@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useRef } from "react"
 import type { ChangeEvent } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "@/components/ui/toast"
@@ -322,6 +322,7 @@ export function useAutomationFormBuilderPage() {
     const { user } = useAuth()
     const isNewForm = id === "new"
     const formId = isNewForm ? null : id
+    const formKey = formId ?? "new"
 
     const { data: formData, isLoading: isFormLoading } = useForm(formId)
     const { data: mappingData, isLoading: isMappingsLoading } = useFormMappings(formId)
@@ -369,9 +370,8 @@ export function useAutomationFormBuilderPage() {
     })
 
     const logoInputRef = useRef<HTMLInputElement>(null)
-    const hydratedFormRef = useRef<string | null>(null)
-    const orgLogoInitRef = useRef(false)
-    const { state, patchState, resetForForm, hydrateFromForm } = useAutomationFormBuilderState(isNewForm)
+    const { state, patchState, resetForForm, hydrateFromForm } =
+        useAutomationFormBuilderState(formKey, isNewForm)
     const {
         pages,
         activePage,
@@ -429,59 +429,46 @@ export function useAutomationFormBuilderPage() {
             ? mappingOptionsData
             : DEFAULT_FORM_SURROGATE_FIELD_OPTIONS
 
-    useEffect(() => {
-        resetForForm(isNewForm)
-        hydratedFormRef.current = null
-        orgLogoInitRef.current = false
+    if (state.formKey !== formKey) {
+        resetForForm(formKey, isNewForm)
         resetDocument()
-    }, [formId, isNewForm, resetDocument, resetForForm])
-
-    useEffect(() => {
-        if (isNewForm || !formData || isMappingsLoading || state.hasHydrated) return
-
+    } else if (
+        !isNewForm &&
+        formData &&
+        formData.id === formId &&
+        !isMappingsLoading &&
+        !state.hasHydrated
+    ) {
         const mappingMap = new Map(
             (mappingData || []).map((mapping) => [mapping.field_key, mapping.surrogate_field]),
         )
         const schema = formData.form_schema || formData.published_schema
 
-        hydrateFromForm({ form: formData })
+        hydrateFromForm({ form: formData, orgLogoPath })
         resetDocument(schema ? schemaToPages(schema, mappingMap) : [FALLBACK_FORM_PAGE])
-    }, [formData, hydrateFromForm, isMappingsLoading, isNewForm, mappingData, resetDocument, state.hasHydrated])
-
-    useEffect(() => {
-        if (!state.hasHydrated || orgLogoInitRef.current) return
-        if (!orgLogoPath) return
-        const isOrgLogo = state.logoUrl === orgLogoPath
-        patchState({
-            useOrgLogo: isOrgLogo,
-            customLogoUrl: isOrgLogo ? state.customLogoUrl : state.logoUrl,
-        })
-        orgLogoInitRef.current = true
-    }, [orgLogoPath, patchState, state.customLogoUrl, state.hasHydrated, state.logoUrl])
+    }
 
     const draftPayload = buildAutomationDraftPayload(pages, state)
     const draftFingerprint = JSON.stringify(draftPayload)
     const isDirty = draftFingerprint !== state.lastSavedFingerprint
 
-    useEffect(() => {
-        if (!state.hasHydrated) return
-        const identity = isNewForm ? "new" : formId || "unknown"
-        if (hydratedFormRef.current === identity) return
-        hydratedFormRef.current = identity
+    if (state.hasHydrated && state.baselineFormKey !== formKey) {
         if (!isNewForm && formData?.updated_at) {
             patchState({
                 autoSaveStatus: "saved",
+                baselineFormKey: formKey,
                 lastSavedAt: new Date(formData.updated_at),
                 lastSavedFingerprint: draftFingerprint,
             })
-            return
+        } else {
+            patchState({
+                autoSaveStatus: "idle",
+                baselineFormKey: formKey,
+                lastSavedAt: null,
+                lastSavedFingerprint: draftFingerprint,
+            })
         }
-        patchState({
-            autoSaveStatus: "idle",
-            lastSavedAt: null,
-            lastSavedFingerprint: draftFingerprint,
-        })
-    }, [draftFingerprint, formData?.updated_at, formId, isNewForm, patchState, state.hasHydrated])
+    }
 
     const requestDeletePage = (pageId: number) => {
         patchState({

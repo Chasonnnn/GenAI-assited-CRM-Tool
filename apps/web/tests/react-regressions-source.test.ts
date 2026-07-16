@@ -3115,10 +3115,22 @@ describe("React regression guards (source)", () => {
 
     it("keeps automation form builder hook compiler-derived", () => {
         const source = readSource("lib/forms/use-automation-form-builder-page.ts")
+        const stateSource = readSource("lib/forms/use-automation-form-builder-state.ts")
 
         expect(source).not.toContain("useMemo")
         expect(source).not.toContain("useCallback")
         expect(source).not.toContain("useDebouncedValue")
+        expect(source).not.toMatch(/\buseEffect\b/)
+        expect(source).toContain("formData.id === formId")
+        expect(source).not.toContain("useEffect(() => {\n        resetForForm")
+        expect(source).not.toContain(
+            "useEffect(() => {\n        if (isNewForm || !formData"
+        )
+        expect(source).not.toContain("hydratedFormRef")
+        expect(source).not.toContain("orgLogoInitRef")
+        expect(stateSource).toContain("baselineFormKey: string | null")
+        expect(stateSource).toContain("formKey: string")
+        expect(stateSource).toContain("buildInitialState(action.payload.formKey")
     })
 
     it("keeps form builder state hooks compiler-derived", () => {
