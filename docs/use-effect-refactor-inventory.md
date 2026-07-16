@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 64 **REPLACE** Effects removed; 42 **CONTAIN** call sites consolidated behind twenty-three tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 59 production `useEffect` calls remain.
+- 64 **REPLACE** Effects removed; 43 **CONTAIN** call sites consolidated behind twenty-four tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 59 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -73,6 +73,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Signed-out Duo callback visitors now route to app or ops login during rendering, while the authenticated callback verification remains the only external lifecycle in that page.
 - Authenticated Duo callback verification now lives in a tested named hook that owns URL parsing, attempt deduplication, the verification request, auth refresh, recovery-code state, unmount-safe late-response cleanup, storage cleanup, and post-MFA navigation.
 - Embedded public forms now keep parent-origin session handshakes and height reporting behind separate tested hooks; the page owns only form/query state while the hooks own message filtering, attribution sanitization, fallback timing, session deduplication, `ResizeObserver`, and all listener/timer/observer cleanup.
+- Hosted intake autosave now lives behind a tested debounce hook that owns latest-callback delivery, restoration-skip consumption, session-scope resets, and timer cancellation while the page owns save eligibility and payload state.
 - Workflow template drafts now hydrate by template ID and server revision during render, so equivalent query objects cannot overwrite operator edits; late workflow options normalize only legacy stage references before save.
 - Workflow template trigger changes now reset type-specific configuration in the reducer transition, preventing obsolete schedule, form, assignment, or field settings from leaking into a newly selected trigger payload.
 - Invalid, unauthorized, and redundant surrogate-detail tab segments now redirect to the canonical overview URL during render, so route content cannot mount before URL correction; explicit tab clicks remain event-driven router replacements.
