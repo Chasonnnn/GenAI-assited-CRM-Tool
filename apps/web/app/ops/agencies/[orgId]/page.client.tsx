@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import Link from "@/components/app-link";
@@ -71,19 +71,22 @@ function CopyButton({ value, label }: { value: string; label: string }) {
     );
 }
 
+type AgencyDetailData = {
+    org: OrganizationDetail;
+    subscription: OrganizationSubscription | null;
+    members: OrgMember[];
+    invites: OrgInvite[];
+    actionLogs: AdminActionLog[];
+};
+
 function useAgencyDetailController() {
     const params = useParams();
     const orgId = params.orgId as string;
     const { push } = useRouter();
     const queryClient = useQueryClient();
+    const agencyDetailQueryKey = ['platform', 'agency', orgId] as const;
     const orgAlertsQueryKey = ['platform', 'alerts', { orgId }] as const;
 
-    const [org, setOrg] = useState<OrganizationDetail | null>(null);
-    const [subscription, setSubscription] = useState<OrganizationSubscription | null>(null);
-    const [members, setMembers] = useState<OrgMember[]>([]);
-    const [invites, setInvites] = useState<OrgInvite[]>([]);
-    const [actionLogs, setActionLogs] = useState<AdminActionLog[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('overview');
     const [alertsUpdating, setAlertsUpdating] = useState<string | null>(null);
     const [mfaResetting, setMfaResetting] = useState<string | null>(null);
@@ -95,22 +98,18 @@ function useAgencyDetailController() {
     });
     const [inviteError, setInviteError] = useState<string | null>(null);
     const [inviteResending, setInviteResending] = useState<string | null>(null);
-    const [notesDraft, setNotesDraft] = useState('');
+    const [notesDraftOverride, setNotesDraftOverride] = useState<{
+        orgId: string;
+        value: string;
+    } | null>(null);
     const [notesSaving, setNotesSaving] = useState(false);
     const [deleteSubmitting, setDeleteSubmitting] = useState(false);
     const [restoreSubmitting, setRestoreSubmitting] = useState(false);
     const [purgeSubmitting, setPurgeSubmitting] = useState(false);
 
-    useEffect(() => {
-        let isCurrent = true;
-
-        async function fetchData() {
-            setIsLoading(true);
-            const finishLoading = () => {
-                if (isCurrent) {
-                    setIsLoading(false);
-                }
-            };
+    const agencyDetailQuery = useQuery({
+        queryKey: agencyDetailQueryKey,
+        queryFn: async (): Promise<AgencyDetailData> => {
             try {
                 const [orgData, subData, membersData, invitesData, logsData] = await Promise.all([
                     getOrganization(orgId),
@@ -119,30 +118,41 @@ function useAgencyDetailController() {
                     listInvites(orgId),
                     getAdminActionLogs(orgId, { limit: 20 }),
                 ]);
-                if (isCurrent) {
-                    setOrg(orgData);
-                    setSubscription(subData);
-                    setNotesDraft(subData?.notes ?? '');
-                    setMembers(membersData);
-                    setInvites(invitesData);
-                    setActionLogs(logsData.items);
-                    finishLoading();
-                }
+                return {
+                    org: orgData,
+                    subscription: subData,
+                    members: membersData,
+                    invites: invitesData,
+                    actionLogs: logsData.items,
+                };
             } catch (error) {
-                if (isCurrent) {
-                    console.error('Failed to fetch agency data:', error);
-                    toast.error('Failed to load agency details');
-                    finishLoading();
-                }
+                console.error('Failed to fetch agency data:', error);
+                toast.error('Failed to load agency details');
+                throw error;
             }
-        }
-
-        void fetchData();
-
-        return () => {
-            isCurrent = false;
-        };
-    }, [orgId]);
+        },
+        retry: false,
+        staleTime: 30_000,
+    });
+    const agencyDetail = agencyDetailQuery.data;
+    const org = agencyDetail?.org ?? null;
+    const subscription = agencyDetail?.subscription ?? null;
+    const members = agencyDetail?.members ?? [];
+    const invites = agencyDetail?.invites ?? [];
+    const actionLogs = agencyDetail?.actionLogs ?? [];
+    const notesDraft =
+        notesDraftOverride?.orgId === orgId
+            ? notesDraftOverride.value
+            : subscription?.notes ?? '';
+    const setNotesDraft = (value: string) => setNotesDraftOverride({ orgId, value });
+    const updateAgencyDetail = (
+        updater: (current: AgencyDetailData) => AgencyDetailData,
+    ) => {
+        queryClient.setQueryData<AgencyDetailData>(
+            agencyDetailQueryKey,
+            (current) => current ? updater(current) : current,
+        );
+    };
 
     const alertsQuery = useQuery({
         queryKey: orgAlertsQueryKey,
@@ -191,7 +201,7 @@ function useAgencyDetailController() {
         const finishDelete = () => setDeleteSubmitting(false);
         try {
             const updated = await deleteOrganization(org.id);
-            setOrg(updated);
+            updateAgencyDetail((current) => ({ ...current, org: updated }));
             toast.success('Organization scheduled for deletion');
             finishDelete();
         } catch (error) {
@@ -207,7 +217,7 @@ function useAgencyDetailController() {
         const finishRestore = () => setRestoreSubmitting(false);
         try {
             const updated = await restoreOrganization(org.id);
-            setOrg(updated);
+            updateAgencyDetail((current) => ({ ...current, org: updated }));
             toast.success('Organization restored');
             finishRestore();
         } catch (error) {
@@ -241,8 +251,8 @@ function useAgencyDetailController() {
     const handleExtendSubscription = async () => {
         try {
             const updated = await extendSubscription(orgId, 30);
-            setSubscription(updated);
-            setNotesDraft(updated.notes ?? '');
+            updateAgencyDetail((current) => ({ ...current, subscription: updated }));
+            setNotesDraftOverride(null);
             toast.success('Subscription extended by 30 days');
         } catch (error) {
             console.error('Failed to extend subscription:', error);
@@ -268,8 +278,8 @@ function useAgencyDetailController() {
         if (!subscription) return;
         try {
             const updated = await updateSubscription(orgId, { auto_renew: value });
-            setSubscription(updated);
-            setNotesDraft(updated.notes ?? '');
+            updateAgencyDetail((current) => ({ ...current, subscription: updated }));
+            setNotesDraftOverride(null);
             toast.success(`Auto-renew ${value ? 'enabled' : 'disabled'}`);
         } catch (error) {
             console.error('Failed to update auto-renew setting:', error);
@@ -283,8 +293,8 @@ function useAgencyDetailController() {
         const finishNotesSave = () => setNotesSaving(false);
         try {
             const updated = await updateSubscription(orgId, { notes: notesDraft });
-            setSubscription(updated);
-            setNotesDraft(updated.notes ?? '');
+            updateAgencyDetail((current) => ({ ...current, subscription: updated }));
+            setNotesDraftOverride(null);
             toast.success('Subscription notes updated');
             finishNotesSave();
         } catch (error) {
@@ -297,9 +307,14 @@ function useAgencyDetailController() {
     const handleDeactivateMember = async (memberId: string) => {
         try {
             await updateMember(orgId, memberId, { is_active: false });
-            setMembers((prev) =>
-                prev.map((m) => (m.id === memberId ? { ...m, is_active: false } : m))
-            );
+            updateAgencyDetail((current) => ({
+                ...current,
+                members: current.members.map((member) =>
+                    member.id === memberId
+                        ? { ...member, is_active: false }
+                        : member
+                ),
+            }));
             toast.success('Member deactivated');
         } catch (error) {
             console.error('Failed to deactivate member:', error);
@@ -310,9 +325,14 @@ function useAgencyDetailController() {
     const handleRevokeInvite = async (inviteId: string) => {
         try {
             await revokeInvite(orgId, inviteId);
-            setInvites((prev) =>
-                prev.map((i) => (i.id === inviteId ? { ...i, status: 'revoked' } : i))
-            );
+            updateAgencyDetail((current) => ({
+                ...current,
+                invites: current.invites.map((invite) =>
+                    invite.id === inviteId
+                        ? { ...invite, status: 'revoked' }
+                        : invite
+                ),
+            }));
             toast.success('Invite revoked');
         } catch (error) {
             console.error('Failed to revoke invite:', error);
@@ -326,7 +346,7 @@ function useAgencyDetailController() {
         try {
             await resendInvite(orgId, inviteId);
             const refreshed = await listInvites(orgId);
-            setInvites(refreshed);
+            updateAgencyDetail((current) => ({ ...current, invites: refreshed }));
             toast.success('Invite resent');
             finishInviteResend();
         } catch (error) {
@@ -349,7 +369,10 @@ function useAgencyDetailController() {
                 email: inviteForm.email.trim().toLowerCase(),
                 role: inviteForm.role,
             });
-            setInvites((prev) => [invite, ...prev]);
+            updateAgencyDetail((current) => ({
+                ...current,
+                invites: [invite, ...current.invites],
+            }));
             setInviteOpen(false);
             setInviteForm({ email: '', role: INVITE_ROLE_OPTIONS[0] });
             toast.success('Invite created');
@@ -423,7 +446,7 @@ function useAgencyDetailController() {
         ? notesDraft !== (subscription.notes ?? '')
         : false;
 
-    if (isLoading) {
+    if (agencyDetailQuery.isPending) {
         return { status: 'loading' as const };
     }
 

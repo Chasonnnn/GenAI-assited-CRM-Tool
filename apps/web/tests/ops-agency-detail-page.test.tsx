@@ -204,4 +204,28 @@ describe("AgencyDetailPage", () => {
 
         await waitFor(() => expect(mockListAlerts).toHaveBeenCalledTimes(1))
     })
+
+    it("reuses fresh agency details when the route remounts", async () => {
+        const queryClient = new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+        })
+
+        const firstView = renderAgencyDetailPage(queryClient)
+        expect(
+            await screen.findByRole("heading", { name: "Test Agency" }),
+        ).toBeInTheDocument()
+        expect(mockGetOrganization).toHaveBeenCalledTimes(1)
+
+        firstView.unmount()
+        renderAgencyDetailPage(queryClient)
+        expect(
+            await screen.findByRole("heading", { name: "Test Agency" }),
+        ).toBeInTheDocument()
+
+        expect(mockGetOrganization).toHaveBeenCalledTimes(1)
+        expect(mockGetSubscription).toHaveBeenCalledTimes(1)
+        expect(mockListMembers).toHaveBeenCalledTimes(1)
+        expect(mockListInvites).toHaveBeenCalledTimes(1)
+        expect(mockGetAdminActionLogs).toHaveBeenCalledTimes(1)
+    })
 })
