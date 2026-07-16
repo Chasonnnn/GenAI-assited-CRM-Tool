@@ -328,17 +328,20 @@ describe("React regression guards (source)", () => {
         expect(source).toContain('toast.success("Template published")')
     })
 
-    it("does not suppress exhaustive deps in MassEditStageModal and handles late stage load", () => {
+    it("owns MassEditStageModal sessions without reset Effects", () => {
         const source = readSource("components/surrogates/MassEditStageModal.tsx")
 
         expect(source).not.toContain("eslint-disable-next-line react-hooks/exhaustive-deps")
         expect(source).toContain("const defaultTargetStageId =")
-        expect(source).toContain("if (!open || targetStageId || !defaultTargetStageId) return")
+        expect(source).toContain("function MassEditStageOpenSession(")
+        expect(source).toContain("if (!props.open) return null")
         expect(source).toContain("const previewSignature =")
         expect(source).toContain("previewState?.signature === previewSignature")
         expect(source).toContain("function massEditStageReducer")
-        expect(source).toContain("const [state, dispatch] = React.useReducer(")
+        expect(source).toContain("const [storedState, dispatch] = React.useReducer(")
         expect(source).toContain("massEditStageReducer,")
+        expect(source).not.toContain("React.useEffect")
+        expect(source).not.toContain("hasInitializedOpenRef")
         expect(source).not.toContain("React.useMemo")
         expect(source).not.toContain("React.useCallback")
         expect(source).not.toContain("memo(")
