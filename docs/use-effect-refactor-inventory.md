@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 59 **REPLACE** Effects removed; 35 **CONTAIN** call sites consolidated behind sixteen tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 64 production `useEffect` calls remain.
+- 59 **REPLACE** Effects removed; 36 **CONTAIN** call sites consolidated behind seventeen tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 64 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -45,6 +45,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - MFA storage setup uses the reviewed mount boundary, and redirect-only branches prevent verified or signed-out users from seeing challenge UI.
 - Automation trigger changes now create the selected trigger type's configuration in the reducer transition, preventing obsolete schedule fields from leaking into task-trigger payloads.
 - AI entity context reconciles pathname changes in the provider reducer, so supported task context remains available on task routes without an Effect that clears itself after every context update.
+- The global AI assistant keyboard shortcut now lives in a tested window-listener hook that uses `useEffectEvent` for the latest toggle callback and owns key filtering, default prevention, enabled gating, and cleanup.
 - The task editor sets and clears AI context directly in its open and close events instead of relaying `editingTask` state through an Effect.
 - Task deep-link scrolling and focus-reset behavior now share one tested `useTaskFocusNavigation` browser synchronization boundary.
 - Agency detail data, organization alerts, and platform email status now use stable TanStack Query keys, preserving fresh route data and avoiding duplicate requests across tab changes and remounts.
