@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import Link from "@/components/app-link"
 import { formatDistanceToNow, isBefore, parseISO, startOfToday } from "date-fns"
 import {
@@ -651,24 +651,29 @@ export function ActivityTimeline({
     tasks = EMPTY_TASKS,
 }: ActivityTimelineProps) {
     const [showFullJourney, setShowFullJourney] = useState(false)
-    const [openStageIds, setOpenStageIds] = useState<Set<string>>(() => new Set())
-    const lastSyncedOpenStageId = useRef<string | null | undefined>(undefined)
 
     const { data: stageHistory = [] } = useSurrogateHistory(surrogateId)
 
     const { stageGroups } = buildTimelineData(stages, stageHistory, activities, currentStageId, effectiveStageId)
     const visibleStages = getVisibleStages(stageGroups, showFullJourney, effectiveStageId, currentStageId)
     const defaultOpenStageId = stageGroups.find((stage) => stage.id === currentStageId)?.id ?? null
-
-    useEffect(() => {
-        if (lastSyncedOpenStageId.current === defaultOpenStageId) {
-            return
-        }
-        lastSyncedOpenStageId.current = defaultOpenStageId
-        startTransition(() => {
-            setOpenStageIds(defaultOpenStageId ? new Set([defaultOpenStageId]) : new Set())
+    const defaultStageKey = defaultOpenStageId ?? `missing:${currentStageId}`
+    const createDefaultOpenStageIds = () => defaultOpenStageId
+        ? new Set([defaultOpenStageId])
+        : new Set<string>()
+    const [openStageState, setOpenStageState] = useState(() => ({
+        defaultStageKey,
+        openStageIds: createDefaultOpenStageIds(),
+    }))
+    if (openStageState.defaultStageKey !== defaultStageKey) {
+        setOpenStageState({
+            defaultStageKey,
+            openStageIds: createDefaultOpenStageIds(),
         })
-    }, [defaultOpenStageId])
+    }
+    const openStageIds = openStageState.defaultStageKey === defaultStageKey
+        ? openStageState.openStageIds
+        : createDefaultOpenStageIds()
 
     const { overdueTasks, upcomingTasks } = (() => {
         const today = startOfToday()
@@ -713,14 +718,15 @@ export function ActivityTimeline({
     })()
 
     function handleStageToggle(stageId: string, isOpen: boolean) {
-        setOpenStageIds((prev) => {
-            const next = new Set(prev)
-            if (isOpen) {
-                next.add(stageId)
-            } else {
-                next.delete(stageId)
-            }
-            return next
+        const next = new Set(openStageIds)
+        if (isOpen) {
+            next.add(stageId)
+        } else {
+            next.delete(stageId)
+        }
+        setOpenStageState({
+            defaultStageKey,
+            openStageIds: next,
         })
     }
 
