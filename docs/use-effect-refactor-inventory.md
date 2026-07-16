@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 68 **REPLACE** Effects removed; 43 **CONTAIN** call sites consolidated behind twenty-four tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 55 production `useEffect` calls remain.
+- 72 **REPLACE** Effects removed; 43 **CONTAIN** call sites consolidated behind twenty-four tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 51 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -59,6 +59,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Hidden-tab browser notification delivery now lives in a tested hook that owns permission checks, native payload mapping, and per-notification deduplication.
 - Form publishing opens the sharing prompt directly from the intake links returned by the publish flow, removing the pending-state Effect relay and avoiding dependence on a later query render.
 - Automation and platform-template autosave now share a tested synchronization hook that owns debounce timing, cancellation, and active-draft completion while each controller retains its payload, queue, and persistence ownership.
+- Automation form-builder drafts, document resets, organization-logo defaults, and autosave baselines now reconcile from reducer-owned route identity during render; stale form responses cannot claim a newly routed draft.
 - Workspace tab transitions clear submission selection, manual-link input, and reviewer notes in the initiating event, preventing review text from leaking into a later submission after leaving the workspace.
 - Email attachment selection is keyed to the surrogate session, so changing recipients clears stale attachment IDs; a tested notification hook now owns query-derived safety updates and uses `useEffectEvent` without callback-ref synchronization.
 - AI assistant and contextual-panel scrolling now share a tested DOM synchronization hook; streaming content stays visible while sticky panels preserve the user's position after they scroll away, with animation-frame cancellation owned by the hook.
