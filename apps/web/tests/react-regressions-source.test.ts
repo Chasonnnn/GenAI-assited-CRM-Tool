@@ -4221,6 +4221,17 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setTriggerConfig({ ...triggerConfig")
     })
 
+    it("hydrates workflow template drafts by server revision instead of query identity", () => {
+        const source = readSource("app/ops/templates/workflows/[id]/page.client.tsx")
+
+        expect(source).toContain("hydratedTemplateKey: string | null")
+        expect(source).toContain("`${templateData.id}:${templateData.updated_at}`")
+        expect(source).toContain("editorState.hydratedTemplateKey !== templateKey")
+        expect(source).not.toContain(
+            "useEffect(() => {\n        if (!templateData || isNew) return\n        dispatchEditor({ type: \"hydrateDraft\""
+        )
+    })
+
     it("uses stable content-derived keys in the AI builder", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 

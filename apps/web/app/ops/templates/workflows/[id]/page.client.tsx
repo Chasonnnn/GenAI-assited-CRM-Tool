@@ -268,6 +268,7 @@ function getActionValidationError(action: ActionConfig): string | null {
 }
 
 type WorkflowTemplateEditorState = {
+    hydratedTemplateKey: string | null
     name: string
     description: string
     icon: string
@@ -283,7 +284,12 @@ type WorkflowTemplateEditorState = {
 type TriggerConfigSetter = Dispatch<SetStateAction<JsonObject>>
 
 type WorkflowTemplateEditorAction =
-    | { type: "hydrateDraft"; templateData: PlatformWorkflowTemplate; statusOptions: WorkflowStatusOption[] }
+    | {
+        type: "hydrateDraft"
+        templateKey: string
+        templateData: PlatformWorkflowTemplate | null
+        statusOptions: WorkflowStatusOption[]
+    }
     | { type: "loadZapierSample" }
     | { type: "loadSharedIntakeSample" }
     | { type: "setName"; value: string }
@@ -303,6 +309,7 @@ type WorkflowTemplateEditorAction =
 
 function createInitialWorkflowTemplateEditorState(): WorkflowTemplateEditorState {
     return {
+        hydratedTemplateKey: null,
         name: "",
         description: "",
         icon: "template",
@@ -332,9 +339,16 @@ function workflowTemplateEditorReducer(
 ): WorkflowTemplateEditorState {
     switch (action.type) {
         case "hydrateDraft": {
+            if (!action.templateData) {
+                return {
+                    ...createInitialWorkflowTemplateEditorState(),
+                    hydratedTemplateKey: action.templateKey,
+                }
+            }
             const draft = action.templateData.draft
             return {
                 ...state,
+                hydratedTemplateKey: action.templateKey,
                 name: draft.name ?? "",
                 description: draft.description ?? "",
                 icon: draft.icon ?? "template",
@@ -2079,6 +2093,21 @@ function useWorkflowTemplatePageState() {
     const [isSaving, setIsSaving] = useState(false)
     const [isPublishing, setIsPublishing] = useState(false)
 
+    const statusOptions = options?.statuses ?? EMPTY_STATUS_OPTIONS
+    const templateKey = isNew
+        ? "new"
+        : templateData
+            ? `${templateData.id}:${templateData.updated_at}`
+            : null
+    if (templateKey && editorState.hydratedTemplateKey !== templateKey) {
+        dispatchEditor({
+            type: "hydrateDraft",
+            templateKey,
+            templateData: isNew ? null : templateData ?? null,
+            statusOptions,
+        })
+    }
+
     const {
         name,
         description,
@@ -2091,6 +2120,17 @@ function useWorkflowTemplatePageState() {
         actions,
         isPublished,
     } = editorState
+    const normalizedTriggerConfig = normalizeTriggerConfigForUi(
+        triggerType,
+        triggerConfig,
+        statusOptions
+    )
+    if (!areJsonObjectsEqual(normalizedTriggerConfig, triggerConfig)) {
+        dispatchEditor({
+            type: "setTriggerConfig",
+            value: normalizedTriggerConfig,
+        })
+    }
     const setName = (value: string) => dispatchEditor({ type: "setName", value })
     const setDescription = (value: string) => dispatchEditor({ type: "setDescription", value })
     const setIcon = (value: string) => dispatchEditor({ type: "setIcon", value })
@@ -2103,7 +2143,6 @@ function useWorkflowTemplatePageState() {
         dispatchEditor({ type: "setConditionLogic", value })
     const setIsPublished = (value: boolean) => dispatchEditor({ type: "setIsPublished", value })
 
-    const statusOptions = options?.statuses ?? EMPTY_STATUS_OPTIONS
     const actionTypeOptions = options?.action_types ?? FALLBACK_ACTION_TYPES
     const triggerTypeOptions = options?.trigger_types ?? FALLBACK_TRIGGER_TYPES
     const updateFields = options?.update_fields ?? ["stage_id", "is_priority", "owner_type", "owner_id"]
@@ -2142,11 +2181,6 @@ function useWorkflowTemplatePageState() {
         dispatchEditor({ type: "loadZapierSample" })
         toast.success("Loaded Zapier conversion sample workflow")
     }
-
-    useEffect(() => {
-        if (!templateData || isNew) return
-        dispatchEditor({ type: "hydrateDraft", templateData, statusOptions })
-    }, [templateData, isNew, statusOptions])
 
     useEffect(() => {
         if (!triggerType) return
