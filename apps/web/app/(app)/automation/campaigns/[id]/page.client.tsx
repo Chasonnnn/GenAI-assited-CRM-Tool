@@ -173,6 +173,28 @@ const initialCampaignEditDraft: CampaignEditDraftState = {
     scheduledAt: "",
 }
 
+function createCampaignEditDraft(campaign: Campaign): CampaignEditDraftState {
+    const criteria = campaign.filter_criteria || {}
+    const stageIds = Array.isArray(criteria.stage_ids) ? criteria.stage_ids : []
+    const stageSlugs = Array.isArray(criteria.stage_slugs) ? criteria.stage_slugs : []
+    const states = Array.isArray(criteria.states) ? criteria.states : []
+    const recipientType =
+        campaign.recipient_type === "intended_parent" ? "intended_parent" : "case"
+
+    return {
+        name: campaign.name,
+        description: campaign.description ?? "",
+        templateId: campaign.email_template_id,
+        recipientType,
+        stages: recipientType === "intended_parent" ? stageSlugs : stageIds,
+        states,
+        includeUnsubscribed: !!campaign.include_unsubscribed,
+        scheduledAt: campaign.scheduled_at
+            ? toLocalDateTimeInput(new Date(campaign.scheduled_at))
+            : "",
+    }
+}
+
 function campaignEditDraftReducer(
     state: CampaignEditDraftState,
     action: CampaignEditDraftAction,
@@ -1205,41 +1227,20 @@ export default function CampaignDetailPage() {
     const canEdit = campaign?.status === "draft" || campaign?.status === "scheduled"
     const shouldAutoOpenEdit = searchParams.get("edit") === "1"
 
+    const openEditDialog = () => {
+        if (!campaign) return
+        dispatchEditDraft({ type: "hydrate", draft: createCampaignEditDraft(campaign) })
+        setShowEditDialog(true)
+    }
+
     useEffect(() => {
-        if (shouldAutoOpenEdit && canEdit) {
+        if (shouldAutoOpenEdit && canEdit && campaign && !showEditDialog) {
             startTransition(() => {
+                dispatchEditDraft({ type: "hydrate", draft: createCampaignEditDraft(campaign) })
                 setShowEditDialog(true)
             })
         }
-    }, [shouldAutoOpenEdit, canEdit])
-
-    useEffect(() => {
-        if (!campaign || !showEditDialog) return
-        const criteria = campaign.filter_criteria || {}
-        const stageIds = Array.isArray(criteria.stage_ids) ? criteria.stage_ids : []
-        const stageSlugs = Array.isArray(criteria.stage_slugs) ? criteria.stage_slugs : []
-        const states = Array.isArray(criteria.states) ? criteria.states : []
-        const recipientType =
-            campaign.recipient_type === "intended_parent" ? "intended_parent" : "case"
-
-        startTransition(() => {
-            dispatchEditDraft({
-                type: "hydrate",
-                draft: {
-                    name: campaign.name,
-                    description: campaign.description ?? "",
-                    templateId: campaign.email_template_id,
-                    recipientType,
-                    stages: recipientType === "intended_parent" ? stageSlugs : stageIds,
-                    states,
-                    includeUnsubscribed: !!campaign.include_unsubscribed,
-                    scheduledAt: campaign.scheduled_at
-                        ? toLocalDateTimeInput(new Date(campaign.scheduled_at))
-                        : "",
-                },
-            })
-        })
-    }, [campaign, showEditDialog])
+    }, [shouldAutoOpenEdit, canEdit, campaign, showEditDialog])
 
     if (isLoading) {
         return (
@@ -1305,7 +1306,7 @@ export default function CampaignDetailPage() {
                 campaign={campaign}
                 canEdit={canEdit}
                 cancelPending={cancelCampaign.isPending}
-                onEdit={() => setShowEditDialog(true)}
+                onEdit={openEditDialog}
                 onSendNow={() => setShowSendDialog(true)}
                 onCancel={() => setShowCancelDialog(true)}
                 onDuplicate={handleDuplicate}
@@ -1372,7 +1373,13 @@ export default function CampaignDetailPage() {
                 minScheduleDate={minScheduleDate}
                 updatePending={updateCampaign.isPending}
                 dispatchEditDraft={dispatchEditDraft}
-                onOpenChange={setShowEditDialog}
+                onOpenChange={(open) => {
+                    if (open) {
+                        openEditDialog()
+                    } else {
+                        setShowEditDialog(false)
+                    }
+                }}
                 onSave={handleEditSave}
             />
 
