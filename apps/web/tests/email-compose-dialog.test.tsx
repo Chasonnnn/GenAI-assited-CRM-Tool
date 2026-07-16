@@ -265,6 +265,78 @@ describe("EmailComposeDialog", () => {
         expect(screen.getByPlaceholderText("Enter email subject...")).toHaveValue("")
     })
 
+    it("refreshes untouched template content without overwriting user edits", async () => {
+        const templateId = "tpl-refresh"
+        const makeTemplate = (subject: string, body: string) => ({
+            id: templateId,
+            organization_id: "org-1",
+            created_by_user_id: null,
+            name: "Refreshable Template",
+            subject,
+            from_email: null,
+            body,
+            is_active: true,
+            scope: "org" as const,
+            owner_user_id: null,
+            owner_name: null,
+            source_template_id: null,
+            is_system_template: false,
+            current_version: 1,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        })
+        let fullTemplate = makeTemplate("Cached subject", "<p>Cached body</p>")
+
+        mockUseEmailTemplates.mockReturnValue({
+            data: [
+                {
+                    id: templateId,
+                    name: "Refreshable Template",
+                    subject: "Cached subject",
+                    from_email: null,
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    is_system_template: false,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+            ],
+            isLoading: false,
+        })
+        mockUseEmailTemplate.mockImplementation((id: string | null) => ({
+            data: id === templateId ? fullTemplate : null,
+            isLoading: false,
+        }))
+        const props = {
+            open: true,
+            onOpenChange: vi.fn(),
+            surrogateData: baseSurrogateData,
+        }
+        const { rerender } = render(<EmailComposeDialog {...props} />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Refreshable Template" }))
+        await waitFor(() => {
+            expect(screen.getByPlaceholderText("Enter email subject...")).toHaveValue(
+                "Cached subject"
+            )
+        })
+
+        fullTemplate = makeTemplate("Fresh subject", "<p>Fresh body</p>")
+        rerender(<EmailComposeDialog {...props} />)
+        expect(screen.getByPlaceholderText("Enter email subject...")).toHaveValue("Fresh subject")
+
+        fireEvent.change(screen.getByPlaceholderText("Enter email subject..."), {
+            target: { value: "My edited subject" },
+        })
+        fullTemplate = makeTemplate("Newer server subject", "<p>Newer server body</p>")
+        rerender(<EmailComposeDialog {...props} />)
+        expect(screen.getByPlaceholderText("Enter email subject...")).toHaveValue(
+            "My edited subject"
+        )
+    })
+
     it("shows resolved template name instead of raw uuid in the selected value", async () => {
         const templateId = "129ba716-7291-457c-baec-545951262c1a"
 
