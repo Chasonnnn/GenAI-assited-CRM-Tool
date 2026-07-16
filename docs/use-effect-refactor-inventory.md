@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 58 **REPLACE** Effects removed; 35 **CONTAIN** call sites consolidated behind sixteen tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 65 production `useEffect` calls remain.
+- 59 **REPLACE** Effects removed; 35 **CONTAIN** call sites consolidated behind sixteen tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 64 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -41,6 +41,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Transcript selection uses one named document-listener lifecycle with stable selection, Escape-key, and pointer subscriptions plus timeout cleanup.
 - Audit export polling is owned by the export query and runs only while a role-visible job is pending or processing.
 - Sidebar route sections initialize from the pathname in server HTML, while query-tab selection derives directly from search parameters.
+- Desktop sidebar expansion now reads its persistence cookie only during initialization; mobile layout transitions preserve the live reducer choice instead of overwriting it from stale or blocked cookie storage.
 - MFA storage setup uses the reviewed mount boundary, and redirect-only branches prevent verified or signed-out users from seeing challenge UI.
 - Automation trigger changes now create the selected trigger type's configuration in the reducer transition, preventing obsolete schedule fields from leaking into task-trigger payloads.
 - AI entity context reconciles pathname changes in the provider reducer, so supported task context remains available on task routes without an Effect that clears itself after every context update.
