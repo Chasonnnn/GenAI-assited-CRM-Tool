@@ -2261,6 +2261,15 @@ describe("React regression guards (source)", () => {
         expect(debounceSource).toContain("}, [scopeKey])")
     })
 
+    it("delegates main matches search timing to the shared debounced value hook", () => {
+        const source = readSource("app/(app)/matches/page.tsx")
+
+        expect(source).toContain('import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"')
+        expect(source).toContain("const debouncedSearch = useDebouncedValue(search, 300)")
+        expect(source).not.toMatch(/\buseEffect\b/)
+        expect(source).not.toContain("setDebouncedSearch")
+    })
+
     it("builds form builder mappings in a single pass", () => {
         const source = readSource("lib/forms/form-builder-document.ts")
 
