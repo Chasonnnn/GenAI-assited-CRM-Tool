@@ -9,7 +9,7 @@
  * - Inline editing support
  */
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -23,6 +23,7 @@ import {
     CheckIcon,
 } from "lucide-react"
 import { formatRelativeTime } from "@/lib/formatters"
+import { useFocusWhen } from "@/lib/hooks/use-focus-when"
 import { cn } from "@/lib/utils"
 import type { InterviewNoteRead } from "@/lib/api/interviews"
 import { SafeHtmlContent } from "@/components/safe-html-content"
@@ -75,11 +76,7 @@ function ReplyItem({
     const canDelete = canEdit
     const canEditReply = canEdit && onEdit
 
-    useEffect(() => {
-        if (isEditing && editInputRef.current) {
-            editInputRef.current.focus()
-        }
-    }, [isEditing])
+    useFocusWhen(editInputRef, isEditing)
 
     const handleEditSubmit = () => {
         if (!editContent.trim() || !onEdit) return
@@ -204,18 +201,8 @@ export function CommentCard({
     const canEditNote = canEdit && onEdit
     const isAnchored = !!note.anchor_text
 
-    // Focus input when replying/editing starts
-    useEffect(() => {
-        if (isReplying && replyInputRef.current) {
-            replyInputRef.current.focus()
-        }
-    }, [isReplying])
-
-    useEffect(() => {
-        if (isEditing && editInputRef.current) {
-            editInputRef.current.focus()
-        }
-    }, [isEditing])
+    useFocusWhen(replyInputRef, isReplying)
+    useFocusWhen(editInputRef, isEditing)
 
     const handleReplySubmit = () => {
         if (!replyContent.trim()) return

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { CheckIcon, XIcon, PencilIcon, Loader2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useFocusWhen } from "@/lib/hooks/use-focus-when"
 
 interface InlineEditFieldProps {
     value: string | null | undefined
@@ -82,13 +83,7 @@ export function InlineEditField({
     const { isEditing, editValue, isSaving, error } = state
     const inputRef = React.useRef<HTMLInputElement>(null)
 
-    // Focus input when editing starts
-    React.useEffect(() => {
-        if (isEditing && inputRef.current) {
-            inputRef.current.focus()
-            inputRef.current.select()
-        }
-    }, [isEditing])
+    useFocusWhen(inputRef, isEditing, { select: true })
 
     const handleStartEdit = () => {
         dispatch({ type: "startEdit", value: value || "" })
