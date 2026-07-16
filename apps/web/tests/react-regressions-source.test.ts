@@ -1398,6 +1398,8 @@ describe("React regression guards (source)", () => {
         expect(contextSource).not.toContain("router.replace")
         expect(contextSource).toContain('redirect(getTabUrl("overview") as Route)')
         expect(contextSource).not.toContain("normalizeInvalidTab")
+        expect(contextSource).toContain("useTrackSurrogateView(surrogate?.id)")
+        expect(contextSource).not.toContain("trackSurrogateViewed(surrogate.id)")
         expect(contextSource).not.toContain("[defaultPipeline?.feature_config, stageOptions, user?.role]")
         expect(contextSource).toContain("function useSurrogateDetailTabNavigation")
         expect(contextSource).toContain("function useSurrogateDetailDataValue")
