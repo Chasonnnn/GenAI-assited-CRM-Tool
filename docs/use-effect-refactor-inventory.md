@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 55 **REPLACE** Effects removed; 27 **CONTAIN** call sites consolidated behind eleven tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 72 production `useEffect` calls remain.
+- 55 **REPLACE** Effects removed; 30 **CONTAIN** call sites consolidated behind twelve tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 70 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -67,6 +67,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Campaign detail now consumes each URL-driven edit request once during render, so `?edit=1` still hydrates and opens the draft while an explicit Cancel remains closed instead of being immediately reopened by an Effect.
 - Controlled rich-text HTML now synchronizes with the external Tiptap editor through a tested named hook that updates changed content once and ignores matching rerenders.
 - Session expiration detection now lives in a tested cache-subscription hook that recognizes query and mutation 401 shapes and owns both unsubscribe cleanups, leaving the dialog presentation-only.
+- Surrogate, intended-parent, and intended-parent-match search navigation now share one tested debounce lifecycle that cancels stale commits on URL changes and unmount, replacing three page-level timer cleanup Effects with one contained boundary.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
 ## Verdict rules
