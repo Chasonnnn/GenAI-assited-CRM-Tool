@@ -15,6 +15,14 @@ Scope: production TypeScript under `apps/web/app`, `apps/web/components`, and `a
 
 Line numbers below identify the baseline commit. As slices land, completion evidence is the current source plus tests and validation—not the continued existence of a baseline line number.
 
+## Progress
+
+- 3 **REPLACE** Effects removed; 141 production `useEffect` calls remain.
+- `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
+- `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
+- Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
+- Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
+
 ## Verdict rules
 
 - **REPLACE** with render-time derivation, an event or reducer transition, TanStack Query, route/server guards, `useEffectEvent`, conditional rendering, or keyed remounting.
