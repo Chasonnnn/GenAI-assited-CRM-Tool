@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useReducer, type Dispatch, type ElementType } from 'react';
+import { useReducer, type ElementType } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from "@/components/app-link";
 import { listAlerts, acknowledgeAlert, resolveAlert, type PlatformAlert } from '@/lib/api/platform';
 import { Button } from '@/components/ui/button';
@@ -50,9 +51,6 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 type AlertsState = {
-    alerts: PlatformAlert[]
-    total: number
-    isLoading: boolean
     statusFilter: string
     severityFilter: string
     actionLoading: string | null
@@ -61,17 +59,9 @@ type AlertsState = {
 type AlertsAction =
     | { type: "set-status-filter"; statusFilter: string }
     | { type: "set-severity-filter"; severityFilter: string }
-    | { type: "load-start" }
-    | { type: "load-success"; alerts: PlatformAlert[]; total: number }
-    | { type: "load-error" }
     | { type: "set-action-loading"; alertId: string | null }
-    | { type: "acknowledge-alert"; alertId: string }
-    | { type: "resolve-alert"; alertId: string; resolvedAt: string | undefined }
 
 const INITIAL_ALERTS_STATE: AlertsState = {
-    alerts: [],
-    total: 0,
-    isLoading: true,
     statusFilter: "",
     severityFilter: "",
     actionLoading: null,
@@ -83,62 +73,54 @@ function alertsReducer(state: AlertsState, action: AlertsAction): AlertsState {
             return { ...state, statusFilter: action.statusFilter }
         case "set-severity-filter":
             return { ...state, severityFilter: action.severityFilter }
-        case "load-start":
-            return { ...state, isLoading: true }
-        case "load-success":
-            return { ...state, alerts: action.alerts, total: action.total, isLoading: false }
-        case "load-error":
-            return { ...state, isLoading: false }
         case "set-action-loading":
             return { ...state, actionLoading: action.alertId }
-        case "acknowledge-alert":
-            return {
-                ...state,
-                alerts: state.alerts.map((alert) =>
-                    alert.id === action.alertId ? { ...alert, status: "acknowledged" as const } : alert,
-                ),
-            }
-        case "resolve-alert":
-            return {
-                ...state,
-                alerts: state.alerts.map((alert): PlatformAlert =>
-                    alert.id === action.alertId
-                        ? { ...alert, status: "resolved", resolved_at: action.resolvedAt }
-                        : alert,
-                ),
-            }
     }
 }
 
-async function loadAlerts(
-    dispatch: Dispatch<AlertsAction>,
-    filters: { statusFilter: string; severityFilter: string },
-): Promise<void> {
-    dispatch({ type: "load-start" });
-    try {
-        const data = await listAlerts({
-            ...(filters.statusFilter ? { status: filters.statusFilter } : {}),
-            ...(filters.severityFilter ? { severity: filters.severityFilter } : {}),
-        });
-        dispatch({ type: "load-success", alerts: data.items, total: data.total });
-    } catch (error) {
-        console.error('Failed to fetch alerts:', error);
-        toast.error('Failed to load alerts');
-        dispatch({ type: "load-error" });
-    }
-}
+type AlertsResponse = Awaited<ReturnType<typeof listAlerts>>;
 
 export default function GlobalAlertsPage() {
     const [state, dispatch] = useReducer(alertsReducer, INITIAL_ALERTS_STATE);
-    const { alerts, total, isLoading, statusFilter, severityFilter, actionLoading } = state;
+    const { statusFilter, severityFilter, actionLoading } = state;
+    const queryClient = useQueryClient();
+    const alertsQueryKey = [
+        'platform',
+        'alerts',
+        { status: statusFilter || null, severity: severityFilter || null },
+    ] as const;
+    const alertsQuery = useQuery({
+        queryKey: alertsQueryKey,
+        queryFn: async () => {
+            try {
+                return await listAlerts({
+                    ...(statusFilter ? { status: statusFilter } : {}),
+                    ...(severityFilter ? { severity: severityFilter } : {}),
+                });
+            } catch (error) {
+                console.error('Failed to fetch alerts:', error);
+                toast.error('Failed to load alerts');
+                throw error;
+            }
+        },
+        retry: false,
+        staleTime: 30_000,
+    });
+    const alerts = alertsQuery.data?.items ?? [];
+    const total = alertsQuery.data?.total ?? 0;
+    const isLoading = alertsQuery.isFetching;
 
     const fetchAlerts = () => {
-        void loadAlerts(dispatch, { statusFilter, severityFilter });
+        void alertsQuery.refetch();
     };
 
-    useEffect(() => {
-        void loadAlerts(dispatch, { statusFilter, severityFilter });
-    }, [statusFilter, severityFilter]);
+    const updateCurrentAlerts = (updateAlert: (alert: PlatformAlert) => PlatformAlert) => {
+        queryClient.setQueryData<AlertsResponse>(alertsQueryKey, (current) =>
+            current
+                ? { ...current, items: current.items.map(updateAlert) }
+                : current
+        );
+    };
 
     const handleAcknowledge = async (alertId: string) => {
         dispatch({ type: "set-action-loading", alertId });
@@ -150,7 +132,9 @@ export default function GlobalAlertsPage() {
         }));
 
         if (result.status === "success") {
-            dispatch({ type: "acknowledge-alert", alertId });
+            updateCurrentAlerts((alert) =>
+                alert.id === alertId ? { ...alert, status: "acknowledged" } : alert
+            );
             toast.success('Alert acknowledged');
         } else {
             console.error('Failed to acknowledge alert:', result.error);
@@ -170,7 +154,11 @@ export default function GlobalAlertsPage() {
         }));
 
         if (result.status === "success") {
-            dispatch({ type: "resolve-alert", alertId, resolvedAt: result.resolvedAt });
+            updateCurrentAlerts((alert) =>
+                alert.id === alertId
+                    ? { ...alert, status: "resolved", resolved_at: result.resolvedAt }
+                    : alert
+            );
             toast.success('Alert resolved');
         } else {
             console.error('Failed to resolve alert:', result.error);
