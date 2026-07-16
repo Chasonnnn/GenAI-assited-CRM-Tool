@@ -23,6 +23,7 @@ import {
     schemaToPages,
     type BuilderFormPage,
 } from "@/lib/forms/form-builder-document"
+import { useAutomationFormAutosave } from "@/lib/forms/use-automation-form-autosave"
 import { useAutomationFormBuilderState } from "@/lib/forms/use-automation-form-builder-state"
 import type { AutomationBuilderState } from "@/lib/forms/use-automation-form-builder-state"
 import { useFormBuilderDocument } from "@/lib/forms/use-form-builder-document"
@@ -539,23 +540,18 @@ export function useAutomationFormBuilderPage() {
         }
     }
 
-    useEffect(() => {
-        if (!state.hasHydrated) return
-        if (!state.formName.trim()) return
-        if (draftFingerprint === state.lastSavedFingerprint) return
-        if (state.isSaving || state.isPublishing) return
-        if (
-            createFormMutation.isPending ||
-            updateFormMutation.isPending ||
-            setMappingsMutation.isPending
-        ) {
-            return
-        }
-
-        let cancelled = false
-        const timeout = setTimeout(() => {
-            if (cancelled) return
-            patchState({ autoSaveStatus: "saving" })
+    useAutomationFormAutosave({
+        enabled:
+            state.hasHydrated &&
+            Boolean(state.formName.trim()) &&
+            !state.isSaving &&
+            !state.isPublishing &&
+            !createFormMutation.isPending &&
+            !updateFormMutation.isPending &&
+            !setMappingsMutation.isPending,
+        fingerprint: draftFingerprint,
+        savedFingerprint: state.lastSavedFingerprint,
+        save: () => {
             const payload = buildAutomationDraftPayload(pages, {
                 allowedMimeTypesText: state.allowedMimeTypesText,
                 defaultTemplateId: state.defaultTemplateId,
@@ -570,8 +566,7 @@ export function useAutomationFormBuilderPage() {
                 publicSubtitle: state.publicSubtitle,
                 publicTitle: state.publicTitle,
             })
-
-            persistAutomationFormPayload({
+            return persistAutomationFormPayload({
                 payload,
                 isNewForm,
                 id,
@@ -582,50 +577,11 @@ export function useAutomationFormBuilderPage() {
                 router,
                 patchState,
             })
-                .then((savedForm) => {
-                    if (cancelled) return
-                    patchState(buildSavedState(draftFingerprint, savedForm))
-                })
-                .catch(() => {
-                    if (cancelled) return
-                    patchState({ autoSaveStatus: "error" })
-                })
-        }, 1200)
-
-        return () => {
-            cancelled = true
-            clearTimeout(timeout)
-        }
-    }, [
-        createFormMutation.isPending,
-        createFormMutation,
-        draftFingerprint,
-        id,
-        isNewForm,
-        pages,
-        patchState,
-        router,
-        setMappingsMutation,
-        setMappingsMutation.isPending,
-        state.allowedMimeTypesText,
-        state.defaultTemplateId,
-        state.formDescription,
-        state.formName,
-        state.formPurpose,
-        state.hasHydrated,
-        state.isPublishing,
-        state.isSaving,
-        state.lastSavedFingerprint,
-        state.logoUrl,
-        state.maxFileCount,
-        state.maxFileSizeMb,
-        state.privacyNotice,
-        state.publicEyebrow,
-        state.publicSubtitle,
-        state.publicTitle,
-        updateFormMutation,
-        updateFormMutation.isPending,
-    ])
+        },
+        onSaving: () => patchState({ autoSaveStatus: "saving" }),
+        onSaved: (savedForm) => patchState(buildSavedState(draftFingerprint, savedForm)),
+        onError: () => patchState({ autoSaveStatus: "error" }),
+    })
 
     const handleLogoUploadClick = () => {
         logoInputRef.current?.click()
