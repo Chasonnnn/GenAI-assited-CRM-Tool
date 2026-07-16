@@ -141,10 +141,6 @@ function useTasksPageController() {
     const [addTaskDialogOpen, setAddTaskDialogOpen] = useState(false)
     const [editingTask, setEditingTask] = useState<TaskListItem | null>(null)
 
-    const handleTaskClick = (task: TaskListItem) => {
-        setEditingTask(task)
-    }
-
     const handleSaveTask = async (taskId: string, data: Partial<TaskEditPayload>) => {
         const payload: Record<string, unknown> = {}
         for (const [key, value] of Object.entries(data)) {
@@ -225,21 +221,21 @@ function useTasksPageController() {
     const createTaskBatch = useCreateTaskBatch()
     const deleteTask = useDeleteTask()
 
-    // Set AI context when editing a task, clear when not
     const { setContext: setAIContext, clearContext: clearAIContext } = useAIContext()
 
-    // Effect to update AI context when editing task changes
-    useEffect(() => {
-        if (editingTask) {
-            setAIContext({
-                entityType: "task" as const,
-                entityId: editingTask.id,
-                entityName: editingTask.title,
-            })
-        } else {
-            clearAIContext()
-        }
-    }, [editingTask, setAIContext, clearAIContext])
+    const handleTaskClick = (task: TaskListItem) => {
+        setAIContext({
+            entityType: "task",
+            entityId: task.id,
+            entityName: task.title,
+        })
+        setEditingTask(task)
+    }
+
+    const handleCloseEditModal = () => {
+        setEditingTask(null)
+        clearAIContext()
+    }
 
     const handleTaskToggle = async (taskId: string, isCompleted: boolean) => {
         setSelectedTaskIds((prev) => {
@@ -413,7 +409,7 @@ function useTasksPageController() {
         handleTaskClick,
         handleTaskToggle,
         handleViewChange,
-        onCloseEditModal: () => setEditingTask(null),
+        onCloseEditModal: handleCloseEditModal,
         onOpenAddTaskDialog: () => setAddTaskDialogOpen(true),
         refetchImportApprovals,
         refetchStatusRequests,

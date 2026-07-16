@@ -62,6 +62,8 @@ const mockUseStatusChangeRequests = vi.fn(() => ({
 }))
 const mockApproveStatusChange = vi.fn()
 const mockRejectStatusChange = vi.fn()
+const mockSetAIContext = vi.fn()
+const mockClearAIContext = vi.fn()
 
 vi.mock('@/lib/hooks/use-tasks', () => ({
     useTasks: (params: unknown) => mockUseTasks(params),
@@ -97,8 +99,8 @@ vi.mock('@/lib/auth-context', () => ({
 // Mock AI context
 vi.mock('@/lib/context/ai-context', () => ({
     useAIContext: () => ({
-        setContext: vi.fn(),
-        clearContext: vi.fn(),
+        setContext: mockSetAIContext,
+        clearContext: mockClearAIContext,
     }),
 }))
 
@@ -193,6 +195,8 @@ describe('TasksPage', () => {
         mockResolveApproval.mockReset()
         mockApproveImport.mockReset()
         mockRejectImport.mockReset()
+        mockSetAIContext.mockReset()
+        mockClearAIContext.mockReset()
     })
 
     it('renders tasks and toggles completion', () => {
@@ -304,6 +308,24 @@ describe('TasksPage', () => {
         await waitFor(() => {
             expect(mockBulkCompleteTasks).toHaveBeenCalledWith(['t1', 't2'])
         })
+    })
+
+    it('updates AI context directly from the task editor lifecycle', () => {
+        render(<TasksPage />)
+
+        expect(mockClearAIContext).not.toHaveBeenCalled()
+
+        fireEvent.click(screen.getByText('Follow up with surrogate'))
+
+        expect(mockSetAIContext).toHaveBeenCalledWith({
+            entityType: 'task',
+            entityId: 't1',
+            entityName: 'Follow up with surrogate',
+        })
+
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+        expect(mockClearAIContext).toHaveBeenCalledTimes(1)
     })
 
     it('creates recurring tasks with the batch task mutation', async () => {
