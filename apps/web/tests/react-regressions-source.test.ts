@@ -3827,6 +3827,10 @@ describe("React regression guards (source)", () => {
         const ticketsSource = readSource("app/(app)/tickets/page.tsx")
         const unassignedPageSource = readSource("app/(app)/surrogates/unassigned/page.tsx")
         const unassignedSource = readSource("app/(app)/surrogates/unassigned/page.client.tsx")
+        const unassignedContentIndex = unassignedSource.indexOf(
+            "function UnassignedSurrogatesContent("
+        )
+        const unassignedAuthorizationSource = unassignedSource.slice(0, unassignedContentIndex)
 
         expect(appLinkSource).toContain("const { push, replace: replaceRoute } = useRouter()")
         expect(appLinkSource).toContain("replaceRoute(targetHref")
@@ -3850,7 +3854,9 @@ describe("React regression guards (source)", () => {
         expect(unassignedSource).toContain("const { push, replace } = useRouter()")
         expect(unassignedPageSource).toContain("searchParams: Promise<Record<string, SearchParamValue>>")
         expect(unassignedSource).toContain("initialSearchParams")
-        expect(unassignedSource).toContain('replace("/surrogates")')
+        expect(unassignedSource).toContain('redirect("/surrogates")')
+        expect(unassignedAuthorizationSource).not.toContain("useUnassignedQueue(")
+        expect(unassignedAuthorizationSource).not.toContain("useClaimSurrogate(")
         expect(unassignedSource).toContain("push(`/surrogates/${surrogateId}`)")
         expect(unassignedSource).not.toContain("finally")
         expect(unassignedSource).not.toContain("useCallback")
