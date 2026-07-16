@@ -3,9 +3,16 @@ import { fireEvent, render, screen, within } from "@testing-library/react"
 import type { ImgHTMLAttributes } from "react"
 
 import FormBuilderPage from "../app/(app)/automation/forms/[id]/page.client"
+import type {
+    FormRead,
+    FormSubmissionRead,
+    ListFormSubmissionsParams,
+} from "@/lib/api/forms"
 
 const mockPush = vi.fn()
 const mockReplace = vi.fn()
+const mockUseForm = vi.fn()
+const mockFormSubmissions = vi.fn()
 const mockCreateForm = vi.fn()
 const mockSetFormMappings = vi.fn()
 const mockPublishForm = vi.fn()
@@ -13,9 +20,12 @@ const mockRefetchIntakeLinks = vi.fn()
 const { toastError } = vi.hoisted(() => ({
     toastError: vi.fn(),
 }))
+const navigationState = vi.hoisted(() => ({
+    formId: "new",
+}))
 
 vi.mock("next/navigation", () => ({
-    useParams: () => ({ id: "new" }),
+    useParams: () => ({ id: navigationState.formId }),
     useRouter: () => ({
         push: mockPush,
         replace: mockReplace,
@@ -62,10 +72,11 @@ vi.mock("@/lib/hooks/use-signature", () => ({
 
 vi.mock("@/lib/hooks/use-forms", () => ({
     useCreateForm: () => ({ mutateAsync: mockCreateForm, isPending: false }),
-    useForm: () => ({ data: undefined, isLoading: false }),
+    useForm: () => mockUseForm(),
     useFormEmbedHealth: () => ({ data: null, isFetching: false, refetch: vi.fn() }),
     useFormIntakeLinks: () => ({ data: [], refetch: mockRefetchIntakeLinks }),
-    useFormSubmissions: () => ({ data: [], refetch: vi.fn(), isLoading: false }),
+    useFormSubmissions: (formId: string | null, params: ListFormSubmissionsParams) =>
+        mockFormSubmissions(formId, params),
     useFormMappings: () => ({ data: [], isLoading: false }),
     usePublishForm: () => ({ mutateAsync: mockPublishForm, isPending: false }),
     useRetrySubmissionMatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -82,13 +93,22 @@ vi.mock("@/lib/hooks/use-forms", () => ({
 
 describe("FormBuilderPage", () => {
     beforeEach(() => {
+        navigationState.formId = "new"
         mockPush.mockReset()
         mockReplace.mockReset()
+        mockUseForm.mockReset()
+        mockFormSubmissions.mockReset()
         mockCreateForm.mockReset()
         mockSetFormMappings.mockReset()
         mockPublishForm.mockReset()
         mockRefetchIntakeLinks.mockReset()
         toastError.mockReset()
+        mockUseForm.mockReturnValue({ data: undefined, isLoading: false })
+        mockFormSubmissions.mockReturnValue({
+            data: [],
+            refetch: vi.fn(),
+            isLoading: false,
+        })
         mockCreateForm.mockResolvedValue({
             id: "form-1",
             name: "Published Intake",
@@ -196,6 +216,72 @@ describe("FormBuilderPage", () => {
         expect(
             await screen.findByRole("heading", { name: "Share Application Intake" }),
         ).toBeInTheDocument()
+    })
+
+    it("clears submission review notes when leaving the submissions workspace", async () => {
+        const form: FormRead = {
+            id: "form-1",
+            name: "Surrogate Application",
+            status: "draft",
+            purpose: "surrogate_application",
+            created_at: "2026-07-16T00:00:00Z",
+            updated_at: "2026-07-16T00:00:00Z",
+            description: null,
+            form_schema: {
+                pages: [{ title: "Application", fields: [] }],
+            },
+            published_schema: null,
+            max_file_size_bytes: 10 * 1024 * 1024,
+            max_file_count: 10,
+            allowed_mime_types: null,
+            default_application_email_template_id: null,
+        }
+        const submission: FormSubmissionRead = {
+            id: "submission-1",
+            form_id: "form-1",
+            surrogate_id: null,
+            status: "pending_review",
+            submitted_at: "2026-07-16T00:00:00Z",
+            reviewed_at: null,
+            reviewed_by_user_id: null,
+            review_notes: null,
+            answers: {
+                full_name: "Alex Applicant",
+                email: "alex@example.com",
+            },
+            schema_snapshot: null,
+            source_mode: "shared",
+            intake_link_id: "link-1",
+            intake_lead_id: null,
+            match_status: "ambiguous_review",
+            match_reason: null,
+            matched_at: null,
+            files: [],
+        }
+
+        navigationState.formId = form.id
+        mockUseForm.mockReturnValue({ data: form, isLoading: false })
+        mockFormSubmissions.mockImplementation(
+            (_formId: string | null, params: ListFormSubmissionsParams = {}) => ({
+                data: params.match_status === "ambiguous_review" ? [submission] : [],
+                refetch: vi.fn(),
+                isLoading: false,
+            }),
+        )
+
+        render(<FormBuilderPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: /^submissions$/i }))
+        fireEvent.click(await screen.findByRole("button", { name: "Review Candidates" }))
+        fireEvent.change(screen.getByLabelText("Reviewer notes"), {
+            target: { value: "Only for the first review" },
+        })
+
+        fireEvent.click(screen.getByRole("tab", { name: /^edit$/i }))
+        fireEvent.click(screen.getByRole("tab", { name: /^submissions$/i }))
+        fireEvent.click(await screen.findByRole("button", { name: "Review Candidates" }))
+
+        expect(screen.getByLabelText("Reviewer notes")).toHaveValue("")
     })
 
     it("renders human-readable labels for inspector dropdown triggers", async () => {
