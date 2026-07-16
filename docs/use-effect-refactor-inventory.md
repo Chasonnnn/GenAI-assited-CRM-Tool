@@ -10,14 +10,14 @@ Scope: production TypeScript under `apps/web/app`, `apps/web/components`, and `a
 
 - 144 `useEffect` calls across 75 production files.
 - 86 **REPLACE**: ordinary React data flow, direct fetching, route choreography, polling, or ref synchronization that should use a more explicit primitive.
-- 46 **CONTAIN**: valid browser or external-system synchronization that currently lives in a page or component and should move behind a narrowly named hook with complete cleanup.
-- 12 **RETAIN**: valid external synchronization already isolated in a named hook with dependencies and cleanup.
+- 47 **CONTAIN**: valid browser or external-system synchronization that currently lives in a page or component and should move behind a narrowly named hook with complete cleanup.
+- 11 **RETAIN**: valid external synchronization already isolated in a named hook with dependencies and cleanup.
 
 Line numbers below identify the baseline commit. As slices land, completion evidence is the current source plus tests and validation—not the continued existence of a baseline line number.
 
 ## Progress
 
-- 44 **REPLACE** Effects removed; 21 **CONTAIN** call sites consolidated behind six tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 84 production `useEffect` calls remain.
+- 44 **REPLACE** Effects removed; 22 **CONTAIN** call sites consolidated behind six tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 83 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -51,7 +51,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Interview detail polling is owned by the detail query and runs only while a selected attachment reports pending or processing transcription.
 - Hidden-tab browser notification delivery now lives in a tested hook that owns permission checks, native payload mapping, and per-notification deduplication.
 - Form publishing opens the sharing prompt directly from the intake links returned by the publish flow, removing the pending-state Effect relay and avoiding dependence on a later query render.
-- Automation form autosave now lives in a tested synchronization hook that owns debounce timing, cancellation, and active-draft completion while the controller retains payload and persistence ownership.
+- Automation and platform-template autosave now share a tested synchronization hook that owns debounce timing, cancellation, and active-draft completion while each controller retains its payload, queue, and persistence ownership.
 - Workspace tab transitions clear submission selection, manual-link input, and reviewer notes in the initiating event, preventing review text from leaking into a later submission after leaving the workspace.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
@@ -204,7 +204,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 | `apps/web/lib/forms/use-template-form-builder-page.ts:245` | REPLACE | Replace internal state choreography with derivation, an event/reducer transition, or a keyed component boundary. |
 | `apps/web/lib/forms/use-template-form-builder-page.ts:271` | REPLACE | Replace internal state choreography with derivation, an event/reducer transition, or a keyed component boundary. |
 | `apps/web/lib/forms/use-template-form-builder-page.ts:283` | REPLACE | Replace internal state choreography with derivation, an event/reducer transition, or a keyed component boundary. |
-| `apps/web/lib/forms/use-template-form-builder-page.ts:348` | RETAIN | Valid external synchronization is already contained in a named hook with cleanup. |
+| `apps/web/lib/forms/use-template-form-builder-page.ts:348` | CONTAIN | Debounced persistence is valid external synchronization, but the baseline page-level Effect should move behind the shared form-builder autosave hook. |
 | `apps/web/lib/hooks/use-dashboard-socket.ts:49` | RETAIN | Valid external synchronization is already contained in a named hook with cleanup. |
 | `apps/web/lib/hooks/use-dashboard-socket.ts:62` | RETAIN | Valid external synchronization is already contained in a named hook with cleanup. |
 | `apps/web/lib/hooks/use-debounced-value.ts:13` | RETAIN | Valid external synchronization is already contained in a named hook with cleanup. |
