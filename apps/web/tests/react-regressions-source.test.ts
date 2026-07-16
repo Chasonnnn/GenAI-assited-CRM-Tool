@@ -2095,6 +2095,7 @@ describe("React regression guards (source)", () => {
     it("keeps intended parent list filters derived from URL state without mirror effects", () => {
         const intendedParentsSource = readSource("app/(app)/intended-parents/page.client.tsx")
         const matchesSource = readSource("app/(app)/intended-parents/matches/page.client.tsx")
+        const debounceSource = readSource("lib/hooks/use-debounced-search-commit.ts")
 
         expect(intendedParentsSource).toContain("function readIntendedParentListUrlState")
         expect(intendedParentsSource).toContain("const searchDebounceTimerRef = useRef")
@@ -2103,10 +2104,15 @@ describe("React regression guards (source)", () => {
         expect(intendedParentsSource).not.toContain("[currentQuery]) // oxlint-disable-line react-doctor/exhaustive-deps")
 
         expect(matchesSource).toContain("function readMatchListUrlState")
-        expect(matchesSource).toContain("const searchDebounceTimerRef = useRef")
+        expect(matchesSource).toContain("useDebouncedSearchCommit(currentQuery)")
+        expect(matchesSource).not.toContain("searchDebounceTimerRef")
+        expect(matchesSource).not.toContain("useEffect")
         expect(matchesSource).not.toContain("hasSyncedSearchRef")
         expect(matchesSource).not.toContain("setDebouncedSearch")
         expect(matchesSource).not.toContain("[currentQuery]) // oxlint-disable-line react-doctor/exhaustive-deps")
+        expect(debounceSource).toContain("useEffect(() =>")
+        expect(debounceSource).toContain("return cancel")
+        expect(debounceSource).toContain("}, [scopeKey])")
     })
 
     it("builds form builder mappings in a single pass", () => {
