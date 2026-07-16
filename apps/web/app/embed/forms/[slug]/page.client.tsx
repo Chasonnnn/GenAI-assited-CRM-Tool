@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useQuery } from "@tanstack/react-query"
 import { AlertTriangleIcon, CheckCircle2Icon, Loader2Icon, SendIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -15,7 +16,6 @@ import {
     createEmbedFormSession,
     getEmbedPublicForm,
     submitEmbedPublicForm,
-    type FormEmbedPublicRead,
     type FormField,
 } from "@/lib/api/forms"
 
@@ -33,18 +33,14 @@ type EmbedSessionState = {
 }
 type EmbedFormState = {
     parentOrigin: string | null
-    formConfig: FormEmbedPublicRead | null
     sessionState: EmbedSessionState | null
     answers: Answers
     datePickerOpen: Record<string, boolean>
-    isLoading: boolean
     isSubmitting: boolean
     isSubmitted: boolean
     error: string | null
 }
 type EmbedFormAction =
-    | { type: "formLoadSucceeded"; formConfig: FormEmbedPublicRead }
-    | { type: "formLoadFailed" }
     | { type: "sessionCreated"; sessionState: EmbedSessionState }
     | { type: "sessionFailed" }
     | { type: "answerChanged"; fieldKey: string; value: PublicFormAnswerValue }
@@ -98,11 +94,9 @@ function createInitialEmbedFormState(initialParentOrigin: string | null | undefi
     const parentOrigin = initialParentOrigin ?? getInitialParentOrigin()
     return {
         parentOrigin,
-        formConfig: null,
         sessionState: null,
         answers: {},
         datePickerOpen: {},
-        isLoading: Boolean(parentOrigin),
         isSubmitting: false,
         isSubmitted: false,
         error: parentOrigin ? null : "This form is not available for this website.",
@@ -166,19 +160,6 @@ function asJsonObject(answers: Answers): JsonObject {
 
 function embedFormReducer(state: EmbedFormState, action: EmbedFormAction): EmbedFormState {
     switch (action.type) {
-        case "formLoadSucceeded":
-            return {
-                ...state,
-                formConfig: action.formConfig,
-                isLoading: false,
-                error: null,
-            }
-        case "formLoadFailed":
-            return {
-                ...state,
-                isLoading: false,
-                error: "This form is not available for this website.",
-            }
         case "sessionCreated":
             return {
                 ...state,
@@ -267,43 +248,52 @@ function ensureEmbedSession({
 }
 
 export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props) {
+    const parentOrigin = initialParentOrigin ?? getInitialParentOrigin()
+    return (
+        <EmbedFormSession
+            key={`${slug}\u0000${parentOrigin ?? "missing-origin"}`}
+            slug={slug}
+            parentOrigin={parentOrigin}
+        />
+    )
+}
+
+function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: string | null }) {
     const containerRef = React.useRef<HTMLDivElement | null>(null)
     const sessionStateRef = React.useRef<EmbedSessionState | null>(null)
     const sessionRequestKeyRef = React.useRef<string | null>(null)
     const [state, dispatch] = React.useReducer(
         embedFormReducer,
-        initialParentOrigin,
+        parentOrigin,
         createInitialEmbedFormState,
     )
     const {
-        parentOrigin,
-        formConfig,
         sessionState,
         answers,
         datePickerOpen,
-        isLoading,
         isSubmitting,
         isSubmitted,
-        error,
+        error: localError,
     } = state
+    const formQuery = useQuery({
+        queryKey: ["public", "embed-form", slug, parentOrigin],
+        queryFn: () => {
+            if (!parentOrigin) throw new Error("Missing parent origin")
+            return getEmbedPublicForm(slug, parentOrigin)
+        },
+        enabled: Boolean(parentOrigin),
+        retry: false,
+    })
+    const formConfig = parentOrigin ? formQuery.data ?? null : null
+    const isLoading = parentOrigin ? formQuery.isLoading : false
+    const error = localError ?? (formQuery.isError
+        ? "This form is not available for this website."
+        : null)
     const activeSessionKey = parentOrigin ? getEmbedSessionKey(slug, parentOrigin) : null
     const sessionToken = sessionState?.key === activeSessionKey ? sessionState.token : null
     const setDatePickerOpen: React.Dispatch<React.SetStateAction<Record<string, boolean>>> = (update) => {
         dispatch({ type: "datePickerOpenChanged", update })
     }
-
-    React.useEffect(() => {
-        if (!parentOrigin) return
-        const loadForm = async () => {
-            try {
-                const form = await getEmbedPublicForm(slug, parentOrigin)
-                dispatch({ type: "formLoadSucceeded", formConfig: form })
-            } catch {
-                dispatch({ type: "formLoadFailed" })
-            }
-        }
-        void loadForm()
-    }, [parentOrigin, slug])
 
     React.useEffect(() => {
         if (!parentOrigin || !formConfig) return
