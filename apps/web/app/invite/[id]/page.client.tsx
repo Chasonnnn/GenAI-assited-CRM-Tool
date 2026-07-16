@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
+import { useQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ShieldCheck, UserPlus, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react"
@@ -29,54 +29,27 @@ export default function InviteAcceptPageClient() {
     const inviteId =
         typeof rawId === "string" ? rawId : Array.isArray(rawId) ? rawId[0] : ""
 
-    const [invite, setInvite] = useState<InviteDetails | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
-    const [currentOrgId, setCurrentOrgId] = useState<string | null>(null)
-
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
 
-    // Fetch invite details
-    useEffect(() => {
-        async function fetchInvite() {
-            const result = await api.get<InviteDetails>(`/settings/invites/accept/${inviteId}`).then((data) => ({
-                status: "success" as const,
-                data,
-            })).catch((err: unknown) => ({
-                status: "error" as const,
-                message: err instanceof Error ? err.message : "Invite not found",
-            }))
-
-            if (result.status === "success") {
-                setInvite(result.data)
-            } else {
-                setError(result.message)
-            }
-            setIsLoading(false)
-        }
-
-        if (inviteId) {
-            void fetchInvite()
-        }
-    }, [inviteId])
-
-    useEffect(() => {
-        let active = true
-        async function fetchMe() {
-            try {
-                const me = await api.get<MeResponse>("/auth/me")
-                if (active) {
-                    setCurrentOrgId(me.org_id)
-                }
-            } catch {
-                // Ignore unauthenticated users
-            }
-        }
-        void fetchMe()
-        return () => {
-            active = false
-        }
-    }, [])
+    const inviteQuery = useQuery({
+        queryKey: ["invite-accept", inviteId],
+        queryFn: () => api.get<InviteDetails>(`/settings/invites/accept/${inviteId}`),
+        enabled: Boolean(inviteId),
+        retry: false,
+    })
+    const currentUserQuery = useQuery({
+        queryKey: ["invite-accept", "current-user"],
+        queryFn: () => api.get<MeResponse>("/auth/me"),
+        retry: false,
+    })
+    const invite = inviteQuery.data ?? null
+    const isLoading = inviteQuery.isLoading
+    const error = inviteQuery.error instanceof Error
+        ? inviteQuery.error.message
+        : inviteQuery.error
+          ? "Invite not found"
+          : null
+    const currentOrgId = currentUserQuery.data?.org_id ?? null
 
     const handleSignIn = () => {
         try {
