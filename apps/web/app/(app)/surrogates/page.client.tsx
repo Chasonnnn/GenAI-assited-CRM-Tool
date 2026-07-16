@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useTransition, useRef } from "react"
+import { useState, useTransition } from "react"
 import type { Route } from "next"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -36,6 +36,7 @@ import { MassEditStageModal } from "@/components/surrogates/MassEditStageModal"
 import { BulkChangeStageModal } from "@/components/surrogates/BulkChangeStageModal"
 import { SurrogatesFloatingScrollbar } from "@/components/surrogates/SurrogatesFloatingScrollbar"
 import type { PipelineStage } from "@/lib/api/pipelines"
+import { useDebouncedSearchCommit } from "@/lib/hooks/use-debounced-search-commit"
 
 const SHORT_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -589,16 +590,10 @@ export function SurrogatesPageClient() {
     const createMutation = useCreateSurrogate()
     const { data: intelligentSummary } = useIntelligentSuggestionSummary()
     const [isFilterPending, startFilterTransition] = useTransition()
-    const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-    useEffect(() => {
-        return () => {
-            if (searchDebounceRef.current) {
-                clearTimeout(searchDebounceRef.current)
-                searchDebounceRef.current = null
-            }
-        }
-    }, [currentQuery])
+    const {
+        cancel: clearPendingSearchCommit,
+        schedule: scheduleSearchCommit,
+    } = useDebouncedSearchCommit(currentQuery)
 
     // Sync state changes back to URL
     const updateUrlParams = (
@@ -634,17 +629,10 @@ export function SurrogatesPageClient() {
         replace(newUrl as Route, { scroll: false })
     }
 
-    const clearPendingSearchCommit = () => {
-        if (searchDebounceRef.current) {
-            clearTimeout(searchDebounceRef.current)
-            searchDebounceRef.current = null
-        }
-    }
-
     const handleSearchChange = (nextSearch: string) => {
         setSearchDraft({ query: currentQuery, value: nextSearch })
         clearPendingSearchCommit()
-        searchDebounceRef.current = setTimeout(() => {
+        scheduleSearchCommit(() => {
             startFilterTransition(() => {
                 updateUrlParams(
                     stageFilter,
