@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useReducer, useRef, useState } from "react"
+import { useEffect, useReducer, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -691,10 +691,20 @@ export default function AutomationPageClient({
     const canManageAutomation = permissions.includes("manage_automation")
     const [activeTab] = useState(initialTab)
 
-    const [workflowScopeTab, setWorkflowScopeTab] = useState<"personal" | "org" | "templates">(
-        initialWorkflowScopeTab
-    )
-    const workflowScopeTabTouchedRef = useRef(false)
+    const [workflowScopeSelection, setWorkflowScopeSelection] = useState<{
+        tab: "personal" | "org" | "templates"
+        touched: boolean
+    }>({
+        tab: initialWorkflowScopeTab,
+        touched: false,
+    })
+    const workflowScopeTab =
+        !hasInitialScopeParam &&
+        canManageAutomation &&
+        !workflowScopeSelection.touched &&
+        workflowScopeSelection.tab === "personal"
+            ? "org"
+            : workflowScopeSelection.tab
     const [workflowBuilderState, dispatchWorkflowBuilder] = useReducer(
         workflowBuilderReducer,
         undefined,
@@ -778,18 +788,6 @@ export default function AutomationPageClient({
 
     const isTemplatesTab = workflowScopeTab === "templates"
     const activeWorkflowScope: WorkflowScope = workflowScopeTab === "templates" ? "personal" : workflowScopeTab
-
-    // Default admins to org workflows when no explicit scope is set.
-    // This avoids "personal" workflows unexpectedly failing for queue-owned cases.
-    useEffect(() => {
-        if (hasInitialScopeParam) return
-        if (!canManageAutomation) return
-        if (workflowScopeTabTouchedRef.current) return
-        if (workflowScopeTab !== "personal") return
-        startTransition(() => {
-            setWorkflowScopeTab("org")
-        })
-    }, [canManageAutomation, hasInitialScopeParam, workflowScopeTab])
 
     const workflowSetupSessionIdRef = useRef<string | null>(null)
 
@@ -1311,8 +1309,10 @@ export default function AutomationPageClient({
                     <Tabs
                         value={workflowScopeTab}
                         onValueChange={(v) => {
-                            workflowScopeTabTouchedRef.current = true
-                            setWorkflowScopeTab(v as "personal" | "org" | "templates")
+                            setWorkflowScopeSelection({
+                                tab: v as "personal" | "org" | "templates",
+                                touched: true,
+                            })
                         }}
                         className="space-y-4"
                     >
