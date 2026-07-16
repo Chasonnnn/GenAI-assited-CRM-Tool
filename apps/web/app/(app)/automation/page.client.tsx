@@ -335,27 +335,63 @@ function normalizeTriggerConfigForUi(
     triggerConfig: JsonObject,
     statuses: StatusOption[],
 ): JsonObject {
-    if (triggerType !== "status_changed") return { ...triggerConfig }
     const next: JsonObject = { ...triggerConfig }
-    if (
-        (typeof next.to_stage_id !== "string" || !next.to_stage_id) &&
-        typeof next.to_status === "string"
-    ) {
-        const match = statuses.find((status) => status.value === next.to_status)
-        if (match?.id) {
-            next.to_stage_id = match.id
-            delete next.to_status
+    if (triggerType === "status_changed") {
+        if (
+            (typeof next.to_stage_id !== "string" || !next.to_stage_id) &&
+            typeof next.to_status === "string"
+        ) {
+            const match = statuses.find((status) => status.value === next.to_status)
+            if (match?.id) {
+                next.to_stage_id = match.id
+                delete next.to_status
+            }
+        }
+        if (
+            (typeof next.from_stage_id !== "string" || !next.from_stage_id) &&
+            typeof next.from_status === "string"
+        ) {
+            const match = statuses.find((status) => status.value === next.from_status)
+            if (match?.id) {
+                next.from_stage_id = match.id
+                delete next.from_status
+            }
+        }
+        if (typeof next.to_stage_id !== "string") next.to_stage_id = ""
+        if (typeof next.from_stage_id !== "string") delete next.from_stage_id
+    }
+    if (triggerType === "scheduled") {
+        if (typeof next.cron !== "string") next.cron = ""
+        if (typeof next.timezone !== "string") next.timezone = "America/Los_Angeles"
+    }
+    if (triggerType === "inactivity") {
+        if (typeof next.days === "string") {
+            const parsed = Number(next.days)
+            next.days = Number.isFinite(parsed) ? parsed : 7
+        } else if (typeof next.days !== "number") {
+            next.days = 7
+        }
+    }
+    if (triggerType === "task_due") {
+        if (typeof next.hours_before === "string") {
+            const parsed = Number(next.hours_before)
+            next.hours_before = Number.isFinite(parsed) ? parsed : 24
+        } else if (typeof next.hours_before !== "number") {
+            next.hours_before = 24
         }
     }
     if (
-        (typeof next.from_stage_id !== "string" || !next.from_stage_id) &&
-        typeof next.from_status === "string"
+        triggerType === "form_started" ||
+        triggerType === "form_submitted" ||
+        triggerType === "intake_lead_created"
     ) {
-        const match = statuses.find((status) => status.value === next.from_status)
-        if (match?.id) {
-            next.from_stage_id = match.id
-            delete next.from_status
-        }
+        if (typeof next.form_id !== "string") next.form_id = ""
+    }
+    if (triggerType === "surrogate_updated") {
+        if (!Array.isArray(next.fields)) next.fields = []
+    }
+    if (triggerType === "surrogate_assigned") {
+        if (typeof next.to_user_id !== "string") delete next.to_user_id
     }
     return next
 }
@@ -520,7 +556,12 @@ function workflowBuilderReducer(state: WorkflowBuilderState, action: WorkflowBui
         case "setWorkflowScope":
             return { ...state, workflowScope: action.value }
         case "setTriggerType":
-            return { ...state, triggerType: action.value }
+            if (action.value === state.triggerType) return state
+            return {
+                ...state,
+                triggerType: action.value,
+                triggerConfig: normalizeTriggerConfigForUi(action.value, {}, []),
+            }
         case "setTriggerConfig":
             return {
                 ...state,
@@ -1026,52 +1067,6 @@ export default function AutomationPageClient({
         if (areJsonObjectsEqual(normalized, triggerConfig)) return
         setTriggerConfig(normalized)
     }, [triggerConfig, triggerType, statusOptions])
-
-    useEffect(() => {
-        if (!triggerType) return
-        const next: JsonObject = { ...triggerConfig }
-        if (triggerType === "status_changed") {
-            if (typeof next.to_stage_id !== "string") next.to_stage_id = ""
-            if (typeof next.from_stage_id !== "string") delete next.from_stage_id
-        }
-        if (triggerType === "scheduled") {
-            if (typeof next.cron !== "string") next.cron = ""
-            if (typeof next.timezone !== "string") next.timezone = "America/Los_Angeles"
-        }
-        if (triggerType === "inactivity") {
-            if (typeof next.days === "string") {
-                const parsed = Number(next.days)
-                next.days = Number.isFinite(parsed) ? parsed : 7
-            } else if (typeof next.days !== "number") {
-                next.days = 7
-            }
-        }
-        if (triggerType === "task_due") {
-            if (typeof next.hours_before === "string") {
-                const parsed = Number(next.hours_before)
-                next.hours_before = Number.isFinite(parsed) ? parsed : 24
-            } else if (typeof next.hours_before !== "number") {
-                next.hours_before = 24
-            }
-        }
-        if (triggerType === "form_started") {
-            if (typeof next.form_id !== "string") next.form_id = ""
-        }
-        if (triggerType === "form_submitted") {
-            if (typeof next.form_id !== "string") next.form_id = ""
-        }
-        if (triggerType === "intake_lead_created") {
-            if (typeof next.form_id !== "string") next.form_id = ""
-        }
-        if (triggerType === "surrogate_updated") {
-            if (!Array.isArray(next.fields)) next.fields = []
-        }
-        if (triggerType === "surrogate_assigned") {
-            if (typeof next.to_user_id !== "string") delete next.to_user_id
-        }
-        if (areJsonObjectsEqual(next, triggerConfig)) return
-        setTriggerConfig(next)
-    }, [triggerConfig, triggerType])
 
     const handleNextStep = () => {
         const error = getStepValidationError(wizardStep)
