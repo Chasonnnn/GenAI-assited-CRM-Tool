@@ -12,8 +12,9 @@ import {
 } from "@/lib/forms/public-field-validation"
 import { cn } from "@/lib/utils"
 import type { JsonObject } from "@/lib/types/json"
+import { useEmbedFormResizeReporting } from "@/lib/hooks/use-embed-form-resize-reporting"
+import { useEmbedFormSessionHandshake } from "@/lib/hooks/use-embed-form-session-handshake"
 import {
-    createEmbedFormSession,
     getEmbedPublicForm,
     submitEmbedPublicForm,
     type FormField,
@@ -25,15 +26,8 @@ type Props = {
 }
 
 type Answers = Record<string, PublicFormAnswerValue>
-type ParentMessage =
-    | { type: string; attribution?: Record<string, unknown> }
-type EmbedSessionState = {
-    key: string
-    token: string
-}
 type EmbedFormState = {
     parentOrigin: string | null
-    sessionState: EmbedSessionState | null
     answers: Answers
     datePickerOpen: Record<string, boolean>
     isSubmitting: boolean
@@ -41,40 +35,13 @@ type EmbedFormState = {
     error: string | null
 }
 type EmbedFormAction =
-    | { type: "sessionCreated"; sessionState: EmbedSessionState }
-    | { type: "sessionFailed" }
     | { type: "answerChanged"; fieldKey: string; value: PublicFormAnswerValue }
     | { type: "datePickerOpenChanged"; update: React.SetStateAction<Record<string, boolean>> }
     | { type: "validationFailed"; error: string }
     | { type: "submissionStarted" }
     | { type: "submissionSucceeded" }
     | { type: "submissionFailed" }
-type EnsureEmbedSessionArgs = {
-    slug: string
-    origin: string
-    attribution: Record<string, unknown>
-    sessionStateRef: { current: EmbedSessionState | null }
-    sessionRequestKeyRef: { current: string | null }
-    onSessionCreated: (sessionState: EmbedSessionState) => void
-    onSessionFailed: () => void
-}
-
 const pageClassName = "public-form-light min-h-screen bg-transparent text-stone-900"
-const ALLOWED_ATTRIBUTION_KEYS = new Set([
-    "utm_source",
-    "utm_medium",
-    "utm_campaign",
-    "utm_term",
-    "utm_content",
-    "ad_id",
-    "adset_id",
-    "campaign_id",
-    "fbclid",
-    "fbc",
-    "fbp",
-    "referrer",
-    "landing_url",
-])
 
 function getInitialParentOrigin(): string | null {
     if (typeof window === "undefined") return null
@@ -94,7 +61,6 @@ function createInitialEmbedFormState(initialParentOrigin: string | null | undefi
     const parentOrigin = initialParentOrigin ?? getInitialParentOrigin()
     return {
         parentOrigin,
-        sessionState: null,
         answers: {},
         datePickerOpen: {},
         isSubmitting: false,
@@ -103,25 +69,11 @@ function createInitialEmbedFormState(initialParentOrigin: string | null | undefi
     }
 }
 
-function getEmbedSessionKey(slug: string, origin: string): string {
-    return `${slug}\u0000${origin}`
-}
-
 function buildIdempotencyKey(): string {
     if (typeof window !== "undefined" && typeof window.crypto?.randomUUID === "function") {
         return window.crypto.randomUUID()
     }
     return `${Date.now()}-${Math.random().toString(36).slice(2, 14)}`
-}
-
-function sanitizeAttribution(payload: Record<string, unknown> | undefined): Record<string, unknown> {
-    const sanitized: Record<string, unknown> = {}
-    for (const [key, value] of Object.entries(payload || {})) {
-        if (!ALLOWED_ATTRIBUTION_KEYS.has(key)) continue
-        if (value === null || value === undefined) continue
-        sanitized[key] = String(value).slice(0, 1000)
-    }
-    return sanitized
 }
 
 function evaluateCondition(field: FormField, answers: Answers): boolean {
@@ -160,16 +112,6 @@ function asJsonObject(answers: Answers): JsonObject {
 
 function embedFormReducer(state: EmbedFormState, action: EmbedFormAction): EmbedFormState {
     switch (action.type) {
-        case "sessionCreated":
-            return {
-                ...state,
-                sessionState: action.sessionState,
-            }
-        case "sessionFailed":
-            return {
-                ...state,
-                error: "This form is not available for this website.",
-            }
         case "answerChanged":
             return {
                 ...state,
@@ -217,36 +159,6 @@ function postEmbedMessageToParent(parentOrigin: string | null, message: Record<s
     window.parent.postMessage(message, parentOrigin)
 }
 
-function ensureEmbedSession({
-    slug,
-    origin,
-    attribution,
-    sessionStateRef,
-    sessionRequestKeyRef,
-    onSessionCreated,
-    onSessionFailed,
-}: EnsureEmbedSessionArgs): void {
-    const sessionKey = getEmbedSessionKey(slug, origin)
-    if (sessionStateRef.current?.key === sessionKey || sessionRequestKeyRef.current === sessionKey) return
-    sessionRequestKeyRef.current = sessionKey
-    void (async () => {
-        try {
-            const session = await createEmbedFormSession(slug, origin, attribution)
-            const nextSession = {
-                key: sessionKey,
-                token: session.session_token,
-            }
-            sessionStateRef.current = nextSession
-            onSessionCreated(nextSession)
-        } catch {
-            onSessionFailed()
-        }
-        if (sessionRequestKeyRef.current === sessionKey) {
-            sessionRequestKeyRef.current = null
-        }
-    })()
-}
-
 export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props) {
     const parentOrigin = initialParentOrigin ?? getInitialParentOrigin()
     return (
@@ -260,15 +172,12 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
 
 function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: string | null }) {
     const containerRef = React.useRef<HTMLDivElement | null>(null)
-    const sessionStateRef = React.useRef<EmbedSessionState | null>(null)
-    const sessionRequestKeyRef = React.useRef<string | null>(null)
     const [state, dispatch] = React.useReducer(
         embedFormReducer,
         parentOrigin,
         createInitialEmbedFormState,
     )
     const {
-        sessionState,
         answers,
         datePickerOpen,
         isSubmitting,
@@ -286,65 +195,18 @@ function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: 
     })
     const formConfig = parentOrigin ? formQuery.data ?? null : null
     const isLoading = parentOrigin ? formQuery.isLoading : false
+    const { sessionToken, sessionError } = useEmbedFormSessionHandshake({
+        enabled: Boolean(parentOrigin && formConfig),
+        parentOrigin,
+        slug,
+    })
     const error = localError ?? (formQuery.isError
         ? "This form is not available for this website."
-        : null)
-    const activeSessionKey = parentOrigin ? getEmbedSessionKey(slug, parentOrigin) : null
-    const sessionToken = sessionState?.key === activeSessionKey ? sessionState.token : null
+        : sessionError)
     const setDatePickerOpen: React.Dispatch<React.SetStateAction<Record<string, boolean>>> = (update) => {
         dispatch({ type: "datePickerOpenChanged", update })
     }
-
-    React.useEffect(() => {
-        if (!parentOrigin || !formConfig) return
-        const onMessage = (event: MessageEvent<ParentMessage>) => {
-            if (event.origin !== parentOrigin) return
-            if (!event.data || event.data.type !== "sf:form:init") return
-            ensureEmbedSession({
-                slug,
-                origin: event.origin,
-                attribution: sanitizeAttribution(event.data.attribution),
-                sessionStateRef,
-                sessionRequestKeyRef,
-                onSessionCreated: (nextSession) => dispatch({ type: "sessionCreated", sessionState: nextSession }),
-                onSessionFailed: () => dispatch({ type: "sessionFailed" }),
-            })
-        }
-        window.addEventListener("message", onMessage)
-        postEmbedMessageToParent(parentOrigin, { type: "sf:form:ready" })
-
-        const fallback = window.setTimeout(() => {
-            ensureEmbedSession({
-                slug,
-                origin: parentOrigin,
-                attribution: {},
-                sessionStateRef,
-                sessionRequestKeyRef,
-                onSessionCreated: (nextSession) => dispatch({ type: "sessionCreated", sessionState: nextSession }),
-                onSessionFailed: () => dispatch({ type: "sessionFailed" }),
-            })
-        }, 1000)
-
-        return () => {
-            window.removeEventListener("message", onMessage)
-            window.clearTimeout(fallback)
-        }
-    }, [formConfig, parentOrigin, slug])
-
-    React.useEffect(() => {
-        if (!containerRef.current) return
-        const element = containerRef.current
-        const sendHeight = () => {
-            postEmbedMessageToParent(parentOrigin, {
-                type: "sf:form:resize",
-                height: Math.ceil(element.getBoundingClientRect().height),
-            })
-        }
-        const observer = new ResizeObserver(sendHeight)
-        observer.observe(element)
-        sendHeight()
-        return () => observer.disconnect()
-    }, [parentOrigin, formConfig, error, isLoading, isSubmitted])
+    useEmbedFormResizeReporting(containerRef, parentOrigin)
 
     const pages = formConfig?.form_schema.pages || []
     const visibleFields: FormField[] = []
