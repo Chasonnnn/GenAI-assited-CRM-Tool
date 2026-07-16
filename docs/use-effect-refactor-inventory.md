@@ -17,13 +17,15 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 7 **REPLACE** Effects removed and 10 **CONTAIN** call sites consolidated behind one tested mount hook; 128 production `useEffect` calls remain.
+- 12 **REPLACE** Effects removed and 10 **CONTAIN** call sites consolidated behind one tested mount hook; 123 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
 - Mount-only browser synchronization now uses the reviewed `useMountEffect` boundary across auth, offline detection, AI cleanup/focus, dashboard analytics/cleanup, templates URL state, and the floating scrollbar.
 - AI, email, and Meta integration forms initialize at loading-to-loaded boundaries instead of rehydrating from every query object.
 - Campaign edit drafts hydrate from the explicit open action rather than campaign query identity.
+- Social-link, personal-signature, and onboarding-profile drafts now preserve user edits across equivalent query/auth refreshes.
+- Invitation and current-user loading now use separate TanStack Query keys, preventing older invitation responses from replacing the active route.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
 ## Verdict rules
