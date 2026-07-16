@@ -13,9 +13,20 @@ export const metadata: Metadata = {
 
 type PageProps = {
     params: Promise<{ slug: string }>
+    searchParams: Promise<{ parent_origin?: string | string[] }>
 }
 
-export default async function EmbedFormPage({ params }: PageProps) {
+export default async function EmbedFormPage({ params, searchParams }: PageProps) {
     const { slug } = await params
-    return <EmbedFormPageClient slug={slug} />
+    const { parent_origin: rawParentOrigin } = await searchParams
+    const initialParentOrigin = Array.isArray(rawParentOrigin)
+        ? rawParentOrigin[0] ?? null
+        : rawParentOrigin ?? null
+
+    return (
+        <EmbedFormPageClient
+            slug={slug}
+            initialParentOrigin={initialParentOrigin}
+        />
+    )
 }

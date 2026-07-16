@@ -160,7 +160,10 @@ function postEmbedMessageToParent(parentOrigin: string | null, message: Record<s
 }
 
 export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props) {
-    const parentOrigin = initialParentOrigin ?? getInitialParentOrigin()
+    const parentOrigin =
+        initialParentOrigin === undefined
+            ? getInitialParentOrigin()
+            : initialParentOrigin
     return (
         <EmbedFormSession
             key={`${slug}\u0000${parentOrigin ?? "missing-origin"}`}
