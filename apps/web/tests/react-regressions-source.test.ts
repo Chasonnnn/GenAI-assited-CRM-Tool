@@ -1943,6 +1943,15 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useCallback")
     })
 
+    it("redirects incomplete app-shell profiles during render", () => {
+        const source = readSource("components/app-shell-client.tsx")
+
+        expect(source).toContain('redirect("/welcome")')
+        expect(source).not.toContain("useEffect")
+        expect(source).not.toContain("useRouter")
+        expect(source).not.toContain("replace(")
+    })
+
     it("avoids flatMap as a filter-map in form and campaign list normalization", () => {
         const formsApiSource = readSource("lib/api/forms.ts")
         const shareDialogSource = readSource("components/forms/builder/ShareApplicationDialog.tsx")
