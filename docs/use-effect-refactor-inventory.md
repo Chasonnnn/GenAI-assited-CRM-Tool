@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 62 **REPLACE** Effects removed; 40 **CONTAIN** call sites consolidated behind twenty-one tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 61 production `useEffect` calls remain.
+- 62 **REPLACE** Effects removed; 41 **CONTAIN** call sites consolidated behind twenty-two tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 61 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -79,6 +79,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - TranscriptEditor now delegates TipTap JSON synchronization to a tested editor hook; external `null` content clears stale transcript text once, while equivalent rerenders avoid duplicate editor writes.
 - TranscriptViewer now delegates container selection/click and document Escape listeners to a tested lifecycle hook with latest callbacks and exact cleanup; listeners also attach when transcript content appears after an initially empty render.
 - Interview connector lines now use a tested scroll-height observer hook only while an active or pending connector is visible, with initial measurement, resize updates, and disconnect cleanup owned by the hook.
+- TranscriptPane now delegates comment hover, focus, click, and keyboard event delegation to a tested interaction hook that respects active text selection, uses the latest context actions, and removes every listener on unmount.
 - The unassigned-surrogates route now redirects unauthorized users during initial rendering and mounts queue and claim hooks only after the role boundary; authorized view analytics live in a tested named lifecycle hook and do not rerun on unrelated renders.
 - Campaign detail now consumes each URL-driven edit request once during render, so `?edit=1` still hydrates and opens the draft while an explicit Cancel remains closed instead of being immediately reopened by an Effect.
 - Controlled rich-text HTML now synchronizes with the external Tiptap editor through a tested named hook that updates changed content once and ignores matching rerenders.
