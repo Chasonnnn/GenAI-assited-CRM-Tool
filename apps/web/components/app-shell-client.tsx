@@ -1,7 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
-import { usePathname, useRouter } from "next/navigation"
+import { redirect, usePathname } from "next/navigation"
 import dynamic from "next/dynamic"
 import { useRequireAuth } from "@/lib/auth-context"
 import { AIContextProvider } from "@/lib/context/ai-context"
@@ -30,7 +29,6 @@ export default function AppShellClient({
 }) {
   const { user, isLoading } = useRequireAuth();
   const pathname = usePathname();
-  const { replace } = useRouter();
 
   const shouldRedirectToWelcome =
     !!user &&
@@ -38,13 +36,6 @@ export default function AppShellClient({
     !user.profile_complete &&
     pathname !== "/welcome" &&
     !(user.mfa_required && !user.mfa_verified)
-
-  // Redirect to welcome page if profile is incomplete
-  useEffect(() => {
-    if (shouldRedirectToWelcome) {
-      replace("/welcome");
-    }
-  }, [shouldRedirectToWelcome, replace]);
 
   // Show loading state while checking auth
   if (isLoading) {
@@ -60,8 +51,8 @@ export default function AppShellClient({
     return null;
   }
 
-  // Don't render app shell while redirecting to welcome
   if (shouldRedirectToWelcome) {
+    redirect("/welcome");
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="animate-spin rounded-full size-8 border-b-2 border-primary"></div>
