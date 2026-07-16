@@ -1968,6 +1968,18 @@ describe("React regression guards (source)", () => {
         expect(filterBarSource).not.toContain("setAssigneeId(user.user_id)")
     })
 
+    it("contains dashboard mismatch diagnostics in a deduplicated hook", () => {
+        const pageSource = readSource("app/(app)/dashboard/page.client.tsx")
+        const hookSource = readSource("lib/hooks/use-dashboard-kpi-mismatch-warning.ts")
+
+        expect(pageSource).toContain("useDashboardKpiMismatchWarning({")
+        expect(pageSource).not.toContain("useEffect(")
+        expect(pageSource).not.toContain('console.warn("[dashboard]')
+        expect(hookSource).toContain("const lastWarningKeyRef = useRef<string | null>(null)")
+        expect(hookSource).toContain("if (lastWarningKeyRef.current === warningKey) return")
+        expect(hookSource).toContain('console.warn("[dashboard] KPI vs distribution mismatch"')
+    })
+
     it("redirects app-shell auth boundaries during render", () => {
         const source = readSource("components/app-shell-client.tsx")
         const authSource = readSource("lib/auth-context.tsx")

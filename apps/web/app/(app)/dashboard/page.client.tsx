@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect } from "react"
 import { useMountEffect } from "@/lib/hooks/use-mount-effect"
+import { useDashboardKpiMismatchWarning } from "@/lib/hooks/use-dashboard-kpi-mismatch-warning"
 import dynamic from "next/dynamic"
 import { useAuth } from "@/lib/auth-context"
 import { useDashboardSocket } from "@/lib/hooks/use-dashboard-socket"
@@ -122,27 +122,16 @@ function DashboardContent() {
         tasksQuery.isFetching ||
         upcomingQuery.isFetching
 
-    useEffect(() => {
-        if (process.env.NODE_ENV !== "development") return
-        if (!statusQuery.data || statsQuery.data?.total === undefined) return
-        const delta = Math.abs(kpiTotalForCheck - statusTotal)
-        const ratio = delta / Math.max(kpiTotalForCheck || 1, 1)
-        if (delta >= 5 && ratio >= 0.2) {
-            console.warn("[dashboard] KPI vs distribution mismatch", {
-                kpiTotal: kpiTotalForCheck,
-                distributionTotal: statusTotal,
-                filters,
-                dateParams,
-            })
-        }
-    }, [
+    useDashboardKpiMismatchWarning({
         dateParams,
+        distributionTotal: statusTotal,
+        enabled:
+            process.env.NODE_ENV === "development" &&
+            Boolean(statusQuery.data) &&
+            statsQuery.data?.total !== undefined,
         filters,
-        kpiTotalForCheck,
-        statsQuery.data?.total,
-        statusQuery.data,
-        statusTotal,
-    ])
+        kpiTotal: kpiTotalForCheck,
+    })
 
     // Refresh all dashboard data
     const handleRefresh = () => {
