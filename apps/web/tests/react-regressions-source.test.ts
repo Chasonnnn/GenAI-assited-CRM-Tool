@@ -2092,9 +2092,10 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("selectedValues.includes(option.value)")
     })
 
-    it("keeps intended parent list filters derived from URL state without mirror effects", () => {
+    it("keeps list filters derived from URL state without mirror effects", () => {
         const intendedParentsSource = readSource("app/(app)/intended-parents/page.client.tsx")
         const matchesSource = readSource("app/(app)/intended-parents/matches/page.client.tsx")
+        const surrogatesSource = readSource("app/(app)/surrogates/page.client.tsx")
         const debounceSource = readSource("lib/hooks/use-debounced-search-commit.ts")
 
         expect(intendedParentsSource).toContain("function readIntendedParentListUrlState")
@@ -2112,6 +2113,9 @@ describe("React regression guards (source)", () => {
         expect(matchesSource).not.toContain("hasSyncedSearchRef")
         expect(matchesSource).not.toContain("setDebouncedSearch")
         expect(matchesSource).not.toContain("[currentQuery]) // oxlint-disable-line react-doctor/exhaustive-deps")
+        expect(surrogatesSource).toContain("useDebouncedSearchCommit(currentQuery)")
+        expect(surrogatesSource).not.toContain("searchDebounceRef")
+        expect(surrogatesSource).not.toContain("useEffect")
         expect(debounceSource).toContain("useEffect(() =>")
         expect(debounceSource).toContain("return cancel")
         expect(debounceSource).toContain("}, [scopeKey])")
