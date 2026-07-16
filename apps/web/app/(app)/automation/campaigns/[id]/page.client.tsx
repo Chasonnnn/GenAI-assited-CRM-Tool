@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useReducer, useState, type Dispatch, type SetStateAction } from "react"
+import { useReducer, useState, type Dispatch, type SetStateAction } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -1175,6 +1175,7 @@ export default function CampaignDetailPage() {
     const [recipientFilter, setRecipientFilter] = useState("all")
     const [showTemplatePreview, setShowTemplatePreview] = useState(true)
     const [showEditDialog, setShowEditDialog] = useState(false)
+    const [handledAutoEditRequest, setHandledAutoEditRequest] = useState<string | null>(null)
     const [editDraft, dispatchEditDraft] = useReducer(
         campaignEditDraftReducer,
         initialCampaignEditDraft,
@@ -1226,21 +1227,28 @@ export default function CampaignDetailPage() {
             : pipelineStages.filter(stage => stage.is_active)
     const canEdit = campaign?.status === "draft" || campaign?.status === "scheduled"
     const shouldAutoOpenEdit = searchParams.get("edit") === "1"
+    const autoEditRequestKey =
+        shouldAutoOpenEdit && canEdit && campaign
+            ? `${campaign.id}:${searchParams.toString()}`
+            : null
+
+    if (!autoEditRequestKey && handledAutoEditRequest !== null) {
+        setHandledAutoEditRequest(null)
+    } else if (
+        autoEditRequestKey &&
+        campaign &&
+        handledAutoEditRequest !== autoEditRequestKey
+    ) {
+        dispatchEditDraft({ type: "hydrate", draft: createCampaignEditDraft(campaign) })
+        setShowEditDialog(true)
+        setHandledAutoEditRequest(autoEditRequestKey)
+    }
 
     const openEditDialog = () => {
         if (!campaign) return
         dispatchEditDraft({ type: "hydrate", draft: createCampaignEditDraft(campaign) })
         setShowEditDialog(true)
     }
-
-    useEffect(() => {
-        if (shouldAutoOpenEdit && canEdit && campaign && !showEditDialog) {
-            startTransition(() => {
-                dispatchEditDraft({ type: "hydrate", draft: createCampaignEditDraft(campaign) })
-                setShowEditDialog(true)
-            })
-        }
-    }, [shouldAutoOpenEdit, canEdit, campaign, showEditDialog])
 
     if (isLoading) {
         return (
