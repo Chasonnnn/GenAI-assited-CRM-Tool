@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useState, type ElementType } from 'react';
+import { type ElementType } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import Link from "@/components/app-link";
 import { Button } from '@/components/ui/button';
 import { buttonVariants } from '@/components/ui/button-variants';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Building2, Users, AlertTriangle, Plus, Bell, Loader2 } from 'lucide-react';
-import { getPlatformStats, listAlerts, type PlatformAlert, type PlatformStats } from '@/lib/api/platform';
+import { getPlatformStats, listAlerts } from '@/lib/api/platform';
 import { toast } from '@/components/ui/toast';
 
 
@@ -78,39 +79,29 @@ function StatCard({
 }
 
 export default function OpsDashboard() {
-    const [stats, setStats] = useState<PlatformStats | null>(null);
-    const [recentAlerts, setRecentAlerts] = useState<PlatformAlert[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [hasError, setHasError] = useState(false);
-
-    useEffect(() => {
-        async function fetchDashboard() {
-            setIsLoading(true);
-            setHasError(false);
-            const result = await Promise.all([
-                getPlatformStats(),
-                listAlerts({ limit: 5, status: 'open' }),
-            ]).then(([statsData, alertsData]) => ({
-                status: 'success' as const,
-                stats: statsData,
-                alerts: alertsData.items,
-            })).catch(() => ({
-                status: 'error' as const,
-            }));
-
-            if (result.status === 'success') {
-                setStats(result.stats);
-                setRecentAlerts(result.alerts);
-            } else {
-                setHasError(true);
+    const dashboardQuery = useQuery({
+        queryKey: ['platform', 'ops-dashboard'],
+        queryFn: async () => {
+            try {
+                const [stats, alerts] = await Promise.all([
+                    getPlatformStats(),
+                    listAlerts({ limit: 5, status: 'open' }),
+                ]);
+                return { stats, recentAlerts: alerts.items };
+            } catch (error) {
                 toast.error('Failed to load ops dashboard');
+                throw error;
             }
-            setIsLoading(false);
-        }
-        void fetchDashboard();
-    }, []);
+        },
+        retry: false,
+        staleTime: 30_000,
+    });
+    const { stats, recentAlerts } = dashboardQuery.data ?? {
+        stats: null,
+        recentAlerts: [],
+    };
 
-    if (isLoading) {
+    if (dashboardQuery.isLoading) {
         return (
             <div className="flex items-center justify-center py-16">
                 <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -118,7 +109,7 @@ export default function OpsDashboard() {
         );
     }
 
-    if (hasError || !stats) {
+    if (dashboardQuery.isError || !stats) {
         return (
             <div className="flex items-center justify-center py-16">
                 <div className="text-center space-y-3">
