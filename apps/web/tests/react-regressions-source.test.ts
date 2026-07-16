@@ -465,6 +465,24 @@ describe("React regression guards (source)", () => {
         expect(listenerSource).toContain("}, [containerRef, enabled])")
     })
 
+    it("observes transcript height only while connector lines are visible", () => {
+        const source = readSource(
+            "components/surrogates/interviews/InterviewComments/ConnectorLines.tsx"
+        )
+        const observerSource = readSource("lib/hooks/use-observed-scroll-height.ts")
+
+        expect(source).toContain(
+            "const connectorVisible = Boolean(activeNoteId || newComment.type === \"pending\")"
+        )
+        expect(source).toContain(
+            "const transcriptHeight = useObservedScrollHeight(transcriptRef, connectorVisible)"
+        )
+        expect(source).not.toContain("useEffect")
+        expect(observerSource).toContain("const resizeObserver = new ResizeObserver(updateHeight)")
+        expect(observerSource).toContain("resizeObserver.disconnect()")
+        expect(observerSource).toContain("}, [elementRef, enabled])")
+    })
+
     it("keeps safe HTML parsing and sanitization free of manual React memoization", () => {
         const source = readSource("components/safe-html-content.tsx")
 
