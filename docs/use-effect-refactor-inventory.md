@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 83 **REPLACE** Effects removed; 45 **CONTAIN** call sites consolidated behind twenty-six tested synchronization hooks; three baseline **CONTAIN** call sites removed after proving they synchronized no external state; 39 production `useEffect` calls remain.
+- 83 **REPLACE** Effects removed; 47 **CONTAIN** call sites consolidated behind twenty-eight tested synchronization hooks; three baseline **CONTAIN** call sites removed after proving they synchronized no external state; 39 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -103,6 +103,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Calendar day rendering no longer carries a focus Effect whose local ref was never attached to the button; existing DayPicker props remain the focus owner and date-range interaction tests stay green.
 - Hosted intake bootstrap loading now uses a slug-keyed TanStack Query, while reducer reconciliation hydrates each slug once without overwriting later answers; restored-draft autosave suppression is reducer-owned and acknowledged by the existing timer lifecycle after commit.
 - Hosted intake resume discovery now lives in a named lookup lifecycle that owns identity debounce timing, stale-request sequencing, cache and suppression checks, prompt updates, and timer cleanup while the page retains the explicit Continue Previous and Start New events.
+- The surrogates floating scrollbar controller now delegates ancestor/window listeners, pointer-capability resets, `ResizeObserver`, scroll synchronization, and activation-time viewport alignment to two named lifecycle hooks with exact cleanup; the controller itself is event and render logic only.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
 ## Verdict rules
