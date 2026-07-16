@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 21 **REPLACE** Effects removed and 10 **CONTAIN** call sites consolidated behind one tested mount hook; 114 production `useEffect` calls remain.
+- 25 **REPLACE** Effects removed and 10 **CONTAIN** call sites consolidated behind one tested mount hook; 110 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -32,6 +32,9 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Support-session capabilities refetch after transient failures and derive the effective access mode without hydration Effects.
 - Availability drafts derive from refreshed server rules for untouched days while explicit edits remain user-owned.
 - Automation defaults authorized admins to org scope before the first query, and email preview HTML derives from the active source without stale cross-preview state.
+- Test-email variables derive from the current recipient until a field is explicitly edited, so recipient changes cannot leave untouched samples stale.
+- Self-service appointment management and embedded public forms use route-keyed queries and keyed local sessions, preventing older route responses and drafts from replacing the active route.
+- Compliance policy fields derive from refreshed server data until the exact field is edited, preserving drafts without freezing untouched policy values.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
 ## Verdict rules
