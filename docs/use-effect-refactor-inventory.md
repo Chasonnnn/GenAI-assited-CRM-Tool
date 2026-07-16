@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 53 **REPLACE** Effects removed; 24 **CONTAIN** call sites consolidated behind eight tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 74 production `useEffect` calls remain.
+- 54 **REPLACE** Effects removed; 24 **CONTAIN** call sites consolidated behind eight tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 73 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -63,6 +63,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Queue settings now authorizes the route during render and mounts queue, member, and mutation hooks only inside the manager-only content boundary, preventing non-admin redirects from issuing protected queue requests first.
 - The welcome route redirects profile-complete users during initial render, before the onboarding form hooks mount, while successful form submission remains an explicit event-driven dashboard navigation.
 - The authenticated app shell now redirects incomplete profiles during initial rendering before protected children mount, while preserving the existing MFA exception and loading/unauthenticated boundaries.
+- The unassigned-surrogates route now redirects unauthorized users during initial rendering and mounts queue and claim hooks only after the role boundary; its valid view-tracking lifecycle remains isolated for a follow-up containment slice.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
 ## Verdict rules
