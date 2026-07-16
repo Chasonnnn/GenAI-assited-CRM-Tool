@@ -1,8 +1,11 @@
 import type { ReactNode } from "react"
 import { describe, it, expect, vi, afterEach } from "vitest"
-import { render, waitFor } from "@testing-library/react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { render, screen, waitFor } from "@testing-library/react"
 import "@testing-library/jest-dom"
 import OpsLayout from "../app/ops/layout"
+
+vi.unmock("@tanstack/react-query")
 
 const mockGetPlatformMe = vi.fn()
 const mockGetPlatformStats = vi.fn()
@@ -37,6 +40,16 @@ vi.mock("@/lib/api", () => ({
     },
 }))
 
+function renderOpsLayout(queryClient: QueryClient) {
+    return render(
+        <QueryClientProvider client={queryClient}>
+            <OpsLayout>
+                <div>Child</div>
+            </OpsLayout>
+        </QueryClientProvider>
+    )
+}
+
 describe("OpsLayout", () => {
     afterEach(() => {
         vi.clearAllMocks()
@@ -46,13 +59,44 @@ describe("OpsLayout", () => {
         const pendingMe = new Promise(() => {})
         mockGetPlatformMe.mockReturnValue(pendingMe)
         mockGetPlatformStats.mockResolvedValue({ open_alerts: 2 })
+        const queryClient = new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+        })
 
-        render(
-            <OpsLayout>
-                <div>Child</div>
-            </OpsLayout>
-        )
+        renderOpsLayout(queryClient)
 
         await waitFor(() => expect(mockGetPlatformStats).toHaveBeenCalledTimes(1))
+    })
+
+    it("reuses fresh platform access data when the protected layout remounts", async () => {
+        mockGetPlatformMe.mockResolvedValue({
+            user_id: "platform-user-1",
+            email: "admin@surrogacyforce.com",
+            display_name: "Platform Admin",
+            is_platform_admin: true,
+        })
+        mockGetPlatformStats.mockResolvedValue({
+            agency_count: 12,
+            active_user_count: 34,
+            open_alerts: 2,
+        })
+        const queryClient = new QueryClient({
+            defaultOptions: {
+                queries: {
+                    retry: false,
+                    staleTime: 60_000,
+                },
+            },
+        })
+
+        const firstRender = renderOpsLayout(queryClient)
+        expect(await screen.findByText("admin@surrogacyforce.com")).toBeInTheDocument()
+        firstRender.unmount()
+
+        renderOpsLayout(queryClient)
+        expect(await screen.findByText("admin@surrogacyforce.com")).toBeInTheDocument()
+
+        expect(mockGetPlatformMe).toHaveBeenCalledTimes(1)
+        expect(mockGetPlatformStats).toHaveBeenCalledTimes(1)
     })
 })
