@@ -229,6 +229,42 @@ describe("EmailComposeDialog", () => {
         expect(screen.getByText("Drag and drop files into the message area to attach.")).toBeInTheDocument()
     })
 
+    it("starts a fresh draft when the recipient changes", () => {
+        mockUseEmailTemplates.mockReturnValue({ data: [], isLoading: false })
+        mockUseEmailTemplate.mockReturnValue({ data: null, isLoading: false })
+        const onOpenChange = vi.fn()
+        const { rerender } = render(
+            <EmailComposeDialog
+                open
+                onOpenChange={onOpenChange}
+                surrogateData={baseSurrogateData}
+            />
+        )
+
+        fireEvent.change(screen.getByPlaceholderText("Enter email subject..."), {
+            target: { value: "Private draft for Ashley" },
+        })
+        expect(screen.getByPlaceholderText("Enter email subject...")).toHaveValue(
+            "Private draft for Ashley"
+        )
+
+        rerender(
+            <EmailComposeDialog
+                open
+                onOpenChange={onOpenChange}
+                surrogateData={{
+                    ...baseSurrogateData,
+                    id: "sur-2",
+                    email: "bea@example.com",
+                    full_name: "Bea Turner",
+                    surrogate_number: "S10002",
+                }}
+            />
+        )
+
+        expect(screen.getByPlaceholderText("Enter email subject...")).toHaveValue("")
+    })
+
     it("shows resolved template name instead of raw uuid in the selected value", async () => {
         const templateId = "129ba716-7291-457c-baec-545951262c1a"
 

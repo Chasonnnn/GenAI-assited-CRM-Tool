@@ -97,7 +97,6 @@ type ComposeFormAction =
     | { type: "togglePreview"; body?: string }
     | { type: "setAttachmentSelection"; selection: EmailAttachmentSelectionState }
     | { type: "setBodyDropActive"; isActive: boolean }
-    | { type: "reset" }
 
 function createEmptyAttachmentSelection(): EmailAttachmentSelectionState {
     return {
@@ -165,8 +164,6 @@ function composeFormReducer(state: ComposeFormState, action: ComposeFormAction):
             return state.isBodyDropActive === action.isActive
                 ? state
                 : { ...state, isBodyDropActive: action.isActive }
-        case "reset":
-            return createInitialComposeFormState()
         default:
             return state
     }
@@ -412,7 +409,12 @@ function createEmailIdempotencyKey(): string {
         : `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-export function EmailComposeDialog({
+export function EmailComposeDialog(props: EmailComposeDialogProps) {
+    const sessionKey = props.open ? `recipient:${props.surrogateData.id}` : "closed"
+    return <EmailComposeDialogSession key={sessionKey} {...props} />
+}
+
+function EmailComposeDialogSession({
     open,
     onOpenChange,
     surrogateData,
@@ -459,15 +461,6 @@ export function EmailComposeDialog({
             body: fullTemplate.body,
         })
     }, [fullTemplate])
-
-    React.useEffect(() => {
-        if (open) return
-
-        dragDepthRef.current = 0
-        idempotencyKeyRef.current = null
-        hydratedTemplateIdRef.current = null
-        dispatch({ type: "reset" })
-    }, [open])
 
     const previewVariableValues = buildPreviewVariableValues(surrogateData, resolvedTemplateVariables)
     const unresolvedTemplateVariables = findUnresolvedTemplateVariables([subject, body], previewVariableValues)
