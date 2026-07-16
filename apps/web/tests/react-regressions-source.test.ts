@@ -1925,12 +1925,18 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("if (currentStep > steps.length)")
     })
 
-    it("keeps dashboard URL filter sync in one reducer update", () => {
+    it("reconciles dashboard URL filters before child queries render", () => {
         const source = readSource("app/(app)/dashboard/context/dashboard-filters.tsx")
 
         expect(source).toContain("type DashboardFiltersAction")
         expect(source).toContain("function dashboardFiltersReducer")
+        expect(source).toContain("function getDashboardFilterSourceKey")
+        expect(source).toContain("if (filterState.sourceKey !== filterSourceKey)")
         expect(source).toMatch(/dispatchFilters\(\{\s*type: "syncFromUrl"/)
+        expect(source).toContain(
+            "filterState.sourceKey === filterSourceKey ? filterState.filters : urlFilters"
+        )
+        expect(source).not.toContain("useEffect")
         expect(source).not.toContain("setDateRangeState")
         expect(source).not.toContain("setCustomRangeState")
         expect(source).not.toContain("setAssigneeIdState")
