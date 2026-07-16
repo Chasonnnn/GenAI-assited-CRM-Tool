@@ -1,13 +1,10 @@
 "use client"
 
 import * as React from "react"
-import useEmblaCarousel, {
-  type UseEmblaCarouselType,
-} from "embla-carousel-react"
+import useEmblaCarousel from "embla-carousel-react"
 
 import { cn } from '@/lib/utils'
 
-type CarouselApi = UseEmblaCarouselType[1]
 type UseCarouselParameters = Parameters<typeof useEmblaCarousel>
 type CarouselOptions = UseCarouselParameters[0]
 type CarouselPlugin = UseCarouselParameters[1]
@@ -16,13 +13,11 @@ type CarouselProps = {
   opts?: CarouselOptions
   plugins?: CarouselPlugin
   orientation?: "horizontal" | "vertical"
-  setApi?: (api: CarouselApi) => void
 }
 
 function Carousel({
   orientation = "horizontal",
   opts,
-  setApi,
   plugins,
   className,
   children,
@@ -37,11 +32,6 @@ function Carousel({
     },
     plugins
   )
-  const setApiRef = React.useRef(setApi)
-
-  React.useEffect(() => {
-    setApiRef.current = setApi
-  }, [setApi])
 
   const scrollPrev = () => {
     api?.scrollPrev()
@@ -60,24 +50,6 @@ function Carousel({
       scrollNext()
     }
   }
-
-  React.useEffect(() => {
-    if (!api) return
-    setApiRef.current?.(api)
-  }, [api])
-
-  React.useEffect(() => {
-    if (!api) return
-    const handleSelect = () => undefined
-
-    api.on("reInit", handleSelect)
-    api.on("select", handleSelect)
-
-    return () => {
-      api.off("reInit", handleSelect)
-      api.off("select", handleSelect)
-    }
-  }, [api])
 
   return (
     <section
