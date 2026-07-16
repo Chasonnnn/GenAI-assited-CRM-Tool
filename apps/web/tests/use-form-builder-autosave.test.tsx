@@ -1,9 +1,9 @@
 import { act, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { useAutomationFormAutosave } from "@/lib/forms/use-automation-form-autosave"
+import { useFormBuilderAutosave } from "@/lib/forms/use-form-builder-autosave"
 
-describe("useAutomationFormAutosave", () => {
+describe("useFormBuilderAutosave", () => {
     beforeEach(() => {
         vi.useFakeTimers()
     })
@@ -12,14 +12,14 @@ describe("useAutomationFormAutosave", () => {
         vi.useRealTimers()
     })
 
-    it("saves an active draft only after the debounce interval", async () => {
+    it("saves the active draft only after the debounce interval", async () => {
         const save = vi.fn().mockResolvedValue({ id: "form-1" })
         const onSaving = vi.fn()
         const onSaved = vi.fn()
         const onError = vi.fn()
 
         renderHook(() =>
-            useAutomationFormAutosave({
+            useFormBuilderAutosave({
                 enabled: true,
                 fingerprint: "draft-1",
                 savedFingerprint: "draft-0",

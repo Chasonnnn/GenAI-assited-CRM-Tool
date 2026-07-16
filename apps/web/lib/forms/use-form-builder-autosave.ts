@@ -2,7 +2,7 @@
 
 import { useEffect, useEffectEvent } from "react"
 
-type AutomationFormAutosaveOptions<SavedForm> = {
+type FormBuilderAutosaveOptions<SavedForm> = {
     enabled: boolean
     fingerprint: string
     savedFingerprint: string
@@ -13,7 +13,7 @@ type AutomationFormAutosaveOptions<SavedForm> = {
     delayMs?: number
 }
 
-export function useAutomationFormAutosave<SavedForm>({
+export function useFormBuilderAutosave<SavedForm>({
     enabled,
     fingerprint,
     savedFingerprint,
@@ -22,7 +22,7 @@ export function useAutomationFormAutosave<SavedForm>({
     onSaved,
     onError,
     delayMs = 1200,
-}: AutomationFormAutosaveOptions<SavedForm>) {
+}: FormBuilderAutosaveOptions<SavedForm>) {
     const saveActiveDraft = useEffectEvent(async (isCancelled: () => boolean) => {
         if (isCancelled()) return
         onSaving()
