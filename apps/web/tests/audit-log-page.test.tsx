@@ -10,7 +10,7 @@ const mockRefetchExports = vi.fn()
 vi.mock('@/lib/hooks/use-audit', () => ({
     useAuditLogs: (filters: unknown) => mockUseAuditLogs(filters),
     useEventTypes: () => ({ data: ['user_login', 'pipeline_updated'] }),
-    useAuditExports: () => mockUseAuditExports(),
+    useAuditExports: (options: unknown) => mockUseAuditExports(options),
     useCreateAuditExport: () => ({ mutateAsync: mockCreateExport, isPending: false }),
     useAIAuditActivity: () => ({
         data: {
