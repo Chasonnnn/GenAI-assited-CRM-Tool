@@ -190,6 +190,13 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("React.useCallback")
         expect(source).toContain("function createWelcomeMessage")
         expect(source).toContain("function createTimestampId")
+        expect(source).toContain("function useAIAssistantHistorySession")
+        expect(source).toContain("if (isAuthLoading) return")
+        expect(source).toContain("chatStateRef.current = { ...chatStateRef.current, ...payload }")
+        expect(source).not.toContain("chatStateRef.current = chatState")
+        expect(source).not.toContain(
+            "useEffect(() => {\n        chatStateRef.current = chatState"
+        )
         expect(source).toContain("const currentSession = chatHistory.find")
         expect(source).not.toContain("`session-${Date.now()}`")
         expect(source).not.toContain("`user-${Date.now()}`")

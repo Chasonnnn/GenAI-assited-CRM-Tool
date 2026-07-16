@@ -193,6 +193,45 @@ describe('AIAssistantPage', () => {
         expect(screen.queryByText('Surrogate Session')).not.toBeInTheDocument()
     })
 
+    it('preserves stored history while authentication is still loading', async () => {
+        sessionStorage.setItem(
+            'ai-assistant-chat-history-v1',
+            JSON.stringify([
+                {
+                    id: 'session-loading',
+                    label: 'Saved during auth',
+                    preview: 'Keep this history',
+                    updatedAt: new Date().toISOString(),
+                    entityType: 'global',
+                    entityId: null,
+                    conversationId: null,
+                    messages: [],
+                },
+            ])
+        )
+        sessionStorage.setItem('ai-assistant-chat-history-user-v1', 'u1')
+        mockUseAuth.mockReturnValue({
+            user: null,
+            isLoading: true,
+            error: null,
+            refetch: vi.fn(),
+        })
+
+        const { rerender } = render(<AIAssistantPage />)
+
+        expect(sessionStorage.getItem('ai-assistant-chat-history-v1')).not.toBeNull()
+
+        mockUseAuth.mockReturnValue({
+            user: { user_id: 'u1' },
+            isLoading: false,
+            error: null,
+            refetch: vi.fn(),
+        })
+        rerender(<AIAssistantPage />)
+
+        expect(await screen.findByText('Saved during auth')).toBeInTheDocument()
+    })
+
     it('clears chat history when the user changes', async () => {
         sessionStorage.setItem(
             'ai-assistant-chat-history-v1',
