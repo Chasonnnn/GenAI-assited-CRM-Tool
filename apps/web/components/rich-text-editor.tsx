@@ -6,9 +6,10 @@ import Placeholder from '@tiptap/extension-placeholder'
 import TextAlign from '@tiptap/extension-text-align'
 import Image from '@tiptap/extension-image'
 import { cn } from '@/lib/utils'
-import { useEffect, useImperativeHandle, useState, type Ref } from 'react'
+import { useImperativeHandle, useState, type Ref } from 'react'
 import { RichTextEditorLoading } from '@/components/rich-text-editor-loading'
 import { RichTextEditorToolbar } from '@/components/rich-text-editor-toolbar'
+import { useSyncRichTextEditorContent } from '@/lib/hooks/use-sync-rich-text-editor-content'
 
 interface RichTextEditorProps {
     ref?: Ref<RichTextEditorHandle>
@@ -108,12 +109,7 @@ export function RichTextEditor({
         [editor]
     )
 
-    // Sync content when it changes externally
-    useEffect(() => {
-        if (editor && content !== editor.getHTML()) {
-            editor.commands.setContent(content)
-        }
-    }, [content, editor])
+    useSyncRichTextEditorContent(editor, content)
 
     const handleSubmit = () => {
         if (!editor) return
