@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import * as React from "react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
 import ManageAppointmentPage from "../app/book/self-service/[orgId]/manage/[token]/page"
 
@@ -8,6 +9,8 @@ const getAppointmentForManageMock = vi.fn()
 const getRescheduleSlotsByTokenMock = vi.fn()
 const rescheduleByManageTokenMock = vi.fn()
 const cancelByManageTokenMock = vi.fn()
+
+vi.unmock("@tanstack/react-query")
 
 vi.mock("@/lib/api/appointments", () => ({
     getAppointmentForManage: (orgId: string, token: string) =>
@@ -43,18 +46,28 @@ const APPOINTMENT = {
     google_meet_url: null,
 }
 
-async function renderManagePage(searchParams: Record<string, string> = {}) {
+async function renderManagePage(
+    searchParams: Record<string, string> = {},
+    routeParams: { orgId: string; token: string } = { orgId: "org-1", token: "token-1" }
+) {
+    const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+    })
+    let view!: ReturnType<typeof render>
     await act(async () => {
-        render(
-            <React.Suspense fallback={<div>Loading</div>}>
-                <ManageAppointmentPage
-                    params={Promise.resolve({ orgId: "org-1", token: "token-1" })}
-                    searchParams={Promise.resolve(searchParams)}
-                />
-            </React.Suspense>
+        view = render(
+            <QueryClientProvider client={queryClient}>
+                <React.Suspense fallback={<div>Loading</div>}>
+                    <ManageAppointmentPage
+                        params={Promise.resolve(routeParams)}
+                        searchParams={Promise.resolve(searchParams)}
+                    />
+                </React.Suspense>
+            </QueryClientProvider>
         )
         await Promise.resolve()
     })
+    return { view, queryClient }
 }
 
 describe("Self-service manage appointment page", () => {
@@ -141,5 +154,58 @@ describe("Self-service manage appointment page", () => {
         })
 
         expect(await screen.findByText("Appointment Rescheduled")).toBeInTheDocument()
+    })
+
+    it("keeps the newest token appointment when the older request finishes last", async () => {
+        let resolveFirst: (value: unknown) => void = () => undefined
+        let resolveSecond: (value: unknown) => void = () => undefined
+        const firstRequest = new Promise((resolve) => {
+            resolveFirst = resolve
+        })
+        const secondRequest = new Promise((resolve) => {
+            resolveSecond = resolve
+        })
+        getAppointmentForManageMock.mockImplementation((_orgId: string, token: string) =>
+            token === "token-1" ? firstRequest : secondRequest
+        )
+        const { view, queryClient } = await renderManagePage()
+        await waitFor(() => expect(getAppointmentForManageMock).toHaveBeenCalledTimes(1))
+
+        await act(async () => {
+            view.rerender(
+                <QueryClientProvider client={queryClient}>
+                    <React.Suspense fallback={<div>Loading</div>}>
+                        <ManageAppointmentPage
+                            params={Promise.resolve({ orgId: "org-2", token: "token-2" })}
+                            searchParams={Promise.resolve({})}
+                        />
+                    </React.Suspense>
+                </QueryClientProvider>
+            )
+            await Promise.resolve()
+        })
+        await waitFor(() => expect(getAppointmentForManageMock).toHaveBeenCalledTimes(2))
+
+        await act(async () => {
+            resolveSecond({
+                ...APPOINTMENT,
+                id: "appt-2",
+                appointment_type_name: "Second Consultation",
+                client_name: "Second Client",
+            })
+        })
+        expect(await screen.findByText("Second Consultation")).toBeInTheDocument()
+
+        await act(async () => {
+            resolveFirst({
+                ...APPOINTMENT,
+                appointment_type_name: "Older Consultation",
+                client_name: "Older Client",
+            })
+            await Promise.resolve()
+        })
+
+        expect(screen.getByText("Second Consultation")).toBeInTheDocument()
+        expect(screen.queryByText("Older Consultation")).not.toBeInTheDocument()
     })
 })
