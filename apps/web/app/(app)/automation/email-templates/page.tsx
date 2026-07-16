@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import NextImage from "next/image"
-import { useState, useRef, useEffect, useReducer } from "react"
+import { useState, useRef, useReducer } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -445,7 +445,6 @@ type TestSendDialogAction =
     | { type: "close" }
     | { type: "changeToEmail"; value: string }
     | { type: "changeIgnoreOptOut"; value: boolean }
-    | { type: "initializeVariables"; variables: Record<string, string> }
     | { type: "changeVariable"; name: string; value: string }
 
 const initialTestSendDialogState: TestSendDialogState = {
@@ -475,9 +474,6 @@ function testSendDialogReducer(
             return { ...state, toEmail: action.value }
         case "changeIgnoreOptOut":
             return { ...state, ignoreOptOut: action.value }
-        case "initializeVariables":
-            if (Object.keys(state.variables).length > 0) return state
-            return { ...state, variables: action.variables }
         case "changeVariable":
             return {
                 ...state,
@@ -928,7 +924,6 @@ export default function EmailTemplatesPage() {
         testSendDialogReducer,
         initialTestSendDialogState,
     )
-    const testSendTouchedRef = useRef<Record<string, boolean>>({})
 
     // Platform library copy/preview state
     const [libraryCopyOpen, setLibraryCopyOpen] = useState(false)
@@ -1016,36 +1011,19 @@ export default function EmailTemplatesPage() {
         : []
     const testSendHasUnsubscribeUrl = testSendUsedVariables.includes("unsubscribe_url")
     const testSendEditableVariables = testSendUsedVariables.filter((name) => name !== "unsubscribe_url")
-
-    useEffect(() => {
-        if (!testSendState.isOpen) return
-        if (!testSendTemplateDetail) return
-        const editableVariables = extractTemplateVariables(`${testSendTemplateDetail.subject}\n${testSendTemplateDetail.body}`)
-            .slice()
-            .sort((a, b) => a.localeCompare(b))
-            .filter((name) => name !== "unsubscribe_url")
-        if (editableVariables.length === 0) return
-
-        React.startTransition(() => {
-            const toEmail = testSendState.toEmail.trim() || user?.email || ""
-            const variables: Record<string, string> = {}
-            for (const variableName of editableVariables) {
-                variables[variableName] = buildTestVariableSample(variableName, {
-                    toEmail,
-                    ownerName: user?.display_name,
-                    orgName: user?.org_name,
-                })
-            }
-            dispatchTestSend({ type: "initializeVariables", variables })
+    const testSendDefaultVariables: Record<string, string> = {}
+    const testSendRecipient = testSendState.toEmail.trim() || user?.email || ""
+    for (const variableName of testSendEditableVariables) {
+        testSendDefaultVariables[variableName] = buildTestVariableSample(variableName, {
+            toEmail: testSendRecipient,
+            ownerName: user?.display_name,
+            orgName: user?.org_name,
         })
-    }, [
-        testSendState.isOpen,
-        testSendState.toEmail,
-        testSendTemplateDetail,
-        user?.display_name,
-        user?.email,
-        user?.org_name,
-    ])
+    }
+    const testSendVariables = {
+        ...testSendDefaultVariables,
+        ...testSendState.variables,
+    }
 
     const canValidateVariables = !templateVariablesLoading && templateVariables.length > 0
     const allowedVariableNames = new Set(templateVariables.map((variable) => variable.name))
@@ -1120,13 +1098,11 @@ export default function EmailTemplatesPage() {
     }
 
     const handleOpenTestDialog = (template: EmailTemplateListItem) => {
-        testSendTouchedRef.current = {}
         dispatchTestSend({ type: "open", target: template, toEmail: user?.email || "" })
     }
 
     const handleCloseTestDialog = () => {
         dispatchTestSend({ type: "close" })
-        testSendTouchedRef.current = {}
     }
 
     const handleSendTest = async () => {
@@ -1139,7 +1115,6 @@ export default function EmailTemplatesPage() {
 
         const overrides: Record<string, string> = {}
         for (const [key, value] of Object.entries(testSendState.variables)) {
-            if (!testSendTouchedRef.current[key]) continue
             const trimmed = value.trim()
             if (!trimmed) continue
             overrides[key] = trimmed
@@ -2413,14 +2388,13 @@ export default function EmailTemplatesPage() {
                                                             </Label>
                                                             <Input
                                                                 id={`test-var-${variableName}`}
-                                                                value={testSendState.variables[variableName] ?? ""}
+                                                                value={testSendVariables[variableName] ?? ""}
                                                                 onChange={(e) => {
                                                                     dispatchTestSend({
                                                                         type: "changeVariable",
                                                                         name: variableName,
                                                                         value: e.target.value,
                                                                     })
-                                                                    testSendTouchedRef.current[variableName] = true
                                                                 }}
                                                             />
                                                         </div>

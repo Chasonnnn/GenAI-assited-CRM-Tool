@@ -290,6 +290,22 @@ describe("EmailTemplatesPage", () => {
         })
     })
 
+    it("updates untouched email variable samples when the test recipient changes", async () => {
+        TEMPLATE_DETAIL_BY_ID.tpl_personal_1.body = "<p>{{email}}</p>"
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Personal Template" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Send test email" }))
+        fireEvent.click(screen.getByRole("button", { name: "Variables (optional)" }))
+
+        expect(await screen.findByLabelText("{{email}}")).toHaveValue("admin@example.com")
+        fireEvent.change(screen.getByLabelText("To email"), {
+            target: { value: "qa@example.com" },
+        })
+
+        expect(screen.getByLabelText("{{email}}")).toHaveValue("qa@example.com")
+    })
+
     it("labels organization template action menus with template context", async () => {
         render(<EmailTemplatesPage />)
 
