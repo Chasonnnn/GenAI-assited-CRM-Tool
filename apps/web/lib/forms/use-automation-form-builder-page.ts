@@ -437,15 +437,6 @@ export function useAutomationFormBuilderPage() {
     }, [formId, isNewForm, resetDocument, resetForForm])
 
     useEffect(() => {
-        if (state.workspaceTab !== "submissions") {
-            patchState({
-                selectedQueueSubmissionId: null,
-                manualSurrogateId: "",
-            })
-        }
-    }, [patchState, state.workspaceTab])
-
-    useEffect(() => {
         if (isNewForm || !formData || isMappingsLoading || state.hasHydrated) return
 
         const mappingMap = new Map(
@@ -698,12 +689,26 @@ export function useAutomationFormBuilderPage() {
         patchState({ showPublishDialog: true })
     }
 
+    const handleWorkspaceTabChange = (value: string) => {
+        const workspaceTab = value as typeof state.workspaceTab
+        patchState(
+            workspaceTab === "submissions"
+                ? { workspaceTab }
+                : {
+                    workspaceTab,
+                    selectedQueueSubmissionId: null,
+                    manualSurrogateId: "",
+                    resolveReviewNotes: "",
+                },
+        )
+    }
+
     const handlePreview = () => {
         if (pages.every((page) => page.fields.length === 0)) {
             toast.error("Add at least one field before previewing")
             return
         }
-        patchState({ workspaceTab: "preview" })
+        handleWorkspaceTabChange("preview")
     }
 
     const confirmPublish = async () => {
@@ -1138,7 +1143,7 @@ export function useAutomationFormBuilderPage() {
         },
         onBack: () => router.push("/automation/forms"),
         onFormNameChange: (value: string) => patchState({ formName: value }),
-        onWorkspaceTabChange: (value: string) => patchState({ workspaceTab: value as typeof state.workspaceTab }),
+        onWorkspaceTabChange: handleWorkspaceTabChange,
         onShareDialogOpenChange: (open: boolean) => patchState({ showSharePrompt: open }),
         onPublishDialogOpenChange: (open: boolean) => patchState({ showPublishDialog: open }),
         onDeletePageDialogOpenChange: (open: boolean) => {
