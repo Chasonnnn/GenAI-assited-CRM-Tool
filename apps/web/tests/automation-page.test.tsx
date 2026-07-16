@@ -165,13 +165,22 @@ describe('AutomationPage', () => {
             data: {
                 trigger_types: [
                     { value: 'surrogate_created', label: 'Surrogate Created', description: '' },
+                    { value: 'scheduled', label: 'Scheduled', description: '' },
                     { value: 'task_due', label: 'Task Due', description: '' },
                 ],
                 action_types: [
                     { value: 'add_note', label: 'Add Note', description: '' },
                 ],
-                action_types_by_trigger: { surrogate_created: ['add_note'], task_due: ['add_note'] },
-                trigger_entity_types: { surrogate_created: 'surrogate', task_due: 'task' },
+                action_types_by_trigger: {
+                    surrogate_created: ['add_note'],
+                    scheduled: ['add_note'],
+                    task_due: ['add_note'],
+                },
+                trigger_entity_types: {
+                    surrogate_created: 'surrogate',
+                    scheduled: 'surrogate',
+                    task_due: 'task',
+                },
                 condition_fields: [],
                 condition_operators: [],
                 update_fields: [],
@@ -243,6 +252,56 @@ describe('AutomationPage', () => {
 
         expect(screen.getByText(/fix these errors/i)).toBeInTheDocument()
         expect(screen.getByText(/Action 1: title is required/i)).toBeInTheDocument()
+    })
+
+    it('submits only the configuration for the selected trigger type', () => {
+        renderAutomationPage()
+
+        const createButtons = screen.getAllByRole('button', { name: /create workflow/i })
+        fireEvent.click(getLastElement(createButtons, 'Expected a create workflow button'))
+
+        fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Surrogates'), {
+            target: { value: 'Task Due Reminder' },
+        })
+
+        const triggerSelect = getFirstElement(
+            screen.getAllByTestId('select'),
+            'Expected a trigger select',
+        )
+        fireEvent.change(triggerSelect, { target: { value: 'scheduled' } })
+        fireEvent.change(screen.getByPlaceholderText('0 9 * * 1'), {
+            target: { value: '0 8 * * *' },
+        })
+        fireEvent.change(screen.getByPlaceholderText('America/Los_Angeles'), {
+            target: { value: 'America/New_York' },
+        })
+
+        fireEvent.change(triggerSelect, { target: { value: 'task_due' } })
+        fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '48' } })
+
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+
+        fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+        fireEvent.change(
+            getFirstElement(screen.getAllByTestId('select'), 'Expected an action select'),
+            { target: { value: 'add_note' } },
+        )
+        fireEvent.change(screen.getByPlaceholderText('Note content'), {
+            target: { value: 'Task is due soon' },
+        })
+
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        const saveButtons = screen.getAllByRole('button', { name: /create workflow/i })
+        fireEvent.click(getLastElement(saveButtons, 'Expected a save workflow button'))
+
+        expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                trigger_type: 'task_due',
+                trigger_config: { hours_before: 48 },
+            }),
+            expect.any(Object),
+        )
     })
 
     it('uses entity-specific labels in the test workflow modal', () => {
