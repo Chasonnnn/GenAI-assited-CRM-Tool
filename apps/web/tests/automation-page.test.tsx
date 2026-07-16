@@ -4,12 +4,13 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import AutomationPage from '../app/(app)/automation/page.client'
 
 const mockUseAuth = vi.fn()
+const mockUseEffectivePermissions = vi.fn()
 vi.mock('@/lib/auth-context', () => ({
     useAuth: () => mockUseAuth(),
 }))
 
 vi.mock('@/lib/hooks/use-permissions', () => ({
-    useEffectivePermissions: () => ({ data: { permissions: [] } }),
+    useEffectivePermissions: () => mockUseEffectivePermissions(),
 }))
 
 // Mock Next.js navigation
@@ -129,7 +130,7 @@ function getLastElement<T>(items: T[], message: string): T {
 }
 
 vi.mock('@/lib/hooks/use-workflows', () => ({
-    useWorkflows: () => mockUseWorkflows(),
+    useWorkflows: (...args: unknown[]) => mockUseWorkflows(...args),
     useWorkflow: () => mockUseWorkflow(),
     useWorkflowStats: () => mockUseWorkflowStats(),
     useWorkflowOptions: () => mockUseWorkflowOptions(),
@@ -155,6 +156,8 @@ function renderAutomationPage() {
 describe('AutomationPage', () => {
     beforeEach(() => {
         mockUseAuth.mockReturnValue({ user: { role: 'admin' } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: [] } })
+        mockUseWorkflows.mockClear()
         mockUseWorkflows.mockReturnValue({ data: [], isLoading: false })
         mockUseWorkflow.mockReturnValue({ data: null, isLoading: false })
         mockUseWorkflowStats.mockReturnValue({ data: { total_workflows: 0, enabled_workflows: 0, success_rate_24h: 0, total_executions_24h: 0 }, isLoading: false })
@@ -195,6 +198,17 @@ describe('AutomationPage', () => {
         expect(screen.getByText('My Workflows')).toBeInTheDocument()
         expect(screen.getByText('Org Workflows')).toBeInTheDocument()
         expect(screen.getByText('Workflow Templates')).toBeInTheDocument()
+    })
+
+    it('uses org scope for the first admin workflow query when no scope is explicit', () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['manage_automation'] },
+        })
+
+        renderAutomationPage()
+
+        expect(mockUseWorkflows).toHaveBeenNthCalledWith(1, { scope: 'org' })
+        expect(mockUseWorkflows).not.toHaveBeenCalledWith({ scope: 'personal' })
     })
 
     it('shows server validation errors in the wizard', () => {
