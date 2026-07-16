@@ -205,6 +205,24 @@ describe("MFAPage", () => {
 
         render(<MFAPage />)
 
+        expect(
+            screen.queryByText("Multi-factor authentication required")
+        ).not.toBeInTheDocument()
         await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/dashboard"))
+    })
+
+    it("redirects signed-out users without rendering the MFA challenge", async () => {
+        mockUseAuth.mockReturnValue({
+            user: null,
+            isLoading: false,
+            refetch: vi.fn(),
+        })
+
+        render(<MFAPage />)
+
+        expect(
+            screen.queryByText("Multi-factor authentication required")
+        ).not.toBeInTheDocument()
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/login"))
     })
 })
