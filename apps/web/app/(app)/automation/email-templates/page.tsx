@@ -396,17 +396,9 @@ type SignatureDraftState = {
 type SignatureDraftField = keyof SignatureDraftState
 
 type SignatureDraftAction =
-    | { type: "hydrate"; draft: SignatureDraftState }
-    | { type: "changeField"; field: SignatureDraftField; value: string }
+    { type: "changeField"; field: SignatureDraftField; value: string }
 
-const initialSignatureDraftState: SignatureDraftState = {
-    name: "",
-    title: "",
-    phone: "",
-    linkedin: "",
-    twitter: "",
-    instagram: "",
-}
+type SignatureDraftOverrides = Partial<SignatureDraftState>
 
 function createSignatureDraftState(
     signatureData: {
@@ -429,12 +421,10 @@ function createSignatureDraftState(
 }
 
 function signatureDraftReducer(
-    state: SignatureDraftState,
+    state: SignatureDraftOverrides,
     action: SignatureDraftAction,
-): SignatureDraftState {
+): SignatureDraftOverrides {
     switch (action.type) {
-        case "hydrate":
-            return action.draft
         case "changeField":
             return { ...state, [action.field]: action.value }
         default:
@@ -947,9 +937,9 @@ export default function EmailTemplatesPage() {
     const [libraryCopyName, setLibraryCopyName] = useState("")
     const [libraryPreviewId, setLibraryPreviewId] = useState<string | null>(null)
 
-    const [signatureDraft, dispatchSignatureDraft] = useReducer(
+    const [signatureDraftOverrides, dispatchSignatureDraft] = useReducer(
         signatureDraftReducer,
-        initialSignatureDraftState,
+        {},
     )
 
     const { data: templateVariables = [], isLoading: templateVariablesLoading } = useEmailTemplateVariables()
@@ -981,6 +971,10 @@ export default function EmailTemplatesPage() {
     const deletePhotoMutation = useDeleteSignaturePhoto()
     const { data: personalSignaturePreview } = useSignaturePreview()
     const { data: orgSignaturePreview } = useOrgSignaturePreview({ enabled: true, mode: "org_only" })
+    const signatureDraft = {
+        ...createSignatureDraftState(signatureData),
+        ...signatureDraftOverrides,
+    }
 
     const hasChanges = Boolean(
             signatureData &&
@@ -1070,18 +1064,6 @@ export default function EmailTemplatesPage() {
     const missingRequiredVariables = canValidateVariables
         ? requiredVariableNames.filter((variable) => !usedVariableNamesSet.has(variable))
         : []
-
-    // Load signature data on mount
-    useEffect(() => {
-        if (signatureData) {
-            React.startTransition(() => {
-                dispatchSignatureDraft({
-                    type: "hydrate",
-                    draft: createSignatureDraftState(signatureData),
-                })
-            })
-        }
-    }, [signatureData])
 
     const handleOpenModal = (template?: EmailTemplateListItem, scope: EmailTemplateScope = "personal") => {
         activeInsertionTargetRef.current = null
