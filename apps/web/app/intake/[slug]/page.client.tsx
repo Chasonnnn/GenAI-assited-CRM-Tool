@@ -39,6 +39,7 @@ import {
     type FormSubmissionSharedResponse,
     type FormSchema,
 } from "@/lib/api/forms"
+import { useHostedIntakeAutosave } from "@/lib/hooks/use-hosted-intake-autosave"
 
 type Step = {
     id: number
@@ -1005,7 +1006,6 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     const [agreed, setAgreed] = React.useState(false)
     const [resumePrompt, setResumePrompt] = React.useState<SharedResumePrompt | null>(null)
     const [isRestoringResume, setIsRestoringResume] = React.useState(false)
-    const autosaveTimerRef = React.useRef<number | null>(null)
     const resumeLookupTimerRef = React.useRef<number | null>(null)
     const skipNextAutosaveRef = React.useRef(false)
     const suppressedIdentityFingerprintsRef = React.useRef<Set<string> | null>(null)
@@ -1180,36 +1180,27 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         setResumePrompt(null)
     }
 
-    // Autosave drafts (answers only, not file uploads)
-    React.useEffect(() => {
-        if (!token || !formConfig || !draftSessionId) return
-        if (isSubmitted) return
-        if (!hasAnyDraftAnswer(answers)) return
-
-        if (skipNextAutosaveRef.current) {
-            skipNextAutosaveRef.current = false
-            return
-        }
-
-        if (autosaveTimerRef.current) {
-            window.clearTimeout(autosaveTimerRef.current)
-        }
-        autosaveTimerRef.current = window.setTimeout(() => {
-            void saveDraftSessionNow({
+    useHostedIntakeAutosave({
+        enabled: Boolean(
+            token &&
+            formConfig &&
+            draftSessionId &&
+            !isSubmitted &&
+            hasAnyDraftAnswer(answers)
+        ),
+        scopeKey: `${token}:${draftSessionId ?? ""}`,
+        trigger: answers,
+        skipNextSaveRef: skipNextAutosaveRef,
+        onSave: () => {
+            if (!draftSessionId) return
+            return saveDraftSessionNow({
                 token,
                 draftSessionId,
                 answers,
                 dispatchIntakeState,
             })
-        }, 1500)
-
-        return () => {
-            if (autosaveTimerRef.current) {
-                window.clearTimeout(autosaveTimerRef.current)
-                autosaveTimerRef.current = null
-            }
-        }
-    }, [answers, draftSessionId, formConfig, isSubmitted, token])
+        },
+    })
 
     const pages = formConfig?.form_schema.pages || []
     const hasAnyFileFields = pages.some((page) => page.fields.some((field) => field.type === "file"))
