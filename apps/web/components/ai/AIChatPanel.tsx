@@ -25,6 +25,7 @@ import { useConversation, useStreamChatMessage, useApproveAction, useRejectActio
 import type { ProposedAction } from "@/lib/api/ai"
 import type { ScheduleParserDialogProps } from "@/components/ai/ScheduleParserDialog"
 import { AssistantRichText } from "@/components/ai/AssistantRichText"
+import { useAIChatScrollToLatest } from "@/lib/hooks/use-ai-chat-scroll-to-latest"
 import { useMountEffect } from "@/lib/hooks/use-mount-effect"
 
 const ScheduleParserDialog = dynamic<ScheduleParserDialogProps>(
@@ -106,13 +107,6 @@ function createPanelMessageState(
 
 function abortActiveStream(streamAbortRef: MutableRef<AbortController | null>) {
     streamAbortRef.current?.abort()
-}
-
-function cancelAutoScrollFrame(autoScrollFrameRef: MutableRef<number | null>) {
-    if (typeof window === "undefined") return
-    if (autoScrollFrameRef.current === null) return
-    window.cancelAnimationFrame(autoScrollFrameRef.current)
-    autoScrollFrameRef.current = null
 }
 
 // Action type icons
@@ -447,7 +441,6 @@ export function AIChatPanel({
     const streamAbortRef = useRef<AbortController | null>(null)
     const streamingMessageIdRef = useRef<string | null>(null)
     const stopRequestedRef = useRef(false)
-    const autoScrollFrameRef = useRef<number | null>(null)
     const shouldStickToBottomRef = useRef(true)
     const currentContext = {
         entityId: entityId ?? null,
@@ -501,19 +494,7 @@ export function AIChatPanel({
         })
     }
 
-    useEffect(() => {
-        if (!shouldStickToBottomRef.current) return
-        if (typeof window === "undefined") return
-        if (autoScrollFrameRef.current !== null) {
-            window.cancelAnimationFrame(autoScrollFrameRef.current)
-        }
-        autoScrollFrameRef.current = window.requestAnimationFrame(() => {
-            const container = scrollRef.current
-            autoScrollFrameRef.current = null
-            if (!container) return
-            container.scrollTop = container.scrollHeight
-        })
-    }, [messages])
+    useAIChatScrollToLatest(scrollRef, messages, { shouldStickToBottomRef })
 
     useEffect(() => {
         shouldStickToBottomRef.current = true
@@ -531,7 +512,6 @@ export function AIChatPanel({
     useMountEffect(() => {
         return () => {
             abortActiveStream(streamAbortRef)
-            cancelAutoScrollFrame(autoScrollFrameRef)
         }
     })
 
