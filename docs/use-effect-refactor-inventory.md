@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 77 **REPLACE** Effects removed; 43 **CONTAIN** call sites consolidated behind twenty-four tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 46 production `useEffect` calls remain.
+- 78 **REPLACE** Effects removed; 43 **CONTAIN** call sites consolidated behind twenty-four tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 45 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -95,6 +95,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Controlled rich-text HTML now synchronizes with the external Tiptap editor through a tested named hook that updates changed content once and ignores matching rerenders.
 - Session expiration detection now lives in a tested cache-subscription hook that recognizes query and mutation 401 shapes and owns both unsubscribe cleanups, leaving the dialog presentation-only.
 - Surrogate, intended-parent, and intended-parent-match search navigation now share one tested debounce lifecycle that cancels stale commits on URL changes and unmount, replacing three page-level timer cleanup Effects with one contained boundary.
+- Main match-pipeline search now delegates its 300 ms timer and cancellation lifecycle to the shared debounced-value hook instead of owning a page-level Effect.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
 ## Verdict rules
