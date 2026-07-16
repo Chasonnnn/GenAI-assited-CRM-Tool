@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import Link from "@/components/app-link";
 import {
@@ -97,8 +98,6 @@ function useAgencyDetailController() {
     const [inviteResending, setInviteResending] = useState<string | null>(null);
     const [notesDraft, setNotesDraft] = useState('');
     const [notesSaving, setNotesSaving] = useState(false);
-    const [platformEmailStatus, setPlatformEmailStatus] = useState<PlatformEmailStatus | null>(null);
-    const [platformEmailLoading, setPlatformEmailLoading] = useState(false);
     const [deleteSubmitting, setDeleteSubmitting] = useState(false);
     const [restoreSubmitting, setRestoreSubmitting] = useState(false);
     const [purgeSubmitting, setPurgeSubmitting] = useState(false);
@@ -211,38 +210,23 @@ function useAgencyDetailController() {
 
     const openAlertCount = orgAlerts.filter((alert) => alert.status === 'open').length;
 
-    useEffect(() => {
-        if (activeTab !== 'invites') return;
-        let isCurrent = true;
-
-        async function fetchEmailStatus() {
-            setPlatformEmailLoading(true);
-            const finishPlatformEmailLoading = () => {
-                if (isCurrent) {
-                    setPlatformEmailLoading(false);
-                }
-            };
+    const platformEmailQuery = useQuery({
+        queryKey: ['platform', 'email-status'],
+        queryFn: async () => {
             try {
-                const status = await getPlatformEmailStatus();
-                if (isCurrent) {
-                    setPlatformEmailStatus(status);
-                    finishPlatformEmailLoading();
-                }
+                return await getPlatformEmailStatus();
             } catch (error) {
-                if (isCurrent) {
-                    console.error('Failed to fetch platform email status:', error);
-                    toast.error('Failed to load platform email sender status');
-                    finishPlatformEmailLoading();
-                }
+                console.error('Failed to fetch platform email status:', error);
+                toast.error('Failed to load platform email sender status');
+                throw error;
             }
-        }
-
-        void fetchEmailStatus();
-
-        return () => {
-            isCurrent = false;
-        };
-    }, [activeTab]);
+        },
+        enabled: activeTab === 'invites',
+        retry: false,
+        staleTime: 30_000,
+    });
+    const platformEmailStatus: PlatformEmailStatus | null = platformEmailQuery.data ?? null;
+    const platformEmailLoading = platformEmailQuery.isFetching;
 
     const handleDeleteOrganization = async () => {
         if (!org) return;
