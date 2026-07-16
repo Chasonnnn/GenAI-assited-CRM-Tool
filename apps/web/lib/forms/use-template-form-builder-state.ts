@@ -10,6 +10,8 @@ type AutoSaveStatus = "idle" | "saving" | "saved" | "error"
 type PreviewDevice = "desktop" | "mobile"
 
 type TemplateBuilderState = {
+    baselineTemplateKey: string | null
+    templateKey: string
     hasHydrated: boolean
     formName: string
     formDescription: string
@@ -39,7 +41,7 @@ type TemplateBuilderState = {
 
 type TemplateBuilderAction =
     | { type: "patch"; payload: Partial<TemplateBuilderState> }
-    | { type: "reset_for_form"; payload: { isNewForm: boolean } }
+    | { type: "reset_for_form"; payload: { isNewForm: boolean; templateKey: string } }
     | {
         type: "hydrate_from_template"
         payload: {
@@ -52,7 +54,9 @@ type TemplateBuilderAction =
         }
     }
 
-const buildInitialState = (isNewForm: boolean): TemplateBuilderState => ({
+const buildInitialState = (templateKey: string, isNewForm: boolean): TemplateBuilderState => ({
+    baselineTemplateKey: null,
+    templateKey,
     hasHydrated: isNewForm,
     formName: isNewForm ? "" : "Surrogate Application Form",
     formDescription: "",
@@ -90,7 +94,7 @@ function reducer(state: TemplateBuilderState, action: TemplateBuilderAction): Te
         case "patch":
             return { ...state, ...action.payload }
         case "reset_for_form":
-            return buildInitialState(action.payload.isNewForm)
+            return buildInitialState(action.payload.templateKey, action.payload.isNewForm)
         case "hydrate_from_template": {
             const metadata = schemaToMetadata(action.payload.schema)
             return {
@@ -120,15 +124,18 @@ function reducer(state: TemplateBuilderState, action: TemplateBuilderAction): Te
     }
 }
 
-export function useTemplateFormBuilderState(isNewForm: boolean) {
-    const [state, dispatch] = useReducer(reducer, buildInitialState(isNewForm))
+export function useTemplateFormBuilderState(templateKey: string, isNewForm: boolean) {
+    const [state, dispatch] = useReducer(reducer, buildInitialState(templateKey, isNewForm))
 
     const [patchState] = useState(() => (payload: Partial<TemplateBuilderState>) => {
         dispatch({ type: "patch", payload })
     })
 
-    const [resetForForm] = useState(() => (nextIsNewForm: boolean) => {
-        dispatch({ type: "reset_for_form", payload: { isNewForm: nextIsNewForm } })
+    const [resetForForm] = useState(() => (nextTemplateKey: string, nextIsNewForm: boolean) => {
+        dispatch({
+            type: "reset_for_form",
+            payload: { isNewForm: nextIsNewForm, templateKey: nextTemplateKey },
+        })
     })
 
     const [hydrateFromTemplate] = useState(() => (
