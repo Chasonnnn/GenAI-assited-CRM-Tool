@@ -126,6 +126,7 @@ const LIBRARY_TEMPLATE_DETAIL: EmailTemplateLibraryDetail = {
 
 let personalTemplatesFixture: EmailTemplateListItem[] = [PERSONAL_TEMPLATE]
 let orgTemplatesFixture: EmailTemplateListItem[] = [ORG_TEMPLATE]
+let libraryTemplateDetailFixture: EmailTemplateLibraryDetail | null = LIBRARY_TEMPLATE_DETAIL
 
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => mockUseAuth(),
@@ -180,7 +181,7 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
         isLoading: false,
     }),
     useEmailTemplateLibraryItem: (id: string | null) => ({
-        data: id === "lib_tpl_1" ? LIBRARY_TEMPLATE_DETAIL : null,
+        data: id === "lib_tpl_1" ? libraryTemplateDetailFixture : null,
         isLoading: false,
     }),
     useEmailTemplateVariables: () => ({ data: TEMPLATE_VARIABLES, isLoading: false }),
@@ -222,6 +223,7 @@ describe("EmailTemplatesPage", () => {
         userSignatureData = null
         personalTemplatesFixture = [PERSONAL_TEMPLATE]
         orgTemplatesFixture = [ORG_TEMPLATE]
+        libraryTemplateDetailFixture = LIBRARY_TEMPLATE_DETAIL
         TEMPLATE_DETAIL_BY_ID.tpl_personal_1.body = "<p>Personal Body</p>"
         TEMPLATE_DETAIL_BY_ID.tpl_org_1.body = "<p>Org Body</p>"
         mockUseAuth.mockReturnValue({
@@ -398,6 +400,27 @@ describe("EmailTemplatesPage", () => {
 
         expect(await screen.findByText("Personal Body")).toBeInTheDocument()
         expect(screen.queryByText("Hi there")).not.toBeInTheDocument()
+    })
+
+    it("does not show the previous template body while a library preview is loading", async () => {
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Personal Template" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
+        fireEvent.click(await screen.findByRole("button", { name: "Preview" }))
+        expect(await screen.findByText("Personal Body")).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Close" }))
+        await waitFor(() => {
+            expect(screen.queryByRole("heading", { name: "Email Preview" })).not.toBeInTheDocument()
+        })
+        fireEvent.click(screen.getByRole("button", { name: "Close" }))
+
+        libraryTemplateDetailFixture = null
+        fireEvent.click(await screen.findByRole("tab", { name: "Platform Templates" }))
+        fireEvent.click(screen.getAllByRole("button", { name: "Preview" })[0]!)
+
+        expect(await screen.findByText("Email Preview")).toBeInTheDocument()
+        expect(screen.queryByText("Personal Body")).not.toBeInTheDocument()
     })
 
     it("enables emoji picker for visual template editing", () => {
