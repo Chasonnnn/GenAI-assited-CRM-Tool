@@ -1967,14 +1967,20 @@ describe("React regression guards (source)", () => {
     })
 
     it("redirects signed-out Duo callbacks during render and retains only verification synchronization", () => {
-        const source = readSource("app/auth/duo/callback/page.client.tsx")
+        const pageSource = readSource("app/auth/duo/callback/page.client.tsx")
+        const hookSource = readSource("lib/hooks/use-duo-callback-verification.ts")
 
-        expect(source).toContain(
+        expect(pageSource).toContain(
             'redirect(getAuthReturnTo() === "ops" ? "/ops/login" : "/login")'
         )
-        expect(source.match(/useEffect\(\(\) =>/g)).toHaveLength(1)
-        expect(source).not.toContain('replace("/ops/login")')
-        expect(source).not.toContain('replace("/login")')
+        expect(pageSource).toContain("useDuoCallbackVerification({")
+        expect(pageSource).not.toContain("useEffect")
+        expect(pageSource).not.toContain('replace("/ops/login")')
+        expect(pageSource).not.toContain('replace("/login")')
+        expect(hookSource.match(/useEffect\(\(\) =>/g)).toHaveLength(1)
+        expect(hookSource).toContain("verifyDuoCallback(code, state, returnTo)")
+        expect(hookSource).toContain("active = false")
+        expect(hookSource).toContain("}, [enabled, refreshAuth, replace, returnTo])")
     })
 
     it("contains unassigned queue view tracking in a named lifecycle hook", () => {

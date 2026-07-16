@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useReducer, useState } from "react"
+import { useState } from "react"
 import { redirect, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog"
 import { CheckIcon, CopyIcon, KeyIcon, Loader2Icon } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { verifyDuoCallback } from "@/lib/api/mfa"
+import { useDuoCallbackVerification } from "@/lib/hooks/use-duo-callback-verification"
 
 function hasAuthReturnToOpsCookie(): boolean {
     if (typeof document === "undefined") return false
@@ -27,22 +27,6 @@ function getStoredAuthReturnTo(): string | null {
         return sessionStorage.getItem("auth_return_to")
     } catch {
         return null
-    }
-}
-
-function setStoredAuthReturnTo(value: string) {
-    try {
-        sessionStorage.setItem("auth_return_to", value)
-    } catch {
-        // Ignore storage errors in restricted browser contexts.
-    }
-}
-
-function clearStoredAuthReturnTo() {
-    try {
-        sessionStorage.removeItem("auth_return_to")
-    } catch {
-        // Ignore storage errors in restricted browser contexts.
     }
 }
 
@@ -60,51 +44,6 @@ function getAuthReturnTo(): "ops" | "app" {
         isOpsHost
         ? "ops"
         : "app"
-}
-
-const APP_POST_MFA_PATH = "/dashboard"
-
-const duoVerifyAttempts = new Set<string>()
-
-type DuoCallbackState = {
-    status: "loading" | "error" | "success"
-    errorMessage: string | null
-    recoveryCodes: string[] | null
-}
-
-type DuoCallbackAction =
-    | { type: "error"; message: string }
-    | { type: "success"; recoveryCodes?: string[] | null }
-    | { type: "clearRecoveryCodes" }
-
-const initialDuoCallbackState: DuoCallbackState = {
-    status: "loading",
-    errorMessage: null,
-    recoveryCodes: null,
-}
-
-function duoCallbackReducer(state: DuoCallbackState, action: DuoCallbackAction): DuoCallbackState {
-    switch (action.type) {
-        case "error":
-            return {
-                status: "error",
-                errorMessage: action.message,
-                recoveryCodes: null,
-            }
-        case "success":
-            return {
-                status: "success",
-                errorMessage: null,
-                recoveryCodes: action.recoveryCodes ?? null,
-            }
-        case "clearRecoveryCodes":
-            return {
-                ...state,
-                recoveryCodes: null,
-            }
-        default:
-            return state
-    }
 }
 
 function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: () => void }) {
@@ -168,67 +107,18 @@ function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: ()
 export default function DuoCallbackPage() {
     const { replace } = useRouter()
     const { user, isLoading: authLoading, refetch: refreshAuth } = useAuth()
-
-    const [{ status, errorMessage, recoveryCodes }, dispatch] = useReducer(
-        duoCallbackReducer,
-        initialDuoCallbackState,
-    )
-
-    useEffect(() => {
-        if (authLoading || !user) return
-
-        const urlParams = new URLSearchParams(window.location.search)
-        const returnTo = getAuthReturnTo()
-
-        if (returnTo === "ops") {
-            setStoredAuthReturnTo("ops")
-        }
-
-        // Duo Web SDK can return the authorization parameter as `duo_code` (default) or `code`.
-        const code = urlParams.get("duo_code") ?? urlParams.get("code")
-        const state = urlParams.get("state")
-        if (!code || !state) {
-            dispatch({
-                type: "error",
-                message: "Missing Duo response parameters. Please try again.",
-            })
-            return
-        }
-
-        const attemptKey = `${code}:${state}:${returnTo}`
-        if (duoVerifyAttempts.has(attemptKey)) {
-            return
-        }
-        duoVerifyAttempts.add(attemptKey)
-
-        const verify = async () => {
-            try {
-                const result = await verifyDuoCallback(code, state, returnTo)
-                const resultRecoveryCodes =
-                    result.recovery_codes && result.recovery_codes.length > 0
-                        ? result.recovery_codes
-                        : null
-                await refreshAuth()
-                dispatch({ type: "success", recoveryCodes: resultRecoveryCodes })
-                if (!resultRecoveryCodes) {
-                    if (returnTo === "ops") {
-                        clearStoredAuthReturnTo()
-                        replace("/ops")
-                        return
-                    }
-                    replace(APP_POST_MFA_PATH)
-                }
-            } catch (error) {
-                console.error("Duo verification failed:", error)
-                dispatch({
-                    type: "error",
-                    message: "Duo verification failed. Please try again.",
-                })
-            }
-        }
-
-        void verify()
-    }, [authLoading, user, refreshAuth, replace])
+    const returnTo = getAuthReturnTo()
+    const {
+        status,
+        errorMessage,
+        recoveryCodes,
+        completeRecoveryCodes,
+    } = useDuoCallbackVerification({
+        enabled: !authLoading && !!user,
+        refreshAuth,
+        replace,
+        returnTo,
+    })
 
     if (!authLoading && !user) {
         redirect(getAuthReturnTo() === "ops" ? "/ops/login" : "/login")
@@ -265,7 +155,7 @@ export default function DuoCallbackPage() {
                     {status === "success" && (
                         <div className="space-y-2">
                             <p className="text-sm text-muted-foreground">Duo verification complete.</p>
-                            <Button onClick={() => replace(APP_POST_MFA_PATH)}>Continue to dashboard</Button>
+                            <Button onClick={completeRecoveryCodes}>Continue to dashboard</Button>
                         </div>
                     )}
                 </CardContent>
@@ -274,16 +164,7 @@ export default function DuoCallbackPage() {
             {recoveryCodes && (
                 <RecoveryCodesDisplay
                     codes={recoveryCodes}
-                    onClose={() => {
-                        dispatch({ type: "clearRecoveryCodes" })
-                        const returnTo = getAuthReturnTo()
-                        if (returnTo === "ops") {
-                            clearStoredAuthReturnTo()
-                            replace("/ops")
-                            return
-                        }
-                        replace(APP_POST_MFA_PATH)
-                    }}
+                    onClose={completeRecoveryCodes}
                 />
             )}
         </div>
