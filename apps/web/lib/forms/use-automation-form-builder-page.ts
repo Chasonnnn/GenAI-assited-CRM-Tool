@@ -23,7 +23,7 @@ import {
     schemaToPages,
     type BuilderFormPage,
 } from "@/lib/forms/form-builder-document"
-import { useAutomationFormAutosave } from "@/lib/forms/use-automation-form-autosave"
+import { useFormBuilderAutosave } from "@/lib/forms/use-form-builder-autosave"
 import { useAutomationFormBuilderState } from "@/lib/forms/use-automation-form-builder-state"
 import type { AutomationBuilderState } from "@/lib/forms/use-automation-form-builder-state"
 import { useFormBuilderDocument } from "@/lib/forms/use-form-builder-document"
@@ -531,7 +531,7 @@ export function useAutomationFormBuilderPage() {
         }
     }
 
-    useAutomationFormAutosave({
+    useFormBuilderAutosave({
         enabled:
             state.hasHydrated &&
             Boolean(state.formName.trim()) &&

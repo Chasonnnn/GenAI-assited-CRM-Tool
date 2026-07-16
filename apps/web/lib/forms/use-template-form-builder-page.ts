@@ -13,6 +13,7 @@ import {
     buildMappings,
     schemaToPages,
 } from "@/lib/forms/form-builder-document"
+import { useFormBuilderAutosave } from "@/lib/forms/use-form-builder-autosave"
 import { useFormBuilderDocument } from "@/lib/forms/use-form-builder-document"
 import { useTemplateFormBuilderState } from "@/lib/forms/use-template-form-builder-state"
 import type { TemplateBuilderState } from "@/lib/forms/use-template-form-builder-state"
@@ -345,16 +346,15 @@ export function useTemplateFormBuilderPage() {
         }
     }
 
-    useEffect(() => {
-        if (!state.hasHydrated) return
-        if (!state.formName.trim()) return
-        if (draftFingerprint === state.lastSavedFingerprint) return
-        if (state.isSaving || state.isPublishing) return
-
-        let cancelled = false
-        const timeout = setTimeout(() => {
-            if (cancelled) return
-            patchState({ autoSaveStatus: "saving" })
+    useFormBuilderAutosave({
+        enabled:
+            state.hasHydrated &&
+            Boolean(state.formName.trim()) &&
+            !state.isSaving &&
+            !state.isPublishing,
+        fingerprint: draftFingerprint,
+        savedFingerprint: state.lastSavedFingerprint,
+        save: () => {
             const payload = buildTemplateDraftPayload(pages, {
                 allowedMimeTypesText: state.allowedMimeTypesText,
                 formDescription: state.formDescription,
@@ -367,8 +367,7 @@ export function useTemplateFormBuilderPage() {
                 publicSubtitle: state.publicSubtitle,
                 publicTitle: state.publicTitle,
             })
-
-            queueTemplateSave(saveQueueRef, () =>
+            return queueTemplateSave(saveQueueRef, () =>
                 persistTemplatePayload({
                     payload,
                     templateIdRef,
@@ -380,43 +379,11 @@ export function useTemplateFormBuilderPage() {
                     templateCurrentVersion: templateData?.current_version,
                 }),
             )
-                .then((savedForm) => {
-                    if (cancelled) return
-                    patchState(buildSavedState(draftFingerprint, savedForm))
-                })
-                .catch(() => {
-                    if (cancelled) return
-                    patchState({ autoSaveStatus: "error" })
-                })
-        }, 1200)
-
-        return () => {
-            cancelled = true
-            clearTimeout(timeout)
-        }
-    }, [
-        createTemplateMutation,
-        draftFingerprint,
-        pages,
-        patchState,
-        router,
-        state.allowedMimeTypesText,
-        state.formDescription,
-        state.formName,
-        state.hasHydrated,
-        state.isPublishing,
-        state.isSaving,
-        state.lastSavedFingerprint,
-        state.logoUrl,
-        state.maxFileCount,
-        state.maxFileSizeMb,
-        state.privacyNotice,
-        state.publicEyebrow,
-        state.publicSubtitle,
-        state.publicTitle,
-        templateData?.current_version,
-        updateTemplateMutation,
-    ])
+        },
+        onSaving: () => patchState({ autoSaveStatus: "saving" }),
+        onSaved: (savedForm) => patchState(buildSavedState(draftFingerprint, savedForm)),
+        onError: () => patchState({ autoSaveStatus: "error" }),
+    })
 
     const handlePreview = () => {
         if (pages.every((page) => page.fields.length === 0)) {
