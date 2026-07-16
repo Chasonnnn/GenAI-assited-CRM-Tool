@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 57 **REPLACE** Effects removed; 31 **CONTAIN** call sites consolidated behind twelve tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 67 production `useEffect` calls remain.
+- 58 **REPLACE** Effects removed; 31 **CONTAIN** call sites consolidated behind twelve tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 66 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -65,6 +65,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Queue settings now authorizes the route during render and mounts queue, member, and mutation hooks only inside the manager-only content boundary, preventing non-admin redirects from issuing protected queue requests first.
 - The welcome route redirects profile-complete users during initial render, before the onboarding form hooks mount, while successful form submission remains an explicit event-driven dashboard navigation.
 - The authenticated app shell now redirects incomplete profiles during initial rendering before protected children mount, while preserving the existing MFA exception and loading/unauthenticated boundaries.
+- Signed-out and MFA-required app-shell users now redirect during the render boundary as well; protected children never mount first, and the existing ops return cookie/host semantics still select `/mfa?return_to=ops`.
 - The unassigned-surrogates route now redirects unauthorized users during initial rendering and mounts queue and claim hooks only after the role boundary; authorized view analytics live in a tested named lifecycle hook and do not rerun on unrelated renders.
 - Campaign detail now consumes each URL-driven edit request once during render, so `?edit=1` still hydrates and opens the draft while an explicit Cancel remains closed instead of being immediately reopened by an Effect.
 - Controlled rich-text HTML now synchronizes with the external Tiptap editor through a tested named hook that updates changed content once and ignores matching rerenders.
