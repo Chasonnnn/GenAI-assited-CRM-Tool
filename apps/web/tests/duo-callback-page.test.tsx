@@ -5,6 +5,7 @@ import DuoCallbackPage from "../app/auth/duo/callback/page.client"
 const mockUseAuth = vi.fn()
 const mockVerifyDuoCallback = vi.fn()
 const mockReplace = vi.fn()
+const mockRedirect = vi.fn()
 
 let authState: { user: Record<string, unknown> | null; isLoading: boolean; refetch: () => void }
 let callbackAttempt = 0
@@ -18,6 +19,7 @@ vi.mock("@/lib/api/mfa", () => ({
 }))
 
 vi.mock("next/navigation", () => ({
+    redirect: (path: string) => mockRedirect(path),
     useRouter: () => ({
         replace: mockReplace,
         push: vi.fn(),
@@ -54,6 +56,27 @@ describe("DuoCallbackPage", () => {
         mockVerifyDuoCallback.mockReset()
         mockVerifyDuoCallback.mockResolvedValue({ success: true, message: "ok" })
         mockReplace.mockClear()
+        mockRedirect.mockClear()
+    })
+
+    it("redirects signed-out callback visitors during rendering", () => {
+        authState.user = null
+
+        render(<DuoCallbackPage />)
+
+        expect(mockRedirect).toHaveBeenCalledWith("/login")
+        expect(mockVerifyDuoCallback).not.toHaveBeenCalled()
+        expect(screen.queryByText(/verifying duo response/i)).not.toBeInTheDocument()
+    })
+
+    it("redirects signed-out ops callback visitors back to ops login", () => {
+        window.sessionStorage.setItem("auth_return_to", "ops")
+        authState.user = null
+
+        render(<DuoCallbackPage />)
+
+        expect(mockRedirect).toHaveBeenCalledWith("/ops/login")
+        expect(mockVerifyDuoCallback).not.toHaveBeenCalled()
     })
 
     it("verifies duo callback once per code/state", async () => {
