@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { redirect, useRouter } from "next/navigation"
 import Link from "@/components/app-link"
 import { toast } from "@/components/ui/toast"
 import { Loader2Icon, UserPlusIcon } from "lucide-react"
@@ -47,20 +47,36 @@ export default function UnassignedSurrogatesPage({
     initialSearchParams,
 }: UnassignedSurrogatesPageProps) {
     const { user } = useAuth()
-    const { push, replace } = useRouter()
-
     const authLoaded = !!user?.role
     const canViewUnassignedQueue = user?.role === "admin" || user?.role === "developer"
 
+    if (authLoaded && !canViewUnassignedQueue) {
+        redirect("/surrogates")
+        return null
+    }
+
+    return (
+        <UnassignedSurrogatesContent
+            initialPageParam={initialPageParam}
+            initialSearchParams={initialSearchParams}
+            authLoaded={authLoaded}
+            canViewUnassignedQueue={canViewUnassignedQueue}
+        />
+    )
+}
+
+function UnassignedSurrogatesContent({
+    initialPageParam,
+    initialSearchParams,
+    authLoaded,
+    canViewUnassignedQueue,
+}: UnassignedSurrogatesPageProps & {
+    authLoaded: boolean
+    canViewUnassignedQueue: boolean
+}) {
+    const { push, replace } = useRouter()
     const urlPage = parsePageParam(initialPageParam)
     const page = urlPage
-
-    useEffect(() => {
-        if (!authLoaded) return
-        if (!canViewUnassignedQueue) {
-            replace("/surrogates")
-        }
-    }, [authLoaded, canViewUnassignedQueue, replace])
 
     useEffect(() => {
         if (!authLoaded || !canViewUnassignedQueue) return
@@ -112,8 +128,6 @@ export default function UnassignedSurrogatesPage({
         }
         setClaimingId(null)
     }
-
-    if (authLoaded && !canViewUnassignedQueue) return null
 
     return (
         <div className="space-y-6">
