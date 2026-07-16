@@ -17,13 +17,14 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 67 **REPLACE** Effects removed; 43 **CONTAIN** call sites consolidated behind twenty-four tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 56 production `useEffect` calls remain.
+- 68 **REPLACE** Effects removed; 43 **CONTAIN** call sites consolidated behind twenty-four tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 55 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
 - Mount-only browser synchronization now uses the reviewed `useMountEffect` boundary across auth, offline detection, AI cleanup/focus, dashboard analytics/cleanup, templates URL state, and the floating scrollbar.
 - AI, email, and Meta integration forms initialize at loading-to-loaded boundaries instead of rehydrating from every query object.
 - AI assistant chat history now waits for authentication to resolve before reading or clearing session storage, creates the fresh active session in the same named lifecycle, and keeps its state ref current through the synchronous reducer helper instead of a separate Effect.
+- AI assistant session selection and message ownership are now event-driven, so stopping a stream preserves its partial response instead of a session-sync Effect restoring an older snapshot.
 - Campaign edit drafts hydrate from the explicit open action rather than campaign query identity.
 - Social-link, personal-signature, and onboarding-profile drafts now preserve user edits across equivalent query/auth refreshes.
 - Invitation and current-user loading now use separate TanStack Query keys, preventing older invitation responses from replacing the active route.
