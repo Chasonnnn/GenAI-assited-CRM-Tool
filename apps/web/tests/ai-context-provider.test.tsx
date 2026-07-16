@@ -50,6 +50,18 @@ function AIContextProbe() {
             >
                 Set context
             </button>
+            <button
+                type="button"
+                onClick={() =>
+                    context.setContext({
+                        entityType: "task",
+                        entityId: "task-1",
+                        entityName: "Follow up with surrogate",
+                    })
+                }
+            >
+                Set task context
+            </button>
             <button type="button" onClick={context.clearContext}>
                 Clear context
             </button>
@@ -104,6 +116,17 @@ describe("AIContextProvider", () => {
             expect(screen.getByLabelText("entity id")).toHaveTextContent("none")
             expect(screen.getByLabelText("entity name")).toHaveTextContent("none")
         })
+    })
+
+    it("keeps task context available while the user is on the tasks page", () => {
+        mockPathname = "/tasks"
+        renderAIContextProbe()
+
+        fireEvent.click(screen.getByRole("button", { name: "Set task context" }))
+
+        expect(screen.getByLabelText("entity type")).toHaveTextContent("task")
+        expect(screen.getByLabelText("entity id")).toHaveTextContent("task-1")
+        expect(screen.getByLabelText("entity name")).toHaveTextContent("Follow up with surrogate")
     })
 
     it("toggles the assistant panel with the keyboard shortcut when AI is available", () => {
