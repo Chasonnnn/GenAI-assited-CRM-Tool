@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 82 **REPLACE** Effects removed; 44 **CONTAIN** call sites consolidated behind twenty-five tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 41 production `useEffect` calls remain.
+- 82 **REPLACE** Effects removed; 44 **CONTAIN** call sites consolidated behind twenty-five tested synchronization hooks; three baseline **CONTAIN** call sites removed after proving they synchronized no external state; 40 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -100,6 +100,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Mass-edit stage drafts now exist only for the mounted open session, so close/reopen resets naturally; a late-arriving disqualified stage is used through render-time fallback without reset or default-hydration Effects.
 - Pipeline journey milestone expansion remains keyed by milestone slug and changes only through the details button; equivalent pipeline refreshes preserve the operator's open panel without copying milestone arrays through an Effect.
 - Global search keyboard registration now lives in a tested document-listener hook that uses `useEffectEvent` for the latest callback and owns Command/Ctrl-K filtering, default prevention, and exact unmount cleanup.
+- Calendar day rendering no longer carries a focus Effect whose local ref was never attached to the button; existing DayPicker props remain the focus owner and date-range interaction tests stay green.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
 ## Verdict rules
