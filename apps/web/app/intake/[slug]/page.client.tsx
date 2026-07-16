@@ -1016,6 +1016,111 @@ async function loadHostedIntakeBootstrap({
     }
 }
 
+function useHostedIntakeResumeLookup({
+    token,
+    formConfig,
+    answers,
+    draftSessionId,
+    enabled,
+    activeResumePromptFingerprint,
+    suppressedIdentityFingerprintsRef,
+    lookupCacheRef,
+    setResumePrompt,
+}: {
+    token: string
+    formConfig: FormIntakePublicRead | null
+    answers: Answers
+    draftSessionId: string | null
+    enabled: boolean
+    activeResumePromptFingerprint: string | undefined
+    suppressedIdentityFingerprintsRef: React.RefObject<Set<string> | null>
+    lookupCacheRef: React.RefObject<Map<string, "no_match" | "match_found"> | null>
+    setResumePrompt: React.Dispatch<React.SetStateAction<SharedResumePrompt | null>>
+}) {
+    const resumeLookupTimerRef = React.useRef<number | null>(null)
+    const lookupSeqRef = React.useRef(0)
+
+    React.useEffect(() => {
+        if (!enabled || !formConfig || !draftSessionId) return
+
+        const identity = resolveResumeIdentity(formConfig.form_schema, answers)
+        if (!identity) return
+        const suppressedIdentityFingerprints = getSuppressedIdentityFingerprints(
+            suppressedIdentityFingerprintsRef
+        )
+        const lookupCache = getLookupCache(lookupCacheRef)
+        const { fingerprint, lookupAnswers } = identity
+        if (suppressedIdentityFingerprints.has(fingerprint)) {
+            return
+        }
+
+        const cached = lookupCache.get(fingerprint)
+        if (cached === "no_match") {
+            return
+        }
+        if (cached === "match_found" && activeResumePromptFingerprint === fingerprint) {
+            return
+        }
+
+        if (resumeLookupTimerRef.current) {
+            window.clearTimeout(resumeLookupTimerRef.current)
+        }
+
+        resumeLookupTimerRef.current = window.setTimeout(() => {
+            const requestId = lookupSeqRef.current + 1
+            lookupSeqRef.current = requestId
+
+            void (async () => {
+                try {
+                    const result = await lookupSharedPublicFormDraft(
+                        token,
+                        lookupAnswers as JsonObject,
+                        draftSessionId,
+                    )
+                    if (lookupSeqRef.current !== requestId) return
+                    if (
+                        result.status === "match_found" &&
+                        result.source_draft_id &&
+                        !suppressedIdentityFingerprints.has(fingerprint)
+                    ) {
+                        lookupCache.set(fingerprint, "match_found")
+                        setResumePrompt({
+                            sourceDraftId: result.source_draft_id,
+                            updatedAt: result.updated_at ?? null,
+                            fingerprint,
+                        })
+                        return
+                    }
+
+                    lookupCache.set(fingerprint, "no_match")
+                    setResumePrompt((current) =>
+                        current?.fingerprint === fingerprint ? null : current,
+                    )
+                } catch {
+                    // No-op: keep typing flow uninterrupted.
+                }
+            })()
+        }, 700)
+
+        return () => {
+            if (resumeLookupTimerRef.current) {
+                window.clearTimeout(resumeLookupTimerRef.current)
+                resumeLookupTimerRef.current = null
+            }
+        }
+    }, [
+        activeResumePromptFingerprint,
+        answers,
+        draftSessionId,
+        enabled,
+        formConfig,
+        lookupCacheRef,
+        setResumePrompt,
+        suppressedIdentityFingerprintsRef,
+        token,
+    ])
+}
+
 // Main Form Component
 export default function PublicApplicationForm({ slug }: PublicApplicationFormProps) {
     const token = slug
@@ -1030,10 +1135,8 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     const [agreed, setAgreed] = React.useState(false)
     const [resumePrompt, setResumePrompt] = React.useState<SharedResumePrompt | null>(null)
     const [isRestoringResume, setIsRestoringResume] = React.useState(false)
-    const resumeLookupTimerRef = React.useRef<number | null>(null)
     const suppressedIdentityFingerprintsRef = React.useRef<Set<string> | null>(null)
     const lookupCacheRef = React.useRef<Map<string, "no_match" | "match_found"> | null>(null)
-    const lookupSeqRef = React.useRef(0)
 
     const bootstrapDraftSession = createDraftSessionState(token)
     const bootstrapQuery = useQuery({
@@ -1095,82 +1198,17 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             ? resumePrompt
             : null
 
-    React.useEffect(() => {
-        if (!token || !formConfig || !draftSessionId || isPreview || isSubmitted || isRestoringResume) return
-
-        const identity = resolveResumeIdentity(formConfig.form_schema, answers)
-        if (!identity) return
-        const suppressedIdentityFingerprints = getSuppressedIdentityFingerprints(suppressedIdentityFingerprintsRef)
-        const lookupCache = getLookupCache(lookupCacheRef)
-        const { fingerprint, lookupAnswers } = identity
-        if (suppressedIdentityFingerprints.has(fingerprint)) {
-            return
-        }
-
-        const cached = lookupCache.get(fingerprint)
-        if (cached === "no_match") {
-            return
-        }
-        if (cached === "match_found" && activeResumePrompt?.fingerprint === fingerprint) {
-            return
-        }
-
-        if (resumeLookupTimerRef.current) {
-            window.clearTimeout(resumeLookupTimerRef.current)
-        }
-
-        resumeLookupTimerRef.current = window.setTimeout(() => {
-            const requestId = lookupSeqRef.current + 1
-            lookupSeqRef.current = requestId
-
-            void (async () => {
-                try {
-                    const result = await lookupSharedPublicFormDraft(
-                        token,
-                        lookupAnswers as JsonObject,
-                        draftSessionId,
-                    )
-                    if (lookupSeqRef.current !== requestId) return
-                    if (
-                        result.status === "match_found" &&
-                        result.source_draft_id &&
-                        !suppressedIdentityFingerprints.has(fingerprint)
-                    ) {
-                        lookupCache.set(fingerprint, "match_found")
-                        setResumePrompt({
-                            sourceDraftId: result.source_draft_id,
-                            updatedAt: result.updated_at ?? null,
-                            fingerprint,
-                        })
-                        return
-                    }
-
-                    lookupCache.set(fingerprint, "no_match")
-                    setResumePrompt((current) =>
-                        current?.fingerprint === fingerprint ? null : current,
-                    )
-                } catch {
-                    // No-op: keep typing flow uninterrupted.
-                }
-            })()
-        }, 700)
-
-        return () => {
-            if (resumeLookupTimerRef.current) {
-                window.clearTimeout(resumeLookupTimerRef.current)
-                resumeLookupTimerRef.current = null
-            }
-        }
-    }, [
-        answers,
-        activeResumePrompt?.fingerprint,
-        draftSessionId,
-        formConfig,
-        isPreview,
-        isRestoringResume,
-        isSubmitted,
+    useHostedIntakeResumeLookup({
         token,
-    ])
+        formConfig,
+        answers,
+        draftSessionId,
+        enabled: Boolean(token && !isPreview && !isSubmitted && !isRestoringResume),
+        activeResumePromptFingerprint: activeResumePrompt?.fingerprint,
+        suppressedIdentityFingerprintsRef,
+        lookupCacheRef,
+        setResumePrompt,
+    })
 
     const handleContinuePreviousApplication = async () => {
         if (!activeResumePrompt || !draftSessionId || !formConfig) return

@@ -2002,6 +2002,7 @@ describe("React regression guards (source)", () => {
 
     it("keeps hosted intake draft and resume state compiler-friendly", () => {
         const source = readSource("app/intake/[slug]/page.client.tsx")
+        const componentSource = readFunctionSource(source, "PublicApplicationForm")
         const autosaveSource = readSource("lib/hooks/use-hosted-intake-autosave.ts")
 
         expect(source).not.toContain("React.useCallback")
@@ -2026,6 +2027,11 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("const bootstrapQuery = useQuery({")
         expect(source).toContain('queryKey: ["hosted-intake-bootstrap", token]')
         expect(source).toContain("function reconcileHostedIntakeBootstrap(")
+        expect(source).toContain("function useHostedIntakeResumeLookup(")
+        expect(componentSource).toContain("useHostedIntakeResumeLookup({")
+        expect(componentSource).not.toContain("React.useEffect")
+        expect(componentSource).not.toContain("resumeLookupTimerRef")
+        expect(componentSource).not.toContain("lookupSeqRef")
         expect(source).toContain(
             "const [storedIntakeState, dispatchIntakeState] = React.useReducer("
         )
