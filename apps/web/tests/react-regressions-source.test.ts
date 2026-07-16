@@ -387,6 +387,9 @@ describe("React regression guards (source)", () => {
 
         expect(source).toContain("const [state, dispatch] = useReducer")
         expect(source).toContain("function csvUploadReducer(")
+        expect(source).toContain("function reconcileBackdateCreatedAt(")
+        expect(source).not.toMatch(/\buseEffect\b/)
+        expect(source).not.toContain("sync_backdate_from_created_at_mapping")
     })
 
     it("keeps CSV upload rendering split into focused sections", () => {
