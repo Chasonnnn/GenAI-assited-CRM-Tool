@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useReducer, type DragEvent } from "react"
+import { useState, useReducer, type DragEvent } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -175,7 +175,6 @@ type CSVUploadAction =
     | { type: "apply_ai_suggestions"; suggestions: EnhancedImportPreview["column_suggestions"] }
     | { type: "set_unknown_column_behavior"; value: UnknownColumnBehavior }
     | { type: "set_backdate_toggled"; checked: boolean }
-    | { type: "sync_backdate_from_created_at_mapping"; hasCreatedAtMapping: boolean }
 
 function createInitialCSVUploadState(): CSVUploadState {
     return {
@@ -197,10 +196,47 @@ function createInitialCSVUploadState(): CSVUploadState {
     }
 }
 
+function containsCreatedAtMapping(mappings: ColumnMappingDraft[]): boolean {
+    return mappings.some(
+        (mapping) => mapping.action === "map" && mapping.surrogate_field === "created_at"
+    )
+}
+
+function reconcileBackdateCreatedAt(
+    state: CSVUploadState,
+    mappings: ColumnMappingDraft[],
+): CSVUploadState {
+    const nextState = { ...state, mappings }
+
+    if (!containsCreatedAtMapping(mappings)) {
+        if (!state.backdateCreatedAt && !state.backdateTouched) {
+            return nextState
+        }
+        return {
+            ...nextState,
+            backdateCreatedAt: false,
+            backdateTouched: false,
+        }
+    }
+
+    if (!state.backdateTouched && !state.backdateCreatedAt) {
+        return {
+            ...nextState,
+            backdateCreatedAt: true,
+        }
+    }
+
+    return nextState
+}
+
 function csvUploadReducer(state: CSVUploadState, action: CSVUploadAction): CSVUploadState {
     switch (action.type) {
-        case "patch":
-            return { ...state, ...action.patch }
+        case "patch": {
+            const nextState = { ...state, ...action.patch }
+            return action.patch.mappings
+                ? reconcileBackdateCreatedAt(nextState, action.patch.mappings)
+                : nextState
+        }
         case "reset_for_new_file":
             return {
                 ...state,
@@ -233,72 +269,69 @@ function csvUploadReducer(state: CSVUploadState, action: CSVUploadAction): CSVUp
         case "update_mapping": {
             const nextTouchedColumns = new Set(state.touchedColumns)
             nextTouchedColumns.add(action.csvColumn)
-            return {
-                ...state,
-                mappings: state.mappings.map((mapping) =>
-                    mapping.csv_column === action.csvColumn ? { ...mapping, ...action.patch } : mapping
-                ),
-                touchedColumns: nextTouchedColumns,
-            }
+            const nextMappings = state.mappings.map((mapping) =>
+                mapping.csv_column === action.csvColumn ? { ...mapping, ...action.patch } : mapping
+            )
+            return reconcileBackdateCreatedAt(
+                {
+                    ...state,
+                    touchedColumns: nextTouchedColumns,
+                },
+                nextMappings
+            )
         }
-        case "apply_ai_suggestions":
-            return {
-                ...state,
-                showAiPrompt: false,
-                mappings: state.mappings.map((mapping) => {
-                    const suggestion = action.suggestions.find(
-                        (item) => item.csv_column === mapping.csv_column
-                    )
-                    if (!suggestion) return mapping
+        case "apply_ai_suggestions": {
+            const nextMappings = state.mappings.map((mapping) => {
+                const suggestion = action.suggestions.find(
+                    (item) => item.csv_column === mapping.csv_column
+                )
+                if (!suggestion) return mapping
 
-                    const derived = buildColumnMappingsFromSuggestions([suggestion])[0]
-                    if (!derived) return mapping
-                    const shouldAdopt =
-                        (!mapping.surrogate_field &&
-                            (mapping.action === "ignore" || mapping.action === "metadata")) ||
-                        mapping.action === "custom"
+                const derived = buildColumnMappingsFromSuggestions([suggestion])[0]
+                if (!derived) return mapping
+                const shouldAdopt =
+                    (!mapping.surrogate_field &&
+                        (mapping.action === "ignore" || mapping.action === "metadata")) ||
+                    mapping.action === "custom"
 
-                    return {
-                        ...mapping,
-                        ...derived,
-                        action: shouldAdopt ? derived.action : mapping.action,
-                        surrogate_field: shouldAdopt ? derived.surrogate_field : mapping.surrogate_field,
-                        transformation: shouldAdopt ? derived.transformation : mapping.transformation,
-                        custom_field_key: shouldAdopt ? derived.custom_field_key : mapping.custom_field_key,
-                        sample_values: mapping.sample_values.length ? mapping.sample_values : derived.sample_values,
-                    }
-                }),
-            }
-        case "set_unknown_column_behavior":
-            return {
-                ...state,
-                unknownColumnBehavior: action.value,
-                mappings: applyUnknownColumnBehavior(state.mappings, action.value, state.touchedColumns),
-            }
+                return {
+                    ...mapping,
+                    ...derived,
+                    action: shouldAdopt ? derived.action : mapping.action,
+                    surrogate_field: shouldAdopt ? derived.surrogate_field : mapping.surrogate_field,
+                    transformation: shouldAdopt ? derived.transformation : mapping.transformation,
+                    custom_field_key: shouldAdopt ? derived.custom_field_key : mapping.custom_field_key,
+                    sample_values: mapping.sample_values.length ? mapping.sample_values : derived.sample_values,
+                }
+            })
+            return reconcileBackdateCreatedAt(
+                {
+                    ...state,
+                    showAiPrompt: false,
+                },
+                nextMappings
+            )
+        }
+        case "set_unknown_column_behavior": {
+            const nextMappings = applyUnknownColumnBehavior(
+                state.mappings,
+                action.value,
+                state.touchedColumns
+            )
+            return reconcileBackdateCreatedAt(
+                {
+                    ...state,
+                    unknownColumnBehavior: action.value,
+                },
+                nextMappings
+            )
+        }
         case "set_backdate_toggled":
             return {
                 ...state,
                 backdateTouched: true,
                 backdateCreatedAt: action.checked,
             }
-        case "sync_backdate_from_created_at_mapping":
-            if (!action.hasCreatedAtMapping) {
-                if (!state.backdateCreatedAt && !state.backdateTouched) {
-                    return state
-                }
-                return {
-                    ...state,
-                    backdateCreatedAt: false,
-                    backdateTouched: false,
-                }
-            }
-            if (!state.backdateTouched && !state.backdateCreatedAt) {
-                return {
-                    ...state,
-                    backdateCreatedAt: true,
-                }
-            }
-            return state
         default: {
             const exhaustive: never = action
             return exhaustive
@@ -603,13 +636,6 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         aiMapMutation,
         onImportComplete,
     })
-
-    useEffect(() => {
-        dispatch({
-            type: "sync_backdate_from_created_at_mapping",
-            hasCreatedAtMapping,
-        })
-    }, [hasCreatedAtMapping])
 
     const handleDragOver = (e: DragEvent<HTMLButtonElement>) => {
         e.preventDefault()
