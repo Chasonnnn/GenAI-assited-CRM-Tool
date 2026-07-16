@@ -430,6 +430,8 @@ describe("React regression guards (source)", () => {
 
         expect(source).toContain('"rtl:**:[.rdp-button\\\\_next>svg]:rotate-180"')
         expect(source).toContain('"rtl:**:[.rdp-button\\\\_previous>svg]:rotate-180"')
+        expect(source).not.toContain("React.useEffect")
+        expect(source).not.toContain("const ref = React.useRef<HTMLButtonElement>(null)")
         expect(source).not.toContain("String.raw`rtl:**:[.rdp-button\\_")
     })
 
