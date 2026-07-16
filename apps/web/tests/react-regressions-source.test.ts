@@ -452,6 +452,19 @@ describe("React regression guards (source)", () => {
         expect(contentSyncSource).toContain("}, [content, editor])")
     })
 
+    it("keeps transcript viewer DOM listeners behind a tested lifecycle boundary", () => {
+        const source = readSource("components/surrogates/interviews/TranscriptViewer.tsx")
+        const listenerSource = readSource("lib/hooks/use-transcript-viewer-listeners.ts")
+
+        expect(source).toContain("useTranscriptViewerListeners({")
+        expect(source).toContain("enabled: Boolean(renderedHtml)")
+        expect(source).not.toContain("useEffect")
+        expect(listenerSource).toContain("const onMouseUpEvent = useEffectEvent(onMouseUp)")
+        expect(listenerSource).toContain('container.addEventListener("mouseup", handleMouseUp)')
+        expect(listenerSource).toContain('document.removeEventListener("keydown", handleKeyDown)')
+        expect(listenerSource).toContain("}, [containerRef, enabled])")
+    })
+
     it("keeps safe HTML parsing and sanitization free of manual React memoization", () => {
         const source = readSource("components/safe-html-content.tsx")
 
