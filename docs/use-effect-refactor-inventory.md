@@ -106,6 +106,47 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - The surrogates floating scrollbar controller now delegates ancestor/window listeners, pointer-capability resets, `ResizeObserver`, scroll synchronization, and activation-time viewport alignment to two named lifecycle hooks with exact cleanup; the controller itself is event and render logic only.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
+## Current retained synchronization inventory
+
+Current production total: **39 `useEffect` calls**. Every remaining call is retained inside a named synchronization boundary; none is classified as ordinary React data flow.
+
+| Current boundary | Calls | Classification | Retained rationale |
+|---|---:|---|---|
+| `app/(app)/ai-assistant/page.tsx` — `useAIAssistantHistorySession` | 1 | RETAIN | Synchronizes authenticated ownership with `sessionStorage`, clears cross-user history, and creates the initial external session once per resolved user. |
+| `app/intake/[slug]/page.client.tsx` — `useHostedIntakeResumeLookup` | 1 | RETAIN | Owns the 700 ms identity debounce, remote draft lookup, stale-request sequencing, prompt cache, and timer cleanup. |
+| `components/surrogates/interviews/SelectionPopover.tsx` — `useSelectionPopoverDocumentListeners` | 1 | RETAIN | Owns document selection, keyboard, and pointer listeners plus the click-reset timeout and exact cleanup. |
+| `components/surrogates/interviews/InterviewComments/hooks/useInteractionClasses.ts` | 2 | RETAIN | Synchronizes hover and focus state with transcript DOM classes for externally rendered comment spans. |
+| `components/surrogates/interviews/InterviewComments/hooks/useCommentPositions.ts` | 4 | RETAIN | Owns initial measurement, transcript/content resize observation, scroll animation frames, comment-card observation, and all timer/observer/listener cleanup. |
+| `components/surrogates/SurrogatesFloatingScrollbar.tsx` — scrollbar lifecycle hooks | 2 | RETAIN | Owns ancestor/window listeners, `ResizeObserver`, pointer-capability resets, bidirectional DOM scroll synchronization, and activation-time viewport alignment. |
+| `lib/context/ai-context.tsx` — `useSetAIContext` | 1 | RETAIN | Registers declarative entity context across the provider tree on mount/value changes and clears it on unmount. |
+| `lib/forms/use-form-builder-autosave.ts` | 1 | RETAIN | Owns form-builder debounce timing, active-draft persistence, cancellation, and late-save suppression. |
+| `lib/hooks/use-observed-scroll-height.ts` | 1 | RETAIN | Measures an external element's `scrollHeight` through `ResizeObserver` and disconnects on cleanup. |
+| `lib/hooks/use-embed-form-session-handshake.ts` | 1 | RETAIN | Owns parent-window messaging, fallback timing, remote session creation, origin filtering, deduplication, and cleanup. |
+| `lib/hooks/use-embed-form-resize-reporting.ts` | 1 | RETAIN | Reports observed element height to the verified parent origin and disconnects its `ResizeObserver`. |
+| `lib/hooks/use-debounced-search-commit.ts` | 1 | RETAIN | Cancels pending browser timers when the route/search scope changes or the consumer unmounts. |
+| `lib/hooks/use-duo-callback-verification.ts` | 1 | RETAIN | Owns the external Duo callback URL, verification request, auth refresh, storage cleanup, navigation, attempt deduplication, and unmount-safe late responses. |
+| `lib/hooks/use-browser-notification-delivery.ts` | 1 | RETAIN | Delivers a query-derived notification to the browser Notification boundary only when permission and document visibility permit it. |
+| `lib/hooks/use-search-hotkey.ts` | 1 | RETAIN | Owns the document Command/Ctrl-K listener, latest callback delivery, default prevention, and removal. |
+| `lib/hooks/use-focus-when.ts` | 1 | RETAIN | Synchronizes conditional rendering state with imperative DOM focus and optional text selection. |
+| `lib/hooks/use-dashboard-kpi-mismatch-warning.ts` | 1 | RETAIN | Emits deduplicated development diagnostics to the console when independently sourced KPI totals materially diverge. |
+| `lib/hooks/use-transcript-comment-interactions.ts` | 1 | RETAIN | Owns delegated transcript mouse, focus, click, and keyboard listeners with latest callbacks and exact removal. |
+| `lib/hooks/use-track-unassigned-queue-view.ts` | 1 | RETAIN | Emits an external analytics event when the authorized queue view becomes active. |
+| `lib/hooks/use-task-focus-navigation.ts` | 1 | RETAIN | Synchronizes deep-link focus targets with DOM scrolling and the browser's persisted task view after loading completes. |
+| `lib/hooks/use-hosted-intake-autosave.ts` | 1 | RETAIN | Owns hosted-intake debounce timing, restoration-skip acknowledgement, latest save delivery, scope resets, and timer cancellation. |
+| `lib/hooks/use-ai-chat-scroll-to-latest.ts` | 1 | RETAIN | Synchronizes new chat content with DOM scroll position and cancels scheduled animation frames. |
+| `lib/hooks/use-dashboard-socket.ts` | 2 | RETAIN | Owns dashboard WebSocket connection/reconnection and the independent ping interval, with socket, timeout, and interval cleanup. |
+| `lib/hooks/use-notification-socket.ts` | 1 | RETAIN | Owns the notification WebSocket, message parsing, reconnection backoff, ping interval, and teardown. |
+| `lib/hooks/use-track-surrogate-view.ts` | 1 | RETAIN | Emits an external analytics event whenever the viewed surrogate identity changes. |
+| `lib/hooks/use-debounced-value.ts` | 1 | RETAIN | Owns generic browser debounce timing and cancels stale value commits. |
+| `lib/hooks/use-sync-rich-text-editor-content.ts` | 1 | RETAIN | Synchronizes controlled HTML with the external rich-text editor only when the editor content differs. |
+| `lib/hooks/use-session-expiration-detection.ts` | 1 | RETAIN | Subscribes to TanStack Query and mutation caches for 401 failures and invokes both unsubscribe functions. |
+| `lib/hooks/use-ai-toggle-hotkey.ts` | 1 | RETAIN | Owns the window AI-toggle hotkey listener with enabled gating, latest callback delivery, and removal. |
+| `lib/hooks/use-sync-tiptap-json-content.ts` | 1 | RETAIN | Synchronizes controlled TipTap JSON with the external editor only when serialized content differs. |
+| `lib/hooks/use-mount-effect.ts` | 1 | RETAIN | Reviewed escape hatch for a true mount/unmount external lifecycle with an intentionally fixed closure. |
+| `lib/hooks/use-email-attachment-selection-notification.ts` | 1 | RETAIN | Notifies the owning compose boundary when query-derived attachment safety or size state changes, using the latest callback. |
+| `lib/hooks/use-transcript-viewer-listeners.ts` | 1 | RETAIN | Owns transcript container selection/click listeners and the document Escape listener with exact cleanup. |
+| **Total** | **39** |  |  |
+
 ## Verdict rules
 
 - **REPLACE** with render-time derivation, an event or reducer transition, TanStack Query, route/server guards, `useEffectEvent`, conditional rendering, or keyed remounting.
