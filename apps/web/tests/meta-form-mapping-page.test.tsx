@@ -205,7 +205,6 @@ describe("MetaFormMappingPage", () => {
         const mapToSelect = screen.getByRole("combobox", {
             name: /map full_name to field/i,
         })
-
         fireEvent.mouseDown(mapToSelect)
 
         const journeyOption = await screen.findByRole("option", { name: "Journey Timing" })
@@ -218,6 +217,57 @@ describe("MetaFormMappingPage", () => {
             within(screen.getByRole("combobox", { name: /map full_name to field/i }))
                 .getByText("Journey Timing")
         ).toBeInTheDocument()
+    })
+
+    it("preserves an unsaved column edit when mapping data refreshes", async () => {
+        const view = render(<MetaFormMappingPage />)
+        const mapToSelect = screen.getByRole("combobox", {
+            name: /map full_name to field/i,
+        })
+        const emailMapToSelect = screen.getByRole("combobox", {
+            name: /map email to field/i,
+        })
+
+        fireEvent.mouseDown(mapToSelect)
+        const phoneOption = await screen.findByRole("option", { name: "Phone" })
+        fireEvent.mouseMove(phoneOption)
+        fireEvent.click(phoneOption)
+        expect(mapToSelect).toHaveTextContent("Phone")
+
+        const latestResult = mockUseMetaFormMapping.mock.results.at(-1)?.value as {
+            data: Record<string, unknown> & { form: Record<string, unknown> }
+            isLoading: boolean
+        }
+        mockUseMetaFormMapping.mockReturnValue({
+            ...latestResult,
+            data: {
+                ...latestResult.data,
+                mapping_rules: [
+                    {
+                        csv_column: "full_name",
+                        surrogate_field: "full_name",
+                        transformation: null,
+                        action: "map",
+                        custom_field_key: null,
+                    },
+                    {
+                        csv_column: "email",
+                        surrogate_field: "state",
+                        transformation: null,
+                        action: "map",
+                        custom_field_key: null,
+                    },
+                ],
+                form: {
+                    ...latestResult.data.form,
+                    synced_at: "2026-03-08T01:00:00Z",
+                },
+            },
+        })
+        view.rerender(<MetaFormMappingPage />)
+
+        expect(mapToSelect).toHaveTextContent("Phone")
+        expect(emailMapToSelect).toHaveTextContent("State")
     })
 
     it("saves manually touched unknown Meta columns when warn behavior omits untouched columns", async () => {

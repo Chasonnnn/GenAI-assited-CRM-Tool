@@ -3609,15 +3609,16 @@ describe("React regression guards (source)", () => {
         expect(roleDetailSource).not.toContain("useMemo")
     })
 
-    it("keeps Meta form mapping touched columns outside render state", () => {
+    it("keeps Meta form mapping drafts as explicit per-column overrides", () => {
         const source = readSource("app/(app)/settings/integrations/meta/forms/[id]/page.tsx")
 
-        expect(source).toContain("touchedColumnsRef")
-        expect(source).toContain("useRef<Set<string> | null>(null)")
-        expect(source).toContain("if (touchedColumnsRef.current === null)")
-        expect(source).toContain("touchedColumnsRef.current = new Set<string>()")
-        expect(source).not.toContain("useRef<Set<string>>(new Set())")
-        expect(source).not.toContain("const [touchedColumns, setTouchedColumns] = useState")
+        expect(source).toContain("const [mappingOverrides, setMappingOverrides]")
+        expect(source).toContain("const serverMappingState =")
+        expect(source).toContain("mappingOverrides[mapping.csv_column] ?? mapping")
+        expect(source).toContain("const touchedColumns = new Set(serverMappingState.touchedColumns)")
+        expect(source).not.toContain("touchedColumnsRef")
+        expect(source).not.toContain("useEffect")
+        expect(source).not.toContain("useRef")
     })
 
     it("keeps Meta form mapping page rendering split into focused helpers", () => {
