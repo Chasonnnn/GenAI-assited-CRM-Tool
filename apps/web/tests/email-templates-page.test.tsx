@@ -15,6 +15,7 @@ const mockUseEmailTemplates = vi.fn()
 const mockCreateEmailTemplate = vi.fn()
 const mockUpdateEmailTemplate = vi.fn()
 const mockSendTestEmailTemplate = vi.fn()
+let userSignatureData: Record<string, string | null> | null = null
 const FIXED_TIMESTAMP = "2026-01-01T00:00:00.000Z"
 const TEMPLATE_VARIABLES = [
     {
@@ -193,7 +194,7 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-signature", () => ({
-    useUserSignature: () => ({ data: null, refetch: vi.fn() }),
+    useUserSignature: () => ({ data: userSignatureData, refetch: vi.fn() }),
     useUpdateUserSignature: () => ({ mutate: vi.fn(), isPending: false }),
     useSignaturePreview: () => ({ data: { html: "<div>Personal Signature</div>" }, isLoading: false }),
     useUploadSignaturePhoto: () => ({ mutate: vi.fn(), isPending: false }),
@@ -218,6 +219,7 @@ describe("EmailTemplatesPage", () => {
         mockUpdateEmailTemplate.mockReset()
         mockSendTestEmailTemplate.mockReset()
         mockSendTestEmailTemplate.mockResolvedValue({ provider_used: "resend" })
+        userSignatureData = null
         personalTemplatesFixture = [PERSONAL_TEMPLATE]
         orgTemplatesFixture = [ORG_TEMPLATE]
         TEMPLATE_DETAIL_BY_ID.tpl_personal_1.body = "<p>Personal Body</p>"
@@ -308,6 +310,30 @@ describe("EmailTemplatesPage", () => {
             "aria-label",
             "Upload signature photo",
         )
+    })
+
+    it("preserves an in-progress signature edit when equivalent signature data rerenders", async () => {
+        userSignatureData = {
+            signature_name: "Saved Name",
+            signature_title: null,
+            signature_phone: null,
+            signature_linkedin: null,
+            signature_twitter: null,
+            signature_instagram: null,
+        }
+        const view = render(<EmailTemplatesPage />)
+        fireEvent.click(screen.getByRole("tab", { name: "My Signature" }))
+
+        const nameInput = await screen.findByLabelText("Name")
+        fireEvent.change(nameInput, { target: { value: "Unsaved Name" } })
+
+        userSignatureData = { ...userSignatureData }
+        await React.act(async () => {
+            view.rerender(<EmailTemplatesPage />)
+            await Promise.resolve()
+        })
+
+        expect(screen.getByLabelText("Name")).toHaveValue("Unsaved Name")
     })
 
     it("clamps long subjects on template cards", () => {
