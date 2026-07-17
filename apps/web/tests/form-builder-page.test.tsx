@@ -3,17 +3,32 @@ import { fireEvent, render, screen, within } from "@testing-library/react"
 import type { ImgHTMLAttributes } from "react"
 
 import FormBuilderPage from "../app/(app)/automation/forms/[id]/page.client"
+import type {
+    FormRead,
+    FormSubmissionRead,
+    ListFormSubmissionsParams,
+} from "@/lib/api/forms"
 
 const mockPush = vi.fn()
+const mockReplace = vi.fn()
+const mockUseForm = vi.fn()
+const mockFormSubmissions = vi.fn()
+const mockCreateForm = vi.fn()
+const mockSetFormMappings = vi.fn()
+const mockPublishForm = vi.fn()
+const mockRefetchIntakeLinks = vi.fn()
 const { toastError } = vi.hoisted(() => ({
     toastError: vi.fn(),
 }))
+const navigationState = vi.hoisted(() => ({
+    formId: "new",
+}))
 
 vi.mock("next/navigation", () => ({
-    useParams: () => ({ id: "new" }),
+    useParams: () => ({ id: navigationState.formId }),
     useRouter: () => ({
         push: mockPush,
-        replace: vi.fn(),
+        replace: mockReplace,
     }),
 }))
 
@@ -56,16 +71,17 @@ vi.mock("@/lib/hooks/use-signature", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-forms", () => ({
-    useCreateForm: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useForm: () => ({ data: undefined, isLoading: false }),
+    useCreateForm: () => ({ mutateAsync: mockCreateForm, isPending: false }),
+    useForm: () => mockUseForm(),
     useFormEmbedHealth: () => ({ data: null, isFetching: false, refetch: vi.fn() }),
-    useFormIntakeLinks: () => ({ data: [], refetch: vi.fn() }),
-    useFormSubmissions: () => ({ data: [], refetch: vi.fn(), isLoading: false }),
+    useFormIntakeLinks: () => ({ data: [], refetch: mockRefetchIntakeLinks }),
+    useFormSubmissions: (formId: string | null, params: ListFormSubmissionsParams) =>
+        mockFormSubmissions(formId, params),
     useFormMappings: () => ({ data: [], isLoading: false }),
-    usePublishForm: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    usePublishForm: () => ({ mutateAsync: mockPublishForm, isPending: false }),
     useRetrySubmissionMatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useResolveSubmissionMatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useSetFormMappings: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useSetFormMappings: () => ({ mutateAsync: mockSetFormMappings, isPending: false }),
     useSetDefaultSurrogateApplicationForm: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useSubmissionMatchCandidates: () => ({ data: [], isLoading: false }),
     usePromoteIntakeLead: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -77,8 +93,52 @@ vi.mock("@/lib/hooks/use-forms", () => ({
 
 describe("FormBuilderPage", () => {
     beforeEach(() => {
+        navigationState.formId = "new"
         mockPush.mockReset()
+        mockReplace.mockReset()
+        mockUseForm.mockReset()
+        mockFormSubmissions.mockReset()
+        mockCreateForm.mockReset()
+        mockSetFormMappings.mockReset()
+        mockPublishForm.mockReset()
+        mockRefetchIntakeLinks.mockReset()
         toastError.mockReset()
+        mockUseForm.mockReturnValue({ data: undefined, isLoading: false })
+        mockFormSubmissions.mockReturnValue({
+            data: [],
+            refetch: vi.fn(),
+            isLoading: false,
+        })
+        mockCreateForm.mockResolvedValue({
+            id: "form-1",
+            name: "Published Intake",
+            status: "draft",
+            updated_at: "2026-07-16T00:00:00Z",
+        })
+        mockSetFormMappings.mockResolvedValue([])
+        mockPublishForm.mockResolvedValue({
+            id: "form-1",
+            status: "published",
+        })
+        mockRefetchIntakeLinks.mockResolvedValue({
+            data: [
+                {
+                    id: "link-1",
+                    form_id: "form-1",
+                    slug: "published-intake",
+                    is_active: true,
+                    submissions_count: 0,
+                    embed_enabled: false,
+                    allowed_embed_origins: [],
+                    tracking_mode: "enhanced_match_lead",
+                    thank_you_config: {},
+                    embed_theme_json: {},
+                    intake_url: "https://example.test/intake/published-intake",
+                    created_at: "2026-07-16T00:00:00Z",
+                    updated_at: "2026-07-16T00:00:00Z",
+                },
+            ],
+        })
     })
 
     it("uses design-system tab controls for workspace sections and a dedicated settings tab", () => {
@@ -121,6 +181,42 @@ describe("FormBuilderPage", () => {
         expect(templateSelect).not.toHaveTextContent("none")
     })
 
+    it("waits for the routed form response before hydrating the builder draft", async () => {
+        const buildForm = (id: string, name: string): FormRead => ({
+            id,
+            name,
+            status: "draft",
+            purpose: "surrogate_application",
+            created_at: "2026-07-16T00:00:00Z",
+            updated_at: "2026-07-16T00:00:00Z",
+            description: null,
+            form_schema: {
+                pages: [{ title: `${name} Page`, fields: [] }],
+            },
+            published_schema: null,
+            max_file_size_bytes: 10 * 1024 * 1024,
+            max_file_count: 10,
+            allowed_mime_types: null,
+            default_application_email_template_id: null,
+        })
+        const formA = buildForm("form-a", "Form A")
+        const formB = buildForm("form-b", "Form B")
+
+        navigationState.formId = formA.id
+        mockUseForm.mockReturnValue({ data: formA, isLoading: false })
+        const view = render(<FormBuilderPage />)
+        expect(await screen.findByLabelText("Form name")).toHaveValue("Form A")
+
+        navigationState.formId = formB.id
+        mockUseForm.mockReturnValue({ data: formA, isLoading: false })
+        view.rerender(<FormBuilderPage />)
+
+        mockUseForm.mockReturnValue({ data: formB, isLoading: false })
+        view.rerender(<FormBuilderPage />)
+
+        expect(await screen.findByLabelText("Form name")).toHaveValue("Form B")
+    })
+
     it("blocks publishing shared intake forms without all identity mappings", async () => {
         render(<FormBuilderPage />)
 
@@ -134,6 +230,94 @@ describe("FormBuilderPage", () => {
         expect(toastError).toHaveBeenCalledWith(expect.stringContaining("Date of Birth"))
         expect(toastError).toHaveBeenCalledWith(expect.stringContaining("Phone"))
         expect(screen.queryByRole("alertdialog", { name: /publish form/i })).not.toBeInTheDocument()
+    })
+
+    it("opens sharing from the link returned by a successful publish", async () => {
+        render(<FormBuilderPage />)
+
+        fireEvent.change(screen.getByLabelText("Form name"), {
+            target: { value: "Published Intake" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: "Add preset Full Name field" }))
+        fireEvent.click(screen.getByRole("button", { name: "Add preset Email field" }))
+        fireEvent.click(screen.getByRole("button", { name: "Add preset Phone field" }))
+        fireEvent.click(screen.getByRole("button", { name: "Demographics" }))
+        fireEvent.click(screen.getByRole("button", { name: "Add preset Date of Birth field" }))
+
+        fireEvent.click(screen.getByRole("button", { name: /^publish$/i }))
+        fireEvent.click(
+            await screen.findByRole("button", { name: /^publish$/i }),
+        )
+
+        expect(
+            await screen.findByRole("heading", { name: "Share Application Intake" }),
+        ).toBeInTheDocument()
+    })
+
+    it("clears submission review notes when leaving the submissions workspace", async () => {
+        const form: FormRead = {
+            id: "form-1",
+            name: "Surrogate Application",
+            status: "draft",
+            purpose: "surrogate_application",
+            created_at: "2026-07-16T00:00:00Z",
+            updated_at: "2026-07-16T00:00:00Z",
+            description: null,
+            form_schema: {
+                pages: [{ title: "Application", fields: [] }],
+            },
+            published_schema: null,
+            max_file_size_bytes: 10 * 1024 * 1024,
+            max_file_count: 10,
+            allowed_mime_types: null,
+            default_application_email_template_id: null,
+        }
+        const submission: FormSubmissionRead = {
+            id: "submission-1",
+            form_id: "form-1",
+            surrogate_id: null,
+            status: "pending_review",
+            submitted_at: "2026-07-16T00:00:00Z",
+            reviewed_at: null,
+            reviewed_by_user_id: null,
+            review_notes: null,
+            answers: {
+                full_name: "Alex Applicant",
+                email: "alex@example.com",
+            },
+            schema_snapshot: null,
+            source_mode: "shared",
+            intake_link_id: "link-1",
+            intake_lead_id: null,
+            match_status: "ambiguous_review",
+            match_reason: null,
+            matched_at: null,
+            files: [],
+        }
+
+        navigationState.formId = form.id
+        mockUseForm.mockReturnValue({ data: form, isLoading: false })
+        mockFormSubmissions.mockImplementation(
+            (_formId: string | null, params: ListFormSubmissionsParams = {}) => ({
+                data: params.match_status === "ambiguous_review" ? [submission] : [],
+                refetch: vi.fn(),
+                isLoading: false,
+            }),
+        )
+
+        render(<FormBuilderPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: /^submissions$/i }))
+        fireEvent.click(await screen.findByRole("button", { name: "Review Candidates" }))
+        fireEvent.change(screen.getByLabelText("Reviewer notes"), {
+            target: { value: "Only for the first review" },
+        })
+
+        fireEvent.click(screen.getByRole("tab", { name: /^edit$/i }))
+        fireEvent.click(screen.getByRole("tab", { name: /^submissions$/i }))
+        fireEvent.click(await screen.findByRole("button", { name: "Review Candidates" }))
+
+        expect(screen.getByLabelText("Reviewer notes")).toHaveValue("")
     })
 
     it("renders human-readable labels for inspector dropdown triggers", async () => {

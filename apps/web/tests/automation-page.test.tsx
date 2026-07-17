@@ -4,12 +4,13 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import AutomationPage from '../app/(app)/automation/page.client'
 
 const mockUseAuth = vi.fn()
+const mockUseEffectivePermissions = vi.fn()
 vi.mock('@/lib/auth-context', () => ({
     useAuth: () => mockUseAuth(),
 }))
 
 vi.mock('@/lib/hooks/use-permissions', () => ({
-    useEffectivePermissions: () => ({ data: { permissions: [] } }),
+    useEffectivePermissions: () => mockUseEffectivePermissions(),
 }))
 
 // Mock Next.js navigation
@@ -129,7 +130,7 @@ function getLastElement<T>(items: T[], message: string): T {
 }
 
 vi.mock('@/lib/hooks/use-workflows', () => ({
-    useWorkflows: () => mockUseWorkflows(),
+    useWorkflows: (...args: unknown[]) => mockUseWorkflows(...args),
     useWorkflow: () => mockUseWorkflow(),
     useWorkflowStats: () => mockUseWorkflowStats(),
     useWorkflowOptions: () => mockUseWorkflowOptions(),
@@ -155,6 +156,8 @@ function renderAutomationPage() {
 describe('AutomationPage', () => {
     beforeEach(() => {
         mockUseAuth.mockReturnValue({ user: { role: 'admin' } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: [] } })
+        mockUseWorkflows.mockClear()
         mockUseWorkflows.mockReturnValue({ data: [], isLoading: false })
         mockUseWorkflow.mockReturnValue({ data: null, isLoading: false })
         mockUseWorkflowStats.mockReturnValue({ data: { total_workflows: 0, enabled_workflows: 0, success_rate_24h: 0, total_executions_24h: 0 }, isLoading: false })
@@ -162,13 +165,22 @@ describe('AutomationPage', () => {
             data: {
                 trigger_types: [
                     { value: 'surrogate_created', label: 'Surrogate Created', description: '' },
+                    { value: 'scheduled', label: 'Scheduled', description: '' },
                     { value: 'task_due', label: 'Task Due', description: '' },
                 ],
                 action_types: [
                     { value: 'add_note', label: 'Add Note', description: '' },
                 ],
-                action_types_by_trigger: { surrogate_created: ['add_note'], task_due: ['add_note'] },
-                trigger_entity_types: { surrogate_created: 'surrogate', task_due: 'task' },
+                action_types_by_trigger: {
+                    surrogate_created: ['add_note'],
+                    scheduled: ['add_note'],
+                    task_due: ['add_note'],
+                },
+                trigger_entity_types: {
+                    surrogate_created: 'surrogate',
+                    scheduled: 'surrogate',
+                    task_due: 'task',
+                },
                 condition_fields: [],
                 condition_operators: [],
                 update_fields: [],
@@ -195,6 +207,17 @@ describe('AutomationPage', () => {
         expect(screen.getByText('My Workflows')).toBeInTheDocument()
         expect(screen.getByText('Org Workflows')).toBeInTheDocument()
         expect(screen.getByText('Workflow Templates')).toBeInTheDocument()
+    })
+
+    it('uses org scope for the first admin workflow query when no scope is explicit', () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['manage_automation'] },
+        })
+
+        renderAutomationPage()
+
+        expect(mockUseWorkflows).toHaveBeenNthCalledWith(1, { scope: 'org' })
+        expect(mockUseWorkflows).not.toHaveBeenCalledWith({ scope: 'personal' })
     })
 
     it('shows server validation errors in the wizard', () => {
@@ -229,6 +252,286 @@ describe('AutomationPage', () => {
 
         expect(screen.getByText(/fix these errors/i)).toBeInTheDocument()
         expect(screen.getByText(/Action 1: title is required/i)).toBeInTheDocument()
+    })
+
+    it('clears server validation errors when condition logic changes', () => {
+        mockCreateWorkflow.mutate.mockImplementation(
+            (_data: unknown, opts?: { onError?: (err: Error) => void }) => {
+                opts?.onError?.(
+                    new Error('Action 1: title is required; Action 1: assignee is required'),
+                )
+            },
+        )
+
+        renderAutomationPage()
+
+        const createButtons = screen.getAllByRole('button', { name: /create workflow/i })
+        fireEvent.click(getLastElement(createButtons, 'Expected a create workflow button'))
+        fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Surrogates'), {
+            target: { value: 'Conditional Workflow' },
+        })
+        fireEvent.change(
+            getFirstElement(screen.getAllByTestId('select'), 'Expected a trigger select'),
+            { target: { value: 'surrogate_created' } },
+        )
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+
+        fireEvent.click(screen.getByRole('button', { name: /add condition/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add condition/i }))
+        expect(screen.getByRole('button', { name: 'AND' })).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+        fireEvent.change(
+            getFirstElement(screen.getAllByTestId('select'), 'Expected an action select'),
+            { target: { value: 'add_note' } },
+        )
+        fireEvent.change(screen.getByPlaceholderText('Note content'), {
+            target: { value: 'Record the condition result' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+
+        const saveButtons = screen.getAllByRole('button', { name: /create workflow/i })
+        fireEvent.click(getLastElement(saveButtons, 'Expected a save workflow button'))
+        expect(mockCreateWorkflow.mutate).toHaveBeenCalledTimes(1)
+        expect(screen.getByText(/Action 1: title is required/i)).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: /back/i }))
+        fireEvent.click(screen.getByRole('button', { name: /back/i }))
+        fireEvent.click(screen.getByRole('button', { name: 'AND' }))
+
+        expect(screen.queryByText(/Action 1: title is required/i)).not.toBeInTheDocument()
+    })
+
+    it('preserves server errors when late status options only normalize legacy config', () => {
+        const initialOptions = {
+            trigger_types: [
+                { value: 'status_changed', label: 'Status Changed', description: '' },
+            ],
+            action_types: [
+                { value: 'add_note', label: 'Add Note', description: '' },
+            ],
+            action_types_by_trigger: {
+                status_changed: ['add_note'],
+            },
+            trigger_entity_types: {
+                status_changed: 'surrogate',
+            },
+            condition_fields: [],
+            condition_operators: [],
+            update_fields: [],
+            email_variables: [],
+            email_templates: [],
+            users: [],
+            queues: [],
+            statuses: [],
+        }
+        mockUseWorkflowOptions.mockReturnValue({
+            data: initialOptions,
+            isLoading: false,
+        })
+        mockUseWorkflows.mockReturnValue({
+            data: [
+                {
+                    id: 'workflow-legacy',
+                    name: 'Legacy Status Workflow',
+                    description: null,
+                    icon: 'activity',
+                    trigger_type: 'status_changed',
+                    is_enabled: true,
+                    run_count: 0,
+                    last_run_at: null,
+                    last_error: null,
+                    created_at: '2026-07-01T00:00:00Z',
+                    can_edit: true,
+                },
+            ],
+            isLoading: false,
+        })
+        mockUseWorkflow.mockReturnValue({
+            data: {
+                id: 'workflow-legacy',
+                name: 'Legacy Status Workflow',
+                description: null,
+                scope: 'personal',
+                trigger_type: 'status_changed',
+                trigger_config: { to_status: 'qualified' },
+                conditions: [],
+                condition_logic: 'AND',
+                actions: [
+                    {
+                        action_type: 'add_note',
+                        content: 'Record status change',
+                    },
+                ],
+            },
+            isLoading: false,
+        })
+        mockUpdateWorkflow.mutate.mockImplementation(
+            (_data: unknown, opts?: { onError?: (err: Error) => void }) => {
+                opts?.onError?.(
+                    new Error('Action 1: title is required; Action 1: assignee is required'),
+                )
+            },
+        )
+
+        const view = renderAutomationPage()
+
+        fireEvent.click(
+            screen.getByRole('button', {
+                name: 'Actions for workflow Legacy Status Workflow',
+            }),
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+        expect(screen.getByDisplayValue('Legacy Status Workflow')).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+        expect(screen.getByText(/Action 1: title is required/i)).toBeInTheDocument()
+
+        mockUseWorkflowOptions.mockReturnValue({
+            data: {
+                ...initialOptions,
+                statuses: [
+                    {
+                        id: 'stage-qualified',
+                        value: 'qualified',
+                        label: 'Qualified',
+                    },
+                ],
+            },
+            isLoading: false,
+        })
+        view.rerender(
+            <AutomationPage
+                initialTab="workflows"
+                initialWorkflowScopeTab="personal"
+                initialCreateOpen={false}
+            />,
+        )
+
+        expect(screen.getByText(/Action 1: title is required/i)).toBeInTheDocument()
+    })
+
+    it('waits for the selected workflow response before hydrating the edit draft', () => {
+        mockUseWorkflows.mockReturnValue({
+            data: [
+                {
+                    id: 'workflow-b',
+                    name: 'Selected Workflow B',
+                    description: null,
+                    icon: 'activity',
+                    trigger_type: 'surrogate_created',
+                    is_enabled: true,
+                    run_count: 0,
+                    last_run_at: null,
+                    last_error: null,
+                    created_at: '2026-07-01T00:00:00Z',
+                    can_edit: true,
+                },
+            ],
+            isLoading: false,
+        })
+        mockUseWorkflow.mockReturnValue({
+            data: {
+                id: 'workflow-a',
+                name: 'Stale Workflow A',
+                description: null,
+                scope: 'personal',
+                trigger_type: 'surrogate_created',
+                trigger_config: {},
+                conditions: [],
+                condition_logic: 'AND',
+                actions: [],
+            },
+            isLoading: false,
+        })
+
+        const view = renderAutomationPage()
+
+        fireEvent.click(
+            screen.getByRole('button', {
+                name: 'Actions for workflow Selected Workflow B',
+            }),
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+
+        mockUseWorkflow.mockReturnValue({
+            data: {
+                id: 'workflow-b',
+                name: 'Selected Workflow B',
+                description: null,
+                scope: 'personal',
+                trigger_type: 'surrogate_created',
+                trigger_config: {},
+                conditions: [],
+                condition_logic: 'AND',
+                actions: [],
+            },
+            isLoading: false,
+        })
+        view.rerender(
+            <AutomationPage
+                initialTab="workflows"
+                initialWorkflowScopeTab="personal"
+                initialCreateOpen={false}
+            />,
+        )
+
+        expect(screen.getByDisplayValue('Selected Workflow B')).toBeInTheDocument()
+        expect(screen.queryByDisplayValue('Stale Workflow A')).not.toBeInTheDocument()
+    })
+
+    it('submits only the configuration for the selected trigger type', () => {
+        renderAutomationPage()
+
+        const createButtons = screen.getAllByRole('button', { name: /create workflow/i })
+        fireEvent.click(getLastElement(createButtons, 'Expected a create workflow button'))
+
+        fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Surrogates'), {
+            target: { value: 'Task Due Reminder' },
+        })
+
+        const triggerSelect = getFirstElement(
+            screen.getAllByTestId('select'),
+            'Expected a trigger select',
+        )
+        fireEvent.change(triggerSelect, { target: { value: 'scheduled' } })
+        fireEvent.change(screen.getByPlaceholderText('0 9 * * 1'), {
+            target: { value: '0 8 * * *' },
+        })
+        fireEvent.change(screen.getByPlaceholderText('America/Los_Angeles'), {
+            target: { value: 'America/New_York' },
+        })
+
+        fireEvent.change(triggerSelect, { target: { value: 'task_due' } })
+        fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '48' } })
+
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+
+        fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+        fireEvent.change(
+            getFirstElement(screen.getAllByTestId('select'), 'Expected an action select'),
+            { target: { value: 'add_note' } },
+        )
+        fireEvent.change(screen.getByPlaceholderText('Note content'), {
+            target: { value: 'Task is due soon' },
+        })
+
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        const saveButtons = screen.getAllByRole('button', { name: /create workflow/i })
+        fireEvent.click(getLastElement(saveButtons, 'Expected a save workflow button'))
+
+        expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                trigger_type: 'task_due',
+                trigger_config: { hours_before: 48 },
+            }),
+            expect.any(Object),
+        )
     })
 
     it('uses entity-specific labels in the test workflow modal', () => {

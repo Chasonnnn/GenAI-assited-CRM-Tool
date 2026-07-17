@@ -205,6 +205,8 @@ const pipelineFixture = {
     updated_at: new Date().toISOString(),
 }
 
+let currentSurrogatePipeline = pipelineFixture
+
 const intendedParentPipelineFixture = {
     id: "ip-p1",
     entity_type: "intended_parent" as const,
@@ -547,7 +549,9 @@ describe("PipelinesSettingsPage", () => {
             isLoading: false,
         }))
         mockUsePipeline.mockImplementation((_id: string | null, entityType?: string) => ({
-            data: entityType === "intended_parent" ? intendedParentPipelineFixture : pipelineFixture,
+            data: entityType === "intended_parent"
+                ? intendedParentPipelineFixture
+                : currentSurrogatePipeline,
             isLoading: false,
         }))
         mockUsePipelineVersions.mockImplementation(() => ({
@@ -588,6 +592,7 @@ describe("PipelinesSettingsPage", () => {
                         : pipelineFixture.feature_config,
             }),
         )
+        currentSurrogatePipeline = pipelineFixture
     })
 
     it("renders editable slugs, hides stage keys until expanded, and keeps categories editable", () => {
@@ -704,6 +709,30 @@ describe("PipelinesSettingsPage", () => {
         ).toHaveAttribute("aria-expanded", "true")
     })
 
+    it("keeps stage details expanded when refreshed data assigns new database IDs", () => {
+        const view = render(<PipelinesSettingsPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: /edit details for contacted/i }))
+        expect(
+            screen.getByRole("button", { name: /hide details for contacted/i }),
+        ).toHaveAttribute("aria-expanded", "true")
+
+        currentSurrogatePipeline = {
+            ...pipelineFixture,
+            current_version: 3,
+            stages: pipelineFixture.stages.map((stage) => ({
+                ...stage,
+                id: `refreshed-${stage.id}`,
+            })),
+        }
+        view.rerender(<PipelinesSettingsPage />)
+
+        expect(
+            screen.getByRole("button", { name: /hide details for contacted/i }),
+        ).toHaveAttribute("aria-expanded", "true")
+        expect(screen.getByText("Behavior preset")).toBeInTheDocument()
+    })
+
     it("hides journey milestone details by default and expands them on demand", () => {
         render(<PipelinesSettingsPage />)
 
@@ -719,6 +748,39 @@ describe("PipelinesSettingsPage", () => {
             screen.getByLabelText("Application & Intake includes New Unread"),
         ).toBeInTheDocument()
         expect(screen.getByText("2 mapped stages")).toBeInTheDocument()
+    })
+
+    it("keeps journey milestone details expanded across equivalent pipeline refreshes", () => {
+        const view = render(<PipelinesSettingsPage />)
+
+        fireEvent.click(
+            screen.getByRole("button", { name: /edit details for application & intake/i }),
+        )
+        expect(
+            screen.getByRole("button", { name: /hide details for application & intake/i }),
+        ).toHaveAttribute("aria-expanded", "true")
+
+        currentSurrogatePipeline = {
+            ...pipelineFixture,
+            current_version: 3,
+            feature_config: {
+                ...pipelineFixture.feature_config,
+                journey: {
+                    ...pipelineFixture.feature_config.journey,
+                    milestones: pipelineFixture.feature_config.journey.milestones.map(
+                        (milestone) => ({ ...milestone }),
+                    ),
+                },
+            },
+        }
+        view.rerender(<PipelinesSettingsPage />)
+
+        expect(
+            screen.getByRole("button", { name: /hide details for application & intake/i }),
+        ).toHaveAttribute("aria-expanded", "true")
+        expect(
+            screen.getByLabelText("Application & Intake includes New Unread"),
+        ).toBeInTheDocument()
     })
 
     it("hides analytics funnel details by default and expands them on demand", () => {

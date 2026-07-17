@@ -14,6 +14,7 @@ import {
     useState,
 } from "react"
 import { createPortal } from "react-dom"
+import { useMountEffect } from "@/lib/hooks/use-mount-effect"
 
 const POINTER_QUERIES = ["(any-pointer: fine)", "(pointer: fine)"]
 const HOVER_QUERIES = ["(any-hover: hover)", "(hover: hover)"]
@@ -254,6 +255,189 @@ interface FloatingScrollbarController extends FloatingScrollbarShellProps {
     wrapperRef: RefObject<HTMLDivElement | null>
 }
 
+function useFloatingScrollbarDomLifecycle({
+    isDesktopPointer,
+    wrapperRef,
+    tableContainerRef,
+    floatingViewportRef,
+    syncSourceRef,
+    hideTimeoutRef,
+    fadeTimeoutRef,
+    setScrollLeft,
+    setMetrics,
+    setIsActive,
+    setIsFadingOut,
+    activateFromScroll,
+}: {
+    isDesktopPointer: boolean
+    wrapperRef: RefObject<HTMLDivElement | null>
+    tableContainerRef: { current: HTMLDivElement | null }
+    floatingViewportRef: RefObject<HTMLDivElement | null>
+    syncSourceRef: { current: SyncSource }
+    hideTimeoutRef: { current: number | null }
+    fadeTimeoutRef: { current: number | null }
+    setScrollLeft: Dispatch<SetStateAction<number>>
+    setMetrics: Dispatch<SetStateAction<ScrollbarMetrics>>
+    setIsActive: Dispatch<SetStateAction<boolean>>
+    setIsFadingOut: Dispatch<SetStateAction<boolean>>
+    activateFromScroll: () => void
+}) {
+    const activateFromScrollEvent = useEffectEvent(activateFromScroll)
+
+    useEffect(() => {
+        if (!isDesktopPointer) {
+            startTransition(() => {
+                setIsActive(false)
+                setIsFadingOut(false)
+            })
+            clearTimerRef(hideTimeoutRef)
+            clearTimerRef(fadeTimeoutRef)
+            return
+        }
+
+        const tableContainer = resolveTableContainerFromRefs(wrapperRef, tableContainerRef)
+        if (!tableContainer) return
+        tableContainerRef.current = tableContainer
+
+        const updateMountedMetrics = () => {
+            const isEligible = updateScrollbarMetrics(
+                wrapperRef,
+                tableContainerRef,
+                setScrollLeft,
+                setMetrics
+            )
+            if (!isEligible) setIsActive(false)
+        }
+
+        const syncMountedTable = () => {
+            const floatingViewport = floatingViewportRef.current
+            if (!floatingViewport) return
+            if (syncSourceRef.current === "floating") return
+
+            if (Math.abs(floatingViewport.scrollLeft - tableContainer.scrollLeft) <= 1) {
+                return
+            }
+
+            syncSourceRef.current = "table"
+            floatingViewport.scrollLeft = tableContainer.scrollLeft
+            setScrollLeft(tableContainer.scrollLeft)
+            syncSourceRef.current = null
+        }
+
+        const onActivityScroll = () => {
+            activateFromScrollEvent()
+        }
+
+        const onMouseMove = (event: MouseEvent) => {
+            if (event.clientY < window.innerHeight - BOTTOM_HOVER_TRIGGER_ZONE_PX) {
+                return
+            }
+            activateFromScrollEvent()
+        }
+
+        const onResize = () => {
+            updateMountedMetrics()
+        }
+
+        const onTableScroll = () => {
+            syncMountedTable()
+            activateFromScrollEvent()
+        }
+
+        const scrollSources = resolveScrollSources(tableContainer)
+        document.addEventListener("scroll", onActivityScroll, true)
+        for (const source of scrollSources) {
+            if (source === window) {
+                window.addEventListener("scroll", onActivityScroll, { passive: true })
+                window.addEventListener("wheel", onActivityScroll, { passive: true })
+                continue
+            }
+            source.addEventListener("scroll", onActivityScroll, { passive: true })
+            source.addEventListener("wheel", onActivityScroll, { passive: true })
+        }
+
+        window.addEventListener("resize", onResize)
+        window.addEventListener("mousemove", onMouseMove, { passive: true })
+        tableContainer.addEventListener("scroll", onTableScroll, { passive: true })
+
+        const resizeObserver = new ResizeObserver(() => {
+            updateMountedMetrics()
+        })
+        resizeObserver.observe(tableContainer)
+        const tableElement = tableContainer.firstElementChild
+        if (tableElement instanceof HTMLElement) {
+            resizeObserver.observe(tableElement)
+        }
+
+        startTransition(() => {
+            updateScrollbarMetrics(wrapperRef, tableContainerRef, setScrollLeft, setMetrics)
+        })
+
+        return () => {
+            resizeObserver.disconnect()
+            document.removeEventListener("scroll", onActivityScroll, true)
+            for (const source of scrollSources) {
+                if (source === window) {
+                    window.removeEventListener("scroll", onActivityScroll)
+                    window.removeEventListener("wheel", onActivityScroll)
+                    continue
+                }
+                source.removeEventListener("scroll", onActivityScroll)
+                source.removeEventListener("wheel", onActivityScroll)
+            }
+            window.removeEventListener("resize", onResize)
+            window.removeEventListener("mousemove", onMouseMove)
+            tableContainer.removeEventListener("scroll", onTableScroll)
+        }
+    }, [
+        fadeTimeoutRef,
+        floatingViewportRef,
+        hideTimeoutRef,
+        isDesktopPointer,
+        setIsActive,
+        setIsFadingOut,
+        setMetrics,
+        setScrollLeft,
+        syncSourceRef,
+        tableContainerRef,
+        wrapperRef,
+    ])
+}
+
+function useFloatingScrollbarActivationSync({
+    isActive,
+    contentWidth,
+    wrapperRef,
+    tableContainerRef,
+    floatingViewportRef,
+    setScrollLeft,
+}: {
+    isActive: boolean
+    contentWidth: number
+    wrapperRef: RefObject<HTMLDivElement | null>
+    tableContainerRef: { current: HTMLDivElement | null }
+    floatingViewportRef: RefObject<HTMLDivElement | null>
+    setScrollLeft: Dispatch<SetStateAction<number>>
+}) {
+    useEffect(() => {
+        if (!isActive) return
+        const tableContainer = resolveTableContainerFromRefs(wrapperRef, tableContainerRef)
+        const floatingViewport = floatingViewportRef.current
+        if (!tableContainer || !floatingViewport) return
+        floatingViewport.scrollLeft = tableContainer.scrollLeft
+        startTransition(() => {
+            setScrollLeft(tableContainer.scrollLeft)
+        })
+    }, [
+        contentWidth,
+        floatingViewportRef,
+        isActive,
+        setScrollLeft,
+        tableContainerRef,
+        wrapperRef,
+    ])
+}
+
 function useSurrogatesFloatingScrollbarController(): FloatingScrollbarController {
     const wrapperRef = useRef<HTMLDivElement | null>(null)
     const tableContainerRef = useRef<HTMLDivElement | null>(null)
@@ -313,10 +497,6 @@ function useSurrogatesFloatingScrollbarController(): FloatingScrollbarController
         scheduleHide()
     }
 
-    const activateFromScrollEvent = useEffectEvent(() => {
-        activateFromScroll()
-    })
-
     const onFloatingScroll = () => {
         const tableContainer = resolveTableContainer()
         const floatingViewport = floatingViewportRef.current
@@ -333,7 +513,7 @@ function useSurrogatesFloatingScrollbarController(): FloatingScrollbarController
         activateFromScroll()
     }
 
-    useEffect(() => {
+    useMountEffect(() => {
         startTransition(() => {
             setIsMounted(true)
         })
@@ -370,121 +550,30 @@ function useSurrogatesFloatingScrollbarController(): FloatingScrollbarController
             clearTimerRef(hideTimeoutRef)
             clearTimerRef(fadeTimeoutRef)
         }
-    }, [])
+    })
 
-    useEffect(() => {
-        if (!isDesktopPointer) {
-            startTransition(() => {
-                setIsActive(false)
-                setIsFadingOut(false)
-            })
-            clearTimerRef(hideTimeoutRef)
-            clearTimerRef(fadeTimeoutRef)
-            return
-        }
-
-        const tableContainer = resolveTableContainerFromRefs(wrapperRef, tableContainerRef)
-        if (!tableContainer) return
-        tableContainerRef.current = tableContainer
-
-        const updateMountedMetrics = () => {
-            const isEligible = updateScrollbarMetrics(wrapperRef, tableContainerRef, setScrollLeft, setMetrics)
-            if (!isEligible) setIsActive(false)
-        }
-
-        const syncMountedTable = () => {
-            const floatingViewport = floatingViewportRef.current
-            if (!floatingViewport) return
-            if (syncSourceRef.current === "floating") return
-
-            if (Math.abs(floatingViewport.scrollLeft - tableContainer.scrollLeft) <= 1) {
-                return
-            }
-
-            syncSourceRef.current = "table"
-            floatingViewport.scrollLeft = tableContainer.scrollLeft
-            setScrollLeft(tableContainer.scrollLeft)
-            syncSourceRef.current = null
-        }
-
-        const onActivityScroll = () => {
-            activateFromScrollEvent()
-        }
-
-        const onMouseMove = (event: MouseEvent) => {
-            if (event.clientY < window.innerHeight - BOTTOM_HOVER_TRIGGER_ZONE_PX) {
-                return
-            }
-            activateFromScrollEvent()
-        }
-
-        const onResize = () => {
-            updateMountedMetrics()
-        }
-
-        const onTableScroll = () => {
-            syncMountedTable()
-            activateFromScrollEvent()
-        }
-
-        const scrollSources = resolveScrollSources(tableContainer)
-        // Capture nested scrolling from containerized layouts.
-        document.addEventListener("scroll", onActivityScroll, true)
-        for (const source of scrollSources) {
-            if (source === window) {
-                window.addEventListener("scroll", onActivityScroll, { passive: true })
-                window.addEventListener("wheel", onActivityScroll, { passive: true })
-                continue
-            }
-            source.addEventListener("scroll", onActivityScroll, { passive: true })
-            source.addEventListener("wheel", onActivityScroll, { passive: true })
-        }
-
-        window.addEventListener("resize", onResize)
-        window.addEventListener("mousemove", onMouseMove, { passive: true })
-        tableContainer.addEventListener("scroll", onTableScroll, { passive: true })
-
-        const resizeObserver = new ResizeObserver(() => {
-            updateMountedMetrics()
-        })
-        resizeObserver.observe(tableContainer)
-        const tableElement = tableContainer.firstElementChild
-        if (tableElement instanceof HTMLElement) {
-            resizeObserver.observe(tableElement)
-        }
-
-        startTransition(() => {
-            updateScrollbarMetrics(wrapperRef, tableContainerRef, setScrollLeft, setMetrics)
-        })
-
-        return () => {
-            resizeObserver.disconnect()
-            document.removeEventListener("scroll", onActivityScroll, true)
-            for (const source of scrollSources) {
-                if (source === window) {
-                    window.removeEventListener("scroll", onActivityScroll)
-                    window.removeEventListener("wheel", onActivityScroll)
-                    continue
-                }
-                source.removeEventListener("scroll", onActivityScroll)
-                source.removeEventListener("wheel", onActivityScroll)
-            }
-            window.removeEventListener("resize", onResize)
-            window.removeEventListener("mousemove", onMouseMove)
-            tableContainer.removeEventListener("scroll", onTableScroll)
-        }
-    }, [isDesktopPointer])
-
-    useEffect(() => {
-        if (!isActive) return
-        const tableContainer = resolveTableContainerFromRefs(wrapperRef, tableContainerRef)
-        const floatingViewport = floatingViewportRef.current
-        if (!tableContainer || !floatingViewport) return
-        floatingViewport.scrollLeft = tableContainer.scrollLeft
-        startTransition(() => {
-            setScrollLeft(tableContainer.scrollLeft)
-        })
-    }, [isActive, metrics.contentWidth])
+    useFloatingScrollbarDomLifecycle({
+        isDesktopPointer,
+        wrapperRef,
+        tableContainerRef,
+        floatingViewportRef,
+        syncSourceRef,
+        hideTimeoutRef,
+        fadeTimeoutRef,
+        setScrollLeft,
+        setMetrics,
+        setIsActive,
+        setIsFadingOut,
+        activateFromScroll,
+    })
+    useFloatingScrollbarActivationSync({
+        isActive,
+        contentWidth: metrics.contentWidth,
+        wrapperRef,
+        tableContainerRef,
+        floatingViewportRef,
+        setScrollLeft,
+    })
 
     const isEligibleToRender =
         isMounted &&

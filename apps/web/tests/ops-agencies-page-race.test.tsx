@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
 import AgenciesPage from "../app/ops/agencies/page.client"
 
 const mockListOrganizations = vi.fn()
 const mockPush = vi.fn()
+
+vi.unmock("@tanstack/react-query")
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ push: mockPush }),
@@ -54,6 +57,17 @@ function org(id: string, name: string): OrganizationSummary {
 }
 
 describe("Ops agencies data loading", () => {
+    const renderAgenciesPage = (queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+    })) => ({
+        queryClient,
+        ...render(
+            <QueryClientProvider client={queryClient}>
+                <AgenciesPage />
+            </QueryClientProvider>
+        ),
+    })
+
     beforeEach(() => {
         mockListOrganizations.mockReset()
         mockPush.mockReset()
@@ -67,7 +81,7 @@ describe("Ops agencies data loading", () => {
             return next.promise
         })
 
-        render(<AgenciesPage />)
+        renderAgenciesPage()
 
         await waitFor(() => expect(requests.length).toBe(1))
         requests[0]?.resolve({ items: [org("init", "Initial Agency")], total: 1 })
@@ -90,5 +104,25 @@ describe("Ops agencies data loading", () => {
             expect(screen.getByText("Latest Agency")).toBeInTheDocument()
             expect(screen.queryByText("Stale Agency")).not.toBeInTheDocument()
         })
+    })
+
+    it("reuses fresh agency results when the page remounts", async () => {
+        mockListOrganizations.mockResolvedValue({
+            items: [org("cached", "Cached Agency")],
+            total: 1,
+        })
+        const queryClient = new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+        })
+
+        const firstView = renderAgenciesPage(queryClient)
+        expect(await screen.findByText("Cached Agency")).toBeInTheDocument()
+        expect(mockListOrganizations).toHaveBeenCalledTimes(1)
+
+        firstView.unmount()
+        renderAgenciesPage(queryClient)
+
+        expect(screen.getByText("Cached Agency")).toBeInTheDocument()
+        expect(mockListOrganizations).toHaveBeenCalledTimes(1)
     })
 })

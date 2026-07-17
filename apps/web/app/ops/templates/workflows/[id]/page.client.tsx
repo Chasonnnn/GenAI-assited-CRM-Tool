@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useReducer, useState, type Dispatch, type SetStateAction } from "react"
+import { useReducer, useState, type Dispatch, type SetStateAction } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -205,27 +205,52 @@ function normalizeTriggerConfigForUi(
     triggerConfig: JsonObject,
     statuses: WorkflowStatusOption[],
 ): JsonObject {
-    if (triggerType !== "status_changed") return { ...triggerConfig }
     const next: JsonObject = { ...triggerConfig }
-    if (
-        (typeof next.to_stage_id !== "string" || !next.to_stage_id) &&
-        typeof next.to_status === "string"
-    ) {
-        const match = statuses.find((status) => status.value === next.to_status)
-        if (match?.id) {
-            next.to_stage_id = match.id
-            delete next.to_status
+    if (triggerType === "status_changed") {
+        if (
+            (typeof next.to_stage_id !== "string" || !next.to_stage_id) &&
+            typeof next.to_status === "string"
+        ) {
+            const match = statuses.find((status) => status.value === next.to_status)
+            if (match?.id) {
+                next.to_stage_id = match.id
+                delete next.to_status
+            }
         }
+        if (
+            (typeof next.from_stage_id !== "string" || !next.from_stage_id) &&
+            typeof next.from_status === "string"
+        ) {
+            const match = statuses.find((status) => status.value === next.from_status)
+            if (match?.id) {
+                next.from_stage_id = match.id
+                delete next.from_status
+            }
+        }
+        if (typeof next.to_stage_id !== "string") next.to_stage_id = ""
+        if (typeof next.from_stage_id !== "string") next.from_stage_id = ""
+    }
+    if (triggerType === "scheduled") {
+        if (typeof next.cron !== "string") next.cron = ""
+        if (typeof next.timezone !== "string") next.timezone = "America/Los_Angeles"
+    }
+    if (triggerType === "inactivity" && typeof next.days !== "number") {
+        next.days = 7
+    }
+    if (triggerType === "task_due" && typeof next.hours_before !== "number") {
+        next.hours_before = 24
+    }
+    if (triggerType === "surrogate_updated" && !Array.isArray(next.fields)) {
+        next.fields = []
+    }
+    if (triggerType === "surrogate_assigned" && typeof next.to_user_id !== "string") {
+        delete next.to_user_id
     }
     if (
-        (typeof next.from_stage_id !== "string" || !next.from_stage_id) &&
-        typeof next.from_status === "string"
+        ["form_started", "form_submitted", "intake_lead_created"].includes(triggerType) &&
+        typeof next.form_id !== "string"
     ) {
-        const match = statuses.find((status) => status.value === next.from_status)
-        if (match?.id) {
-            next.from_stage_id = match.id
-            delete next.from_status
-        }
+        next.form_id = ""
     }
     return next
 }
@@ -268,6 +293,7 @@ function getActionValidationError(action: ActionConfig): string | null {
 }
 
 type WorkflowTemplateEditorState = {
+    hydratedTemplateKey: string | null
     name: string
     description: string
     icon: string
@@ -283,7 +309,12 @@ type WorkflowTemplateEditorState = {
 type TriggerConfigSetter = Dispatch<SetStateAction<JsonObject>>
 
 type WorkflowTemplateEditorAction =
-    | { type: "hydrateDraft"; templateData: PlatformWorkflowTemplate; statusOptions: WorkflowStatusOption[] }
+    | {
+        type: "hydrateDraft"
+        templateKey: string
+        templateData: PlatformWorkflowTemplate | null
+        statusOptions: WorkflowStatusOption[]
+    }
     | { type: "loadZapierSample" }
     | { type: "loadSharedIntakeSample" }
     | { type: "setName"; value: string }
@@ -303,6 +334,7 @@ type WorkflowTemplateEditorAction =
 
 function createInitialWorkflowTemplateEditorState(): WorkflowTemplateEditorState {
     return {
+        hydratedTemplateKey: null,
         name: "",
         description: "",
         icon: "template",
@@ -332,9 +364,16 @@ function workflowTemplateEditorReducer(
 ): WorkflowTemplateEditorState {
     switch (action.type) {
         case "hydrateDraft": {
+            if (!action.templateData) {
+                return {
+                    ...createInitialWorkflowTemplateEditorState(),
+                    hydratedTemplateKey: action.templateKey,
+                }
+            }
             const draft = action.templateData.draft
             return {
                 ...state,
+                hydratedTemplateKey: action.templateKey,
                 name: draft.name ?? "",
                 description: draft.description ?? "",
                 icon: draft.icon ?? "template",
@@ -392,7 +431,12 @@ function workflowTemplateEditorReducer(
         case "setCategory":
             return { ...state, category: action.value }
         case "setTriggerType":
-            return { ...state, triggerType: action.value }
+            if (action.value === state.triggerType) return state
+            return {
+                ...state,
+                triggerType: action.value,
+                triggerConfig: normalizeTriggerConfigForUi(action.value, {}, []),
+            }
         case "setTriggerConfig": {
             const triggerConfig =
                 typeof action.value === "function" ? action.value(state.triggerConfig) : action.value
@@ -2079,6 +2123,21 @@ function useWorkflowTemplatePageState() {
     const [isSaving, setIsSaving] = useState(false)
     const [isPublishing, setIsPublishing] = useState(false)
 
+    const statusOptions = options?.statuses ?? EMPTY_STATUS_OPTIONS
+    const templateKey = isNew
+        ? "new"
+        : templateData
+            ? `${templateData.id}:${templateData.updated_at}`
+            : null
+    if (templateKey && editorState.hydratedTemplateKey !== templateKey) {
+        dispatchEditor({
+            type: "hydrateDraft",
+            templateKey,
+            templateData: isNew ? null : templateData ?? null,
+            statusOptions,
+        })
+    }
+
     const {
         name,
         description,
@@ -2091,6 +2150,17 @@ function useWorkflowTemplatePageState() {
         actions,
         isPublished,
     } = editorState
+    const normalizedTriggerConfig = normalizeTriggerConfigForUi(
+        triggerType,
+        triggerConfig,
+        statusOptions
+    )
+    if (!areJsonObjectsEqual(normalizedTriggerConfig, triggerConfig)) {
+        dispatchEditor({
+            type: "setTriggerConfig",
+            value: normalizedTriggerConfig,
+        })
+    }
     const setName = (value: string) => dispatchEditor({ type: "setName", value })
     const setDescription = (value: string) => dispatchEditor({ type: "setDescription", value })
     const setIcon = (value: string) => dispatchEditor({ type: "setIcon", value })
@@ -2103,7 +2173,6 @@ function useWorkflowTemplatePageState() {
         dispatchEditor({ type: "setConditionLogic", value })
     const setIsPublished = (value: boolean) => dispatchEditor({ type: "setIsPublished", value })
 
-    const statusOptions = options?.statuses ?? EMPTY_STATUS_OPTIONS
     const actionTypeOptions = options?.action_types ?? FALLBACK_ACTION_TYPES
     const triggerTypeOptions = options?.trigger_types ?? FALLBACK_TRIGGER_TYPES
     const updateFields = options?.update_fields ?? ["stage_id", "is_priority", "owner_type", "owner_id"]
@@ -2142,51 +2211,6 @@ function useWorkflowTemplatePageState() {
         dispatchEditor({ type: "loadZapierSample" })
         toast.success("Loaded Zapier conversion sample workflow")
     }
-
-    useEffect(() => {
-        if (!templateData || isNew) return
-        dispatchEditor({ type: "hydrateDraft", templateData, statusOptions })
-    }, [templateData, isNew, statusOptions])
-
-    useEffect(() => {
-        if (!triggerType) return
-        dispatchEditor({
-            type: "setTriggerConfig",
-            value: (current) => {
-                const next = { ...current }
-                if (triggerType === "status_changed") {
-                    if (typeof next.to_stage_id !== "string") next.to_stage_id = ""
-                    if (typeof next.from_stage_id !== "string") next.from_stage_id = ""
-                }
-                if (triggerType === "scheduled") {
-                    if (typeof next.cron !== "string") next.cron = ""
-                    if (typeof next.timezone !== "string") next.timezone = "America/Los_Angeles"
-                }
-                if (triggerType === "inactivity") {
-                    if (typeof next.days !== "number") next.days = 7
-                }
-                if (triggerType === "task_due") {
-                    if (typeof next.hours_before !== "number") next.hours_before = 24
-                }
-                if (triggerType === "surrogate_updated") {
-                    if (!Array.isArray(next.fields)) next.fields = []
-                }
-                if (triggerType === "surrogate_assigned") {
-                    if (typeof next.to_user_id !== "string") delete next.to_user_id
-                }
-                if (triggerType === "form_started") {
-                    if (typeof next.form_id !== "string") next.form_id = ""
-                }
-                if (triggerType === "form_submitted") {
-                    if (typeof next.form_id !== "string") next.form_id = ""
-                }
-                if (triggerType === "intake_lead_created") {
-                    if (typeof next.form_id !== "string") next.form_id = ""
-                }
-                return areJsonObjectsEqual(next, current) ? current : next
-            },
-        })
-    }, [triggerType])
 
     const addCondition = () => {
         dispatchEditor({ type: "addCondition" })

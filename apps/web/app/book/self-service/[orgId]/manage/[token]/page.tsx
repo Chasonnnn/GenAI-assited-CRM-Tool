@@ -1,6 +1,7 @@
 "use client"
 
-import { use, useEffect, useState, useSyncExternalStore } from "react"
+import { use, useState, useSyncExternalStore } from "react"
+import { useQuery } from "@tanstack/react-query"
 import {
     addMonths,
     eachDayOfInterval,
@@ -75,7 +76,13 @@ const TIMEZONE_OPTIONS = [
 
 const DEFAULT_TIMEZONE = "America/Los_Angeles"
 const INVALID_MANAGE_LINK_MESSAGE = "Invalid appointment management link"
+const UUID_PATTERN =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 type TimezoneOption = { value: string; label: string }
+
+function isValidOrganizationId(value: string | undefined): value is string {
+    return typeof value === "string" && UUID_PATTERN.test(value)
+}
 
 function getTimezoneLabel(value: string | null | undefined, options: TimezoneOption[] = TIMEZONE_OPTIONS) {
     if (!value) return "Select timezone"
@@ -539,18 +546,36 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
         : resolvedSearchParams.action
     const initialAction: ManageAction = rawAction === "cancel" ? "cancel" : "reschedule"
 
-    const [loadState, setLoadState] = useState<{
-        appointment: PublicAppointmentView | null
-        isLoading: boolean
-        error: string | null
-    }>({
-        appointment: null,
-        isLoading: true,
-        error: null,
-    })
+    return (
+        <ManageAppointmentSession
+            key={`${orgId ?? "missing-org"}:${token ?? "missing-token"}`}
+            orgId={orgId}
+            token={token}
+            initialAction={initialAction}
+        />
+    )
+}
 
+function ManageAppointmentSession({
+    orgId,
+    token,
+    initialAction,
+}: {
+    orgId: string | undefined
+    token: string | undefined
+    initialAction: ManageAction
+}) {
     const [action, setAction] = useState<ManageAction>(() => initialAction)
-    const hasManageLink = Boolean(orgId && token)
+    const hasManageLink = isValidOrganizationId(orgId) && Boolean(token)
+    const appointmentQuery = useQuery({
+        queryKey: ["public", "manage-appointment", orgId ?? null, token ?? null],
+        queryFn: () => {
+            if (!orgId || !token) throw new Error(INVALID_MANAGE_LINK_MESSAGE)
+            return getAppointmentForManage(orgId, token)
+        },
+        enabled: hasManageLink,
+        retry: false,
+    })
     const detectedTimezone = useSyncExternalStore(
         subscribeTimezoneSnapshot,
         getTimezoneSnapshot,
@@ -566,40 +591,20 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
 
     const [reason, setReason] = useState("")
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [submissionError, setSubmissionError] = useState<string | null>(null)
     const [successState, setSuccessState] = useState<"rescheduled" | "cancelled" | null>(null)
-    const appointment = hasManageLink ? loadState.appointment : null
-    const isLoading = hasManageLink ? loadState.isLoading : false
-    const error = hasManageLink ? loadState.error : INVALID_MANAGE_LINK_MESSAGE
+    const appointment = hasManageLink ? appointmentQuery.data ?? null : null
+    const isLoading = hasManageLink ? appointmentQuery.isLoading : false
+    const queryError = hasManageLink
+        ? appointmentQuery.error instanceof Error
+            ? appointmentQuery.error.message
+            : appointmentQuery.isError
+                ? "Appointment not found"
+                : null
+        : INVALID_MANAGE_LINK_MESSAGE
+    const error = submissionError ?? queryError
     const appointmentTimezone = appointment?.client_timezone ?? null
     const timezone = timezoneOverride ?? appointmentTimezone ?? detectedTimezone
-
-    useEffect(() => {
-        if (!orgId || !token) {
-            return
-        }
-
-        const orgIdForCall = orgId
-        const tokenForCall = token
-
-        async function load() {
-            try {
-                const data = await getAppointmentForManage(orgIdForCall, tokenForCall)
-                setLoadState({
-                    appointment: data,
-                    isLoading: false,
-                    error: null,
-                })
-            } catch (err: unknown) {
-                setLoadState({
-                    appointment: null,
-                    isLoading: false,
-                    error: err instanceof Error ? err.message : "Appointment not found",
-                })
-            }
-        }
-
-        void load()
-    }, [orgId, token])
 
     const timezoneOptions = TIMEZONE_OPTIONS.some((opt) => opt.value === timezone)
         ? TIMEZONE_OPTIONS
@@ -640,10 +645,13 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
         setSelectedSlot(null)
         setIsLoadingSlots(true)
 
+        if (!orgId || !token) {
+            setSlots([])
+            setIsLoadingSlots(false)
+            return
+        }
+
         try {
-            if (!orgId || !token) {
-                throw new Error("Invalid appointment management link")
-            }
             const dateString = format(date, "yyyy-MM-dd")
             const response = await getRescheduleSlotsByToken(
                 orgId,
@@ -655,43 +663,38 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
             setSlots(response.slots)
         } catch {
             setSlots([])
-        } finally {
-            setIsLoadingSlots(false)
         }
+        setIsLoadingSlots(false)
     }
 
     const handleReschedule = async () => {
         if (!selectedSlot || !orgId || !token) return
         setIsSubmitting(true)
-        setLoadState((prev) => ({ ...prev, error: null }))
+        setSubmissionError(null)
         try {
             await rescheduleByManageToken(orgId, token, selectedSlot.start)
             setSuccessState("rescheduled")
         } catch (err: unknown) {
-            setLoadState((prev) => ({
-                ...prev,
-                error: err instanceof Error ? err.message : "Failed to reschedule appointment",
-            }))
-        } finally {
-            setIsSubmitting(false)
+            setSubmissionError(
+                err instanceof Error ? err.message : "Failed to reschedule appointment"
+            )
         }
+        setIsSubmitting(false)
     }
 
     const handleCancel = async () => {
         if (!orgId || !token) return
         setIsSubmitting(true)
-        setLoadState((prev) => ({ ...prev, error: null }))
+        setSubmissionError(null)
         try {
             await cancelByManageToken(orgId, token, reason || undefined)
             setSuccessState("cancelled")
         } catch (err: unknown) {
-            setLoadState((prev) => ({
-                ...prev,
-                error: err instanceof Error ? err.message : "Failed to cancel appointment",
-            }))
-        } finally {
-            setIsSubmitting(false)
+            setSubmissionError(
+                err instanceof Error ? err.message : "Failed to cancel appointment"
+            )
         }
+        setIsSubmitting(false)
     }
 
     if (isLoading) {

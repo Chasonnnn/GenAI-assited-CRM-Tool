@@ -6,7 +6,7 @@
  * Unified view showing tasks and appointments with list/calendar toggle.
  */
 
-import { startTransition, useState, useEffect, useRef } from "react"
+import { useState } from "react"
 import type { Route } from "next"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
@@ -20,6 +20,7 @@ import { AddTaskDialog, type TaskFormData } from "@/components/tasks/AddTaskDial
 import { useTasks, useCompleteTask, useUncompleteTask, useUpdateTask, useCreateTask, useCreateTaskBatch, useDeleteTask, useBulkCompleteTasks } from "@/lib/hooks/use-tasks"
 import { useStatusChangeRequests } from "@/lib/hooks/use-status-change-requests"
 import { usePendingImportApprovals } from "@/lib/hooks/use-import"
+import { useTaskFocusNavigation } from "@/lib/hooks/use-task-focus-navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useAIContext } from "@/lib/context/ai-context"
 import type { TaskListItem } from "@/lib/types/task"
@@ -79,7 +80,6 @@ function useTasksPageController() {
     const canViewOtherOwners = ["admin", "developer"].includes(currentUser?.role || "")
     const ownerOverride = canViewOtherOwners && urlOwnerId ? urlOwnerId : null
     const focusTarget = isFocusTarget(urlFocus) ? urlFocus : null
-    const handledFocusRef = useRef<FocusTarget | null>(null)
 
     const [filter, setFilter] = useState<FilterType>(
         isFilterType(urlFilter) ? urlFilter : "my_tasks"
@@ -94,12 +94,6 @@ function useTasksPageController() {
         return "calendar"
     })
     const [manualViewFocusTarget, setManualViewFocusTarget] = useState<FocusTarget | null>(null)
-
-    useEffect(() => {
-        if (!focusTarget) {
-            handledFocusRef.current = null
-        }
-    }, [focusTarget])
 
     const focusRequiresListView = focusTarget !== null && focusTarget !== "approvals"
     const shouldUseListViewForFocus =
@@ -125,6 +119,7 @@ function useTasksPageController() {
 
     // Handle filter change
     const handleFilterChange = (newFilter: FilterType) => {
+        setSelectedTaskIds(new Set())
         setFilter(newFilter)
         updateUrlParams(newFilter)
     }
@@ -140,10 +135,6 @@ function useTasksPageController() {
     // Create/edit modal state
     const [addTaskDialogOpen, setAddTaskDialogOpen] = useState(false)
     const [editingTask, setEditingTask] = useState<TaskListItem | null>(null)
-
-    const handleTaskClick = (task: TaskListItem) => {
-        setEditingTask(task)
-    }
 
     const handleSaveTask = async (taskId: string, data: Partial<TaskEditPayload>) => {
         const payload: Record<string, unknown> = {}
@@ -225,21 +216,29 @@ function useTasksPageController() {
     const createTaskBatch = useCreateTaskBatch()
     const deleteTask = useDeleteTask()
 
-    // Set AI context when editing a task, clear when not
     const { setContext: setAIContext, clearContext: clearAIContext } = useAIContext()
 
-    // Effect to update AI context when editing task changes
-    useEffect(() => {
-        if (editingTask) {
-            setAIContext({
-                entityType: "task" as const,
-                entityId: editingTask.id,
-                entityName: editingTask.title,
-            })
-        } else {
-            clearAIContext()
+    const visibleTaskIds = new Set((incompleteTasks?.items ?? []).map((task) => task.id))
+    const visibleSelectedTaskIds = new Set<string>()
+    for (const taskId of selectedTaskIds) {
+        if (visibleTaskIds.has(taskId)) {
+            visibleSelectedTaskIds.add(taskId)
         }
-    }, [editingTask, setAIContext, clearAIContext])
+    }
+
+    const handleTaskClick = (task: TaskListItem) => {
+        setAIContext({
+            entityType: "task",
+            entityId: task.id,
+            entityName: task.title,
+        })
+        setEditingTask(task)
+    }
+
+    const handleCloseEditModal = () => {
+        setEditingTask(null)
+        clearAIContext()
+    }
 
     const handleTaskToggle = async (taskId: string, isCompleted: boolean) => {
         setSelectedTaskIds((prev) => {
@@ -277,7 +276,7 @@ function useTasksPageController() {
     }
 
     const handleBulkCompleteSelected = async () => {
-        const taskIds = Array.from(selectedTaskIds)
+        const taskIds = Array.from(visibleSelectedTaskIds)
         if (taskIds.length === 0) return
         const result = await bulkCompleteTasks.mutateAsync(taskIds)
         setSelectedTaskIds(new Set())
@@ -328,47 +327,14 @@ function useTasksPageController() {
         void refetchCompleted()
     }
 
-    useEffect(() => {
-        if (!focusTarget || handledFocusRef.current === focusTarget) return
-        if (focusTarget !== "approvals" && activeView !== "list") return
-        if (isLoading) return
-        if (focusTarget === "approvals" && (loadingApprovals || loadingStatusRequests || loadingImportApprovals)) return
-
-        const targetId =
-            focusTarget === "approvals"
-                ? "tasks-approvals"
-                : focusTarget === "tasks"
-                    ? "tasks-list"
-                    : `tasks-${focusTarget}`
-        const target =
-            document.getElementById(targetId) || document.getElementById("tasks-list")
-        if (!target) return
-
-        target.scrollIntoView({ behavior: "smooth", block: "start" })
-        if (focusTarget !== "approvals") {
-            localStorage.setItem("tasks-view", "list")
-        }
-        handledFocusRef.current = focusTarget
-    }, [focusTarget, activeView, isLoading, loadingApprovals, loadingStatusRequests, loadingImportApprovals])
-
-    useEffect(() => {
-        const visibleIds = new Set((incompleteTasks?.items ?? []).map((task) => task.id))
-        startTransition(() => {
-            setSelectedTaskIds((prev) => {
-                if (prev.size === 0) return prev
-                let changed = false
-                const next = new Set<string>()
-                for (const taskId of prev) {
-                    if (visibleIds.has(taskId)) {
-                        next.add(taskId)
-                    } else {
-                        changed = true
-                    }
-                }
-                return changed ? next : prev
-            })
-        })
-    }, [incompleteTasks?.items])
+    useTaskFocusNavigation({
+        focusTarget,
+        activeView,
+        isLoading,
+        loadingApprovals,
+        loadingStatusRequests,
+        loadingImportApprovals,
+    })
 
     return {
         addTaskDialogOpen,
@@ -398,7 +364,7 @@ function useTasksPageController() {
         pendingApprovals: pendingApprovals?.items ?? [],
         pendingImportApprovals: pendingImportApprovals ?? [],
         pendingStatusRequests: pendingStatusRequests?.items ?? [],
-        selectedTaskIds,
+        selectedTaskIds: visibleSelectedTaskIds,
         showCompleted,
         view: activeView,
         bulkCompletePending: bulkCompleteTasks.isPending,
@@ -413,7 +379,7 @@ function useTasksPageController() {
         handleTaskClick,
         handleTaskToggle,
         handleViewChange,
-        onCloseEditModal: () => setEditingTask(null),
+        onCloseEditModal: handleCloseEditModal,
         onOpenAddTaskDialog: () => setAddTaskDialogOpen(true),
         refetchImportApprovals,
         refetchStatusRequests,

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useRef } from "react"
 import type { ChangeEvent } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "@/components/ui/toast"
@@ -23,6 +23,7 @@ import {
     schemaToPages,
     type BuilderFormPage,
 } from "@/lib/forms/form-builder-document"
+import { useFormBuilderAutosave } from "@/lib/forms/use-form-builder-autosave"
 import { useAutomationFormBuilderState } from "@/lib/forms/use-automation-form-builder-state"
 import type { AutomationBuilderState } from "@/lib/forms/use-automation-form-builder-state"
 import { useFormBuilderDocument } from "@/lib/forms/use-form-builder-document"
@@ -321,6 +322,7 @@ export function useAutomationFormBuilderPage() {
     const { user } = useAuth()
     const isNewForm = id === "new"
     const formId = isNewForm ? null : id
+    const formKey = formId ?? "new"
 
     const { data: formData, isLoading: isFormLoading } = useForm(formId)
     const { data: mappingData, isLoading: isMappingsLoading } = useFormMappings(formId)
@@ -368,9 +370,8 @@ export function useAutomationFormBuilderPage() {
     })
 
     const logoInputRef = useRef<HTMLInputElement>(null)
-    const hydratedFormRef = useRef<string | null>(null)
-    const orgLogoInitRef = useRef(false)
-    const { state, patchState, resetForForm, hydrateFromForm } = useAutomationFormBuilderState(isNewForm)
+    const { state, patchState, resetForForm, hydrateFromForm } =
+        useAutomationFormBuilderState(formKey, isNewForm)
     const {
         pages,
         activePage,
@@ -428,68 +429,46 @@ export function useAutomationFormBuilderPage() {
             ? mappingOptionsData
             : DEFAULT_FORM_SURROGATE_FIELD_OPTIONS
 
-    useEffect(() => {
-        resetForForm(isNewForm)
-        hydratedFormRef.current = null
-        orgLogoInitRef.current = false
+    if (state.formKey !== formKey) {
+        resetForForm(formKey, isNewForm)
         resetDocument()
-    }, [formId, isNewForm, resetDocument, resetForForm])
-
-    useEffect(() => {
-        if (state.workspaceTab !== "submissions") {
-            patchState({
-                selectedQueueSubmissionId: null,
-                manualSurrogateId: "",
-            })
-        }
-    }, [patchState, state.workspaceTab])
-
-    useEffect(() => {
-        if (isNewForm || !formData || isMappingsLoading || state.hasHydrated) return
-
+    } else if (
+        !isNewForm &&
+        formData &&
+        formData.id === formId &&
+        !isMappingsLoading &&
+        !state.hasHydrated
+    ) {
         const mappingMap = new Map(
             (mappingData || []).map((mapping) => [mapping.field_key, mapping.surrogate_field]),
         )
         const schema = formData.form_schema || formData.published_schema
 
-        hydrateFromForm({ form: formData })
+        hydrateFromForm({ form: formData, orgLogoPath })
         resetDocument(schema ? schemaToPages(schema, mappingMap) : [FALLBACK_FORM_PAGE])
-    }, [formData, hydrateFromForm, isMappingsLoading, isNewForm, mappingData, resetDocument, state.hasHydrated])
-
-    useEffect(() => {
-        if (!state.hasHydrated || orgLogoInitRef.current) return
-        if (!orgLogoPath) return
-        const isOrgLogo = state.logoUrl === orgLogoPath
-        patchState({
-            useOrgLogo: isOrgLogo,
-            customLogoUrl: isOrgLogo ? state.customLogoUrl : state.logoUrl,
-        })
-        orgLogoInitRef.current = true
-    }, [orgLogoPath, patchState, state.customLogoUrl, state.hasHydrated, state.logoUrl])
+    }
 
     const draftPayload = buildAutomationDraftPayload(pages, state)
     const draftFingerprint = JSON.stringify(draftPayload)
     const isDirty = draftFingerprint !== state.lastSavedFingerprint
 
-    useEffect(() => {
-        if (!state.hasHydrated) return
-        const identity = isNewForm ? "new" : formId || "unknown"
-        if (hydratedFormRef.current === identity) return
-        hydratedFormRef.current = identity
+    if (state.hasHydrated && state.baselineFormKey !== formKey) {
         if (!isNewForm && formData?.updated_at) {
             patchState({
                 autoSaveStatus: "saved",
+                baselineFormKey: formKey,
                 lastSavedAt: new Date(formData.updated_at),
                 lastSavedFingerprint: draftFingerprint,
             })
-            return
+        } else {
+            patchState({
+                autoSaveStatus: "idle",
+                baselineFormKey: formKey,
+                lastSavedAt: null,
+                lastSavedFingerprint: draftFingerprint,
+            })
         }
-        patchState({
-            autoSaveStatus: "idle",
-            lastSavedAt: null,
-            lastSavedFingerprint: draftFingerprint,
-        })
-    }, [draftFingerprint, formData?.updated_at, formId, isNewForm, patchState, state.hasHydrated])
+    }
 
     const requestDeletePage = (pageId: number) => {
         patchState({
@@ -539,23 +518,18 @@ export function useAutomationFormBuilderPage() {
         }
     }
 
-    useEffect(() => {
-        if (!state.hasHydrated) return
-        if (!state.formName.trim()) return
-        if (draftFingerprint === state.lastSavedFingerprint) return
-        if (state.isSaving || state.isPublishing) return
-        if (
-            createFormMutation.isPending ||
-            updateFormMutation.isPending ||
-            setMappingsMutation.isPending
-        ) {
-            return
-        }
-
-        let cancelled = false
-        const timeout = setTimeout(() => {
-            if (cancelled) return
-            patchState({ autoSaveStatus: "saving" })
+    useFormBuilderAutosave({
+        enabled:
+            state.hasHydrated &&
+            Boolean(state.formName.trim()) &&
+            !state.isSaving &&
+            !state.isPublishing &&
+            !createFormMutation.isPending &&
+            !updateFormMutation.isPending &&
+            !setMappingsMutation.isPending,
+        fingerprint: draftFingerprint,
+        savedFingerprint: state.lastSavedFingerprint,
+        save: () => {
             const payload = buildAutomationDraftPayload(pages, {
                 allowedMimeTypesText: state.allowedMimeTypesText,
                 defaultTemplateId: state.defaultTemplateId,
@@ -570,8 +544,7 @@ export function useAutomationFormBuilderPage() {
                 publicSubtitle: state.publicSubtitle,
                 publicTitle: state.publicTitle,
             })
-
-            persistAutomationFormPayload({
+            return persistAutomationFormPayload({
                 payload,
                 isNewForm,
                 id,
@@ -582,50 +555,11 @@ export function useAutomationFormBuilderPage() {
                 router,
                 patchState,
             })
-                .then((savedForm) => {
-                    if (cancelled) return
-                    patchState(buildSavedState(draftFingerprint, savedForm))
-                })
-                .catch(() => {
-                    if (cancelled) return
-                    patchState({ autoSaveStatus: "error" })
-                })
-        }, 1200)
-
-        return () => {
-            cancelled = true
-            clearTimeout(timeout)
-        }
-    }, [
-        createFormMutation.isPending,
-        createFormMutation,
-        draftFingerprint,
-        id,
-        isNewForm,
-        pages,
-        patchState,
-        router,
-        setMappingsMutation,
-        setMappingsMutation.isPending,
-        state.allowedMimeTypesText,
-        state.defaultTemplateId,
-        state.formDescription,
-        state.formName,
-        state.formPurpose,
-        state.hasHydrated,
-        state.isPublishing,
-        state.isSaving,
-        state.lastSavedFingerprint,
-        state.logoUrl,
-        state.maxFileCount,
-        state.maxFileSizeMb,
-        state.privacyNotice,
-        state.publicEyebrow,
-        state.publicSubtitle,
-        state.publicTitle,
-        updateFormMutation,
-        updateFormMutation.isPending,
-    ])
+        },
+        onSaving: () => patchState({ autoSaveStatus: "saving" }),
+        onSaved: (savedForm) => patchState(buildSavedState(draftFingerprint, savedForm)),
+        onError: () => patchState({ autoSaveStatus: "error" }),
+    })
 
     const handleLogoUploadClick = () => {
         logoInputRef.current?.click()
@@ -742,12 +676,26 @@ export function useAutomationFormBuilderPage() {
         patchState({ showPublishDialog: true })
     }
 
+    const handleWorkspaceTabChange = (value: string) => {
+        const workspaceTab = value as typeof state.workspaceTab
+        patchState(
+            workspaceTab === "submissions"
+                ? { workspaceTab }
+                : {
+                    workspaceTab,
+                    selectedQueueSubmissionId: null,
+                    manualSurrogateId: "",
+                    resolveReviewNotes: "",
+                },
+        )
+    }
+
     const handlePreview = () => {
         if (pages.every((page) => page.fields.length === 0)) {
             toast.error("Add at least one field before previewing")
             return
         }
-        patchState({ workspaceTab: "preview" })
+        handleWorkspaceTabChange("preview")
     }
 
     const confirmPublish = async () => {
@@ -771,15 +719,12 @@ export function useAutomationFormBuilderPage() {
             })
             patchState(buildSavedState(draftFingerprint, savedForm))
             await publishFormMutation.mutateAsync(savedForm.id)
-            patchState({
-                isPublished: true,
-                pendingSharePrompt: true,
-            })
+            patchState({ isPublished: true })
             const intakeLinkResult = await refetchIntakeLinks()
-            if ((intakeLinkResult.data || []).length === 0) {
-                patchState({ pendingSharePrompt: false })
-            }
-            patchState({ showPublishDialog: false })
+            patchState({
+                showPublishDialog: false,
+                showSharePrompt: (intakeLinkResult.data || []).length > 0,
+            })
             toast.success("Form published")
             finishPublishing()
         } catch {
@@ -815,15 +760,6 @@ export function useAutomationFormBuilderPage() {
             : state.submissionHistoryFilter === "processed"
                 ? processedSubmissionHistory
                 : submissionHistory
-
-    useEffect(() => {
-        if (!state.pendingSharePrompt) return
-        if (sortedIntakeLinks.length === 0) return
-        patchState({
-            showSharePrompt: true,
-            pendingSharePrompt: false,
-        })
-    }, [patchState, sortedIntakeLinks.length, state.pendingSharePrompt])
 
     const handleUpdateEmbedSettings = async ({
         link,
@@ -1194,7 +1130,7 @@ export function useAutomationFormBuilderPage() {
         },
         onBack: () => router.push("/automation/forms"),
         onFormNameChange: (value: string) => patchState({ formName: value }),
-        onWorkspaceTabChange: (value: string) => patchState({ workspaceTab: value as typeof state.workspaceTab }),
+        onWorkspaceTabChange: handleWorkspaceTabChange,
         onShareDialogOpenChange: (open: boolean) => patchState({ showSharePrompt: open }),
         onPublishDialogOpenChange: (open: boolean) => patchState({ showPublishDialog: open }),
         onDeletePageDialogOpenChange: (open: boolean) => {

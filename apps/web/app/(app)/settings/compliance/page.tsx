@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useState } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -52,6 +52,7 @@ type PolicyEdit = {
 }
 
 type PolicyEdits = Record<string, PolicyEdit>
+type PolicyEditOverrides = Record<string, Partial<PolicyEdit>>
 type PolicyEditField = keyof PolicyEdit
 
 type RetentionPoliciesCardProps = {
@@ -506,47 +507,40 @@ export default function ComplianceSettingsPage() {
         page: holdsPage,
         per_page: perPage,
     })
+    const availableHoldsPages = Math.max(1, legalHolds?.pages ?? 1)
+    if (holdsPage > availableHoldsPages) {
+        setHoldsPage(availableHoldsPages)
+    }
     const createHold = useCreateLegalHold()
     const releaseHold = useReleaseLegalHold()
 
     const purgePreview = usePurgePreview()
     const executePurge = useExecutePurge()
 
-    const [policyEdits, setPolicyEdits] = useState<PolicyEdits>({})
+    const [policyEditOverrides, setPolicyEditOverrides] = useState<PolicyEditOverrides>({})
     const [holdType, setHoldType] = useState("org")
     const [holdEntityId, setHoldEntityId] = useState("")
     const [holdReason, setHoldReason] = useState("")
     const [purgeJobId, setPurgeJobId] = useState<string | null>(null)
 
-    useEffect(() => {
-        if (!policies) return
-        const policyMap: Record<string, { retention_days: number; is_active: boolean }> = {}
-        policies.forEach((policy) => {
-            policyMap[policy.entity_type] = {
-                retention_days: policy.retention_days,
-                is_active: policy.is_active,
-            }
-        })
-        startTransition(() => {
-            setPolicyEdits((prev) => (Object.keys(prev).length ? prev : { ...policyMap }))
-        })
-    }, [policies])
-
-    useEffect(() => {
-        if (!legalHolds?.pages) return
-        if (holdsPage > legalHolds.pages) {
-            startTransition(() => {
-                setHoldsPage(legalHolds.pages)
-            })
+    const policyByEntityType = new Map(
+        (policies ?? []).map((policy) => [policy.entity_type, policy] as const)
+    )
+    const policyEdits: PolicyEdits = {}
+    for (const entity of RETENTION_OPTIONS) {
+        const policy = policyByEntityType.get(entity.value)
+        policyEdits[entity.value] = {
+            retention_days: policy?.retention_days ?? 0,
+            is_active: policy?.is_active ?? true,
+            ...policyEditOverrides[entity.value],
         }
-    }, [holdsPage, legalHolds?.pages])
+    }
 
     const updatePolicyEdit = (entityType: string, field: "retention_days" | "is_active", value: number | boolean) => {
-        setPolicyEdits((prev) => ({
+        setPolicyEditOverrides((prev) => ({
             ...prev,
             [entityType]: {
-                retention_days: prev[entityType]?.retention_days ?? 0,
-                is_active: prev[entityType]?.is_active ?? true,
+                ...prev[entityType],
                 [field]: value,
             },
         }))

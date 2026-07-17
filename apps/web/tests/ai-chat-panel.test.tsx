@@ -131,6 +131,22 @@ describe('AIChatPanel', () => {
         expect(closeButton).not.toBeInTheDocument()
     })
 
+    it("clears an unsent draft when the conversation context changes", () => {
+        const { rerender } = render(
+            <AIChatPanel entityType="surrogate" entityId="sur-1" entityName="Jordan Example" />
+        )
+        const composer = screen.getByPlaceholderText("Ask anything")
+
+        fireEvent.change(composer, { target: { value: "Draft for Jordan" } })
+        expect(composer).toHaveValue("Draft for Jordan")
+
+        rerender(
+            <AIChatPanel entityType="surrogate" entityId="sur-2" entityName="Taylor Example" />
+        )
+
+        expect(screen.getByPlaceholderText("Ask anything")).toHaveValue("")
+    })
+
     it('renders accessible action buttons when actions are proposed', () => {
         mockUseConversation.mockReturnValue({
             data: {

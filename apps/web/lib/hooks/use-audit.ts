@@ -12,6 +12,7 @@ import {
     createAuditExport,
     AuditLogFilters,
     AuditExportCreate,
+    type AuditExportJob,
 } from '@/lib/api/audit'
 
 // Query keys
@@ -49,10 +50,23 @@ export function useAIAuditActivity(hours: number = 24) {
     })
 }
 
-export function useAuditExports() {
+function hasPendingAuditExports(
+    data: { items: AuditExportJob[] } | undefined,
+    includeFull: boolean,
+) {
+    return (data?.items ?? []).some(
+        (job) =>
+            (includeFull || job.redact_mode !== 'full') &&
+            (job.status === 'pending' || job.status === 'processing'),
+    )
+}
+
+export function useAuditExports({ includeFull = true }: { includeFull?: boolean } = {}) {
     return useQuery({
         queryKey: auditKeys.exports(),
         queryFn: listAuditExports,
+        refetchInterval: (query) =>
+            hasPendingAuditExports(query.state.data, includeFull) ? 8000 : false,
     })
 }
 

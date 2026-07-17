@@ -64,7 +64,6 @@ type MassEditStageState = {
     previewState: PreviewState | null
 }
 type MassEditStageAction =
-    | { type: "reset"; targetStageId: string }
     | { type: "set"; patch: Partial<MassEditStageState> }
     | { type: "addRace"; race: string }
     | { type: "removeRace"; race: string }
@@ -98,8 +97,6 @@ function massEditStageReducer(
     action: MassEditStageAction
 ): MassEditStageState {
     switch (action.type) {
-        case "reset":
-            return createInitialMassEditStageState(action.targetStageId)
         case "set":
             return { ...state, ...action.patch }
         case "addRace": {
@@ -886,21 +883,28 @@ function MassEditFooter({
 }
 
 function useMassEditStageModel({
-    open,
     onOpenChange,
     stages,
     baseFilters,
-}: MassEditStageModalProps) {
+}: Omit<MassEditStageModalProps, "open">) {
     const previewMutation = usePreviewSurrogateMassEditStage()
     const applyStageMutation = useApplySurrogateMassEditStage()
     const applyArchiveMutation = useApplySurrogateMassEditArchive()
-    const optionsQuery = useSurrogateMassEditOptions({ enabled: open })
+    const optionsQuery = useSurrogateMassEditOptions({ enabled: true })
 
-    const [state, dispatch] = React.useReducer(
+    const activeStages = stages.filter((s) => s.is_active).toSorted((a, b) => a.order - b.order)
+    const defaultTargetStageId = activeStages.find((s) => s.slug === "disqualified")?.id ?? ""
+
+    const [storedState, dispatch] = React.useReducer(
         massEditStageReducer,
-        "",
+        defaultTargetStageId,
         createInitialMassEditStageState
     )
+    const targetStageId = storedState.targetStageId || defaultTargetStageId
+    const state =
+        targetStageId === storedState.targetStageId
+            ? storedState
+            : { ...storedState, targetStageId }
     const {
         statesInput,
         createdFrom,
@@ -915,34 +919,11 @@ function useMassEditStageModel({
         hasChild,
         isNonSmoker,
         hasSurrogateExperience,
-        targetStageId,
         actionMode,
         triggerWorkflows,
         reason,
         previewState,
     } = state
-
-    const activeStages = stages.filter((s) => s.is_active).toSorted((a, b) => a.order - b.order)
-    const defaultTargetStageId = activeStages.find((s) => s.slug === "disqualified")?.id ?? ""
-    const hasInitializedOpenRef = React.useRef(false)
-
-    // Reset only once per open cycle.
-    React.useEffect(() => {
-        if (!open) {
-            hasInitializedOpenRef.current = false
-            return
-        }
-        if (hasInitializedOpenRef.current) return
-
-        hasInitializedOpenRef.current = true
-        dispatch({ type: "reset", targetStageId: defaultTargetStageId })
-    }, [open, defaultTargetStageId])
-
-    // If stages load after opening, apply the default only while no stage is selected.
-    React.useEffect(() => {
-        if (!open || targetStageId || !defaultTargetStageId) return
-        dispatch({ type: "set", patch: { targetStageId: defaultTargetStageId } })
-    }, [open, targetStageId, defaultTargetStageId])
 
     const { states, error: statesError } = parseStates(statesInput)
     const races = selectedRaces.length ? selectedRaces : undefined
@@ -1165,8 +1146,11 @@ function useMassEditStageModel({
     }
 }
 
-export function MassEditStageModal(props: MassEditStageModalProps) {
-    const { open, onOpenChange } = props
+function MassEditStageOpenSession({
+    onOpenChange,
+    stages,
+    baseFilters,
+}: Omit<MassEditStageModalProps, "open">) {
     const {
         state,
         dispatch,
@@ -1184,10 +1168,10 @@ export function MassEditStageModal(props: MassEditStageModalProps) {
         previewPending,
         handlePreview,
         handleApply,
-    } = useMassEditStageModel(props)
+    } = useMassEditStageModel({ onOpenChange, stages, baseFilters })
 
     return (
-        <Dialog open={open} onOpenChange={(next) => !isApplying && onOpenChange(next)}>
+        <Dialog open onOpenChange={(next) => !isApplying && onOpenChange(next)}>
             <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
                 <DialogHeader className="pr-10">
                     <DialogTitle className="flex items-center gap-2">
@@ -1249,5 +1233,17 @@ export function MassEditStageModal(props: MassEditStageModalProps) {
                 />
             </DialogContent>
         </Dialog>
+    )
+}
+
+export function MassEditStageModal(props: MassEditStageModalProps) {
+    if (!props.open) return null
+
+    return (
+        <MassEditStageOpenSession
+            onOpenChange={props.onOpenChange}
+            stages={props.stages}
+            baseFilters={props.baseFilters}
+        />
     )
 }

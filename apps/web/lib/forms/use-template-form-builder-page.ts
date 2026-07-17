@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "@/components/ui/toast"
 
@@ -13,6 +13,7 @@ import {
     buildMappings,
     schemaToPages,
 } from "@/lib/forms/form-builder-document"
+import { useFormBuilderAutosave } from "@/lib/forms/use-form-builder-autosave"
 import { useFormBuilderDocument } from "@/lib/forms/use-form-builder-document"
 import { useTemplateFormBuilderState } from "@/lib/forms/use-template-form-builder-state"
 import type { TemplateBuilderState } from "@/lib/forms/use-template-form-builder-state"
@@ -49,6 +50,14 @@ type TemplateDraftPayload = {
 
 type SaveQueueRef = {
     current: Promise<void> | null
+}
+
+type TemplateSaveIdentityRef = {
+    current: {
+        currentVersion: number | null
+        routeKey: string
+        templateId: string | null
+    } | null
 }
 
 type TemplateCreateMutation = {
@@ -112,8 +121,9 @@ const queueTemplateSave = <T>(saveQueueRef: SaveQueueRef, run: () => Promise<T>)
 
 const persistTemplatePayload = async ({
     payload,
-    templateIdRef,
-    currentVersionRef,
+    templateIdentityRef,
+    templateKey,
+    routeTemplateId,
     createTemplateMutation,
     updateTemplateMutation,
     router,
@@ -121,8 +131,9 @@ const persistTemplatePayload = async ({
     templateCurrentVersion,
 }: {
     payload: TemplateDraftPayload
-    templateIdRef: { current: string | null }
-    currentVersionRef: { current: number | null }
+    templateIdentityRef: TemplateSaveIdentityRef
+    templateKey: string
+    routeTemplateId: string | null
     createTemplateMutation: TemplateCreateMutation
     updateTemplateMutation: TemplateUpdateMutation
     router: TemplateRouter
@@ -130,24 +141,38 @@ const persistTemplatePayload = async ({
     templateCurrentVersion: number | null | undefined
 }): Promise<PlatformFormTemplate> => {
     let savedTemplate: PlatformFormTemplate
-    const templateId = templateIdRef.current
+    const trackedIdentity =
+        templateIdentityRef.current?.routeKey === templateKey
+            ? templateIdentityRef.current
+            : null
+    const templateId = trackedIdentity?.templateId ?? routeTemplateId
+    const expectedVersions = [
+        trackedIdentity?.currentVersion,
+        templateCurrentVersion,
+    ].filter((version): version is number => typeof version === "number")
+    const expectedVersion =
+        expectedVersions.length > 0 ? Math.max(...expectedVersions) : null
     if (!templateId) {
         savedTemplate = await createTemplateMutation.mutateAsync(payload)
-        templateIdRef.current = savedTemplate.id
         router.replace(`/ops/templates/forms/${savedTemplate.id}`)
     } else {
         savedTemplate = await updateTemplateMutation.mutateAsync({
             id: templateId,
             payload: {
                 ...payload,
-                expected_version: currentVersionRef.current ?? templateCurrentVersion ?? null,
+                expected_version: expectedVersion,
             },
         })
     }
 
     patchState({ isPublished: (savedTemplate.published_version ?? 0) > 0 })
-    if (typeof savedTemplate.current_version === "number") {
-        currentVersionRef.current = savedTemplate.current_version
+    templateIdentityRef.current = {
+        currentVersion:
+            typeof savedTemplate.current_version === "number"
+                ? savedTemplate.current_version
+                : expectedVersion,
+        routeKey: templateKey,
+        templateId: savedTemplate.id,
     }
     return savedTemplate
 }
@@ -176,18 +201,18 @@ export function useTemplateFormBuilderPage() {
     const router = useRouter()
     const isNewForm = id === "new"
     const formId = isNewForm ? null : id
+    const templateKey = formId ?? "new"
 
     const { data: templateData, isLoading: isFormLoading } = usePlatformFormTemplate(formId)
     const createTemplateMutation = useCreatePlatformFormTemplate()
     const updateTemplateMutation = useUpdatePlatformFormTemplate()
     const publishTemplateMutation = usePublishPlatformFormTemplate()
     const deleteTemplateMutation = useDeletePlatformFormTemplate()
-    const currentVersionRef = useRef<number | null>(null)
-    const templateIdRef = useRef<string | null>(isNewForm ? null : id)
+    const templateIdentityRef = useRef<TemplateSaveIdentityRef["current"]>(null)
     const saveQueueRef = useRef<Promise<void> | null>(null)
-    const hydratedFormRef = useRef<string | null>(null)
 
-    const { state, patchState, resetForForm, hydrateFromTemplate } = useTemplateFormBuilderState(isNewForm)
+    const { state, patchState, resetForForm, hydrateFromTemplate } =
+        useTemplateFormBuilderState(templateKey, isNewForm)
     const {
         pages,
         activePage,
@@ -234,17 +259,15 @@ export function useTemplateFormBuilderPage() {
     const resolvedLogoUrl =
         state.logoUrl && state.logoUrl.startsWith("/") && apiBaseUrl ? `${apiBaseUrl}${state.logoUrl}` : state.logoUrl
 
-    useEffect(() => {
-        resetForForm(isNewForm)
-        hydratedFormRef.current = null
-        currentVersionRef.current = null
-        templateIdRef.current = isNewForm ? null : id
+    if (state.templateKey !== templateKey) {
+        resetForForm(templateKey, isNewForm)
         resetDocument()
-    }, [formId, id, isNewForm, resetDocument, resetForForm])
-
-    useEffect(() => {
-        if (isNewForm || !templateData || state.hasHydrated) return
-
+    } else if (
+        !isNewForm &&
+        templateData &&
+        templateData.id === formId &&
+        !state.hasHydrated
+    ) {
         const draft = templateData.draft
         const published = templateData.published
         const settings = (draft?.settings_json ?? published?.settings_json ?? {}) as Record<string, unknown>
@@ -266,35 +289,28 @@ export function useTemplateFormBuilderPage() {
             publishedVersion: templateData.published_version ?? 0,
         })
         resetDocument(schema ? schemaToPages(schema, mappingMap) : [FALLBACK_FORM_PAGE])
-    }, [hydrateFromTemplate, isNewForm, resetDocument, state.hasHydrated, templateData])
-
-    useEffect(() => {
-        const nextVersion = templateData?.current_version
-        if (typeof nextVersion !== "number") return
-        if (currentVersionRef.current === null || nextVersion > currentVersionRef.current) {
-            currentVersionRef.current = nextVersion
-        }
-    }, [templateData?.current_version])
+    }
 
     const draftPayload = buildTemplateDraftPayload(pages, state)
     const draftFingerprint = JSON.stringify(draftPayload)
     const isDirty = draftFingerprint !== state.lastSavedFingerprint
 
-    useEffect(() => {
-        if (!state.hasHydrated) return
-        const identity = isNewForm ? "new" : formId || "unknown"
-        if (hydratedFormRef.current === identity) return
-        hydratedFormRef.current = identity
+    if (state.hasHydrated && state.baselineTemplateKey !== templateKey) {
         if (!isNewForm && templateData?.updated_at) {
             patchState({
                 autoSaveStatus: "saved",
+                baselineTemplateKey: templateKey,
                 lastSavedAt: new Date(templateData.updated_at),
                 lastSavedFingerprint: draftFingerprint,
             })
-            return
+        } else {
+            patchState({
+                autoSaveStatus: "idle",
+                baselineTemplateKey: templateKey,
+                lastSavedFingerprint: draftFingerprint,
+            })
         }
-        patchState({ autoSaveStatus: "idle", lastSavedFingerprint: draftFingerprint })
-    }, [draftFingerprint, formId, isNewForm, patchState, state.hasHydrated, templateData?.updated_at])
+    }
 
     const requestDeletePage = (pageId: number) => {
         patchState({
@@ -326,8 +342,9 @@ export function useTemplateFormBuilderPage() {
             const savedTemplate = await queueTemplateSave(saveQueueRef, () =>
                 persistTemplatePayload({
                     payload: draftPayload,
-                    templateIdRef,
-                    currentVersionRef,
+                    templateIdentityRef,
+                    templateKey,
+                    routeTemplateId: formId,
                     createTemplateMutation,
                     updateTemplateMutation,
                     router,
@@ -345,16 +362,15 @@ export function useTemplateFormBuilderPage() {
         }
     }
 
-    useEffect(() => {
-        if (!state.hasHydrated) return
-        if (!state.formName.trim()) return
-        if (draftFingerprint === state.lastSavedFingerprint) return
-        if (state.isSaving || state.isPublishing) return
-
-        let cancelled = false
-        const timeout = setTimeout(() => {
-            if (cancelled) return
-            patchState({ autoSaveStatus: "saving" })
+    useFormBuilderAutosave({
+        enabled:
+            state.hasHydrated &&
+            Boolean(state.formName.trim()) &&
+            !state.isSaving &&
+            !state.isPublishing,
+        fingerprint: draftFingerprint,
+        savedFingerprint: state.lastSavedFingerprint,
+        save: () => {
             const payload = buildTemplateDraftPayload(pages, {
                 allowedMimeTypesText: state.allowedMimeTypesText,
                 formDescription: state.formDescription,
@@ -367,12 +383,12 @@ export function useTemplateFormBuilderPage() {
                 publicSubtitle: state.publicSubtitle,
                 publicTitle: state.publicTitle,
             })
-
-            queueTemplateSave(saveQueueRef, () =>
+            return queueTemplateSave(saveQueueRef, () =>
                 persistTemplatePayload({
                     payload,
-                    templateIdRef,
-                    currentVersionRef,
+                    templateIdentityRef,
+                    templateKey,
+                    routeTemplateId: formId,
                     createTemplateMutation,
                     updateTemplateMutation,
                     router,
@@ -380,43 +396,11 @@ export function useTemplateFormBuilderPage() {
                     templateCurrentVersion: templateData?.current_version,
                 }),
             )
-                .then((savedForm) => {
-                    if (cancelled) return
-                    patchState(buildSavedState(draftFingerprint, savedForm))
-                })
-                .catch(() => {
-                    if (cancelled) return
-                    patchState({ autoSaveStatus: "error" })
-                })
-        }, 1200)
-
-        return () => {
-            cancelled = true
-            clearTimeout(timeout)
-        }
-    }, [
-        createTemplateMutation,
-        draftFingerprint,
-        pages,
-        patchState,
-        router,
-        state.allowedMimeTypesText,
-        state.formDescription,
-        state.formName,
-        state.hasHydrated,
-        state.isPublishing,
-        state.isSaving,
-        state.lastSavedFingerprint,
-        state.logoUrl,
-        state.maxFileCount,
-        state.maxFileSizeMb,
-        state.privacyNotice,
-        state.publicEyebrow,
-        state.publicSubtitle,
-        state.publicTitle,
-        templateData?.current_version,
-        updateTemplateMutation,
-    ])
+        },
+        onSaving: () => patchState({ autoSaveStatus: "saving" }),
+        onSaved: (savedForm) => patchState(buildSavedState(draftFingerprint, savedForm)),
+        onError: () => patchState({ autoSaveStatus: "error" }),
+    })
 
     const handlePreview = () => {
         if (pages.every((page) => page.fields.length === 0)) {
@@ -445,8 +429,9 @@ export function useTemplateFormBuilderPage() {
             const savedTemplate = await queueTemplateSave(saveQueueRef, () =>
                 persistTemplatePayload({
                     payload: draftPayload,
-                    templateIdRef,
-                    currentVersionRef,
+                    templateIdentityRef,
+                    templateKey,
+                    routeTemplateId: formId,
                     createTemplateMutation,
                     updateTemplateMutation,
                     router,

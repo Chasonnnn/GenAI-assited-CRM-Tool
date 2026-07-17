@@ -42,6 +42,36 @@ describe("PublishDialog", () => {
         } as never)
     })
 
+    it("preserves in-progress selections when equivalent defaults are rerendered while open", () => {
+        const onOpenChange = vi.fn()
+        const onPublish = vi.fn()
+        const { rerender } = render(
+            <PublishDialog
+                open
+                onOpenChange={onOpenChange}
+                onPublish={onPublish}
+                defaultPublishAll={false}
+                initialOrgIds={["org-a"]}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("checkbox", { name: /Beta Family/i }))
+        expect(screen.getByText("2 selected")).toBeInTheDocument()
+
+        rerender(
+            <PublishDialog
+                open
+                onOpenChange={onOpenChange}
+                onPublish={onPublish}
+                defaultPublishAll={false}
+                initialOrgIds={["org-a"]}
+            />
+        )
+
+        expect(screen.getByRole("checkbox", { name: /Beta Family/i })).toBeChecked()
+        expect(screen.getByText("2 selected")).toBeInTheDocument()
+    })
+
     it("resets publish mode, search, and selected orgs each time it opens", () => {
         const onOpenChange = vi.fn()
         const onPublish = vi.fn()

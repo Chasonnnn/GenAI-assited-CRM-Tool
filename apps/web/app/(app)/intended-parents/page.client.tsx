@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState } from "react"
 import type { Route } from "next"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { PaginationJump } from "@/components/ui/pagination-jump"
+import { useDebouncedSearchCommit } from "@/lib/hooks/use-debounced-search-commit"
 import {
     Table,
     TableBody,
@@ -562,23 +563,10 @@ export default function IntendedParentsPage() {
     const [isCreateOpen, setIsCreateOpen] = useState(false)
     const [sortBy, setSortBy] = useState<string | null>("intended_parent_number")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
-    const searchDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-    useEffect(() => {
-        return () => {
-            if (searchDebounceTimerRef.current) {
-                clearTimeout(searchDebounceTimerRef.current)
-                searchDebounceTimerRef.current = null
-            }
-        }
-    }, [currentQuery])
-
-    const clearPendingSearchUpdate = () => {
-        if (searchDebounceTimerRef.current) {
-            clearTimeout(searchDebounceTimerRef.current)
-            searchDebounceTimerRef.current = null
-        }
-    }
+    const {
+        cancel: clearPendingSearchUpdate,
+        schedule: scheduleSearchCommit,
+    } = useDebouncedSearchCommit(currentQuery)
 
     // Handle status filter change
     const handleStatusChange = (status: string) => {
@@ -636,8 +624,7 @@ export default function IntendedParentsPage() {
         setPageDraft({ query: currentQuery, value: 1 })
         clearPendingSearchUpdate()
         const scheduledQuery = currentQuery
-        searchDebounceTimerRef.current = setTimeout(() => {
-            searchDebounceTimerRef.current = null
+        scheduleSearchCommit(() => {
             if (searchParams.toString() !== scheduledQuery) return
             updateIntendedParentListUrl(
                 replace,

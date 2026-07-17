@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState } from "react"
+import { redirect, useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -46,16 +46,25 @@ type WelcomeFormData = z.infer<typeof welcomeSchema>
  * After completing the form, redirects to the dashboard.
  */
 export default function WelcomePage() {
+    const { user } = useAuth()
+
+    if (user?.profile_complete) {
+        redirect("/dashboard")
+    }
+
+    return <WelcomePageContent key={user ? user.user_id || "loaded" : "loading"} />
+}
+
+function WelcomePageContent() {
     "use no memo"
 
-    const { push, replace } = useRouter()
+    const { push } = useRouter()
     const { user, refetch } = useAuth()
     const [isSubmitting, setIsSubmitting] = useState(false)
 
     const {
         register,
         handleSubmit,
-        reset,
         formState: { errors },
     } = useForm<WelcomeFormData>({
         resolver: zodResolver(welcomeSchema),
@@ -89,26 +98,6 @@ export default function WelcomePage() {
             )
         }
         setIsSubmitting(false)
-    }
-
-    useEffect(() => {
-        if (user?.profile_complete) {
-            replace("/dashboard")
-        }
-    }, [user, replace])
-
-    useEffect(() => {
-        if (user) {
-            reset({
-                display_name: user.display_name || "",
-                title: user.title || "",
-                phone: user.phone || "",
-            })
-        }
-    }, [user, reset])
-
-    if (user?.profile_complete) {
-        return null
     }
 
     return (

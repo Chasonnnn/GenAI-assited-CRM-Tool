@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import "@testing-library/jest-dom"
 
 import { SupportSessionDialog } from "@/components/ops/agencies/SupportSessionDialog"
 
 const mockCreateSupportSession = vi.fn()
 const mockGetPlatformMe = vi.fn()
+
+vi.unmock("@tanstack/react-query")
 
 vi.mock("@/lib/api/platform", () => ({
     createSupportSession: (data: unknown) => mockCreateSupportSession(data),
@@ -44,6 +47,17 @@ function createPopupStub() {
 }
 
 describe("SupportSessionDialog", () => {
+    const renderDialog = (dialog: React.ReactElement) => {
+        const queryClient = new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+        })
+        return render(
+            <QueryClientProvider client={queryClient}>
+                {dialog}
+            </QueryClientProvider>
+        )
+    }
+
     beforeEach(() => {
         vi.clearAllMocks()
         mockGetPlatformMe.mockResolvedValue({
@@ -70,7 +84,7 @@ describe("SupportSessionDialog", () => {
             created_at: new Date().toISOString(),
         })
 
-        render(
+        renderDialog(
             <SupportSessionDialog
                 orgId="org_1"
                 orgName="Test Org"
@@ -111,7 +125,7 @@ describe("SupportSessionDialog", () => {
             created_at: new Date().toISOString(),
         })
 
-        render(
+        renderDialog(
             <SupportSessionDialog
                 orgId="org_1"
                 orgName="Test Org"
@@ -142,7 +156,7 @@ describe("SupportSessionDialog", () => {
             created_at: new Date().toISOString(),
         })
 
-        render(
+        renderDialog(
             <SupportSessionDialog
                 orgId="org_1"
                 orgName="Test Org"
@@ -169,7 +183,7 @@ describe("SupportSessionDialog", () => {
 
         mockCreateSupportSession.mockRejectedValueOnce(new Error("Nope"))
 
-        render(
+        renderDialog(
             <SupportSessionDialog
                 orgId="org_1"
                 orgName="Test Org"
@@ -184,7 +198,7 @@ describe("SupportSessionDialog", () => {
     })
 
     it("loads capabilities and shows read-only as unavailable when disabled", async () => {
-        render(
+        renderDialog(
             <SupportSessionDialog
                 orgId="org_1"
                 orgName="Test Org"
@@ -200,8 +214,42 @@ describe("SupportSessionDialog", () => {
         ).toBeInTheDocument()
     })
 
+    it("retries capability loading when the dialog reopens after a transient failure", async () => {
+        mockGetPlatformMe
+            .mockRejectedValueOnce(new Error("Temporary outage"))
+            .mockResolvedValueOnce({
+                user_id: "user_1",
+                email: "ops@example.com",
+                display_name: "Ops",
+                is_platform_admin: true,
+                support_session_allow_read_only: true,
+            })
+        renderDialog(
+            <SupportSessionDialog
+                orgId="org_1"
+                orgName="Test Org"
+                portalBaseUrl="https://test.example.com"
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "View as role" }))
+        expect(
+            await screen.findByText("Read-only mode is disabled in this environment.")
+        ).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+        fireEvent.click(screen.getByRole("button", { name: "View as role" }))
+
+        await waitFor(() => expect(mockGetPlatformMe).toHaveBeenCalledTimes(2))
+        await waitFor(() => {
+            expect(
+                screen.queryByText("Read-only mode is disabled in this environment.")
+            ).not.toBeInTheDocument()
+        })
+    })
+
     it("disables starting a session when the organization is scheduled for deletion", () => {
-        render(
+        renderDialog(
             <SupportSessionDialog
                 orgId="org_1"
                 orgName="Test Org"

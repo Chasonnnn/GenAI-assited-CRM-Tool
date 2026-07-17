@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useSyncExternalStore } from "react"
+import { useSyncExternalStore } from "react"
 import { WifiOff } from "lucide-react"
+import { useMountEffect } from "@/lib/hooks/use-mount-effect"
 
 let offlineSnapshot = false
 const offlineListeners = new Set<() => void>()
@@ -46,7 +47,7 @@ export function OfflineBanner() {
     )
 
     // Track online/offline events
-    useEffect(() => {
+    useMountEffect(() => {
         const handleOnline = () => setOfflineSnapshot(false)
         const handleOffline = () => setOfflineSnapshot(true)
 
@@ -62,10 +63,10 @@ export function OfflineBanner() {
             window.removeEventListener("online", handleOnline)
             window.removeEventListener("offline", handleOffline)
         }
-    }, [])
+    })
 
     // Intercept fetch to detect network failures
-    useEffect(() => {
+    useMountEffect(() => {
         const originalFetch = window.fetch
 
         window.fetch = async (...args) => {
@@ -91,7 +92,7 @@ export function OfflineBanner() {
         return () => {
             window.fetch = originalFetch
         }
-    }, [])
+    })
 
     if (!isOffline) {
         return null

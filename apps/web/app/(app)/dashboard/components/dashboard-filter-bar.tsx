@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { DateRangePicker } from "@/components/ui/date-range-picker"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -9,6 +9,7 @@ import { useDashboardFilters } from "../context/dashboard-filters"
 import { useAssignees } from "@/lib/hooks/use-surrogates"
 import { useAuth } from "@/lib/auth-context"
 import { formatDistanceToNow } from "date-fns"
+import { useMountEffect } from "@/lib/hooks/use-mount-effect"
 
 interface DashboardFilterBarProps {
     lastUpdated?: number | null
@@ -35,22 +36,16 @@ export function DashboardFilterBar({
     const isAdmin = user?.role === "admin" || user?.role === "developer"
     const showReset = filters.dateRange !== "all" || (isAdmin && !!filters.assigneeId)
 
-    useEffect(() => {
-        if (!isAdmin && user?.user_id && !filters.assigneeId) {
-            setAssigneeId(user.user_id)
-        }
-    }, [filters.assigneeId, isAdmin, setAssigneeId, user?.user_id])
-
     // The unmount cleanup intentionally clears the latest refresh hold timeout,
     // not the timeout value that existed when this effect was registered.
     // oxlint-disable-next-line react-doctor/exhaustive-deps
-    useEffect(() => {
+    useMountEffect(() => {
         return () => {
             if (refreshTimeoutRef.current) {
                 clearTimeout(refreshTimeoutRef.current)
             }
         }
-    }, [])
+    })
 
     const showRefreshing = !!onRefresh && (isRefreshing || refreshHold)
     const lastUpdatedText = showRefreshing

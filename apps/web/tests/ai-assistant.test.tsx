@@ -111,6 +111,36 @@ describe('AIAssistantPage', () => {
         expect(container).not.toHaveTextContent("### Funnel Actions")
     })
 
+    it('preserves partial assistant text when generation is stopped', async () => {
+        mockStreamMessage.mockImplementationOnce(
+            async (_request, onEvent, signal: AbortSignal) => {
+                onEvent({ type: 'start', data: { status: 'thinking' } })
+                onEvent({ type: 'delta', data: { text: 'Partial response worth keeping.' } })
+
+                await new Promise<void>((_resolve, reject) => {
+                    signal.addEventListener(
+                        'abort',
+                        () => reject(new DOMException('Aborted', 'AbortError')),
+                        { once: true },
+                    )
+                })
+            },
+        )
+
+        render(<AIAssistantPage />)
+
+        const input = screen.getByRole('textbox')
+        fireEvent.change(input, { target: { value: 'Start a long answer' } })
+        fireEvent.keyDown(input, { key: 'Enter', shiftKey: false })
+
+        expect(await screen.findByText('Partial response worth keeping.')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Stop generating' }))
+
+        await waitFor(() => {
+            expect(screen.getByText('Partial response worth keeping.')).toBeInTheDocument()
+        })
+    })
+
     it("adds an accessible label to reject action buttons", async () => {
         render(<AIAssistantPage />)
 
@@ -191,6 +221,45 @@ describe('AIAssistantPage', () => {
 
         expect(await screen.findByText('Global Session')).toBeInTheDocument()
         expect(screen.queryByText('Surrogate Session')).not.toBeInTheDocument()
+    })
+
+    it('preserves stored history while authentication is still loading', async () => {
+        sessionStorage.setItem(
+            'ai-assistant-chat-history-v1',
+            JSON.stringify([
+                {
+                    id: 'session-loading',
+                    label: 'Saved during auth',
+                    preview: 'Keep this history',
+                    updatedAt: new Date().toISOString(),
+                    entityType: 'global',
+                    entityId: null,
+                    conversationId: null,
+                    messages: [],
+                },
+            ])
+        )
+        sessionStorage.setItem('ai-assistant-chat-history-user-v1', 'u1')
+        mockUseAuth.mockReturnValue({
+            user: null,
+            isLoading: true,
+            error: null,
+            refetch: vi.fn(),
+        })
+
+        const { rerender } = render(<AIAssistantPage />)
+
+        expect(sessionStorage.getItem('ai-assistant-chat-history-v1')).not.toBeNull()
+
+        mockUseAuth.mockReturnValue({
+            user: { user_id: 'u1' },
+            isLoading: false,
+            error: null,
+            refetch: vi.fn(),
+        })
+        rerender(<AIAssistantPage />)
+
+        expect(await screen.findByText('Saved during auth')).toBeInTheDocument()
     })
 
     it('clears chat history when the user changes', async () => {

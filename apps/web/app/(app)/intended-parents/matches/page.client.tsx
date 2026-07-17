@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState } from "react"
 import type { Route } from "next"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select"
 import { PaginationJump } from "@/components/ui/pagination-jump"
 import { PermissionDeniedState } from "@/components/error-state"
+import { useDebouncedSearchCommit } from "@/lib/hooks/use-debounced-search-commit"
 import {
     HeartHandshakeIcon,
     Loader2Icon,
@@ -135,23 +136,10 @@ export default function MatchesPage() {
     const statusFilter = resolveQueryDraft(statusDraft, currentQuery, urlState.statusFilter)
     const page = resolveQueryDraft(pageDraft, currentQuery, urlState.page)
     const search = resolveQueryDraft(searchDraft, currentQuery, urlState.search)
-    const searchDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-    useEffect(() => {
-        return () => {
-            if (searchDebounceTimerRef.current) {
-                clearTimeout(searchDebounceTimerRef.current)
-                searchDebounceTimerRef.current = null
-            }
-        }
-    }, [currentQuery])
-
-    const clearPendingSearchUpdate = () => {
-        if (searchDebounceTimerRef.current) {
-            clearTimeout(searchDebounceTimerRef.current)
-            searchDebounceTimerRef.current = null
-        }
-    }
+    const {
+        cancel: clearPendingSearchUpdate,
+        schedule: scheduleSearchCommit,
+    } = useDebouncedSearchCommit(currentQuery)
 
     const handleStatusChange = (value: string) => {
         const nextStatus = value === "all" || isMatchStatus(value) ? value : "all"
@@ -172,8 +160,7 @@ export default function MatchesPage() {
         setPageDraft({ query: currentQuery, value: 1 })
         clearPendingSearchUpdate()
         const scheduledQuery = currentQuery
-        searchDebounceTimerRef.current = setTimeout(() => {
-            searchDebounceTimerRef.current = null
+        scheduleSearchCommit(() => {
             if (searchParams.toString() !== scheduledQuery) return
             updateMatchListUrl(replace, searchParams, statusFilter, nextSearch, 1)
         }, 300)

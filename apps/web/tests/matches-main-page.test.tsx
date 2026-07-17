@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen } from "@testing-library/react"
 import type { ReactNode } from "react"
 
 import MatchesPage from "../app/(app)/matches/page"
@@ -86,6 +86,7 @@ vi.mock("@/lib/hooks/use-intended-parents", () => ({
 
 describe("MatchesPage", () => {
     beforeEach(() => {
+        vi.useRealTimers()
         mockUseMatches.mockClear()
         mockUseMatchStats.mockReset()
         mockUseAuth.mockReturnValue({ user: { user_id: "user-1", role: "admin" } })
@@ -226,6 +227,28 @@ describe("MatchesPage", () => {
         expect(screen.queryByRole("button", { name: /new match/i })).not.toBeInTheDocument()
         expect(mockUseMatchStats).toHaveBeenCalledWith({ enabled: false })
         expect(mockUseMatches).not.toHaveBeenCalled()
+    })
+
+    it("waits 300 ms before applying match search to the query", () => {
+        vi.useFakeTimers()
+        render(<MatchesPage />)
+        mockUseMatches.mockClear()
+
+        fireEvent.change(screen.getByPlaceholderText("Search surrogate or IP name/number"), {
+            target: { value: "Jordan" },
+        })
+
+        expect(mockUseMatches).not.toHaveBeenCalledWith(
+            expect.objectContaining({ q: "Jordan" }),
+        )
+
+        act(() => {
+            vi.advanceTimersByTime(300)
+        })
+
+        expect(mockUseMatches).toHaveBeenCalledWith(
+            expect.objectContaining({ q: "Jordan" }),
+        )
     })
 
     it("uses pipeline semantics to show protected handoff-stage surrogates in the new match dialog", () => {

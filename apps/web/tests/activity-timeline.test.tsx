@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { renderToString } from 'react-dom/server'
 import { ActivityTimeline } from '@/components/surrogates/ActivityTimeline'
 import type { PipelineStage } from '@/lib/api/pipelines'
 import type { SurrogateActivity, SurrogateStatusHistory } from '@/lib/api/surrogates'
@@ -173,6 +174,56 @@ describe('ActivityTimeline', () => {
 
         expect(screen.getByText('Current stage note')).toBeInTheDocument()
         expect(screen.queryByText('Backdated stage note')).not.toBeInTheDocument()
+    })
+
+    it('renders the current stage details in the initial server HTML', () => {
+        const stages = [
+            makeStage({ id: 's1', label: 'Contacted', order: 1, slug: 'contacted' }),
+            makeStage({ id: 's2', label: 'Pre-Qualified', order: 2, slug: 'pre_qualified' }),
+        ]
+        mockUseSurrogateHistory.mockReturnValue({
+            data: [
+                makeHistory({
+                    id: 'h1',
+                    to_stage_id: 's1',
+                    changed_at: '2024-01-10T00:00:00.000Z',
+                    effective_at: '2024-01-05T00:00:00.000Z',
+                    recorded_at: '2024-01-10T00:00:00.000Z',
+                }),
+                makeHistory({
+                    id: 'h2',
+                    from_stage_id: 's1',
+                    to_stage_id: 's2',
+                    changed_at: '2024-02-01T00:00:00.000Z',
+                    effective_at: '2024-02-01T00:00:00.000Z',
+                    recorded_at: '2024-02-01T00:00:00.000Z',
+                }),
+            ],
+        })
+
+        const html = renderToString(
+            <ActivityTimeline
+                surrogateId="surr1"
+                currentStageId="s2"
+                stages={stages}
+                activities={[
+                    makeActivity({
+                        id: 'a1',
+                        details: { preview: 'Backdated stage note' },
+                        created_at: '2024-01-20T00:00:00.000Z',
+                    }),
+                    makeActivity({
+                        id: 'a2',
+                        details: { preview: 'Current stage note' },
+                        created_at: '2024-02-03T00:00:00.000Z',
+                    }),
+                ]}
+                tasks={[]}
+            />,
+        )
+
+        expect(html).toContain('Current stage note')
+        expect(html).not.toContain('Backdated stage note')
     })
 
     it('expands a non-current stage when clicked', () => {

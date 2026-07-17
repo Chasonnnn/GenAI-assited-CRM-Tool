@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useReducer } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
+import { redirect, usePathname } from 'next/navigation';
 import Link from "@/components/app-link";
-import { getPlatformMe, getPlatformStats, type PlatformUser } from '@/lib/api/platform';
+import { getPlatformMe, getPlatformStats } from '@/lib/api/platform';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ShieldCheck, Building2, Bell, LogOut, Loader2, LayoutTemplate } from 'lucide-react';
@@ -35,29 +35,15 @@ function NavLink({
     );
 }
 
-type OpsLayoutState = {
-    user: PlatformUser | null;
-    isLoading: boolean;
-    openAlertCount: number;
-};
-
-type OpsLayoutAction =
-    | { type: 'loginPageReady' }
-    | { type: 'loaded'; user: PlatformUser; openAlertCount: number }
-    | { type: 'redirecting' };
-
-function opsLayoutReducer(state: OpsLayoutState, action: OpsLayoutAction): OpsLayoutState {
-    switch (action.type) {
-        case 'loginPageReady':
-        case 'redirecting':
-            return { ...state, isLoading: false };
-        case 'loaded':
-            return {
-                user: action.user,
-                isLoading: false,
-                openAlertCount: action.openAlertCount,
-            };
+function getOpsAccessRedirect(error: unknown) {
+    if (
+        error instanceof ApiError &&
+        error.status === 403 &&
+        error.message.toLowerCase().includes('mfa')
+    ) {
+        return '/mfa';
     }
+    return '/ops/login';
 }
 
 function redirectToOpsLogin() {
@@ -74,57 +60,33 @@ async function logoutFromOps() {
 }
 
 export default function OpsLayout({ children }: { children: React.ReactNode }) {
-    const [opsLayoutState, dispatchOpsLayout] = useReducer(opsLayoutReducer, {
-        user: null,
-        isLoading: true,
-        openAlertCount: 0,
-    });
-    const { user, isLoading, openAlertCount } = opsLayoutState;
-    const { replace } = useRouter();
     const pathname = usePathname();
-
-    // Skip auth check for login page
     const isLoginPage = pathname === '/ops/login';
-
-    useEffect(() => {
-        if (isLoginPage) {
-            dispatchOpsLayout({ type: 'loginPageReady' });
-            return;
-        }
-
-        async function checkPlatformAdmin() {
-            try {
-                const statsPromise = getPlatformStats().catch(() => null);
-                const data = await getPlatformMe();
-                const stats = await statsPromise;
-                dispatchOpsLayout({
-                    type: 'loaded',
-                    user: data,
-                    openAlertCount: stats?.open_alerts ?? 0,
-                });
-            } catch (error) {
-                if (error instanceof ApiError && error.status === 403) {
-                    const message = (error.message || '').toLowerCase();
-                    if (message.includes('mfa')) {
-                        dispatchOpsLayout({ type: 'redirecting' });
-                        replace('/mfa');
-                        return;
-                    }
-                }
-                // Not authenticated or not platform admin
-                dispatchOpsLayout({ type: 'redirecting' });
-                replace('/ops/login');
-            }
-        }
-        void checkPlatformAdmin();
-    }, [replace, isLoginPage]);
+    const platformMeQuery = useQuery({
+        queryKey: ['platform', 'me'],
+        queryFn: getPlatformMe,
+        enabled: !isLoginPage,
+        retry: false,
+        staleTime: 60_000,
+    });
+    const platformStatsQuery = useQuery({
+        queryKey: ['platform', 'stats'],
+        queryFn: getPlatformStats,
+        enabled: !isLoginPage,
+        retry: false,
+        staleTime: 60_000,
+    });
 
     // Don't show layout for login page
     if (isLoginPage) {
         return <>{children}</>;
     }
 
-    if (isLoading) {
+    if (platformMeQuery.isError) {
+        redirect(getOpsAccessRedirect(platformMeQuery.error));
+    }
+
+    if (platformMeQuery.isPending || platformStatsQuery.isPending) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-stone-50 dark:bg-stone-950">
                 <Loader2 className="size-8 animate-spin text-teal-600" />
@@ -132,9 +94,8 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
         );
     }
 
-    if (!user) {
-        return null;
-    }
+    const user = platformMeQuery.data;
+    const openAlertCount = platformStatsQuery.data?.open_alerts ?? 0;
 
     return (
         <div className="min-h-screen bg-stone-50 dark:bg-stone-950">

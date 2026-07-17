@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useReducer } from "react"
+import { useReducer } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { toast } from "@/components/ui/toast"
 import { ArrowUpRight, Eye, Loader2 } from "lucide-react"
 
@@ -67,7 +68,6 @@ type SupportSessionState = {
     reasonCode: SupportSessionReasonCode
     reasonText: string
     submitting: boolean
-    readOnlySupported: boolean | null
 }
 
 type SupportSessionAction =
@@ -77,7 +77,6 @@ type SupportSessionAction =
     | { type: "setReasonCode"; reasonCode: SupportSessionReasonCode }
     | { type: "setReasonText"; reasonText: string }
     | { type: "setSubmitting"; submitting: boolean }
-    | { type: "setReadOnlySupported"; readOnlySupported: boolean }
 
 const INITIAL_SUPPORT_SESSION_STATE: SupportSessionState = {
     open: false,
@@ -86,7 +85,6 @@ const INITIAL_SUPPORT_SESSION_STATE: SupportSessionState = {
     reasonCode: "bug_repro",
     reasonText: "",
     submitting: false,
-    readOnlySupported: null,
 }
 
 function supportSessionReducer(
@@ -106,12 +104,6 @@ function supportSessionReducer(
             return { ...state, reasonText: action.reasonText }
         case "setSubmitting":
             return { ...state, submitting: action.submitting }
-        case "setReadOnlySupported":
-            return {
-                ...state,
-                readOnlySupported: action.readOnlySupported,
-                mode: !action.readOnlySupported && state.mode === "read_only" ? "write" : state.mode,
-            }
     }
 }
 
@@ -149,7 +141,20 @@ export function SupportSessionDialog({
     disabled = false,
 }: SupportSessionDialogProps) {
     const [state, dispatch] = useReducer(supportSessionReducer, INITIAL_SUPPORT_SESSION_STATE)
-    const { open, role, mode, reasonCode, reasonText, submitting, readOnlySupported } = state
+    const { open, role, mode: selectedMode, reasonCode, reasonText, submitting } = state
+    const capabilityQuery = useQuery({
+        queryKey: ["platform", "me", "support-session-capabilities"],
+        queryFn: getPlatformMe,
+        enabled: open,
+        retry: false,
+        staleTime: 60_000,
+    })
+    const readOnlySupported = capabilityQuery.data
+        ? capabilityQuery.data.support_session_allow_read_only === true
+        : capabilityQuery.isError
+            ? false
+            : null
+    const mode: SupportSessionMode = readOnlySupported === true ? selectedMode : "write"
 
     const reasonTextTrimmed = reasonText.trim()
     const reasonTextLength = reasonTextTrimmed.length
@@ -157,18 +162,6 @@ export function SupportSessionDialog({
 
     const normalizedPortalUrl = normalizePortalUrl(portalBaseUrl)
     const portalHost = getPortalHost(normalizedPortalUrl)
-
-    useEffect(() => {
-        if (!open) return
-        if (readOnlySupported !== null) return
-
-        void getPlatformMe()
-            .then((me) => dispatch({
-                type: "setReadOnlySupported",
-                readOnlySupported: me.support_session_allow_read_only === true,
-            }))
-            .catch(() => dispatch({ type: "setReadOnlySupported", readOnlySupported: false }))
-    }, [open, readOnlySupported])
 
     const handleStartAndOpen = async () => {
         if (disabled) {

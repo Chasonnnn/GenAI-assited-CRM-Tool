@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, startTransition, use, useEffect, useState, useRef } from "react"
+import { Suspense, use, useState, useRef } from "react"
 import type { Route } from "next"
 import NextImage from "next/image"
 import { useRouter } from "next/navigation"
@@ -852,19 +852,29 @@ function AppVersion() {
 
 function SocialLinksSection() {
   const { data: orgSig, isLoading } = useOrgSignature()
+
+  return (
+    <SocialLinksSectionContent
+      key={orgSig ? "loaded" : "loading"}
+      orgSig={orgSig}
+      isLoading={isLoading}
+    />
+  )
+}
+
+function SocialLinksSectionContent({
+  orgSig,
+  isLoading,
+}: {
+  orgSig: ReturnType<typeof useOrgSignature>["data"]
+  isLoading: boolean
+}) {
   const updateOrgSig = useUpdateOrgSignature()
 
-  const [links, setLinks] = useState<SocialLink[]>([])
+  const [links, setLinks] = useState<SocialLink[]>(() => [
+    ...(orgSig?.signature_social_links ?? []),
+  ])
   const [saved, setSaved] = useState(false)
-
-  useEffect(() => {
-    const socialLinks = orgSig?.signature_social_links
-    if (socialLinks) {
-      startTransition(() => {
-        setLinks(socialLinks)
-      })
-    }
-  }, [orgSig])
 
   const addLink = () => {
     if (links.length >= 6) {

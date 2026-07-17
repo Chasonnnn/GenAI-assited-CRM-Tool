@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -34,6 +34,7 @@ import {
 } from "@/lib/match-status-definitions"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 import { PermissionDeniedState } from "@/components/error-state"
 
 function StatusBadge({ status }: { status: MatchStatus }) {
@@ -322,14 +323,8 @@ function MatchTable({ status, search }: { status?: MatchStatus; search?: string 
 export default function MatchesPage() {
     const [activeTab, setActiveTab] = useState<string>("proposed")
     const [search, setSearch] = useState("")
-    const [debouncedSearch, setDebouncedSearch] = useState("")
+    const debouncedSearch = useDebouncedValue(search, 300)
     const [newMatchOpen, setNewMatchOpen] = useState(false)
-
-    // Debounce search input
-    useEffect(() => {
-        const timer = setTimeout(() => setDebouncedSearch(search), 300)
-        return () => clearTimeout(timer)
-    }, [search])
 
     const { user } = useAuth()
     const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)

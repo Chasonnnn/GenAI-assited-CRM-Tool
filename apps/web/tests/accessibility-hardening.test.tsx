@@ -105,6 +105,31 @@ describe("accessibility hardening", () => {
         ).toBeInTheDocument()
     })
 
+    it("does not rewrite dashboard filters when a non-admin filter bar mounts", () => {
+        const setAssigneeId = vi.fn()
+        mockUseAuth.mockReturnValue({
+            user: {
+                user_id: "case-manager-1",
+                role: "case_manager",
+            },
+        })
+        mockUseDashboardFilters.mockReturnValue({
+            filters: {
+                dateRange: "all",
+                customRange: { from: undefined, to: undefined },
+                assigneeId: undefined,
+            },
+            setDateRange: vi.fn(),
+            setCustomRange: vi.fn(),
+            setAssigneeId,
+            resetFilters: vi.fn(),
+        })
+
+        render(<DashboardFilterBar />)
+
+        expect(setAssigneeId).not.toHaveBeenCalled()
+    })
+
     it("exposes error detail expansion state and hides the decorative chevron", () => {
         render(<ErrorState error={new Error("Boom")} reset={vi.fn()} showDetails />)
 

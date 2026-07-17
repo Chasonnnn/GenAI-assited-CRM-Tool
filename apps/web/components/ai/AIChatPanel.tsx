@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import dynamic from "next/dynamic"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -25,6 +25,8 @@ import { useConversation, useStreamChatMessage, useApproveAction, useRejectActio
 import type { ProposedAction } from "@/lib/api/ai"
 import type { ScheduleParserDialogProps } from "@/components/ai/ScheduleParserDialog"
 import { AssistantRichText } from "@/components/ai/AssistantRichText"
+import { useAIChatScrollToLatest } from "@/lib/hooks/use-ai-chat-scroll-to-latest"
+import { useMountEffect } from "@/lib/hooks/use-mount-effect"
 
 const ScheduleParserDialog = dynamic<ScheduleParserDialogProps>(
     () => import("@/components/ai/ScheduleParserDialog").then((mod) => mod.ScheduleParserDialog),
@@ -105,13 +107,6 @@ function createPanelMessageState(
 
 function abortActiveStream(streamAbortRef: MutableRef<AbortController | null>) {
     streamAbortRef.current?.abort()
-}
-
-function cancelAutoScrollFrame(autoScrollFrameRef: MutableRef<number | null>) {
-    if (typeof window === "undefined") return
-    if (autoScrollFrameRef.current === null) return
-    window.cancelAnimationFrame(autoScrollFrameRef.current)
-    autoScrollFrameRef.current = null
 }
 
 // Action type icons
@@ -431,7 +426,7 @@ function AIChatScheduleParser({
     )
 }
 
-export function AIChatPanel({
+function AIChatPanelContent({
     entityType,
     entityId,
     entityName,
@@ -446,13 +441,11 @@ export function AIChatPanel({
     const streamAbortRef = useRef<AbortController | null>(null)
     const streamingMessageIdRef = useRef<string | null>(null)
     const stopRequestedRef = useRef(false)
-    const autoScrollFrameRef = useRef<number | null>(null)
     const shouldStickToBottomRef = useRef(true)
     const currentContext = {
         entityId: entityId ?? null,
         entityType: entityType ?? null,
     }
-    const [trackedContext, setTrackedContext] = useState<PanelContext>(() => currentContext)
 
     // Hooks
     const { data: conversation, isLoading: loadingConversation } = useConversation(entityType, entityId)
@@ -464,17 +457,7 @@ export function AIChatPanel({
     const [messageState, setMessageState] = useState<PanelMessageState>(() =>
         createPanelMessageState(conversationKey, conversationMessages)
     )
-    const contextChanged =
-        trackedContext.entityId !== currentContext.entityId || trackedContext.entityType !== currentContext.entityType
-
-    if (contextChanged) {
-        setTrackedContext(currentContext)
-        if (isStreaming) {
-            setIsStreaming(false)
-        }
-    }
-
-    const streamVisible = isStreaming && !contextChanged
+    const streamVisible = isStreaming
     const hasCurrentMessageState =
         messageState.conversationKey === conversationKey && messageState.conversationMessages === conversationMessages
     const derivedMessageState = hasCurrentMessageState
@@ -500,39 +483,18 @@ export function AIChatPanel({
         })
     }
 
-    useEffect(() => {
-        if (!shouldStickToBottomRef.current) return
-        if (typeof window === "undefined") return
-        if (autoScrollFrameRef.current !== null) {
-            window.cancelAnimationFrame(autoScrollFrameRef.current)
-        }
-        autoScrollFrameRef.current = window.requestAnimationFrame(() => {
-            const container = scrollRef.current
-            autoScrollFrameRef.current = null
-            if (!container) return
-            container.scrollTop = container.scrollHeight
-        })
-    }, [messages])
-
-    useEffect(() => {
-        shouldStickToBottomRef.current = true
-        abortActiveStream(streamAbortRef)
-        streamAbortRef.current = null
-        streamingMessageIdRef.current = null
-        stopRequestedRef.current = false
-    }, [currentContext.entityId, currentContext.entityType])
+    useAIChatScrollToLatest(scrollRef, messages, { shouldStickToBottomRef })
 
     // Focus input on mount
-    useEffect(() => {
+    useMountEffect(() => {
         inputRef.current?.focus()
-    }, [])
+    })
 
-    useEffect(() => {
+    useMountEffect(() => {
         return () => {
             abortActiveStream(streamAbortRef)
-            cancelAutoScrollFrame(autoScrollFrameRef)
         }
-    }, [autoScrollFrameRef, streamAbortRef])
+    })
 
     const updateMessageById = (id: string, updater: (msg: PanelMessage) => PanelMessage) => {
         updateMessages((currentMessages) => currentMessages.map((msg) => (msg.id === id ? updater(msg) : msg)))
@@ -712,6 +674,12 @@ export function AIChatPanel({
             />
         </div>
     )
+}
+
+export function AIChatPanel(props: AIChatPanelProps) {
+    const contextKey = `${props.entityType ?? "global"}:${props.entityId ?? "global"}`
+
+    return <AIChatPanelContent key={contextKey} {...props} />
 }
 
 // Action card component

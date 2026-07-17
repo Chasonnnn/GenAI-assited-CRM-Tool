@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState } from "react"
+import { redirect, useRouter } from "next/navigation"
 import Link from "@/components/app-link"
 import { toast } from "@/components/ui/toast"
 import { Loader2Icon, UserPlusIcon } from "lucide-react"
@@ -9,7 +9,7 @@ import { Loader2Icon, UserPlusIcon } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useUnassignedQueue } from "@/lib/hooks/use-surrogates"
 import { useClaimSurrogate } from "@/lib/hooks/use-queues"
-import { trackUnassignedQueueViewed } from "@/lib/workflow-metrics"
+import { useTrackUnassignedQueueView } from "@/lib/hooks/use-track-unassigned-queue-view"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -47,25 +47,38 @@ export default function UnassignedSurrogatesPage({
     initialSearchParams,
 }: UnassignedSurrogatesPageProps) {
     const { user } = useAuth()
-    const { push, replace } = useRouter()
-
     const authLoaded = !!user?.role
     const canViewUnassignedQueue = user?.role === "admin" || user?.role === "developer"
 
+    if (authLoaded && !canViewUnassignedQueue) {
+        redirect("/surrogates")
+        return null
+    }
+
+    return (
+        <UnassignedSurrogatesContent
+            initialPageParam={initialPageParam}
+            initialSearchParams={initialSearchParams}
+            authLoaded={authLoaded}
+            canViewUnassignedQueue={canViewUnassignedQueue}
+        />
+    )
+}
+
+function UnassignedSurrogatesContent({
+    initialPageParam,
+    initialSearchParams,
+    authLoaded,
+    canViewUnassignedQueue,
+}: UnassignedSurrogatesPageProps & {
+    authLoaded: boolean
+    canViewUnassignedQueue: boolean
+}) {
+    const { push, replace } = useRouter()
     const urlPage = parsePageParam(initialPageParam)
     const page = urlPage
 
-    useEffect(() => {
-        if (!authLoaded) return
-        if (!canViewUnassignedQueue) {
-            replace("/surrogates")
-        }
-    }, [authLoaded, canViewUnassignedQueue, replace])
-
-    useEffect(() => {
-        if (!authLoaded || !canViewUnassignedQueue) return
-        trackUnassignedQueueViewed()
-    }, [authLoaded, canViewUnassignedQueue])
+    useTrackUnassignedQueueView(authLoaded && canViewUnassignedQueue)
 
     const { data, isLoading, error, refetch } = useUnassignedQueue(
         {
@@ -112,8 +125,6 @@ export default function UnassignedSurrogatesPage({
         }
         setClaimingId(null)
     }
-
-    if (authLoaded && !canViewUnassignedQueue) return null
 
     return (
         <div className="space-y-6">

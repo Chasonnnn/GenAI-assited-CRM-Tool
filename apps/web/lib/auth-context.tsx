@@ -1,7 +1,8 @@
 'use client';
 
-import { createContext, use, useEffect, useState, type ReactNode } from 'react';
+import { createContext, use, useState, type ReactNode } from 'react';
 import api from '@/lib/api';
+import { useMountEffect } from '@/lib/hooks/use-mount-effect';
 
 // Interface matches backend MeResponse schema
 export interface User {
@@ -77,14 +78,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
     };
 
-    useEffect(() => {
+    useMountEffect(() => {
         if (shouldSkipAuthFetch()) return;
 
         const timeoutId = window.setTimeout(() => {
             void fetchUser()
         }, 0);
         return () => window.clearTimeout(timeoutId);
-    }, []);
+    });
 
     return (
         <AuthContext.Provider value={{ user, isLoading, error, refetch: () => { void fetchUser() } }}>
@@ -99,32 +100,4 @@ export function useAuth() {
         throw new Error('useAuth must be used within an AuthProvider');
     }
     return context;
-}
-
-// Hook for protected pages
-export function useRequireAuth() {
-    const { user, isLoading } = useAuth();
-
-    useEffect(() => {
-        if (!isLoading && !user) {
-            window.location.href = '/login';
-        }
-        if (
-            !isLoading &&
-            user &&
-            user.mfa_required &&
-            !user.mfa_verified
-        ) {
-            const hasOpsCookie = document.cookie
-                .split(';')
-                .some((c) => c.trim().startsWith('auth_return_to=ops'));
-            const isOpsRoute =
-                window.location.pathname.startsWith('/ops') ||
-                window.location.hostname.startsWith('ops.');
-            const url = hasOpsCookie || isOpsRoute ? '/mfa?return_to=ops' : '/mfa';
-            window.location.href = url;
-        }
-    }, [user, isLoading]);
-
-    return { user, isLoading };
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,7 @@ import {
     useInitiateDuoAuth,
     useMFAStatus,
 } from "@/lib/hooks/use-mfa"
+import { useMountEffect } from "@/lib/hooks/use-mount-effect"
 
 function hasAuthReturnToOpsCookie(): boolean {
     if (typeof document === "undefined") return false
@@ -47,6 +48,39 @@ function clearStoredAuthReturnTo() {
 
 const APP_POST_MFA_PATH = "/dashboard"
 
+function MFAFullPageLoader() {
+    return (
+        <div className="flex min-h-screen items-center justify-center">
+            <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+        </div>
+    )
+}
+
+function MFARedirect({
+    authenticated,
+}: {
+    authenticated: boolean
+}) {
+    const { replace } = useRouter()
+
+    useMountEffect(() => {
+        if (!authenticated) {
+            replace("/login")
+            return
+        }
+
+        const returnTo = getStoredAuthReturnTo()
+        if (returnTo === "ops") {
+            clearStoredAuthReturnTo()
+            replace("/ops")
+            return
+        }
+        replace(APP_POST_MFA_PATH)
+    })
+
+    return <MFAFullPageLoader />
+}
+
 export default function MFAPageClient() {
     const { replace } = useRouter()
     const { user, isLoading: authLoading, refetch } = useAuth()
@@ -60,7 +94,7 @@ export default function MFAPageClient() {
     const [errorMessage, setErrorMessage] = useState<string | null>(null)
     const [showCodeEntry, setShowCodeEntry] = useState(false)
 
-    useEffect(() => {
+    useMountEffect(() => {
         // Ensure ops flows keep "return_to=ops" even if the user landed here without coming from /ops/login.
         if (typeof window === "undefined") return
         const queryReturnTo = new URLSearchParams(window.location.search).get("return_to")
@@ -73,24 +107,7 @@ export default function MFAPageClient() {
         if (isOps) {
             setStoredAuthReturnTo("ops")
         }
-    }, [])
-
-    useEffect(() => {
-        if (authLoading) return
-        if (!user) {
-            replace("/login")
-            return
-        }
-        if (!user.mfa_required || user.mfa_verified) {
-            const returnTo = getStoredAuthReturnTo()
-            if (returnTo === "ops") {
-                clearStoredAuthReturnTo()
-                replace("/ops")
-                return
-            }
-            replace(APP_POST_MFA_PATH)
-        }
-    }, [authLoading, user, replace])
+    })
 
     const handleChallenge = async () => {
         if (!challengeCode) return
@@ -137,13 +154,12 @@ export default function MFAPageClient() {
         }
     }
 
-    if (authLoading || mfaLoading) {
-        return (
-            <div className="flex min-h-screen items-center justify-center">
-                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-            </div>
-        )
+    if (authLoading) return <MFAFullPageLoader />
+    if (!user) return <MFARedirect authenticated={false} />
+    if (!user.mfa_required || user.mfa_verified) {
+        return <MFARedirect authenticated />
     }
+    if (mfaLoading) return <MFAFullPageLoader />
 
     const duoAvailable = duoStatus?.available
     const duoEnrolled = duoStatus?.enrolled

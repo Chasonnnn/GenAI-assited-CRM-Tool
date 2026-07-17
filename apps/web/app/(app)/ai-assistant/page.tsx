@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { SendIcon, SparklesIcon, FileTextIcon, UserIcon, CalendarIcon, ClockIcon, BotIcon, Loader2Icon, AlertCircleIcon, CheckIcon, XIcon, StopCircleIcon, type LucideIcon } from "lucide-react"
 import { useEffect, useReducer, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react"
+import { useAIChatScrollToLatest } from "@/lib/hooks/use-ai-chat-scroll-to-latest"
+import { useMountEffect } from "@/lib/hooks/use-mount-effect"
 import { useStreamChatMessage, useAISettings, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
 import { useAuth } from "@/lib/auth-context"
 import { AssistantRichText } from "@/components/ai/AssistantRichText"
@@ -70,8 +72,7 @@ type ChatState = {
 }
 
 type ChatAction =
-    | { type: "patch"; payload: Partial<ChatState> }
-    | { type: "update_history"; updater: (prev: ChatSession[]) => ChatSession[] }
+    { type: "patch"; payload: Partial<ChatState> }
 
 type ChatDispatch = (action: ChatAction) => void
 type ChatStateRef = { current: ChatState }
@@ -104,8 +105,6 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     switch (action.type) {
         case "patch":
             return { ...state, ...action.payload }
-        case "update_history":
-            return { ...state, chatHistory: action.updater(state.chatHistory) }
         default:
             return state
     }
@@ -314,8 +313,69 @@ function safeParseHistory(raw: string | null): ChatSession[] {
     }
 }
 
+function useAIAssistantHistorySession({
+    userId,
+    isAuthLoading,
+    dispatchChat,
+    chatStateRef,
+}: {
+    userId: string | null
+    isAuthLoading: boolean
+    dispatchChat: ChatDispatch
+    chatStateRef: ChatStateRef
+}) {
+    const historyLoadedRef = useRef(false)
+    const initialSessionCreatedRef = useRef(false)
+
+    useEffect(() => {
+        if (isAuthLoading) return
+        if (!userId) {
+            historyLoadedRef.current = false
+            initialSessionCreatedRef.current = false
+            clearChatHistory(dispatchChat, chatStateRef)
+            return
+        }
+
+        const storedUserId = sessionStorage.getItem(CHAT_HISTORY_USER_KEY)
+        if (storedUserId && storedUserId !== userId) {
+            clearChatHistory(dispatchChat, chatStateRef)
+            historyLoadedRef.current = false
+            initialSessionCreatedRef.current = false
+        }
+
+        if (!historyLoadedRef.current) {
+            const storedHistory = safeParseHistory(sessionStorage.getItem(CHAT_HISTORY_KEY))
+            patchChatState(dispatchChat, chatStateRef, {
+                chatHistory: storedHistory,
+                activeSessionId: null,
+                messages: [createWelcomeMessage()],
+            })
+            historyLoadedRef.current = true
+        }
+        sessionStorage.setItem(CHAT_HISTORY_USER_KEY, userId)
+
+        if (initialSessionCreatedRef.current) return
+        initialSessionCreatedRef.current = true
+        const sessionId = createTimestampId("session")
+        upsertSession(dispatchChat, chatStateRef, {
+            id: sessionId,
+            label: buildSessionLabel(),
+            preview: "",
+            updatedAt: new Date().toISOString(),
+            entityType: "global",
+            entityId: null,
+            conversationId: null,
+            messages: [],
+        })
+        patchChatState(dispatchChat, chatStateRef, {
+            activeSessionId: sessionId,
+            messages: [createWelcomeMessage()],
+        })
+    }, [chatStateRef, dispatchChat, isAuthLoading, userId])
+}
+
 function useAIAssistantChat() {
-    const { user } = useAuth()
+    const { user, isLoading: isAuthLoading } = useAuth()
     const [message, setMessage] = useState("")
     const [isStreaming, setIsStreaming] = useState(false)
     const [chatState, dispatchChat] = useReducer(chatReducer, undefined, buildInitialChatState)
@@ -325,10 +385,6 @@ function useAIAssistantChat() {
     const streamingMessageIdRef = useRef<string | null>(null)
     const streamAbortRef = useRef<AbortController | null>(null)
     const stopRequestedRef = useRef(false)
-
-    useEffect(() => {
-        chatStateRef.current = chatState
-    }, [chatState])
 
     const setMessages = (value: Message[] | ((prev: Message[]) => Message[])) => {
         setChatMessages(dispatchChat, chatStateRef, value)
@@ -350,84 +406,23 @@ function useAIAssistantChat() {
 
     const aiSettingsErrorMessage = aiSettingsErrorData instanceof Error ? aiSettingsErrorData.message : ""
 
-    const historyLoadedRef = useRef(false)
-    const initialSessionCreatedRef = useRef(false)
+    useAIAssistantHistorySession({
+        userId: user?.user_id ?? null,
+        isAuthLoading,
+        dispatchChat,
+        chatStateRef,
+    })
 
-    useEffect(() => {
-        if (typeof window === "undefined") return
-        if (!user?.user_id) {
-            historyLoadedRef.current = false
-            initialSessionCreatedRef.current = false
-            clearChatHistory(dispatchChat, chatStateRef)
-            return
-        }
-        const storedUserId = sessionStorage.getItem(CHAT_HISTORY_USER_KEY)
-        if (storedUserId && storedUserId !== user.user_id) {
-            clearChatHistory(dispatchChat, chatStateRef)
-            historyLoadedRef.current = false
-            initialSessionCreatedRef.current = false
-        }
-        if (!historyLoadedRef.current) {
-            const storedHistory = safeParseHistory(sessionStorage.getItem(CHAT_HISTORY_KEY))
-            patchChatState(dispatchChat, chatStateRef, {
-                chatHistory: storedHistory,
-                activeSessionId: null,
-                messages: [createWelcomeMessage()],
-            })
-            historyLoadedRef.current = true
-        }
-        sessionStorage.setItem(CHAT_HISTORY_USER_KEY, user.user_id)
-    }, [user?.user_id])
-
-    useEffect(() => {
-        if (!user?.user_id || !historyLoadedRef.current || initialSessionCreatedRef.current) return
-        initialSessionCreatedRef.current = true
-        const sessionId = createTimestampId("session")
-        upsertSession(dispatchChat, chatStateRef, {
-            id: sessionId,
-            label: buildSessionLabel(),
-            preview: "",
-            updatedAt: new Date().toISOString(),
-            entityType: "global",
-            entityId: null,
-            conversationId: null,
-            messages: [],
-        })
-        patchChatState(dispatchChat, chatStateRef, {
-            activeSessionId: sessionId,
-            messages: [createWelcomeMessage()],
-        })
-    }, [user?.user_id])
-
-    const currentSession = chatHistory.find((session) => session.id === activeSessionId) || null
-
-    useEffect(() => {
-        if (isStreaming) return
-        if (currentSession) {
-            const sessionMessages = currentSession.messages.length
-                ? currentSession.messages
-                : [createWelcomeMessage()]
-            setChatMessages(dispatchChat, chatStateRef, sessionMessages)
-            return
-        }
-        setChatMessages(dispatchChat, chatStateRef, [createWelcomeMessage()])
-    }, [currentSession, isStreaming])
-
-    // Scroll to bottom when messages change
-    useEffect(() => {
-        const container = scrollRef.current
-        if (!container) return
-        container.scrollTop = container.scrollHeight
-    }, [messages])
+    useAIChatScrollToLatest(scrollRef, messages)
 
     // The unmount cleanup intentionally aborts the latest active stream, not the
     // controller that existed when this effect was registered.
     // oxlint-disable-next-line react-doctor/exhaustive-deps
-    useEffect(() => {
+    useMountEffect(() => {
         return () => {
             streamAbortRef.current?.abort()
         }
-    }, [])
+    })
 
     const ensureSessionId = () => {
         if (activeSessionId && chatHistory.some((session) => session.id === activeSessionId)) {

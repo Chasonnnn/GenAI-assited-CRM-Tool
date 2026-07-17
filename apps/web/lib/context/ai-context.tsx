@@ -5,6 +5,7 @@ import { createContext, use, useEffect, useReducer, useState } from "react"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
+import { useAIToggleHotkey } from "@/lib/hooks/use-ai-toggle-hotkey"
 
 // Types
 export interface EntityContext {
@@ -37,6 +38,7 @@ interface AIContextValue {
 const AIContext = createContext<AIContextValue | undefined>(undefined)
 
 type EntityContextState = {
+    pathname: string
     entityType: EntityContext["entityType"] | null
     entityId: string | null
     entityName: string | null
@@ -47,10 +49,13 @@ type EntityContextAction =
     | { type: "clear" }
     | { type: "sync-pathname"; pathname: string }
 
-const emptyEntityContext: EntityContextState = {
-    entityType: null,
-    entityId: null,
-    entityName: null,
+function createEmptyEntityContext(pathname: string): EntityContextState {
+    return {
+        pathname,
+        entityType: null,
+        entityId: null,
+        entityName: null,
+    }
 }
 
 function isEntityPathname(pathname: string) {
@@ -61,21 +66,42 @@ function isEntityPathname(pathname: string) {
     )
 }
 
+function shouldRetainEntityContext(
+    pathname: string,
+    entityType: EntityContextState["entityType"],
+) {
+    const isTasksPath = pathname === "/tasks" || pathname.startsWith("/tasks/")
+    if (isTasksPath) return entityType === "task"
+    if (entityType === "task") return false
+    return isEntityPathname(pathname)
+}
+
 function aiEntityContextReducer(
     state: EntityContextState,
     action: EntityContextAction
 ): EntityContextState {
     switch (action.type) {
         case "set":
+            if (
+                state.entityType === action.context.entityType &&
+                state.entityId === action.context.entityId &&
+                state.entityName === action.context.entityName
+            ) {
+                return state
+            }
             return {
+                pathname: state.pathname,
                 entityType: action.context.entityType,
                 entityId: action.context.entityId,
                 entityName: action.context.entityName,
             }
         case "clear":
-            return state.entityId ? emptyEntityContext : state
+            return state.entityId ? createEmptyEntityContext(state.pathname) : state
         case "sync-pathname":
-            return state.entityId && !isEntityPathname(action.pathname) ? emptyEntityContext : state
+            if (state.pathname === action.pathname) return state
+            return state.entityId && !shouldRetainEntityContext(action.pathname, state.entityType)
+                ? createEmptyEntityContext(action.pathname)
+                : { ...state, pathname: action.pathname }
     }
 }
 
@@ -86,8 +112,13 @@ export function AIContextProvider({ children }: { children: React.ReactNode }) {
 
     const [entityContext, dispatchEntityContext] = useReducer(
         aiEntityContextReducer,
-        emptyEntityContext
+        pathname,
+        createEmptyEntityContext
     )
+
+    if (entityContext.pathname !== pathname) {
+        dispatchEntityContext({ type: "sync-pathname", pathname })
+    }
 
     // Panel state
     const [isOpen, setIsOpen] = useState(false)
@@ -99,35 +130,21 @@ export function AIContextProvider({ children }: { children: React.ReactNode }) {
     const canUseAI =
         isAIEnabled && (effectivePermissions?.permissions || []).includes("use_ai_assistant")
 
-    // Clear context on route change if navigating away from entity pages.
-    useEffect(() => {
-        React.startTransition(() => {
-            dispatchEntityContext({ type: "sync-pathname", pathname })
-        })
-    }, [pathname, entityContext.entityId])
+    useAIToggleHotkey(canUseAI, () => {
+        setIsOpen(prev => !prev)
+    })
 
-    // Keyboard shortcut: Cmd+Shift+A or Ctrl+Shift+A
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "a") {
-                e.preventDefault()
-                if (canUseAI) {
-                    setIsOpen(prev => !prev)
-                }
-            }
-        }
+    const [setContext] = useState(
+        () => (ctx: EntityContext) => {
+            dispatchEntityContext({ type: "set", context: ctx })
+        },
+    )
 
-        window.addEventListener("keydown", handleKeyDown)
-        return () => window.removeEventListener("keydown", handleKeyDown)
-    }, [canUseAI])
-
-    const setContext = (ctx: EntityContext) => {
-        dispatchEntityContext({ type: "set", context: ctx })
-    }
-
-    const clearContext = () => {
-        dispatchEntityContext({ type: "clear" })
-    }
+    const [clearContext] = useState(
+        () => () => {
+            dispatchEntityContext({ type: "clear" })
+        },
+    )
 
     const togglePanel = () => {
         setIsOpen(prev => !prev)
@@ -169,13 +186,16 @@ export function useAIContext() {
 // Hook for setting context on page load
 export function useSetAIContext(ctx: EntityContext | null) {
     const { setContext, clearContext, canUseAI } = useAIContext()
+    const entityType = ctx?.entityType ?? null
+    const entityId = ctx?.entityId ?? null
+    const entityName = ctx?.entityName ?? null
 
     useEffect(() => {
-        if (ctx && canUseAI) {
-            setContext(ctx)
+        if (entityType && entityId && entityName && canUseAI) {
+            setContext({ entityType, entityId, entityName })
         }
         return () => {
             clearContext()
         }
-    }, [ctx, canUseAI, setContext, clearContext])
+    }, [canUseAI, clearContext, entityId, entityName, entityType, setContext])
 }

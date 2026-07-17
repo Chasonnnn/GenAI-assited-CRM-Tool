@@ -35,8 +35,8 @@ import {
     MessageSquareIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useEffect } from 'react'
 import type { TipTapDoc } from '@/lib/api/interviews'
+import { useSyncTipTapJsonContent } from '@/lib/hooks/use-sync-tiptap-json-content'
 
 const isTipTapDoc = (value: JSONContent): value is TipTapDoc => value?.type === 'doc'
 
@@ -185,16 +185,7 @@ export function TranscriptEditor({
         },
     })
 
-    // Sync content when it changes externally (e.g., loading interview for edit)
-    useEffect(() => {
-        if (editor && content) {
-            const currentJson = JSON.stringify(editor.getJSON())
-            const newJson = JSON.stringify(content)
-            if (currentJson !== newJson) {
-                editor.commands.setContent(content)
-            }
-        }
-    }, [content, editor])
+    useSyncTipTapJsonContent(editor, content)
 
     const addLink = () => {
         if (!editor) return

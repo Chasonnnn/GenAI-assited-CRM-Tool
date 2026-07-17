@@ -120,6 +120,19 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useMemo")
         expect(source).toContain("function parseServerErrors")
         expect(source).toContain("function getActionValidationError")
+        expect(source).toContain(
+            "return { ...state, conditionLogic: action.value, serverErrors: [] }"
+        )
+        expect(source).toContain("workflowName: action.value, serverErrors: []")
+        expect(source).not.toContain('type: "clearServerErrors"')
+        expect(source).toContain(
+            'dispatchWorkflowBuilder({ type: "normalizeTriggerConfig", value: normalized })'
+        )
+        expect(source).not.toContain(
+            "useEffect(() => {\n        if (triggerType !== \"status_changed\""
+        )
+        expect(source).toContain("editingWorkflow.id === editingWorkflowId")
+        expect(source).not.toMatch(/\buseEffect\b/)
         expect(source).not.toContain("const parseServerErrors =")
         expect(source).not.toContain("const getActionValidationError =")
     })
@@ -190,7 +203,15 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("React.useCallback")
         expect(source).toContain("function createWelcomeMessage")
         expect(source).toContain("function createTimestampId")
-        expect(source).toContain("const currentSession = chatHistory.find")
+        expect(source).toContain("function useAIAssistantHistorySession")
+        expect(source).toContain("if (isAuthLoading) return")
+        expect(source).toContain("chatStateRef.current = { ...chatStateRef.current, ...payload }")
+        expect(source).not.toContain("chatStateRef.current = chatState")
+        expect(source).not.toContain(
+            "useEffect(() => {\n        chatStateRef.current = chatState"
+        )
+        expect(source).not.toContain("const currentSession = chatHistory.find")
+        expect(source).not.toContain("useEffect(() => {\n        if (isStreaming) return")
         expect(source).not.toContain("`session-${Date.now()}`")
         expect(source).not.toContain("`user-${Date.now()}`")
         expect(source).not.toContain("`assistant-${Date.now()}`")
@@ -215,14 +236,28 @@ describe("React regression guards (source)", () => {
 
     it("keeps AI context state updates compiler-friendly", () => {
         const source = readSource("lib/context/ai-context.tsx")
+        const hotkeySource = readSource("lib/hooks/use-ai-toggle-hotkey.ts")
 
         expect(source).toContain("function aiEntityContextReducer")
         expect(source).toContain("const [entityContext, dispatchEntityContext] = useReducer(")
+        expect(source).toContain("state.entityId === action.context.entityId")
+        expect(source).toContain("const [setContext] = useState(")
+        expect(source).toContain("const [clearContext] = useState(")
+        expect(source).toContain(
+            "}, [canUseAI, clearContext, entityId, entityName, entityType, setContext])"
+        )
+        expect(source.match(/\buseEffect\(/g)).toHaveLength(1)
+        expect(source).toContain("useAIToggleHotkey(canUseAI")
+        expect(source).not.toContain('window.addEventListener("keydown"')
         expect(source).not.toContain("useCallback")
         expect(source).not.toContain("React.useCallback")
         expect(source).not.toContain("setEntityType")
         expect(source).not.toContain("setEntityId")
         expect(source).not.toContain("setEntityName")
+        expect(hotkeySource).toContain("const onToggleEvent = useEffectEvent(onToggle)")
+        expect(hotkeySource).toContain('window.addEventListener("keydown", handleKeyDown)')
+        expect(hotkeySource).toContain('window.removeEventListener("keydown", handleKeyDown)')
+        expect(hotkeySource).toContain("}, [enabled])")
     })
 
     it("documents intentional exhaustive-deps exceptions with React Doctor rule names", () => {
@@ -293,17 +328,20 @@ describe("React regression guards (source)", () => {
         expect(source).toContain('toast.success("Template published")')
     })
 
-    it("does not suppress exhaustive deps in MassEditStageModal and handles late stage load", () => {
+    it("owns MassEditStageModal sessions without reset Effects", () => {
         const source = readSource("components/surrogates/MassEditStageModal.tsx")
 
         expect(source).not.toContain("eslint-disable-next-line react-hooks/exhaustive-deps")
         expect(source).toContain("const defaultTargetStageId =")
-        expect(source).toContain("if (!open || targetStageId || !defaultTargetStageId) return")
+        expect(source).toContain("function MassEditStageOpenSession(")
+        expect(source).toContain("if (!props.open) return null")
         expect(source).toContain("const previewSignature =")
         expect(source).toContain("previewState?.signature === previewSignature")
         expect(source).toContain("function massEditStageReducer")
-        expect(source).toContain("const [state, dispatch] = React.useReducer(")
+        expect(source).toContain("const [storedState, dispatch] = React.useReducer(")
         expect(source).toContain("massEditStageReducer,")
+        expect(source).not.toContain("React.useEffect")
+        expect(source).not.toContain("hasInitializedOpenRef")
         expect(source).not.toContain("React.useMemo")
         expect(source).not.toContain("React.useCallback")
         expect(source).not.toContain("memo(")
@@ -352,6 +390,9 @@ describe("React regression guards (source)", () => {
 
         expect(source).toContain("const [state, dispatch] = useReducer")
         expect(source).toContain("function csvUploadReducer(")
+        expect(source).toContain("function reconcileBackdateCreatedAt(")
+        expect(source).not.toMatch(/\buseEffect\b/)
+        expect(source).not.toContain("sync_backdate_from_created_at_mapping")
     })
 
     it("keeps CSV upload rendering split into focused sections", () => {
@@ -389,6 +430,8 @@ describe("React regression guards (source)", () => {
 
         expect(source).toContain('"rtl:**:[.rdp-button\\\\_next>svg]:rotate-180"')
         expect(source).toContain('"rtl:**:[.rdp-button\\\\_previous>svg]:rotate-180"')
+        expect(source).not.toContain("React.useEffect")
+        expect(source).not.toContain("const ref = React.useRef<HTMLButtonElement>(null)")
         expect(source).not.toContain("String.raw`rtl:**:[.rdp-button\\_")
     })
 
@@ -419,13 +462,61 @@ describe("React regression guards (source)", () => {
 
     it("keeps RichTextEditor split and free of compiler-obsolete callbacks", () => {
         const source = readSource("components/rich-text-editor.tsx")
+        const contentSyncSource = readSource("lib/hooks/use-sync-rich-text-editor-content.ts")
 
         expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("useEffect")
         expect(source).toContain("RichTextEditorLoading")
         expect(source).toContain("RichTextEditorToolbar")
+        expect(source).toContain("useSyncRichTextEditorContent(editor, content)")
+        expect(contentSyncSource).toContain("useEffect(() =>")
+        expect(contentSyncSource).toContain("editor.commands.setContent(content)")
+        expect(contentSyncSource).toContain("}, [content, editor])")
         expect(source).not.toContain("emoji-picker-react")
         expect(source).not.toContain("BoldIcon")
         expect(source).not.toContain("SmileIcon")
+    })
+
+    it("keeps transcript JSON synchronization behind a tested editor boundary", () => {
+        const source = readSource("components/surrogates/interviews/TranscriptEditor.tsx")
+        const contentSyncSource = readSource("lib/hooks/use-sync-tiptap-json-content.ts")
+
+        expect(source).toContain("useSyncTipTapJsonContent(editor, content)")
+        expect(source).not.toContain("useEffect")
+        expect(contentSyncSource).toContain("const nextContent = content ?? EMPTY_TIPTAP_DOCUMENT")
+        expect(contentSyncSource).toContain("editor.commands.setContent(nextContent)")
+        expect(contentSyncSource).toContain("}, [content, editor])")
+    })
+
+    it("keeps transcript viewer DOM listeners behind a tested lifecycle boundary", () => {
+        const source = readSource("components/surrogates/interviews/TranscriptViewer.tsx")
+        const listenerSource = readSource("lib/hooks/use-transcript-viewer-listeners.ts")
+
+        expect(source).toContain("useTranscriptViewerListeners({")
+        expect(source).toContain("enabled: Boolean(renderedHtml)")
+        expect(source).not.toContain("useEffect")
+        expect(listenerSource).toContain("const onMouseUpEvent = useEffectEvent(onMouseUp)")
+        expect(listenerSource).toContain('container.addEventListener("mouseup", handleMouseUp)')
+        expect(listenerSource).toContain('document.removeEventListener("keydown", handleKeyDown)')
+        expect(listenerSource).toContain("}, [containerRef, enabled])")
+    })
+
+    it("observes transcript height only while connector lines are visible", () => {
+        const source = readSource(
+            "components/surrogates/interviews/InterviewComments/ConnectorLines.tsx"
+        )
+        const observerSource = readSource("lib/hooks/use-observed-scroll-height.ts")
+
+        expect(source).toContain(
+            "const connectorVisible = Boolean(activeNoteId || newComment.type === \"pending\")"
+        )
+        expect(source).toContain(
+            "const transcriptHeight = useObservedScrollHeight(transcriptRef, connectorVisible)"
+        )
+        expect(source).not.toContain("useEffect")
+        expect(observerSource).toContain("const resizeObserver = new ResizeObserver(updateHeight)")
+        expect(observerSource).toContain("resizeObserver.disconnect()")
+        expect(observerSource).toContain("}, [elementRef, enabled])")
     })
 
     it("keeps safe HTML parsing and sanitization free of manual React memoization", () => {
@@ -1383,6 +1474,10 @@ describe("React regression guards (source)", () => {
         expect(contextSource).not.toContain("const router = useRouter()")
         expect(contextSource).not.toContain("router.push")
         expect(contextSource).not.toContain("router.replace")
+        expect(contextSource).toContain('redirect(getTabUrl("overview") as Route)')
+        expect(contextSource).not.toContain("normalizeInvalidTab")
+        expect(contextSource).toContain("useTrackSurrogateView(surrogate?.id)")
+        expect(contextSource).not.toContain("trackSurrogateViewed(surrogate.id)")
         expect(contextSource).not.toContain("[defaultPipeline?.feature_config, stageOptions, user?.role]")
         expect(contextSource).toContain("function useSurrogateDetailTabNavigation")
         expect(contextSource).toContain("function useSurrogateDetailDataValue")
@@ -1840,18 +1935,35 @@ describe("React regression guards (source)", () => {
 
     it("keeps public embed origin and session state compiler-friendly", () => {
         const source = readSource("app/embed/forms/[slug]/page.client.tsx")
+        const sessionHookSource = readSource("lib/hooks/use-embed-form-session-handshake.ts")
+        const resizeHookSource = readSource("lib/hooks/use-embed-form-resize-reporting.ts")
 
         expect(source).toContain("function embedFormReducer")
         expect(source).toContain("const [state, dispatch] = React.useReducer(")
+        expect(source).toContain("useEmbedFormSessionHandshake({")
+        expect(source).toContain("useEmbedFormResizeReporting(containerRef, parentOrigin)")
+        expect(source).not.toContain("React.useEffect")
+        expect(source).not.toContain("ResizeObserver")
+        expect(source).not.toContain('addEventListener("message"')
         expect(source).not.toContain("React.useState<FormEmbedPublicRead")
         expect(source).not.toContain("React.useState<EmbedSessionState")
         expect(source).not.toContain("React.useState<Answers>")
         expect(source).not.toContain("React.useState<Record<string, boolean>>")
-        expect(source).toContain("type EmbedSessionState")
+        expect(source).not.toContain("type EmbedSessionState")
         expect(source).not.toContain("setParentOrigin")
         expect(source).not.toContain("setSessionToken")
         expect(source).not.toContain("sessionTokenRef")
         expect(source).not.toContain("finally")
+        expect(sessionHookSource).toContain("type EmbedSessionState")
+        expect(sessionHookSource).toContain('window.addEventListener("message", onMessage)')
+        expect(sessionHookSource).toContain('window.removeEventListener("message", onMessage)')
+        expect(sessionHookSource).toContain("window.clearTimeout(fallback)")
+        expect(sessionHookSource).toContain("active = false")
+        expect(sessionHookSource).toContain("}, [enabled, parentOrigin, slug])")
+        expect(sessionHookSource).not.toContain("finally")
+        expect(resizeHookSource).toContain("new ResizeObserver(sendHeight)")
+        expect(resizeHookSource).toContain("observer.disconnect()")
+        expect(resizeHookSource).toContain("}, [containerRef, parentOrigin])")
     })
 
     it("batches independent profile hidden-field saves", () => {
@@ -1891,6 +2003,8 @@ describe("React regression guards (source)", () => {
 
     it("keeps hosted intake draft and resume state compiler-friendly", () => {
         const source = readSource("app/intake/[slug]/page.client.tsx")
+        const componentSource = readFunctionSource(source, "PublicApplicationForm")
+        const autosaveSource = readSource("lib/hooks/use-hosted-intake-autosave.ts")
 
         expect(source).not.toContain("React.useCallback")
         expect(source).toContain("function isDraftValueEmpty")
@@ -1905,12 +2019,27 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setDraftSession")
         expect(source).not.toContain("setDraftSessionId")
         expect(source).not.toContain("setDraftSessionExists")
+        expect(source).not.toContain("skipNextAutosaveRef")
+        expect(source).toContain("skipNextAutosave: boolean")
+        expect(source).toContain('type: "setSkipNextAutosave"')
         expect(source).toContain("type HostedIntakeBootstrapResult")
         expect(source).toContain("function loadHostedIntakeBootstrap")
         expect(source).toContain("function hostedIntakeReducer")
-        expect(source).toContain("React.useReducer(hostedIntakeReducer")
+        expect(source).toContain("const bootstrapQuery = useQuery({")
+        expect(source).toContain('queryKey: ["hosted-intake-bootstrap", token]')
+        expect(source).toContain("function reconcileHostedIntakeBootstrap(")
+        expect(source).toContain("function useHostedIntakeResumeLookup(")
+        expect(componentSource).toContain("useHostedIntakeResumeLookup({")
+        expect(componentSource).not.toContain("React.useEffect")
+        expect(componentSource).not.toContain("resumeLookupTimerRef")
+        expect(componentSource).not.toContain("lookupSeqRef")
+        expect(source).toContain(
+            "const [storedIntakeState, dispatchIntakeState] = React.useReducer("
+        )
         expect(source).toContain("draftSession: DraftSessionState")
-        expect(source).toContain("{ type: \"bootstrapStarted\"; draftSession: DraftSessionState }")
+        expect(source).not.toContain("{ type: \"bootstrapStarted\"; draftSession: DraftSessionState }")
+        expect(source).not.toContain("// Validate shared link on mount")
+        expect(source).not.toContain("React.useEffect(() => {\n        let cancelled = false")
         expect(source).not.toContain("react-doctor-disable-next-line react-doctor/no-event-handler")
         expect(source).not.toContain("PublicApplicationFormInner")
         expect(source).not.toContain("key={props.slug}")
@@ -1920,21 +2049,92 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const [formError, setFormError]")
         expect(source).not.toContain("const loadForm = async ()")
         expect(source).not.toContain("setAnswers(restored)")
+        expect(source).toContain("useHostedIntakeAutosave({")
+        expect(source).not.toContain("autosaveTimerRef")
+        expect(autosaveSource).toContain("const onSaveEvent = useEffectEvent(onSave)")
+        expect(autosaveSource).toContain("const onSkipNextSaveEvent = useEffectEvent(onSkipNextSave)")
+        expect(autosaveSource).toContain("onSkipNextSaveEvent()")
+        expect(autosaveSource).toContain("}, [delay, enabled, scopeKey, skipNextSave, trigger])")
         expect(source).not.toContain('throw new Error("Invalid form payload")')
         expect(source).not.toContain("finally")
         expect(source).not.toContain("if (currentStep > steps.length)")
     })
 
-    it("keeps dashboard URL filter sync in one reducer update", () => {
+    it("reconciles dashboard URL filters before child queries render", () => {
         const source = readSource("app/(app)/dashboard/context/dashboard-filters.tsx")
+        const filterBarSource = readSource("app/(app)/dashboard/components/dashboard-filter-bar.tsx")
 
         expect(source).toContain("type DashboardFiltersAction")
         expect(source).toContain("function dashboardFiltersReducer")
+        expect(source).toContain("function getDashboardFilterSourceKey")
+        expect(source).toContain("if (filterState.sourceKey !== filterSourceKey)")
         expect(source).toMatch(/dispatchFilters\(\{\s*type: "syncFromUrl"/)
+        expect(source).toContain(
+            "filterState.sourceKey === filterSourceKey ? filterState.filters : urlFilters"
+        )
+        expect(source).not.toContain("useEffect")
         expect(source).not.toContain("setDateRangeState")
         expect(source).not.toContain("setCustomRangeState")
         expect(source).not.toContain("setAssigneeIdState")
         expect(source).not.toContain("useCallback")
+        expect(filterBarSource).not.toContain("useEffect(()")
+        expect(filterBarSource).not.toContain("setAssigneeId(user.user_id)")
+    })
+
+    it("contains dashboard mismatch diagnostics in a deduplicated hook", () => {
+        const pageSource = readSource("app/(app)/dashboard/page.client.tsx")
+        const hookSource = readSource("lib/hooks/use-dashboard-kpi-mismatch-warning.ts")
+
+        expect(pageSource).toContain("useDashboardKpiMismatchWarning({")
+        expect(pageSource).not.toContain("useEffect(")
+        expect(pageSource).not.toContain('console.warn("[dashboard]')
+        expect(hookSource).toContain("const lastWarningKeyRef = useRef<string | null>(null)")
+        expect(hookSource).toContain("if (lastWarningKeyRef.current === warningKey) return")
+        expect(hookSource).toContain('console.warn("[dashboard] KPI vs distribution mismatch"')
+    })
+
+    it("redirects app-shell auth boundaries during render", () => {
+        const source = readSource("components/app-shell-client.tsx")
+        const authSource = readSource("lib/auth-context.tsx")
+
+        expect(source).toContain('redirect("/login")')
+        expect(source).toContain("redirect(getMfaRedirectPath(pathname))")
+        expect(source).toContain('redirect("/welcome")')
+        expect(source).not.toContain("useEffect")
+        expect(source).not.toContain("useRouter")
+        expect(source).not.toContain("replace(")
+        expect(authSource).not.toContain("useRequireAuth")
+        expect(authSource).not.toContain("useEffect(()")
+    })
+
+    it("redirects signed-out Duo callbacks during render and retains only verification synchronization", () => {
+        const pageSource = readSource("app/auth/duo/callback/page.client.tsx")
+        const hookSource = readSource("lib/hooks/use-duo-callback-verification.ts")
+
+        expect(pageSource).toContain(
+            'redirect(getAuthReturnTo() === "ops" ? "/ops/login" : "/login")'
+        )
+        expect(pageSource).toContain("useDuoCallbackVerification({")
+        expect(pageSource).not.toContain("useEffect")
+        expect(pageSource).not.toContain('replace("/ops/login")')
+        expect(pageSource).not.toContain('replace("/login")')
+        expect(hookSource.match(/useEffect\(\(\) =>/g)).toHaveLength(1)
+        expect(hookSource).toContain("verifyDuoCallback(code, state, returnTo)")
+        expect(hookSource).toContain("active = false")
+        expect(hookSource).toContain("}, [enabled, refreshAuth, replace, returnTo])")
+    })
+
+    it("contains unassigned queue view tracking in a named lifecycle hook", () => {
+        const pageSource = readSource("app/(app)/surrogates/unassigned/page.client.tsx")
+        const hookSource = readSource("lib/hooks/use-track-unassigned-queue-view.ts")
+
+        expect(pageSource).toContain(
+            "useTrackUnassignedQueueView(authLoaded && canViewUnassignedQueue)"
+        )
+        expect(pageSource).not.toContain("useEffect")
+        expect(hookSource).toContain("useEffect(() =>")
+        expect(hookSource).toContain("trackUnassignedQueueViewed()")
+        expect(hookSource).toContain("}, [enabled])")
     })
 
     it("avoids flatMap as a filter-map in form and campaign list normalization", () => {
@@ -2058,21 +2258,42 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("selectedValues.includes(option.value)")
     })
 
-    it("keeps intended parent list filters derived from URL state without mirror effects", () => {
+    it("keeps list filters derived from URL state without mirror effects", () => {
         const intendedParentsSource = readSource("app/(app)/intended-parents/page.client.tsx")
         const matchesSource = readSource("app/(app)/intended-parents/matches/page.client.tsx")
+        const surrogatesSource = readSource("app/(app)/surrogates/page.client.tsx")
+        const debounceSource = readSource("lib/hooks/use-debounced-search-commit.ts")
 
         expect(intendedParentsSource).toContain("function readIntendedParentListUrlState")
-        expect(intendedParentsSource).toContain("const searchDebounceTimerRef = useRef")
+        expect(intendedParentsSource).toContain("useDebouncedSearchCommit(currentQuery)")
+        expect(intendedParentsSource).not.toContain("searchDebounceTimerRef")
+        expect(intendedParentsSource).not.toContain("useEffect")
         expect(intendedParentsSource).not.toContain("hasSyncedSearchRef")
         expect(intendedParentsSource).not.toContain("setDebouncedSearch")
         expect(intendedParentsSource).not.toContain("[currentQuery]) // oxlint-disable-line react-doctor/exhaustive-deps")
 
         expect(matchesSource).toContain("function readMatchListUrlState")
-        expect(matchesSource).toContain("const searchDebounceTimerRef = useRef")
+        expect(matchesSource).toContain("useDebouncedSearchCommit(currentQuery)")
+        expect(matchesSource).not.toContain("searchDebounceTimerRef")
+        expect(matchesSource).not.toContain("useEffect")
         expect(matchesSource).not.toContain("hasSyncedSearchRef")
         expect(matchesSource).not.toContain("setDebouncedSearch")
         expect(matchesSource).not.toContain("[currentQuery]) // oxlint-disable-line react-doctor/exhaustive-deps")
+        expect(surrogatesSource).toContain("useDebouncedSearchCommit(currentQuery)")
+        expect(surrogatesSource).not.toContain("searchDebounceRef")
+        expect(surrogatesSource).not.toContain("useEffect")
+        expect(debounceSource).toContain("useEffect(() =>")
+        expect(debounceSource).toContain("return cancel")
+        expect(debounceSource).toContain("}, [scopeKey])")
+    })
+
+    it("delegates main matches search timing to the shared debounced value hook", () => {
+        const source = readSource("app/(app)/matches/page.tsx")
+
+        expect(source).toContain('import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"')
+        expect(source).toContain("const debouncedSearch = useDebouncedValue(search, 300)")
+        expect(source).not.toMatch(/\buseEffect\b/)
+        expect(source).not.toContain("setDebouncedSearch")
     })
 
     it("builds form builder mappings in a single pass", () => {
@@ -2156,8 +2377,11 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("const templateBodyMode = editorState.bodyModeOverride ?? getTemplateBodyMode(editorState.template ? fullTemplate?.body : null)")
         expect(source).toContain("const activeInsertionTargetRef = useRef<ActiveInsertionTarget>(null)")
         expect(source).toContain("const copyShareTargetRef = useRef<EmailTemplateListItem | null>(null)")
-        expect(source).toContain("const testSendTouchedRef = useRef<Record<string, boolean>>({})")
+        expect(source).toContain("const testSendDefaultVariables: Record<string, string> = {}")
+        expect(source).toContain("const testSendVariables = {")
+        expect(source).toContain("...testSendState.variables,")
         expect(source).toContain("const libraryCopyTargetRef = useRef<EmailTemplateLibraryItem | null>(null)")
+        expect(source).not.toContain("testSendTouchedRef")
         expect(source).not.toContain("const [templateBodyOverride, setTemplateBodyOverride] = useState")
         expect(source).not.toContain("const [templateBodyModeOverride, setTemplateBodyModeOverride] = useState")
         expect(source).not.toContain("const [templateBody, setTemplateBody] = useState")
@@ -2193,7 +2417,10 @@ describe("React regression guards (source)", () => {
 
         expect(source).toContain("type SignatureDraftState")
         expect(source).toContain("function signatureDraftReducer")
-        expect(pageSource).toContain("const [signatureDraft, dispatchSignatureDraft] = useReducer")
+        expect(pageSource).toContain("const [signatureDraftOverrides, dispatchSignatureDraft] = useReducer")
+        expect(pageSource).toContain("const signatureDraft = {")
+        expect(pageSource).toContain("...createSignatureDraftState(signatureData),")
+        expect(pageSource).toContain("...signatureDraftOverrides,")
         expect(pageSource).not.toContain("setSignatureName")
         expect(pageSource).not.toContain("setSignatureTitle")
         expect(pageSource).not.toContain("setSignaturePhone")
@@ -2255,13 +2482,21 @@ describe("React regression guards (source)", () => {
     it("keeps queues settings rendering split into focused helpers", () => {
         const source = readSource("app/(app)/settings/queues/page.tsx")
         const componentIndex = source.indexOf("export default function QueuesSettingsPage()")
+        const contentIndex = source.indexOf("function QueuesSettingsContent()")
         const firstHelperIndex = source.indexOf("function QueuesPageHeader")
         const componentSource = source.slice(
             componentIndex,
             firstHelperIndex > componentIndex ? firstHelperIndex : undefined
         )
+        const authorizationSource = source.slice(componentIndex, contentIndex)
 
         expect(componentIndex).toBeGreaterThanOrEqual(0)
+        expect(contentIndex).toBeGreaterThan(componentIndex)
+        expect(source).toContain('redirect("/settings")')
+        expect(source).toContain("return <QueuesSettingsContent />")
+        expect(source).not.toContain("React.useEffect")
+        expect(authorizationSource).not.toContain("useQueues(")
+        expect(authorizationSource).not.toContain("useMembers(")
         expect(source).toContain("function QueuesPageHeader")
         expect(source).toContain("function QueuesStatusContent")
         expect(source).toContain("function QueuesTable")
@@ -2668,8 +2903,17 @@ describe("React regression guards (source)", () => {
 
     it("keeps the surrogates floating scrollbar free of manual React memoization", () => {
         const source = readSource("components/surrogates/SurrogatesFloatingScrollbar.tsx")
+        const controllerSource = readFunctionSource(
+            source,
+            "useSurrogatesFloatingScrollbarController"
+        )
 
         expect(source).toContain("useState(detectPointerCapability)")
+        expect(source).toContain("function useFloatingScrollbarDomLifecycle(")
+        expect(source).toContain("function useFloatingScrollbarActivationSync(")
+        expect(controllerSource).toContain("useFloatingScrollbarDomLifecycle({")
+        expect(controllerSource).toContain("useFloatingScrollbarActivationSync({")
+        expect(controllerSource).not.toContain("useEffect(() =>")
         expect(source).not.toContain("const [isDesktopPointer, setIsDesktopPointer] = useState(false)")
         expect(source).not.toContain("useMemo")
         expect(source).not.toContain("useCallback")
@@ -2878,7 +3122,10 @@ describe("React regression guards (source)", () => {
     it("keeps self-service manage appointment timezone defaults render-derived", () => {
         const source = readSource("app/book/self-service/[orgId]/manage/[token]/page.tsx")
 
-        expect(source).toContain("const hasManageLink = Boolean(orgId && token)")
+        expect(source).toContain("function isValidOrganizationId(")
+        expect(source).toContain(
+            "const hasManageLink = isValidOrganizationId(orgId) && Boolean(token)"
+        )
         expect(source).toContain("subscribeTimezoneSnapshot")
         expect(source).toContain("timezoneOverride")
         expect(source).toContain("viewMonthOverride")
@@ -2891,6 +3138,8 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useCallback")
         expect(source).not.toContain("useMemo")
         expect(source).not.toContain("<SelectValue />")
+        expect(source).not.toContain("finally")
+        expect(source).not.toContain('throw new Error("Invalid appointment management link")')
     })
 
     it("keeps self-service manage appointment rendering split into focused helpers", () => {
@@ -2920,18 +3169,38 @@ describe("React regression guards (source)", () => {
 
     it("keeps template form builder hook compiler-derived", () => {
         const source = readSource("lib/forms/use-template-form-builder-page.ts")
+        const stateSource = readSource("lib/forms/use-template-form-builder-state.ts")
 
         expect(source).not.toContain("useMemo")
         expect(source).not.toContain("useCallback")
+        expect(source).not.toMatch(/\buseEffect\b/)
         expect(source).not.toContain("useRef<Promise<void>>(Promise.resolve())")
+        expect(source).not.toContain("currentVersionRef")
+        expect(source).not.toContain("templateIdRef")
+        expect(source).not.toContain("hydratedFormRef")
+        expect(source).toContain("templateData.id === formId")
+        expect(stateSource).toContain("baselineTemplateKey: string | null")
+        expect(stateSource).toContain("templateKey: string")
     })
 
     it("keeps automation form builder hook compiler-derived", () => {
         const source = readSource("lib/forms/use-automation-form-builder-page.ts")
+        const stateSource = readSource("lib/forms/use-automation-form-builder-state.ts")
 
         expect(source).not.toContain("useMemo")
         expect(source).not.toContain("useCallback")
         expect(source).not.toContain("useDebouncedValue")
+        expect(source).not.toMatch(/\buseEffect\b/)
+        expect(source).toContain("formData.id === formId")
+        expect(source).not.toContain("useEffect(() => {\n        resetForForm")
+        expect(source).not.toContain(
+            "useEffect(() => {\n        if (isNewForm || !formData"
+        )
+        expect(source).not.toContain("hydratedFormRef")
+        expect(source).not.toContain("orgLogoInitRef")
+        expect(stateSource).toContain("baselineFormKey: string | null")
+        expect(stateSource).toContain("formKey: string")
+        expect(stateSource).toContain("buildInitialState(action.payload.formKey")
     })
 
     it("keeps form builder state hooks compiler-derived", () => {
@@ -3073,6 +3342,7 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("function shouldSkipAuthFetch()")
         expect(source).toContain("useState(() => !shouldSkipAuthFetch())")
         expect(source).toContain("window.setTimeout")
+        expect(source).not.toContain("useRequireAuth")
         expect(source).not.toContain("finally")
         expect(source).not.toContain("void fetchUser();")
     })
@@ -3104,6 +3374,14 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("type CampaignEditDraftState")
         expect(source).toContain("function campaignEditDraftReducer")
         expect(pageSource).toContain("const [editDraft, dispatchEditDraft] = useReducer")
+        expect(pageSource).toContain(
+            "const [handledAutoEditRequest, setHandledAutoEditRequest] = useState<string | null>(null)"
+        )
+        expect(pageSource).toContain(
+            "handledAutoEditRequest !== autoEditRequestKey"
+        )
+        expect(pageSource).not.toContain("useEffect")
+        expect(pageSource).not.toContain("startTransition")
         expect(pageSource).not.toContain("setEditName")
         expect(pageSource).not.toContain("setEditDescription")
         expect(pageSource).not.toContain("setEditTemplateId")
@@ -3184,6 +3462,20 @@ describe("React regression guards (source)", () => {
         expect(versionHistorySource).not.toContain("const formatDate =")
     })
 
+    it("contains session-expiration cache subscriptions in a named hook", () => {
+        const dialogSource = readSource("components/session-expired-dialog.tsx")
+        const hookSource = readSource("lib/hooks/use-session-expiration-detection.ts")
+
+        expect(dialogSource).toContain("const isExpired = useSessionExpirationDetection()")
+        expect(dialogSource).not.toContain("useEffect")
+        expect(dialogSource).not.toContain("useQueryClient")
+        expect(hookSource).toContain("getQueryCache().subscribe")
+        expect(hookSource).toContain("getMutationCache().subscribe")
+        expect(hookSource).toContain("unsubscribeQueries()")
+        expect(hookSource).toContain("unsubscribeMutations()")
+        expect(hookSource).toContain("}, [queryClient])")
+    })
+
     it("uses gap spacing for integrations provider radio rows", () => {
         const source = readSource("app/(app)/settings/integrations/page.tsx")
 
@@ -3243,11 +3535,15 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("type PanelMessageState")
         expect(source).toContain("function createConversationKey")
         expect(source).toContain("function createPanelMessageState")
+        expect(source).toContain("function AIChatPanelContent")
         expect(source).toContain("const currentContext =")
+        expect(source).toContain("<AIChatPanelContent key={contextKey}")
         expect(source).not.toContain("const [messages, setMessages]")
         expect(source).not.toContain("setMessages(")
+        expect(source).not.toContain("useEffect")
         expect(source).not.toContain("useEffect(() => {\n        if (isStreaming) return")
         expect(source).not.toContain("prevContextRef")
+        expect(source).not.toContain("trackedContext")
         expect(source).not.toContain("useEffect(() => {\n        const prev =")
         expect(source).not.toContain("finally")
     })
@@ -3415,7 +3711,12 @@ describe("React regression guards (source)", () => {
         const source = readSource("app/(app)/settings/intelligent-suggestions-section.tsx")
 
         expect(source).toContain("const normalizedNewRuleDraft =")
-        expect(source).toContain("window.setTimeout(() => void loadInitialSettings(), 0)")
+        expect(source).toContain("INTELLIGENT_SUGGESTION_SETTINGS_QUERY_KEY")
+        expect(source).toContain("INTELLIGENT_SUGGESTION_TEMPLATES_QUERY_KEY")
+        expect(source).toContain("INTELLIGENT_SUGGESTION_RULES_QUERY_KEY")
+        expect(source).toContain("staleTime: INTELLIGENT_SUGGESTIONS_STALE_TIME_MS")
+        expect(source).not.toContain("window.setTimeout(() => void loadInitialSettings(), 0)")
+        expect(source).not.toContain("useEffect")
         expect(source).not.toContain("useMemo")
         expect(source).not.toContain("useCallback")
         expect(source).not.toContain("finally")
@@ -3604,20 +3905,25 @@ describe("React regression guards (source)", () => {
         const metaFormMappingSource = readSource("app/(app)/settings/integrations/meta/forms/[id]/page.tsx")
         const roleDetailSource = readSource("app/(app)/settings/team/roles/[role]/page.client.tsx")
 
+        expect(complianceSource).toContain("const policyByEntityType = new Map")
+        expect(complianceSource).not.toContain("policies?.find(")
         expect(complianceSource).not.toContain("useMemo")
+        expect(metaFormMappingSource).toContain("const suggestionByCsvColumn = new Map")
+        expect(metaFormMappingSource).not.toContain("result.suggestions.find(")
         expect(metaFormMappingSource).not.toContain("useMemo")
         expect(roleDetailSource).not.toContain("useMemo")
     })
 
-    it("keeps Meta form mapping touched columns outside render state", () => {
+    it("keeps Meta form mapping drafts as explicit per-column overrides", () => {
         const source = readSource("app/(app)/settings/integrations/meta/forms/[id]/page.tsx")
 
-        expect(source).toContain("touchedColumnsRef")
-        expect(source).toContain("useRef<Set<string> | null>(null)")
-        expect(source).toContain("if (touchedColumnsRef.current === null)")
-        expect(source).toContain("touchedColumnsRef.current = new Set<string>()")
-        expect(source).not.toContain("useRef<Set<string>>(new Set())")
-        expect(source).not.toContain("const [touchedColumns, setTouchedColumns] = useState")
+        expect(source).toContain("const [mappingOverrides, setMappingOverrides]")
+        expect(source).toContain("const serverMappingState =")
+        expect(source).toContain("mappingOverrides[mapping.csv_column] ?? mapping")
+        expect(source).toContain("const touchedColumns = new Set(serverMappingState.touchedColumns)")
+        expect(source).not.toContain("touchedColumnsRef")
+        expect(source).not.toContain("useEffect")
+        expect(source).not.toContain("useRef")
     })
 
     it("keeps Meta form mapping page rendering split into focused helpers", () => {
@@ -3781,9 +4087,10 @@ describe("React regression guards (source)", () => {
         const newAgencySource = readSource("app/ops/agencies/new/page.client.tsx")
 
         expect(opsDashboardSource).not.toContain("finally")
-        expect(agenciesSource).toContain("void listOrganizations(")
-        expect(agenciesSource).toContain("if (!isCurrent) return")
-        expect(agenciesSource).not.toContain("const data = await listOrganizations")
+        expect(agenciesSource).toContain("const agenciesQuery = useQuery({")
+        expect(agenciesSource).toContain("'platform',")
+        expect(agenciesSource).toContain("const data = await listOrganizations")
+        expect(agenciesSource).not.toContain("if (!isCurrent) return")
         expect(agenciesSource).not.toContain("async function fetchAgencies")
         expect(newAgencySource).toContain("function generateSlug(name: string)")
         expect(newAgencySource).not.toContain("const generateSlug =")
@@ -3798,34 +4105,36 @@ describe("React regression guards (source)", () => {
         const ticketsSource = readSource("app/(app)/tickets/page.tsx")
         const unassignedPageSource = readSource("app/(app)/surrogates/unassigned/page.tsx")
         const unassignedSource = readSource("app/(app)/surrogates/unassigned/page.client.tsx")
+        const unassignedContentIndex = unassignedSource.indexOf(
+            "function UnassignedSurrogatesContent("
+        )
+        const unassignedAuthorizationSource = unassignedSource.slice(0, unassignedContentIndex)
 
         expect(appLinkSource).toContain("const { push, replace: replaceRoute } = useRouter()")
         expect(appLinkSource).toContain("replaceRoute(targetHref")
         expect(appLinkSource).toContain("push(targetHref")
-        expect(opsLayoutSource).toContain("const { replace } = useRouter()")
-        expect(opsLayoutSource).toContain("replace('/mfa')")
-        expect(opsLayoutSource).toContain("replace('/ops/login')")
-        expect(opsLayoutSource).toContain("[replace, isLoginPage]")
-        expect(opsLayoutSource).toContain("const [opsLayoutState, dispatchOpsLayout] = useReducer(opsLayoutReducer")
-        expect(opsLayoutSource).toContain("type: 'loaded'")
-        expect(opsLayoutSource).toContain("dispatchOpsLayout({ type: 'redirecting' })")
-        expect(opsLayoutSource).not.toContain("setOpsLayoutState")
-        expect(opsLayoutSource).not.toContain("const [user, setUser] = useState")
-        expect(opsLayoutSource).not.toContain("const [isLoading, setIsLoading] = useState")
-        expect(opsLayoutSource).not.toContain("const [openAlertCount, setOpenAlertCount] = useState")
+        expect(opsLayoutSource).toContain("queryKey: ['platform', 'me']")
+        expect(opsLayoutSource).toContain("queryKey: ['platform', 'stats']")
+        expect(opsLayoutSource).toContain("redirect(getOpsAccessRedirect(platformMeQuery.error))")
+        expect(opsLayoutSource).not.toContain("useEffect")
+        expect(opsLayoutSource).not.toContain("useReducer")
+        expect(opsLayoutSource).not.toContain("useRouter")
         expect(newAgencySource).toContain("const { push } = useRouter()")
         expect(newAgencySource).toContain("push(`/ops/agencies/${result.org.id}`)")
         expect(newAgencySource).toContain("push('/ops/agencies')")
-        expect(welcomeSource).toContain("const { push, replace } = useRouter()")
+        expect(welcomeSource).toContain("const { push } = useRouter()")
         expect(welcomeSource).toContain('push("/dashboard")')
-        expect(welcomeSource).toContain('replace("/dashboard")')
-        expect(welcomeSource).toContain("[user, replace]")
+        expect(welcomeSource).toContain('redirect("/dashboard")')
+        expect(welcomeSource).not.toContain("useEffect")
+        expect(welcomeSource).not.toContain("replace(")
         expect(ticketsSource).toContain("const { push } = useRouter()")
         expect(ticketsSource).toContain("push(`/tickets/${result.ticket_id}`)")
         expect(unassignedSource).toContain("const { push, replace } = useRouter()")
         expect(unassignedPageSource).toContain("searchParams: Promise<Record<string, SearchParamValue>>")
         expect(unassignedSource).toContain("initialSearchParams")
-        expect(unassignedSource).toContain('replace("/surrogates")')
+        expect(unassignedSource).toContain('redirect("/surrogates")')
+        expect(unassignedAuthorizationSource).not.toContain("useUnassignedQueue(")
+        expect(unassignedAuthorizationSource).not.toContain("useClaimSurrogate(")
         expect(unassignedSource).toContain("push(`/surrogates/${surrogateId}`)")
         expect(unassignedSource).not.toContain("finally")
         expect(unassignedSource).not.toContain("useCallback")
@@ -3904,12 +4213,17 @@ describe("React regression guards (source)", () => {
 
     it("keeps Tasks page focus coordination out of render state", () => {
         const source = readSource("app/(app)/tasks/page.client.tsx")
+        const focusNavigationSource = readSource("lib/hooks/use-task-focus-navigation.ts")
 
-        expect(source).toContain("const handledFocusRef = useRef<FocusTarget | null>(null)")
         expect(source).toContain("const [manualViewFocusTarget, setManualViewFocusTarget] = useState<FocusTarget | null>(null)")
         expect(source).toContain("const activeView = shouldUseListViewForFocus ? \"list\" : view")
-        expect(source).toContain("handledFocusRef.current === focusTarget")
-        expect(source).toContain("handledFocusRef.current = focusTarget")
+        expect(source).toContain("useTaskFocusNavigation({")
+        expect(source).not.toContain("handledFocusRef")
+        expect(focusNavigationSource).toContain(
+            "const handledFocusRef = useRef<TaskFocusTarget | null>(null)"
+        )
+        expect(focusNavigationSource).toContain("handledFocusRef.current === focusTarget")
+        expect(focusNavigationSource).toContain("handledFocusRef.current = focusTarget")
         expect(source).not.toContain("const [pendingFocus, setPendingFocus]")
         expect(source).not.toContain("const pendingFocus =")
         expect(source).not.toContain("setPendingFocus(")
@@ -3922,6 +4236,16 @@ describe("React regression guards (source)", () => {
 
         expect(source).not.toContain("useCallback")
         expect(source).not.toContain("useMemo")
+    })
+
+    it("keeps Tasks page selection owned by visible rows and scope events", () => {
+        const source = readSource("app/(app)/tasks/page.client.tsx")
+
+        expect(source).not.toMatch(/\buseEffect\b/)
+        expect(source).toContain("setSelectedTaskIds(new Set())\n        setFilter(newFilter)")
+        expect(source).toContain("const visibleSelectedTaskIds = new Set<string>()")
+        expect(source).toContain("const taskIds = Array.from(visibleSelectedTaskIds)")
+        expect(source).toContain("selectedTaskIds: visibleSelectedTaskIds")
     })
 
     it("keeps Tasks page rendering split from the controller hook", () => {
@@ -4047,6 +4371,8 @@ describe("React regression guards (source)", () => {
         expect(pipelinesSource).toContain("const mappedLabels: string[] = []")
         expect(pipelinesSource).toContain("const selectedLabels: string[] = []")
         expect(pipelinesSource).toContain("const nextStages: EditableStage[] = []")
+        expect(pipelinesSource).not.toContain("useEffect")
+        expect(pipelinesSource).not.toContain("startTransition")
         expect(pipelinesSource).not.toContain(".map((value) => (value === removedStageKey ? targetStageKey ?? null : value))")
         expect(pipelinesSource).not.toContain(".filter((stage) => milestone.mapped_stage_keys.includes(stage.stageKey))")
         expect(pipelinesSource).not.toContain(".map((activeStage) => activeStage.stage_key)\n                                        .filter")
@@ -4069,7 +4395,20 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("type TriggerConfigSetter = Dispatch<SetStateAction<JsonObject>>")
         expect(source).toContain("setTriggerConfig((current) => ({")
         expect(source).toContain("const currentFields = Array.isArray(current.fields)")
+        expect(source).toContain("triggerConfig: normalizeTriggerConfigForUi(action.value, {}, [])")
+        expect(source).not.toContain("useEffect")
         expect(source).not.toContain("setTriggerConfig({ ...triggerConfig")
+    })
+
+    it("hydrates workflow template drafts by server revision instead of query identity", () => {
+        const source = readSource("app/ops/templates/workflows/[id]/page.client.tsx")
+
+        expect(source).toContain("hydratedTemplateKey: string | null")
+        expect(source).toContain("`${templateData.id}:${templateData.updated_at}`")
+        expect(source).toContain("editorState.hydratedTemplateKey !== templateKey")
+        expect(source).not.toContain(
+            "useEffect(() => {\n        if (!templateData || isNew) return\n        dispatchEditor({ type: \"hydrateDraft\""
+        )
     })
 
     it("uses stable content-derived keys in the AI builder", () => {
@@ -4157,10 +4496,15 @@ describe("React regression guards (source)", () => {
 
         expect(source).toContain("appSidebarReducer")
         expect(source).toContain("SidebarNavLink")
-        expect(source).toContain("activeTab: null")
-        expect(source).toContain('{ type: "setActiveTab"')
-        expect(source).not.toContain("useSearchParams")
-        expect(source).not.toContain("const activeTab = readCurrentTabParam()")
+        expect(source).toContain("function getSectionsForPath")
+        expect(source).toContain('{ type: "syncPathname"')
+        expect(source).toContain("createInitialAppSidebarState")
+        expect(source).toContain("isExpanded: readSidebarCookie()")
+        expect(source).not.toMatch(/\buseEffect\(/)
+        expect(source).not.toContain('dispatch({ type: "setExpanded", isExpanded: readSidebarCookie() })')
+        expect(source).toContain('const activeTab = searchParams.get("tab")')
+        expect(source).not.toContain("readCurrentTabParam")
+        expect(source).not.toContain("setActiveTab")
         expect(source).not.toContain("renderNavLink")
         expect(source).not.toContain("useCallback")
         expect(source).not.toContain("useMemo")
@@ -4172,9 +4516,14 @@ describe("React regression guards (source)", () => {
 
     it("keeps search command handlers compiler-friendly", () => {
         const source = readSource("components/search-command.tsx")
+        const hotkeySource = readSource("lib/hooks/use-search-hotkey.ts")
 
         expect(source).toContain('key={open ? "open" : "closed"}')
-        expect(source).toContain("useEffectEvent")
+        expect(source).not.toContain("useEffect")
+        expect(source).toContain('export { useSearchHotkey } from "@/lib/hooks/use-search-hotkey"')
+        expect(hotkeySource).toContain("useEffectEvent")
+        expect(hotkeySource).toContain('document.addEventListener("keydown", handleKeyDown)')
+        expect(hotkeySource).toContain('document.removeEventListener("keydown", handleKeyDown)')
         expect(source).not.toContain("useCallback")
         expect(source).not.toContain("startTransition")
     })
@@ -4428,13 +4777,21 @@ describe("React regression guards (source)", () => {
 
     it("keeps the interview transcript pane on a native labeled region", () => {
         const source = readSource("components/surrogates/interviews/InterviewComments/TranscriptPane.tsx")
+        const interactionSource = readSource("lib/hooks/use-transcript-comment-interactions.ts")
 
         expect(source).toContain("<section")
         expect(source).toContain('aria-label="Interview Transcript"')
+        expect(source).toContain("useTranscriptCommentInteractions({")
+        expect(source).not.toContain("useEffect")
         expect(source).not.toContain('role="button"')
         expect(source).not.toContain('role="region"')
         expect(source).not.toContain("onClick={")
         expect(source).not.toContain("onKeyDown={")
+        expect(interactionSource).toContain(
+            "const setHoveredCommentIdEvent = useEffectEvent(setHoveredCommentId)"
+        )
+        expect(interactionSource).toContain('container.addEventListener("focusin", handleFocusIn)')
+        expect(interactionSource).toContain('container.removeEventListener("keydown", handleKeyDown)')
     })
 
     it("delegates match detail tab rendering to a dedicated component", () => {

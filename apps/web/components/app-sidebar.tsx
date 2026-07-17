@@ -1,10 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { useEffect, useReducer } from "react"
+import { useReducer } from "react"
 import type { Route } from "next"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import { useSearchHotkey, SearchCommandDialog } from "@/components/search-command"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -127,13 +127,13 @@ type NavLinkItem = {
 type SidebarSection = "tasks" | "automation" | "settings"
 
 type AppSidebarState = {
+    pathname: string | null
     isExpanded: boolean
     mobileOpen: boolean
     automationOpen: boolean
     settingsOpen: boolean
     tasksOpen: boolean
     searchOpen: boolean
-    activeTab: string | null
 }
 
 type AppSidebarAction =
@@ -141,9 +141,8 @@ type AppSidebarAction =
     | { type: "setMobileOpen"; mobileOpen: boolean }
     | { type: "toggleMobileOpen" }
     | { type: "toggleSection"; section: SidebarSection }
-    | { type: "openSectionsForPath"; pathname: string | null }
+    | { type: "syncPathname"; pathname: string | null }
     | { type: "setSearchOpen"; searchOpen: boolean }
-    | { type: "setActiveTab"; activeTab: string | null }
 
 function readSidebarCookie() {
     if (typeof document === "undefined") return true
@@ -155,15 +154,27 @@ function readSidebarCookie() {
     return match.split("=")[1] === "true"
 }
 
-function createInitialAppSidebarState(): AppSidebarState {
+function getSectionsForPath(pathname: string | null) {
     return {
+        automationOpen: pathname?.startsWith("/automation") === true,
+        settingsOpen:
+            pathname?.startsWith("/settings") === true &&
+            pathname?.startsWith("/settings/appointments") !== true,
+        tasksOpen:
+            pathname?.startsWith("/tasks") === true ||
+            pathname?.startsWith("/appointments") === true ||
+            pathname === "/settings/appointments",
+    }
+}
+
+function createInitialAppSidebarState(pathname: string | null): AppSidebarState {
+    const sections = getSectionsForPath(pathname)
+    return {
+        pathname,
         isExpanded: readSidebarCookie(),
         mobileOpen: false,
-        automationOpen: false,
-        settingsOpen: false,
-        tasksOpen: false,
+        ...sections,
         searchOpen: false,
-        activeTab: null,
     }
 }
 
@@ -177,30 +188,20 @@ function appSidebarReducer(state: AppSidebarState, action: AppSidebarAction): Ap
             return { ...state, mobileOpen: !state.mobileOpen }
         case "toggleSection":
             return { ...state, [`${action.section}Open`]: !state[`${action.section}Open`] }
-        case "openSectionsForPath":
+        case "syncPathname": {
+            if (state.pathname === action.pathname) return state
+            const sections = getSectionsForPath(action.pathname)
             return {
                 ...state,
-                automationOpen: state.automationOpen || action.pathname?.startsWith("/automation") === true,
-                settingsOpen:
-                    state.settingsOpen ||
-                    (action.pathname?.startsWith("/settings") === true &&
-                        action.pathname?.startsWith("/settings/appointments") !== true),
-                tasksOpen:
-                    state.tasksOpen ||
-                    action.pathname?.startsWith("/tasks") === true ||
-                    action.pathname?.startsWith("/appointments") === true ||
-                    action.pathname === "/settings/appointments",
+                pathname: action.pathname,
+                automationOpen: state.automationOpen || sections.automationOpen,
+                settingsOpen: state.settingsOpen || sections.settingsOpen,
+                tasksOpen: state.tasksOpen || sections.tasksOpen,
             }
+        }
         case "setSearchOpen":
             return { ...state, searchOpen: action.searchOpen }
-        case "setActiveTab":
-            return { ...state, activeTab: action.activeTab }
     }
-}
-
-function readCurrentTabParam() {
-    if (typeof window === "undefined") return null
-    return new URLSearchParams(window.location.search).get("tab")
 }
 
 function getNavItemClass(active: boolean) {
@@ -549,6 +550,7 @@ function AppSidebarContent({
 
 export function AppSidebar({ children }: AppSidebarProps) {
     const pathname = usePathname()
+    const searchParams = useSearchParams()
     const { user } = useAuth()
     const isDeveloper = user?.role === "developer"
     const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
@@ -587,7 +589,17 @@ export function AppSidebar({ children }: AppSidebarProps) {
         return matches[0]!.url
     })()
 
-    const [state, dispatch] = useReducer(appSidebarReducer, undefined, createInitialAppSidebarState)
+    const [state, dispatch] = useReducer(
+        appSidebarReducer,
+        pathname,
+        createInitialAppSidebarState
+    )
+    if (state.pathname !== pathname) {
+        dispatch({ type: "syncPathname", pathname })
+    }
+    const currentState = state.pathname === pathname
+        ? state
+        : appSidebarReducer(state, { type: "syncPathname", pathname })
     const {
         isExpanded,
         mobileOpen,
@@ -595,8 +607,8 @@ export function AppSidebar({ children }: AppSidebarProps) {
         settingsOpen,
         tasksOpen,
         searchOpen,
-        activeTab,
-    } = state
+    } = currentState
+    const activeTab = searchParams.get("tab")
     const activeSettingsTab = activeTab
     const activeAutomationTab = activeTab
 
@@ -614,18 +626,6 @@ export function AppSidebar({ children }: AppSidebarProps) {
         }
         setExpanded(!isExpanded)
     }
-
-    // Sync cookie on mount when switching between mobile/desktop
-    useEffect(() => {
-        if (!isMobile) {
-            dispatch({ type: "setExpanded", isExpanded: readSidebarCookie() })
-        }
-    }, [isMobile])
-
-    React.useEffect(() => {
-        dispatch({ type: "openSectionsForPath", pathname })
-        dispatch({ type: "setActiveTab", activeTab: readCurrentTabParam() })
-    }, [pathname])
 
     const settingsItems: Array<{ title: string; url: string; tab?: string | null }> = [
         { title: "General", url: "/settings", tab: null },

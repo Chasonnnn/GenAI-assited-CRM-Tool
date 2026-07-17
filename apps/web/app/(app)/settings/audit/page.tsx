@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import {
     AlertTriangle,
     CheckIcon,
@@ -717,7 +717,7 @@ export default function AuditLogPage() {
 
     const { data: auditData, isLoading } = useAuditLogs(filters)
     const { data: eventTypes } = useEventTypes()
-    const { data: exportJobs, refetch: refetchExports } = useAuditExports()
+    const { data: exportJobs } = useAuditExports({ includeFull: isDeveloper })
     const createExport = useCreateAuditExport()
     const { data: aiActivity, isLoading: aiActivityLoading } = useAIAuditActivity(aiActivityHours)
 
@@ -732,14 +732,6 @@ export default function AuditLogPage() {
     const hasPendingExports = visibleExportJobs.some((job) =>
         ["pending", "processing"].includes(job.status)
     )
-
-    useEffect(() => {
-        if (!hasPendingExports) return
-        const timer = setInterval(() => {
-            void refetchExports()
-        }, 8000)
-        return () => clearInterval(timer)
-    }, [hasPendingExports, refetchExports])
 
     const handleExport = async () => {
         const { start, end } = getExportDates(exportRange, customRange)

@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useReducer, useRef, useState } from "react"
+import { useReducer, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -335,27 +335,63 @@ function normalizeTriggerConfigForUi(
     triggerConfig: JsonObject,
     statuses: StatusOption[],
 ): JsonObject {
-    if (triggerType !== "status_changed") return { ...triggerConfig }
     const next: JsonObject = { ...triggerConfig }
-    if (
-        (typeof next.to_stage_id !== "string" || !next.to_stage_id) &&
-        typeof next.to_status === "string"
-    ) {
-        const match = statuses.find((status) => status.value === next.to_status)
-        if (match?.id) {
-            next.to_stage_id = match.id
-            delete next.to_status
+    if (triggerType === "status_changed") {
+        if (
+            (typeof next.to_stage_id !== "string" || !next.to_stage_id) &&
+            typeof next.to_status === "string"
+        ) {
+            const match = statuses.find((status) => status.value === next.to_status)
+            if (match?.id) {
+                next.to_stage_id = match.id
+                delete next.to_status
+            }
+        }
+        if (
+            (typeof next.from_stage_id !== "string" || !next.from_stage_id) &&
+            typeof next.from_status === "string"
+        ) {
+            const match = statuses.find((status) => status.value === next.from_status)
+            if (match?.id) {
+                next.from_stage_id = match.id
+                delete next.from_status
+            }
+        }
+        if (typeof next.to_stage_id !== "string") next.to_stage_id = ""
+        if (typeof next.from_stage_id !== "string") delete next.from_stage_id
+    }
+    if (triggerType === "scheduled") {
+        if (typeof next.cron !== "string") next.cron = ""
+        if (typeof next.timezone !== "string") next.timezone = "America/Los_Angeles"
+    }
+    if (triggerType === "inactivity") {
+        if (typeof next.days === "string") {
+            const parsed = Number(next.days)
+            next.days = Number.isFinite(parsed) ? parsed : 7
+        } else if (typeof next.days !== "number") {
+            next.days = 7
+        }
+    }
+    if (triggerType === "task_due") {
+        if (typeof next.hours_before === "string") {
+            const parsed = Number(next.hours_before)
+            next.hours_before = Number.isFinite(parsed) ? parsed : 24
+        } else if (typeof next.hours_before !== "number") {
+            next.hours_before = 24
         }
     }
     if (
-        (typeof next.from_stage_id !== "string" || !next.from_stage_id) &&
-        typeof next.from_status === "string"
+        triggerType === "form_started" ||
+        triggerType === "form_submitted" ||
+        triggerType === "intake_lead_created"
     ) {
-        const match = statuses.find((status) => status.value === next.from_status)
-        if (match?.id) {
-            next.from_stage_id = match.id
-            delete next.from_status
-        }
+        if (typeof next.form_id !== "string") next.form_id = ""
+    }
+    if (triggerType === "surrogate_updated") {
+        if (!Array.isArray(next.fields)) next.fields = []
+    }
+    if (triggerType === "surrogate_assigned") {
+        if (typeof next.to_user_id !== "string") delete next.to_user_id
     }
     return next
 }
@@ -393,12 +429,12 @@ type WorkflowBuilderAction =
     | { type: "setWizardStep"; value: StateUpdate<number> }
     | { type: "setValidationError"; value: string | null }
     | { type: "setServerErrors"; value: string[] }
-    | { type: "clearServerErrors" }
     | { type: "setWorkflowName"; value: string }
     | { type: "setWorkflowDescription"; value: string }
     | { type: "setWorkflowScope"; value: WorkflowScope }
     | { type: "setTriggerType"; value: string }
     | { type: "setTriggerConfig"; value: StateUpdate<JsonObject> }
+    | { type: "normalizeTriggerConfig"; value: JsonObject }
     | { type: "setConditionLogic"; value: "AND" | "OR" }
     | { type: "addCondition" }
     | { type: "removeCondition"; index: number }
@@ -511,23 +547,30 @@ function workflowBuilderReducer(state: WorkflowBuilderState, action: WorkflowBui
             return { ...state, validationError: action.value }
         case "setServerErrors":
             return { ...state, serverErrors: action.value }
-        case "clearServerErrors":
-            return state.serverErrors.length > 0 ? { ...state, serverErrors: [] } : state
         case "setWorkflowName":
-            return { ...state, workflowName: action.value }
+            return { ...state, workflowName: action.value, serverErrors: [] }
         case "setWorkflowDescription":
-            return { ...state, workflowDescription: action.value }
+            return { ...state, workflowDescription: action.value, serverErrors: [] }
         case "setWorkflowScope":
-            return { ...state, workflowScope: action.value }
+            return { ...state, workflowScope: action.value, serverErrors: [] }
         case "setTriggerType":
-            return { ...state, triggerType: action.value }
+            if (action.value === state.triggerType) return state
+            return {
+                ...state,
+                triggerType: action.value,
+                triggerConfig: normalizeTriggerConfigForUi(action.value, {}, []),
+                serverErrors: [],
+            }
         case "setTriggerConfig":
             return {
                 ...state,
                 triggerConfig: typeof action.value === "function" ? action.value(state.triggerConfig) : action.value,
+                serverErrors: [],
             }
+        case "normalizeTriggerConfig":
+            return { ...state, triggerConfig: action.value }
         case "setConditionLogic":
-            return { ...state, conditionLogic: action.value }
+            return { ...state, conditionLogic: action.value, serverErrors: [] }
         case "addCondition":
             return {
                 ...state,
@@ -535,11 +578,13 @@ function workflowBuilderReducer(state: WorkflowBuilderState, action: WorkflowBui
                     ...state.conditions,
                     { clientId: createClientRowId(), field: "", operator: "equals", value: "" },
                 ],
+                serverErrors: [],
             }
         case "removeCondition":
             return {
                 ...state,
                 conditions: state.conditions.filter((_, index) => index !== action.index),
+                serverErrors: [],
             }
         case "updateCondition":
             return {
@@ -574,16 +619,19 @@ function workflowBuilderReducer(state: WorkflowBuilderState, action: WorkflowBui
                     }
                     return next
                 }),
+                serverErrors: [],
             }
         case "addAction":
             return {
                 ...state,
                 actions: [...state.actions, { clientId: createClientRowId(), action_type: "" }],
+                serverErrors: [],
             }
         case "removeAction":
             return {
                 ...state,
                 actions: state.actions.filter((_, index) => index !== action.index),
+                serverErrors: [],
             }
         case "updateAction":
             return {
@@ -591,6 +639,7 @@ function workflowBuilderReducer(state: WorkflowBuilderState, action: WorkflowBui
                 actions: state.actions.map((currentAction, index) =>
                     index === action.index ? mergeActionConfig(currentAction, action.updates) : currentAction
                 ),
+                serverErrors: [],
             }
         default:
             return state
@@ -691,10 +740,20 @@ export default function AutomationPageClient({
     const canManageAutomation = permissions.includes("manage_automation")
     const [activeTab] = useState(initialTab)
 
-    const [workflowScopeTab, setWorkflowScopeTab] = useState<"personal" | "org" | "templates">(
-        initialWorkflowScopeTab
-    )
-    const workflowScopeTabTouchedRef = useRef(false)
+    const [workflowScopeSelection, setWorkflowScopeSelection] = useState<{
+        tab: "personal" | "org" | "templates"
+        touched: boolean
+    }>({
+        tab: initialWorkflowScopeTab,
+        touched: false,
+    })
+    const workflowScopeTab =
+        !hasInitialScopeParam &&
+        canManageAutomation &&
+        !workflowScopeSelection.touched &&
+        workflowScopeSelection.tab === "personal"
+            ? "org"
+            : workflowScopeSelection.tab
     const [workflowBuilderState, dispatchWorkflowBuilder] = useReducer(
         workflowBuilderReducer,
         undefined,
@@ -779,18 +838,6 @@ export default function AutomationPageClient({
     const isTemplatesTab = workflowScopeTab === "templates"
     const activeWorkflowScope: WorkflowScope = workflowScopeTab === "templates" ? "personal" : workflowScopeTab
 
-    // Default admins to org workflows when no explicit scope is set.
-    // This avoids "personal" workflows unexpectedly failing for queue-owned cases.
-    useEffect(() => {
-        if (hasInitialScopeParam) return
-        if (!canManageAutomation) return
-        if (workflowScopeTabTouchedRef.current) return
-        if (workflowScopeTab !== "personal") return
-        startTransition(() => {
-            setWorkflowScopeTab("org")
-        })
-    }, [canManageAutomation, hasInitialScopeParam, workflowScopeTab])
-
     const workflowSetupSessionIdRef = useRef<string | null>(null)
 
     // API hooks
@@ -852,10 +899,6 @@ export default function AutomationPageClient({
     const duplicateWorkflow = useDuplicateWorkflow()
     const deleteWorkflow = useDeleteWorkflow()
     const testWorkflowMutation = useTestWorkflow()
-
-    useEffect(() => {
-        dispatchWorkflowBuilder({ type: "clearServerErrors" })
-    }, [workflowName, workflowDescription, triggerType, triggerConfig, conditions, actions])
 
     // Email template hooks
     const createTemplate = useCreateEmailTemplate()
@@ -1011,69 +1054,27 @@ export default function AutomationPageClient({
     // Fetch full workflow when editing
     const { data: editingWorkflow } = useWorkflow(editingWorkflowId || "")
 
-    useEffect(() => {
-        if (!editingWorkflow || !editingWorkflowId || !showCreateModal) return
-        if (hydratedWorkflowId === editingWorkflowId) return
+    if (
+        editingWorkflow &&
+        editingWorkflowId &&
+        editingWorkflow.id === editingWorkflowId &&
+        showCreateModal &&
+        hydratedWorkflowId !== editingWorkflowId
+    ) {
         dispatchWorkflowBuilder({
             type: "hydrateWorkflow",
             workflow: editingWorkflow as WorkflowCreate & { scope: WorkflowScope },
             workflowId: editingWorkflowId,
             statusOptions,
         })
-    }, [editingWorkflow, editingWorkflowId, hydratedWorkflowId, showCreateModal, statusOptions])
+    }
 
-    useEffect(() => {
-        if (triggerType !== "status_changed" || statusOptions.length === 0) return
+    if (triggerType === "status_changed" && statusOptions.length > 0) {
         const normalized = normalizeTriggerConfigForUi(triggerType, triggerConfig, statusOptions)
-        if (areJsonObjectsEqual(normalized, triggerConfig)) return
-        setTriggerConfig(normalized)
-    }, [triggerConfig, triggerType, statusOptions])
-
-    useEffect(() => {
-        if (!triggerType) return
-        const next: JsonObject = { ...triggerConfig }
-        if (triggerType === "status_changed") {
-            if (typeof next.to_stage_id !== "string") next.to_stage_id = ""
-            if (typeof next.from_stage_id !== "string") delete next.from_stage_id
+        if (!areJsonObjectsEqual(normalized, triggerConfig)) {
+            dispatchWorkflowBuilder({ type: "normalizeTriggerConfig", value: normalized })
         }
-        if (triggerType === "scheduled") {
-            if (typeof next.cron !== "string") next.cron = ""
-            if (typeof next.timezone !== "string") next.timezone = "America/Los_Angeles"
-        }
-        if (triggerType === "inactivity") {
-            if (typeof next.days === "string") {
-                const parsed = Number(next.days)
-                next.days = Number.isFinite(parsed) ? parsed : 7
-            } else if (typeof next.days !== "number") {
-                next.days = 7
-            }
-        }
-        if (triggerType === "task_due") {
-            if (typeof next.hours_before === "string") {
-                const parsed = Number(next.hours_before)
-                next.hours_before = Number.isFinite(parsed) ? parsed : 24
-            } else if (typeof next.hours_before !== "number") {
-                next.hours_before = 24
-            }
-        }
-        if (triggerType === "form_started") {
-            if (typeof next.form_id !== "string") next.form_id = ""
-        }
-        if (triggerType === "form_submitted") {
-            if (typeof next.form_id !== "string") next.form_id = ""
-        }
-        if (triggerType === "intake_lead_created") {
-            if (typeof next.form_id !== "string") next.form_id = ""
-        }
-        if (triggerType === "surrogate_updated") {
-            if (!Array.isArray(next.fields)) next.fields = []
-        }
-        if (triggerType === "surrogate_assigned") {
-            if (typeof next.to_user_id !== "string") delete next.to_user_id
-        }
-        if (areJsonObjectsEqual(next, triggerConfig)) return
-        setTriggerConfig(next)
-    }, [triggerConfig, triggerType])
+    }
 
     const handleNextStep = () => {
         const error = getStepValidationError(wizardStep)
@@ -1311,8 +1312,10 @@ export default function AutomationPageClient({
                     <Tabs
                         value={workflowScopeTab}
                         onValueChange={(v) => {
-                            workflowScopeTabTouchedRef.current = true
-                            setWorkflowScopeTab(v as "personal" | "org" | "templates")
+                            setWorkflowScopeSelection({
+                                tab: v as "personal" | "org" | "templates",
+                                touched: true,
+                            })
                         }}
                         className="space-y-4"
                     >

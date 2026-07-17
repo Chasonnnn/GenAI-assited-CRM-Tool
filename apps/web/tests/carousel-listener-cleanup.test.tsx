@@ -38,43 +38,15 @@ describe("Carousel listener cleanup", () => {
         expect(carousel.tagName).toBe("SECTION")
     })
 
-    it("unregisters each Embla listener it registers", () => {
-        const { unmount } = render(
+    it("does not register Embla listeners when there is no state to synchronize", () => {
+        render(
             <Carousel>
                 <div>Slide</div>
             </Carousel>
         )
 
-        const reInitHandler = emblaMocks.api.on.mock.calls.find(([event]) => event === "reInit")?.[1]
-        const selectHandler = emblaMocks.api.on.mock.calls.find(([event]) => event === "select")?.[1]
-
-        expect(reInitHandler).toEqual(expect.any(Function))
-        expect(selectHandler).toEqual(expect.any(Function))
-
-        unmount()
-
-        expect(emblaMocks.api.off).toHaveBeenCalledWith("reInit", reInitHandler)
-        expect(emblaMocks.api.off).toHaveBeenCalledWith("select", selectHandler)
-    })
-
-    it("does not notify a new setApi callback for an unchanged API instance", () => {
-        const firstSetApi = vi.fn()
-        const secondSetApi = vi.fn()
-        const { rerender } = render(
-            <Carousel setApi={firstSetApi}>
-                <div>Slide</div>
-            </Carousel>
-        )
-
-        expect(firstSetApi).toHaveBeenCalledWith(emblaMocks.api)
-
-        rerender(
-            <Carousel setApi={secondSetApi}>
-                <div>Slide</div>
-            </Carousel>
-        )
-
-        expect(secondSetApi).not.toHaveBeenCalled()
+        expect(emblaMocks.api.on).not.toHaveBeenCalled()
+        expect(emblaMocks.api.off).not.toHaveBeenCalled()
     })
 
     it("keeps arrow key carousel navigation wired to Embla", () => {

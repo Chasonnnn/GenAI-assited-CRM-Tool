@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -39,6 +40,7 @@ import {
     type FormSubmissionSharedResponse,
     type FormSchema,
 } from "@/lib/api/forms"
+import { useHostedIntakeAutosave } from "@/lib/hooks/use-hosted-intake-autosave"
 
 type Step = {
     id: number
@@ -832,6 +834,7 @@ type HostedIntakeBootstrapResult =
     }
 
 type HostedIntakeState = {
+    bootstrapToken: string
     draftSession: DraftSessionState
     formConfig: FormIntakePublicRead | null
     answers: Answers
@@ -841,21 +844,24 @@ type HostedIntakeState = {
     draftRestored: boolean
     draftSaveState: DraftSaveState
     draftUpdatedAt: string | null
+    skipNextAutosave: boolean
 }
 
 type HostedIntakeAction =
-    | { type: "bootstrapStarted"; draftSession: DraftSessionState }
-    | { type: "bootstrapFinished"; result: HostedIntakeBootstrapResult }
+    | { type: "bootstrapReconciled"; state: HostedIntakeState }
     | { type: "setAnswers"; next: React.SetStateAction<Answers> }
     | { type: "setLogoError"; value: boolean }
     | { type: "setDraftRestored"; value: boolean }
     | { type: "setDraftUpdatedAt"; value: string | null }
     | { type: "setDraftSaveState"; value: DraftSaveState }
+    | { type: "setSkipNextAutosave"; value: boolean }
 
 function createInitialHostedIntakeState(
     draftSession: DraftSessionState = createEmptyDraftSessionState(""),
+    bootstrapToken = "",
 ): HostedIntakeState {
     return {
+        bootstrapToken,
         draftSession,
         formConfig: null,
         answers: {},
@@ -865,6 +871,7 @@ function createInitialHostedIntakeState(
         draftRestored: false,
         draftSaveState: "idle",
         draftUpdatedAt: null,
+        skipNextAutosave: false,
     }
 }
 
@@ -873,26 +880,8 @@ function hostedIntakeReducer(
     action: HostedIntakeAction,
 ): HostedIntakeState {
     switch (action.type) {
-        case "bootstrapStarted":
-            return createInitialHostedIntakeState(action.draftSession)
-        case "bootstrapFinished":
-            if (action.result.status === "invalid") {
-                return {
-                    ...createInitialHostedIntakeState(action.result.draftSession),
-                    isLoading: false,
-                    formError: INVALID_FORM_LINK_MESSAGE,
-                }
-            }
-            return {
-                ...createInitialHostedIntakeState(action.result.draftSession),
-                formConfig: action.result.form,
-                answers: action.result.answers,
-                isLoading: false,
-                logoError: false,
-                draftRestored: action.result.draftRestored,
-                draftUpdatedAt: action.result.draftUpdatedAt,
-                draftSaveState: action.result.draftSaveState,
-            }
+        case "bootstrapReconciled":
+            return action.state
         case "setAnswers": {
             const nextAnswers =
                 typeof action.next === "function"
@@ -908,8 +897,45 @@ function hostedIntakeReducer(
             return { ...state, draftUpdatedAt: action.value }
         case "setDraftSaveState":
             return { ...state, draftSaveState: action.value }
+        case "setSkipNextAutosave":
+            return { ...state, skipNextAutosave: action.value }
         default:
             return state
+    }
+}
+
+function reconcileHostedIntakeBootstrap(
+    state: HostedIntakeState,
+    token: string,
+    draftSession: DraftSessionState,
+    result: HostedIntakeBootstrapResult | undefined,
+): HostedIntakeState {
+    if (state.bootstrapToken === token && (!state.isLoading || !result)) {
+        return state
+    }
+
+    if (!result) {
+        return createInitialHostedIntakeState(draftSession, token)
+    }
+
+    if (result.status === "invalid") {
+        return {
+            ...createInitialHostedIntakeState(result.draftSession, token),
+            isLoading: false,
+            formError: INVALID_FORM_LINK_MESSAGE,
+        }
+    }
+
+    return {
+        ...createInitialHostedIntakeState(result.draftSession, token),
+        formConfig: result.form,
+        answers: result.answers,
+        isLoading: false,
+        logoError: false,
+        draftRestored: result.draftRestored,
+        draftUpdatedAt: result.draftUpdatedAt,
+        draftSaveState: result.draftSaveState,
+        skipNextAutosave: Object.keys(result.answers).length > 0,
     }
 }
 
@@ -990,90 +1016,38 @@ async function loadHostedIntakeBootstrap({
     }
 }
 
-// Main Form Component
-export default function PublicApplicationForm({ slug }: PublicApplicationFormProps) {
-    const token = slug
-    const isPreview = false
-
-    const [currentStep, setCurrentStep] = React.useState(1)
-    const [intakeState, dispatchIntakeState] = React.useReducer(hostedIntakeReducer, undefined, createInitialHostedIntakeState)
-    const [fileUploads, setFileUploads] = React.useState<FileUploads>({})
-    const [isSubmitting, setIsSubmitting] = React.useState(false)
-    const [isSubmitted, setIsSubmitted] = React.useState(false)
-    const [submissionOutcome, setSubmissionOutcome] = React.useState<FormSubmissionSharedResponse["outcome"] | null>(null)
-    const [datePickerOpen, setDatePickerOpen] = React.useState<Record<string, boolean>>({})
-    const [agreed, setAgreed] = React.useState(false)
-    const [resumePrompt, setResumePrompt] = React.useState<SharedResumePrompt | null>(null)
-    const [isRestoringResume, setIsRestoringResume] = React.useState(false)
-    const autosaveTimerRef = React.useRef<number | null>(null)
+function useHostedIntakeResumeLookup({
+    token,
+    formConfig,
+    answers,
+    draftSessionId,
+    enabled,
+    activeResumePromptFingerprint,
+    suppressedIdentityFingerprintsRef,
+    lookupCacheRef,
+    setResumePrompt,
+}: {
+    token: string
+    formConfig: FormIntakePublicRead | null
+    answers: Answers
+    draftSessionId: string | null
+    enabled: boolean
+    activeResumePromptFingerprint: string | undefined
+    suppressedIdentityFingerprintsRef: React.RefObject<Set<string> | null>
+    lookupCacheRef: React.RefObject<Map<string, "no_match" | "match_found"> | null>
+    setResumePrompt: React.Dispatch<React.SetStateAction<SharedResumePrompt | null>>
+}) {
     const resumeLookupTimerRef = React.useRef<number | null>(null)
-    const skipNextAutosaveRef = React.useRef(false)
-    const suppressedIdentityFingerprintsRef = React.useRef<Set<string> | null>(null)
-    const lookupCacheRef = React.useRef<Map<string, "no_match" | "match_found"> | null>(null)
     const lookupSeqRef = React.useRef(0)
 
-    const {
-        answers,
-        draftSession,
-        draftRestored,
-        draftSaveState,
-        draftUpdatedAt,
-        formConfig,
-        formError,
-        isLoading,
-        logoError,
-    } = intakeState
-    const draftSessionId = draftSession.slug === slug ? draftSession.id : null
-    const setAnswers: React.Dispatch<React.SetStateAction<Answers>> = (next) => {
-        dispatchIntakeState({ type: "setAnswers", next })
-    }
-    const setDraftRestored = (value: boolean) => {
-        dispatchIntakeState({ type: "setDraftRestored", value })
-    }
-    const setDraftSaveState = (value: DraftSaveState) => {
-        dispatchIntakeState({ type: "setDraftSaveState", value })
-    }
-    const setDraftUpdatedAt = (value: string | null) => {
-        dispatchIntakeState({ type: "setDraftUpdatedAt", value })
-    }
-    const setLogoError = (value: boolean) => {
-        dispatchIntakeState({ type: "setLogoError", value })
-    }
-
-    // Validate shared link on mount
     React.useEffect(() => {
-        let cancelled = false
-        const nextDraftSession = createDraftSessionState(token)
-        dispatchIntakeState({ type: "bootstrapStarted", draftSession: nextDraftSession })
-
-        void (async () => {
-            const result = await loadHostedIntakeBootstrap({
-                token,
-                draftSession: nextDraftSession,
-            })
-            if (cancelled) return
-            skipNextAutosaveRef.current =
-                result.status === "loaded" && Object.keys(result.answers).length > 0
-            dispatchIntakeState({ type: "bootstrapFinished", result })
-        })()
-
-        return () => {
-            cancelled = true
-        }
-    }, [token])
-
-    const resumeIdentity = formConfig ? resolveResumeIdentity(formConfig.form_schema, answers) : null
-    const activeResumePrompt =
-        resumeIdentity && resumePrompt?.fingerprint === resumeIdentity.fingerprint
-            ? resumePrompt
-            : null
-
-    React.useEffect(() => {
-        if (!token || !formConfig || !draftSessionId || isPreview || isSubmitted || isRestoringResume) return
+        if (!enabled || !formConfig || !draftSessionId) return
 
         const identity = resolveResumeIdentity(formConfig.form_schema, answers)
         if (!identity) return
-        const suppressedIdentityFingerprints = getSuppressedIdentityFingerprints(suppressedIdentityFingerprintsRef)
+        const suppressedIdentityFingerprints = getSuppressedIdentityFingerprints(
+            suppressedIdentityFingerprintsRef
+        )
         const lookupCache = getLookupCache(lookupCacheRef)
         const { fingerprint, lookupAnswers } = identity
         if (suppressedIdentityFingerprints.has(fingerprint)) {
@@ -1084,7 +1058,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         if (cached === "no_match") {
             return
         }
-        if (cached === "match_found" && activeResumePrompt?.fingerprint === fingerprint) {
+        if (cached === "match_found" && activeResumePromptFingerprint === fingerprint) {
             return
         }
 
@@ -1135,15 +1109,106 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             }
         }
     }, [
+        activeResumePromptFingerprint,
         answers,
-        activeResumePrompt?.fingerprint,
         draftSessionId,
+        enabled,
         formConfig,
-        isPreview,
-        isRestoringResume,
-        isSubmitted,
+        lookupCacheRef,
+        setResumePrompt,
+        suppressedIdentityFingerprintsRef,
         token,
     ])
+}
+
+// Main Form Component
+export default function PublicApplicationForm({ slug }: PublicApplicationFormProps) {
+    const token = slug
+    const isPreview = false
+
+    const [currentStep, setCurrentStep] = React.useState(1)
+    const [fileUploads, setFileUploads] = React.useState<FileUploads>({})
+    const [isSubmitting, setIsSubmitting] = React.useState(false)
+    const [isSubmitted, setIsSubmitted] = React.useState(false)
+    const [submissionOutcome, setSubmissionOutcome] = React.useState<FormSubmissionSharedResponse["outcome"] | null>(null)
+    const [datePickerOpen, setDatePickerOpen] = React.useState<Record<string, boolean>>({})
+    const [agreed, setAgreed] = React.useState(false)
+    const [resumePrompt, setResumePrompt] = React.useState<SharedResumePrompt | null>(null)
+    const [isRestoringResume, setIsRestoringResume] = React.useState(false)
+    const suppressedIdentityFingerprintsRef = React.useRef<Set<string> | null>(null)
+    const lookupCacheRef = React.useRef<Map<string, "no_match" | "match_found"> | null>(null)
+
+    const bootstrapDraftSession = createDraftSessionState(token)
+    const bootstrapQuery = useQuery({
+        queryKey: ["hosted-intake-bootstrap", token],
+        queryFn: () =>
+            loadHostedIntakeBootstrap({
+                token,
+                draftSession: bootstrapDraftSession,
+            }),
+        retry: false,
+    })
+    const [storedIntakeState, dispatchIntakeState] = React.useReducer(
+        hostedIntakeReducer,
+        undefined,
+        createInitialHostedIntakeState
+    )
+    const intakeState = reconcileHostedIntakeBootstrap(
+        storedIntakeState,
+        token,
+        bootstrapDraftSession,
+        bootstrapQuery.data
+    )
+    if (intakeState !== storedIntakeState) {
+        dispatchIntakeState({ type: "bootstrapReconciled", state: intakeState })
+    }
+
+    const {
+        answers,
+        draftSession,
+        draftRestored,
+        draftSaveState,
+        draftUpdatedAt,
+        formConfig,
+        formError,
+        isLoading,
+        logoError,
+        skipNextAutosave,
+    } = intakeState
+    const draftSessionId = draftSession.slug === slug ? draftSession.id : null
+    const setAnswers: React.Dispatch<React.SetStateAction<Answers>> = (next) => {
+        dispatchIntakeState({ type: "setAnswers", next })
+    }
+    const setDraftRestored = (value: boolean) => {
+        dispatchIntakeState({ type: "setDraftRestored", value })
+    }
+    const setDraftSaveState = (value: DraftSaveState) => {
+        dispatchIntakeState({ type: "setDraftSaveState", value })
+    }
+    const setDraftUpdatedAt = (value: string | null) => {
+        dispatchIntakeState({ type: "setDraftUpdatedAt", value })
+    }
+    const setLogoError = (value: boolean) => {
+        dispatchIntakeState({ type: "setLogoError", value })
+    }
+
+    const resumeIdentity = formConfig ? resolveResumeIdentity(formConfig.form_schema, answers) : null
+    const activeResumePrompt =
+        resumeIdentity && resumePrompt?.fingerprint === resumeIdentity.fingerprint
+            ? resumePrompt
+            : null
+
+    useHostedIntakeResumeLookup({
+        token,
+        formConfig,
+        answers,
+        draftSessionId,
+        enabled: Boolean(token && !isPreview && !isSubmitted && !isRestoringResume),
+        activeResumePromptFingerprint: activeResumePrompt?.fingerprint,
+        suppressedIdentityFingerprintsRef,
+        lookupCacheRef,
+        setResumePrompt,
+    })
 
     const handleContinuePreviousApplication = async () => {
         if (!activeResumePrompt || !draftSessionId || !formConfig) return
@@ -1156,7 +1221,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                 activeResumePrompt.sourceDraftId,
             )
             const nextAnswers = filterDraftAnswersForSchema(formConfig.form_schema, restored.answers)
-            skipNextAutosaveRef.current = true
+            dispatchIntakeState({ type: "setSkipNextAutosave", value: true })
             setAnswers(nextAnswers)
             persistDraftSessionForToken(token, draftSessionId)
             setDraftUpdatedAt(restored.updated_at)
@@ -1180,36 +1245,30 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         setResumePrompt(null)
     }
 
-    // Autosave drafts (answers only, not file uploads)
-    React.useEffect(() => {
-        if (!token || !formConfig || !draftSessionId) return
-        if (isSubmitted) return
-        if (!hasAnyDraftAnswer(answers)) return
-
-        if (skipNextAutosaveRef.current) {
-            skipNextAutosaveRef.current = false
-            return
-        }
-
-        if (autosaveTimerRef.current) {
-            window.clearTimeout(autosaveTimerRef.current)
-        }
-        autosaveTimerRef.current = window.setTimeout(() => {
-            void saveDraftSessionNow({
+    useHostedIntakeAutosave({
+        enabled: Boolean(
+            token &&
+            formConfig &&
+            draftSessionId &&
+            !isSubmitted &&
+            hasAnyDraftAnswer(answers)
+        ),
+        scopeKey: `${token}:${draftSessionId ?? ""}`,
+        trigger: answers,
+        skipNextSave: skipNextAutosave,
+        onSkipNextSave: () => {
+            dispatchIntakeState({ type: "setSkipNextAutosave", value: false })
+        },
+        onSave: () => {
+            if (!draftSessionId) return
+            return saveDraftSessionNow({
                 token,
                 draftSessionId,
                 answers,
                 dispatchIntakeState,
             })
-        }, 1500)
-
-        return () => {
-            if (autosaveTimerRef.current) {
-                window.clearTimeout(autosaveTimerRef.current)
-                autosaveTimerRef.current = null
-            }
-        }
-    }, [answers, draftSessionId, formConfig, isSubmitted, token])
+        },
+    })
 
     const pages = formConfig?.form_schema.pages || []
     const hasAnyFileFields = pages.some((page) => page.fields.some((field) => field.type === "file"))

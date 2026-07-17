@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useReducer, useState, type Dispatch, type SetStateAction } from "react"
+import { useReducer, useState, type Dispatch, type SetStateAction } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -171,6 +171,28 @@ const initialCampaignEditDraft: CampaignEditDraftState = {
     states: [],
     includeUnsubscribed: false,
     scheduledAt: "",
+}
+
+function createCampaignEditDraft(campaign: Campaign): CampaignEditDraftState {
+    const criteria = campaign.filter_criteria || {}
+    const stageIds = Array.isArray(criteria.stage_ids) ? criteria.stage_ids : []
+    const stageSlugs = Array.isArray(criteria.stage_slugs) ? criteria.stage_slugs : []
+    const states = Array.isArray(criteria.states) ? criteria.states : []
+    const recipientType =
+        campaign.recipient_type === "intended_parent" ? "intended_parent" : "case"
+
+    return {
+        name: campaign.name,
+        description: campaign.description ?? "",
+        templateId: campaign.email_template_id,
+        recipientType,
+        stages: recipientType === "intended_parent" ? stageSlugs : stageIds,
+        states,
+        includeUnsubscribed: !!campaign.include_unsubscribed,
+        scheduledAt: campaign.scheduled_at
+            ? toLocalDateTimeInput(new Date(campaign.scheduled_at))
+            : "",
+    }
 }
 
 function campaignEditDraftReducer(
@@ -1153,6 +1175,7 @@ export default function CampaignDetailPage() {
     const [recipientFilter, setRecipientFilter] = useState("all")
     const [showTemplatePreview, setShowTemplatePreview] = useState(true)
     const [showEditDialog, setShowEditDialog] = useState(false)
+    const [handledAutoEditRequest, setHandledAutoEditRequest] = useState<string | null>(null)
     const [editDraft, dispatchEditDraft] = useReducer(
         campaignEditDraftReducer,
         initialCampaignEditDraft,
@@ -1204,42 +1227,28 @@ export default function CampaignDetailPage() {
             : pipelineStages.filter(stage => stage.is_active)
     const canEdit = campaign?.status === "draft" || campaign?.status === "scheduled"
     const shouldAutoOpenEdit = searchParams.get("edit") === "1"
+    const autoEditRequestKey =
+        shouldAutoOpenEdit && canEdit && campaign
+            ? `${campaign.id}:${searchParams.toString()}`
+            : null
 
-    useEffect(() => {
-        if (shouldAutoOpenEdit && canEdit) {
-            startTransition(() => {
-                setShowEditDialog(true)
-            })
-        }
-    }, [shouldAutoOpenEdit, canEdit])
+    if (!autoEditRequestKey && handledAutoEditRequest !== null) {
+        setHandledAutoEditRequest(null)
+    } else if (
+        autoEditRequestKey &&
+        campaign &&
+        handledAutoEditRequest !== autoEditRequestKey
+    ) {
+        dispatchEditDraft({ type: "hydrate", draft: createCampaignEditDraft(campaign) })
+        setShowEditDialog(true)
+        setHandledAutoEditRequest(autoEditRequestKey)
+    }
 
-    useEffect(() => {
-        if (!campaign || !showEditDialog) return
-        const criteria = campaign.filter_criteria || {}
-        const stageIds = Array.isArray(criteria.stage_ids) ? criteria.stage_ids : []
-        const stageSlugs = Array.isArray(criteria.stage_slugs) ? criteria.stage_slugs : []
-        const states = Array.isArray(criteria.states) ? criteria.states : []
-        const recipientType =
-            campaign.recipient_type === "intended_parent" ? "intended_parent" : "case"
-
-        startTransition(() => {
-            dispatchEditDraft({
-                type: "hydrate",
-                draft: {
-                    name: campaign.name,
-                    description: campaign.description ?? "",
-                    templateId: campaign.email_template_id,
-                    recipientType,
-                    stages: recipientType === "intended_parent" ? stageSlugs : stageIds,
-                    states,
-                    includeUnsubscribed: !!campaign.include_unsubscribed,
-                    scheduledAt: campaign.scheduled_at
-                        ? toLocalDateTimeInput(new Date(campaign.scheduled_at))
-                        : "",
-                },
-            })
-        })
-    }, [campaign, showEditDialog])
+    const openEditDialog = () => {
+        if (!campaign) return
+        dispatchEditDraft({ type: "hydrate", draft: createCampaignEditDraft(campaign) })
+        setShowEditDialog(true)
+    }
 
     if (isLoading) {
         return (
@@ -1305,7 +1314,7 @@ export default function CampaignDetailPage() {
                 campaign={campaign}
                 canEdit={canEdit}
                 cancelPending={cancelCampaign.isPending}
-                onEdit={() => setShowEditDialog(true)}
+                onEdit={openEditDialog}
                 onSendNow={() => setShowSendDialog(true)}
                 onCancel={() => setShowCancelDialog(true)}
                 onDuplicate={handleDuplicate}
@@ -1372,7 +1381,13 @@ export default function CampaignDetailPage() {
                 minScheduleDate={minScheduleDate}
                 updatePending={updateCampaign.isPending}
                 dispatchEditDraft={dispatchEditDraft}
-                onOpenChange={setShowEditDialog}
+                onOpenChange={(open) => {
+                    if (open) {
+                        openEditDialog()
+                    } else {
+                        setShowEditDialog(false)
+                    }
+                }}
                 onSave={handleEditSave}
             />
 

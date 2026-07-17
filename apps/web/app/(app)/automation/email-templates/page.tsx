@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import NextImage from "next/image"
-import { useState, useRef, useEffect, useReducer } from "react"
+import { useState, useRef, useReducer } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -396,17 +396,9 @@ type SignatureDraftState = {
 type SignatureDraftField = keyof SignatureDraftState
 
 type SignatureDraftAction =
-    | { type: "hydrate"; draft: SignatureDraftState }
-    | { type: "changeField"; field: SignatureDraftField; value: string }
+    { type: "changeField"; field: SignatureDraftField; value: string }
 
-const initialSignatureDraftState: SignatureDraftState = {
-    name: "",
-    title: "",
-    phone: "",
-    linkedin: "",
-    twitter: "",
-    instagram: "",
-}
+type SignatureDraftOverrides = Partial<SignatureDraftState>
 
 function createSignatureDraftState(
     signatureData: {
@@ -429,12 +421,10 @@ function createSignatureDraftState(
 }
 
 function signatureDraftReducer(
-    state: SignatureDraftState,
+    state: SignatureDraftOverrides,
     action: SignatureDraftAction,
-): SignatureDraftState {
+): SignatureDraftOverrides {
     switch (action.type) {
-        case "hydrate":
-            return action.draft
         case "changeField":
             return { ...state, [action.field]: action.value }
         default:
@@ -455,7 +445,6 @@ type TestSendDialogAction =
     | { type: "close" }
     | { type: "changeToEmail"; value: string }
     | { type: "changeIgnoreOptOut"; value: boolean }
-    | { type: "initializeVariables"; variables: Record<string, string> }
     | { type: "changeVariable"; name: string; value: string }
 
 const initialTestSendDialogState: TestSendDialogState = {
@@ -485,9 +474,6 @@ function testSendDialogReducer(
             return { ...state, toEmail: action.value }
         case "changeIgnoreOptOut":
             return { ...state, ignoreOptOut: action.value }
-        case "initializeVariables":
-            if (Object.keys(state.variables).length > 0) return state
-            return { ...state, variables: action.variables }
         case "changeVariable":
             return {
                 ...state,
@@ -917,7 +903,6 @@ export default function EmailTemplatesPage() {
         initialEmailTemplateEditorState,
     )
     const [showPreview, setShowPreview] = useState(false)
-    const [previewHtml, setPreviewHtml] = useState("")
     const [signaturePreviewMode, setSignaturePreviewMode] = useState<"personal" | "org">("personal")
 
     const subjectRef = useRef<HTMLInputElement | null>(null)
@@ -939,7 +924,6 @@ export default function EmailTemplatesPage() {
         testSendDialogReducer,
         initialTestSendDialogState,
     )
-    const testSendTouchedRef = useRef<Record<string, boolean>>({})
 
     // Platform library copy/preview state
     const [libraryCopyOpen, setLibraryCopyOpen] = useState(false)
@@ -947,9 +931,9 @@ export default function EmailTemplatesPage() {
     const [libraryCopyName, setLibraryCopyName] = useState("")
     const [libraryPreviewId, setLibraryPreviewId] = useState<string | null>(null)
 
-    const [signatureDraft, dispatchSignatureDraft] = useReducer(
+    const [signatureDraftOverrides, dispatchSignatureDraft] = useReducer(
         signatureDraftReducer,
-        initialSignatureDraftState,
+        {},
     )
 
     const { data: templateVariables = [], isLoading: templateVariablesLoading } = useEmailTemplateVariables()
@@ -981,6 +965,10 @@ export default function EmailTemplatesPage() {
     const deletePhotoMutation = useDeleteSignaturePhoto()
     const { data: personalSignaturePreview } = useSignaturePreview()
     const { data: orgSignaturePreview } = useOrgSignaturePreview({ enabled: true, mode: "org_only" })
+    const signatureDraft = {
+        ...createSignatureDraftState(signatureData),
+        ...signatureDraftOverrides,
+    }
 
     const hasChanges = Boolean(
             signatureData &&
@@ -1023,36 +1011,19 @@ export default function EmailTemplatesPage() {
         : []
     const testSendHasUnsubscribeUrl = testSendUsedVariables.includes("unsubscribe_url")
     const testSendEditableVariables = testSendUsedVariables.filter((name) => name !== "unsubscribe_url")
-
-    useEffect(() => {
-        if (!testSendState.isOpen) return
-        if (!testSendTemplateDetail) return
-        const editableVariables = extractTemplateVariables(`${testSendTemplateDetail.subject}\n${testSendTemplateDetail.body}`)
-            .slice()
-            .sort((a, b) => a.localeCompare(b))
-            .filter((name) => name !== "unsubscribe_url")
-        if (editableVariables.length === 0) return
-
-        React.startTransition(() => {
-            const toEmail = testSendState.toEmail.trim() || user?.email || ""
-            const variables: Record<string, string> = {}
-            for (const variableName of editableVariables) {
-                variables[variableName] = buildTestVariableSample(variableName, {
-                    toEmail,
-                    ownerName: user?.display_name,
-                    orgName: user?.org_name,
-                })
-            }
-            dispatchTestSend({ type: "initializeVariables", variables })
+    const testSendDefaultVariables: Record<string, string> = {}
+    const testSendRecipient = testSendState.toEmail.trim() || user?.email || ""
+    for (const variableName of testSendEditableVariables) {
+        testSendDefaultVariables[variableName] = buildTestVariableSample(variableName, {
+            toEmail: testSendRecipient,
+            ownerName: user?.display_name,
+            orgName: user?.org_name,
         })
-    }, [
-        testSendState.isOpen,
-        testSendState.toEmail,
-        testSendTemplateDetail,
-        user?.display_name,
-        user?.email,
-        user?.org_name,
-    ])
+    }
+    const testSendVariables = {
+        ...testSendDefaultVariables,
+        ...testSendState.variables,
+    }
 
     const canValidateVariables = !templateVariablesLoading && templateVariables.length > 0
     const allowedVariableNames = new Set(templateVariables.map((variable) => variable.name))
@@ -1070,18 +1041,6 @@ export default function EmailTemplatesPage() {
     const missingRequiredVariables = canValidateVariables
         ? requiredVariableNames.filter((variable) => !usedVariableNamesSet.has(variable))
         : []
-
-    // Load signature data on mount
-    useEffect(() => {
-        if (signatureData) {
-            React.startTransition(() => {
-                dispatchSignatureDraft({
-                    type: "hydrate",
-                    draft: createSignatureDraftState(signatureData),
-                })
-            })
-        }
-    }, [signatureData])
 
     const handleOpenModal = (template?: EmailTemplateListItem, scope: EmailTemplateScope = "personal") => {
         activeInsertionTargetRef.current = null
@@ -1139,13 +1098,11 @@ export default function EmailTemplatesPage() {
     }
 
     const handleOpenTestDialog = (template: EmailTemplateListItem) => {
-        testSendTouchedRef.current = {}
         dispatchTestSend({ type: "open", target: template, toEmail: user?.email || "" })
     }
 
     const handleCloseTestDialog = () => {
         dispatchTestSend({ type: "close" })
-        testSendTouchedRef.current = {}
     }
 
     const handleSendTest = async () => {
@@ -1158,7 +1115,6 @@ export default function EmailTemplatesPage() {
 
         const overrides: Record<string, string> = {}
         for (const [key, value] of Object.entries(testSendState.variables)) {
-            if (!testSendTouchedRef.current[key]) continue
             const trimmed = value.trim()
             if (!trimmed) continue
             overrides[key] = trimmed
@@ -1235,38 +1191,19 @@ export default function EmailTemplatesPage() {
     const previewSubject = previewSubjectTemplate
         .replace(/\{\{full_name\}\}/g, "John Smith")
         .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy")
-    useEffect(() => {
-        if (!showPreview) return
-
-        const rawHtml = libraryPreviewId ? libraryTemplateDetail?.body : templateBody
-        if (libraryPreviewId && !rawHtml) return
-
-        React.startTransition(() => {
-            setPreviewHtml(buildPreviewHtml(rawHtml || "", {
+    const previewHtml = showPreview
+        ? buildPreviewHtml(
+            libraryPreviewId ? libraryTemplateDetail?.body ?? "" : templateBody,
+            {
                 orgSignatureCompanyName: signatureData?.org_signature_company_name,
                 previewScope,
                 personalSignatureHtml: personalSignaturePreview?.html,
                 orgSignatureHtml: orgSignaturePreview?.html,
-            }))
-        })
-    }, [
-        libraryPreviewId,
-        libraryTemplateDetail?.body,
-        orgSignaturePreview?.html,
-        personalSignaturePreview?.html,
-        previewScope,
-        showPreview,
-        signatureData?.org_signature_company_name,
-        templateBody,
-    ])
+            }
+        )
+        : ""
 
     const handlePreview = () => {
-        setPreviewHtml(buildPreviewHtml(templateBody, {
-            orgSignatureCompanyName: signatureData?.org_signature_company_name,
-            previewScope,
-            personalSignatureHtml: personalSignaturePreview?.html,
-            orgSignatureHtml: orgSignaturePreview?.html,
-        }))
         setShowPreview(true)
     }
 
@@ -2451,14 +2388,13 @@ export default function EmailTemplatesPage() {
                                                             </Label>
                                                             <Input
                                                                 id={`test-var-${variableName}`}
-                                                                value={testSendState.variables[variableName] ?? ""}
+                                                                value={testSendVariables[variableName] ?? ""}
                                                                 onChange={(e) => {
                                                                     dispatchTestSend({
                                                                         type: "changeVariable",
                                                                         name: variableName,
                                                                         value: e.target.value,
                                                                     })
-                                                                    testSendTouchedRef.current[variableName] = true
                                                                 }}
                                                             />
                                                         </div>

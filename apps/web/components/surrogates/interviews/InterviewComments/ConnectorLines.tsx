@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { useInterviewComments } from "./context"
 import { getMinSidebarHeight } from "./comment-layout"
+import { useObservedScrollHeight } from "@/lib/hooks/use-observed-scroll-height"
 
 export function ConnectorLines() {
     const {
@@ -12,27 +12,11 @@ export function ConnectorLines() {
         newComment,
         transcriptRef,
     } = useInterviewComments()
-    const [transcriptHeight, setTranscriptHeight] = useState(0)
-
-    useEffect(() => {
-        const transcript = transcriptRef.current
-        if (!transcript) return
-
-        const updateTranscriptHeight = () => {
-            setTranscriptHeight(transcript.scrollHeight)
-        }
-
-        updateTranscriptHeight()
-        const resizeObserver = new ResizeObserver(updateTranscriptHeight)
-        resizeObserver.observe(transcript)
-
-        return () => {
-            resizeObserver.disconnect()
-        }
-    }, [transcriptRef])
+    const connectorVisible = Boolean(activeNoteId || newComment.type === "pending")
+    const transcriptHeight = useObservedScrollHeight(transcriptRef, connectorVisible)
 
     // Only render when there's an active note or pending comment
-    if (!activeNoteId && newComment.type !== "pending") {
+    if (!connectorVisible) {
         return null
     }
 

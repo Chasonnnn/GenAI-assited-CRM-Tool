@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useState } from "react"
+import { useState } from "react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -1559,19 +1559,7 @@ function StageEditor({
     onRequestDeleteStage: (stageKey: string) => void
 }) {
     const [dragIndex, setDragIndex] = useState<number | null>(null)
-    const [expandedStageIds, setExpandedStageIds] = useState<Record<string, boolean>>({})
-
-    useEffect(() => {
-        startTransition(() => {
-            setExpandedStageIds((current) => {
-                const next: Record<string, boolean> = {}
-                for (const stage of stages) {
-                    next[stage.id] = current[stage.id] ?? false
-                }
-                return next
-            })
-        })
-    }, [stages])
+    const [expandedStageKeys, setExpandedStageKeys] = useState<Record<string, boolean>>({})
 
     const updateStage = (index: number, updater: (stage: EditableStage) => EditableStage) => {
         const next = [...stages]
@@ -1601,10 +1589,10 @@ function StageEditor({
         setDragIndex(null)
     }
 
-    const toggleStageDetails = (stageId: string) => {
-        setExpandedStageIds((current) => ({
+    const toggleStageDetails = (stageKey: string) => {
+        setExpandedStageKeys((current) => ({
             ...current,
-            [stageId]: !current[stageId],
+            [stageKey]: !current[stageKey],
         }))
     }
 
@@ -1612,7 +1600,7 @@ function StageEditor({
         <div className="space-y-4">
             {stages.map((stage, index) => {
                 const dependency = getDependencyByStageKey(dependencyGraph, stage.stage_key)
-                const isExpanded = expandedStageIds[stage.id] ?? false
+                const isExpanded = expandedStageKeys[stage.stage_key] ?? false
                 return (
                     <StageCard
                         key={stage.id}
@@ -1623,7 +1611,7 @@ function StageEditor({
                         isExpanded={isExpanded}
                         isDragging={dragIndex === index}
                         onStageChange={(updater) => updateStage(index, updater)}
-                        onToggleDetails={() => toggleStageDetails(stage.id)}
+                        onToggleDetails={() => toggleStageDetails(stage.stage_key)}
                         onDuplicateStage={() => onDuplicateStage(stage.stage_key)}
                         onRequestDeleteStage={() => onRequestDeleteStage(stage.stage_key)}
                         onDragStart={() => handleDragStart(index)}
@@ -1655,18 +1643,6 @@ function JourneyMilestonesEditor({
     onChange: (featureConfig: PipelineFeatureConfig) => void
 }) {
     const [expandedMilestones, setExpandedMilestones] = useState<Record<string, boolean>>({})
-
-    useEffect(() => {
-        startTransition(() => {
-            setExpandedMilestones((current) => {
-                const next: Record<string, boolean> = {}
-                for (const milestone of featureConfig.journey.milestones) {
-                    next[milestone.slug] = current[milestone.slug] ?? false
-                }
-                return next
-            })
-        })
-    }, [featureConfig.journey.milestones])
 
     const stageOptions = stages.map((stage) => ({
         stageKey: stage.stage_key,

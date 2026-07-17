@@ -1,8 +1,11 @@
 import React from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
 import EmbedFormPageClient from "../app/embed/forms/[slug]/page.client"
+
+vi.unmock("@tanstack/react-query")
 
 const {
     createEmbedFormSession,
@@ -77,6 +80,24 @@ async function waitForEmbedMessageListener() {
     })
 }
 
+function renderEmbedForm(props: React.ComponentProps<typeof EmbedFormPageClient>) {
+    const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+    })
+    const renderPage = (pageProps: React.ComponentProps<typeof EmbedFormPageClient>) => (
+        <QueryClientProvider client={queryClient}>
+            <EmbedFormPageClient {...pageProps} />
+        </QueryClientProvider>
+    )
+    const view = render(renderPage(props))
+    return {
+        ...view,
+        rerenderEmbedForm: (nextProps: React.ComponentProps<typeof EmbedFormPageClient>) => {
+            view.rerender(renderPage(nextProps))
+        },
+    }
+}
+
 describe("EmbedFormPageClient", () => {
     beforeEach(() => {
         addEventListenerSpy?.mockRestore()
@@ -103,7 +124,7 @@ describe("EmbedFormPageClient", () => {
     })
 
     it("loads via parent origin, creates a sanitized embed session, and submits lead answers", async () => {
-        render(<EmbedFormPageClient slug="lead-form" initialParentOrigin="https://www.ewisurrogacy.com" />)
+        renderEmbedForm({ slug: "lead-form", initialParentOrigin: "https://www.ewisurrogacy.com" })
 
         await waitFor(() => {
             expect(getEmbedPublicForm).toHaveBeenCalled()
@@ -162,6 +183,51 @@ describe("EmbedFormPageClient", () => {
         expect(await screen.findByRole("heading", { name: "Request received" })).toBeInTheDocument()
     })
 
+    it("keeps the newest form when an older slug request finishes last", async () => {
+        let resolveFirst: (value: typeof embedForm) => void = () => undefined
+        let resolveSecond: (value: typeof embedForm) => void = () => undefined
+        const firstRequest = new Promise<typeof embedForm>((resolve) => {
+            resolveFirst = resolve
+        })
+        const secondRequest = new Promise<typeof embedForm>((resolve) => {
+            resolveSecond = resolve
+        })
+        getEmbedPublicForm.mockImplementation((slug: string) =>
+            slug === "first-form" ? firstRequest : secondRequest
+        )
+
+        const view = renderEmbedForm({
+            slug: "first-form",
+            initialParentOrigin: "https://www.ewisurrogacy.com",
+        })
+        await waitFor(() => expect(getEmbedPublicForm).toHaveBeenCalledTimes(1))
+
+        view.rerenderEmbedForm({
+            slug: "second-form",
+            initialParentOrigin: "https://www.ewisurrogacy.com",
+        })
+        await waitFor(() => expect(getEmbedPublicForm).toHaveBeenCalledTimes(2))
+
+        await act(async () => {
+            resolveSecond({
+                ...embedForm,
+                form_id: "form-2",
+                form_schema: { ...embedForm.form_schema, public_title: "Second Form" },
+            })
+        })
+        expect(await screen.findByRole("heading", { name: "Second Form" })).toBeInTheDocument()
+
+        await act(async () => {
+            resolveFirst({
+                ...embedForm,
+                form_schema: { ...embedForm.form_schema, public_title: "Older Form" },
+            })
+        })
+
+        expect(screen.getByRole("heading", { name: "Second Form" })).toBeInTheDocument()
+        expect(screen.queryByRole("heading", { name: "Older Form" })).not.toBeInTheDocument()
+    })
+
     it("blocks invalid public contact values before submitting the embedded form", async () => {
         getEmbedPublicForm.mockResolvedValueOnce({
             ...embedForm,
@@ -205,7 +271,7 @@ describe("EmbedFormPageClient", () => {
             },
         })
 
-        render(<EmbedFormPageClient slug="lead-form" initialParentOrigin="https://www.ewisurrogacy.com" />)
+        renderEmbedForm({ slug: "lead-form", initialParentOrigin: "https://www.ewisurrogacy.com" })
 
         expect(await screen.findByRole("heading", { name: "Become a Surrogate" })).toBeInTheDocument()
         await waitForEmbedMessageListener()
@@ -263,7 +329,7 @@ describe("EmbedFormPageClient", () => {
             },
         })
 
-        render(<EmbedFormPageClient slug="lead-form" initialParentOrigin="https://www.ewisurrogacy.com" />)
+        renderEmbedForm({ slug: "lead-form", initialParentOrigin: "https://www.ewisurrogacy.com" })
 
         expect(await screen.findByRole("heading", { name: "Become a Surrogate" })).toBeInTheDocument()
         await waitForEmbedMessageListener()
@@ -299,7 +365,7 @@ describe("EmbedFormPageClient", () => {
         })
 
         try {
-            render(<EmbedFormPageClient slug="lead-form" initialParentOrigin="https://www.ewisurrogacy.com" />)
+            renderEmbedForm({ slug: "lead-form", initialParentOrigin: "https://www.ewisurrogacy.com" })
 
             expect(await screen.findByRole("heading", { name: "Become a Surrogate" })).toBeInTheDocument()
             await waitForEmbedMessageListener()
@@ -356,7 +422,7 @@ describe("EmbedFormPageClient", () => {
     })
 
     it("does not create duplicate embed sessions when the parent sends init more than once", async () => {
-        render(<EmbedFormPageClient slug="lead-form" initialParentOrigin="https://www.ewisurrogacy.com" />)
+        renderEmbedForm({ slug: "lead-form", initialParentOrigin: "https://www.ewisurrogacy.com" })
 
         expect(await screen.findByRole("heading", { name: "Become a Surrogate" })).toBeInTheDocument()
         await waitForEmbedMessageListener()

@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import type { Route } from "next"
 import { Bell, BellOff } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -28,6 +27,7 @@ import {
 } from "@/lib/hooks/use-notifications"
 import { useNotificationSocket } from "@/lib/hooks/use-notification-socket"
 import { useBrowserNotifications } from "@/lib/hooks/use-browser-notifications"
+import { useBrowserNotificationDelivery } from "@/lib/hooks/use-browser-notification-delivery"
 import type { Notification } from "@/lib/api/notifications"
 import { getNotificationHref } from "@/lib/utils/notification-routing"
 
@@ -47,29 +47,11 @@ export function NotificationBell() {
 
     // Browser notifications
     const { permission, showNotification } = useBrowserNotifications()
-    const lastNotificationIdRef = React.useRef<string | null>(null)
-
-    // Show browser notification when new message arrives (only if tab not focused)
-    React.useEffect(() => {
-        if (
-            lastNotification &&
-            lastNotification.id &&
-            lastNotification.id !== lastNotificationIdRef.current &&
-            permission === 'granted' &&
-            typeof document !== 'undefined' &&
-            document.hidden // Only show if tab is not focused
-        ) {
-            lastNotificationIdRef.current = lastNotification.id
-            const notificationOptions = {
-                tag: lastNotification.id,
-                ...(lastNotification.body ? { body: lastNotification.body } : {}),
-                ...(lastNotification.entity_type ? { entityType: lastNotification.entity_type } : {}),
-                ...(lastNotification.entity_id ? { entityId: lastNotification.entity_id } : {}),
-                ...(lastNotification.type ? { notificationType: lastNotification.type } : {}),
-            }
-            showNotification(lastNotification.title || 'New notification', notificationOptions)
-        }
-    }, [lastNotification, permission, showNotification])
+    useBrowserNotificationDelivery({
+        latest: lastNotification,
+        permission,
+        showNotification,
+    })
 
     // Prefer WebSocket count when connected, fall back to polling
     const unreadCount = isConnected && wsUnreadCount !== null ? wsUnreadCount : (countData?.count ?? 0)
