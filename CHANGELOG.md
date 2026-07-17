@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.47](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.46...surrogacy-crm-platform-v0.91.47) (2026-07-17)
+
+
+### Features
+
+* Clarify pregnancy tracker timing states ([bbfb3fa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bbfb3fa5e70944a9dfb2d2c5d0b780b3c9d82a92))
+* Clarify pregnancy tracker timing states ([99a1a2b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/99a1a2be1067ff13a17bd296d7eef67dc12ec23f))
+
+
+### Bug Fixes
+
+* attach transcript viewer listeners when ready ([3f7d063](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3f7d0634a5bc2dd3ad8945c2fcb0202286371927))
+* clear automation errors on every edit ([e290275](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e290275c7746b48b321c14c023a3ffe099cb17ad))
+* clear incompatible AI context across task routes ([d7ffe0b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d7ffe0b66ccc7a7e84ed102eda9a59ba7a4d2011))
+* clear stale transcript editor content ([82323a0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/82323a06b72a1da28f39b2e6a1dad3caf6e1655f))
+* clear task selection on scope changes ([b47977a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b47977ab49370d5d5da2d853132200c327f25bbf))
+* handle malformed appointment links safely ([c39ad13](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c39ad13668154285d5670bc71a8056911641df31))
+* Harden Google Calendar discovery ([4867c4c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4867c4cc4c5a0119309b46622436930abf9f7b6f))
+* Harden request and Calendar teardown paths ([cc22305](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cc22305a2e5d0d6a99db5330887fa2410c7acc1b))
+* hydrate the selected automation workflow ([f80a39c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f80a39c20921bbf2e2d6de626694c0f01ce84c2d))
+* keep embed origin hydration stable ([6bd9b5f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6bd9b5f1ea66bd683fb5b996bc1c0b821071d66e))
+* Make Calendar reconciliation authoritative ([0b77a87](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0b77a87812415d7fe8e0b2acfddadd3bfc260a55))
+* Make org scope teardown single-owner ([e691b21](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e691b219c2d921b1ce6af8db26f4e19083570c08))
+* preserve AI history during auth loading ([0291ec4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0291ec48eef639aa5b1e6d83dcd67897129764ca))
+* preserve automation errors during normalization ([ec2b562](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ec2b562f250c94172aeb9bec6dd626212b203336))
+* preserve stopped AI responses ([b2823b6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b2823b671fa33ba111d55fb8a14746b23fc07c68))
+* preserve task context on tasks routes ([6c37099](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6c37099d9d7d55c0a8d874a73595e3afb90f2281))
+* Require complete Calendar snapshots ([d14bbce](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d14bbce708196f362c98ab653098d3bfc8120fe3))
+* reset workflow trigger configuration ([1ce9592](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1ce9592a67c5e4df838dca392e19dcf217e6e2af))
+* Retry incomplete Calendar sync jobs ([240b377](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/240b377fe897c4acce5b5989fe88831ab23ca3fb))
+* scope form builder drafts to route identity ([fa526c1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fa526c150a04e758e5001673e5ed9c0533e95b98))
+* scope template builder drafts to route identity ([690701d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/690701da34c7446a3373e40812ad0ffc571716bb))
+* stabilize AI context registration ([00950b6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/00950b669431f7fc2477d9109facddd6742054f1))
+
 ## [0.91.46](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.45...surrogacy-crm-platform-v0.91.46) (2026-07-14)
 
 
