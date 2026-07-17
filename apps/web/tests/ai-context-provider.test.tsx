@@ -196,6 +196,47 @@ describe("AIContextProvider", () => {
         expect(screen.getByLabelText("entity name")).toHaveTextContent("Follow up with surrogate")
     })
 
+    it("clears a non-task entity context when navigation enters the tasks page", async () => {
+        const { rerender } = renderAIContextProbe()
+
+        fireEvent.click(screen.getByRole("button", { name: "Set context" }))
+        expect(screen.getByLabelText("entity type")).toHaveTextContent("surrogate")
+
+        mockPathname = "/tasks"
+        rerender(
+            <AIContextProvider>
+                <AIContextProbe />
+            </AIContextProvider>
+        )
+
+        await waitFor(() => {
+            expect(screen.getByLabelText("entity type")).toHaveTextContent("none")
+            expect(screen.getByLabelText("entity id")).toHaveTextContent("none")
+            expect(screen.getByLabelText("entity name")).toHaveTextContent("none")
+        })
+    })
+
+    it("clears task context when navigation leaves the tasks page", async () => {
+        mockPathname = "/tasks"
+        const { rerender } = renderAIContextProbe()
+
+        fireEvent.click(screen.getByRole("button", { name: "Set task context" }))
+        expect(screen.getByLabelText("entity type")).toHaveTextContent("task")
+
+        mockPathname = "/surrogates/surrogate-1"
+        rerender(
+            <AIContextProvider>
+                <AIContextProbe />
+            </AIContextProvider>
+        )
+
+        await waitFor(() => {
+            expect(screen.getByLabelText("entity type")).toHaveTextContent("none")
+            expect(screen.getByLabelText("entity id")).toHaveTextContent("none")
+            expect(screen.getByLabelText("entity name")).toHaveTextContent("none")
+        })
+    })
+
     it("toggles the assistant panel with the keyboard shortcut when AI is available", () => {
         renderAIContextProbe()
 

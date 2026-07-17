@@ -62,10 +62,18 @@ function isEntityPathname(pathname: string) {
     return (
         pathname.includes("/surrogates/") ||
         pathname.includes("/intended-parents/") ||
-        pathname.includes("/matches/") ||
-        pathname === "/tasks" ||
-        pathname.startsWith("/tasks/")
+        pathname.includes("/matches/")
     )
+}
+
+function shouldRetainEntityContext(
+    pathname: string,
+    entityType: EntityContextState["entityType"],
+) {
+    const isTasksPath = pathname === "/tasks" || pathname.startsWith("/tasks/")
+    if (isTasksPath) return entityType === "task"
+    if (entityType === "task") return false
+    return isEntityPathname(pathname)
 }
 
 function aiEntityContextReducer(
@@ -91,7 +99,7 @@ function aiEntityContextReducer(
             return state.entityId ? createEmptyEntityContext(state.pathname) : state
         case "sync-pathname":
             if (state.pathname === action.pathname) return state
-            return state.entityId && !isEntityPathname(action.pathname)
+            return state.entityId && !shouldRetainEntityContext(action.pathname, state.entityType)
                 ? createEmptyEntityContext(action.pathname)
                 : { ...state, pathname: action.pathname }
     }
