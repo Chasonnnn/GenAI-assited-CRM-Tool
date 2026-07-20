@@ -64,7 +64,7 @@ export function DesktopLayout({ className }: DesktopLayoutProps) {
                             <Badge variant="secondary" className="text-xs px-1.5 py-0">{generalNotes.length}</Badge>
                         )}
                     </div>
-                    <ChevronDownIcon className="size-4 text-muted-foreground transition-transform [[data-state=open]>&]:rotate-180" />
+                    <ChevronDownIcon className="size-4 text-muted-foreground transition-transform [[data-state=open]>&]:rotate-180" aria-hidden="true" />
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                     <div className="max-h-48 overflow-auto bg-muted/20">

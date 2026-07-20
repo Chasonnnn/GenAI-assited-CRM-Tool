@@ -1,0 +1,3 @@
+## 2024-07-20 - Ensure decorative icons in `CollapsibleTrigger` are hidden from screen readers
+**Learning:** Decorative icons (like chevrons) used within interactive elements that contain visual text must include `aria-hidden="true"`. Furthermore, Radix UI's `CollapsibleTrigger` natively manages the `aria-expanded` state, but custom implementations may override this and must ensure the attribute is propagated or explicitly declared (e.g. `aria-expanded={isOpen}`) so screen readers announce the state correctly.
+**Action:** When implementing custom `Collapsible` components, ensure `aria-expanded` is bound correctly on the trigger, and explicitly hide decorative icons via `aria-hidden="true"`.
