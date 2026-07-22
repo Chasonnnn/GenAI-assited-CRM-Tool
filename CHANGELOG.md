@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.48](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.47...surrogacy-crm-platform-v0.91.48) (2026-07-22)
+
+
+### Bug Fixes
+
+* Exempt support session revocation from rate limits ([6b5c11a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6b5c11a44f3b8d62652f4436524057b421f4db4f))
+* Exempt support session revocation from rate limits ([6d893d1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6d893d164081b3bd62c28e4e0d077f8831dc2c8f))
+* Hide duplicate dates in range picker ([a1ad532](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a1ad532cab1cbd88366e4fa9901cf16fbbd1dd86))
+* Hide duplicate dates in range picker ([eaa55d0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/eaa55d0ab805ac2cbae078bde7c81307bae68b21))
+* Upgrade DOMPurify to 3.4.12 ([73b203d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/73b203db603b284724e70a9b996a60cd5010dde8))
+* Upgrade pyasn1 to 0.6.4 ([912fe24](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/912fe24c6fb1930394e11991b85a4b9ec6a3097e))
+* Upgrade vulnerable frontend dependencies ([439af7f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/439af7f07a84e5c9413dbfd7843ae1ad88f83fc3))
+
 ## [0.91.47](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.46...surrogacy-crm-platform-v0.91.47) (2026-07-17)
 
 
