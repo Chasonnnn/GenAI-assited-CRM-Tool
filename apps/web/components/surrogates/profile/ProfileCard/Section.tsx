@@ -19,15 +19,12 @@ export function Section({ index, title, children }: SectionProps) {
             open={isOpen}
             onOpenChange={() => toggleSection(index)}
         >
-            <CollapsibleTrigger
-                className="flex w-full items-center justify-between py-2 text-sm font-medium hover:text-primary transition-colors"
-                aria-expanded={isOpen}
-            >
+            <CollapsibleTrigger className="flex w-full items-center justify-between py-2 text-sm font-medium hover:text-primary transition-colors">
                 <span>{title}</span>
                 {isOpen ? (
-                    <ChevronUpIcon className="size-4" aria-hidden="true" />
+                    <ChevronUpIcon className="size-4" />
                 ) : (
-                    <ChevronDownIcon className="size-4" aria-hidden="true" />
+                    <ChevronDownIcon className="size-4" />
                 )}
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-2 pt-2">
