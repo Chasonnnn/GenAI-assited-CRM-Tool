@@ -205,6 +205,7 @@ export function DateRangePicker({
                                     : undefined
                             }
                             numberOfMonths={2}
+                            showOutsideDays={false}
                             {...(resolvedCalendarDefaultMonth
                                 ? { defaultMonth: resolvedCalendarDefaultMonth }
                                 : {})}
