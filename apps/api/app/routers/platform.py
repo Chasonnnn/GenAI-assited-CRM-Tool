@@ -37,6 +37,7 @@ from app.core.deps import (
 )
 from app.core.csrf import set_csrf_cookie, CSRF_COOKIE_NAME, get_csrf_cookie
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.services import (
     duo_admin_service,
     platform_service,
@@ -419,6 +420,7 @@ def create_support_session(
     "/support-sessions/{session_id}/revoke",
     dependencies=[Depends(require_csrf_header)],
 )
+@limiter.exempt
 def revoke_support_session(
     session_id: UUID,
     request: Request,
