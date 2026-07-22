@@ -265,7 +265,7 @@ function CanvasFieldSurface({
                             }}
                             aria-label={`Duplicate ${fieldLabel}`}
                         >
-                            <CopyIcon className="size-4" aria-hidden="true" />
+                            <CopyIcon className="size-4" />
                         </Button>
                         <Button
                             type="button"
@@ -278,7 +278,7 @@ function CanvasFieldSurface({
                             }}
                             aria-label={`Delete ${fieldLabel}`}
                         >
-                            <XIcon className="size-4" aria-hidden="true" />
+                            <XIcon className="size-4" />
                         </Button>
                     </div>
                 ) : null}
@@ -397,7 +397,7 @@ function PageStrip({
                         onClick={() => onDuplicatePage(activePage)}
                         aria-label={`Duplicate ${currentPageLabel}`}
                     >
-                        <CopyIcon className="mr-2 size-4" aria-hidden="true" />
+                        <CopyIcon className="mr-2 size-4" />
                         Duplicate
                     </Button>
                     <Button
@@ -409,7 +409,7 @@ function PageStrip({
                         disabled={pages.length === 1}
                         aria-label={`Delete ${currentPageLabel}`}
                     >
-                        <Trash2Icon className="mr-2 size-4" aria-hidden="true" />
+                        <Trash2Icon className="mr-2 size-4" />
                         Delete
                     </Button>
                 </div>
@@ -703,7 +703,7 @@ function FieldInspector({
                                                     onClick={() => removeOption(selectedFieldData.id, index)}
                                                     aria-label={`Remove option ${getBuilderOptionLabel(option) || `Option ${index + 1}`}`}
                                                 >
-                                                    <XIcon className="size-4" aria-hidden="true" />
+                                                    <XIcon className="size-4" />
                                                 </Button>
                                             </div>
                                         ))
@@ -777,7 +777,7 @@ function FieldInspector({
                                                         onClick={() => onRemoveRow(selectedFieldData.id, row.id)}
                                                         aria-label={`Remove row ${row.label || "row"}`}
                                                     >
-                                                        <XIcon className="size-4" aria-hidden="true" />
+                                                        <XIcon className="size-4" />
                                                     </Button>
                                                 </div>
                                                 <Input
@@ -867,7 +867,7 @@ function FieldInspector({
                                                     onClick={() => onRemoveColumn(selectedFieldData.id, column.id)}
                                                     aria-label={`Remove column ${column.label || "column"}`}
                                                 >
-                                                    <XIcon className="size-4" aria-hidden="true" />
+                                                    <XIcon className="size-4" />
                                                 </Button>
                                             </div>
                                             {column.type === "select" || column.type === "radio" ? (

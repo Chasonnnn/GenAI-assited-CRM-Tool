@@ -1,3 +1,0 @@
-## 2024-05-24 - Missing `aria-hidden` on Lucide Icons in Icon-Only Buttons
-**Learning:** Found a common accessibility issue pattern across the codebase where decorative Lucide icons (e.g., `CopyIcon`, `XIcon`, `CheckIcon`) used inside icon-only `<Button>` elements (which explicitly have an `aria-label`) were missing the `aria-hidden="true"` attribute. This causes screen readers to redundantly or confusingly announce the raw SVG details in addition to the button's `aria-label`.
-**Action:** When adding or reviewing icon-only buttons with `aria-label`s, strictly ensure that the nested icon component receives the `aria-hidden="true"` prop to prevent screen reader noise.
