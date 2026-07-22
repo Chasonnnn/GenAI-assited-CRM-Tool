@@ -21,6 +21,8 @@ overrides:
   ws: 8.21.0
   js-yaml: 4.2.0
   "@babel/core": 8.0.1
+  "markdown-it>linkify-it": 5.0.2
+  "next>sharp": 0.35.3
 
 packageExtensions:
   react-simple-maps@*:
