@@ -172,7 +172,33 @@ function SetterHarness() {
     )
 }
 
+function JuneRangeHarness() {
+    const [preset, setPreset] = useState<DateRangePreset>("custom")
+    const [customRange, setCustomRange] = useState<CustomRange>({
+        from: new Date(2026, 5, 1),
+        to: new Date(2026, 5, 30),
+    })
+
+    return (
+        <DateRangePicker
+            preset={preset}
+            onPresetChange={setPreset}
+            customRange={customRange}
+            onCustomRangeChange={setCustomRange}
+        />
+    )
+}
+
 describe("DateRangePicker", () => {
+    it("renders each date only once across adjacent month panels", () => {
+        render(<JuneRangeHarness />)
+
+        fireEvent.click(screen.getByRole("button", { name: /jun 1 - jun 30/i }))
+        fireEvent.click(screen.getByRole("button", { name: /custom range/i }))
+
+        expect(screen.getAllByRole("button", { name: /june 30th, 2026/i })).toHaveLength(1)
+    })
+
     it("uses a stable minimum trigger width for custom date ranges", async () => {
         render(<SetterHarness />)
 
