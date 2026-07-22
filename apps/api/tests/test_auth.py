@@ -51,6 +51,7 @@ def test_auth_error_response_clears_account_hint_without_selected_email():
 
 def test_session_revocation_routes_are_rate_limit_exempt():
     from app.routers import auth as _auth  # noqa: F401
+    from app.routers import platform as _platform  # noqa: F401
     from app.core.rate_limit import limiter
 
     exempt_routes = getattr(limiter, "_exempt_routes", set())
@@ -58,6 +59,7 @@ def test_session_revocation_routes_are_rate_limit_exempt():
     assert "app.routers.auth.revoke_session" in exempt_routes
     assert "app.routers.auth.revoke_all_sessions" in exempt_routes
     assert "app.routers.auth.logout" in exempt_routes
+    assert "app.routers.platform.revoke_support_session" in exempt_routes
 
 
 def _response_cookies(response) -> SimpleCookie:
