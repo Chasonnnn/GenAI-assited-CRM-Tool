@@ -1134,6 +1134,159 @@ class TestResendWebhookHandler:
         assert attempt.error_type == "transport_error"
 
     @pytest.mark.asyncio
+    async def test_retryable_failure_after_verified_webhook_does_not_schedule_duplicate(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
+        from app.db.models import EmailDeliveryAttempt
+        from app.services.email_delivery_service import record_delivery_failure
+
+        _existing_log, settings, webhook_secret = setup_email_log
+        claimed_at = datetime.now(timezone.utc)
+        queued, claim = _queue_claimed_resend_delivery(
+            db,
+            test_org.id,
+            claimed_at=claimed_at,
+        )
+        provider_message_id = f"verified-before-failure-{uuid.uuid4().hex}"
+        event_created_at = claimed_at + timedelta(seconds=1)
+        response = await _post_signed_resend_event(
+            client,
+            webhook_id=settings.webhook_id,
+            webhook_secret=webhook_secret,
+            payload={
+                "type": "email.bounced",
+                "created_at": event_created_at.isoformat(),
+                "data": {
+                    "email_id": provider_message_id,
+                    "bounce": {"type": "Permanent"},
+                    "tags": {
+                        "organization_id": str(test_org.id),
+                        "email_log_id": str(queued.email_log.id),
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200
+
+        db.expire_all()
+        webhook_email_log = db.get(type(queued.email_log), queued.email_log.id)
+        webhook_error = webhook_email_log.error
+        assert webhook_email_log.resend_status == "bounced"
+        assert webhook_email_log.status == "failed"
+
+        failed_at = claimed_at + timedelta(seconds=2)
+        delivery = record_delivery_failure(
+            db,
+            claim=claim,
+            retryable=True,
+            error_type="transport_error",
+            error_message="Connection dropped before the response was read",
+            provider_outcome_unknown=True,
+            now=failed_at,
+        )
+
+        db.expire_all()
+        email_log = db.get(type(queued.email_log), queued.email_log.id)
+        attempt = (
+            db.query(EmailDeliveryAttempt)
+            .filter(EmailDeliveryAttempt.delivery_id == delivery.id)
+            .one()
+        )
+        assert delivery.status == EmailDeliveryStatus.SENT.value
+        assert delivery.provider_message_id == provider_message_id
+        assert delivery.completed_at == failed_at
+        assert delivery.last_error is None
+        assert delivery.lease_token is None
+        assert email_log.external_id == provider_message_id
+        assert email_log.resend_status == "bounced"
+        assert email_log.resend_status_at == event_created_at
+        assert email_log.status == "failed"
+        assert email_log.error == webhook_error
+        assert attempt.outcome == EmailDeliveryAttemptOutcome.TERMINAL_ERROR.value
+        assert attempt.error_type == "transport_error"
+
+    @pytest.mark.asyncio
+    async def test_final_lease_expiry_after_verified_webhook_does_not_dead_letter(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
+        from app.db.models import EmailDeliveryAttempt
+        from app.services.email_delivery_service import claim_due_deliveries
+
+        _existing_log, settings, webhook_secret = setup_email_log
+        claimed_at = datetime.now(timezone.utc)
+        queued, _claim = _queue_claimed_resend_delivery(
+            db,
+            test_org.id,
+            claimed_at=claimed_at,
+        )
+        queued.delivery.max_attempts = 1
+        db.commit()
+
+        provider_message_id = f"verified-before-lease-expiry-{uuid.uuid4().hex}"
+        event_created_at = claimed_at + timedelta(seconds=1)
+        response = await _post_signed_resend_event(
+            client,
+            webhook_id=settings.webhook_id,
+            webhook_secret=webhook_secret,
+            payload={
+                "type": "email.bounced",
+                "created_at": event_created_at.isoformat(),
+                "data": {
+                    "email_id": provider_message_id,
+                    "bounce": {"type": "Permanent"},
+                    "tags": {
+                        "organization_id": str(test_org.id),
+                        "email_log_id": str(queued.email_log.id),
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200
+
+        expired_at = claimed_at + timedelta(minutes=3)
+        claims = claim_due_deliveries(
+            db,
+            worker_id="worker-b",
+            now=expired_at,
+            lease_for=timedelta(minutes=1),
+            limit=1,
+        )
+
+        assert claims == []
+        db.expire_all()
+        delivery = db.get(type(queued.delivery), queued.delivery.id)
+        email_log = db.get(type(queued.email_log), queued.email_log.id)
+        attempt = (
+            db.query(EmailDeliveryAttempt)
+            .filter(EmailDeliveryAttempt.delivery_id == delivery.id)
+            .one()
+        )
+        assert delivery.status == EmailDeliveryStatus.SENT.value
+        assert delivery.provider_message_id == provider_message_id
+        assert delivery.completed_at == expired_at
+        assert delivery.last_error is None
+        assert delivery.lease_token is None
+        assert email_log.external_id == provider_message_id
+        assert email_log.resend_status == "bounced"
+        assert email_log.resend_status_at == event_created_at
+        assert email_log.status == "failed"
+        assert attempt.outcome == EmailDeliveryAttemptOutcome.LEASE_EXPIRED.value
+
+    @pytest.mark.asyncio
     async def test_verified_webhook_resolves_reconciliation_required_delivery(
         self,
         db,

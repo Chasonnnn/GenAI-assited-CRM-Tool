@@ -181,6 +181,44 @@ def _merge_provider_acceptance(
     return True
 
 
+def _resolve_verified_provider_acceptance(
+    db: Session,
+    *,
+    delivery: EmailDelivery,
+    resolved_at: datetime,
+    project_source: bool,
+) -> bool:
+    """Make signed provider identity authoritative over local retry outcomes."""
+    provider_message_id = delivery.provider_message_id
+    if provider_message_id is None:
+        return False
+
+    _assert_provider_message_identity(delivery, provider_message_id)
+    delivery.status = EmailDeliveryStatus.SENT.value
+    delivery.completed_at = resolved_at
+    delivery.last_error_type = None
+    delivery.last_error = None
+    delivery.lease_token = None
+    delivery.lease_owner = None
+    delivery.lease_expires_at = None
+
+    email_log = delivery.email_log
+    acceptance_is_canonical = _merge_provider_acceptance(
+        email_log,
+        provider_message_id=provider_message_id,
+        accepted_at=email_log.resend_status_at or resolved_at,
+    )
+    if project_source and acceptance_is_canonical:
+        _project_source_delivery(
+            db,
+            email_log=email_log,
+            status=EmailStatus.SENT.value,
+            provider_message_id=provider_message_id,
+            occurred_at=resolved_at,
+        )
+    return True
+
+
 def lock_delivery_for_verified_webhook(
     db: Session,
     *,
@@ -765,24 +803,37 @@ def claim_due_deliveries(
     claims: list[DeliveryClaim] = []
     lease_expires_at = claimed_at + lease_for
     for delivery in deliveries:
+        stale_attempt = None
+        if delivery.status == EmailDeliveryStatus.LEASED.value:
+            stale_attempt = (
+                db.query(EmailDeliveryAttempt)
+                .filter(
+                    EmailDeliveryAttempt.delivery_id == delivery.id,
+                    EmailDeliveryAttempt.lease_token == delivery.lease_token,
+                    EmailDeliveryAttempt.outcome
+                    == EmailDeliveryAttemptOutcome.IN_PROGRESS.value,
+                )
+                .one_or_none()
+            )
+            if delivery.provider_message_id is not None:
+                if stale_attempt is not None:
+                    stale_attempt.outcome = EmailDeliveryAttemptOutcome.LEASE_EXPIRED.value
+                    stale_attempt.completed_at = claimed_at
+                _resolve_verified_provider_acceptance(
+                    db,
+                    delivery=delivery,
+                    resolved_at=claimed_at,
+                    project_source=False,
+                )
+                continue
+
         if (
             delivery.idempotency_expires_at is not None
             and delivery.idempotency_expires_at <= claimed_at
         ):
-            if delivery.status == EmailDeliveryStatus.LEASED.value:
-                stale_attempt = (
-                    db.query(EmailDeliveryAttempt)
-                    .filter(
-                        EmailDeliveryAttempt.delivery_id == delivery.id,
-                        EmailDeliveryAttempt.lease_token == delivery.lease_token,
-                        EmailDeliveryAttempt.outcome
-                        == EmailDeliveryAttemptOutcome.IN_PROGRESS.value,
-                    )
-                    .one_or_none()
-                )
-                if stale_attempt is not None:
-                    stale_attempt.outcome = EmailDeliveryAttemptOutcome.LEASE_EXPIRED.value
-                    stale_attempt.completed_at = claimed_at
+            if stale_attempt is not None:
+                stale_attempt.outcome = EmailDeliveryAttemptOutcome.LEASE_EXPIRED.value
+                stale_attempt.completed_at = claimed_at
             _mark_reconciliation_required(delivery, completed_at=claimed_at)
             _project_appointment_email_delivery(
                 db,
@@ -794,15 +845,6 @@ def claim_due_deliveries(
             continue
 
         if delivery.status == EmailDeliveryStatus.LEASED.value:
-            stale_attempt = (
-                db.query(EmailDeliveryAttempt)
-                .filter(
-                    EmailDeliveryAttempt.delivery_id == delivery.id,
-                    EmailDeliveryAttempt.lease_token == delivery.lease_token,
-                    EmailDeliveryAttempt.outcome == EmailDeliveryAttemptOutcome.IN_PROGRESS.value,
-                )
-                .one_or_none()
-            )
             if stale_attempt is not None:
                 stale_attempt.outcome = EmailDeliveryAttemptOutcome.LEASE_EXPIRED.value
                 stale_attempt.completed_at = claimed_at
@@ -1172,29 +1214,13 @@ def record_delivery_reconciliation_required(
     attempt.provider_http_status = provider_http_status
     attempt.error_type = safe_error_type
     attempt.error_message = safe_error_message
-    if delivery.provider_message_id is not None:
-        _assert_provider_message_identity(delivery, delivery.provider_message_id)
-        delivery.status = EmailDeliveryStatus.SENT.value
-        delivery.completed_at = completed_at
-        delivery.last_error_type = None
-        delivery.last_error = None
-        delivery.lease_token = None
-        delivery.lease_owner = None
-        delivery.lease_expires_at = None
-        acceptance_is_canonical = _merge_provider_acceptance(
-            delivery.email_log,
-            provider_message_id=delivery.provider_message_id,
-            accepted_at=completed_at,
-        )
-        if acceptance_is_canonical:
-            _project_source_delivery(
-                db,
-                email_log=delivery.email_log,
-                status=EmailStatus.SENT.value,
-                provider_message_id=delivery.provider_message_id,
-                occurred_at=completed_at,
-            )
-    else:
+    provider_acceptance_verified = _resolve_verified_provider_acceptance(
+        db,
+        delivery=delivery,
+        resolved_at=completed_at,
+        project_source=True,
+    )
+    if not provider_acceptance_verified:
         _mark_reconciliation_required(
             delivery,
             completed_at=completed_at,
@@ -1244,6 +1270,22 @@ def record_delivery_failure(
 
     safe_error_type = _safe_error(error_type, limit=100)
     safe_error_message = _safe_error(error_message, limit=1000)
+    if delivery.provider_message_id is not None:
+        attempt.completed_at = failed_at
+        attempt.outcome = EmailDeliveryAttemptOutcome.TERMINAL_ERROR.value
+        attempt.provider_http_status = provider_http_status
+        attempt.error_type = safe_error_type
+        attempt.error_message = safe_error_message
+        _resolve_verified_provider_acceptance(
+            db,
+            delivery=delivery,
+            resolved_at=failed_at,
+            project_source=True,
+        )
+        db.commit()
+        db.refresh(delivery)
+        return delivery
+
     can_retry = retryable and delivery.attempt_count < delivery.max_attempts
     retry_delay = (
         _retry_delay(
