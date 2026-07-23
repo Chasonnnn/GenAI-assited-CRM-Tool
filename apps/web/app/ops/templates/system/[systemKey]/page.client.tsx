@@ -950,7 +950,9 @@ export default function PlatformSystemEmailTemplatePage() {
                 },
             })
             if (!result.queued) {
-                throw new Error("Test email was not durably queued")
+                toast.error("Test email was not durably queued")
+                finishSending()
+                return
             }
             testSendOccurrenceIdRef.current = null
             toast.success("Test email queued")
