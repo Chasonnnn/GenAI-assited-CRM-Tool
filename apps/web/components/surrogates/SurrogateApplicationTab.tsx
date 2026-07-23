@@ -87,6 +87,28 @@ function resolveIntakeLink(baseUrl: string, link: FormIntakeLinkRead): string {
     }
 }
 
+function createEmailOccurrenceId(): string {
+    const cryptoApi = globalThis.crypto
+    if (typeof cryptoApi?.randomUUID === "function") {
+        return `form-intake-link/${cryptoApi.randomUUID()}`
+    }
+    if (typeof cryptoApi?.getRandomValues !== "function") {
+        throw new Error("Secure random UUID generation is unavailable")
+    }
+    const bytes = cryptoApi.getRandomValues(new Uint8Array(16))
+    bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40
+    bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"))
+    const uuid = [
+        hex.slice(0, 4).join(""),
+        hex.slice(4, 6).join(""),
+        hex.slice(6, 8).join(""),
+        hex.slice(8, 10).join(""),
+        hex.slice(10, 16).join(""),
+    ].join("-")
+    return `form-intake-link/${uuid}`
+}
+
 // Format file size for display
 function formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`
@@ -749,6 +771,19 @@ function SurrogateApplicationEmptyState({
                                 </p>
                             </div>
                             <div className="space-y-2">
+                                <Label htmlFor="application-intake-link">Shared intake link</Label>
+                                <SelectControl
+                                    id="application-intake-link"
+                                    value={state.selectedIntakeLinkId}
+                                    onValueChange={actions.setSelectedIntakeLinkIdOverride}
+                                    options={state.sendableIntakeLinks.map((link) => ({
+                                        value: link.id,
+                                        label: link.campaign_name || link.event_name || link.slug,
+                                    }))}
+                                    placeholder="Select shared link"
+                                />
+                            </div>
+                            <div className="space-y-2">
                                 <Label htmlFor="application-template">Email template</Label>
                                 <SelectControl
                                     id="application-template"
@@ -1139,7 +1174,7 @@ function SurrogateApplicationSubmittedField({
 
     return (
         <div className="flex justify-between items-start gap-4 group py-1">
-            <span className="text-sm text-muted-foreground flex-shrink-0">
+            <span className="text-sm text-muted-foreground shrink-0">
                 {field.label}
             </span>
             <div className="flex items-center gap-2">
@@ -1746,10 +1781,12 @@ type SurrogateApplicationLinkHandlersInput = {
     formLink: string
     selectedIntakeLink: FormIntakeLinkRead | null
     selectedTemplateId: string
+    sendOccurrenceId: string | null
     sendIntakeLinkMutation: ReturnType<typeof useSendFormIntakeLink>
     setFormLink: (value: string) => void
     setFormLinkCopied: (value: boolean) => void
     setIsSendingLink: (value: boolean) => void
+    setSendOccurrenceId: (value: string | null) => void
     setSendFormModalOpen: (value: boolean) => void
     surrogateId: string
     useAdvancedOverride: boolean
@@ -1782,6 +1819,7 @@ function createSurrogateApplicationLinkHandlers(input: SurrogateApplicationLinkH
         }
         input.setFormLink(resolveIntakeLink(input.baseUrl, input.selectedIntakeLink))
         input.setFormLinkCopied(false)
+        input.setSendOccurrenceId(createEmailOccurrenceId())
         input.setSendFormModalOpen(true)
     }
 
@@ -1797,16 +1835,21 @@ function createSurrogateApplicationLinkHandlers(input: SurrogateApplicationLinkH
         input.setIsSendingLink(true)
         const finishSending = () => input.setIsSendingLink(false)
         try {
+            const idempotencyKey = input.sendOccurrenceId ?? createEmailOccurrenceId()
+            input.setSendOccurrenceId(idempotencyKey)
             const response = await input.sendIntakeLinkMutation.mutateAsync({
                 formId: input.effectiveFormId,
                 linkId: input.selectedIntakeLink.id,
                 surrogateId: input.surrogateId,
                 templateId: input.selectedTemplateId,
+                idempotencyKey,
             })
             input.setFormLink(
                 response.intake_url || resolveIntakeLink(input.baseUrl, input.selectedIntakeLink),
             )
-            toast.success("Application link sent")
+            toast.success("Application link queued")
+            input.setSendOccurrenceId(null)
+            input.setSendFormModalOpen(false)
             finishSending()
         } catch {
             toast.error("Failed to send application link")
@@ -2037,6 +2080,7 @@ export function SurrogateApplicationTab({
     const [rejectModalOpen, setRejectModalOpen] = React.useState(false)
     const [approveModalOpen, setApproveModalOpen] = React.useState(false)
     const [sendFormModalOpen, setSendFormModalOpen] = React.useState(false)
+    const [sendOccurrenceId, setSendOccurrenceId] = React.useState<string | null>(null)
 
     const [rejectReason, setRejectReason] = React.useState("")
     const [approveNotes, setApproveNotes] = React.useState("")
@@ -2061,6 +2105,19 @@ export function SurrogateApplicationTab({
         emailTemplates.some((template) => template.id === selectedTemplateIdOverride)
             ? selectedTemplateIdOverride
             : emailTemplates[0]?.id || ""
+    const selectIntakeLinkForSend = (value: string) => {
+        setSelectedIntakeLinkIdOverride(value)
+        setSendOccurrenceId(null)
+        const nextLink = sendableIntakeLinks.find((link) => link.id === value)
+        if (nextLink) {
+            setFormLink(resolveIntakeLink(baseUrl, nextLink))
+            setFormLinkCopied(false)
+        }
+    }
+    const selectTemplateForSend = (value: string) => {
+        setSelectedTemplateIdOverride(value)
+        setSendOccurrenceId(null)
+    }
     const submissionPages = submission?.schema_snapshot?.pages || []
     const submissionFileFields = submissionPages.flatMap((page) =>
         page.fields.filter((field) => field.type === "file"),
@@ -2089,10 +2146,12 @@ export function SurrogateApplicationTab({
             formLink,
             selectedIntakeLink,
             selectedTemplateId,
+            sendOccurrenceId,
             sendIntakeLinkMutation,
             setFormLink,
             setFormLinkCopied,
             setIsSendingLink,
+            setSendOccurrenceId,
             setSendFormModalOpen,
             surrogateId,
             useAdvancedOverride,
@@ -2193,8 +2252,8 @@ export function SurrogateApplicationTab({
             sendFormModalOpen,
             setConfirmOverride,
             setSelectedFormIdOverride,
-            setSelectedIntakeLinkIdOverride,
-            setSelectedTemplateIdOverride,
+            setSelectedIntakeLinkIdOverride: selectIntakeLinkForSend,
+            setSelectedTemplateIdOverride: selectTemplateForSend,
             setSendFormModalOpen,
             setUseAdvancedOverride,
             useAdvancedOverride,
