@@ -5,16 +5,14 @@ export async function postUnsubscribeToApi(token: string, requestHeaders: Header
     const safeToken = encodeURIComponent(token || "")
     if (!safeToken) return
 
-    // Best-effort: the API endpoint is the source of truth for recording suppressions.
-    // We intentionally show the same success message regardless of token validity.
-    try {
-        await fetch(`${apiBase}/email/unsubscribe/${safeToken}`, {
-            method: "POST",
-            // No cookies required; token is the auth.
-            cache: "no-store",
-            headers: buildServerApiHeaders(requestHeaders),
-        })
-    } catch {
-        // Ignore failures to avoid leaking availability details to recipients.
+    const response = await fetch(`${apiBase}/email/unsubscribe/${safeToken}`, {
+        method: "POST",
+        // No cookies required; token is the auth.
+        cache: "no-store",
+        headers: buildServerApiHeaders(requestHeaders),
+    })
+
+    if (!response.ok) {
+        throw new Error(`Unsubscribe API request failed with status ${response.status}`)
     }
 }

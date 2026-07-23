@@ -78,4 +78,65 @@ describe("email unsubscribe routes", () => {
         expect(postRes.status).toBe(200)
         expect(fetchSpy).toHaveBeenCalledTimes(1)
     })
+
+    it("returns a retryable failure when the one-click API request cannot reach the backend", async () => {
+        vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("network unavailable"))
+
+        const postRes = await oneClickPost(
+            new Request("https://app.example.com/email/unsubscribe/token-123/one-click", {
+                method: "POST",
+            }),
+            { params: Promise.resolve({ token: "token-123" }) },
+        )
+
+        expect(postRes.status).toBe(503)
+        expect(postRes.headers.get("retry-after")).toBe("60")
+    })
+
+    it("returns a retryable failure when the backend does not persist the one-click suppression", async () => {
+        vi.spyOn(globalThis, "fetch").mockResolvedValue(
+            new Response("temporarily unavailable", { status: 503 }),
+        )
+
+        const postRes = await oneClickPost(
+            new Request("https://app.example.com/email/unsubscribe/token-123/one-click", {
+                method: "POST",
+            }),
+            { params: Promise.resolve({ token: "token-123" }) },
+        )
+
+        expect(postRes.status).toBe(503)
+    })
+
+    it("does not redirect a confirmation request when the backend rejects the suppression", async () => {
+        vi.spyOn(globalThis, "fetch").mockResolvedValue(
+            new Response("temporarily unavailable", { status: 503 }),
+        )
+
+        await expect(
+            confirmUnsubscribe(
+                new Request("https://app.example.com/email/unsubscribe/token-123/confirm", {
+                    method: "POST",
+                }),
+                { params: Promise.resolve({ token: "token-123" }) },
+            ),
+        ).rejects.toThrow("Unsubscribe API request failed")
+    })
+
+    it("keeps the backend's generic invalid-token response indistinguishable from success", async () => {
+        vi.spyOn(globalThis, "fetch").mockResolvedValue(
+            new Response("If this email address exists, it has been unsubscribed.", {
+                status: 200,
+            }),
+        )
+
+        const postRes = await oneClickPost(
+            new Request("https://app.example.com/email/unsubscribe/invalid-token/one-click", {
+                method: "POST",
+            }),
+            { params: Promise.resolve({ token: "invalid-token" }) },
+        )
+
+        expect(postRes.status).toBe(200)
+    })
 })
