@@ -45,6 +45,35 @@ class MissingTargetsError(ValueError):
         self.detail = detail
 
 
+class EmailQueueUnavailableError(RuntimeError):
+    """A platform mutation could not durably enqueue its required email."""
+
+
+def _queue_invite_email_or_raise(db: Session, invite: OrgInvite) -> None:
+    """Queue an invite in the caller transaction or fail the mutation."""
+    import asyncio
+
+    from app.services import invite_email_service
+
+    try:
+        result = asyncio.run(
+            invite_email_service.send_invite_email(
+                db,
+                invite,
+                commit=False,
+            )
+        )
+    except Exception as exc:
+        logger.warning(
+            "Platform invite could not be queued",
+            extra={"error_type": type(exc).__name__},
+        )
+        raise EmailQueueUnavailableError("Invitation could not be queued for delivery") from exc
+    if not result.get("success"):
+        logger.warning("Platform invite could not be queued")
+        raise EmailQueueUnavailableError("Invitation could not be queued for delivery")
+
+
 # =============================================================================
 # HMAC Helpers for PII-Safe Logging
 # =============================================================================
@@ -495,6 +524,8 @@ def create_organization(
             "Admin email already has a pending invite. Revoke it or use another email."
         )
 
+    savepoint = db.begin_nested()
+
     # Create org
     org = Organization(name=name, slug=validated_slug, timezone=timezone_str)
     db.add(org)
@@ -530,26 +561,22 @@ def create_organization(
     )
 
     try:
+        _queue_invite_email_or_raise(db, invite)
+        savepoint.commit()
         db.commit()
+    except EmailQueueUnavailableError:
+        if savepoint.is_active:
+            savepoint.rollback()
+        raise
     except IntegrityError as exc:
-        db.rollback()
+        if savepoint.is_active:
+            savepoint.rollback()
         error_text = str(exc.orig) if exc.orig else str(exc)
         if "uq_pending_invite_email" in error_text:
             raise ValueError(
                 "Admin email already has a pending invite. Revoke it or use another email."
             ) from exc
         raise
-
-    # Send invite email (best-effort)
-    try:
-        import asyncio
-        from app.services import invite_email_service
-
-        email_result = asyncio.run(invite_email_service.send_invite_email(db, invite))
-        if not email_result.get("success"):
-            logger.warning("Invite email failed: %s", email_result.get("error"))
-    except Exception as exc:
-        logger.warning("Invite email error: %s", exc)
 
     return get_organization_detail(db, org.id)
 
@@ -1047,7 +1074,7 @@ def list_invites(db: Session, org_id: UUID) -> list[dict]:
 
     from app.services import invite_service
 
-    invite_log_keys = {f"invite:{invite.id}:v{invite.resend_count}" for invite in invites}
+    invite_log_keys = {f"invite:{invite.id}:v{invite.send_revision}" for invite in invites}
     email_logs: dict[str, EmailLog] = {}
     if invite_log_keys:
         logs = (
@@ -1087,7 +1114,7 @@ def list_invites(db: Session, org_id: UUID) -> list[dict]:
             )
             cooldown_seconds = max(0, int((cooldown_end - now).total_seconds()))
 
-        log_key = f"invite:{inv.id}:v{inv.resend_count}"
+        log_key = f"invite:{inv.id}:v{inv.send_revision}"
         email_log = email_logs.get(log_key)
 
         results.append(
@@ -1150,24 +1177,17 @@ def create_invite(
         )
         .first()
     )
-    invite: OrgInvite | None = None
+    invite_to_reactivate: OrgInvite | None = None
+    invite_to_revoke: OrgInvite | None = None
     if existing:
         existing_active = existing.expires_at is None or existing.expires_at > now
         if existing_active:
             raise ValueError(f"An active invite already exists for {email}")
 
         if existing.organization_id == org_id:
-            # Re-activate the expired invite instead of inserting a duplicate row.
-            existing.role = role_value
-            existing.invited_by_user_id = actor_id
-            existing.expires_at = now + timedelta(days=7)
-            existing.last_resent_at = now
-            existing.resend_count = (existing.resend_count or 0) + 1
-            invite = existing
+            invite_to_reactivate = existing
         else:
-            # Release the global pending-invite uniqueness slot for this email.
-            existing.revoked_at = now
-            existing.revoked_by_user_id = actor_id
+            invite_to_revoke = existing
 
     # Check if user already exists and is a member
     existing_user = db.query(User).filter(User.email == email).first()
@@ -1182,6 +1202,22 @@ def create_invite(
         )
         if existing_membership and existing_membership.is_active:
             raise ValueError(f"{email} is already a member of this organization")
+
+    savepoint = db.begin_nested()
+    invite: OrgInvite | None = None
+    if invite_to_reactivate is not None:
+        # Re-activate the expired invite instead of inserting a duplicate row.
+        invite_to_reactivate.role = role_value
+        invite_to_reactivate.invited_by_user_id = actor_id
+        invite_to_reactivate.expires_at = now + timedelta(days=7)
+        invite_to_reactivate.last_resent_at = now
+        invite_to_reactivate.resend_count = (invite_to_reactivate.resend_count or 0) + 1
+        invite_to_reactivate.send_revision += 1
+        invite = invite_to_reactivate
+    elif invite_to_revoke is not None:
+        # Release the global pending-invite uniqueness slot for this email.
+        invite_to_revoke.revoked_at = now
+        invite_to_revoke.revoked_by_user_id = actor_id
 
     if invite is None:
         invite = OrgInvite(
@@ -1206,23 +1242,19 @@ def create_invite(
     )
 
     try:
+        _queue_invite_email_or_raise(db, invite)
+        savepoint.commit()
         db.commit()
+    except EmailQueueUnavailableError:
+        if savepoint.is_active:
+            savepoint.rollback()
+        raise
     except IntegrityError as exc:
-        db.rollback()
+        if savepoint.is_active:
+            savepoint.rollback()
         if "uq_pending_invite_email" in str(exc.orig):
             raise ValueError(f"An active invite already exists for {email}") from exc
         raise
-
-    # Send invite email (best-effort)
-    try:
-        import asyncio
-        from app.services import invite_email_service
-
-        email_result = asyncio.run(invite_email_service.send_invite_email(db, invite))
-        if not email_result.get("success"):
-            logger.warning("Invite email failed: %s", email_result.get("error"))
-    except Exception as exc:
-        logger.warning("Invite email error: %s", exc)
 
     return {
         "id": str(invite.id),
@@ -1303,6 +1335,7 @@ def resend_invite(
 
     from app.services import invite_service
 
+    savepoint = db.begin_nested()
     invite_service.resend_invite(db, invite)
 
     log_admin_action(
@@ -1314,17 +1347,14 @@ def resend_invite(
         request=request,
     )
 
-    db.commit()
-
     try:
-        import asyncio
-        from app.services import invite_email_service
-
-        email_result = asyncio.run(invite_email_service.send_invite_email(db, invite))
-        if not email_result.get("success"):
-            logger.warning("Invite resend email failed: %s", email_result.get("error"))
-    except Exception as exc:
-        logger.warning("Invite resend email error: %s", exc)
+        _queue_invite_email_or_raise(db, invite)
+        savepoint.commit()
+        db.commit()
+    except EmailQueueUnavailableError:
+        if savepoint.is_active:
+            savepoint.rollback()
+        raise
 
     can_resend, error = invite_service.can_resend(invite)
     cooldown_seconds = None
@@ -1360,6 +1390,7 @@ async def send_system_email_campaign(
     *,
     db: Session,
     system_key: str,
+    campaign_occurrence_id: UUID,
     targets: list[dict],
     actor_id: UUID,
     actor_display_name: str | None,
@@ -1436,7 +1467,7 @@ async def send_system_email_campaign(
     if missing_targets:
         raise MissingTargetsError({"missing_targets": missing_targets})
 
-    sent = 0
+    queued = 0
     suppressed = 0
     failed = 0
     failures: list[dict] = []
@@ -1498,11 +1529,13 @@ async def send_system_email_campaign(
             text=None,
             template_id=None,
             surrogate_id=None,
-            idempotency_key=f"platform-campaign:{system_key}:{org_id}:{user.id}",
+            idempotency_key=(
+                f"platform-campaign:{system_key}:{campaign_occurrence_id}:{org_id}:{user.id}"
+            ),
         )
 
         if result.get("success"):
-            sent += 1
+            queued += 1
         else:
             error = str(result.get("error") or "")
             if "suppressed" in error.lower():
@@ -1525,7 +1558,8 @@ async def send_system_email_campaign(
         target_org_id=None,
         metadata={
             "system_key": system_key,
-            "sent": sent,
+            "campaign_occurrence_id": str(campaign_occurrence_id),
+            "queued": queued,
             "suppressed": suppressed,
             "failed": failed,
             "recipients": len(recipients),
@@ -1535,7 +1569,7 @@ async def send_system_email_campaign(
     db.commit()
 
     return {
-        "sent": sent,
+        "queued": queued,
         "suppressed": suppressed,
         "failed": failed,
         "recipients": len(recipients),

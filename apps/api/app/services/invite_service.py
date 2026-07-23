@@ -142,6 +142,7 @@ def create_invite(
             existing_invite.expires_at = now + timedelta(days=INVITE_EXPIRY_DAYS)
             # Reactivation starts a fresh resend window.
             existing_invite.resend_count = 0
+            existing_invite.send_revision += 1
             existing_invite.last_resent_at = None
             db.flush()
             return existing_invite
@@ -192,6 +193,7 @@ def resend_invite(db: Session, invite: OrgInvite) -> None:
         raise ValueError(error)
 
     invite.resend_count += 1
+    invite.send_revision += 1
     invite.last_resent_at = datetime.now(timezone.utc)
     # Extend expiry on resend
     invite.expires_at = datetime.now(timezone.utc) + timedelta(days=INVITE_EXPIRY_DAYS)
@@ -226,6 +228,27 @@ def get_invite(db: Session, org_id: uuid.UUID, invite_id: uuid.UUID) -> OrgInvit
         )
         .first()
     )
+
+
+def is_invite_delivery_eligible(
+    db: Session,
+    organization_id: uuid.UUID,
+    invite_id: uuid.UUID,
+    idempotency_key: str,
+) -> bool:
+    """Return whether this exact tenant-scoped invite occurrence may still send."""
+    invite = (
+        db.query(OrgInvite)
+        .populate_existing()
+        .filter(
+            OrgInvite.id == invite_id,
+            OrgInvite.organization_id == organization_id,
+        )
+        .one_or_none()
+    )
+    if invite is None or get_invite_status(invite) != "pending":
+        return False
+    return idempotency_key == f"invite:{invite.id}:v{invite.send_revision}"
 
 
 def get_invite_by_id(db: Session, invite_id: uuid.UUID) -> OrgInvite | None:

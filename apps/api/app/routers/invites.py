@@ -151,20 +151,18 @@ async def create_invite(
             role=body.role,
             request=request,
         )
+        email_result = await invite_email_service.send_invite_email(
+            db,
+            invite,
+            commit=False,
+        )
+        if not email_result.get("success"):
+            db.rollback()
+            raise HTTPException(
+                status_code=503,
+                detail="Invitation could not be queued for delivery. Please try again.",
+            )
         db.commit()
-
-        # Send invitation email (async, best-effort)
-        try:
-            email_result = await invite_email_service.send_invite_email(db, invite)
-            if not email_result.get("success"):
-                # Log but don't fail - invite is created
-                import logging
-
-                logging.warning(f"Failed to send invite email: {email_result.get('error')}")
-        except Exception as e:
-            import logging
-
-            logging.exception(f"Error sending invite email: {e}")
 
         return _invite_to_read(invite)
     except ValueError as e:
@@ -188,19 +186,18 @@ async def resend_invite(
 
     try:
         invite_service.resend_invite(db, invite)
+        email_result = await invite_email_service.send_invite_email(
+            db,
+            invite,
+            commit=False,
+        )
+        if not email_result.get("success"):
+            db.rollback()
+            raise HTTPException(
+                status_code=503,
+                detail="Invitation could not be queued for delivery. Please try again.",
+            )
         db.commit()
-
-        # Resend invitation email (async, best-effort)
-        try:
-            email_result = await invite_email_service.send_invite_email(db, invite)
-            if not email_result.get("success"):
-                import logging
-
-                logging.warning(f"Failed to resend invite email: {email_result.get('error')}")
-        except Exception as e:
-            import logging
-
-            logging.exception(f"Error resending invite email: {e}")
 
         return {"resent": True}
     except ValueError as e:

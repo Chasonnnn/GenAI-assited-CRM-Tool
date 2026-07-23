@@ -1,4 +1,5 @@
 import re
+from uuid import uuid4
 
 import pytest
 
@@ -93,7 +94,15 @@ async def test_platform_send_test_system_email_uses_platform_sender(
         assert kwargs["to_email"] == "test@example.com"
         assert kwargs["template_id"] is None
         assert kwargs["from_email"] == "Invites <invites@surrogacyforce.com>"
-        return {"success": True, "message_id": "msg_123", "email_log_id": "log_123"}
+        assert kwargs["idempotency_key"] == (
+            f"platform-system-test:org_invite:{test_occurrence_id}"
+        )
+        return {
+            "success": True,
+            "queued": True,
+            "message_id": None,
+            "email_log_id": "log_123",
+        }
 
     monkeypatch.setattr(platform_email_service, "send_email_logged", fake_send_email_logged)
 
@@ -105,15 +114,116 @@ async def test_platform_send_test_system_email_uses_platform_sender(
     )
     tpl.from_email = "Invites <invites@surrogacyforce.com>"
     db.commit()
+    test_occurrence_id = uuid4()
 
     res = await authed_client.post(
         "/platform/email/system-templates/org_invite/test",
-        json={"to_email": "test@example.com", "org_id": str(test_org.id)},
+        json={
+            "to_email": "test@example.com",
+            "org_id": str(test_org.id),
+            "idempotency_key": str(test_occurrence_id),
+        },
     )
     assert res.status_code == 200
     data = res.json()
-    assert data["sent"] is True
-    assert data["message_id"] == "msg_123"
+    assert data["queued"] is True
+    assert "sent" not in data
+    assert data["message_id"] is None
+    assert data["email_log_id"] == "log_123"
+
+    org_scoped_response = await authed_client.post(
+        f"/platform/orgs/{test_org.id}/email/system-templates/org_invite/test",
+        json={
+            "to_email": "test@example.com",
+            "idempotency_key": str(test_occurrence_id),
+        },
+    )
+    assert org_scoped_response.status_code == 200
+    assert org_scoped_response.json()["queued"] is True
+
+
+@pytest.mark.asyncio
+async def test_platform_send_test_system_email_requires_idempotency_key(
+    authed_client, db, test_user, test_org
+):
+    test_user.is_platform_admin = True
+    db.commit()
+
+    response = await authed_client.post(
+        "/platform/email/system-templates/org_invite/test",
+        json={"to_email": "test@example.com", "org_id": str(test_org.id)},
+    )
+
+    assert response.status_code == 422
+    assert "idempotency_key" in response.text
+
+
+@pytest.mark.asyncio
+async def test_platform_send_test_system_email_reuses_one_occurrence_but_allows_a_new_send(
+    authed_client, db, test_user, test_org, monkeypatch
+):
+    from app.db.models import EmailLog
+    from app.services import platform_email_service, system_email_template_service
+
+    test_user.is_platform_admin = True
+    monkeypatch.setattr(platform_email_service, "platform_sender_configured", lambda: True)
+
+    template = system_email_template_service.ensure_system_template(
+        db, system_key=system_email_template_service.ORG_INVITE_SYSTEM_KEY
+    )
+    template.from_email = "Invites <invites@surrogacyforce.com>"
+    db.commit()
+
+    first_occurrence_id = uuid4()
+    request_body = {
+        "to_email": "test@example.com",
+        "org_id": str(test_org.id),
+        "idempotency_key": str(first_occurrence_id),
+    }
+    first = await authed_client.post(
+        "/platform/email/system-templates/org_invite/test",
+        json=request_body,
+    )
+    retry = await authed_client.post(
+        "/platform/email/system-templates/org_invite/test",
+        json=request_body,
+    )
+
+    assert first.status_code == 200
+    assert retry.status_code == 200
+    assert first.json()["queued"] is True
+    assert retry.json()["queued"] is True
+    first_key = f"platform-system-test:org_invite:{first_occurrence_id}"
+    assert (
+        db.query(EmailLog)
+        .filter(
+            EmailLog.organization_id == test_org.id,
+            EmailLog.idempotency_key == first_key,
+        )
+        .count()
+        == 1
+    )
+
+    second_occurrence_id = uuid4()
+    second = await authed_client.post(
+        "/platform/email/system-templates/org_invite/test",
+        json={
+            **request_body,
+            "idempotency_key": str(second_occurrence_id),
+        },
+    )
+
+    assert second.status_code == 200
+    second_key = f"platform-system-test:org_invite:{second_occurrence_id}"
+    assert (
+        db.query(EmailLog)
+        .filter(
+            EmailLog.organization_id == test_org.id,
+            EmailLog.idempotency_key.in_([first_key, second_key]),
+        )
+        .count()
+        == 2
+    )
 
 
 @pytest.mark.asyncio
@@ -141,17 +251,105 @@ async def test_platform_system_email_campaign_sends_selected_users(
     )
     tpl.from_email = "Invites <invites@surrogacyforce.com>"
     db.commit()
+    campaign_occurrence_id = uuid4()
+
+    res = await authed_client.post(
+        "/platform/email/system-templates/org_invite/campaign",
+        json={
+            "campaign_occurrence_id": str(campaign_occurrence_id),
+            "targets": [{"org_id": str(test_org.id), "user_ids": [str(test_user.id)]}],
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["queued"] == 1
+    assert "sent" not in data
+    assert data["failed"] == 0
+    assert data["suppressed"] == 0
+    assert data["recipients"] == 1
+
+
+@pytest.mark.asyncio
+async def test_platform_system_email_campaign_requires_occurrence_id(
+    authed_client, db, test_user, test_org
+):
+    test_user.is_platform_admin = True
+    db.commit()
 
     res = await authed_client.post(
         "/platform/email/system-templates/org_invite/campaign",
         json={"targets": [{"org_id": str(test_org.id), "user_ids": [str(test_user.id)]}]},
     )
-    assert res.status_code == 200
-    data = res.json()
-    assert data["sent"] == 1
-    assert data["failed"] == 0
-    assert data["suppressed"] == 0
-    assert data["recipients"] == 1
+
+    assert res.status_code == 422
+    assert "campaign_occurrence_id" in res.text
+
+
+@pytest.mark.asyncio
+async def test_platform_system_email_campaign_occurrence_is_idempotent_but_distinct_campaigns_queue(
+    authed_client, db, test_user, test_org, monkeypatch
+):
+    from app.db.models import EmailLog
+    from app.services import platform_email_service, system_email_template_service
+
+    test_user.is_platform_admin = True
+    monkeypatch.setattr(platform_email_service, "platform_sender_configured", lambda: True)
+
+    template = system_email_template_service.ensure_system_template(
+        db, system_key=system_email_template_service.ORG_INVITE_SYSTEM_KEY
+    )
+    template.from_email = "Invites <invites@surrogacyforce.com>"
+    db.commit()
+
+    first_occurrence_id = uuid4()
+    request_body = {
+        "campaign_occurrence_id": str(first_occurrence_id),
+        "targets": [{"org_id": str(test_org.id), "user_ids": [str(test_user.id)]}],
+    }
+
+    first = await authed_client.post(
+        "/platform/email/system-templates/org_invite/campaign",
+        json=request_body,
+    )
+    retry = await authed_client.post(
+        "/platform/email/system-templates/org_invite/campaign",
+        json=request_body,
+    )
+
+    assert first.status_code == 200
+    assert retry.status_code == 200
+    first_key = f"platform-campaign:org_invite:{first_occurrence_id}:{test_org.id}:{test_user.id}"
+    first_logs = (
+        db.query(EmailLog)
+        .filter(
+            EmailLog.organization_id == test_org.id,
+            EmailLog.idempotency_key == first_key,
+        )
+        .all()
+    )
+    assert len(first_logs) == 1
+
+    second_occurrence_id = uuid4()
+    second = await authed_client.post(
+        "/platform/email/system-templates/org_invite/campaign",
+        json={
+            **request_body,
+            "campaign_occurrence_id": str(second_occurrence_id),
+        },
+    )
+
+    assert second.status_code == 200
+    second_key = f"platform-campaign:org_invite:{second_occurrence_id}:{test_org.id}:{test_user.id}"
+    second_logs = (
+        db.query(EmailLog)
+        .filter(
+            EmailLog.organization_id == test_org.id,
+            EmailLog.idempotency_key.in_([first_key, second_key]),
+        )
+        .all()
+    )
+    assert len(second_logs) == 2
+    assert {log.idempotency_key for log in second_logs} == {first_key, second_key}
 
 
 @pytest.mark.asyncio

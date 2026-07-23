@@ -93,6 +93,36 @@ async def test_platform_create_org_normalizes_slug_lowercase(
 
 
 @pytest.mark.asyncio
+async def test_platform_create_org_rolls_back_when_admin_invite_cannot_be_queued(
+    authed_client, db, test_user, monkeypatch
+):
+    from app.db.models import Organization
+    from app.services import invite_email_service
+
+    test_user.is_platform_admin = True
+    db.commit()
+
+    async def fail_enqueue(*_args, **_kwargs):
+        return {"success": False, "error": "Outbox unavailable"}
+
+    monkeypatch.setattr(invite_email_service, "send_invite_email", fail_enqueue)
+    slug = f"atomic-{uuid.uuid4().hex[:6]}"
+
+    response = await authed_client.post(
+        "/platform/orgs",
+        json={
+            "name": "Atomic Organization",
+            "slug": slug,
+            "timezone": "America/New_York",
+            "admin_email": f"admin-{uuid.uuid4().hex[:6]}@atomic.example",
+        },
+    )
+
+    assert response.status_code == 503
+    assert db.query(Organization).filter(Organization.slug == slug).count() == 0
+
+
+@pytest.mark.asyncio
 async def test_platform_update_org_slug(authed_client, db, test_user, test_org):
     test_user.is_platform_admin = True
     db.commit()

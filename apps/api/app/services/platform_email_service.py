@@ -11,43 +11,24 @@ is supported only as an optional fallback for local/dev or emergency ops.
 
 from __future__ import annotations
 
-import base64
 import logging
-from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
-import httpx
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.enums import EmailStatus
 from app.db.models import EmailLog
-from app.services.http_service import DEFAULT_RETRY_STATUSES, request_with_retries
+from app.services.email_delivery_service import (
+    DeliveryRoute,
+    EmailSource,
+    RenderedEmail,
+    queue_rendered_email,
+)
+from app.services.email_content import html_to_text
 from app.types import JsonObject
 
 logger = logging.getLogger(__name__)
-
-RESEND_SEND_URL = "https://api.resend.com/emails"
-RESEND_MAX_ATTEMPTS = 3
-RESEND_RETRY_BASE_DELAY = 0.5
-RESEND_RETRY_MAX_DELAY = 4.0
-RESEND_TIMEOUT_SECONDS = 20.0
-
-
-def _html_to_text(content: str) -> str:
-    """Convert HTML into readable text (deliverability + inbox previews).
-
-    Keep this small and dependency-free; we don't need full fidelity, just a
-    reasonable plain-text alternative.
-    """
-    import html as html_module
-    import re
-
-    text = re.sub(r"<(script|style)[^>]*>.*?</\\1>", "", content, flags=re.DOTALL | re.I)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = re.sub(r"\\s+", " ", text).strip()
-    return html_module.unescape(text)
 
 
 def platform_sender_configured() -> bool:
@@ -59,114 +40,14 @@ def platform_sender_configured() -> bool:
 
 def _result_from_log(log: EmailLog) -> JsonObject:
     success = log.status == EmailStatus.SENT.value
+    queued = log.status == EmailStatus.PENDING.value and log.delivery is not None
     return {
-        "success": success,
+        "success": success or queued,
+        "queued": queued,
         "message_id": log.external_id,
         "email_log_id": log.id,
-        "error": None if success else (log.error or "Email send failed"),
+        "error": None if success or queued else (log.error or "Email send failed"),
     }
-
-
-async def _send_resend_email(
-    *,
-    to_email: str,
-    subject: str,
-    from_email: str | None,
-    html: str,
-    text: str | None,
-    idempotency_key: str | None,
-    headers: dict[str, str] | None = None,
-    attachments: list[dict[str, object]] | None = None,
-) -> JsonObject:
-    api_key = settings.PLATFORM_RESEND_API_KEY.get_secret_value()
-    resolved_from = (from_email or "").strip() or (settings.PLATFORM_EMAIL_FROM or "").strip()
-    if not api_key:
-        return {
-            "success": False,
-            "error": "Platform email sender not configured (missing PLATFORM_RESEND_API_KEY)",
-        }
-    if not resolved_from:
-        return {
-            "success": False,
-            "error": "Missing From address for platform email (set template from_email in Ops)",
-        }
-
-    payload: dict[str, object] = {
-        "from": resolved_from,
-        "to": [to_email],
-        "subject": subject,
-        "html": html,
-    }
-    if text:
-        payload["text"] = text
-    if headers:
-        payload["headers"] = headers
-    if attachments:
-        payload["attachments"] = [
-            {
-                "filename": str(attachment["filename"]),
-                "content": base64.b64encode(bytes(attachment["content_bytes"])).decode("ascii"),
-                "type": str(attachment["content_type"]),
-            }
-            for attachment in attachments
-        ]
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    if idempotency_key:
-        headers["Idempotency-Key"] = idempotency_key
-
-    async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as client:
-
-        async def request_fn() -> httpx.Response:
-            return await client.post(RESEND_SEND_URL, headers=headers, json=payload)
-
-        response = await request_with_retries(
-            request_fn,
-            max_attempts=RESEND_MAX_ATTEMPTS,
-            base_delay=RESEND_RETRY_BASE_DELAY,
-            max_delay=RESEND_RETRY_MAX_DELAY,
-            retry_statuses=DEFAULT_RETRY_STATUSES,
-        )
-
-    if 200 <= response.status_code < 300:
-        data = response.json()
-        message_id = data.get("id")
-        if isinstance(message_id, str) and message_id:
-            return {"success": True, "message_id": message_id}
-        return {"success": False, "error": "Resend API returned success without message id"}
-
-    # Resend uses 409 for idempotency conflicts. If the message already exists, treat
-    # the send as a success so we don't incorrectly mark EmailLog as failed.
-    if response.status_code == 409:
-        message_id = None
-        try:
-            data = response.json()
-            if isinstance(data, dict):
-                mid = data.get("id")
-                if isinstance(mid, str) and mid:
-                    message_id = mid
-        except Exception:
-            message_id = None
-
-        if message_id:
-            return {"success": True, "message_id": message_id}
-        return {"success": True}
-
-    # Best-effort parse of error response
-    detail = None
-    try:
-        data = response.json()
-        if isinstance(data, dict):
-            detail = data.get("message") or data.get("error")
-    except Exception:
-        detail = None
-
-    if detail:
-        return {"success": False, "error": f"Resend API error: {response.status_code} ({detail})"}
-    return {"success": False, "error": f"Resend API error: {response.status_code}"}
 
 
 async def send_email_logged(
@@ -181,121 +62,82 @@ async def send_email_logged(
     template_id: UUID | None = None,
     surrogate_id: UUID | None = None,
     idempotency_key: str | None = None,
+    source_type: str | None = None,
+    source_id: UUID | None = None,
     attachments: list[dict[str, object]] | None = None,
+    commit: bool = True,
 ) -> JsonObject:
-    """Send a platform/system email with EmailLog tracking + idempotency."""
-    from app.services import email_service, unsubscribe_service
+    """Queue a platform/system email in the leased transactional outbox."""
+    from app.services import org_service, unsubscribe_service
 
-    if idempotency_key:
-        existing = (
-            db.query(EmailLog)
-            .filter(EmailLog.organization_id == org_id, EmailLog.idempotency_key == idempotency_key)
-            .first()
-        )
-        if existing:
-            return _result_from_log(existing)
-
-    if email_service.is_email_suppressed(db, org_id, to_email):
-        email_log = EmailLog(
-            organization_id=org_id,
-            template_id=template_id,
-            surrogate_id=surrogate_id,
-            recipient_email=to_email,
-            subject=subject,
-            body=html,
-            status=EmailStatus.SKIPPED.value,
-            error="suppressed",
-            idempotency_key=idempotency_key,
-        )
-        db.add(email_log)
-        db.commit()
-        db.refresh(email_log)
+    if not platform_sender_configured():
         return {
             "success": False,
-            "error": "Email suppressed",
-            "email_log_id": email_log.id,
+            "queued": False,
+            "error": "Platform email sender not configured (missing PLATFORM_RESEND_API_KEY)",
         }
 
-    email_log = EmailLog(
-        organization_id=org_id,
-        template_id=template_id,
-        surrogate_id=surrogate_id,
-        recipient_email=to_email,
-        subject=subject,
-        body=html,
-        status=EmailStatus.PENDING.value,
-        idempotency_key=idempotency_key,
-    )
-    db.add(email_log)
+    resolved_from = (from_email or "").strip() or (settings.PLATFORM_EMAIL_FROM or "").strip()
+    if not resolved_from:
+        return {
+            "success": False,
+            "queued": False,
+            "error": "Missing From address for platform email (set template from_email in Ops)",
+        }
+    if attachments:
+        return {
+            "success": False,
+            "queued": False,
+            "error": "Platform queued email attachments must use persisted attachment records",
+        }
 
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        existing = (
-            db.query(EmailLog)
-            .filter(EmailLog.organization_id == org_id, EmailLog.idempotency_key == idempotency_key)
-            .first()
-        )
-        if existing:
-            return _result_from_log(existing)
-        raise
-
-    db.refresh(email_log)
-
-    resolved_text = text
-    if not (resolved_text or "").strip() and html:
-        resolved_text = _html_to_text(html)
-
-    from app.services import org_service
-
-    org = org_service.get_org_by_id(db, org_id)
-    headers = unsubscribe_service.build_list_unsubscribe_headers(
+    resolved_text = text if (text or "").strip() else html_to_text(html)
+    organization = org_service.get_org_by_id(db, org_id)
+    list_headers = unsubscribe_service.build_list_unsubscribe_headers(
         org_id=org_id,
         email=to_email,
-        base_url=org_service.get_org_portal_base_url(org),
+        base_url=org_service.get_org_portal_base_url(organization),
     )
-
-    try:
-        result = await _send_resend_email(
-            to_email=to_email,
+    queued = queue_rendered_email(
+        db,
+        organization_id=org_id,
+        route=DeliveryRoute.PLATFORM_RESEND,
+        provider_account_id="platform:default",
+        rendered_email=RenderedEmail(
+            recipient_email=to_email,
             subject=subject,
-            from_email=from_email,
             html=html,
             text=resolved_text,
-            idempotency_key=idempotency_key,
-            headers=headers,
-            attachments=attachments,
-        )
-    except Exception as exc:
-        email_log.status = EmailStatus.FAILED.value
-        # Avoid leaking request payloads/PII into logs; exception type is enough
-        # to debug the integration while keeping logs safe.
-        email_log.error = f"Platform email send failed: {exc.__class__.__name__}"
-        logger.exception("Platform email send raised for email_log=%s", email_log.id)
-        db.commit()
+            from_email=resolved_from,
+            headers=list_headers,
+            safe_tags=({"name": "message_kind", "value": "platform_transactional"},),
+        ),
+        idempotency_key=idempotency_key or f"platform-email/{uuid4()}",
+        source=EmailSource(
+            source_type=source_type or ("platform_template" if template_id else "platform_email"),
+            source_id=source_id if source_type else template_id,
+            template_id=template_id,
+            surrogate_id=surrogate_id,
+            purpose="transactional",
+        ),
+        commit=commit,
+    )
+    if queued.email_log.status == EmailStatus.SKIPPED.value:
         return {
             "success": False,
-            "error": email_log.error,
-            "email_log_id": email_log.id,
+            "queued": False,
+            "error": "Email suppressed",
+            "email_log_id": queued.email_log.id,
+            "message_id": None,
         }
 
-    if result.get("success"):
-        email_log.status = EmailStatus.SENT.value
-        email_log.external_id = result.get("message_id")
-        email_log.sent_at = datetime.now(timezone.utc)
-        email_log.error = None
-        logger.info("Platform email sent for email_log=%s", email_log.id)
-    else:
-        email_log.status = EmailStatus.FAILED.value
-        email_log.error = str(result.get("error") or "Email send failed")
-        logger.warning("Platform email failed for email_log=%s", email_log.id)
-
-    db.commit()
-
     return {
-        **result,
-        "email_log_id": email_log.id,
+        "success": True,
+        "queued": True,
+        "message_id": None,
+        "email_log_id": queued.email_log.id,
+        "delivery_id": queued.delivery.id if queued.delivery else None,
+        "error": None,
     }
 
 
@@ -318,7 +160,10 @@ class PlatformEmailSender:
         template_id: UUID | None = None,
         surrogate_id: UUID | None = None,
         idempotency_key: str | None = None,
+        source_type: str | None = None,
+        source_id: UUID | None = None,
         attachments: list[dict[str, object]] | None = None,
+        commit: bool = True,
     ) -> JsonObject:
         return await send_email_logged(
             db=db,
@@ -331,5 +176,8 @@ class PlatformEmailSender:
             template_id=template_id,
             surrogate_id=surrogate_id,
             idempotency_key=idempotency_key,
+            source_type=source_type,
+            source_id=source_id,
             attachments=attachments,
+            commit=commit,
         )
