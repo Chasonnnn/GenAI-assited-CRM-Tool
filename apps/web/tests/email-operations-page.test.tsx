@@ -2,13 +2,30 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, within } from "@testing-library/react"
 
 import { EmailOperationsDashboard } from "@/components/email-operations/EmailOperationsDashboard"
+import { ApiError } from "@/lib/api"
 
 const mockUseReadiness = vi.fn()
 const mockUseMessages = vi.fn()
 const mockUseMessage = vi.fn()
+const mockUseReconciliationCases = vi.fn()
+const mockUseRetryReconciliation = vi.fn()
+const mockUseDismissReconciliation = vi.fn()
+const mockUseLinkReconciliation = vi.fn()
+const mockUseConfirmSentReconciliation = vi.fn()
+const mockUseConfirmNotSentReconciliation = vi.fn()
+const mockUseAuth = vi.fn()
+const mockUseEffectivePermissions = vi.fn()
 const mockFetchNextPage = vi.fn()
+const mockFetchNextReconciliationPage = vi.fn()
 const mockRefetchReadiness = vi.fn()
 const mockRefetchMessages = vi.fn()
+const mockRefetchReconciliation = vi.fn()
+const mockRetryReconciliation = vi.fn()
+const mockDismissReconciliation = vi.fn()
+const mockLinkReconciliation = vi.fn()
+const mockConfirmSentReconciliation = vi.fn()
+const mockConfirmNotSentReconciliation = vi.fn()
+const mockToastSuccess = vi.fn()
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({
@@ -22,6 +39,30 @@ vi.mock("@/lib/hooks/use-email-operations", () => ({
     useEmailOperationsReadiness: () => mockUseReadiness(),
     useEmailOperationsMessages: () => mockUseMessages(),
     useEmailOperationMessage: (messageId: string | null) => mockUseMessage(messageId),
+    useEmailReconciliationCases: (options: unknown) =>
+        mockUseReconciliationCases(options),
+    useRetryEmailReconciliationCorrelation: () => mockUseRetryReconciliation(),
+    useDismissEmailReconciliationCase: () => mockUseDismissReconciliation(),
+    useLinkEmailReconciliationEvent: () => mockUseLinkReconciliation(),
+    useConfirmEmailReconciliationSent: () =>
+        mockUseConfirmSentReconciliation(),
+    useConfirmEmailReconciliationNotSent: () =>
+        mockUseConfirmNotSentReconciliation(),
+}))
+
+vi.mock("@/lib/auth-context", () => ({
+    useAuth: () => mockUseAuth(),
+}))
+
+vi.mock("@/lib/hooks/use-permissions", () => ({
+    useEffectivePermissions: (userId: string | null) =>
+        mockUseEffectivePermissions(userId),
+}))
+
+vi.mock("@/components/ui/toast", () => ({
+    toast: {
+        success: (...args: unknown[]) => mockToastSuccess(...args),
+    },
 }))
 
 const readiness = {
@@ -152,11 +193,99 @@ const detail = {
     ],
 } as const
 
+const reconciliationCase = {
+    id: "11111111-1111-4111-8111-111111111111",
+    case_type: "orphan_webhook",
+    status: "action_required",
+    reason_code: "automatic_correlation_exhausted",
+    version: 3,
+    provider: "resend",
+    event_type: "email.delivered",
+    event_created_at: "2026-07-23T12:02:00Z",
+    received_at: "2026-07-23T12:02:01Z",
+    message_id: null,
+    delivery_id: null,
+    attempt_count: null,
+    max_attempts: null,
+    next_attempt_at: null,
+    available_actions: ["retry_correlation", "link_event"],
+    detected_at: "2026-07-23T12:03:00Z",
+    updated_at: "2026-07-23T12:04:00Z",
+} as const
+
+const unknownDeliveryCase = {
+    ...reconciliationCase,
+    id: "22222222-2222-4222-8222-222222222222",
+    case_type: "unknown_delivery",
+    reason_code: "provider_outcome_unknown",
+    event_type: null,
+    event_created_at: null,
+    received_at: null,
+    delivery_id: "33333333-3333-4333-8333-333333333333",
+    attempt_count: 5,
+    max_attempts: 5,
+    available_actions: ["confirm_sent", "confirm_not_sent"],
+} as const
+
+function reconciliationQueryResult(
+    items: readonly unknown[],
+    options: {
+        actionRequired?: number
+        resolved?: number
+        nextCursor?: string | null
+        hasNextPage?: boolean
+    } = {},
+) {
+    const nextCursor = options.nextCursor ?? null
+    return {
+        data: {
+            pages: [
+                {
+                    items,
+                    next_cursor: nextCursor,
+                    counts: {
+                        monitoring: 0,
+                        action_required:
+                            options.actionRequired ?? items.length,
+                        resolved: options.resolved ?? 0,
+                    },
+                },
+            ],
+        },
+        isLoading: false,
+        isError: false,
+        isFetching: false,
+        hasNextPage: options.hasNextPage ?? nextCursor !== null,
+        isFetchingNextPage: false,
+        fetchNextPage: mockFetchNextReconciliationPage,
+        refetch: mockRefetchReconciliation,
+    }
+}
+
 describe("EmailOperationsDashboard", () => {
     beforeEach(() => {
         mockFetchNextPage.mockReset()
+        mockFetchNextReconciliationPage.mockReset()
         mockRefetchReadiness.mockReset()
         mockRefetchMessages.mockReset()
+        mockRefetchReconciliation.mockReset()
+        mockRetryReconciliation.mockReset()
+        mockDismissReconciliation.mockReset()
+        mockLinkReconciliation.mockReset()
+        mockConfirmSentReconciliation.mockReset()
+        mockConfirmNotSentReconciliation.mockReset()
+        mockToastSuccess.mockReset()
+        mockUseAuth.mockReturnValue({
+            user: {
+                user_id: "case-user-1",
+                role: "case_manager",
+            },
+        })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: {
+                permissions: [],
+            },
+        })
         mockUseReadiness.mockReturnValue({
             data: readiness,
             isLoading: false,
@@ -187,6 +316,422 @@ describe("EmailOperationsDashboard", () => {
             isError: false,
             refetch: vi.fn(),
         }))
+        mockUseReconciliationCases.mockReturnValue(
+            reconciliationQueryResult([]),
+        )
+        mockUseRetryReconciliation.mockReturnValue({
+            mutate: mockRetryReconciliation,
+            isPending: false,
+            error: null,
+            reset: vi.fn(),
+        })
+        mockUseDismissReconciliation.mockReturnValue({
+            mutate: mockDismissReconciliation,
+            isPending: false,
+            error: null,
+            reset: vi.fn(),
+        })
+        mockUseLinkReconciliation.mockReturnValue({
+            mutate: mockLinkReconciliation,
+            isPending: false,
+            error: null,
+            reset: vi.fn(),
+        })
+        mockUseConfirmSentReconciliation.mockReturnValue({
+            mutate: mockConfirmSentReconciliation,
+            isPending: false,
+            error: null,
+            reset: vi.fn(),
+        })
+        mockUseConfirmNotSentReconciliation.mockReturnValue({
+            mutate: mockConfirmNotSentReconciliation,
+            isPending: false,
+            error: null,
+            reset: vi.fn(),
+        })
+    })
+
+    it("does not request or render the operator queue without manage_ops", () => {
+        render(<EmailOperationsDashboard />)
+
+        expect(mockUseReconciliationCases).toHaveBeenCalledWith({
+            enabled: false,
+            status: "action_required",
+        })
+        expect(
+            screen.queryByRole("heading", { name: "Reconciliation queue" }),
+        ).not.toBeInTheDocument()
+    })
+
+    it("renders only friendly, sanitized reconciliation details for an authorized operator", () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: {
+                permissions: ["manage_ops"],
+            },
+        })
+        mockUseReconciliationCases.mockReturnValue(
+            reconciliationQueryResult([reconciliationCase]),
+        )
+
+        render(<EmailOperationsDashboard />)
+
+        expect(mockUseReconciliationCases).toHaveBeenCalledWith({
+            enabled: true,
+            status: "action_required",
+        })
+        expect(
+            screen.getByRole("heading", { name: "Reconciliation queue" }),
+        ).toBeInTheDocument()
+        expect(screen.getByText("1 needs action")).toBeInTheDocument()
+        expect(screen.getByText("Orphan provider event")).toBeInTheDocument()
+        expect(
+            screen.getByText("Automatic correlation exhausted"),
+        ).toBeInTheDocument()
+        expect(screen.queryByText("orphan_webhook")).not.toBeInTheDocument()
+        expect(
+            screen.queryByText("automatic_correlation_exhausted"),
+        ).not.toBeInTheDocument()
+        expect(
+            screen.queryByText("11111111-1111-4111-8111-111111111111"),
+        ).not.toBeInTheDocument()
+    })
+
+    it("requires explicit confirmation before retrying local correlation", () => {
+        mockUseAuth.mockReturnValue({
+            user: {
+                user_id: "developer-1",
+                role: "developer",
+            },
+        })
+        mockUseReconciliationCases.mockReturnValue(
+            reconciliationQueryResult([reconciliationCase]),
+        )
+        mockRetryReconciliation.mockImplementation(
+            (_input: unknown, options?: { onSuccess?: () => void }) => {
+                options?.onSuccess?.()
+            },
+        )
+
+        render(<EmailOperationsDashboard />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Retry correlation" }))
+        const dialog = screen.getByRole("alertdialog")
+        expect(
+            within(dialog).getByText(
+                "This retries local matching only. It does not send or resend email.",
+            ),
+        ).toBeInTheDocument()
+
+        fireEvent.click(
+            within(dialog).getByRole("button", { name: "Retry local matching" }),
+        )
+        expect(mockRetryReconciliation).toHaveBeenCalledWith(
+            {
+                caseId: reconciliationCase.id,
+                expectedVersion: 3,
+            },
+            expect.any(Object),
+        )
+        expect(mockToastSuccess).toHaveBeenCalledWith(
+            "Local correlation retry started",
+        )
+        expect(dialog).not.toBeInTheDocument()
+    })
+
+    it("shows a controlled conflict message and blocks duplicate retries", () => {
+        mockUseAuth.mockReturnValue({
+            user: {
+                user_id: "developer-1",
+                role: "developer",
+            },
+        })
+        mockUseReconciliationCases.mockReturnValue(
+            reconciliationQueryResult([reconciliationCase]),
+        )
+        mockUseRetryReconciliation.mockReturnValue({
+            mutate: mockRetryReconciliation,
+            isPending: true,
+            error: new ApiError(
+                409,
+                "Conflict",
+                "raw provider conflict detail that must stay hidden",
+            ),
+            reset: vi.fn(),
+        })
+
+        render(<EmailOperationsDashboard />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Retry correlation" }))
+        const dialog = screen.getByRole("alertdialog")
+        expect(
+            within(dialog).getByText("This case changed. Refresh and try again."),
+        ).toBeInTheDocument()
+        expect(
+            within(dialog).queryByText(
+                "raw provider conflict detail that must stay hidden",
+            ),
+        ).not.toBeInTheDocument()
+        expect(
+            within(dialog).getByRole("button", { name: "Retrying..." }),
+        ).toBeDisabled()
+    })
+
+    it("dismisses only with a controlled operator reason and no-send warning", () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: {
+                permissions: ["manage_ops"],
+            },
+        })
+        mockUseReconciliationCases.mockReturnValue(
+            reconciliationQueryResult([
+                {
+                    ...reconciliationCase,
+                    available_actions: ["dismiss"],
+                },
+            ]),
+        )
+
+        render(<EmailOperationsDashboard />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Dismiss case" }))
+        const dialog = screen.getByRole("dialog", {
+            name: "Dismiss reconciliation case",
+        })
+        expect(
+            within(dialog).getByText(
+                "Dismissal removes this case from the operator queue. It does not change message status or send email.",
+            ),
+        ).toBeInTheDocument()
+        expect(
+            within(dialog).getByRole("button", { name: "Dismiss case" }),
+        ).toBeDisabled()
+
+        fireEvent.click(
+            within(dialog).getByRole("radio", {
+                name: /Test provider event/,
+            }),
+        )
+        fireEvent.click(
+            within(dialog).getByRole("button", { name: "Dismiss case" }),
+        )
+        expect(mockDismissReconciliation).toHaveBeenCalledWith(
+            {
+                caseId: reconciliationCase.id,
+                expectedVersion: 3,
+                resolutionCode: "test_event",
+            },
+            expect.any(Object),
+        )
+        expect(within(dialog).queryByText("test_event")).not.toBeInTheDocument()
+    })
+
+    it("links an orphan event through a friendly recent-message picker", () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: {
+                permissions: ["manage_ops"],
+            },
+        })
+        mockUseReconciliationCases.mockReturnValue(
+            reconciliationQueryResult([
+                {
+                    ...reconciliationCase,
+                    available_actions: ["link_event"],
+                },
+            ]),
+        )
+
+        render(<EmailOperationsDashboard />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Link to message" }))
+        const sheet = screen.getByRole("dialog", {
+            name: "Link provider event",
+        })
+        expect(
+            within(sheet).getByText(
+                "Linking updates local delivery history only. It does not send or resend email.",
+            ),
+        ).toBeInTheDocument()
+        expect(
+            within(sheet).getByText("Welcome to Surrogacy Force"),
+        ).toBeInTheDocument()
+        expect(within(sheet).getByText("recipient@example.com")).toBeInTheDocument()
+        expect(within(sheet).queryByText("message-1")).not.toBeInTheDocument()
+
+        fireEvent.click(
+            within(sheet).getByRole("button", {
+                name: "Select Welcome to Surrogacy Force to recipient@example.com",
+            }),
+        )
+        fireEvent.click(
+            within(sheet).getByRole("button", { name: "Link event" }),
+        )
+        expect(mockLinkReconciliation).toHaveBeenCalledWith(
+            {
+                caseId: reconciliationCase.id,
+                expectedVersion: 3,
+                emailLogId: message.id,
+            },
+            expect.any(Object),
+        )
+    })
+
+    it("requires provider evidence before confirming a sent delivery", () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: {
+                permissions: ["manage_ops"],
+            },
+        })
+        mockUseReconciliationCases.mockReturnValue(
+            reconciliationQueryResult([
+                {
+                    ...unknownDeliveryCase,
+                    available_actions: ["confirm_sent"],
+                },
+            ]),
+        )
+
+        render(<EmailOperationsDashboard />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Confirm sent" }))
+        const dialog = screen.getByRole("dialog", {
+            name: "Confirm sent delivery",
+        })
+        expect(
+            within(dialog).getByText(
+                "Use only after verifying the Resend dashboard. This updates local delivery history and does not send email.",
+            ),
+        ).toBeInTheDocument()
+        const confirm = within(dialog).getByRole("button", {
+            name: "Confirm sent",
+        })
+        expect(confirm).toBeDisabled()
+
+        fireEvent.change(within(dialog).getByLabelText("Resend message ID"), {
+            target: { value: "provider-message-verified" },
+        })
+        fireEvent.click(confirm)
+        expect(mockConfirmSentReconciliation).toHaveBeenCalledWith(
+            {
+                caseId: unknownDeliveryCase.id,
+                expectedVersion: 3,
+                providerMessageId: "provider-message-verified",
+            },
+            expect.any(Object),
+        )
+    })
+
+    it("uses high-friction confirmation before marking a delivery not sent", () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: {
+                permissions: ["manage_ops"],
+            },
+        })
+        mockUseReconciliationCases.mockReturnValue(
+            reconciliationQueryResult([
+                {
+                    ...unknownDeliveryCase,
+                    available_actions: ["confirm_not_sent"],
+                },
+            ]),
+        )
+
+        render(<EmailOperationsDashboard />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Confirm not sent" }))
+        const dialog = screen.getByRole("alertdialog")
+        expect(
+            within(dialog).getByText(
+                "Use only after verifying the Resend dashboard. This marks the local delivery as not sent. It does not send or resend email.",
+            ),
+        ).toBeInTheDocument()
+        fireEvent.click(
+            within(dialog).getByRole("button", { name: "Confirm not sent" }),
+        )
+        expect(mockConfirmNotSentReconciliation).toHaveBeenCalledWith(
+            {
+                caseId: unknownDeliveryCase.id,
+                expectedVersion: 3,
+            },
+            expect.any(Object),
+        )
+    })
+
+    it("renders complete loading, error, empty, and pagination states for the queue", () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: {
+                permissions: ["manage_ops"],
+            },
+        })
+        mockUseReconciliationCases.mockReturnValueOnce({
+            data: undefined,
+            isLoading: true,
+            isError: false,
+            isFetching: true,
+            hasNextPage: false,
+            isFetchingNextPage: false,
+            fetchNextPage: mockFetchNextReconciliationPage,
+            refetch: mockRefetchReconciliation,
+        })
+
+        const loadingView = render(<EmailOperationsDashboard />)
+        expect(screen.getByText("Loading reconciliation cases")).toBeInTheDocument()
+        loadingView.unmount()
+
+        mockUseReconciliationCases.mockReturnValueOnce({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            hasNextPage: false,
+            isFetchingNextPage: false,
+            fetchNextPage: mockFetchNextReconciliationPage,
+            refetch: mockRefetchReconciliation,
+        })
+        const errorView = render(<EmailOperationsDashboard />)
+        const errorTitle = screen.getByText("Reconciliation queue couldn’t load")
+        const queueAlert = errorTitle.closest('[role="alert"]')
+        expect(queueAlert).not.toBeNull()
+        fireEvent.click(
+            within(queueAlert as HTMLElement).getByRole("button", {
+                name: "Try again",
+            }),
+        )
+        expect(mockRefetchReconciliation).toHaveBeenCalledTimes(1)
+        errorView.unmount()
+
+        mockUseReconciliationCases.mockReturnValueOnce(
+            reconciliationQueryResult([], { resolved: 2 }),
+        )
+        const emptyView = render(<EmailOperationsDashboard />)
+        expect(screen.getByText("No cases need action")).toBeInTheDocument()
+        emptyView.unmount()
+
+        mockUseReconciliationCases.mockReturnValueOnce(
+            reconciliationQueryResult([reconciliationCase], {
+                actionRequired: 2,
+                nextCursor: "next-page",
+            }),
+        )
+        render(<EmailOperationsDashboard />)
+        fireEvent.click(
+            screen.getByRole("button", { name: "Load more reconciliation cases" }),
+        )
+        expect(mockFetchNextReconciliationPage).toHaveBeenCalledTimes(1)
+    })
+
+    it("includes the protected reconciliation queue in an authorized refresh", () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: {
+                permissions: ["manage_ops"],
+            },
+        })
+
+        render(<EmailOperationsDashboard />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Refresh" }))
+        expect(mockRefetchReadiness).toHaveBeenCalledTimes(1)
+        expect(mockRefetchMessages).toHaveBeenCalledTimes(1)
+        expect(mockRefetchReconciliation).toHaveBeenCalledTimes(1)
     })
 
     it("separates send and tracking readiness while treating no activity as unknown", () => {

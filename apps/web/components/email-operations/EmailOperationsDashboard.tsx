@@ -54,8 +54,12 @@ import type {
 import {
     useEmailOperationsMessages,
     useEmailOperationsReadiness,
+    useEmailReconciliationCases,
 } from "@/lib/hooks/use-email-operations"
+import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { EmailOperationDetailSheet } from "./EmailOperationDetailSheet"
+import { EmailReconciliationQueue } from "./EmailReconciliationQueue"
 import {
     getCheckStatusLabel,
     getMessageStatusLabel,
@@ -573,10 +577,23 @@ function DashboardSkeleton() {
 }
 
 export function EmailOperationsDashboard() {
+    const { user } = useAuth()
+    const effectivePermissionsQuery = useEffectivePermissions(
+        user?.user_id ?? null,
+    )
     const readinessQuery = useEmailOperationsReadiness()
     const messagesQuery = useEmailOperationsMessages()
     const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
 
+    const permissionSet = new Set(
+        effectivePermissionsQuery.data?.permissions ?? [],
+    )
+    const canManageReconciliation =
+        user?.role === "developer" || permissionSet.has("manage_ops")
+    const reconciliationQuery = useEmailReconciliationCases({
+        enabled: canManageReconciliation,
+        status: "action_required",
+    })
     const messages =
         messagesQuery.data?.pages.flatMap((page) => page.items) ?? []
     const isInitialLoading =
@@ -587,10 +604,17 @@ export function EmailOperationsDashboard() {
         !readinessQuery.data &&
         messagesQuery.isError &&
         !messagesQuery.data
-    const isRefreshing = readinessQuery.isFetching || messagesQuery.isFetching
+    const isRefreshing =
+        readinessQuery.isFetching ||
+        messagesQuery.isFetching ||
+        (canManageReconciliation && reconciliationQuery.isFetching)
 
     const refresh = () => {
-        void Promise.all([readinessQuery.refetch(), messagesQuery.refetch()])
+        void Promise.all([
+            readinessQuery.refetch(),
+            messagesQuery.refetch(),
+            ...(canManageReconciliation ? [reconciliationQuery.refetch()] : []),
+        ])
     }
 
     return (
@@ -662,6 +686,12 @@ export function EmailOperationsDashboard() {
                         {readinessQuery.data ? (
                             <>
                                 <ReadinessSection readiness={readinessQuery.data} />
+                                {canManageReconciliation ? (
+                                    <EmailReconciliationQueue
+                                        query={reconciliationQuery}
+                                        messages={messages}
+                                    />
+                                ) : null}
                                 <MetricsSection
                                     summary={readinessQuery.data.summary_24h}
                                 />

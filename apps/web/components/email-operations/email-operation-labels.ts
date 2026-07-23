@@ -68,6 +68,20 @@ const ERROR_TYPE_LABELS: Record<string, string> = {
     configuration_error: "Configuration error",
 }
 
+const RECONCILIATION_CASE_LABELS: Record<string, string> = {
+    orphan_webhook: "Orphan provider event",
+    unknown_delivery: "Unknown delivery outcome",
+}
+
+const RECONCILIATION_REASON_LABELS: Record<string, string> = {
+    automatic_correlation_exhausted: "Automatic correlation exhausted",
+    provider_outcome_unknown: "Provider outcome unknown",
+    idempotency_window_expired: "Safe retry window expired",
+    delivery_lease_expired: "Delivery worker outcome unknown",
+    worker_claim_expired: "Correlation worker stopped",
+    unsupported_event: "Unsupported provider event",
+}
+
 function friendlyFallback(value: string): string {
     const normalized = value.replace(/[._-]+/g, " ").trim()
     if (!normalized) return "Unknown"
@@ -124,4 +138,12 @@ export function getWebhookActivityLabel(value: EmailOperationsCheckStatus): stri
     if (value === "fail") return "Events missing"
     if (value === "unknown") return "Awaiting first signal"
     return "Not applicable"
+}
+
+export function getReconciliationCaseLabel(value: string): string {
+    return RECONCILIATION_CASE_LABELS[value] ?? "Provider reconciliation case"
+}
+
+export function getReconciliationReasonLabel(value: string): string {
+    return RECONCILIATION_REASON_LABELS[value] ?? "Operator review needed"
 }
