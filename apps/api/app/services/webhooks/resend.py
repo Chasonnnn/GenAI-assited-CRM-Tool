@@ -605,6 +605,7 @@ def _process_verified_payload(
     event: ResendWebhookEvent,
     email_log: EmailLog,
     payload: dict,
+    commit: bool = True,
 ) -> dict:
     """Project one durably accepted Resend event transactionally."""
     event_id = event.id
@@ -661,7 +662,8 @@ def _process_verified_payload(
             locked_event.organization_id,
             locked_event.provider_event_id,
         )
-        db.commit()
+        if commit:
+            db.commit()
         return {"status": "ok"}
 
     event_type_value = payload.get("type")
@@ -703,7 +705,10 @@ def _process_verified_payload(
             db,
             delivery=locked_delivery,
         )
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return {"status": "ok"}
 
 

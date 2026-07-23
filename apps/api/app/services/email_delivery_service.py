@@ -232,6 +232,72 @@ def _resolve_verified_provider_acceptance(
     return True
 
 
+def resolve_reconciliation_by_operator(
+    db: Session,
+    *,
+    delivery: EmailDelivery,
+    outcome: str,
+    provider_message_id: str | None,
+    resolved_at: datetime,
+) -> None:
+    """Project explicit operator evidence without making a provider request."""
+    if delivery.status != EmailDeliveryStatus.RECONCILIATION_REQUIRED.value:
+        raise EmailDeliveryConflict("delivery is no longer awaiting reconciliation")
+
+    if outcome == "confirm_sent":
+        normalized_provider_message_id = (provider_message_id or "").strip()
+        if not normalized_provider_message_id:
+            raise EmailDeliveryConflict(
+                "provider_message_id is required when confirming provider acceptance"
+            )
+        _assert_provider_message_identity(delivery, normalized_provider_message_id)
+        delivery.provider_message_id = normalized_provider_message_id
+        if not _resolve_verified_provider_acceptance(
+            db,
+            delivery=delivery,
+            resolved_at=resolved_at,
+            project_source=True,
+        ):
+            raise EmailDeliveryConflict("provider acceptance could not be projected")
+        return
+
+    if outcome != "confirm_not_sent":
+        raise EmailDeliveryConflict("unsupported operator reconciliation outcome")
+    if provider_message_id is not None and provider_message_id.strip():
+        raise EmailDeliveryConflict(
+            "provider_message_id is not allowed when confirming no provider acceptance"
+        )
+
+    email_log = delivery.email_log
+    if (
+        delivery.provider_message_id is not None
+        or email_log.external_id is not None
+        or email_log.resend_status is not None
+        or email_log.resend_status_at is not None
+    ):
+        raise EmailDeliveryConflict(
+            "verified provider evidence conflicts with a not-sent resolution"
+        )
+
+    controlled_error = "Operator confirmed provider did not accept this delivery"
+    delivery.status = EmailDeliveryStatus.FAILED.value
+    delivery.completed_at = resolved_at
+    delivery.last_error_type = "operator_confirmed_not_sent"
+    delivery.last_error = controlled_error
+    delivery.lease_token = None
+    delivery.lease_owner = None
+    delivery.lease_expires_at = None
+    email_log.status = EmailStatus.FAILED.value
+    email_log.error = controlled_error
+    _project_source_delivery(
+        db,
+        email_log=email_log,
+        status=EmailStatus.FAILED.value,
+        error=controlled_error,
+        occurred_at=resolved_at,
+    )
+
+
 def lock_delivery_for_verified_webhook(
     db: Session,
     *,
@@ -271,6 +337,7 @@ def merge_verified_webhook_identity(
         if delivery.status in {
             EmailDeliveryStatus.PENDING.value,
             EmailDeliveryStatus.RETRY_SCHEDULED.value,
+            EmailDeliveryStatus.FAILED.value,
             EmailDeliveryStatus.RECONCILIATION_REQUIRED.value,
         }:
             delivery.status = EmailDeliveryStatus.SENT.value
@@ -823,8 +890,7 @@ def claim_due_deliveries(
                 .filter(
                     EmailDeliveryAttempt.delivery_id == delivery.id,
                     EmailDeliveryAttempt.lease_token == delivery.lease_token,
-                    EmailDeliveryAttempt.outcome
-                    == EmailDeliveryAttemptOutcome.IN_PROGRESS.value,
+                    EmailDeliveryAttempt.outcome == EmailDeliveryAttemptOutcome.IN_PROGRESS.value,
                 )
                 .one_or_none()
             )

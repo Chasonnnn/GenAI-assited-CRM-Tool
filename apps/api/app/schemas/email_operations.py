@@ -200,3 +200,22 @@ class EmailReconciliationRetryRequest(BaseModel):
     """Optimistically fenced request to retry local event correlation."""
 
     expected_version: int = Field(ge=1)
+
+
+class EmailReconciliationLinkRequest(EmailReconciliationRetryRequest):
+    """Optimistically fenced request to link a signed event to a message."""
+
+    email_log_id: UUID
+
+
+class EmailReconciliationDismissRequest(EmailReconciliationRetryRequest):
+    """Controlled dismissal for a non-lifecycle provider event."""
+
+    resolution_code: Literal["unsupported_event", "test_event", "not_actionable"]
+
+
+class EmailReconciliationDeliveryResolutionRequest(EmailReconciliationRetryRequest):
+    """Controlled operator resolution for an unknown provider outcome."""
+
+    outcome: Literal["confirm_sent", "confirm_not_sent"]
+    provider_message_id: str | None = Field(default=None, max_length=255)

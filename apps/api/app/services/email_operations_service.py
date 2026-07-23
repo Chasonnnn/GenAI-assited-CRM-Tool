@@ -88,7 +88,17 @@ def _reconciliation_actions(case: EmailReconciliationCase) -> list[str]:
     if case.status != "action_required":
         return []
     if case.case_type == "orphan_webhook":
-        return ["retry_correlation", "link_event", "dismiss"]
+        actions = ["retry_correlation", "link_event"]
+        event_type = (
+            case.resend_webhook_event.event_type if case.resend_webhook_event is not None else None
+        )
+        from app.services.email_reconciliation_service import (
+            RECONCILABLE_DELIVERY_EVENT_TYPES,
+        )
+
+        if event_type not in RECONCILABLE_DELIVERY_EVENT_TYPES:
+            actions.append("dismiss")
+        return actions
     return ["confirm_sent", "confirm_not_sent"]
 
 
@@ -110,7 +120,7 @@ def project_reconciliation_case(
         event_type=event.event_type if event else None,
         event_created_at=event.event_created_at if event else None,
         received_at=event.received_at if event else None,
-        message_id=delivery.email_log_id if delivery else None,
+        message_id=(delivery.email_log_id if delivery else event.email_log_id if event else None),
         delivery_id=delivery.id if delivery else None,
         attempt_count=delivery.attempt_count if delivery else None,
         max_attempts=delivery.max_attempts if delivery else None,
@@ -181,11 +191,9 @@ def list_reconciliation_cases(
         items=[project_reconciliation_case(case) for case in visible_rows],
         next_cursor=next_cursor,
         counts=EmailReconciliationCounts(
-            monitoring=counts_by_status.get("pending", 0)
-            + counts_by_status.get("running", 0),
+            monitoring=counts_by_status.get("pending", 0) + counts_by_status.get("running", 0),
             action_required=counts_by_status.get("action_required", 0),
-            resolved=counts_by_status.get("resolved", 0)
-            + counts_by_status.get("dismissed", 0),
+            resolved=counts_by_status.get("resolved", 0) + counts_by_status.get("dismissed", 0),
         ),
     )
 

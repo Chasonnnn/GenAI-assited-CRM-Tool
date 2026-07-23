@@ -11,7 +11,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.enums import AuditEventType, JobStatus, JobType
-from app.db.models import EmailDelivery, EmailReconciliationCase, Job, ResendWebhookEvent
+from app.db.models import (
+    EmailDelivery,
+    EmailLog,
+    EmailReconciliationCase,
+    Job,
+    ResendWebhookEvent,
+)
 
 
 _DELIVERY_REASON_CODES = {
@@ -20,6 +26,20 @@ _DELIVERY_REASON_CODES = {
     "provider_outcome_unknown": "provider_outcome_unknown",
 }
 _EVENT_RECONCILE_MAX_ATTEMPTS = 8
+RECONCILABLE_DELIVERY_EVENT_TYPES = frozenset(
+    {
+        "email.scheduled",
+        "email.sent",
+        "email.delivery_delayed",
+        "email.delivered",
+        "email.failed",
+        "email.suppressed",
+        "email.bounced",
+        "email.complained",
+        "email.opened",
+        "email.clicked",
+    }
+)
 
 
 class ReconciliationCaseNotFound(LookupError):
@@ -227,9 +247,7 @@ def retry_orphan_correlation(
     ):
         raise ReconciliationCaseConflict
 
-    idempotency_key = (
-        f"resend-event-reconcile/{organization_id}/{event.provider_event_id}"
-    )
+    idempotency_key = f"resend-event-reconcile/{organization_id}/{event.provider_event_id}"
     job = (
         db.query(Job)
         .filter(
@@ -297,6 +315,354 @@ def retry_orphan_correlation(
     return case
 
 
+def link_orphan_event(
+    db: Session,
+    *,
+    organization_id: UUID,
+    case_id: UUID,
+    expected_version: int,
+    email_log_id: UUID,
+    actor_user_id: UUID,
+    request: Request | None = None,
+) -> EmailReconciliationCase:
+    """Link and project a signed orphan event without making a provider request."""
+    case_snapshot = (
+        db.query(EmailReconciliationCase)
+        .filter(
+            EmailReconciliationCase.organization_id == organization_id,
+            EmailReconciliationCase.id == case_id,
+        )
+        .one_or_none()
+    )
+    if case_snapshot is None or case_snapshot.resend_webhook_event_id is None:
+        raise ReconciliationCaseNotFound
+
+    event = db.execute(
+        select(ResendWebhookEvent)
+        .where(
+            ResendWebhookEvent.organization_id == organization_id,
+            ResendWebhookEvent.id == case_snapshot.resend_webhook_event_id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+    if event is None:
+        raise ReconciliationCaseNotFound
+    case = (
+        db.query(EmailReconciliationCase)
+        .filter(
+            EmailReconciliationCase.organization_id == organization_id,
+            EmailReconciliationCase.id == case_id,
+        )
+        .execution_options(populate_existing=True)
+        .one_or_none()
+    )
+    if case is None:
+        raise ReconciliationCaseNotFound
+    if case.version != expected_version:
+        raise ReconciliationCaseConflict
+    if (
+        case.case_type != "orphan_webhook"
+        or case.status != "action_required"
+        or event.processed_at is not None
+    ):
+        raise ReconciliationCaseConflict
+
+    email_log = (
+        db.query(EmailLog)
+        .filter(
+            EmailLog.organization_id == organization_id,
+            EmailLog.id == email_log_id,
+        )
+        .one_or_none()
+    )
+    if email_log is None:
+        raise ReconciliationCaseNotFound
+
+    payload = event.payload if isinstance(event.payload, dict) else {}
+    data_value = payload.get("data")
+    data = data_value if isinstance(data_value, dict) else {}
+    provider_message_id = data.get("email_id")
+    if not isinstance(provider_message_id, str) or not provider_message_id.strip():
+        raise ReconciliationCaseConflict
+
+    tags_value = data.get("tags")
+    tags = tags_value if isinstance(tags_value, dict) else {}
+    correlation_tags_present = "organization_id" in tags or "email_log_id" in tags
+    if correlation_tags_present:
+        try:
+            tagged_org_id = UUID(str(tags["organization_id"]))
+            tagged_email_log_id = UUID(str(tags["email_log_id"]))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ReconciliationCaseConflict from exc
+        if tagged_org_id != organization_id or tagged_email_log_id != email_log_id:
+            raise ReconciliationCaseConflict
+    if email_log.provider != "resend":
+        raise ReconciliationCaseConflict
+    if email_log.external_id not in {None, provider_message_id}:
+        raise ReconciliationCaseConflict
+
+    previous_version = case.version
+    from app.services.webhooks.resend import _process_verified_payload
+
+    _process_verified_payload(
+        db,
+        event=event,
+        email_log=email_log,
+        payload=payload,
+        commit=False,
+    )
+    db.refresh(case)
+
+    idempotency_key = f"resend-event-reconcile/{organization_id}/{event.provider_event_id}"
+    job = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == organization_id,
+            Job.idempotency_key == idempotency_key,
+        )
+        .with_for_update()
+        .one_or_none()
+    )
+    if job is not None:
+        job.status = JobStatus.COMPLETED.value
+        job.completed_at = datetime.now(timezone.utc)
+        job.last_error = None
+        job.claim_token = None
+        job.claimed_at = None
+
+    from app.services import audit_service
+
+    audit_service.log_event(
+        db,
+        org_id=organization_id,
+        event_type=AuditEventType.EMAIL_RECONCILIATION_LINKED,
+        actor_user_id=actor_user_id,
+        target_type="email_reconciliation_case",
+        target_id=case.id,
+        details={
+            "action": "link_event",
+            "case_type": case.case_type,
+            "from_version": previous_version,
+            "reason_code": case.reason_code,
+            "to_version": case.version,
+        },
+        request=request,
+    )
+    db.commit()
+    db.refresh(case)
+    return case
+
+
+def dismiss_orphan_event(
+    db: Session,
+    *,
+    organization_id: UUID,
+    case_id: UUID,
+    expected_version: int,
+    resolution_code: str,
+    actor_user_id: UUID,
+    request: Request | None = None,
+) -> EmailReconciliationCase:
+    """Dismiss only a controlled unsupported/test orphan event."""
+    case_snapshot = (
+        db.query(EmailReconciliationCase)
+        .filter(
+            EmailReconciliationCase.organization_id == organization_id,
+            EmailReconciliationCase.id == case_id,
+        )
+        .one_or_none()
+    )
+    if case_snapshot is None or case_snapshot.resend_webhook_event_id is None:
+        raise ReconciliationCaseNotFound
+    event = db.execute(
+        select(ResendWebhookEvent)
+        .where(
+            ResendWebhookEvent.organization_id == organization_id,
+            ResendWebhookEvent.id == case_snapshot.resend_webhook_event_id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+    if event is None:
+        raise ReconciliationCaseNotFound
+    case = (
+        db.query(EmailReconciliationCase)
+        .filter(
+            EmailReconciliationCase.organization_id == organization_id,
+            EmailReconciliationCase.id == case_id,
+        )
+        .execution_options(populate_existing=True)
+        .one_or_none()
+    )
+    if case is None:
+        raise ReconciliationCaseNotFound
+    if case.version != expected_version:
+        raise ReconciliationCaseConflict
+    if (
+        case.case_type != "orphan_webhook"
+        or case.status != "action_required"
+        or event.processed_at is not None
+        or event.event_type in RECONCILABLE_DELIVERY_EVENT_TYPES
+    ):
+        raise ReconciliationCaseConflict
+
+    previous_version = case.version
+    resolved_at = datetime.now(timezone.utc)
+    case.status = "dismissed"
+    case.reason_code = "operator_dismissed"
+    case.resolved_at = resolved_at
+    case.resolved_by_user_id = actor_user_id
+    case.resolution_code = resolution_code
+    case.updated_at = resolved_at
+    case.version += 1
+
+    idempotency_key = f"resend-event-reconcile/{organization_id}/{event.provider_event_id}"
+    job = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == organization_id,
+            Job.idempotency_key == idempotency_key,
+        )
+        .with_for_update()
+        .one_or_none()
+    )
+    if job is not None:
+        job.status = JobStatus.COMPLETED.value
+        job.completed_at = resolved_at
+        job.last_error = None
+        job.claim_token = None
+        job.claimed_at = None
+
+    from app.services import audit_service
+
+    audit_service.log_event(
+        db,
+        org_id=organization_id,
+        event_type=AuditEventType.EMAIL_RECONCILIATION_DISMISSED,
+        actor_user_id=actor_user_id,
+        target_type="email_reconciliation_case",
+        target_id=case.id,
+        details={
+            "action": "dismiss",
+            "case_type": case.case_type,
+            "from_version": previous_version,
+            "reason_code": case.reason_code,
+            "resolution_code": resolution_code,
+            "to_version": case.version,
+        },
+        request=request,
+    )
+    db.commit()
+    db.refresh(case)
+    return case
+
+
+def resolve_unknown_delivery_by_operator(
+    db: Session,
+    *,
+    organization_id: UUID,
+    case_id: UUID,
+    expected_version: int,
+    outcome: str,
+    provider_message_id: str | None,
+    actor_user_id: UUID,
+    request: Request | None = None,
+) -> EmailReconciliationCase:
+    """Resolve an unknown delivery from controlled operator evidence."""
+    case_snapshot = (
+        db.query(EmailReconciliationCase)
+        .filter(
+            EmailReconciliationCase.organization_id == organization_id,
+            EmailReconciliationCase.id == case_id,
+        )
+        .one_or_none()
+    )
+    if case_snapshot is None or case_snapshot.email_delivery_id is None:
+        raise ReconciliationCaseNotFound
+
+    delivery = db.execute(
+        select(EmailDelivery)
+        .where(
+            EmailDelivery.organization_id == organization_id,
+            EmailDelivery.id == case_snapshot.email_delivery_id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+    if delivery is None:
+        raise ReconciliationCaseNotFound
+
+    case = db.execute(
+        select(EmailReconciliationCase)
+        .where(
+            EmailReconciliationCase.organization_id == organization_id,
+            EmailReconciliationCase.id == case_id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+    if case is None:
+        raise ReconciliationCaseNotFound
+    if case.version != expected_version:
+        raise ReconciliationCaseConflict
+    if case.case_type != "unknown_delivery" or case.status != "action_required":
+        raise ReconciliationCaseConflict
+
+    resolved_at = datetime.now(timezone.utc)
+    from app.services import email_delivery_service
+
+    try:
+        email_delivery_service.resolve_reconciliation_by_operator(
+            db,
+            delivery=delivery,
+            outcome=outcome,
+            provider_message_id=provider_message_id,
+            resolved_at=resolved_at,
+        )
+    except email_delivery_service.EmailDeliveryConflict as exc:
+        raise ReconciliationCaseConflict from exc
+
+    previous_version = case.version
+    reason_code = (
+        "operator_confirmed_sent" if outcome == "confirm_sent" else "operator_confirmed_not_sent"
+    )
+    case.status = "resolved"
+    case.reason_code = reason_code
+    case.resolved_at = resolved_at
+    case.resolved_by_user_id = actor_user_id
+    case.resolution_code = reason_code
+    case.updated_at = resolved_at
+    case.version += 1
+
+    from app.services import audit_service
+
+    event_type = (
+        AuditEventType.EMAIL_RECONCILIATION_CONFIRMED_SENT
+        if outcome == "confirm_sent"
+        else AuditEventType.EMAIL_RECONCILIATION_CONFIRMED_NOT_SENT
+    )
+    audit_service.log_event(
+        db,
+        org_id=organization_id,
+        event_type=event_type,
+        actor_user_id=actor_user_id,
+        target_type="email_reconciliation_case",
+        target_id=case.id,
+        details={
+            "action": outcome,
+            "case_type": case.case_type,
+            "from_version": previous_version,
+            "reason_code": reason_code,
+            "to_version": case.version,
+        },
+        request=request,
+    )
+    db.commit()
+    db.refresh(case)
+    return case
+
+
 def mark_orphan_case_exhausted_for_job(
     db: Session,
     *,
@@ -321,10 +687,7 @@ def mark_orphan_case_exhausted_for_job(
     )
     if case is None or case.status in {"resolved", "dismissed"}:
         return case
-    if (
-        case.status != "action_required"
-        or case.reason_code != "automatic_correlation_exhausted"
-    ):
+    if case.status != "action_required" or case.reason_code != "automatic_correlation_exhausted":
         case.status = "action_required"
         case.reason_code = "automatic_correlation_exhausted"
         case.updated_at = datetime.now(timezone.utc)

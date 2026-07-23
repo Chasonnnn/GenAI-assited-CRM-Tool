@@ -22,12 +22,112 @@ from app.schemas.email_operations import (
     EmailOperationsReadinessResponse,
     EmailReconciliationCaseListResponse,
     EmailReconciliationCaseSummary,
+    EmailReconciliationDeliveryResolutionRequest,
+    EmailReconciliationDismissRequest,
+    EmailReconciliationLinkRequest,
     EmailReconciliationRetryRequest,
 )
 from app.services import email_operations_service, email_reconciliation_service
 
 
 router = APIRouter(prefix="/email-operations", tags=["email-operations"])
+
+
+@router.post(
+    "/reconciliation-cases/{case_id}/resolve-delivery",
+    dependencies=[Depends(require_csrf_header)],
+)
+def resolve_reconciliation_delivery(
+    case_id: UUID,
+    body: EmailReconciliationDeliveryResolutionRequest,
+    request: Request,
+    session: Annotated[UserSession, Depends(require_permission(P.OPS_MANAGE))],
+    db: Annotated[Session, Depends(get_db)],
+) -> EmailReconciliationCaseSummary:
+    """Resolve one unknown delivery outcome without invoking provider transport."""
+    try:
+        case = email_reconciliation_service.resolve_unknown_delivery_by_operator(
+            db,
+            organization_id=session.org_id,
+            case_id=case_id,
+            expected_version=body.expected_version,
+            outcome=body.outcome,
+            provider_message_id=body.provider_message_id,
+            actor_user_id=session.user_id,
+            request=request,
+        )
+    except email_reconciliation_service.ReconciliationCaseNotFound as exc:
+        raise HTTPException(status_code=404, detail="Reconciliation case not found") from exc
+    except email_reconciliation_service.ReconciliationCaseConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="Reconciliation case changed or evidence conflicts",
+        ) from exc
+    return email_operations_service.project_reconciliation_case(case)
+
+
+@router.post(
+    "/reconciliation-cases/{case_id}/dismiss",
+    dependencies=[Depends(require_csrf_header)],
+)
+def dismiss_reconciliation_event(
+    case_id: UUID,
+    body: EmailReconciliationDismissRequest,
+    request: Request,
+    session: Annotated[UserSession, Depends(require_permission(P.OPS_MANAGE))],
+    db: Annotated[Session, Depends(get_db)],
+) -> EmailReconciliationCaseSummary:
+    """Dismiss a controlled unsupported/test event without projecting it."""
+    try:
+        case = email_reconciliation_service.dismiss_orphan_event(
+            db,
+            organization_id=session.org_id,
+            case_id=case_id,
+            expected_version=body.expected_version,
+            resolution_code=body.resolution_code,
+            actor_user_id=session.user_id,
+            request=request,
+        )
+    except email_reconciliation_service.ReconciliationCaseNotFound as exc:
+        raise HTTPException(status_code=404, detail="Reconciliation case not found") from exc
+    except email_reconciliation_service.ReconciliationCaseConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="Reconciliation case changed or cannot be dismissed",
+        ) from exc
+    return email_operations_service.project_reconciliation_case(case)
+
+
+@router.post(
+    "/reconciliation-cases/{case_id}/link-event",
+    dependencies=[Depends(require_csrf_header)],
+)
+def link_reconciliation_event(
+    case_id: UUID,
+    body: EmailReconciliationLinkRequest,
+    request: Request,
+    session: Annotated[UserSession, Depends(require_permission(P.OPS_MANAGE))],
+    db: Annotated[Session, Depends(get_db)],
+) -> EmailReconciliationCaseSummary:
+    """Link one signed orphan provider event to an existing organization message."""
+    try:
+        case = email_reconciliation_service.link_orphan_event(
+            db,
+            organization_id=session.org_id,
+            case_id=case_id,
+            expected_version=body.expected_version,
+            email_log_id=body.email_log_id,
+            actor_user_id=session.user_id,
+            request=request,
+        )
+    except email_reconciliation_service.ReconciliationCaseNotFound as exc:
+        raise HTTPException(status_code=404, detail="Reconciliation case not found") from exc
+    except email_reconciliation_service.ReconciliationCaseConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="Reconciliation case changed or evidence conflicts",
+        ) from exc
+    return email_operations_service.project_reconciliation_case(case)
 
 
 @router.post(
@@ -69,9 +169,7 @@ def list_reconciliation_cases(
     cursor: Annotated[str | None, Query(max_length=1024)] = None,
     status: Annotated[
         str | None,
-        Query(
-            pattern="^(monitoring|pending|running|action_required|resolved|dismissed)$"
-        ),
+        Query(pattern="^(monitoring|pending|running|action_required|resolved|dismissed)$"),
     ] = None,
 ) -> EmailReconciliationCaseListResponse:
     """List sanitized email reconciliation cases for an operations user."""

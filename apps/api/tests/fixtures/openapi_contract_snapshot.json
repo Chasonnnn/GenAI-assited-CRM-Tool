@@ -1034,6 +1034,36 @@
       "422"
     ]
   },
+  "/email-operations/reconciliation-cases": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-operations/reconciliation-cases/{case_id}/dismiss": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-operations/reconciliation-cases/{case_id}/link-event": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-operations/reconciliation-cases/{case_id}/resolve-delivery": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-operations/reconciliation-cases/{case_id}/retry-correlation": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/email-operations/readiness": {
     "GET": [
       "200"
