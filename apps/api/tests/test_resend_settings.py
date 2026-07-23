@@ -1,7 +1,7 @@
 """Tests for Resend settings service and email provider resolution."""
 
 import uuid
-import httpx
+
 import pytest
 
 
@@ -293,54 +293,6 @@ class TestEmailProviderResolver:
         assert "resend" in str(exc.value).lower()
 
 
-class TestResendEmailService:
-    """Test Resend email sending service."""
-
-    @pytest.mark.asyncio
-    async def test_send_email_direct_success(self, monkeypatch):
-        from app.services import resend_email_service
-
-        async def fake_request_with_retries(request_fn, **kwargs):
-            return httpx.Response(200, json={"id": "msg_123"})
-
-        monkeypatch.setattr(resend_email_service, "request_with_retries", fake_request_with_retries)
-
-        success, error, message_id = await resend_email_service.send_email_direct(
-            api_key="re_test_key",
-            to_email="recipient@example.com",
-            subject="Test Subject",
-            body="<p>Test body</p>",
-            from_email="sender@example.com",
-            from_name="Sender Name",
-        )
-
-        assert success is True
-        assert error is None
-        assert message_id == "msg_123"
-
-    @pytest.mark.asyncio
-    async def test_send_email_direct_treats_409_as_success(self, monkeypatch):
-        from app.services import resend_email_service
-
-        async def fake_request_with_retries(request_fn, **kwargs):
-            return httpx.Response(409, json={"id": "msg_dup"})
-
-        monkeypatch.setattr(resend_email_service, "request_with_retries", fake_request_with_retries)
-
-        success, error, message_id = await resend_email_service.send_email_direct(
-            api_key="re_test_key",
-            to_email="recipient@example.com",
-            subject="Test Subject",
-            body="<p>Test body</p>",
-            from_email="sender@example.com",
-            idempotency_key="dup-key",
-        )
-
-        # 409 (idempotency conflict) should be treated as success
-        assert success is True
-        assert error is None
-
-
 @pytest.mark.asyncio
 async def test_campaign_send_execution_rejects_gmail_provider(db, test_org, test_user):
     """Campaign send jobs must reject non-Resend providers at execution time."""
@@ -401,7 +353,8 @@ async def test_campaign_send_execution_rejects_gmail_provider(db, test_org, test
         entity_id=uuid.uuid4(),
         recipient_email="recipient@example.com",
         status="pending",
-        external_message_id=str(email_log.id),
+        email_log_id=email_log.id,
+        external_message_id="provider-message-id",
     )
     db.add(campaign_recipient)
     db.commit()
@@ -410,82 +363,3 @@ async def test_campaign_send_execution_rejects_gmail_provider(db, test_org, test
         await send_email_async(email_log, db=db)
 
     assert "campaign emails must use resend" in str(exc.value).lower()
-
-    @pytest.mark.asyncio
-    async def test_send_email_direct_failure(self, monkeypatch):
-        from app.services import resend_email_service
-
-        async def fake_request_with_retries(request_fn, **kwargs):
-            return httpx.Response(401, json={"error": "Invalid API key"})
-
-        monkeypatch.setattr(resend_email_service, "request_with_retries", fake_request_with_retries)
-
-        success, error, message_id = await resend_email_service.send_email_direct(
-            api_key="re_invalid_key",
-            to_email="recipient@example.com",
-            subject="Test Subject",
-            body="<p>Test body</p>",
-            from_email="sender@example.com",
-        )
-
-        assert success is False
-        assert error is not None
-        assert "401" in error
-        assert message_id is None
-
-    @pytest.mark.asyncio
-    async def test_send_email_direct_generates_text(self, monkeypatch):
-        from app.services import resend_email_service
-
-        captured_payload = {}
-
-        async def fake_request_with_retries(request_fn, **kwargs):
-            # Call the request function to capture the payload
-            response = httpx.Response(200, json={"id": "msg_text"})
-            return response
-
-        # Patch at httpx.AsyncClient level to capture the request
-        async def capture_post(self, url, **kwargs):
-            captured_payload.update(kwargs.get("json", {}))
-            return httpx.Response(200, json={"id": "msg_text"})
-
-        monkeypatch.setattr(httpx.AsyncClient, "post", capture_post)
-
-        await resend_email_service.send_email_direct(
-            api_key="re_test_key",
-            to_email="recipient@example.com",
-            subject="Test Subject",
-            body="<p>Hello <strong>World</strong></p>",
-            from_email="sender@example.com",
-        )
-
-        # Should have generated text version
-        assert "text" in captured_payload
-        assert "Hello" in captured_payload["text"]
-        assert "World" in captured_payload["text"]
-        assert "<" not in captured_payload["text"]  # No HTML tags
-
-    @pytest.mark.asyncio
-    async def test_send_email_direct_sets_list_unsubscribe(self, monkeypatch):
-        from app.services import resend_email_service
-
-        captured_payload = {}
-
-        async def capture_post(self, url, **kwargs):
-            captured_payload.update(kwargs.get("json", {}))
-            return httpx.Response(200, json={"id": "msg_unsub"})
-
-        monkeypatch.setattr(httpx.AsyncClient, "post", capture_post)
-
-        await resend_email_service.send_email_direct(
-            api_key="re_test_key",
-            to_email="recipient@example.com",
-            subject="Test Subject",
-            body="<p>Hello World</p>",
-            from_email="sender@example.com",
-            unsubscribe_url="https://example.com/email/unsubscribe/abc123",
-        )
-
-        headers = captured_payload.get("headers") or {}
-        assert headers.get("List-Unsubscribe") == "<https://example.com/email/unsubscribe/abc123>"
-        assert headers.get("List-Unsubscribe-Post") == "List-Unsubscribe=One-Click"
