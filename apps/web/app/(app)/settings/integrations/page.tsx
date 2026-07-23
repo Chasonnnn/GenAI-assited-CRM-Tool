@@ -5217,7 +5217,7 @@ export default function IntegrationsPage() {
     const MetaStatusIcon = metaStatusIcon
 
     return (
-        <div className="flex min-h-screen flex-col">
+        <div className="flex min-h-dvh flex-col">
             <IntegrationsPageHeader
                 canRefresh={organizationIntegrationsEnabled}
                 isFetching={isFetching}
@@ -5682,6 +5682,15 @@ function OrganizationIntegrationsSection({
                     <p className="text-xs text-muted-foreground">
                         {emailConfigured ? `${emailProviderLabel} · ${emailDetail}` : "Choose a provider to start sending"}
                     </p>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full"
+                        render={<Link href="/settings/integrations/email" />}
+                    >
+                        <ActivityIcon aria-hidden="true" />
+                        View email operations
+                    </Button>
                 </OrganizationIntegrationCard>
 
                 <OrganizationIntegrationCard

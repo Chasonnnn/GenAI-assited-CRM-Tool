@@ -616,6 +616,9 @@ describe('IntegrationsPage', () => {
         expect(screen.getAllByText('Meta Lead Ads').length).toBeGreaterThan(0)
         expect(screen.getByText('AI Assistant')).toBeInTheDocument()
         expect(screen.getByText('Email Delivery')).toBeInTheDocument()
+        expect(
+            screen.getByRole('link', { name: /view email operations/i })
+        ).toHaveAttribute('href', '/settings/integrations/email')
         expect(screen.getByText('Zapier')).toBeInTheDocument()
         expect(screen.getByRole('button', { name: /configure zapier/i })).toBeInTheDocument()
 
