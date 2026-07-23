@@ -18,6 +18,9 @@ from app.db.models import (
     Job,
     ResendWebhookEvent,
 )
+from app.services.resend_event_contract import (
+    RESEND_RECONCILABLE_EVENT_TYPES as RECONCILABLE_DELIVERY_EVENT_TYPES,
+)
 
 
 _DELIVERY_REASON_CODES = {
@@ -26,20 +29,6 @@ _DELIVERY_REASON_CODES = {
     "provider_outcome_unknown": "provider_outcome_unknown",
 }
 _EVENT_RECONCILE_MAX_ATTEMPTS = 8
-RECONCILABLE_DELIVERY_EVENT_TYPES = frozenset(
-    {
-        "email.scheduled",
-        "email.sent",
-        "email.delivery_delayed",
-        "email.delivered",
-        "email.failed",
-        "email.suppressed",
-        "email.bounced",
-        "email.complained",
-        "email.opened",
-        "email.clicked",
-    }
-)
 
 
 class ReconciliationCaseNotFound(LookupError):

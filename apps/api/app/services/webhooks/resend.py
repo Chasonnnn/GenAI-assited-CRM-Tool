@@ -19,6 +19,10 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.models import EmailLog, ResendWebhookEvent
 from app.services import resend_settings_service
+from app.services.resend_event_contract import (
+    RESEND_DELIVERY_FAILURE_EVENT_TYPES,
+    RESEND_DELIVERY_STATUS_BY_EVENT_TYPE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,22 +35,6 @@ _DELIVERY_STATUS_RANK = {
     "suppressed": 50,
     "bounced": 60,
     "complained": 70,
-}
-_DELIVERY_EVENT_STATUS = {
-    "email.scheduled": "scheduled",
-    "email.sent": "sent",
-    "email.delivery_delayed": "delivery_delayed",
-    "email.delivered": "delivered",
-    "email.failed": "failed",
-    "email.suppressed": "suppressed",
-    "email.bounced": "bounced",
-    "email.complained": "complained",
-}
-_DELIVERY_FAILURE_EVENTS = {
-    "email.failed",
-    "email.suppressed",
-    "email.bounced",
-    "email.complained",
 }
 _EVENT_RECONCILE_MAX_ATTEMPTS = 8
 
@@ -318,7 +306,7 @@ def _process_resend_event(
     from app.db.enums import CampaignRecipientStatus, EmailStatus
     from app.services import campaign_service
 
-    resend_status = _DELIVERY_EVENT_STATUS.get(event_type or "")
+    resend_status = RESEND_DELIVERY_STATUS_BY_EVENT_TYPE.get(event_type or "")
     state_advanced = False
     if resend_status:
         state_advanced = _advance_delivery_state(
@@ -466,7 +454,7 @@ def _process_resend_event(
     if state_advanced and event_type in {
         "email.sent",
         "email.delivered",
-        *_DELIVERY_FAILURE_EVENTS,
+        *RESEND_DELIVERY_FAILURE_EVENT_TYPES,
     }:
         from app.services.email_delivery_service import (
             project_appointment_email_canonical_state,
@@ -512,7 +500,7 @@ def _downgrade_workflow_execution_for_delivery_failure(
     event_type: str | None,
 ) -> None:
     """Downgrade linked workflow execution after terminal delivery failures."""
-    if event_type not in _DELIVERY_FAILURE_EVENTS:
+    if event_type not in RESEND_DELIVERY_FAILURE_EVENT_TYPES:
         return
 
     if not email_log.job_id:

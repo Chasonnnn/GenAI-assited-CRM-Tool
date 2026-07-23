@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.services import email_provider_admission_service
+from app.services.resend_event_contract import RESEND_SANITIZED_WEBHOOK_EVENT_TYPES
 
 RESEND_API_BASE = "https://api.resend.com"
 RESEND_CONTROL_PLANE_TIMEOUT_SECONDS = 10.0
@@ -46,18 +47,6 @@ _DNS_RECORD_STATUSES = {
     "temporary_failure",
 }
 _WEBHOOK_STATUSES = {"enabled", "disabled"}
-_READINESS_WEBHOOK_EVENTS = {
-    "email.sent",
-    "email.delivery_delayed",
-    "email.delivered",
-    "email.failed",
-    "email.suppressed",
-    "email.bounced",
-    "email.complained",
-    "email.opened",
-    "email.clicked",
-    "email.received",
-}
 
 
 class ResendControlPlaneStatus(StrEnum):
@@ -418,7 +407,7 @@ def _sanitize_webhook(
         for event in raw_events:
             if (
                 isinstance(event, str)
-                and event in _READINESS_WEBHOOK_EVENTS
+                and event in RESEND_SANITIZED_WEBHOOK_EVENT_TYPES
                 and event not in events
             ):
                 events.append(event)
