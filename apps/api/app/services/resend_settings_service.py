@@ -229,8 +229,9 @@ async def test_api_key(api_key: str) -> ResendKeyValidationResult:
     """
     Test a Resend API key by fetching domains without sending email.
 
-    For this onboarding contract, a 403 is permission-limited domain evidence
-    rather than an authentication failure. A 401 remains invalid.
+    Resend returns ``restricted_api_key`` with HTTP 401 when a valid
+    sending-only key cannot list domains. All other authentication errors fail
+    closed, including ``invalid_api_key`` with HTTP 403.
     """
     try:
         async with httpx.AsyncClient(timeout=RESEND_TIMEOUT) as client:
@@ -239,22 +240,35 @@ async def test_api_key(api_key: str) -> ResendKeyValidationResult:
                 headers={"Authorization": f"Bearer {api_key}"},
             )
 
-        if response.status_code == 401:
+        if response.status_code in {401, 403}:
+            try:
+                error_payload = response.json()
+            except ValueError:
+                error_payload = {}
+            error_name = (
+                error_payload.get("name")
+                if isinstance(error_payload, dict)
+                else None
+            )
+
+            if (
+                response.status_code == 401
+                and error_name == "restricted_api_key"
+            ):
+                return ResendKeyValidationResult(
+                    valid=True,
+                    error=None,
+                    verified_domains=[],
+                    permission_limited=True,
+                    warning=PERMISSION_LIMITED_WARNING,
+                )
+
             return ResendKeyValidationResult(
                 valid=False,
                 error="Invalid API key",
                 verified_domains=[],
                 permission_limited=False,
                 warning=None,
-            )
-
-        if response.status_code == 403:
-            return ResendKeyValidationResult(
-                valid=True,
-                error=None,
-                verified_domains=[],
-                permission_limited=True,
-                warning=PERMISSION_LIMITED_WARNING,
             )
 
         if response.status_code != 200:

@@ -27,37 +27,18 @@ class _FakeDomainsClient:
 
 
 @pytest.mark.asyncio
-async def test_resend_domains_401_marks_key_invalid(monkeypatch):
+async def test_resend_domains_restricted_key_is_valid_but_permission_limited(monkeypatch):
     from app.services import resend_settings_service
 
-    client = _FakeDomainsClient(httpx.Response(401))
-    monkeypatch.setattr(
-        resend_settings_service.httpx,
-        "AsyncClient",
-        lambda **_kwargs: client,
+    client = _FakeDomainsClient(
+        httpx.Response(
+            401,
+            json={
+                "name": "restricted_api_key",
+                "message": "This API key is restricted to only send emails.",
+            },
+        )
     )
-
-    result = await resend_settings_service.test_api_key("re_invalid")
-
-    assert result.valid is False
-    assert result.error == "Invalid API key"
-    assert result.verified_domains == []
-    assert result.permission_limited is False
-    assert result.warning is None
-    assert client.requests == [
-        {
-            "method": "GET",
-            "url": "https://api.resend.com/domains",
-            "headers": {"Authorization": "Bearer re_invalid"},
-        }
-    ]
-
-
-@pytest.mark.asyncio
-async def test_resend_domains_403_marks_key_valid_but_permission_limited(monkeypatch):
-    from app.services import resend_settings_service
-
-    client = _FakeDomainsClient(httpx.Response(403))
     monkeypatch.setattr(
         resend_settings_service.httpx,
         "AsyncClient",
@@ -72,8 +53,76 @@ async def test_resend_domains_403_marks_key_valid_but_permission_limited(monkeyp
     assert result.permission_limited is True
     assert result.warning
     assert "cannot list domains" in result.warning.lower()
+    assert client.requests == [
+        {
+            "method": "GET",
+            "url": "https://api.resend.com/domains",
+            "headers": {"Authorization": "Bearer re_sending_access"},
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_resend_domains_invalid_key_is_rejected(monkeypatch):
+    from app.services import resend_settings_service
+
+    client = _FakeDomainsClient(
+        httpx.Response(
+            403,
+            json={"name": "invalid_api_key", "message": "API key is invalid."},
+        )
+    )
+    monkeypatch.setattr(
+        resend_settings_service.httpx,
+        "AsyncClient",
+        lambda **_kwargs: client,
+    )
+
+    result = await resend_settings_service.test_api_key("re_invalid")
+
+    assert result.valid is False
+    assert result.error == "Invalid API key"
+    assert result.verified_domains == []
+    assert result.permission_limited is False
+    assert result.warning is None
     assert len(client.requests) == 1
     assert client.requests[0]["url"] == "https://api.resend.com/domains"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status_code", "name"),
+    [
+        (401, "missing_api_key"),
+        (401, "unexpected_auth_error"),
+        (403, "validation_error"),
+        (403, None),
+    ],
+)
+async def test_resend_domains_unknown_auth_errors_fail_closed(
+    monkeypatch,
+    status_code,
+    name,
+):
+    from app.services import resend_settings_service
+
+    payload = {"message": "Authentication failed"}
+    if name is not None:
+        payload["name"] = name
+    client = _FakeDomainsClient(httpx.Response(status_code, json=payload))
+    monkeypatch.setattr(
+        resend_settings_service.httpx,
+        "AsyncClient",
+        lambda **_kwargs: client,
+    )
+
+    result = await resend_settings_service.test_api_key("re_untrusted")
+
+    assert result.valid is False
+    assert result.error == "Invalid API key"
+    assert result.verified_domains == []
+    assert result.permission_limited is False
+    assert result.warning is None
 
 
 @pytest.mark.asyncio
