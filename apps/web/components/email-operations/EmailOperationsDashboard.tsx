@@ -84,6 +84,14 @@ const CHECK_VARIANTS: Record<EmailOperationsCheckStatus, BadgeVariant> = {
     not_applicable: "outline",
 }
 
+const ACTION_NEEDED_MESSAGE_STATUSES = new Set([
+    "failed",
+    "bounced",
+    "complained",
+    "suppressed",
+    "reconciliation_required",
+])
+
 function CheckStatusIcon({ status }: { status: EmailOperationsCheckStatus }) {
     if (status === "pass") {
         return <CheckCircle2Icon className="size-4 text-primary" aria-hidden="true" />
@@ -367,9 +375,7 @@ function MetricsSection({ summary }: { summary: EmailOperationsSummary24h }) {
 
 function MessageStatusBadge({ message }: { message: EmailOperationMessage }) {
     const status = message.provider_status ?? message.delivery_status ?? message.status
-    const destructive = ["failed", "bounced", "complained", "suppressed"].includes(
-        status,
-    )
+    const destructive = ACTION_NEEDED_MESSAGE_STATUSES.has(status)
     return (
         <Badge variant={destructive ? "destructive" : "secondary"}>
             {getMessageStatusLabel(status)}

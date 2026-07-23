@@ -236,6 +236,204 @@ describe("EmailOperationsDashboard", () => {
         expect(within(sheet).queryByText(/https?:\/\//i)).not.toBeInTheDocument()
     })
 
+    it.each(["pending", "suppressed", "cancelled"])(
+        "does not claim a %s message was sent",
+        (status) => {
+            mockUseMessage.mockImplementation((messageId: string | null) => ({
+                data: messageId
+                    ? {
+                          ...detail,
+                          status,
+                          provider_status: null,
+                          delivery_status: status,
+                          sent_at: null,
+                      }
+                    : undefined,
+                isLoading: false,
+                isError: false,
+                refetch: vi.fn(),
+            }))
+
+            render(<EmailOperationsDashboard />)
+            fireEvent.click(
+                screen.getByRole("button", {
+                    name: "View message Welcome to Surrogacy Force to recipient@example.com",
+                }),
+            )
+
+            const sheet = screen.getByRole("dialog")
+            expect(
+                within(sheet).getByText(
+                    /Recipient: recipient@example\.com\. Content, headers, and raw provider payloads are intentionally excluded\./,
+                ),
+            ).toBeInTheDocument()
+            expect(
+                within(sheet).queryByText(/Sent to recipient@example\.com/),
+            ).not.toBeInTheDocument()
+        },
+    )
+
+    it("uses the outbox delivery status when provider status is not available", () => {
+        const reconciliationMessage = {
+            ...message,
+            status: "pending",
+            provider_status: null,
+            delivery_status: "reconciliation_required",
+        }
+        mockUseMessages.mockReturnValue({
+            data: {
+                pages: [
+                    {
+                        items: [reconciliationMessage],
+                        next_cursor: null,
+                    },
+                ],
+            },
+            isLoading: false,
+            isError: false,
+            isFetching: false,
+            hasNextPage: false,
+            isFetchingNextPage: false,
+            fetchNextPage: mockFetchNextPage,
+            refetch: mockRefetchMessages,
+        })
+        mockUseMessage.mockImplementation((messageId: string | null) => ({
+            data: messageId
+                ? {
+                      ...detail,
+                      ...reconciliationMessage,
+                      delivery: {
+                          ...detail.delivery,
+                          status: "reconciliation_required",
+                      },
+                  }
+                : undefined,
+            isLoading: false,
+            isError: false,
+            refetch: vi.fn(),
+        }))
+
+        render(<EmailOperationsDashboard />)
+        expect(
+            screen.getByText("Needs reconciliation", {
+                selector: '[data-slot="badge"]',
+            }),
+        ).toBeInTheDocument()
+
+        fireEvent.click(
+            screen.getByRole("button", {
+                name: "View message Welcome to Surrogacy Force to recipient@example.com",
+            }),
+        )
+
+        expect(
+            within(screen.getByRole("dialog")).getAllByText("Needs reconciliation", {
+                selector: '[data-slot="badge"]',
+            }),
+        ).toHaveLength(2)
+    })
+
+    it("shows an in-progress delivery attempt as non-destructive", () => {
+        mockUseMessage.mockImplementation((messageId: string | null) => ({
+            data: messageId
+                ? {
+                      ...detail,
+                      attempts: [
+                          {
+                              ...detail.attempts[0],
+                              completed_at: null,
+                              outcome: "in_progress",
+                              provider_http_status: null,
+                              error_type: null,
+                              retry_after_seconds: null,
+                          },
+                      ],
+                  }
+                : undefined,
+            isLoading: false,
+            isError: false,
+            refetch: vi.fn(),
+        }))
+
+        render(<EmailOperationsDashboard />)
+        fireEvent.click(
+            screen.getByRole("button", {
+                name: "View message Welcome to Surrogacy Force to recipient@example.com",
+            }),
+        )
+
+        expect(
+            within(screen.getByRole("dialog")).getByText("In progress", {
+                selector: '[data-slot="badge"]',
+            }),
+        ).toHaveAttribute("data-variant", "secondary")
+    })
+
+    it("marks reconciliation-required messages as needing action", () => {
+        const reconciliationMessage = {
+            ...message,
+            status: "pending",
+            provider_status: null,
+            delivery_status: "reconciliation_required",
+        }
+        mockUseMessages.mockReturnValue({
+            data: {
+                pages: [
+                    {
+                        items: [reconciliationMessage],
+                        next_cursor: null,
+                    },
+                ],
+            },
+            isLoading: false,
+            isError: false,
+            isFetching: false,
+            hasNextPage: false,
+            isFetchingNextPage: false,
+            fetchNextPage: mockFetchNextPage,
+            refetch: mockRefetchMessages,
+        })
+        mockUseMessage.mockImplementation((messageId: string | null) => ({
+            data: messageId
+                ? {
+                      ...detail,
+                      ...reconciliationMessage,
+                      delivery: {
+                          ...detail.delivery,
+                          status: "reconciliation_required",
+                      },
+                  }
+                : undefined,
+            isLoading: false,
+            isError: false,
+            refetch: vi.fn(),
+        }))
+
+        render(<EmailOperationsDashboard />)
+        expect(
+            screen.getByText("Needs reconciliation", {
+                selector: '[data-slot="badge"]',
+            }),
+        ).toHaveAttribute("data-variant", "destructive")
+
+        fireEvent.click(
+            screen.getByRole("button", {
+                name: "View message Welcome to Surrogacy Force to recipient@example.com",
+            }),
+        )
+
+        const reconciliationBadges = within(screen.getByRole("dialog")).getAllByText(
+            "Needs reconciliation",
+            {
+                selector: '[data-slot="badge"]',
+            },
+        )
+        expect(reconciliationBadges).toHaveLength(2)
+        expect(reconciliationBadges).toSatisfy((badges: HTMLElement[]) =>
+            badges.every((badge) => badge.dataset.variant === "destructive"),
+        )
+    })
+
     it("renders a recoverable error state", () => {
         mockUseReadiness.mockReturnValue({
             data: undefined,

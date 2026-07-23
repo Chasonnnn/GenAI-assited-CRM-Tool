@@ -1,4 +1,4 @@
-import api from "@/lib/api"
+import api from "../api"
 
 export type EmailOperationsOverall = "ready" | "needs_attention" | "not_configured"
 export type EmailOperationsCheckStatus = "pass" | "fail" | "unknown" | "not_applicable"

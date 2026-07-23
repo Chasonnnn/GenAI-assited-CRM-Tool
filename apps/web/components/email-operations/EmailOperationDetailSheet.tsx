@@ -37,6 +37,20 @@ interface EmailOperationDetailSheetProps {
     onOpenChange: (open: boolean) => void
 }
 
+const ACTION_NEEDED_MESSAGE_STATUSES = new Set([
+    "failed",
+    "bounced",
+    "complained",
+    "suppressed",
+    "reconciliation_required",
+])
+
+function getMessageStatusVariant(status: string | null): "destructive" | "secondary" {
+    return status && ACTION_NEEDED_MESSAGE_STATUSES.has(status)
+        ? "destructive"
+        : "secondary"
+}
+
 function DetailSkeleton() {
     return (
         <div className="space-y-5 p-6" aria-label="Loading message details">
@@ -65,6 +79,9 @@ export function EmailOperationDetailSheet({
 }: EmailOperationDetailSheetProps) {
     const detailQuery = useEmailOperationMessage(messageId)
     const message = detailQuery.data
+    const effectiveStatus = message
+        ? (message.provider_status ?? message.delivery_status ?? message.status)
+        : null
 
     return (
         <Sheet
@@ -88,7 +105,7 @@ export function EmailOperationDetailSheet({
                     </div>
                     <SheetDescription>
                         {message
-                            ? `Sent to ${message.recipient_email}. Content, headers, and raw provider payloads are intentionally excluded.`
+                            ? `Recipient: ${message.recipient_email}. Content, headers, and raw provider payloads are intentionally excluded.`
                             : "Loading sanitized delivery diagnostics."}
                     </SheetDescription>
                 </SheetHeader>
@@ -129,10 +146,10 @@ export function EmailOperationDetailSheet({
                                     >
                                         Message overview
                                     </h3>
-                                    <Badge variant="secondary">
-                                        {getMessageStatusLabel(
-                                            message.provider_status ?? message.status,
-                                        )}
+                                    <Badge
+                                        variant={getMessageStatusVariant(effectiveStatus)}
+                                    >
+                                        {getMessageStatusLabel(effectiveStatus)}
                                     </Badge>
                                 </div>
                                 <dl className="grid gap-4 sm:grid-cols-2">
@@ -188,7 +205,11 @@ export function EmailOperationDetailSheet({
                                                 {message.delivery.max_attempts} attempts used
                                             </p>
                                         </div>
-                                        <Badge variant="secondary">
+                                        <Badge
+                                            variant={getMessageStatusVariant(
+                                                message.delivery.status,
+                                            )}
+                                        >
                                             {getMessageStatusLabel(
                                                 message.delivery.status,
                                             )}
@@ -249,8 +270,12 @@ export function EmailOperationDetailSheet({
                                                             variant={
                                                                 attempt.outcome === "succeeded"
                                                                     ? "default"
-                                                                    : attempt.outcome ===
-                                                                        "retryable_error"
+                                                                    : [
+                                                                            "in_progress",
+                                                                            "retryable_error",
+                                                                        ].includes(
+                                                                            attempt.outcome,
+                                                                        )
                                                                       ? "secondary"
                                                                       : "destructive"
                                                             }
