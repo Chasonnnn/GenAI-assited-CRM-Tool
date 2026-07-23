@@ -8,7 +8,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.db.models import Job
-from app.db.enums import JobStatus, JobType
+from app.db.enums import JobScope, JobStatus, JobType
 
 
 class JobClaimLost(RuntimeError):
@@ -42,7 +42,35 @@ def enqueue_job(
     with IntegrityError (caller should catch and handle).
     """
     job = Job(
+        job_scope=JobScope.ORGANIZATION.value,
         organization_id=org_id,
+        job_type=job_type.value,
+        payload=payload,
+        run_at=run_at or datetime.now(timezone.utc),
+        status=JobStatus.PENDING.value,
+        idempotency_key=idempotency_key,
+    )
+    db.add(job)
+    if commit:
+        db.commit()
+        db.refresh(job)
+    else:
+        db.flush()
+    return job
+
+
+def enqueue_platform_job(
+    db: Session,
+    job_type: JobType,
+    payload: dict,
+    run_at: datetime | None = None,
+    idempotency_key: str | None = None,
+    commit: bool = True,
+) -> Job:
+    """Enqueue a platform-owned job without inventing an organization."""
+    job = Job(
+        job_scope=JobScope.PLATFORM.value,
+        organization_id=None,
         job_type=job_type.value,
         payload=payload,
         run_at=run_at or datetime.now(timezone.utc),
@@ -180,8 +208,11 @@ def claim_job_for_dispatch(db: Session, job_id: UUID) -> Job | None:
 def get_job(db: Session, job_id: UUID, org_id: UUID | None = None) -> Job | None:
     """Get a job by ID, optionally scoped to org."""
     query = db.query(Job).filter(Job.id == job_id)
-    if org_id:
-        query = query.filter(Job.organization_id == org_id)
+    if org_id is not None:
+        query = query.filter(
+            Job.job_scope == JobScope.ORGANIZATION.value,
+            Job.organization_id == org_id,
+        )
     return query.first()
 
 
@@ -190,6 +221,7 @@ def get_job_by_idempotency_key(db: Session, *, org_id: UUID, idempotency_key: st
     return (
         db.query(Job)
         .filter(
+            Job.job_scope == JobScope.ORGANIZATION.value,
             Job.organization_id == org_id,
             Job.idempotency_key == idempotency_key,
         )
@@ -205,7 +237,10 @@ def list_jobs(
     limit: int = 50,
 ) -> list[Job]:
     """List jobs for an organization with optional filters."""
-    query = db.query(Job).filter(Job.organization_id == org_id)
+    query = db.query(Job).filter(
+        Job.job_scope == JobScope.ORGANIZATION.value,
+        Job.organization_id == org_id,
+    )
     if status:
         query = query.filter(Job.status == status.value)
     if job_type:
@@ -222,6 +257,7 @@ def list_dead_letter_jobs(
 ) -> list[Job]:
     """List failed (dead-letter) jobs for an organization."""
     query = db.query(Job).filter(
+        Job.job_scope == JobScope.ORGANIZATION.value,
         Job.organization_id == org_id,
         Job.status == JobStatus.FAILED.value,
     )
@@ -465,6 +501,7 @@ def replay_failed_job(
         db.query(Job)
         .filter(
             Job.id == job_id,
+            Job.job_scope == JobScope.ORGANIZATION.value,
             Job.organization_id == org_id,
         )
         .first()

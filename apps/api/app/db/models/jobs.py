@@ -23,6 +23,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.db.enums import (
     DEFAULT_JOB_STATUS,
+    JobScope,
 )
 
 if TYPE_CHECKING:
@@ -43,6 +44,11 @@ class Job(Base):
             "(claim_token IS NULL) = (claimed_at IS NULL)",
             name="ck_jobs_claim_pair",
         ),
+        CheckConstraint(
+            "(job_scope = 'organization' AND organization_id IS NOT NULL) OR "
+            "(job_scope = 'platform' AND organization_id IS NULL)",
+            name="ck_jobs_scope_organization_coherence",
+        ),
         Index(
             "idx_jobs_pending",
             "status",
@@ -61,10 +67,16 @@ class Job(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    organization_id: Mapped[uuid.UUID] = mapped_column(
+    job_scope: Mapped[str] = mapped_column(
+        String(20),
+        default=JobScope.ORGANIZATION.value,
+        server_default=text(f"'{JobScope.ORGANIZATION.value}'"),
+        nullable=False,
+    )
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
     )
 
     job_type: Mapped[str] = mapped_column(String(50), nullable=False)

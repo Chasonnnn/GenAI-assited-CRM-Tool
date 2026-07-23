@@ -3,6 +3,13 @@
 from enum import Enum
 
 
+class JobScope(str, Enum):
+    """Ownership boundary for a background job."""
+
+    ORGANIZATION = "organization"
+    PLATFORM = "platform"
+
+
 class JobType(str, Enum):
     """Types of background jobs."""
 

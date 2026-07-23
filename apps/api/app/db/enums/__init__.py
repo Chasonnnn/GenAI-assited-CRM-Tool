@@ -46,7 +46,7 @@ from app.db.enums.integration_health import (
     IntegrationType,
 )
 from app.db.enums.intended_parents import IntendedParentStatus
-from app.db.enums.jobs import JobStatus, JobType
+from app.db.enums.jobs import JobScope, JobStatus, JobType
 from app.db.enums.matches import MatchEventPerson, MatchEventType, MatchStatus
 from app.db.enums.notifications import NotificationType
 from app.db.enums.permissions import (
@@ -131,6 +131,7 @@ __all__ = [
     "IntegrationStatus",
     "IntegrationType",
     "IntendedParentStatus",
+    "JobScope",
     "JobStatus",
     "JobType",
     "MatchEventPerson",
