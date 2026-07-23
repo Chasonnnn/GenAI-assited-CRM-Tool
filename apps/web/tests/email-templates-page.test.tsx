@@ -7,6 +7,7 @@ import type {
     EmailTemplateLibraryDetail,
     EmailTemplateLibraryItem,
     EmailTemplateListItem,
+    EmailTemplateVersion,
 } from "@/lib/api/email-templates"
 
 const mockUseAuth = vi.fn()
@@ -15,6 +16,7 @@ const mockUseEmailTemplates = vi.fn()
 const mockCreateEmailTemplate = vi.fn()
 const mockUpdateEmailTemplate = vi.fn()
 const mockSendTestEmailTemplate = vi.fn()
+const mockRollbackEmailTemplate = vi.fn()
 let userSignatureData: Record<string, string | null> | null = null
 const FIXED_TIMESTAMP = "2026-01-01T00:00:00.000Z"
 const TEMPLATE_VARIABLES = [
@@ -25,6 +27,23 @@ const TEMPLATE_VARIABLES = [
         required: false,
         value_type: "text",
         html_safe: false,
+    },
+]
+
+const TEMPLATE_VERSIONS: EmailTemplateVersion[] = [
+    {
+        id: "version-2",
+        version: 2,
+        created_by_user_id: "user_1",
+        comment: "Updated",
+        created_at: "2026-01-02T00:00:00.000Z",
+    },
+    {
+        id: "version-1",
+        version: 1,
+        created_by_user_id: "user_1",
+        comment: "Created",
+        created_at: FIXED_TIMESTAMP,
     },
 ]
 
@@ -97,7 +116,7 @@ const TEMPLATE_DETAIL_BY_ID: Record<string, EmailTemplate> = {
         owner_name: null,
         source_template_id: null,
         is_system_template: false,
-        current_version: 1,
+        current_version: 2,
         created_at: FIXED_TIMESTAMP,
         updated_at: FIXED_TIMESTAMP,
     },
@@ -185,8 +204,18 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
         isLoading: false,
     }),
     useEmailTemplateVariables: () => ({ data: TEMPLATE_VARIABLES, isLoading: false }),
+    useEmailTemplateVersions: (id: string | null, enabled = true) => ({
+        data: id === "tpl_org_1" && enabled ? TEMPLATE_VERSIONS : [],
+        isLoading: false,
+        isError: false,
+        refetch: vi.fn(),
+    }),
     useCreateEmailTemplate: () => ({ mutate: mockCreateEmailTemplate, isPending: false }),
     useUpdateEmailTemplate: () => ({ mutate: mockUpdateEmailTemplate, isPending: false }),
+    useRollbackEmailTemplate: () => ({
+        mutateAsync: mockRollbackEmailTemplate,
+        isPending: false,
+    }),
     useDeleteEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
     useCopyTemplateToPersonal: () => ({ mutate: vi.fn(), isPending: false }),
     useShareTemplateWithOrg: () => ({ mutate: vi.fn(), isPending: false }),
@@ -219,7 +248,15 @@ describe("EmailTemplatesPage", () => {
         mockCreateEmailTemplate.mockReset()
         mockUpdateEmailTemplate.mockReset()
         mockSendTestEmailTemplate.mockReset()
+        mockRollbackEmailTemplate.mockReset()
         mockSendTestEmailTemplate.mockResolvedValue({ provider_used: "resend" })
+        mockRollbackEmailTemplate.mockResolvedValue({
+            ...TEMPLATE_DETAIL_BY_ID.tpl_org_1,
+            name: "Restored Org Template",
+            subject: "Restored subject",
+            body: "<p>Restored body</p>",
+            current_version: 3,
+        })
         userSignatureData = null
         personalTemplatesFixture = [PERSONAL_TEMPLATE]
         orgTemplatesFixture = [ORG_TEMPLATE]
@@ -559,6 +596,36 @@ describe("EmailTemplatesPage", () => {
         expect(await screen.findByText("Email Preview")).toBeInTheDocument()
         expect(screen.getByText("Org Signature")).toBeInTheDocument()
         expect(screen.queryByText("Personal Signature")).not.toBeInTheDocument()
+    })
+
+    it("opens organization template history from the editor and restores a version", async () => {
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Org Template" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
+        fireEvent.click(await screen.findByRole("button", { name: "View history" }))
+
+        expect(
+            await screen.findByRole("heading", { name: "Template history" }),
+        ).toBeInTheDocument()
+        expect(screen.getByText("Template updated")).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Restore version 1" }))
+        fireEvent.click(screen.getByRole("button", { name: "Restore version" }))
+
+        await waitFor(() => {
+            expect(mockRollbackEmailTemplate).toHaveBeenCalledWith({
+                id: "tpl_org_1",
+                version: 1,
+            })
+        })
+
+        fireEvent.click(screen.getByRole("button", { name: "Close" }))
+        expect(await screen.findByLabelText("Template Name")).toHaveValue(
+            "Restored Org Template",
+        )
+        expect(screen.getByLabelText("Subject Line")).toHaveValue("Restored subject")
     })
 
     it.each(["admin", "developer"] as const)(

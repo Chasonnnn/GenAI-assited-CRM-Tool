@@ -58,6 +58,7 @@ import {
     SparklesIcon,
     AlertTriangleIcon,
     SendIcon,
+    HistoryIcon,
 } from "lucide-react"
 import DOMPurify from "dompurify"
 import {
@@ -73,6 +74,8 @@ import {
     useEmailTemplateLibrary,
     useEmailTemplateLibraryItem,
     useCopyTemplateFromLibrary,
+    useEmailTemplateVersions,
+    useRollbackEmailTemplate,
 } from "@/lib/hooks/use-email-templates"
 import {
     useUserSignature,
@@ -85,7 +88,12 @@ import {
 import { getSignaturePreview } from "@/lib/api/signature"
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor"
 import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
-import type { EmailTemplateListItem, EmailTemplateScope, EmailTemplateLibraryItem } from "@/lib/api/email-templates"
+import type {
+    EmailTemplate,
+    EmailTemplateLibraryItem,
+    EmailTemplateListItem,
+    EmailTemplateScope,
+} from "@/lib/api/email-templates"
 import { toast } from "@/components/ui/toast"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
@@ -94,6 +102,7 @@ import { normalizeTemplateHtml } from "@/lib/email-template-html"
 import { formatDate } from "@/lib/formatters"
 import { insertAtCursor } from "@/lib/insert-at-cursor"
 import { SafeHtmlContent } from "@/components/safe-html-content"
+import { EmailTemplateHistorySheet } from "@/components/email/EmailTemplateHistorySheet"
 
 // =============================================================================
 // Signature Override Field Component
@@ -324,6 +333,7 @@ type EmailTemplateEditorState = {
     bodyOverride: string | null
     bodyModeOverride: EditorMode | null
     scope: EmailTemplateScope
+    currentVersionOverride: number | null
 }
 
 type EmailTemplateEditorAction =
@@ -334,6 +344,7 @@ type EmailTemplateEditorAction =
     | { type: "changeSubject"; value: string }
     | { type: "changeBody"; value: string }
     | { type: "changeBodyMode"; value: EditorMode }
+    | { type: "applyRollback"; template: EmailTemplate }
 
 const initialEmailTemplateEditorState: EmailTemplateEditorState = {
     isOpen: false,
@@ -343,6 +354,7 @@ const initialEmailTemplateEditorState: EmailTemplateEditorState = {
     bodyOverride: null,
     bodyModeOverride: null,
     scope: "personal",
+    currentVersionOverride: null,
 }
 
 function emailTemplateEditorReducer(
@@ -365,6 +377,7 @@ function emailTemplateEditorReducer(
                 bodyOverride: null,
                 bodyModeOverride: null,
                 scope: action.template.scope,
+                currentVersionOverride: null,
             }
         case "close":
             return {
@@ -379,6 +392,17 @@ function emailTemplateEditorReducer(
             return { ...state, bodyOverride: action.value }
         case "changeBodyMode":
             return { ...state, bodyModeOverride: action.value }
+        case "applyRollback":
+            return {
+                ...state,
+                template: action.template,
+                name: action.template.name,
+                subject: action.template.subject,
+                bodyOverride: action.template.body,
+                bodyModeOverride: getTemplateBodyMode(action.template.body),
+                scope: action.template.scope,
+                currentVersionOverride: action.template.current_version,
+            }
         default:
             return state
     }
@@ -903,6 +927,7 @@ export default function EmailTemplatesPage() {
         initialEmailTemplateEditorState,
     )
     const [showPreview, setShowPreview] = useState(false)
+    const [historyOpen, setHistoryOpen] = useState(false)
     const [signaturePreviewMode, setSignaturePreviewMode] = useState<"personal" | "org">("personal")
 
     const subjectRef = useRef<HTMLInputElement | null>(null)
@@ -957,6 +982,7 @@ export default function EmailTemplatesPage() {
     const shareWithOrg = useShareTemplateWithOrg()
     const copyFromLibrary = useCopyTemplateFromLibrary()
     const sendTest = useSendTestEmailTemplate()
+    const rollbackTemplateMutation = useRollbackEmailTemplate()
 
     // Signature hooks
     const { data: signatureData, refetch: refetchSignature } = useUserSignature()
@@ -984,6 +1010,15 @@ export default function EmailTemplatesPage() {
 
     // Get full template details when editing
     const { data: fullTemplate } = useEmailTemplate(editorState.template?.id || null)
+    const historyTemplateId = editorState.template?.scope === "org"
+        ? editorState.template.id
+        : null
+    const {
+        data: templateVersions = [],
+        isLoading: templateVersionsLoading,
+        isError: templateVersionsError,
+        refetch: refetchTemplateVersions,
+    } = useEmailTemplateVersions(historyTemplateId, historyOpen)
     const { data: testSendTemplateDetail, isLoading: testSendTemplateLoading } = useEmailTemplate(
         testSendState.target?.id || null
     )
@@ -1044,6 +1079,7 @@ export default function EmailTemplatesPage() {
 
     const handleOpenModal = (template?: EmailTemplateListItem, scope: EmailTemplateScope = "personal") => {
         activeInsertionTargetRef.current = null
+        setHistoryOpen(false)
         if (template) {
             dispatchEditor({ type: "openEdit", template })
         } else {
@@ -1076,6 +1112,31 @@ export default function EmailTemplatesPage() {
                 },
                 { onSuccess: () => dispatchEditor({ type: "close" }) }
             )
+        }
+    }
+
+    const handleRestoreVersion = async (version: number) => {
+        if (!historyTemplateId) return
+
+        try {
+            const restoredTemplate = await rollbackTemplateMutation.mutateAsync({
+                id: historyTemplateId,
+                version,
+            })
+            dispatchEditor({
+                type: "applyRollback",
+                template: restoredTemplate,
+            })
+            toast.success(
+                `Version ${version} restored as version ${restoredTemplate.current_version}`,
+            )
+        } catch (error) {
+            toast.error(
+                error instanceof Error
+                    ? error.message
+                    : `Couldn’t restore version ${version}`,
+            )
+            throw error
         }
     }
 
@@ -1329,7 +1390,7 @@ export default function EmailTemplatesPage() {
     }
 
     return (
-        <div className="flex min-h-screen flex-col">
+        <div className="flex min-h-dvh flex-col">
             {/* Page Header */}
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="flex h-16 items-center justify-between px-6">
@@ -1980,6 +2041,7 @@ export default function EmailTemplatesPage() {
                 onOpenChange={(open) => {
                     if (!open) {
                         activeInsertionTargetRef.current = null
+                        setHistoryOpen(false)
                         dispatchEditor({ type: "close" })
                     }
                 }}
@@ -2173,6 +2235,16 @@ export default function EmailTemplatesPage() {
                     </div>
 
                     <DialogFooter className="flex gap-2">
+                        {editorState.template?.scope === "org" && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setHistoryOpen(true)}
+                            >
+                                <HistoryIcon className="mr-2 size-4" />
+                                View history
+                            </Button>
+                        )}
                         <Button variant="outline" onClick={handlePreview}>
                             <EyeIcon className="mr-2 size-4" />
                             Preview
@@ -2189,6 +2261,25 @@ export default function EmailTemplatesPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <EmailTemplateHistorySheet
+                open={historyOpen && Boolean(historyTemplateId)}
+                onOpenChange={setHistoryOpen}
+                templateName={editorState.name || "Organization template"}
+                currentVersion={
+                    editorState.currentVersionOverride
+                    ?? fullTemplate?.current_version
+                    ?? null
+                }
+                versions={templateVersions}
+                isLoading={templateVersionsLoading}
+                isError={templateVersionsError}
+                onRetry={() => {
+                    void refetchTemplateVersions()
+                }}
+                onRestore={handleRestoreVersion}
+                isRestoring={rollbackTemplateMutation.isPending}
+            />
 
             {/* Copy Template Dialog */}
             <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
