@@ -34,7 +34,7 @@ from app.db.models import (
     User,
 )
 from app.schemas.appointment import AppointmentRead, AppointmentListItem
-from app.db.enums import AppointmentStatus, MeetingMode
+from app.db.enums import AppointmentEmailType, AppointmentStatus, MeetingMode
 from app.services import appointment_integrations
 from app.utils.pagination import paginate_query_by_offset
 
@@ -1356,6 +1356,7 @@ def approve_booking(
     # Schedule reminder email
     if appt_type and appt_type.reminder_hours_before > 0:
         from app.core.config import settings
+        from app.services import appointment_email_service
 
         appointment_email_service.schedule_reminder_email(
             db=db,
@@ -1502,6 +1503,21 @@ def reschedule_booking(
     appointment.reschedule_token_expires_at = token_expires
     appointment.cancel_token_expires_at = token_expires
 
+    from app.services import appointment_email_service
+
+    appointment_email_service.cancel_queued_appointment_emails(
+        db,
+        appointment,
+        reason_type="appointment_rescheduled",
+        reason_message="Appointment was rescheduled",
+        email_types=(
+            AppointmentEmailType.REQUEST_RECEIVED,
+            AppointmentEmailType.CONFIRMED,
+            AppointmentEmailType.RESCHEDULED,
+            AppointmentEmailType.REMINDER,
+        ),
+        commit=False,
+    )
     db.commit()
     db.refresh(appointment)
 
@@ -1537,7 +1553,6 @@ def reschedule_booking(
         )
         if reminder_appointment_type and reminder_appointment_type.reminder_hours_before > 0:
             from app.core.config import settings
-            from app.services import appointment_email_service
 
             appointment_email_service.replace_reminder_after_reschedule(
                 db,
@@ -1595,17 +1610,23 @@ def cancel_booking(
     appointment.reschedule_token_expires_at = None
     appointment.cancel_token_expires_at = None
 
-    db.commit()
-    db.refresh(appointment)
-
     from app.services import appointment_email_service
 
-    appointment_email_service.cancel_queued_reminders(
+    appointment_email_service.cancel_queued_appointment_emails(
         db,
         appointment,
         reason_type="appointment_cancelled",
         reason_message="Appointment was cancelled",
+        email_types=(
+            AppointmentEmailType.REQUEST_RECEIVED,
+            AppointmentEmailType.CONFIRMED,
+            AppointmentEmailType.RESCHEDULED,
+            AppointmentEmailType.REMINDER,
+        ),
+        commit=False,
     )
+    db.commit()
+    db.refresh(appointment)
 
     # Delete Zoom meeting (best-effort, after commit)
     if appointment.zoom_meeting_id:

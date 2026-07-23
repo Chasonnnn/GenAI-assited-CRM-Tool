@@ -552,6 +552,77 @@ def test_confirmed_reschedule_replaces_pending_or_retry_reminder_occurrence(
     assert old_start != new_start
 
 
+def test_newer_reschedule_cancels_stale_notice_and_preserves_current_occurrence(
+    db,
+    test_org,
+    test_user,
+):
+    from app.db.enums import EmailDeliveryStatus, EmailStatus
+    from app.db.models import EmailDelivery, EmailLog
+    from app.services import appointment_email_service, appointment_service
+
+    _configure_resend(db, test_org.id)
+    appointment = _create_confirmed_appointment(db, test_org, test_user)
+    old_start, new_start = _prepare_future_reminder_schedule(db, appointment)
+
+    appointment_service.reschedule_booking(
+        db,
+        appointment,
+        new_start,
+        by_client=False,
+    )
+    stale_notice = appointment_email_service.send_rescheduled(
+        db,
+        appointment,
+        old_start,
+        "https://portal.example.com",
+    )
+    assert stale_notice is not None
+    stale_delivery = (
+        db.query(EmailDelivery)
+        .filter(
+            EmailDelivery.organization_id == test_org.id,
+            EmailDelivery.email_log_id == stale_notice.email_log_id,
+        )
+        .one()
+    )
+
+    newer_start = new_start + timedelta(days=7)
+    appointment_service.reschedule_booking(
+        db,
+        appointment,
+        newer_start,
+        by_client=False,
+    )
+    current_notice = appointment_email_service.send_rescheduled(
+        db,
+        appointment,
+        new_start,
+        "https://portal.example.com",
+    )
+
+    assert current_notice is not None
+    db.refresh(stale_delivery)
+    db.refresh(stale_notice)
+    stale_email_log = db.get(EmailLog, stale_notice.email_log_id)
+    current_delivery = (
+        db.query(EmailDelivery)
+        .filter(
+            EmailDelivery.organization_id == test_org.id,
+            EmailDelivery.email_log_id == current_notice.email_log_id,
+        )
+        .one()
+    )
+    assert stale_delivery.status == EmailDeliveryStatus.CANCELLED.value
+    assert stale_delivery.last_error_type == "appointment_rescheduled"
+    assert stale_notice.status == EmailStatus.SKIPPED.value
+    assert stale_email_log is not None
+    assert stale_email_log.status == EmailStatus.SKIPPED.value
+    assert current_notice.status == EmailStatus.PENDING.value
+    assert current_delivery.status == EmailDeliveryStatus.PENDING.value
+    assert current_notice.occurrence_key != stale_notice.occurrence_key
+
+
 @pytest.mark.parametrize("queued_status", ["pending", "retry_scheduled"])
 def test_appointment_cancellation_cancels_pending_or_retry_reminder(
     db,
@@ -601,6 +672,66 @@ def test_appointment_cancellation_cancels_pending_or_retry_reminder(
     assert email_log is not None
     assert email_log.status == EmailStatus.SKIPPED.value
     assert email_log.error == "Appointment was cancelled"
+
+
+def test_appointment_cancellation_cancels_stale_confirmation_and_preserves_notice(
+    db,
+    test_org,
+    test_user,
+):
+    from app.db.enums import AppointmentEmailType, EmailDeliveryStatus, EmailStatus
+    from app.db.models import EmailDelivery, EmailLog
+    from app.services import appointment_email_service, appointment_service
+
+    _configure_resend(db, test_org.id)
+    appointment = _create_confirmed_appointment(db, test_org, test_user)
+    confirmation = appointment_email_service.send_appointment_email(
+        db,
+        appointment,
+        AppointmentEmailType.CONFIRMED,
+        "https://portal.example.com",
+    )
+    assert confirmation is not None
+    confirmation_delivery = (
+        db.query(EmailDelivery)
+        .filter(
+            EmailDelivery.organization_id == test_org.id,
+            EmailDelivery.email_log_id == confirmation.email_log_id,
+        )
+        .one()
+    )
+
+    appointment_service.cancel_booking(
+        db,
+        appointment,
+        reason="Client cancelled",
+        by_client=False,
+    )
+    cancellation = appointment_email_service.send_cancelled(
+        db,
+        appointment,
+        "https://portal.example.com",
+    )
+
+    assert cancellation is not None
+    db.refresh(confirmation_delivery)
+    db.refresh(confirmation)
+    confirmation_log = db.get(EmailLog, confirmation.email_log_id)
+    cancellation_delivery = (
+        db.query(EmailDelivery)
+        .filter(
+            EmailDelivery.organization_id == test_org.id,
+            EmailDelivery.email_log_id == cancellation.email_log_id,
+        )
+        .one()
+    )
+    assert confirmation_delivery.status == EmailDeliveryStatus.CANCELLED.value
+    assert confirmation_delivery.last_error_type == "appointment_cancelled"
+    assert confirmation.status == EmailStatus.SKIPPED.value
+    assert confirmation_log is not None
+    assert confirmation_log.status == EmailStatus.SKIPPED.value
+    assert cancellation.status == EmailStatus.PENDING.value
+    assert cancellation_delivery.status == EmailDeliveryStatus.PENDING.value
 
 
 @pytest.mark.parametrize("transition", ["cancelled", "rescheduled"])
@@ -764,3 +895,260 @@ async def test_dispatcher_rechecks_appointment_reminder_after_provider_admission
     email_log = db.get(EmailLog, reminder.email_log_id)
     assert email_log is not None
     assert email_log.status == EmailStatus.SKIPPED.value
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_rejects_delayed_confirmation_after_appointment_cancellation(
+    db,
+    test_org,
+    test_user,
+    monkeypatch,
+):
+    from types import SimpleNamespace
+
+    from app.db.enums import AppointmentEmailType, EmailDeliveryStatus
+    from app.db.models import EmailDelivery
+    from app.services import (
+        appointment_email_service,
+        appointment_service,
+        email_delivery_dispatch,
+        email_delivery_service,
+    )
+    from app.services.resend_transport import ResendSendResult
+
+    _configure_resend(db, test_org.id)
+    appointment = _create_confirmed_appointment(db, test_org, test_user)
+    confirmation = appointment_email_service.send_appointment_email(
+        db,
+        appointment,
+        AppointmentEmailType.CONFIRMED,
+        "https://portal.example.com",
+    )
+    assert confirmation is not None
+    delivery = (
+        db.query(EmailDelivery)
+        .filter(
+            EmailDelivery.organization_id == test_org.id,
+            EmailDelivery.email_log_id == confirmation.email_log_id,
+        )
+        .one()
+    )
+    claim = email_delivery_service.claim_due_deliveries(
+        db,
+        worker_id="delayed-confirmation-worker",
+        now=delivery.run_at + timedelta(seconds=1),
+        lease_for=timedelta(minutes=5),
+        limit=1,
+    )[0]
+    provider_called = False
+
+    monkeypatch.setattr(
+        email_delivery_dispatch.email_provider_admission_service,
+        "reserve_provider_request_slot",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            send_at=datetime.now(timezone.utc) + timedelta(seconds=1)
+        ),
+    )
+
+    async def cancel_during_wait(_delay_seconds: float) -> None:
+        appointment_service.cancel_booking(
+            db,
+            appointment,
+            reason="Client cancelled",
+            by_client=False,
+        )
+
+    async def fake_send_email(**_kwargs):
+        nonlocal provider_called
+        provider_called = True
+        return ResendSendResult(success=True, message_id="must-not-send")
+
+    monkeypatch.setattr(
+        email_delivery_dispatch.resend_transport,
+        "send_email",
+        fake_send_email,
+    )
+
+    result = await email_delivery_dispatch.dispatch_claim(
+        db,
+        claim=claim,
+        sleeper=cancel_during_wait,
+    )
+
+    assert provider_called is False
+    assert result.status == EmailDeliveryStatus.CANCELLED.value
+    assert result.last_error_type == "appointment_ineligible"
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_rejects_confirmation_after_appointment_reschedule(
+    db,
+    test_org,
+    test_user,
+    monkeypatch,
+):
+    from types import SimpleNamespace
+
+    from app.db.enums import AppointmentEmailType, EmailDeliveryStatus
+    from app.db.models import EmailDelivery
+    from app.services import (
+        appointment_email_service,
+        appointment_service,
+        email_delivery_dispatch,
+        email_delivery_service,
+    )
+    from app.services.resend_transport import ResendSendResult
+
+    _configure_resend(db, test_org.id)
+    appointment = _create_confirmed_appointment(db, test_org, test_user)
+    _old_start, new_start = _prepare_future_reminder_schedule(db, appointment)
+    confirmation = appointment_email_service.send_appointment_email(
+        db,
+        appointment,
+        AppointmentEmailType.CONFIRMED,
+        "https://portal.example.com",
+    )
+    assert confirmation is not None
+    delivery = (
+        db.query(EmailDelivery)
+        .filter(
+            EmailDelivery.organization_id == test_org.id,
+            EmailDelivery.email_log_id == confirmation.email_log_id,
+        )
+        .one()
+    )
+    claim = email_delivery_service.claim_due_deliveries(
+        db,
+        worker_id="stale-confirmation-worker",
+        now=delivery.run_at + timedelta(seconds=1),
+        lease_for=timedelta(minutes=5),
+        limit=1,
+    )[0]
+    provider_called = False
+
+    monkeypatch.setattr(
+        email_delivery_dispatch.email_provider_admission_service,
+        "reserve_provider_request_slot",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            send_at=datetime.now(timezone.utc) + timedelta(seconds=1)
+        ),
+    )
+
+    async def reschedule_during_wait(_delay_seconds: float) -> None:
+        appointment_service.reschedule_booking(
+            db,
+            appointment,
+            new_start,
+            by_client=False,
+        )
+
+    async def fake_send_email(**_kwargs):
+        nonlocal provider_called
+        provider_called = True
+        return ResendSendResult(success=True, message_id="must-not-send")
+
+    monkeypatch.setattr(
+        email_delivery_dispatch.resend_transport,
+        "send_email",
+        fake_send_email,
+    )
+
+    result = await email_delivery_dispatch.dispatch_claim(
+        db,
+        claim=claim,
+        sleeper=reschedule_during_wait,
+    )
+
+    assert provider_called is False
+    assert result.status == EmailDeliveryStatus.CANCELLED.value
+    assert result.last_error_type == "appointment_ineligible"
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_rejects_reschedule_notice_after_newer_reschedule(
+    db,
+    test_org,
+    test_user,
+    monkeypatch,
+):
+    from types import SimpleNamespace
+
+    from app.db.enums import EmailDeliveryStatus
+    from app.db.models import EmailDelivery
+    from app.services import (
+        appointment_email_service,
+        appointment_service,
+        email_delivery_dispatch,
+        email_delivery_service,
+    )
+    from app.services.resend_transport import ResendSendResult
+
+    _configure_resend(db, test_org.id)
+    appointment = _create_confirmed_appointment(db, test_org, test_user)
+    old_start, new_start = _prepare_future_reminder_schedule(db, appointment)
+    appointment_service.reschedule_booking(
+        db,
+        appointment,
+        new_start,
+        by_client=False,
+    )
+    stale_notice = appointment_email_service.send_rescheduled(
+        db,
+        appointment,
+        old_start,
+        "https://portal.example.com",
+    )
+    assert stale_notice is not None
+    delivery = (
+        db.query(EmailDelivery)
+        .filter(
+            EmailDelivery.organization_id == test_org.id,
+            EmailDelivery.email_log_id == stale_notice.email_log_id,
+        )
+        .one()
+    )
+    claim = email_delivery_service.claim_due_deliveries(
+        db,
+        worker_id="stale-reschedule-worker",
+        now=delivery.run_at + timedelta(seconds=1),
+        lease_for=timedelta(minutes=5),
+        limit=1,
+    )[0]
+    provider_called = False
+
+    monkeypatch.setattr(
+        email_delivery_dispatch.email_provider_admission_service,
+        "reserve_provider_request_slot",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            send_at=datetime.now(timezone.utc) + timedelta(seconds=1)
+        ),
+    )
+
+    async def reschedule_again_during_wait(_delay_seconds: float) -> None:
+        appointment_service.reschedule_booking(
+            db,
+            appointment,
+            new_start + timedelta(days=7),
+            by_client=False,
+        )
+
+    async def fake_send_email(**_kwargs):
+        nonlocal provider_called
+        provider_called = True
+        return ResendSendResult(success=True, message_id="must-not-send")
+
+    monkeypatch.setattr(
+        email_delivery_dispatch.resend_transport,
+        "send_email",
+        fake_send_email,
+    )
+
+    result = await email_delivery_dispatch.dispatch_claim(
+        db,
+        claim=claim,
+        sleeper=reschedule_again_during_wait,
+    )
+
+    assert provider_called is False
+    assert result.status == EmailDeliveryStatus.CANCELLED.value
+    assert result.last_error_type == "appointment_ineligible"
