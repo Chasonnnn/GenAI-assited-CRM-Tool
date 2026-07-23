@@ -521,11 +521,12 @@ class IntakeLeadPromoteResponse(BaseModel):
 class FormIntakeLinkSendRequest(BaseModel):
     surrogate_id: UUID
     template_id: UUID | None = None
+    idempotency_key: str = Field(min_length=1, max_length=256)
 
 
 class FormIntakeLinkSendResponse(BaseModel):
     intake_link_id: UUID
     template_id: UUID
     email_log_id: UUID
-    sent_at: datetime
+    queued_at: datetime
     intake_url: str

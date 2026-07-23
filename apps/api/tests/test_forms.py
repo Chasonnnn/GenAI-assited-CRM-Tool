@@ -11,8 +11,10 @@ from app.db.models import (
     AutomationWorkflow,
     EmailTemplate,
     FormIntakeLink,
+    ResendSettings,
     Surrogate,
 )
+from app.services import resend_settings_service
 from app.utils.normalization import (
     normalize_email,
     normalize_name,
@@ -429,7 +431,10 @@ async def test_set_form_mappings_applies_public_surrogate_field_defaults(authed_
     schema = get_res.json()["form_schema"]
 
     assert _field_by_key(schema, "current_state")["validation"]["pattern"] == "^[A-Za-z]{2}$"
-    assert _field_by_key(schema, "current_state")["help_text"] == "Use the 2-letter state code, e.g. CA."
+    assert (
+        _field_by_key(schema, "current_state")["help_text"]
+        == "Use the 2-letter state code, e.g. CA."
+    )
     assert _field_by_key(schema, "current_height")["type"] == "height"
     assert _field_by_key(schema, "current_weight")["validation"]["max_value"] == 1000.0
     assert _field_by_key(schema, "deliveries")["validation"]["min_value"] == 1.0
@@ -708,19 +713,66 @@ async def test_send_shared_intake_link_uses_template_and_returns_intake_url(
         scope="org",
         is_active=True,
     )
-    db.add(template)
+    db.add_all(
+        [
+            template,
+            ResendSettings(
+                organization_id=test_org.id,
+                email_provider="resend",
+                api_key_encrypted=resend_settings_service.encrypt_api_key("re_test_key"),
+                from_email="care@example.com",
+                verified_domain="example.com",
+            ),
+        ]
+    )
     db.commit()
 
-    send_link_res = await authed_client.post(
+    missing_occurrence_res = await authed_client.post(
         f"/forms/{form_id}/intake-links/{link_id}/send",
         json={"surrogate_id": str(surrogate.id), "template_id": str(template.id)},
+    )
+    assert missing_occurrence_res.status_code == 422
+
+    idempotency_key = f"form-intake-link/{uuid.uuid4()}"
+    send_link_res = await authed_client.post(
+        f"/forms/{form_id}/intake-links/{link_id}/send",
+        json={
+            "surrogate_id": str(surrogate.id),
+            "template_id": str(template.id),
+            "idempotency_key": idempotency_key,
+        },
     )
     assert send_link_res.status_code == 200
     payload = send_link_res.json()
     assert payload["intake_link_id"] == link_id
     assert payload["template_id"] == str(template.id)
     assert payload["email_log_id"]
+    assert payload["queued_at"]
+    assert "sent_at" not in payload
     assert payload["intake_url"].endswith(f"/intake/{slug}")
+
+    retry_res = await authed_client.post(
+        f"/forms/{form_id}/intake-links/{link_id}/send",
+        json={
+            "surrogate_id": str(surrogate.id),
+            "template_id": str(template.id),
+            "idempotency_key": idempotency_key,
+        },
+    )
+    assert retry_res.status_code == 200
+    assert retry_res.json()["email_log_id"] == payload["email_log_id"]
+
+    other_surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    conflicting_retry_res = await authed_client.post(
+        f"/forms/{form_id}/intake-links/{link_id}/send",
+        json={
+            "surrogate_id": str(other_surrogate.id),
+            "template_id": str(template.id),
+            "idempotency_key": idempotency_key,
+        },
+    )
+    assert conflicting_retry_res.status_code == 409
+    assert "different email payload" in conflicting_retry_res.json()["detail"]
 
 
 @pytest.mark.asyncio
