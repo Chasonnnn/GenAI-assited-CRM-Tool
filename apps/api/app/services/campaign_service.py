@@ -5,7 +5,8 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import and_, case, func, or_
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY, SURROGATE_PIPELINE_ENTITY
@@ -787,30 +788,11 @@ def enqueue_campaign_retry_failed(
 
 def cancel_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> bool:
     """Cancel a scheduled campaign."""
-    campaign = (
-        db.query(Campaign)
-        .filter(
-            Campaign.id == campaign_id,
-            Campaign.organization_id == org_id,
-            Campaign.status.in_(
-                [
-                    CampaignStatus.SCHEDULED.value,
-                    CampaignStatus.SENDING.value,
-                ]
-            ),
-        )
-        .first()
-    )
+    from app.db.enums import EmailDeliveryStatus
+    from app.db.models import EmailDelivery, EmailLog
 
-    if not campaign:
-        return False
-
-    campaign.status = CampaignStatus.CANCELLED.value
-    campaign.scheduled_at = None
-
-    now = datetime.now(timezone.utc)
-    latest_run = (
-        db.query(CampaignRun)
+    latest_run_id = (
+        db.query(CampaignRun.id)
         .filter(
             CampaignRun.organization_id == org_id,
             CampaignRun.campaign_id == campaign_id,
@@ -818,10 +800,83 @@ def cancel_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> bool:
         .order_by(CampaignRun.started_at.desc())
         .first()
     )
+    latest_run = None
+    if latest_run_id is not None:
+        locked = _lock_campaign_run_and_campaign(
+            db,
+            organization_id=org_id,
+            run_id=latest_run_id[0],
+        )
+        if locked is None:
+            return False
+        latest_run, campaign = locked
+    else:
+        campaign = (
+            db.query(Campaign)
+            .filter(
+                Campaign.id == campaign_id,
+                Campaign.organization_id == org_id,
+            )
+            .with_for_update(of=Campaign)
+            .populate_existing()
+            .one_or_none()
+        )
+
+    if campaign is None or campaign.status not in {
+        CampaignStatus.SCHEDULED.value,
+        CampaignStatus.SENDING.value,
+    }:
+        return False
+
+    campaign.status = CampaignStatus.CANCELLED.value
+    campaign.scheduled_at = None
+
+    now = datetime.now(timezone.utc)
     if latest_run and latest_run.status != "completed":
         latest_run.status = "failed"
         latest_run.error_message = "cancelled"
         latest_run.completed_at = now
+
+        cancellable_deliveries = (
+            db.query(EmailDelivery, EmailLog, CampaignRecipient)
+            .join(
+                EmailLog,
+                EmailLog.id == EmailDelivery.email_log_id,
+            )
+            .join(
+                CampaignRecipient,
+                or_(
+                    CampaignRecipient.email_log_id == EmailLog.id,
+                    and_(
+                        EmailLog.source_type == "campaign_recipient",
+                        EmailLog.source_id == CampaignRecipient.id,
+                    ),
+                ),
+            )
+            .filter(
+                EmailDelivery.organization_id == org_id,
+                EmailLog.organization_id == org_id,
+                CampaignRecipient.run_id == latest_run.id,
+                EmailDelivery.status.in_(
+                    [
+                        EmailDeliveryStatus.PENDING.value,
+                        EmailDeliveryStatus.RETRY_SCHEDULED.value,
+                    ]
+                ),
+            )
+            .with_for_update(of=EmailDelivery)
+            .all()
+        )
+        for delivery, email_log, recipient in cancellable_deliveries:
+            delivery.status = EmailDeliveryStatus.CANCELLED.value
+            delivery.completed_at = now
+            delivery.last_error_type = "campaign_cancelled"
+            delivery.last_error = "cancelled"
+            email_log.status = EmailStatus.SKIPPED.value
+            email_log.error = "cancelled"
+            recipient.status = CampaignRecipientStatus.SKIPPED.value
+            recipient.error = None
+            recipient.skip_reason = "cancelled"
 
     pending_jobs = (
         db.query(Job)
@@ -838,6 +893,315 @@ def cancel_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> bool:
         job.last_error = "cancelled"
         job.completed_at = now
 
+    if latest_run is not None:
+        recompute_campaign_run_aggregates(
+            db,
+            organization_id=org_id,
+            run_id=latest_run.id,
+            commit=False,
+        )
+
+    return True
+
+
+def _lock_campaign_run_and_campaign(
+    db: Session,
+    *,
+    organization_id: UUID,
+    run_id: UUID,
+) -> tuple[CampaignRun, Campaign] | None:
+    """Acquire the canonical run -> campaign row-lock order."""
+    run = (
+        db.query(CampaignRun)
+        .filter(
+            CampaignRun.id == run_id,
+            CampaignRun.organization_id == organization_id,
+        )
+        .with_for_update(of=CampaignRun)
+        .populate_existing()
+        .one_or_none()
+    )
+    if run is None:
+        return None
+    campaign = (
+        db.query(Campaign)
+        .filter(
+            Campaign.id == run.campaign_id,
+            Campaign.organization_id == organization_id,
+        )
+        .with_for_update(of=Campaign)
+        .populate_existing()
+        .one_or_none()
+    )
+    if campaign is None:
+        return None
+    return run, campaign
+
+
+def _campaign_run_id_for_email_log(
+    db: Session,
+    *,
+    organization_id: UUID,
+    email_log_id: UUID,
+) -> UUID | None:
+    return (
+        db.query(CampaignRecipient.run_id)
+        .join(CampaignRun, CampaignRun.id == CampaignRecipient.run_id)
+        .join(Campaign, Campaign.id == CampaignRun.campaign_id)
+        .filter(
+            CampaignRecipient.email_log_id == email_log_id,
+            CampaignRun.organization_id == organization_id,
+            Campaign.organization_id == organization_id,
+        )
+        .scalar()
+    )
+
+
+def lock_campaign_run_for_email_log(
+    db: Session,
+    *,
+    organization_id: UUID,
+    email_log_id: UUID,
+) -> UUID | None:
+    """Pre-lock campaign aggregates before a delivery or webhook row mutation."""
+    run_id = _campaign_run_id_for_email_log(
+        db,
+        organization_id=organization_id,
+        email_log_id=email_log_id,
+    )
+    if run_id is None:
+        return None
+    if (
+        _lock_campaign_run_and_campaign(
+            db,
+            organization_id=organization_id,
+            run_id=run_id,
+        )
+        is None
+    ):
+        return None
+    return run_id
+
+
+def is_campaign_recipient_delivery_eligible(
+    db: Session,
+    org_id: UUID,
+    recipient_id: UUID,
+) -> bool:
+    """Lock and check whether a campaign recipient may still be sent."""
+    run_id = (
+        db.query(CampaignRecipient.run_id)
+        .join(CampaignRun, CampaignRun.id == CampaignRecipient.run_id)
+        .join(Campaign, Campaign.id == CampaignRun.campaign_id)
+        .filter(
+            CampaignRecipient.id == recipient_id,
+            CampaignRun.organization_id == org_id,
+            Campaign.organization_id == org_id,
+        )
+        .scalar()
+    )
+    if run_id is None:
+        return False
+    locked = _lock_campaign_run_and_campaign(
+        db,
+        organization_id=org_id,
+        run_id=run_id,
+    )
+    if locked is None:
+        return False
+    run, campaign = locked
+    recipient = (
+        db.query(CampaignRecipient)
+        .filter(
+            CampaignRecipient.id == recipient_id,
+            CampaignRecipient.run_id == run.id,
+        )
+        .with_for_update(of=CampaignRecipient)
+        .one_or_none()
+    )
+    return bool(
+        recipient is not None
+        and recipient.status == CampaignRecipientStatus.PENDING.value
+        and run.status == "running"
+        and campaign.status == CampaignStatus.SENDING.value
+    )
+
+
+def recompute_campaign_run_aggregates(
+    db: Session,
+    *,
+    organization_id: UUID,
+    run_id: UUID,
+    commit: bool = True,
+) -> bool:
+    """Recompute one tenant campaign run from its recipient source of truth."""
+    # The stable run -> campaign lock order serializes outbox and webhook
+    # projections without allowing concurrent writers to publish stale totals.
+    db.flush()
+    locked = _lock_campaign_run_and_campaign(
+        db,
+        organization_id=organization_id,
+        run_id=run_id,
+    )
+    if locked is None:
+        return False
+    run, campaign = locked
+
+    status_rows = (
+        db.query(CampaignRecipient.status, func.count(CampaignRecipient.id))
+        .filter(CampaignRecipient.run_id == run.id)
+        .group_by(CampaignRecipient.status)
+        .all()
+    )
+    status_counts = {status: count for status, count in status_rows}
+    engagement_counts = (
+        db.query(
+            func.count(CampaignRecipient.id)
+            .filter(CampaignRecipient.opened_at.isnot(None))
+            .label("opened_count"),
+            func.count(CampaignRecipient.id)
+            .filter(CampaignRecipient.clicked_at.isnot(None))
+            .label("clicked_count"),
+        )
+        .filter(CampaignRecipient.run_id == run.id)
+        .one()
+    )
+
+    delivered_count = status_counts.get(CampaignRecipientStatus.DELIVERED.value, 0)
+    failed_count = status_counts.get(CampaignRecipientStatus.FAILED.value, 0)
+    pending_count = status_counts.get(CampaignRecipientStatus.PENDING.value, 0)
+    run.sent_count = status_counts.get(CampaignRecipientStatus.SENT.value, 0) + delivered_count
+    run.delivered_count = delivered_count
+    run.failed_count = failed_count
+    run.skipped_count = status_counts.get(CampaignRecipientStatus.SKIPPED.value, 0)
+    run.opened_count = engagement_counts.opened_count
+    run.clicked_count = engagement_counts.clicked_count
+
+    now = datetime.now(timezone.utc)
+    was_terminal = run.status in {"completed", "failed"} and run.completed_at is not None
+    if campaign.status == CampaignStatus.CANCELLED.value:
+        run.status = "failed"
+        run.completed_at = run.completed_at or now
+        run.error_message = run.error_message or "cancelled"
+    elif pending_count:
+        run.status = "running"
+        run.completed_at = None
+        campaign.status = CampaignStatus.SENDING.value
+    else:
+        run.status = "failed" if failed_count else "completed"
+        if not was_terminal:
+            run.completed_at = now
+        campaign.status = (
+            CampaignStatus.FAILED.value if failed_count else CampaignStatus.COMPLETED.value
+        )
+
+    campaign.sent_count = run.sent_count
+    campaign.delivered_count = run.delivered_count
+    campaign.failed_count = run.failed_count
+    campaign.skipped_count = run.skipped_count
+    campaign.total_recipients = run.total_count
+
+    if commit:
+        db.commit()
+    else:
+        db.flush()
+    return True
+
+
+def project_campaign_recipient_delivery(
+    db: Session,
+    *,
+    organization_id: UUID,
+    email_log_id: UUID,
+    status: str,
+    provider_message_id: str | None = None,
+    error: str | None = None,
+    occurred_at: datetime | None = None,
+    commit: bool = True,
+) -> bool:
+    """Project a fenced outbox result onto its tenant-scoped campaign recipient."""
+    if status not in {
+        EmailStatus.SENT.value,
+        EmailStatus.FAILED.value,
+        EmailStatus.SKIPPED.value,
+    }:
+        raise ValueError("unsupported campaign delivery projection status")
+    if status == EmailStatus.SENT.value and not provider_message_id:
+        raise ValueError("provider_message_id is required for sent projection")
+
+    run_id = _campaign_run_id_for_email_log(
+        db,
+        organization_id=organization_id,
+        email_log_id=email_log_id,
+    )
+    if run_id is None:
+        return False
+    if (
+        _lock_campaign_run_and_campaign(
+            db,
+            organization_id=organization_id,
+            run_id=run_id,
+        )
+        is None
+    ):
+        return False
+
+    recipient = (
+        db.query(CampaignRecipient)
+        .filter(
+            CampaignRecipient.email_log_id == email_log_id,
+            CampaignRecipient.run_id == run_id,
+        )
+        .with_for_update(of=CampaignRecipient)
+        .one_or_none()
+    )
+    if recipient is None:
+        return False
+
+    if status == EmailStatus.SENT.value:
+        if recipient.status in {
+            CampaignRecipientStatus.PENDING.value,
+            CampaignRecipientStatus.SENT.value,
+        }:
+            recipient.status = CampaignRecipientStatus.SENT.value
+        if recipient.status in {
+            CampaignRecipientStatus.SENT.value,
+            CampaignRecipientStatus.DELIVERED.value,
+        }:
+            projected_at = occurred_at or datetime.now(timezone.utc)
+            if recipient.sent_at is None or projected_at < recipient.sent_at:
+                recipient.sent_at = projected_at
+            if recipient.external_message_id is None:
+                recipient.external_message_id = provider_message_id
+            recipient.error = None
+            recipient.skip_reason = None
+    elif status == EmailStatus.FAILED.value and recipient.status in {
+        CampaignRecipientStatus.PENDING.value,
+        CampaignRecipientStatus.FAILED.value,
+    }:
+        recipient.status = CampaignRecipientStatus.FAILED.value
+        recipient.error = (error or "Send failed")[:500]
+        recipient.skip_reason = None
+    elif recipient.status in {
+        CampaignRecipientStatus.PENDING.value,
+        CampaignRecipientStatus.SKIPPED.value,
+    }:
+        recipient.status = CampaignRecipientStatus.SKIPPED.value
+        recipient.error = None
+        recipient.skip_reason = (error or "skipped")[:100]
+
+    if not recompute_campaign_run_aggregates(
+        db,
+        organization_id=organization_id,
+        run_id=recipient.run_id,
+        commit=False,
+    ):
+        raise RuntimeError("Campaign aggregate projection target is missing")
+
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return True
 
 
@@ -941,30 +1305,48 @@ def add_to_suppression(
     source_type: str | None = None,
     source_id: UUID | None = None,
 ) -> EmailSuppression:
-    """Add an email to the suppression list (idempotent)."""
-    existing = (
-        db.query(EmailSuppression)
-        .filter(
-            EmailSuppression.organization_id == org_id,
-            EmailSuppression.email == email.lower(),
-        )
-        .first()
-    )
-
-    if existing:
-        return existing
-
-    suppression = EmailSuppression(
+    """Atomically add or strengthen one tenant-scoped suppression."""
+    statement = insert(EmailSuppression).values(
         organization_id=org_id,
         email=email.lower(),
         reason=reason,
-        source_type=source_type,
+        source_type=str(source_type) if source_type is not None else None,
         source_id=source_id,
     )
-    db.add(suppression)
-    db.flush()
-
-    return suppression
+    incoming_reason = statement.excluded.reason
+    incoming_precedence = case(
+        (incoming_reason == "archived", 10),
+        (incoming_reason == "opt_out", 20),
+        (incoming_reason == "bounced", 30),
+        (incoming_reason == "complaint", 40),
+        else_=0,
+    )
+    stored_precedence = case(
+        (EmailSuppression.reason == "archived", 10),
+        (EmailSuppression.reason == "opt_out", 20),
+        (EmailSuppression.reason == "bounced", 30),
+        (EmailSuppression.reason == "complaint", 40),
+        else_=0,
+    )
+    should_strengthen = incoming_precedence > stored_precedence
+    statement = statement.on_conflict_do_update(
+        constraint="uq_email_suppression",
+        set_={
+            "reason": case(
+                (should_strengthen, statement.excluded.reason),
+                else_=EmailSuppression.reason,
+            ),
+            "source_type": case(
+                (should_strengthen, statement.excluded.source_type),
+                else_=EmailSuppression.source_type,
+            ),
+            "source_id": case(
+                (should_strengthen, statement.excluded.source_id),
+                else_=EmailSuppression.source_id,
+            ),
+        },
+    )
+    return db.execute(statement.returning(EmailSuppression)).scalar_one()
 
 
 def list_suppressions(
@@ -1118,31 +1500,16 @@ def execute_campaign_run(
     recipient_iter = recipient_query.execution_options(stream_results=True).yield_per(batch_size)
 
     def _finalize_cancelled():
-        status_rows = (
-            db.query(CampaignRecipient.status, func.count(CampaignRecipient.id))
-            .filter(CampaignRecipient.run_id == run_id)
-            .group_by(CampaignRecipient.status)
-            .all()
-        )
-        status_counts = {status: count for status, count in status_rows}
-
-        run.sent_count = status_counts.get(
-            CampaignRecipientStatus.SENT.value, 0
-        ) + status_counts.get(CampaignRecipientStatus.DELIVERED.value, 0)
-        run.delivered_count = status_counts.get(CampaignRecipientStatus.DELIVERED.value, 0)
-        run.failed_count = status_counts.get(CampaignRecipientStatus.FAILED.value, 0)
-        run.skipped_count = status_counts.get(CampaignRecipientStatus.SKIPPED.value, 0)
-        run.completed_at = datetime.now(timezone.utc)
         run.status = "failed"
         run.error_message = "cancelled"
-
-        campaign.sent_count = run.sent_count
-        campaign.delivered_count = run.delivered_count
-        campaign.failed_count = run.failed_count
-        campaign.skipped_count = run.skipped_count
-        campaign.total_recipients = run.total_count
         campaign.status = CampaignStatus.CANCELLED.value
-        db.commit()
+        if not recompute_campaign_run_aggregates(
+            db,
+            organization_id=org_id,
+            run_id=run_id,
+            commit=True,
+        ):
+            raise RuntimeError("Campaign aggregate target is missing")
 
         return {
             "sent_count": run.sent_count,
@@ -1240,6 +1607,7 @@ def execute_campaign_run(
                     tracking_token=tracking_service.generate_tracking_token(),
                 )
                 db.add(cr)
+                db.flush()
             elif cr.status in (
                 CampaignRecipientStatus.PENDING.value,
                 CampaignRecipientStatus.SENT.value,
@@ -1277,9 +1645,19 @@ def execute_campaign_run(
                     sender_user_id=actor_user_id,
                     commit=False,
                     ignore_opt_out=bool(getattr(campaign, "include_unsubscribed", False)),
+                    idempotency_key=(f"campaign-recipient/{cr.id}/v{cr.send_revision}"),
+                    source_type="campaign_recipient",
+                    source_id=cr.id,
+                    purpose="marketing",
                 )
-                cr.status = CampaignRecipientStatus.PENDING.value
-                cr.external_message_id = str(email_log.id)
+                cr.email_log_id = email_log.id
+                if email_log.status == EmailStatus.SKIPPED.value:
+                    cr.status = CampaignRecipientStatus.SKIPPED.value
+                    cr.error = None
+                    cr.skip_reason = (email_log.error or "suppressed")[:100]
+                    cr.external_message_id = None
+                else:
+                    cr.status = CampaignRecipientStatus.PENDING.value
             except Exception as e:
                 cr.status = CampaignRecipientStatus.FAILED.value
                 cr.error = str(e)[:500]
@@ -1301,41 +1679,13 @@ def execute_campaign_run(
             return _finalize_cancelled()
         _process_batch(recipients_buffer)
 
-    # Update run and campaign status
-    status_rows = (
-        db.query(CampaignRecipient.status, func.count(CampaignRecipient.id))
-        .filter(CampaignRecipient.run_id == run_id)
-        .group_by(CampaignRecipient.status)
-        .all()
-    )
-    status_counts = {status: count for status, count in status_rows}
-
-    pending_count = status_counts.get(CampaignRecipientStatus.PENDING.value, 0)
-    delivered_count = status_counts.get(CampaignRecipientStatus.DELIVERED.value, 0)
-    run.sent_count = status_counts.get(CampaignRecipientStatus.SENT.value, 0) + delivered_count
-    run.delivered_count = delivered_count
-    run.failed_count = status_counts.get(CampaignRecipientStatus.FAILED.value, 0)
-    run.skipped_count = status_counts.get(CampaignRecipientStatus.SKIPPED.value, 0)
-    run.completed_at = datetime.now(timezone.utc) if pending_count == 0 else None
-    run.status = (
-        "completed"
-        if pending_count == 0 and run.failed_count == 0
-        else ("failed" if pending_count == 0 else "running")
-    )
-
-    campaign.sent_count = run.sent_count
-    campaign.delivered_count = run.delivered_count
-    campaign.failed_count = run.failed_count
-    campaign.skipped_count = run.skipped_count
-    campaign.total_recipients = run.total_count
-    if pending_count == 0:
-        campaign.status = (
-            CampaignStatus.COMPLETED.value if run.failed_count == 0 else CampaignStatus.FAILED.value
-        )
-    else:
-        campaign.status = CampaignStatus.SENDING.value
-
-    db.commit()
+    if not recompute_campaign_run_aggregates(
+        db,
+        organization_id=org_id,
+        run_id=run_id,
+        commit=True,
+    ):
+        raise RuntimeError("Campaign aggregate target is missing")
 
     return {
         "sent_count": run.sent_count,
@@ -1515,6 +1865,8 @@ def retry_failed_campaign_run(
                 body, recipient.tracking_token
             )
 
+        recipient.send_revision += 1
+        recipient.external_message_id = None
         try:
             email_log, _job = email_service.send_email(
                 db=db,
@@ -1527,6 +1879,10 @@ def retry_failed_campaign_run(
                 sender_user_id=actor_user_id,
                 commit=False,
                 ignore_opt_out=bool(getattr(campaign, "include_unsubscribed", False)),
+                idempotency_key=(f"campaign-recipient/{recipient.id}/v{recipient.send_revision}"),
+                source_type="campaign_recipient",
+                source_id=recipient.id,
+                purpose="marketing",
             )
         except Exception as exc:
             recipient.status = CampaignRecipientStatus.FAILED.value
@@ -1546,44 +1902,16 @@ def retry_failed_campaign_run(
         recipient.status = CampaignRecipientStatus.PENDING.value
         recipient.error = None
         recipient.skip_reason = None
-        recipient.external_message_id = str(email_log.id)
+        recipient.email_log_id = email_log.id
         retried_count += 1
 
-    db.commit()
-
-    status_rows = (
-        db.query(CampaignRecipient.status, func.count(CampaignRecipient.id))
-        .filter(CampaignRecipient.run_id == run_id)
-        .group_by(CampaignRecipient.status)
-        .all()
-    )
-    status_counts = {status: count for status, count in status_rows}
-
-    pending_count = status_counts.get(CampaignRecipientStatus.PENDING.value, 0)
-    delivered_count = status_counts.get(CampaignRecipientStatus.DELIVERED.value, 0)
-    run.sent_count = status_counts.get(CampaignRecipientStatus.SENT.value, 0) + delivered_count
-    run.delivered_count = delivered_count
-    run.failed_count = status_counts.get(CampaignRecipientStatus.FAILED.value, 0)
-    run.skipped_count = status_counts.get(CampaignRecipientStatus.SKIPPED.value, 0)
-    run.completed_at = datetime.now(timezone.utc) if pending_count == 0 else None
-    run.status = (
-        "completed"
-        if pending_count == 0 and run.failed_count == 0
-        else ("failed" if pending_count == 0 else "running")
-    )
-
-    campaign.sent_count = run.sent_count
-    campaign.delivered_count = run.delivered_count
-    campaign.failed_count = run.failed_count
-    campaign.skipped_count = run.skipped_count
-    campaign.total_recipients = run.total_count
-    campaign.status = (
-        CampaignStatus.COMPLETED.value
-        if pending_count == 0 and run.failed_count == 0
-        else (CampaignStatus.FAILED.value if pending_count == 0 else CampaignStatus.SENDING.value)
-    )
-
-    db.commit()
+    if not recompute_campaign_run_aggregates(
+        db,
+        organization_id=org_id,
+        run_id=run_id,
+        commit=True,
+    ):
+        raise RuntimeError("Campaign aggregate target is missing")
 
     return {
         "sent_count": run.sent_count,
