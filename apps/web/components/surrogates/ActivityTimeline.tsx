@@ -168,13 +168,39 @@ function getActivityPreview(activity: SurrogateActivity): string {
                 const attachments = Array.isArray(details.attachments)
                     ? details.attachments as Array<{ filename?: string }>
                     : []
-                if (attachments.length === 0) return basePreview
+                const deliveryStatus =
+                    typeof details.delivery_status === "string"
+                        ? details.delivery_status.replaceAll("_", " ")
+                        : ""
+                const deliveredAt = formatActivityTimestamp(details.delivered_at)
+                const openCount =
+                    typeof details.open_count === "number" ? details.open_count : 0
+                const openedAt = formatActivityTimestamp(details.opened_at)
+                const clickCount =
+                    typeof details.click_count === "number" ? details.click_count : 0
+                const clickedAt = formatActivityTimestamp(details.clicked_at)
+                const engagementSummary = [
+                    deliveryStatus
+                        ? `${deliveryStatus.charAt(0).toUpperCase()}${deliveryStatus.slice(1)}${deliveredAt ? ` ${deliveredAt}` : ""}`
+                        : "",
+                    openCount > 0
+                        ? `${openCount} open${openCount === 1 ? "" : "s"}${openedAt ? ` (first ${openedAt})` : ""}`
+                        : "",
+                    clickCount > 0
+                        ? `${clickCount} click${clickCount === 1 ? "" : "s"}${clickedAt ? ` (first ${clickedAt})` : ""}`
+                        : "",
+                    openCount > 0 ? "Open tracking is approximate" : "",
+                ].filter(Boolean)
 
                 const attachmentSummary =
-                    attachments.length === 1 && attachments[0]?.filename
+                    attachments.length === 0
+                        ? ""
+                        : attachments.length === 1 && attachments[0]?.filename
                         ? `Attachment: ${attachments[0].filename}`
                         : `${attachments.length} attachments`
-                return [basePreview, attachmentSummary].filter(Boolean).join(" • ")
+                return [basePreview, ...engagementSummary, attachmentSummary]
+                    .filter(Boolean)
+                    .join(" • ")
             }
         case "email_bounced":
             {

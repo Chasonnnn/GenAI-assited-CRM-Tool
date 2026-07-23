@@ -204,6 +204,37 @@ describe("SurrogateHistoryTab", () => {
         ).not.toBeInTheDocument()
     })
 
+    it("renders Resend delivery and engagement details", () => {
+        render(
+            <SurrogateHistoryTab
+                activities={[
+                    {
+                        id: "a-email-engagement",
+                        activity_type: "email_sent",
+                        actor_name: "System",
+                        created_at: "2026-07-21T14:00:00Z",
+                        details: {
+                            subject: "Welcome",
+                            provider: "resend",
+                            delivery_status: "delivered",
+                            delivered_at: "2026-07-21T14:03:00Z",
+                            open_count: 2,
+                            opened_at: "2026-07-21T14:08:00Z",
+                            click_count: 1,
+                            clicked_at: "2026-07-21T14:12:00Z",
+                        },
+                    },
+                ]}
+                formatDateTime={formatDateTime}
+            />
+        )
+
+        expect(screen.getByText(/delivered/i)).toBeInTheDocument()
+        expect(screen.getByText(/2 opens/i)).toBeInTheDocument()
+        expect(screen.getByText(/1 click/i)).toBeInTheDocument()
+        expect(screen.getByText(/open tracking is approximate/i)).toBeInTheDocument()
+    })
+
     it("renders queue names in queue activity details", () => {
         render(
             <SurrogateHistoryTab

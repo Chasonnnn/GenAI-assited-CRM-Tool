@@ -467,6 +467,47 @@ describe('ActivityTimeline', () => {
         expect(screen.getByText(/via gmail/i)).toBeInTheDocument()
     })
 
+    it('shows Resend delivery and engagement on sent email activity', () => {
+        const stages = [makeStage({ id: 's1', label: 'New Unread', order: 1 })]
+
+        mockUseSurrogateHistory.mockReturnValue({
+            data: [makeHistory({ id: 'h1', to_stage_id: 's1' })],
+        })
+
+        const activities = [
+            makeActivity({
+                id: 'a1',
+                activity_type: 'email_sent',
+                details: {
+                    subject: 'Welcome',
+                    provider: 'resend',
+                    delivery_status: 'delivered',
+                    delivered_at: '2026-07-21T14:03:00.000Z',
+                    open_count: 2,
+                    opened_at: '2026-07-21T14:08:00.000Z',
+                    click_count: 1,
+                    clicked_at: '2026-07-21T14:12:00.000Z',
+                },
+                created_at: '2026-07-21T14:00:00.000Z',
+            }),
+        ]
+
+        render(
+            <ActivityTimeline
+                surrogateId="surr1"
+                currentStageId="s1"
+                stages={stages}
+                activities={activities}
+                tasks={[]}
+            />
+        )
+
+        expect(screen.getByText(/delivered/i)).toBeInTheDocument()
+        expect(screen.getByText(/2 opens/i)).toBeInTheDocument()
+        expect(screen.getByText(/1 click/i)).toBeInTheDocument()
+        expect(screen.getByText(/open tracking is approximate/i)).toBeInTheDocument()
+    })
+
     it('shows bounced email preview details', () => {
         const stages = [makeStage({ id: 's1', label: 'New Unread', order: 1 })]
 

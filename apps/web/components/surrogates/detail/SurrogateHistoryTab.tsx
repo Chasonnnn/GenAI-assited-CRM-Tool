@@ -287,7 +287,32 @@ function formatActivityDetails(
                 : details.template_id
                   ? "template"
                   : ""
-            const parts = [subject, provider, templateDetail].filter(Boolean)
+            const deliveryStatus =
+                typeof details.delivery_status === "string"
+                    ? details.delivery_status.replaceAll("_", " ")
+                    : ""
+            const deliveredAt = formatDateDetail(details.delivered_at, formatDateTime)
+            const openCount =
+                typeof details.open_count === "number" ? details.open_count : 0
+            const openedAt = formatDateDetail(details.opened_at, formatDateTime)
+            const clickCount =
+                typeof details.click_count === "number" ? details.click_count : 0
+            const clickedAt = formatDateDetail(details.clicked_at, formatDateTime)
+            const parts = [
+                subject,
+                provider,
+                templateDetail,
+                deliveryStatus
+                    ? `${deliveryStatus.charAt(0).toUpperCase()}${deliveryStatus.slice(1)}${deliveredAt ? ` ${deliveredAt}` : ""}`
+                    : "",
+                openCount > 0
+                    ? `${openCount} open${openCount === 1 ? "" : "s"}${openedAt ? ` (first ${openedAt})` : ""}`
+                    : "",
+                clickCount > 0
+                    ? `${clickCount} click${clickCount === 1 ? "" : "s"}${clickedAt ? ` (first ${clickedAt})` : ""}`
+                    : "",
+                openCount > 0 ? "Open tracking is approximate" : "",
+            ].filter(Boolean)
             if (parts.length > 0) {
                 return aiPrefix ? `AI-generated · ${parts.join(" • ")}` : parts.join(" • ")
             }
