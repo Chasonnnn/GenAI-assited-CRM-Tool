@@ -9,16 +9,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.enums import EmailStatus
 from app.db.models import EmailLog, Organization
-from app.services import email_service, gmail_service, media_service, resend_email_service
-from app.services import resend_settings_service
+from app.services import gmail_service, media_service
 
 
 VARIABLE_PATTERN = re.compile(r"{{\s*([a-zA-Z0-9_]+)\s*}}")
@@ -126,6 +123,7 @@ def apply_unknown_variable_fallbacks(
 @dataclass(frozen=True)
 class _SendResult:
     success: bool
+    queued: bool
     provider_used: str | None
     email_log_id: UUID | None
     message_id: str | None
@@ -134,6 +132,7 @@ class _SendResult:
     def as_dict(self) -> dict:
         return {
             "success": self.success,
+            "queued": self.queued,
             "provider_used": self.provider_used,
             "email_log_id": self.email_log_id,
             "message_id": self.message_id,
@@ -142,9 +141,11 @@ class _SendResult:
 
 
 def _result_from_log(*, provider_used: str, log: EmailLog) -> _SendResult:
-    success = log.status == EmailStatus.SENT.value
+    queued = log.status == EmailStatus.PENDING.value and log.delivery is not None
+    success = log.status == EmailStatus.SENT.value or queued
     return _SendResult(
         success=success,
+        queued=queued,
         provider_used=provider_used,
         email_log_id=log.id,
         message_id=log.external_id,
@@ -159,7 +160,6 @@ async def send_resend_logged(
     to_email: str,
     subject: str,
     html: str,
-    api_key_encrypted: str,
     from_email: str,
     from_name: str | None,
     reply_to: str | None,
@@ -167,123 +167,64 @@ async def send_resend_logged(
     idempotency_key: str | None,
     ignore_opt_out: bool = False,
 ) -> dict:
-    if idempotency_key:
-        existing = (
-            db.query(EmailLog)
-            .filter(
-                EmailLog.organization_id == org_id,
-                EmailLog.idempotency_key == idempotency_key,
-            )
-            .first()
-        )
-        if existing:
-            return _result_from_log(provider_used="resend", log=existing).as_dict()
-
-    if email_service.is_email_suppressed(db, org_id, to_email, ignore_opt_out=ignore_opt_out):
-        email_log = EmailLog(
-            organization_id=org_id,
-            template_id=template_id,
-            surrogate_id=None,
-            recipient_email=to_email,
-            subject=subject,
-            body=html,
-            status=EmailStatus.SKIPPED.value,
-            error="suppressed",
-            idempotency_key=idempotency_key,
-        )
-        db.add(email_log)
-        db.commit()
-        db.refresh(email_log)
-        return _SendResult(
-            success=False,
-            provider_used="resend",
-            email_log_id=email_log.id,
-            message_id=None,
-            error="Email suppressed",
-        ).as_dict()
-
-    email_log = EmailLog(
-        organization_id=org_id,
-        template_id=template_id,
-        surrogate_id=None,
-        recipient_email=to_email,
-        subject=subject,
-        body=html,
-        status=EmailStatus.PENDING.value,
-        idempotency_key=idempotency_key,
-    )
-    db.add(email_log)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        existing = (
-            db.query(EmailLog)
-            .filter(
-                EmailLog.organization_id == org_id,
-                EmailLog.idempotency_key == idempotency_key,
-            )
-            .first()
-        )
-        if existing:
-            return _result_from_log(provider_used="resend", log=existing).as_dict()
-        raise
-
-    db.refresh(email_log)
-
     from app.services import unsubscribe_service, org_service
+    from app.services.email_content import html_to_text
+    from app.services.email_delivery_service import (
+        DeliveryRoute,
+        EmailSource,
+        RenderedEmail,
+        queue_rendered_email,
+    )
+    from app.db.enums import EmailSuppressionPolicy
 
-    api_key = resend_settings_service.decrypt_api_key(api_key_encrypted)
     org = org_service.get_org_by_id(db, org_id)
-    unsubscribe_url = unsubscribe_service.build_list_unsubscribe_url(
+    headers = unsubscribe_service.build_list_unsubscribe_headers(
         org_id=org_id,
         email=to_email,
         base_url=org_service.get_org_portal_base_url(org),
     )
-
-    try:
-        success, error, message_id = await resend_email_service.send_email_direct(
-            api_key=api_key,
-            to_email=to_email,
+    resolved_from = (
+        f"{from_name} <{from_email}>" if from_name and "<" not in from_email else from_email
+    )
+    queued = queue_rendered_email(
+        db,
+        organization_id=org_id,
+        route=DeliveryRoute.ORGANIZATION_RESEND,
+        provider_account_id=f"organization:{org_id}",
+        rendered_email=RenderedEmail(
+            recipient_email=to_email,
             subject=subject,
-            body=html,
-            from_email=from_email,
-            from_name=from_name,
-            reply_to=reply_to,
-            idempotency_key=idempotency_key,
-            unsubscribe_url=unsubscribe_url,
-        )
-    except Exception as exc:
-        email_log.status = EmailStatus.FAILED.value
-        email_log.error = f"Resend send failed: {exc.__class__.__name__}"
-        db.commit()
+            html=html,
+            text=html_to_text(html),
+            from_email=resolved_from,
+            reply_to_email=reply_to,
+            headers=headers,
+            safe_tags=({"name": "message_kind", "value": "template_test"},),
+        ),
+        idempotency_key=idempotency_key or f"template-test/{uuid4()}",
+        source=EmailSource(
+            source_type="template_test_send",
+            source_id=template_id,
+            template_id=template_id,
+            purpose="transactional",
+            suppression_policy=(
+                EmailSuppressionPolicy.ALLOW_OPT_OUT
+                if ignore_opt_out
+                else EmailSuppressionPolicy.ENFORCE_ALL
+            ),
+        ),
+        commit=True,
+    )
+    if queued.email_log.status == EmailStatus.SKIPPED.value:
         return _SendResult(
             success=False,
+            queued=False,
             provider_used="resend",
-            email_log_id=email_log.id,
+            email_log_id=queued.email_log.id,
             message_id=None,
-            error=email_log.error,
+            error="Email suppressed",
         ).as_dict()
-
-    now = datetime.now(timezone.utc)
-    if success:
-        email_log.status = EmailStatus.SENT.value
-        email_log.external_id = message_id
-        email_log.resend_status = "sent"
-        email_log.sent_at = now
-        email_log.error = None
-    else:
-        email_log.status = EmailStatus.FAILED.value
-        email_log.error = (error or "Send failed")[:500]
-    db.commit()
-
-    return _SendResult(
-        success=bool(success),
-        provider_used="resend",
-        email_log_id=email_log.id,
-        message_id=message_id,
-        error=None if success else email_log.error,
-    ).as_dict()
+    return _result_from_log(provider_used="resend", log=queued.email_log).as_dict()
 
 
 async def send_gmail_logged(
@@ -312,6 +253,7 @@ async def send_gmail_logged(
     )
     return _SendResult(
         success=bool(result.get("success")),
+        queued=False,
         provider_used="gmail",
         email_log_id=result.get("email_log_id"),
         message_id=result.get("message_id"),
@@ -343,6 +285,7 @@ async def send_test_via_org_provider(
     except EmailProviderError as exc:
         return _SendResult(
             success=False,
+            queued=False,
             provider_used=None,
             email_log_id=None,
             message_id=None,
@@ -357,7 +300,6 @@ async def send_test_via_org_provider(
             to_email=to_email,
             subject=subject,
             html=html,
-            api_key_encrypted=config["api_key_encrypted"],
             from_email=resolved_from,
             from_name=config.get("from_name"),
             reply_to=config.get("reply_to"),
@@ -381,6 +323,7 @@ async def send_test_via_org_provider(
 
     return _SendResult(
         success=False,
+        queued=False,
         provider_used=None,
         email_log_id=None,
         message_id=None,

@@ -5,10 +5,11 @@ v2: With version control for templates.
 
 from email.utils import parseaddr
 from html import escape as html_escape
+import hashlib
 import re
 from datetime import datetime, timezone
 from typing import TypedDict
-from uuid import UUID
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func
@@ -17,9 +18,16 @@ from sqlalchemy.orm import Session
 import nh3
 from email_validator import EmailNotValidError, validate_email
 
-from app.db.models import Attachment, EmailLog, EmailLogAttachment, EmailTemplate, Job, Surrogate
-from app.db.enums import EmailStatus, JobType
-from app.services.job_service import enqueue_job
+from app.db.models import (
+    Attachment,
+    EmailDelivery,
+    EmailLog,
+    EmailLogAttachment,
+    EmailTemplate,
+    Job,
+    Surrogate,
+)
+from app.db.enums import EmailStatus
 from app.services import email_sender, version_service
 from app.services.template_variable_catalog import VARIABLE_PATTERN as _TEMPLATE_VARIABLE_PATTERN
 from app.types import JsonObject
@@ -176,6 +184,10 @@ class EmailAttachmentNotFoundError(LookupError):
 
 class EmailAttachmentValidationError(ValueError):
     """Raised when attachment selection violates email-send constraints."""
+
+
+class EmailProviderConfigurationError(ValueError):
+    """Raised when an immutable provider request cannot be configured."""
 
 
 class ProviderAttachment(TypedDict):
@@ -1133,6 +1145,29 @@ def link_attachments_to_email_log(
 ) -> None:
     """Persist attachment links for an EmailLog."""
     unique_attachments = list({attachment.id: attachment for attachment in attachments}.values())
+    email_log = (
+        db.query(EmailLog)
+        .filter(
+            EmailLog.organization_id == org_id,
+            EmailLog.id == email_log_id,
+        )
+        .one()
+    )
+    manifest = [
+        {
+            "attachment_id": str(attachment.id),
+            "filename": attachment.filename,
+            "content_type": attachment.content_type,
+            "size_bytes": int(attachment.file_size),
+            "sha256": attachment.checksum_sha256.lower(),
+        }
+        for attachment in unique_attachments
+    ]
+    if email_log.attachment_manifest and email_log.attachment_manifest != manifest:
+        raise EmailAttachmentValidationError(
+            "Stored email attachment manifest does not match selected attachments."
+        )
+    email_log.attachment_manifest = manifest
     for attachment in unique_attachments:
         db.add(
             EmailLogAttachment(
@@ -1149,7 +1184,17 @@ def list_email_log_attachments(
     org_id: UUID,
     email_log_id: UUID,
 ) -> list[Attachment]:
-    """Return linked attachments for an EmailLog in insertion order."""
+    """Return linked attachments in the immutable manifest order when available."""
+    email_log = (
+        db.query(EmailLog)
+        .filter(
+            EmailLog.organization_id == org_id,
+            EmailLog.id == email_log_id,
+        )
+        .one_or_none()
+    )
+    if email_log is None:
+        return []
     rows = (
         db.query(Attachment)
         .join(EmailLogAttachment, EmailLogAttachment.attachment_id == Attachment.id)
@@ -1159,9 +1204,19 @@ def list_email_log_attachments(
             Attachment.organization_id == org_id,
             Attachment.deleted_at.is_(None),
         )
-        .order_by(EmailLogAttachment.created_at.asc())
+        .order_by(EmailLogAttachment.created_at.asc(), EmailLogAttachment.id.asc())
         .all()
     )
+    if email_log.attachment_manifest:
+        rows_by_id = {str(attachment.id): attachment for attachment in rows}
+        ordered_rows: list[Attachment] = []
+        for item in email_log.attachment_manifest:
+            if not isinstance(item, dict):
+                continue
+            attachment = rows_by_id.get(str(item.get("attachment_id", "")))
+            if attachment is not None:
+                ordered_rows.append(attachment)
+        return ordered_rows
     return rows
 
 
@@ -1170,32 +1225,118 @@ def load_email_log_provider_attachments(
     org_id: UUID,
     email_log_id: UUID,
 ) -> list[ProviderAttachment]:
-    """Load linked email attachments as provider-ready byte payloads."""
+    """Load provider bytes only when links, metadata, and content match the snapshot."""
     from app.services import attachment_service
 
-    attachments = list_email_log_attachments(db, org_id, email_log_id)
-    if not attachments:
+    email_log = (
+        db.query(EmailLog)
+        .filter(
+            EmailLog.organization_id == org_id,
+            EmailLog.id == email_log_id,
+        )
+        .one_or_none()
+    )
+    if email_log is None:
+        raise EmailAttachmentValidationError("Stored email attachment manifest is unavailable.")
+
+    manifest = email_log.attachment_manifest
+    if not isinstance(manifest, list):
+        raise EmailAttachmentValidationError("Stored email attachment manifest is invalid.")
+    if len(manifest) > EMAIL_ATTACHMENT_MAX_COUNT:
+        raise EmailAttachmentValidationError(
+            f"Email has too many attachments ({len(manifest)}). "
+            f"Max allowed is {EMAIL_ATTACHMENT_MAX_COUNT}."
+        )
+
+    links = (
+        db.query(EmailLogAttachment).filter(EmailLogAttachment.email_log_id == email_log_id).all()
+    )
+    if not manifest:
+        if links:
+            raise EmailAttachmentValidationError(
+                "Stored email attachment links do not match the immutable manifest."
+            )
         return []
 
-    if len(attachments) > EMAIL_ATTACHMENT_MAX_COUNT:
+    expected: list[tuple[UUID, dict]] = []
+    seen_ids: set[UUID] = set()
+    for item in manifest:
+        if not isinstance(item, dict):
+            raise EmailAttachmentValidationError("Stored email attachment manifest is invalid.")
+        try:
+            attachment_id = UUID(str(item["attachment_id"]))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise EmailAttachmentValidationError(
+                "Stored email attachment manifest is invalid."
+            ) from exc
+        size_bytes = item.get("size_bytes")
+        sha256 = item.get("sha256")
+        if (
+            attachment_id in seen_ids
+            or not isinstance(item.get("filename"), str)
+            or not isinstance(item.get("content_type"), str)
+            or not isinstance(size_bytes, int)
+            or isinstance(size_bytes, bool)
+            or size_bytes < 0
+            or not isinstance(sha256, str)
+            or re.fullmatch(r"[0-9a-f]{64}", sha256) is None
+        ):
+            raise EmailAttachmentValidationError("Stored email attachment manifest is invalid.")
+        seen_ids.add(attachment_id)
+        expected.append((attachment_id, item))
+
+    links_by_attachment_id = {link.attachment_id: link for link in links}
+    if (
+        len(links) != len(expected)
+        or set(links_by_attachment_id) != seen_ids
+        or any(link.organization_id != org_id for link in links)
+    ):
         raise EmailAttachmentValidationError(
-            f"Email has too many attachments ({len(attachments)}). "
-            f"Max allowed is {EMAIL_ATTACHMENT_MAX_COUNT}."
+            "Stored email attachment links do not match the immutable manifest."
         )
 
     total_bytes = 0
     provider_attachments: list[ProviderAttachment] = []
-    for attachment in attachments:
-        if attachment.quarantined or attachment.scan_status != "clean":
-            raise EmailAttachmentValidationError(
-                f"Attachment '{attachment.filename}' is not clean and cannot be sent."
+    for attachment_id, item in expected:
+        attachment = (
+            db.query(Attachment)
+            .filter(
+                Attachment.id == attachment_id,
+                Attachment.organization_id == org_id,
             )
-        total_bytes += int(attachment.file_size)
+            .one_or_none()
+        )
+        if (
+            attachment is None
+            or attachment.deleted_at is not None
+            or attachment.quarantined
+            or attachment.scan_status != "clean"
+        ):
+            raise EmailAttachmentValidationError("Stored email attachment is unavailable.")
+        if (
+            attachment.filename != item["filename"]
+            or attachment.content_type != item["content_type"]
+            or int(attachment.file_size) != item["size_bytes"]
+            or attachment.checksum_sha256.lower() != item["sha256"]
+        ):
+            raise EmailAttachmentValidationError(
+                "Stored email attachment metadata changed after queueing."
+            )
+
+        content_bytes = attachment_service.load_file_bytes(attachment.storage_key)
+        if (
+            len(content_bytes) != item["size_bytes"]
+            or hashlib.sha256(content_bytes).hexdigest() != item["sha256"]
+        ):
+            raise EmailAttachmentValidationError(
+                "Stored email attachment content failed integrity verification."
+            )
+        total_bytes += item["size_bytes"]
         provider_attachments.append(
             ProviderAttachment(
                 filename=attachment.filename,
                 content_type=attachment.content_type,
-                content_bytes=attachment_service.load_file_bytes(attachment.storage_key),
+                content_bytes=content_bytes,
             )
         )
 
@@ -1221,76 +1362,88 @@ def send_email(
     sender_user_id: UUID | None = None,
     commit: bool = True,
     ignore_opt_out: bool = False,
-) -> tuple[EmailLog, Job | None]:
+    idempotency_key: str | None = None,
+    source_type: str = "organization_email",
+    source_id: UUID | None = None,
+    purpose: str = "transactional",
+) -> tuple[EmailLog, EmailDelivery | None]:
     """
     Queue an email for sending.
 
-    Creates an EmailLog record and schedules a job to send it.
-    Returns (email_log, job).
+    Creates an immutable EmailLog and leased delivery outbox row.
+    Returns (email_log, delivery).
     """
-    if is_email_suppressed(db, org_id, recipient_email, ignore_opt_out=ignore_opt_out):
-        email_log = EmailLog(
-            organization_id=org_id,
-            template_id=template_id,
-            surrogate_id=surrogate_id,
+    from app.services import org_service, resend_settings_service, unsubscribe_service
+    from app.services.email_content import html_to_text
+    from app.services.email_delivery_service import (
+        DeliveryRoute,
+        EmailSource,
+        RenderedEmail,
+        queue_rendered_email,
+    )
+    from app.db.enums import EmailSuppressionPolicy
+
+    resend_settings = resend_settings_service.get_resend_settings(db, org_id)
+    if not resend_settings_service.is_resend_sender_configured(resend_settings):
+        raise EmailProviderConfigurationError("Organization Resend sender is not configured")
+
+    organization = org_service.get_org_by_id(db, org_id)
+    if organization is None:
+        raise EmailProviderConfigurationError("Organization not found")
+    from_address = (
+        f"{resend_settings.from_name} <{resend_settings.from_email}>"
+        if resend_settings.from_name
+        else str(resend_settings.from_email)
+    )
+    headers = unsubscribe_service.build_list_unsubscribe_headers(
+        org_id=org_id,
+        email=recipient_email,
+        base_url=org_service.get_org_portal_base_url(organization),
+    )
+    queued = queue_rendered_email(
+        db,
+        organization_id=org_id,
+        route=DeliveryRoute.ORGANIZATION_RESEND,
+        provider_account_id=f"organization:{org_id}",
+        rendered_email=RenderedEmail(
             recipient_email=recipient_email,
             subject=subject,
-            body=body,
-            status=EmailStatus.SKIPPED.value,
-            error="suppressed",
-        )
-        db.add(email_log)
-        if commit:
-            db.commit()
-            db.refresh(email_log)
-        else:
-            db.flush()
-        return email_log, None
-
-    # Create email log
-    email_log = EmailLog(
-        organization_id=org_id,
-        template_id=template_id,
-        surrogate_id=surrogate_id,
-        recipient_email=recipient_email,
-        subject=subject,
-        body=body,
-        status=EmailStatus.PENDING.value,
+            html=body,
+            text=html_to_text(body),
+            from_email=from_address,
+            reply_to_email=resend_settings.reply_to_email,
+            headers=headers,
+            safe_tags=({"name": "message_kind", "value": purpose},),
+        ),
+        idempotency_key=idempotency_key or f"organization-email/{uuid4()}",
+        source=EmailSource(
+            source_type=source_type,
+            source_id=source_id,
+            template_id=template_id,
+            surrogate_id=surrogate_id,
+            actor_user_id=sender_user_id,
+            purpose=purpose,
+            suppression_policy=(
+                EmailSuppressionPolicy.ALLOW_OPT_OUT
+                if ignore_opt_out
+                else EmailSuppressionPolicy.ENFORCE_ALL
+            ),
+        ),
+        attachments=attachments or (),
+        schedule_at=schedule_at,
+        commit=False,
     )
-    db.add(email_log)
-    db.flush()  # Get ID before creating job
+    email_log = queued.email_log
 
-    if attachments:
-        link_attachments_to_email_log(
-            db=db,
-            org_id=org_id,
-            email_log_id=email_log.id,
-            attachments=attachments,
-        )
-
-    # Schedule job to send
-    payload: dict[str, str] = {"email_log_id": str(email_log.id)}
-    if sender_user_id:
-        payload["sender_user_id"] = str(sender_user_id)
-
-    job = enqueue_job(
-        db=db,
-        org_id=org_id,
-        job_type=JobType.SEND_EMAIL,
-        payload=payload,
-        run_at=schedule_at,
-        commit=commit,
-    )
-
-    # Link job to email log
-    email_log.job_id = job.id
     if commit:
         db.commit()
         db.refresh(email_log)
+        if queued.delivery is not None:
+            db.refresh(queued.delivery)
     else:
         db.flush()
 
-    return email_log, job
+    return email_log, queued.delivery
 
 
 async def send_immediate_email(
@@ -1361,7 +1514,11 @@ def send_from_template(
     surrogate_id: UUID | None = None,
     schedule_at: datetime | None = None,
     sender_user_id: UUID | None = None,
-) -> tuple[EmailLog, Job | None] | None:
+    idempotency_key: str | None = None,
+    source_type: str = "organization_email",
+    source_id: UUID | None = None,
+    commit: bool = True,
+) -> tuple[EmailLog, EmailDelivery | None] | None:
     """
     Queue an email using a template.
 
@@ -1418,6 +1575,10 @@ def send_from_template(
         surrogate_id=surrogate_id,
         schedule_at=schedule_at,
         sender_user_id=sender_user_id,
+        idempotency_key=idempotency_key,
+        source_type=source_type,
+        source_id=source_id,
+        commit=commit,
     )
 
 
@@ -1479,6 +1640,7 @@ def log_surrogate_email_send_success(
     template_id: UUID | None = None,
     actor_user_id: UUID | None = None,
     attachments: list[Attachment] | None = None,
+    commit: bool = True,
 ) -> None:
     """Write surrogate activity + audit for successful outbound sends."""
     if not surrogate_id:
@@ -1510,7 +1672,8 @@ def log_surrogate_email_send_success(
         subject=subject,
         template_id=template_id,
     )
-    db.commit()
+    if commit:
+        db.commit()
 
 
 def get_email_log(db: Session, email_id: UUID, org_id: UUID) -> EmailLog | None:
@@ -1553,7 +1716,11 @@ def _sync_campaign_recipient(
 
     cr = (
         db.query(CampaignRecipient)
-        .filter(CampaignRecipient.external_message_id == str(email_log.id))
+        .join(CampaignRun, CampaignRun.id == CampaignRecipient.run_id)
+        .filter(
+            CampaignRun.organization_id == email_log.organization_id,
+            CampaignRecipient.email_log_id == email_log.id,
+        )
         .first()
     )
     if not cr:

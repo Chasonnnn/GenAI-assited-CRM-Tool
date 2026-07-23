@@ -15,6 +15,15 @@ from app.main import app
 from app.services import resend_settings_service, session_service
 
 
+def test_template_test_send_contract_requires_idempotency_key():
+    from pydantic import ValidationError
+
+    from app.schemas.email import EmailTemplateTestSendRequest
+
+    with pytest.raises(ValidationError):
+        EmailTemplateTestSendRequest(to_email="test@example.com")
+
+
 @asynccontextmanager
 async def authed_client_for_user(db, user: User, org_id: uuid.UUID, role: Role):
     token = create_session_token(
@@ -54,7 +63,8 @@ async def authed_client_for_user(db, user: User, org_id: uuid.UUID, role: Role):
 async def test_test_send_org_template_uses_resend_when_configured(
     authed_client, db, test_org, test_user, monkeypatch
 ):
-    from app.db.models import EmailLog
+    from app.db.models import EmailDelivery, EmailLog
+    from app.services import resend_transport
 
     test_org.signature_company_name = "Org Signature Co"
     test_org.signature_template = "classic"
@@ -84,37 +94,36 @@ async def test_test_send_org_template_uses_resend_when_configured(
     db.add(template)
     db.commit()
 
-    captured: dict[str, object] = {}
+    async def fail_provider_io(**_kwargs):
+        raise AssertionError("test send endpoint must only enqueue")
 
-    async def fake_send_email_direct(*args, **kwargs):
-        captured["body"] = kwargs.get("body")
-        return True, None, "resend_123"
-
-    from app.services import resend_email_service
-
-    monkeypatch.setattr(resend_email_service, "send_email_direct", fake_send_email_direct)
+    monkeypatch.setattr(resend_transport, "send_email", fail_provider_io)
 
     res = await authed_client.post(
         f"/email-templates/{template.id}/test",
-        json={"to_email": "test@example.com"},
+        json={
+            "to_email": "test@example.com",
+            "idempotency_key": f"template-test/{uuid.uuid4()}",
+        },
     )
     assert res.status_code == 200
     data = res.json()
     assert data["success"] is True
+    assert data["queued"] is True
     assert data["provider_used"] == "resend"
-    assert data["message_id"] == "resend_123"
+    assert data["message_id"] is None
     assert data["email_log_id"]
 
     log_id = uuid.UUID(data["email_log_id"])
     log = db.query(EmailLog).filter(EmailLog.id == log_id).first()
     assert log is not None
-    assert log.status == "sent"
-    assert log.external_id == "resend_123"
-    assert log.resend_status == "sent"
+    assert log.status == "pending"
+    assert log.external_id is None
     assert log.template_id == template.id
+    delivery = db.query(EmailDelivery).filter(EmailDelivery.email_log_id == log.id).one()
+    assert delivery.status == "pending"
 
-    assert isinstance(captured.get("body"), str)
-    sent_body = captured["body"]
+    sent_body = log.body
     assert "Org Signature Co" in sent_body
     assert "{{unsubscribe_url}}" not in sent_body
     assert ">Unsubscribe<" in sent_body
@@ -125,6 +134,9 @@ async def test_test_send_org_template_uses_resend_when_configured(
 async def test_test_send_org_template_allows_ignore_opt_out_for_opt_out_suppression(
     authed_client, db, test_org, test_user, monkeypatch
 ):
+    from app.db.models import EmailDelivery
+    from app.services import resend_transport
+
     resend_settings_service.update_resend_settings(
         db,
         test_org.id,
@@ -158,34 +170,38 @@ async def test_test_send_org_template_allows_ignore_opt_out_for_opt_out_suppress
     )
     db.commit()
 
-    called = {"count": 0}
+    async def fail_provider_io(**_kwargs):
+        raise AssertionError("test send endpoint must only enqueue")
 
-    async def fake_send_email_direct(*_args, **_kwargs):
-        called["count"] += 1
-        return True, None, "resend_456"
-
-    from app.services import resend_email_service
-
-    monkeypatch.setattr(resend_email_service, "send_email_direct", fake_send_email_direct)
+    monkeypatch.setattr(resend_transport, "send_email", fail_provider_io)
 
     suppressed = await authed_client.post(
         f"/email-templates/{template.id}/test",
-        json={"to_email": "optout@example.com"},
+        json={
+            "to_email": "optout@example.com",
+            "idempotency_key": f"template-test/{uuid.uuid4()}",
+        },
     )
     assert suppressed.status_code == 200
     assert suppressed.json()["success"] is False
+    assert suppressed.json()["queued"] is False
     assert suppressed.json()["error"] == "Email suppressed"
-    assert called["count"] == 0
+    assert db.query(EmailDelivery).count() == 0
 
     bypassed = await authed_client.post(
         f"/email-templates/{template.id}/test",
-        json={"to_email": "optout@example.com", "ignore_opt_out": True},
+        json={
+            "to_email": "optout@example.com",
+            "idempotency_key": f"template-test/{uuid.uuid4()}",
+            "ignore_opt_out": True,
+        },
     )
     assert bypassed.status_code == 200
     assert bypassed.json()["success"] is True
+    assert bypassed.json()["queued"] is True
     assert bypassed.json()["provider_used"] == "resend"
-    assert bypassed.json()["message_id"] == "resend_456"
-    assert called["count"] == 1
+    assert bypassed.json()["message_id"] is None
+    assert db.query(EmailDelivery).count() == 1
 
 
 @pytest.mark.asyncio
@@ -279,7 +295,10 @@ async def test_test_send_org_template_uses_org_gmail_when_configured(
 
     res = await authed_client.post(
         f"/email-templates/{template.id}/test",
-        json={"to_email": "test@example.com"},
+        json={
+            "to_email": "test@example.com",
+            "idempotency_key": f"template-test/{uuid.uuid4()}",
+        },
     )
     assert res.status_code == 200
     data = res.json()
@@ -332,7 +351,10 @@ async def test_test_send_org_template_requires_manage_permission(db, test_org, m
     async with authed_client_for_user(db, user, test_org.id, Role.CASE_MANAGER) as client:
         res = await client.post(
             f"/email-templates/{template.id}/test",
-            json={"to_email": "test@example.com"},
+            json={
+                "to_email": "test@example.com",
+                "idempotency_key": f"template-test/{uuid.uuid4()}",
+            },
         )
         assert res.status_code == 403
 
@@ -417,7 +439,10 @@ async def test_test_send_personal_template_only_owner_can_send(db, test_org, mon
     async with authed_client_for_user(db, owner, test_org.id, Role.CASE_MANAGER) as client:
         res = await client.post(
             f"/email-templates/{template.id}/test",
-            json={"to_email": "test@example.com"},
+            json={
+                "to_email": "test@example.com",
+                "idempotency_key": f"template-test/{uuid.uuid4()}",
+            },
         )
         assert res.status_code == 200
         data = res.json()
@@ -429,7 +454,10 @@ async def test_test_send_personal_template_only_owner_can_send(db, test_org, mon
     async with authed_client_for_user(db, other, test_org.id, Role.CASE_MANAGER) as client:
         res = await client.post(
             f"/email-templates/{template.id}/test",
-            json={"to_email": "test@example.com"},
+            json={
+                "to_email": "test@example.com",
+                "idempotency_key": f"template-test/{uuid.uuid4()}",
+            },
         )
         assert res.status_code == 403
 
@@ -526,7 +554,10 @@ async def test_test_send_personal_template_allows_manage_permission_override(
     async with authed_client_for_user(db, manager, test_org.id, Role.ADMIN) as client:
         res = await client.post(
             f"/email-templates/{template.id}/test",
-            json={"to_email": "external-test@example.com"},
+            json={
+                "to_email": "external-test@example.com",
+                "idempotency_key": f"template-test/{uuid.uuid4()}",
+            },
         )
         assert res.status_code == 200
         data = res.json()

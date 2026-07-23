@@ -35,7 +35,7 @@ from app.schemas.platform_templates import (
     EmailTemplateLibraryItem,
     EmailTemplateLibraryDetail,
 )
-from app.services import email_service, user_service
+from app.services import email_delivery_service, email_service, user_service
 
 router = APIRouter(
     tags=["Email Templates"],
@@ -520,9 +520,15 @@ def send_email(
             surrogate_id=data.surrogate_id,
             schedule_at=data.schedule_at,
             sender_user_id=session.user_id,
+            idempotency_key=data.idempotency_key,
         )
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except (
+        email_delivery_service.EmailDeliveryConflict,
+        email_service.EmailProviderConfigurationError,
+    ) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     if not result:
         raise HTTPException(status_code=404, detail="Template not found")
