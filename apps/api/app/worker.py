@@ -669,6 +669,22 @@ async def worker_loop() -> None:
                         logger.warning("Session cleanup failed: %s", exc)
                     last_session_cleanup = now
 
+                stale_reconciliation = (
+                    job_service.recover_stale_resend_reconciliation_jobs(
+                        db,
+                        now=now,
+                    )
+                )
+                if stale_reconciliation.inspected:
+                    logger.warning(
+                        "Recovered stale Resend reconciliation jobs "
+                        "(inspected=%s requeued=%s failed=%s resolved=%s)",
+                        stale_reconciliation.inspected,
+                        stale_reconciliation.requeued,
+                        stale_reconciliation.failed,
+                        stale_reconciliation.resolved,
+                    )
+
                 jobs = job_service.claim_pending_jobs(
                     db,
                     limit=BATCH_SIZE,

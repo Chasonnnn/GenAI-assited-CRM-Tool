@@ -626,6 +626,17 @@ async def test_worker_loop_single_iteration_success_and_failure(monkeypatch, db)
         "claim_pending_jobs",
         lambda session, limit, job_types: jobs,
     )
+    stale_recovery_calls = {"count": 0}
+
+    def _recover_stale_jobs(*_args, **_kwargs):
+        stale_recovery_calls["count"] += 1
+        return SimpleNamespace(inspected=0, requeued=0, failed=0, resolved=0)
+
+    monkeypatch.setattr(
+        worker.job_service,
+        "recover_stale_resend_reconciliation_jobs",
+        _recover_stale_jobs,
+    )
 
     def _mark_completed(session, job):
         job.status = JobStatus.COMPLETED.value
@@ -660,6 +671,7 @@ async def test_worker_loop_single_iteration_success_and_failure(monkeypatch, db)
         await worker.worker_loop()
 
     assert slept["count"] == 1
+    assert stale_recovery_calls["count"] == 1
     assert jobs[0].status == JobStatus.COMPLETED.value
     assert jobs[1].status == JobStatus.FAILED.value
 

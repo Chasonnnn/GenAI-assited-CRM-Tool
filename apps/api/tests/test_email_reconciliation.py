@@ -358,6 +358,112 @@ def test_final_automatic_correlation_failure_requires_operator_action(
     assert case.resolution_code is None
 
 
+def test_stale_reconciliation_claim_is_recovered_and_old_worker_is_fenced(
+    db,
+    test_org,
+):
+    from app.services import job_service
+
+    detected_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    event = ResendWebhookEvent(
+        id=uuid4(),
+        organization_id=test_org.id,
+        provider_event_id=f"evt_stale_claim_{uuid4().hex}",
+        event_type="email.delivered",
+        event_created_at=detected_at,
+        received_at=detected_at,
+        payload={"data": {"email_id": "unmatched-provider-message"}},
+    )
+    case = EmailReconciliationCase(
+        id=uuid4(),
+        organization_id=test_org.id,
+        case_type="orphan_webhook",
+        status="pending",
+        reason_code="correlation_pending",
+        version=1,
+        resend_webhook_event_id=event.id,
+        detected_at=detected_at,
+        updated_at=detected_at,
+    )
+    job = Job(
+        id=uuid4(),
+        organization_id=test_org.id,
+        job_type="resend_event_reconcile",
+        payload={"event_id": str(event.id)},
+        run_at=detected_at,
+        status="pending",
+        attempts=0,
+        max_attempts=2,
+        idempotency_key=(
+            f"resend-event-reconcile/{test_org.id}/{event.provider_event_id}"
+        ),
+    )
+    db.add_all([event, case, job])
+    db.commit()
+
+    first_claim = job_service.claim_job_for_dispatch(db, job.id)
+    assert first_claim is not None
+    first_token = first_claim.claim_token
+    assert first_token is not None
+    first_claim.claimed_at = detected_at
+    db.commit()
+
+    summary = job_service.recover_stale_resend_reconciliation_jobs(
+        db,
+        now=datetime.now(timezone.utc),
+        stale_after=timedelta(minutes=5),
+        limit=100,
+    )
+
+    db.refresh(job)
+    db.refresh(case)
+    assert summary.requeued >= 1
+    assert job.status == "pending"
+    assert job.claim_token is None
+    assert job.claimed_at is None
+    assert case.status == "pending"
+    assert case.reason_code == "worker_claim_expired"
+    assert case.version == 2
+
+    second_claim = job_service.claim_job_for_dispatch(db, job.id)
+    assert second_claim is not None
+    second_token = second_claim.claim_token
+    assert second_token is not None
+    assert second_token != first_token
+
+    with pytest.raises(job_service.JobClaimLost):
+        job_service.complete_claimed_job(
+            db,
+            job_id=job.id,
+            claim_token=first_token,
+        )
+
+    db.expire_all()
+    current = db.get(Job, job.id)
+    assert current.status == "running"
+    assert current.claim_token == second_token
+
+    current.attempts = current.max_attempts
+    current.claimed_at = detected_at
+    db.commit()
+    final_summary = job_service.recover_stale_resend_reconciliation_jobs(
+        db,
+        now=datetime.now(timezone.utc),
+        stale_after=timedelta(minutes=5),
+        limit=100,
+    )
+
+    db.refresh(current)
+    db.refresh(case)
+    assert final_summary.failed >= 1
+    assert current.status == "failed"
+    assert current.claim_token is None
+    assert current.claimed_at is None
+    assert case.status == "action_required"
+    assert case.reason_code == "automatic_correlation_exhausted"
+    assert case.version == 3
+
+
 @pytest.mark.asyncio
 async def test_retry_correlation_requeues_only_local_work_with_version_and_audit_fencing(
     authed_client,

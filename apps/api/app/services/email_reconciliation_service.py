@@ -330,3 +330,35 @@ def mark_orphan_case_exhausted_for_job(
         case.updated_at = datetime.now(timezone.utc)
         case.version += 1
     return case
+
+
+def mark_orphan_case_claim_expired(
+    db: Session,
+    *,
+    job: Job,
+) -> EmailReconciliationCase | None:
+    """Return a stranded automatic correlation case to its visible pending state."""
+    if job.job_type != JobType.RESEND_EVENT_RECONCILE.value:
+        return None
+    payload = job.payload if isinstance(job.payload, dict) else {}
+    try:
+        event_id = UUID(str(payload.get("event_id")))
+    except (TypeError, ValueError):
+        return None
+
+    case = (
+        db.query(EmailReconciliationCase)
+        .filter(
+            EmailReconciliationCase.organization_id == job.organization_id,
+            EmailReconciliationCase.resend_webhook_event_id == event_id,
+        )
+        .one_or_none()
+    )
+    if case is None or case.status in {"resolved", "dismissed"}:
+        return case
+    if case.status != "pending" or case.reason_code != "worker_claim_expired":
+        case.status = "pending"
+        case.reason_code = "worker_claim_expired"
+        case.updated_at = datetime.now(timezone.utc)
+        case.version += 1
+    return case
