@@ -108,6 +108,10 @@ _PROVIDER_OUTCOME_UNKNOWN_ERROR = (
     "Provider outcome remains unknown after the final safe retry; "
     "operator reconciliation is required"
 )
+_LEASE_EXPIRED_RECONCILIATION_ERROR = (
+    "Delivery lease expired after the final attempt; provider outcome is unknown "
+    "and operator reconciliation is required"
+)
 _UNSUBSCRIBE_TOKEN_RE = re.compile(r"(?<=/email/unsubscribe/)[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
 _RESEND_STATUS_RANK = {
     "scheduled": 5,
@@ -849,21 +853,17 @@ def claim_due_deliveries(
                 stale_attempt.outcome = EmailDeliveryAttemptOutcome.LEASE_EXPIRED.value
                 stale_attempt.completed_at = claimed_at
             if delivery.attempt_count >= delivery.max_attempts:
-                error_message = "Delivery lease expired after final attempt"
-                delivery.status = EmailDeliveryStatus.FAILED.value
-                delivery.completed_at = claimed_at
-                delivery.last_error_type = "lease_expired"
-                delivery.last_error = error_message
-                delivery.lease_token = None
-                delivery.lease_owner = None
-                delivery.lease_expires_at = None
-                delivery.email_log.status = EmailStatus.FAILED.value
-                delivery.email_log.error = error_message
+                _mark_reconciliation_required(
+                    delivery,
+                    completed_at=claimed_at,
+                    error_type="lease_expired",
+                    error_message=_LEASE_EXPIRED_RECONCILIATION_ERROR,
+                )
                 _project_appointment_email_delivery(
                     db,
                     email_log=delivery.email_log,
-                    status=EmailStatus.FAILED.value,
-                    error=error_message,
+                    status=EmailStatus.PENDING.value,
+                    error=_LEASE_EXPIRED_RECONCILIATION_ERROR,
                     occurred_at=claimed_at,
                 )
                 continue

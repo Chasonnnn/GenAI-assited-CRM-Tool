@@ -624,7 +624,10 @@ def test_retryable_failure_schedules_bounded_retry_and_keeps_message_pending(db,
     assert attempt.retry_after_seconds == 90
 
 
-def test_expired_final_lease_dead_letters_instead_of_reclaiming_forever(db, test_org):
+def test_expired_final_lease_requires_reconciliation_instead_of_reclaiming_forever(
+    db,
+    test_org,
+):
     claimed_at = datetime.now(timezone.utc)
     queued = queue_rendered_email(
         db,
@@ -659,11 +662,12 @@ def test_expired_final_lease_dead_letters_instead_of_reclaiming_forever(db, test
     db.expire_all()
     delivery = db.get(EmailDelivery, queued.delivery.id)
     email_log = db.get(EmailLog, queued.email_log.id)
-    assert delivery.status == EmailDeliveryStatus.FAILED.value
+    assert delivery.status == EmailDeliveryStatus.RECONCILIATION_REQUIRED.value
     assert delivery.completed_at == expired_at
     assert delivery.last_error_type == "lease_expired"
     assert delivery.lease_token is None
-    assert email_log.status == EmailStatus.FAILED.value
+    assert email_log.status == EmailStatus.PENDING.value
+    assert "operator reconciliation" in (email_log.error or "").lower()
 
 
 def test_queue_rendered_email_rolls_back_with_the_callers_transaction(

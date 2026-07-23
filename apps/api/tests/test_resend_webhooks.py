@@ -1287,6 +1287,82 @@ class TestResendWebhookHandler:
         assert attempt.outcome == EmailDeliveryAttemptOutcome.LEASE_EXPIRED.value
 
     @pytest.mark.asyncio
+    async def test_verified_webhook_resolves_delivery_after_final_lease_expiry(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
+        from app.db.models import EmailDeliveryAttempt
+        from app.services.email_delivery_service import claim_due_deliveries
+
+        _existing_log, settings, webhook_secret = setup_email_log
+        claimed_at = datetime.now(timezone.utc)
+        queued, _claim = _queue_claimed_resend_delivery(
+            db,
+            test_org.id,
+            claimed_at=claimed_at,
+        )
+        queued.delivery.max_attempts = 1
+        db.commit()
+
+        expired_at = claimed_at + timedelta(minutes=3)
+        claims = claim_due_deliveries(
+            db,
+            worker_id="worker-b",
+            now=expired_at,
+            lease_for=timedelta(minutes=1),
+            limit=1,
+        )
+        assert claims == []
+
+        db.expire_all()
+        delivery = db.get(type(queued.delivery), queued.delivery.id)
+        assert delivery.status == EmailDeliveryStatus.RECONCILIATION_REQUIRED.value
+
+        provider_message_id = f"verified-after-lease-expiry-{uuid.uuid4().hex}"
+        event_created_at = expired_at + timedelta(seconds=1)
+        response = await _post_signed_resend_event(
+            client,
+            webhook_id=settings.webhook_id,
+            webhook_secret=webhook_secret,
+            payload={
+                "type": "email.delivered",
+                "created_at": event_created_at.isoformat(),
+                "data": {
+                    "email_id": provider_message_id,
+                    "tags": {
+                        "organization_id": str(test_org.id),
+                        "email_log_id": str(queued.email_log.id),
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200
+
+        db.expire_all()
+        delivery = db.get(type(queued.delivery), queued.delivery.id)
+        email_log = db.get(type(queued.email_log), queued.email_log.id)
+        attempt = (
+            db.query(EmailDeliveryAttempt)
+            .filter(EmailDeliveryAttempt.delivery_id == delivery.id)
+            .one()
+        )
+        assert delivery.status == EmailDeliveryStatus.SENT.value
+        assert delivery.provider_message_id == provider_message_id
+        assert delivery.completed_at == event_created_at
+        assert delivery.last_error is None
+        assert email_log.external_id == provider_message_id
+        assert email_log.resend_status == "delivered"
+        assert email_log.resend_status_at == event_created_at
+        assert email_log.status == "sent"
+        assert attempt.outcome == EmailDeliveryAttemptOutcome.LEASE_EXPIRED.value
+
+    @pytest.mark.asyncio
     async def test_verified_webhook_resolves_reconciliation_required_delivery(
         self,
         db,
