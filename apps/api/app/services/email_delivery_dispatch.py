@@ -490,15 +490,32 @@ async def dispatch_claim(
             retryable=True,
             error_type="network_error",
             error_message="Provider transport failed",
+            provider_outcome_unknown=True,
         )
 
-    if result.ambiguous:
+    if result.ambiguous and not result.retryable:
         return record_delivery_reconciliation_required(
             db,
             claim=claim,
             error_type=result.error_type or "ambiguous_provider_response",
             error_message=result.error or "Provider acceptance could not be confirmed",
             provider_http_status=result.status_code,
+        )
+
+    if result.ambiguous:
+        return record_delivery_failure(
+            db,
+            claim=claim,
+            retryable=True,
+            error_type=result.error_type or "ambiguous_provider_response",
+            error_message=result.error or "Provider acceptance could not be confirmed",
+            provider_http_status=result.status_code,
+            retry_after=(
+                timedelta(seconds=result.retry_after_seconds)
+                if result.retry_after_seconds is not None
+                else None
+            ),
+            provider_outcome_unknown=True,
         )
 
     if result.success and result.message_id:

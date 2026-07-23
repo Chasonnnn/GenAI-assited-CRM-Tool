@@ -328,6 +328,7 @@ async def test_request_error_without_idempotency_key_is_not_retried(monkeypatch)
     assert result.success is False
     assert result.error_type == "timeout"
     assert result.retryable is False
+    assert result.ambiguous is True
     assert len(client.requests) == 1
 
 

@@ -146,18 +146,24 @@ async def send_email(
         try:
             response = await client.post(RESEND_SEND_URL, headers=headers, json=payload)
         except httpx.RequestError as exc:
+            provider_outcome_unknown = not isinstance(
+                exc,
+                (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout),
+            )
             if isinstance(exc, httpx.TimeoutException):
                 return ResendSendResult(
                     success=False,
                     error="Connection timeout",
                     error_type="timeout",
                     retryable=safe_to_retry,
+                    ambiguous=provider_outcome_unknown,
                 )
             return ResendSendResult(
                 success=False,
                 error=f"Connection error: {exc.__class__.__name__}",
                 error_type="network_error",
                 retryable=safe_to_retry,
+                ambiguous=provider_outcome_unknown,
             )
 
     data = _response_data(response)

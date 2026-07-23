@@ -621,6 +621,92 @@ async def test_dispatch_claim_requires_reconciliation_for_ambiguous_success_resp
 
 
 @pytest.mark.asyncio
+async def test_dispatch_claim_retries_unknown_outcome_then_requires_reconciliation(
+    monkeypatch,
+    db,
+    test_org,
+):
+    db.add(
+        ResendSettings(
+            organization_id=test_org.id,
+            email_provider="resend",
+            api_key_encrypted=resend_settings_service.encrypt_api_key("re_org_secret"),
+            from_email="care@example.com",
+            webhook_id=str(uuid4()),
+        )
+    )
+    db.flush()
+    queued = queue_rendered_email(
+        db,
+        organization_id=test_org.id,
+        route=DeliveryRoute.ORGANIZATION_RESEND,
+        provider_account_id=f"organization:{test_org.id}",
+        rendered_email=_rendered_email(),
+        idempotency_key=f"ambiguous-timeout/{uuid4()}",
+        source=EmailSource(source_type="test", source_id=uuid4()),
+        schedule_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+        max_attempts=2,
+        commit=False,
+    )
+    first_claim = claim_due_deliveries(
+        db,
+        worker_id="ambiguous-timeout-worker-1",
+        lease_for=timedelta(minutes=2),
+        limit=1,
+    )[0]
+
+    async def fake_send_email(**_kwargs):
+        return ResendSendResult(
+            success=False,
+            error="Connection timeout",
+            error_type="timeout",
+            retryable=True,
+            ambiguous=True,
+        )
+
+    monkeypatch.setattr(
+        email_delivery_dispatch.resend_transport,
+        "send_email",
+        fake_send_email,
+    )
+
+    first_result = await email_delivery_dispatch.dispatch_claim(
+        db,
+        claim=first_claim,
+    )
+
+    assert first_result.status == EmailDeliveryStatus.RETRY_SCHEDULED.value
+    second_claim = claim_due_deliveries(
+        db,
+        worker_id="ambiguous-timeout-worker-2",
+        now=first_result.run_at,
+        lease_for=timedelta(minutes=2),
+        limit=1,
+    )[0]
+
+    final_result = await email_delivery_dispatch.dispatch_claim(
+        db,
+        claim=second_claim,
+    )
+
+    assert final_result.status == EmailDeliveryStatus.RECONCILIATION_REQUIRED.value
+    assert final_result.last_error_type == "provider_outcome_unknown"
+    assert "reconciliation" in (final_result.last_error or "").lower()
+    db.expire_all()
+    assert queued.email_log.status == EmailStatus.PENDING.value
+    attempts = (
+        db.query(EmailDeliveryAttempt)
+        .filter(EmailDeliveryAttempt.delivery_id == final_result.id)
+        .order_by(EmailDeliveryAttempt.attempt_number)
+        .all()
+    )
+    assert [attempt.outcome for attempt in attempts] == [
+        EmailDeliveryAttemptOutcome.RETRYABLE_ERROR.value,
+        EmailDeliveryAttemptOutcome.TERMINAL_ERROR.value,
+    ]
+
+
+@pytest.mark.asyncio
 async def test_dispatch_due_batch_starts_all_claimed_network_calls_concurrently(
     monkeypatch,
 ):

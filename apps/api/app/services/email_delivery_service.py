@@ -104,6 +104,10 @@ class DeliveryLeaseLost(RuntimeError):
 
 RESEND_IDEMPOTENCY_WINDOW = timedelta(hours=24)
 _RECONCILIATION_ERROR = "Provider idempotency window expired; operator reconciliation is required"
+_PROVIDER_OUTCOME_UNKNOWN_ERROR = (
+    "Provider outcome remains unknown after the final safe retry; "
+    "operator reconciliation is required"
+)
 _UNSUBSCRIBE_TOKEN_RE = re.compile(r"(?<=/email/unsubscribe/)[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
 _RESEND_STATUS_RANK = {
     "scheduled": 5,
@@ -1219,6 +1223,7 @@ def record_delivery_failure(
     error_message: str | None,
     provider_http_status: int | None = None,
     retry_after: timedelta | None = None,
+    provider_outcome_unknown: bool = False,
     now: datetime | None = None,
 ) -> EmailDelivery:
     """Finish the active attempt and either retry or dead-letter the message."""
@@ -1257,7 +1262,7 @@ def record_delivery_failure(
     attempt.completed_at = failed_at
     attempt.outcome = (
         EmailDeliveryAttemptOutcome.RETRYABLE_ERROR.value
-        if can_retry
+        if can_retry and not idempotency_window_expired
         else EmailDeliveryAttemptOutcome.TERMINAL_ERROR.value
     )
     attempt.provider_http_status = provider_http_status
@@ -1279,9 +1284,21 @@ def record_delivery_failure(
         delivery.run_at = failed_at + retry_delay
         email_log.status = EmailStatus.PENDING.value
     elif idempotency_window_expired:
-        assert retry_delay is not None
-        attempt.retry_after_seconds = int(retry_delay.total_seconds())
         _mark_reconciliation_required(delivery, completed_at=failed_at)
+        _project_appointment_email_delivery(
+            db,
+            email_log=email_log,
+            status=EmailStatus.PENDING.value,
+            error=delivery.last_error,
+            occurred_at=failed_at,
+        )
+    elif provider_outcome_unknown:
+        _mark_reconciliation_required(
+            delivery,
+            completed_at=failed_at,
+            error_type="provider_outcome_unknown",
+            error_message=_PROVIDER_OUTCOME_UNKNOWN_ERROR,
+        )
         _project_appointment_email_delivery(
             db,
             email_log=email_log,
