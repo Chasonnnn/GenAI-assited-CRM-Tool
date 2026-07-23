@@ -13,7 +13,7 @@ async def test_workflow_email_appends_org_signature_for_org_scope(
     from app.db.models import EmailLog, EmailTemplate, Job
     from app.services import workflow_email_provider
     from app.worker import process_workflow_email
-    from app.services import resend_email_service, resend_settings_service
+    from app.services import resend_transport
 
     test_org.signature_company_name = "Org Signature Co"
     test_org.signature_template = "classic"
@@ -41,12 +41,11 @@ async def test_workflow_email_appends_org_signature_for_org_scope(
             {"api_key_encrypted": "fake", "from_email": "no-reply@test.com"},
         ),
     )
-    monkeypatch.setattr(resend_settings_service, "decrypt_api_key", lambda _: "key")
 
-    async def fake_send_email_direct(**_kwargs):
-        return True, None, "msg-id"
+    async def fail_provider_io(**_kwargs):
+        raise AssertionError("workflow handler must only enqueue Resend email")
 
-    monkeypatch.setattr(resend_email_service, "send_email_direct", fake_send_email_direct)
+    monkeypatch.setattr(resend_transport, "send_email", fail_provider_io)
 
     job = Job(
         id=uuid.uuid4(),
@@ -86,7 +85,7 @@ async def test_workflow_email_appends_personal_signature_for_personal_scope(
     from app.db.models import EmailLog, EmailTemplate, Job
     from app.services import workflow_email_provider
     from app.worker import process_workflow_email
-    from app.services import resend_email_service, resend_settings_service
+    from app.services import resend_transport
 
     test_org.signature_company_name = "Org Signature Co"
     test_org.signature_template = "classic"
@@ -114,12 +113,11 @@ async def test_workflow_email_appends_personal_signature_for_personal_scope(
             {"api_key_encrypted": "fake", "from_email": "no-reply@test.com"},
         ),
     )
-    monkeypatch.setattr(resend_settings_service, "decrypt_api_key", lambda _: "key")
 
-    async def fake_send_email_direct(**_kwargs):
-        return True, None, "msg-id"
+    async def fail_provider_io(**_kwargs):
+        raise AssertionError("workflow handler must only enqueue Resend email")
 
-    monkeypatch.setattr(resend_email_service, "send_email_direct", fake_send_email_direct)
+    monkeypatch.setattr(resend_transport, "send_email", fail_provider_io)
 
     job = Job(
         id=uuid.uuid4(),
@@ -156,14 +154,19 @@ async def test_workflow_email_appends_personal_signature_for_personal_scope(
 async def test_workflow_email_logs_surrogate_activity_and_audit_after_success_with_system_actor_fallback(
     db, test_org, test_user, monkeypatch
 ):
+    from datetime import datetime, timedelta, timezone
+
     from app.core.constants import SYSTEM_USER_ID
     from app.db.enums import AuditEventType, JobType, SurrogateSource, SurrogateActivityType
     from app.db.models import AuditLog, EmailTemplate, Job, SurrogateActivityLog
     from app.schemas.surrogate import SurrogateCreate
     from app.services import workflow_email_provider
     from app.services import surrogate_service
+    from app.services.email_delivery_service import (
+        claim_due_deliveries,
+        record_delivery_success,
+    )
     from app.worker import process_workflow_email
-    from app.services import resend_email_service, resend_settings_service
 
     surrogate = surrogate_service.create_surrogate(
         db=db,
@@ -198,13 +201,6 @@ async def test_workflow_email_logs_surrogate_activity_and_audit_after_success_wi
             {"api_key_encrypted": "fake", "from_email": "no-reply@test.com"},
         ),
     )
-    monkeypatch.setattr(resend_settings_service, "decrypt_api_key", lambda _: "key")
-
-    async def fake_send_email_direct(**_kwargs):
-        return True, None, "msg-id"
-
-    monkeypatch.setattr(resend_email_service, "send_email_direct", fake_send_email_direct)
-
     job = Job(
         id=uuid.uuid4(),
         organization_id=test_org.id,
@@ -221,6 +217,18 @@ async def test_workflow_email_logs_surrogate_activity_and_audit_after_success_wi
     db.commit()
 
     await process_workflow_email(db, job)
+    claim = claim_due_deliveries(
+        db,
+        worker_id="workflow-test",
+        now=datetime.now(timezone.utc),
+        lease_for=timedelta(minutes=2),
+        limit=1,
+    )[0]
+    record_delivery_success(
+        db,
+        claim=claim,
+        provider_message_id="msg-id",
+    )
 
     activity = (
         db.query(SurrogateActivityLog)

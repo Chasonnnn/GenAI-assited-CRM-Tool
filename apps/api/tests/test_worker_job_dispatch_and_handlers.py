@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
+from threading import Barrier, Thread
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -208,6 +209,398 @@ async def test_worker_process_job_dispatch(monkeypatch, db):
 
 
 @pytest.mark.asyncio
+async def test_legacy_send_email_handler_cannot_load_another_organizations_log(
+    monkeypatch,
+    db,
+    test_org,
+):
+    from app.db.models import EmailLog
+    from app.jobs.handlers import email as email_job_handler
+
+    email_log = EmailLog(
+        organization_id=test_org.id,
+        recipient_email="tenant-boundary@example.com",
+        subject="Tenant boundary",
+        body="<p>Do not send</p>",
+        status="pending",
+    )
+    db.add(email_log)
+    db.commit()
+
+    job = _job(
+        job_type=JobType.SEND_EMAIL.value,
+        payload={"email_log_id": str(email_log.id)},
+    )
+    assert job.organization_id != test_org.id
+
+    send_calls: list = []
+
+    async def _unexpected_send(*args, **kwargs):
+        send_calls.append((args, kwargs))
+        return "queued"
+
+    monkeypatch.setattr(email_job_handler, "send_email_async", _unexpected_send)
+
+    with pytest.raises(Exception, match=f"EmailLog {email_log.id} not found"):
+        await email_job_handler.process_send_email(db, job)
+
+    assert send_calls == []
+
+
+def test_worker_email_failure_projection_cannot_mutate_another_organizations_log(
+    monkeypatch,
+    db,
+    test_org,
+):
+    from app.db.models import EmailLog
+
+    email_log = EmailLog(
+        organization_id=test_org.id,
+        recipient_email="tenant-failure-boundary@example.com",
+        subject="Tenant failure boundary",
+        body="<p>Do not mutate</p>",
+        status="pending",
+    )
+    db.add(email_log)
+    db.commit()
+
+    job = _job(
+        job_type=JobType.SEND_EMAIL.value,
+        payload={"email_log_id": str(email_log.id)},
+    )
+    assert job.organization_id != test_org.id
+
+    failed_logs: list = []
+    monkeypatch.setattr(
+        worker.email_service,
+        "mark_email_failed",
+        lambda _db, log, _error: failed_logs.append(log.id),
+    )
+
+    worker._mark_send_email_failed(db, job, "provider failure")
+
+    assert failed_logs == []
+    db.refresh(email_log)
+    assert email_log.status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_worker_reconciles_accepted_resend_event(db, test_org):
+    """The worker links an accepted orphan event once its EmailLog is committed."""
+    from app.db.models import EmailLog, ResendWebhookEvent
+
+    email_log = EmailLog(
+        organization_id=test_org.id,
+        recipient_email="reconcile@example.com",
+        subject="Reconcile event",
+        body="<p>Body</p>",
+        status="sent",
+        external_id="resend_reconcile_message",
+    )
+    event = ResendWebhookEvent(
+        organization_id=test_org.id,
+        provider_event_id="svix_reconcile_event",
+        event_type="email.delivered",
+        event_created_at=datetime(2026, 7, 21, 14, 3, tzinfo=timezone.utc),
+        payload={
+            "type": "email.delivered",
+            "created_at": "2026-07-21T14:03:00.000Z",
+            "data": {"email_id": "resend_reconcile_message"},
+        },
+    )
+    db.add_all([email_log, event])
+    db.commit()
+
+    job = _job(
+        job_type=JobType.RESEND_EVENT_RECONCILE.value,
+        status=JobStatus.RUNNING.value,
+        payload={"event_id": str(event.id)},
+    )
+    job.organization_id = test_org.id
+
+    completed = await worker.process_job(db, job)
+
+    assert completed is True
+    db.refresh(event)
+    db.refresh(email_log)
+    assert event.email_log_id == email_log.id
+    assert event.processed_at is not None
+    assert email_log.resend_status == "delivered"
+    assert email_log.delivered_at.isoformat() == "2026-07-21T14:03:00+00:00"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("event_type", "expected_resend_status", "expected_email_status", "milestone_field"),
+    [
+        ("email.delivered", "delivered", "sent", "delivered_at"),
+        ("email.bounced", "bounced", "failed", "bounced_at"),
+    ],
+)
+async def test_worker_reconciles_older_orphan_event_after_provider_acceptance(
+    db,
+    test_org,
+    event_type,
+    expected_resend_status,
+    expected_email_status,
+    milestone_field,
+):
+    """A higher-rank provider event wins even when acceptance was recorded later."""
+    from app.db.models import ResendWebhookEvent
+    from app.services.email_delivery_service import (
+        DeliveryRoute,
+        EmailSource,
+        RenderedEmail,
+        claim_due_deliveries,
+        queue_rendered_email,
+        record_delivery_success,
+    )
+
+    provider_created_at = datetime(2026, 7, 21, 14, 3, tzinfo=timezone.utc)
+    accepted_at = provider_created_at + timedelta(minutes=2)
+    provider_message_id = f"resend_race_{event_type.rsplit('.', 1)[-1]}"
+    queued = queue_rendered_email(
+        db,
+        organization_id=test_org.id,
+        route=DeliveryRoute.ORGANIZATION_RESEND,
+        provider_account_id=f"organization:{test_org.id}",
+        rendered_email=RenderedEmail(
+            recipient_email="race@example.com",
+            subject="Chronology race",
+            html="<p>Body</p>",
+            text="Body",
+            from_email="Surrogacy Force <care@example.com>",
+        ),
+        idempotency_key=f"chronology-race/{event_type}",
+        source=EmailSource(source_type="test"),
+        schedule_at=accepted_at - timedelta(seconds=1),
+        commit=False,
+    )
+    event = ResendWebhookEvent(
+        organization_id=test_org.id,
+        provider_event_id=f"svix_race_{event_type}",
+        event_type=event_type,
+        event_created_at=provider_created_at,
+        payload={
+            "type": event_type,
+            "created_at": provider_created_at.isoformat(),
+            "data": {
+                "email_id": provider_message_id,
+                "bounce": {"type": "Permanent"},
+            },
+        },
+    )
+    db.add(event)
+    db.commit()
+
+    claim = claim_due_deliveries(
+        db,
+        worker_id="worker-a",
+        now=accepted_at,
+        lease_for=timedelta(minutes=2),
+        limit=1,
+    )[0]
+    record_delivery_success(
+        db,
+        claim=claim,
+        provider_message_id=provider_message_id,
+        now=accepted_at,
+    )
+
+    job = _job(
+        job_type=JobType.RESEND_EVENT_RECONCILE.value,
+        status=JobStatus.RUNNING.value,
+        payload={"event_id": str(event.id)},
+    )
+    job.organization_id = test_org.id
+    completed = await worker.process_job(db, job)
+
+    assert completed is True
+    db.refresh(event)
+    db.refresh(queued.email_log)
+    assert event.email_log_id == queued.email_log.id
+    assert event.processed_at is not None
+    assert queued.email_log.resend_status == expected_resend_status
+    assert queued.email_log.status == expected_email_status
+    assert queued.email_log.resend_status_at == provider_created_at
+    assert getattr(queued.email_log, milestone_field) == provider_created_at
+
+
+def test_verified_resend_projection_locks_tenant_event_and_email_rows(db, test_org):
+    """Projection serializes event dedupe and message state within the tenant."""
+    from sqlalchemy import event as sqlalchemy_event
+
+    from app.db.models import EmailLog, ResendWebhookEvent
+    from app.services.webhooks.resend import _process_verified_payload
+
+    provider_created_at = datetime(2026, 7, 21, 14, 3, tzinfo=timezone.utc)
+    email_log = EmailLog(
+        organization_id=test_org.id,
+        recipient_email="locked@example.com",
+        subject="Locked projection",
+        body="<p>Body</p>",
+        status="sent",
+        external_id="resend_locked_projection",
+        resend_status="sent",
+        resend_status_at=provider_created_at - timedelta(seconds=1),
+    )
+    db.add(email_log)
+    db.flush()
+    payload = {
+        "type": "email.delivered",
+        "created_at": provider_created_at.isoformat(),
+        "data": {"email_id": email_log.external_id},
+    }
+    webhook_event = ResendWebhookEvent(
+        organization_id=test_org.id,
+        email_log_id=email_log.id,
+        provider_event_id="svix_locked_projection",
+        event_type="email.delivered",
+        event_created_at=provider_created_at,
+        payload=payload,
+    )
+    db.add(webhook_event)
+    db.commit()
+
+    statements: list[str] = []
+
+    def capture_sql(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement.lower())
+
+    engine = db.get_bind()
+    sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        _process_verified_payload(
+            db,
+            event=webhook_event,
+            email_log=email_log,
+            payload=payload,
+        )
+    finally:
+        sqlalchemy_event.remove(engine, "before_cursor_execute", capture_sql)
+
+    locking_selects = [statement for statement in statements if "for update" in statement]
+    assert any(
+        "from resend_webhook_events" in statement and "organization_id" in statement
+        for statement in locking_selects
+    )
+    assert any(
+        "from email_logs" in statement and "organization_id" in statement
+        for statement in locking_selects
+    )
+
+
+def test_concurrent_resend_open_events_do_not_lose_counts(db_engine):
+    """Distinct provider events serialize their updates to one EmailLog."""
+    from app.db.models import EmailLog, Organization, ResendWebhookEvent
+    from app.db.session import SessionLocal
+    from app.services.webhooks.resend import _process_verified_payload
+
+    organization_id = uuid4()
+    email_log_id = uuid4()
+    provider_created_at = datetime(2026, 7, 21, 14, 3, tzinfo=timezone.utc)
+    event_ids: list = []
+    setup = SessionLocal(bind=db_engine)
+    try:
+        setup.add(
+            Organization(
+                id=organization_id,
+                name="Webhook Concurrency Test",
+                slug=f"webhook-concurrency-{uuid4().hex[:10]}",
+            )
+        )
+        setup.add(
+            EmailLog(
+                id=email_log_id,
+                organization_id=organization_id,
+                recipient_email="concurrent@example.com",
+                subject="Concurrent projection",
+                body="<p>Body</p>",
+                status="sent",
+                external_id="resend_concurrent_projection",
+                resend_status="sent",
+                resend_status_at=provider_created_at - timedelta(seconds=1),
+            )
+        )
+        for sequence in (1, 2):
+            payload = {
+                "type": "email.opened",
+                "created_at": (provider_created_at + timedelta(seconds=sequence)).isoformat(),
+                "data": {"email_id": "resend_concurrent_projection"},
+            }
+            webhook_event = ResendWebhookEvent(
+                organization_id=organization_id,
+                email_log_id=email_log_id,
+                provider_event_id=f"svix_concurrent_open_{sequence}",
+                event_type="email.opened",
+                event_created_at=provider_created_at + timedelta(seconds=sequence),
+                payload=payload,
+            )
+            setup.add(webhook_event)
+            setup.flush()
+            event_ids.append(webhook_event.id)
+        setup.commit()
+    finally:
+        setup.close()
+
+    ready = Barrier(2)
+    errors: list[BaseException] = []
+
+    def project(event_id):
+        session = SessionLocal(bind=db_engine)
+        try:
+            webhook_event = session.get(ResendWebhookEvent, event_id)
+            email_log = session.get(EmailLog, email_log_id)
+            assert webhook_event is not None
+            assert email_log is not None
+            ready.wait(timeout=5)
+            _process_verified_payload(
+                session,
+                event=webhook_event,
+                email_log=email_log,
+                payload=webhook_event.payload,
+            )
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            session.close()
+
+    threads = [Thread(target=project, args=(event_id,)) for event_id in event_ids]
+    try:
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+
+        assert all(not thread.is_alive() for thread in threads)
+        assert errors == []
+
+        verify = SessionLocal(bind=db_engine)
+        try:
+            email_log = verify.get(EmailLog, email_log_id)
+            assert email_log is not None
+            assert email_log.open_count == 2
+            assert (
+                verify.query(ResendWebhookEvent)
+                .filter(
+                    ResendWebhookEvent.organization_id == organization_id,
+                    ResendWebhookEvent.processed_at.isnot(None),
+                )
+                .count()
+                == 2
+            )
+        finally:
+            verify.close()
+    finally:
+        cleanup = SessionLocal(bind=db_engine)
+        try:
+            cleanup.query(Organization).filter(Organization.id == organization_id).delete()
+            cleanup.commit()
+        finally:
+            cleanup.close()
+
+
+@pytest.mark.asyncio
 async def test_worker_loop_single_iteration_success_and_failure(monkeypatch, db):
     jobs = [
         _job(job_type=JobType.CAMPAIGN_SEND.value),
@@ -321,6 +714,119 @@ async def test_worker_loop_leaves_job_running_when_handler_defers_completion(mon
 
     assert job.status == JobStatus.RUNNING.value
     assert completed["count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_worker_loop_dispatches_one_bounded_email_delivery_batch(monkeypatch, db):
+    monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(db))
+    monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
+    monkeypatch.setattr(worker, "POLL_INTERVAL_SECONDS", 0)
+    monkeypatch.setattr(worker, "EMAIL_DELIVERY_DISPATCH_ENABLED", True)
+    monkeypatch.setattr(worker, "EMAIL_DELIVERY_BATCH_SIZE", 4)
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_google_calendar_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_gmail_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker.job_service,
+        "claim_pending_jobs",
+        lambda *_args, **_kwargs: [],
+    )
+    dispatch_calls: list[dict[str, object]] = []
+
+    async def fake_dispatch_due_delivery_batch(**kwargs):
+        dispatch_calls.append(kwargs)
+        return SimpleNamespace(
+            claimed=2,
+            sent=1,
+            retry_scheduled=1,
+            failed=0,
+            cancelled=0,
+            lease_lost=0,
+            unexpected_errors=0,
+        )
+
+    monkeypatch.setattr(
+        worker.email_delivery_dispatch,
+        "dispatch_due_delivery_batch",
+        fake_dispatch_due_delivery_batch,
+    )
+
+    async def stop_after_iteration(_seconds):
+        raise RuntimeError("stop-loop")
+
+    monkeypatch.setattr(worker.asyncio, "sleep", stop_after_iteration)
+
+    with pytest.raises(RuntimeError, match="stop-loop"):
+        await worker.worker_loop()
+
+    assert len(dispatch_calls) == 1
+    assert dispatch_calls[0]["session_factory"] is worker.SessionLocal
+    assert dispatch_calls[0]["limit"] == 4
+    assert dispatch_calls[0]["worker_id"]
+
+
+@pytest.mark.asyncio
+async def test_worker_loop_drains_full_email_batches_before_poll_sleep(monkeypatch, db):
+    monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(db))
+    monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
+    monkeypatch.setattr(worker, "POLL_INTERVAL_SECONDS", 0)
+    monkeypatch.setattr(worker, "EMAIL_DELIVERY_DISPATCH_ENABLED", True)
+    monkeypatch.setattr(worker, "EMAIL_DELIVERY_BATCH_SIZE", 3)
+    monkeypatch.setattr(worker, "EMAIL_DELIVERY_MAX_BATCHES_PER_TICK", 4)
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_google_calendar_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_gmail_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker.job_service,
+        "claim_pending_jobs",
+        lambda *_args, **_kwargs: [],
+    )
+    claimed_counts = iter((3, 2))
+    dispatch_calls: list[dict[str, object]] = []
+
+    async def fake_dispatch_due_delivery_batch(**kwargs):
+        dispatch_calls.append(kwargs)
+        claimed = next(claimed_counts)
+        return SimpleNamespace(
+            claimed=claimed,
+            sent=claimed,
+            retry_scheduled=0,
+            failed=0,
+            cancelled=0,
+            lease_lost=0,
+            unexpected_errors=0,
+        )
+
+    monkeypatch.setattr(
+        worker.email_delivery_dispatch,
+        "dispatch_due_delivery_batch",
+        fake_dispatch_due_delivery_batch,
+    )
+
+    async def stop_after_iteration(_seconds):
+        raise RuntimeError("stop-loop")
+
+    monkeypatch.setattr(worker.asyncio, "sleep", stop_after_iteration)
+
+    with pytest.raises(RuntimeError, match="stop-loop"):
+        await worker.worker_loop()
+
+    assert len(dispatch_calls) == 2
+    assert all(call["limit"] == 3 for call in dispatch_calls)
 
 
 def test_worker_main_paths(monkeypatch):
