@@ -615,6 +615,16 @@ def _process_verified_payload(
         email_log_id=email_log_id,
     )
 
+    from app.services.email_delivery_service import (
+        lock_delivery_for_verified_webhook,
+        merge_verified_webhook_identity,
+    )
+
+    locked_delivery = lock_delivery_for_verified_webhook(
+        db,
+        organization_id=organization_id,
+        email_log_id=email_log_id,
+    )
     locked_email_log = db.execute(
         select(EmailLog)
         .where(
@@ -643,7 +653,20 @@ def _process_verified_payload(
     data_value = payload.get("data")
     data = data_value if isinstance(data_value, dict) else {}
     event_created_at = _parse_event_created_at(payload.get("created_at"))
+    provider_message_id_value = data.get("email_id")
+    provider_message_id = (
+        provider_message_id_value
+        if isinstance(provider_message_id_value, str) and provider_message_id_value.strip()
+        else None
+    )
 
+    if provider_message_id is not None:
+        merge_verified_webhook_identity(
+            delivery=locked_delivery,
+            email_log=locked_email_log,
+            provider_message_id=provider_message_id,
+            event_created_at=event_created_at,
+        )
     _process_resend_event(
         db,
         email_log=locked_email_log,
@@ -732,11 +755,6 @@ def _organization_email_log_from_correlation_tags(
     if email_log.external_id not in {None, email_id}:
         logger.warning("Resend webhook correlation tags conflict with provider message id")
         return None, True
-    if email_log.external_id is None:
-        # A signed event can beat the provider-response commit. Bind the message
-        # identity now so later webhook retries and delivery reconciliation agree.
-        email_log.external_id = email_id
-        db.flush()
     return email_log, True
 
 
@@ -893,7 +911,6 @@ class PlatformResendWebhookHandler:
             .filter(
                 EmailLog.organization_id == organization_id,
                 EmailLog.id == email_log_id,
-                EmailLog.external_id == email_id,
             )
             .first()
         )

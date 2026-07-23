@@ -105,6 +105,16 @@ class DeliveryLeaseLost(RuntimeError):
 RESEND_IDEMPOTENCY_WINDOW = timedelta(hours=24)
 _RECONCILIATION_ERROR = "Provider idempotency window expired; operator reconciliation is required"
 _UNSUBSCRIBE_TOKEN_RE = re.compile(r"(?<=/email/unsubscribe/)[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
+_RESEND_STATUS_RANK = {
+    "scheduled": 5,
+    "sent": 10,
+    "delivery_delayed": 20,
+    "delivered": 30,
+    "failed": 40,
+    "suppressed": 50,
+    "bounced": 60,
+    "complained": 70,
+}
 
 
 def _mark_reconciliation_required(
@@ -124,6 +134,112 @@ def _mark_reconciliation_required(
     delivery.lease_expires_at = None
     delivery.email_log.status = EmailStatus.PENDING.value
     delivery.email_log.error = error_message
+
+
+def _assert_provider_message_identity(
+    delivery: EmailDelivery,
+    provider_message_id: str,
+) -> None:
+    """Reject divergent provider identities before mutating a fenced delivery."""
+    for current_provider_message_id in (
+        delivery.provider_message_id,
+        delivery.email_log.external_id,
+    ):
+        if current_provider_message_id not in {None, provider_message_id}:
+            raise EmailDeliveryConflict(
+                "provider message id conflicts with the verified delivery identity"
+            )
+
+
+def _merge_provider_acceptance(
+    email_log: EmailLog,
+    *,
+    provider_message_id: str,
+    accepted_at: datetime,
+) -> bool:
+    """Merge provider acceptance without regressing later webhook evidence."""
+    current_rank = _RESEND_STATUS_RANK.get(email_log.resend_status or "", 0)
+    acceptance_rank = _RESEND_STATUS_RANK["sent"]
+    email_log.external_id = provider_message_id
+    email_log.sent_at = (
+        accepted_at
+        if email_log.sent_at is None or accepted_at < email_log.sent_at
+        else email_log.sent_at
+    )
+    if current_rank > acceptance_rank:
+        return False
+
+    email_log.status = EmailStatus.SENT.value
+    email_log.error = None
+    if current_rank < acceptance_rank or email_log.resend_status_at is None:
+        email_log.resend_status = "sent"
+        email_log.resend_status_at = accepted_at
+    return True
+
+
+def lock_delivery_for_verified_webhook(
+    db: Session,
+    *,
+    organization_id: UUID,
+    email_log_id: UUID,
+) -> EmailDelivery | None:
+    """Lock the tenant-scoped outbox row before a signed webhook binds identity."""
+    query = select(EmailDelivery).where(
+        EmailDelivery.organization_id == organization_id,
+        EmailDelivery.email_log_id == email_log_id,
+    )
+    bind = db.get_bind()
+    if getattr(bind, "dialect", None) and bind.dialect.name == "postgresql":
+        query = query.with_for_update()
+    return db.execute(query).scalar_one_or_none()
+
+
+def merge_verified_webhook_identity(
+    *,
+    delivery: EmailDelivery | None,
+    email_log: EmailLog,
+    provider_message_id: str,
+    event_created_at: datetime,
+) -> None:
+    """Bind signed provider identity and resolve delivery states safe from retries."""
+    normalized_provider_message_id = provider_message_id.strip()
+    if not normalized_provider_message_id:
+        raise ValueError("provider_message_id is required")
+    if delivery is not None:
+        if (
+            delivery.organization_id != email_log.organization_id
+            or delivery.email_log_id != email_log.id
+        ):
+            raise EmailDeliveryConflict("provider message id target is outside the delivery tenant")
+        _assert_provider_message_identity(delivery, normalized_provider_message_id)
+        delivery.provider_message_id = normalized_provider_message_id
+        if delivery.status in {
+            EmailDeliveryStatus.PENDING.value,
+            EmailDeliveryStatus.RETRY_SCHEDULED.value,
+            EmailDeliveryStatus.RECONCILIATION_REQUIRED.value,
+        }:
+            delivery.status = EmailDeliveryStatus.SENT.value
+            delivery.completed_at = event_created_at
+            delivery.last_error_type = None
+            delivery.last_error = None
+            delivery.lease_token = None
+            delivery.lease_owner = None
+            delivery.lease_expires_at = None
+    elif email_log.external_id not in {None, normalized_provider_message_id}:
+        raise EmailDeliveryConflict(
+            "provider message id conflicts with the verified email identity"
+        )
+
+    email_log.external_id = normalized_provider_message_id
+    current_rank = _RESEND_STATUS_RANK.get(email_log.resend_status or "", 0)
+    if current_rank <= _RESEND_STATUS_RANK["sent"]:
+        email_log.status = EmailStatus.SENT.value
+        email_log.error = None
+        email_log.sent_at = (
+            event_created_at
+            if email_log.sent_at is None or event_created_at < email_log.sent_at
+            else email_log.sent_at
+        )
 
 
 def _route_scope(route: DeliveryRoute) -> EmailProviderScope:
@@ -860,6 +976,7 @@ def record_delivery_success(
     if attempt is None:
         raise DeliveryLeaseLost("delivery attempt is no longer active")
 
+    _assert_provider_message_identity(delivery, provider_message_id)
     attempt.outcome = EmailDeliveryAttemptOutcome.SUCCEEDED.value
     attempt.completed_at = completed_at
     attempt.provider_message_id = provider_message_id
@@ -874,20 +991,19 @@ def record_delivery_success(
     delivery.lease_expires_at = None
 
     email_log = delivery.email_log
-    email_log.status = EmailStatus.SENT.value
-    email_log.external_id = provider_message_id
-    email_log.sent_at = completed_at
-    email_log.error = None
-    email_log.resend_status = "sent"
-    email_log.resend_status_at = completed_at
-
-    _project_source_delivery(
-        db,
-        email_log=email_log,
-        status=EmailStatus.SENT.value,
+    acceptance_is_canonical = _merge_provider_acceptance(
+        email_log,
         provider_message_id=provider_message_id,
-        occurred_at=completed_at,
+        accepted_at=completed_at,
     )
+    if acceptance_is_canonical:
+        _project_source_delivery(
+            db,
+            email_log=email_log,
+            status=EmailStatus.SENT.value,
+            provider_message_id=provider_message_id,
+            occurred_at=completed_at,
+        )
     db.commit()
     db.refresh(delivery)
     return delivery
@@ -1052,19 +1168,42 @@ def record_delivery_reconciliation_required(
     attempt.provider_http_status = provider_http_status
     attempt.error_type = safe_error_type
     attempt.error_message = safe_error_message
-    _mark_reconciliation_required(
-        delivery,
-        completed_at=completed_at,
-        error_type=safe_error_type,
-        error_message=safe_error_message,
-    )
-    _project_appointment_email_delivery(
-        db,
-        email_log=delivery.email_log,
-        status=EmailStatus.PENDING.value,
-        error=safe_error_message,
-        occurred_at=completed_at,
-    )
+    if delivery.provider_message_id is not None:
+        _assert_provider_message_identity(delivery, delivery.provider_message_id)
+        delivery.status = EmailDeliveryStatus.SENT.value
+        delivery.completed_at = completed_at
+        delivery.last_error_type = None
+        delivery.last_error = None
+        delivery.lease_token = None
+        delivery.lease_owner = None
+        delivery.lease_expires_at = None
+        acceptance_is_canonical = _merge_provider_acceptance(
+            delivery.email_log,
+            provider_message_id=delivery.provider_message_id,
+            accepted_at=completed_at,
+        )
+        if acceptance_is_canonical:
+            _project_source_delivery(
+                db,
+                email_log=delivery.email_log,
+                status=EmailStatus.SENT.value,
+                provider_message_id=delivery.provider_message_id,
+                occurred_at=completed_at,
+            )
+    else:
+        _mark_reconciliation_required(
+            delivery,
+            completed_at=completed_at,
+            error_type=safe_error_type,
+            error_message=safe_error_message,
+        )
+        _project_appointment_email_delivery(
+            db,
+            email_log=delivery.email_log,
+            status=EmailStatus.PENDING.value,
+            error=safe_error_message,
+            occurred_at=completed_at,
+        )
 
     db.commit()
     db.refresh(delivery)

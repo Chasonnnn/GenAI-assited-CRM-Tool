@@ -10,6 +10,69 @@ import pytest
 from sqlalchemy import event
 
 
+async def _post_signed_resend_event(
+    client,
+    *,
+    webhook_id: str,
+    webhook_secret: str,
+    payload: dict,
+):
+    import json
+
+    body = json.dumps(payload).encode("utf-8")
+    timestamp = str(int(time.time()))
+    msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+    response = await client.post(
+        f"/webhooks/resend/{webhook_id}",
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "svix-id": msg_id,
+            "svix-timestamp": timestamp,
+            "svix-signature": signature,
+        },
+    )
+    return response
+
+
+def _queue_claimed_resend_delivery(db, organization_id, *, claimed_at):
+    from datetime import timedelta
+
+    from app.services.email_delivery_service import (
+        DeliveryRoute,
+        EmailSource,
+        RenderedEmail,
+        claim_due_deliveries,
+        queue_rendered_email,
+    )
+
+    queued = queue_rendered_email(
+        db,
+        organization_id=organization_id,
+        route=DeliveryRoute.ORGANIZATION_RESEND,
+        provider_account_id=f"organization:{organization_id}",
+        rendered_email=RenderedEmail(
+            recipient_email="race@recipient.com",
+            subject="Provider chronology",
+            html="<p>Provider chronology</p>",
+            text="Provider chronology",
+            from_email="Surrogacy Force <care@example.com>",
+        ),
+        idempotency_key=f"provider-chronology/{uuid.uuid4()}",
+        source=EmailSource(source_type="test"),
+        schedule_at=claimed_at - timedelta(seconds=1),
+        commit=False,
+    )
+    claim = claim_due_deliveries(
+        db,
+        worker_id="worker-a",
+        now=claimed_at,
+        lease_for=timedelta(minutes=2),
+        limit=1,
+    )[0]
+    return queued, claim
+
+
 def _generate_svix_signature(body: bytes, secret: str, timestamp: str) -> str:
     """Generate a valid Svix signature for testing."""
     msg_id = str(uuid.uuid4())
@@ -928,6 +991,282 @@ class TestResendWebhookHandler:
         assert legacy_match.resend_status is None
         assert tagged_match.external_id == legacy_match.external_id
         assert tagged_match.resend_status == "delivered"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("event_type", "expected_resend_status", "expected_email_status"),
+        [
+            ("email.delivered", "delivered", "sent"),
+            ("email.bounced", "bounced", "failed"),
+        ],
+    )
+    async def test_verified_webhook_before_provider_response_remains_canonical(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+        event_type,
+        expected_resend_status,
+        expected_email_status,
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
+        from app.db.models import EmailDeliveryAttempt
+        from app.services.email_delivery_service import record_delivery_success
+
+        _existing_log, settings, webhook_secret = setup_email_log
+        claimed_at = datetime.now(timezone.utc)
+        queued, claim = _queue_claimed_resend_delivery(
+            db,
+            test_org.id,
+            claimed_at=claimed_at,
+        )
+        provider_message_id = f"webhook-first-{uuid.uuid4().hex}"
+        event_created_at = claimed_at + timedelta(seconds=1)
+        response = await _post_signed_resend_event(
+            client,
+            webhook_id=settings.webhook_id,
+            webhook_secret=webhook_secret,
+            payload={
+                "type": event_type,
+                "created_at": event_created_at.isoformat(),
+                "data": {
+                    "email_id": provider_message_id,
+                    "bounce": {"type": "Permanent"},
+                    "tags": {
+                        "organization_id": str(test_org.id),
+                        "email_log_id": str(queued.email_log.id),
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200
+
+        delivery = record_delivery_success(
+            db,
+            claim=claim,
+            provider_message_id=provider_message_id,
+            now=claimed_at + timedelta(seconds=2),
+        )
+
+        db.expire_all()
+        email_log = db.get(type(queued.email_log), queued.email_log.id)
+        attempt = (
+            db.query(EmailDeliveryAttempt)
+            .filter(EmailDeliveryAttempt.delivery_id == delivery.id)
+            .one()
+        )
+        assert delivery.status == EmailDeliveryStatus.SENT.value
+        assert delivery.provider_message_id == provider_message_id
+        assert attempt.outcome == EmailDeliveryAttemptOutcome.SUCCEEDED.value
+        assert attempt.provider_message_id == provider_message_id
+        assert email_log.external_id == provider_message_id
+        assert email_log.resend_status == expected_resend_status
+        assert email_log.status == expected_email_status
+        assert email_log.resend_status_at == event_created_at
+
+    @pytest.mark.asyncio
+    async def test_ambiguous_provider_response_after_verified_webhook_resolves_delivery(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
+        from app.db.models import EmailDeliveryAttempt
+        from app.services.email_delivery_service import (
+            record_delivery_reconciliation_required,
+        )
+
+        _existing_log, settings, webhook_secret = setup_email_log
+        claimed_at = datetime.now(timezone.utc)
+        queued, claim = _queue_claimed_resend_delivery(
+            db,
+            test_org.id,
+            claimed_at=claimed_at,
+        )
+        provider_message_id = f"verified-before-timeout-{uuid.uuid4().hex}"
+        response = await _post_signed_resend_event(
+            client,
+            webhook_id=settings.webhook_id,
+            webhook_secret=webhook_secret,
+            payload={
+                "type": "email.delivered",
+                "created_at": (claimed_at + timedelta(seconds=1)).isoformat(),
+                "data": {
+                    "email_id": provider_message_id,
+                    "tags": {
+                        "organization_id": str(test_org.id),
+                        "email_log_id": str(queued.email_log.id),
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200
+
+        delivery = record_delivery_reconciliation_required(
+            db,
+            claim=claim,
+            error_type="transport_error",
+            error_message="Connection dropped before the response was read",
+            now=claimed_at + timedelta(seconds=2),
+        )
+
+        db.expire_all()
+        email_log = db.get(type(queued.email_log), queued.email_log.id)
+        attempt = (
+            db.query(EmailDeliveryAttempt)
+            .filter(EmailDeliveryAttempt.delivery_id == delivery.id)
+            .one()
+        )
+        assert delivery.status == EmailDeliveryStatus.SENT.value
+        assert delivery.provider_message_id == provider_message_id
+        assert delivery.last_error is None
+        assert email_log.external_id == provider_message_id
+        assert email_log.resend_status == "delivered"
+        assert email_log.status == "sent"
+        assert attempt.outcome == EmailDeliveryAttemptOutcome.TERMINAL_ERROR.value
+        assert attempt.error_type == "transport_error"
+
+    @pytest.mark.asyncio
+    async def test_verified_webhook_resolves_reconciliation_required_delivery(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
+        from app.db.models import EmailDeliveryAttempt
+        from app.services.email_delivery_service import (
+            record_delivery_reconciliation_required,
+        )
+
+        _existing_log, settings, webhook_secret = setup_email_log
+        claimed_at = datetime.now(timezone.utc)
+        queued, claim = _queue_claimed_resend_delivery(
+            db,
+            test_org.id,
+            claimed_at=claimed_at,
+        )
+        delivery = record_delivery_reconciliation_required(
+            db,
+            claim=claim,
+            error_type="transport_error",
+            error_message="Connection dropped before the response was read",
+            now=claimed_at + timedelta(seconds=1),
+        )
+        assert delivery.status == EmailDeliveryStatus.RECONCILIATION_REQUIRED.value
+
+        provider_message_id = f"reconciled-by-webhook-{uuid.uuid4().hex}"
+        response = await _post_signed_resend_event(
+            client,
+            webhook_id=settings.webhook_id,
+            webhook_secret=webhook_secret,
+            payload={
+                "type": "email.delivered",
+                "created_at": (claimed_at + timedelta(seconds=2)).isoformat(),
+                "data": {
+                    "email_id": provider_message_id,
+                    "tags": {
+                        "organization_id": str(test_org.id),
+                        "email_log_id": str(queued.email_log.id),
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200
+
+        db.expire_all()
+        delivery = db.get(type(delivery), delivery.id)
+        email_log = db.get(type(queued.email_log), queued.email_log.id)
+        attempt = (
+            db.query(EmailDeliveryAttempt)
+            .filter(EmailDeliveryAttempt.delivery_id == delivery.id)
+            .one()
+        )
+        assert delivery.status == EmailDeliveryStatus.SENT.value
+        assert delivery.provider_message_id == provider_message_id
+        assert delivery.last_error is None
+        assert email_log.external_id == provider_message_id
+        assert email_log.resend_status == "delivered"
+        assert email_log.status == "sent"
+        assert attempt.outcome == EmailDeliveryAttemptOutcome.TERMINAL_ERROR.value
+        assert attempt.error_type == "transport_error"
+        assert attempt.provider_message_id is None
+
+    @pytest.mark.asyncio
+    async def test_conflicting_provider_response_does_not_overwrite_verified_webhook_identity(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
+        from app.db.models import EmailDeliveryAttempt
+        from app.services.email_delivery_service import (
+            EmailDeliveryConflict,
+            record_delivery_success,
+        )
+
+        _existing_log, settings, webhook_secret = setup_email_log
+        claimed_at = datetime.now(timezone.utc)
+        queued, claim = _queue_claimed_resend_delivery(
+            db,
+            test_org.id,
+            claimed_at=claimed_at,
+        )
+        verified_provider_message_id = f"verified-id-{uuid.uuid4().hex}"
+        response = await _post_signed_resend_event(
+            client,
+            webhook_id=settings.webhook_id,
+            webhook_secret=webhook_secret,
+            payload={
+                "type": "email.delivered",
+                "created_at": (claimed_at + timedelta(seconds=1)).isoformat(),
+                "data": {
+                    "email_id": verified_provider_message_id,
+                    "tags": {
+                        "organization_id": str(test_org.id),
+                        "email_log_id": str(queued.email_log.id),
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200
+
+        with pytest.raises(EmailDeliveryConflict, match="provider message id"):
+            record_delivery_success(
+                db,
+                claim=claim,
+                provider_message_id=f"conflicting-id-{uuid.uuid4().hex}",
+                now=claimed_at + timedelta(seconds=2),
+            )
+
+        db.expire_all()
+        delivery = db.get(type(queued.delivery), queued.delivery.id)
+        email_log = db.get(type(queued.email_log), queued.email_log.id)
+        attempt = (
+            db.query(EmailDeliveryAttempt)
+            .filter(EmailDeliveryAttempt.delivery_id == delivery.id)
+            .one()
+        )
+        assert delivery.status == EmailDeliveryStatus.LEASED.value
+        assert delivery.provider_message_id == verified_provider_message_id
+        assert email_log.external_id == verified_provider_message_id
+        assert email_log.resend_status == "delivered"
+        assert attempt.outcome == EmailDeliveryAttemptOutcome.IN_PROGRESS.value
+        assert attempt.provider_message_id is None
 
     @pytest.mark.asyncio
     async def test_reconcile_job_uses_tags_after_email_log_commit_race(
