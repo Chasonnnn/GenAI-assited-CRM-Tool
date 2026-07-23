@@ -140,3 +140,57 @@ class EmailOperationMessageDetail(EmailOperationMessageSummary):
     delivery: EmailOperationDelivery | None
     attempts: list[EmailOperationDeliveryAttempt]
     provider_events: list[EmailOperationProviderEvent]
+
+
+EmailReconciliationStatus = Literal[
+    "pending",
+    "running",
+    "action_required",
+    "resolved",
+    "dismissed",
+]
+EmailReconciliationAction = Literal[
+    "retry_correlation",
+    "link_event",
+    "dismiss",
+    "confirm_sent",
+    "confirm_not_sent",
+]
+
+
+class EmailReconciliationCaseSummary(BaseModel):
+    """Sanitized operator projection for one email reconciliation case."""
+
+    id: UUID
+    case_type: Literal["orphan_webhook", "unknown_delivery"]
+    status: EmailReconciliationStatus
+    reason_code: str
+    version: int
+    provider: Literal["resend"]
+    event_type: str | None
+    event_created_at: datetime | None
+    received_at: datetime | None
+    message_id: UUID | None
+    delivery_id: UUID | None
+    attempt_count: int | None
+    max_attempts: int | None
+    next_attempt_at: datetime | None
+    available_actions: list[EmailReconciliationAction]
+    detected_at: datetime
+    updated_at: datetime
+
+
+class EmailReconciliationCounts(BaseModel):
+    """Organization case totals grouped for the operator queue."""
+
+    monitoring: int
+    action_required: int
+    resolved: int
+
+
+class EmailReconciliationCaseListResponse(BaseModel):
+    """Stable keyset-paginated reconciliation queue."""
+
+    items: list[EmailReconciliationCaseSummary]
+    next_cursor: str | None
+    counts: EmailReconciliationCounts

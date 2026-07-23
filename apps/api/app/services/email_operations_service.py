@@ -15,6 +15,7 @@ from app.db.models import (
     EmailDelivery,
     EmailDeliveryAttempt,
     EmailLog,
+    EmailReconciliationCase,
     ResendSettings,
     ResendWebhookEvent,
 )
@@ -25,6 +26,9 @@ from app.schemas.email_operations import (
     EmailOperationMessageListResponse,
     EmailOperationMessageSummary,
     EmailOperationProviderEvent,
+    EmailReconciliationCaseListResponse,
+    EmailReconciliationCaseSummary,
+    EmailReconciliationCounts,
     EmailOperationsReadinessCheck,
     EmailOperationsReadinessResponse,
     EmailOperationsSummary24h,
@@ -70,6 +74,120 @@ def _decode_cursor(cursor: str) -> tuple[datetime, UUID]:
         json.JSONDecodeError,
     ) as exc:
         raise ValueError("Invalid cursor") from exc
+
+
+def _encode_reconciliation_cursor(*, detected_at: datetime, case_id: UUID) -> str:
+    return _encode_cursor(created_at=detected_at, message_id=case_id)
+
+
+def _decode_reconciliation_cursor(cursor: str) -> tuple[datetime, UUID]:
+    return _decode_cursor(cursor)
+
+
+def _reconciliation_actions(case: EmailReconciliationCase) -> list[str]:
+    if case.status != "action_required":
+        return []
+    if case.case_type == "orphan_webhook":
+        return ["retry_correlation", "link_event", "dismiss"]
+    return ["confirm_sent", "confirm_not_sent"]
+
+
+def _reconciliation_projection(
+    case: EmailReconciliationCase,
+) -> EmailReconciliationCaseSummary:
+    event = case.resend_webhook_event
+    delivery = case.email_delivery
+    next_attempt_at = None
+    if delivery is not None and delivery.status in {"pending", "retry_scheduled"}:
+        next_attempt_at = delivery.run_at
+    return EmailReconciliationCaseSummary(
+        id=case.id,
+        case_type=case.case_type,
+        status=case.status,
+        reason_code=case.reason_code,
+        version=case.version,
+        provider="resend",
+        event_type=event.event_type if event else None,
+        event_created_at=event.event_created_at if event else None,
+        received_at=event.received_at if event else None,
+        message_id=delivery.email_log_id if delivery else None,
+        delivery_id=delivery.id if delivery else None,
+        attempt_count=delivery.attempt_count if delivery else None,
+        max_attempts=delivery.max_attempts if delivery else None,
+        next_attempt_at=next_attempt_at,
+        available_actions=_reconciliation_actions(case),
+        detected_at=case.detected_at,
+        updated_at=case.updated_at,
+    )
+
+
+def list_reconciliation_cases(
+    db: Session,
+    *,
+    organization_id: UUID,
+    limit: int,
+    cursor: str | None,
+    status: str | None,
+) -> EmailReconciliationCaseListResponse:
+    """List only sanitized, source-linked reconciliation cases for one organization."""
+    query = db.query(EmailReconciliationCase).filter(
+        EmailReconciliationCase.organization_id == organization_id
+    )
+    if status == "monitoring":
+        query = query.filter(EmailReconciliationCase.status.in_(("pending", "running")))
+    elif status:
+        query = query.filter(EmailReconciliationCase.status == status)
+    if cursor:
+        cursor_detected_at, cursor_id = _decode_reconciliation_cursor(cursor)
+        query = query.filter(
+            or_(
+                EmailReconciliationCase.detected_at < cursor_detected_at,
+                and_(
+                    EmailReconciliationCase.detected_at == cursor_detected_at,
+                    EmailReconciliationCase.id < cursor_id,
+                ),
+            )
+        )
+
+    rows = (
+        query.order_by(
+            EmailReconciliationCase.detected_at.desc(),
+            EmailReconciliationCase.id.desc(),
+        )
+        .limit(limit + 1)
+        .all()
+    )
+    has_more = len(rows) > limit
+    visible_rows = rows[:limit]
+    next_cursor = None
+    if has_more and visible_rows:
+        last_case = visible_rows[-1]
+        next_cursor = _encode_reconciliation_cursor(
+            detected_at=last_case.detected_at,
+            case_id=last_case.id,
+        )
+
+    count_rows = (
+        db.query(
+            EmailReconciliationCase.status,
+            func.count(EmailReconciliationCase.id),
+        )
+        .filter(EmailReconciliationCase.organization_id == organization_id)
+        .group_by(EmailReconciliationCase.status)
+        .all()
+    )
+    counts_by_status = {row[0]: int(row[1]) for row in count_rows}
+    return EmailReconciliationCaseListResponse(
+        items=[_reconciliation_projection(case) for case in visible_rows],
+        next_cursor=next_cursor,
+        counts=EmailReconciliationCounts(
+            monitoring=counts_by_status.get("pending", 0)
+            + counts_by_status.get("running", 0),
+            action_required=counts_by_status.get("action_required", 0),
+            resolved=counts_by_status.get("resolved", 0)
+            + counts_by_status.get("dismissed", 0),
+        ),
+    )
 
 
 def _summary_projection(

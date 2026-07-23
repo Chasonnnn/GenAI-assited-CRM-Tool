@@ -8,17 +8,45 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db
+from app.core.deps import get_current_session, get_db, require_permission
+from app.core.permissions import PermissionKey as P
 from app.schemas.auth import UserSession
 from app.schemas.email_operations import (
     EmailOperationMessageDetail,
     EmailOperationMessageListResponse,
     EmailOperationsReadinessResponse,
+    EmailReconciliationCaseListResponse,
 )
 from app.services import email_operations_service
 
 
 router = APIRouter(prefix="/email-operations", tags=["email-operations"])
+
+
+@router.get("/reconciliation-cases")
+def list_reconciliation_cases(
+    session: Annotated[UserSession, Depends(require_permission(P.OPS_MANAGE))],
+    db: Annotated[Session, Depends(get_db)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: Annotated[str | None, Query(max_length=1024)] = None,
+    status: Annotated[
+        str | None,
+        Query(
+            pattern="^(monitoring|pending|running|action_required|resolved|dismissed)$"
+        ),
+    ] = None,
+) -> EmailReconciliationCaseListResponse:
+    """List sanitized email reconciliation cases for an operations user."""
+    try:
+        return email_operations_service.list_reconciliation_cases(
+            db,
+            organization_id=session.org_id,
+            limit=limit,
+            cursor=cursor,
+            status=status,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid cursor") from exc
 
 
 @router.get("/readiness")

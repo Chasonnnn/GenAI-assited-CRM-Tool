@@ -524,6 +524,11 @@ class ResendWebhookEvent(Base):
     __table_args__ = (
         UniqueConstraint(
             "organization_id",
+            "id",
+            name="uq_resend_webhook_events_org_id",
+        ),
+        UniqueConstraint(
+            "organization_id",
             "provider_event_id",
             name="uq_resend_webhook_events_org_provider_event",
         ),
@@ -560,6 +565,137 @@ class ResendWebhookEvent(Base):
 
     organization: Mapped["Organization"] = relationship()
     email_log: Mapped["EmailLog | None"] = relationship(back_populates="resend_webhook_events")
+
+
+class EmailReconciliationCase(Base):
+    """PII-safe operator case for an email outcome requiring reconciliation."""
+
+    __tablename__ = "email_reconciliation_cases"
+    __table_args__ = (
+        CheckConstraint(
+            "case_type IN ('orphan_webhook', 'unknown_delivery')",
+            name="ck_email_reconciliation_cases_type",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'running', 'action_required', 'resolved', 'dismissed')",
+            name="ck_email_reconciliation_cases_status",
+        ),
+        CheckConstraint(
+            "version >= 1",
+            name="ck_email_reconciliation_cases_version",
+        ),
+        CheckConstraint(
+            "((case_type = 'orphan_webhook' "
+            "AND resend_webhook_event_id IS NOT NULL "
+            "AND email_delivery_id IS NULL) "
+            "OR (case_type = 'unknown_delivery' "
+            "AND email_delivery_id IS NOT NULL "
+            "AND resend_webhook_event_id IS NULL))",
+            name="ck_email_reconciliation_cases_source",
+        ),
+        CheckConstraint(
+            "((status IN ('resolved', 'dismissed') "
+            "AND resolved_at IS NOT NULL AND resolution_code IS NOT NULL) "
+            "OR (status NOT IN ('resolved', 'dismissed') "
+            "AND resolved_at IS NULL AND resolution_code IS NULL))",
+            name="ck_email_reconciliation_cases_resolution",
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "id",
+            name="uq_email_reconciliation_cases_org_id",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "resend_webhook_event_id"],
+            ["resend_webhook_events.organization_id", "resend_webhook_events.id"],
+            name="fk_email_reconciliation_cases_org_event",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "email_delivery_id"],
+            ["email_deliveries.organization_id", "email_deliveries.id"],
+            name="fk_email_reconciliation_cases_org_delivery",
+            ondelete="CASCADE",
+        ),
+        Index(
+            "uq_email_reconciliation_cases_event",
+            "organization_id",
+            "resend_webhook_event_id",
+            unique=True,
+            postgresql_where=text("resend_webhook_event_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_email_reconciliation_cases_delivery",
+            "organization_id",
+            "email_delivery_id",
+            unique=True,
+            postgresql_where=text("email_delivery_id IS NOT NULL"),
+        ),
+        Index(
+            "idx_email_reconciliation_cases_org_status_detected",
+            "organization_id",
+            "status",
+            "detected_at",
+            "id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    case_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(30),
+        server_default=text("'pending'"),
+        nullable=False,
+    )
+    reason_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, server_default=text("1"), nullable=False)
+    resend_webhook_event_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+    )
+    email_delivery_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+    )
+    detected_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=text("now()"),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=text("now()"),
+        onupdate=text("now()"),
+        nullable=False,
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True,
+    )
+    resolved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolution_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+
+    organization: Mapped["Organization"] = relationship(
+        overlaps="email_delivery,resend_webhook_event"
+    )
+    resend_webhook_event: Mapped["ResendWebhookEvent | None"] = relationship(
+        overlaps="email_delivery,organization"
+    )
+    email_delivery: Mapped["EmailDelivery | None"] = relationship(
+        overlaps="organization,resend_webhook_event"
+    )
+    resolved_by: Mapped["User | None"] = relationship()
 
 
 class EmailLogAttachment(Base):
