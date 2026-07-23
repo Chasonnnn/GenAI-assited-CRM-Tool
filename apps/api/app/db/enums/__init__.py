@@ -17,7 +17,15 @@ from app.db.enums.defaults import (
     DEFAULT_SURROGATE_STATUS,
     DEFAULT_TASK_TYPE,
 )
-from app.db.enums.email import EmailStatus, SuppressionReason
+from app.db.enums.email import (
+    EmailDeliveryAttemptOutcome,
+    EmailDeliveryStatus,
+    EmailProvider,
+    EmailProviderScope,
+    EmailSuppressionPolicy,
+    EmailStatus,
+    SuppressionReason,
+)
 from app.db.enums.entities import EntityType
 from app.db.enums.forms import (
     FieldSensitivity,
@@ -104,6 +112,11 @@ __all__ = [
     "DEFAULT_SURROGATE_STATUS",
     "DEFAULT_TASK_TYPE",
     "EmailStatus",
+    "EmailDeliveryAttemptOutcome",
+    "EmailDeliveryStatus",
+    "EmailProvider",
+    "EmailProviderScope",
+    "EmailSuppressionPolicy",
     "EntityType",
     "EmailDirection",
     "EmailOccurrenceState",

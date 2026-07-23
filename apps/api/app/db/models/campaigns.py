@@ -9,6 +9,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     ForeignKey,
     Index,
     Integer,
@@ -24,7 +25,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
-    from app.db.models import EmailTemplate, Organization, User
+    from app.db.models import EmailLog, EmailTemplate, Organization, User
 
 
 class Campaign(Base):
@@ -178,8 +179,13 @@ class CampaignRecipient(Base):
     __table_args__ = (
         Index("idx_campaign_recipients_run", "run_id"),
         Index("idx_campaign_recipients_entity", "entity_type", "entity_id"),
+        Index("idx_campaign_recipients_email_log", "email_log_id"),
         Index("idx_campaign_recipients_tracking_token", "tracking_token", unique=True),
         UniqueConstraint("run_id", "entity_type", "entity_id", name="uq_campaign_recipient"),
+        CheckConstraint(
+            "send_revision >= 0",
+            name="ck_campaign_recipients_send_revision_nonnegative",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -209,7 +215,21 @@ class CampaignRecipient(Base):
     # Timing
     sent_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
-    # External ID from email service
+    # Current immutable email message and monotonic intentional-send occurrence
+    email_log_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("email_logs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    send_revision: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        server_default=text("0"),
+        nullable=False,
+        comment="Monotonic intentional-send occurrence used for provider idempotency",
+    )
+
+    # Provider-assigned message ID (never an internal EmailLog ID)
     external_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Tracking - unique index 'idx_campaign_recipients_tracking_token' created by migration c3e9f2a1b8d4
@@ -223,6 +243,7 @@ class CampaignRecipient(Base):
 
     # Relationships
     run: Mapped["CampaignRun"] = relationship(back_populates="recipients")
+    email_log: Mapped["EmailLog | None"] = relationship(foreign_keys=[email_log_id])
     tracking_events: Mapped[list["CampaignTrackingEvent"]] = relationship(
         back_populates="recipient", cascade="all, delete-orphan"
     )

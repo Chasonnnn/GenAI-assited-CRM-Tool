@@ -9,7 +9,9 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -18,12 +20,15 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import CITEXT, UUID
+from sqlalchemy.dialects.postgresql import CITEXT, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.enums import (
     DEFAULT_EMAIL_STATUS,
+    EmailDeliveryAttemptOutcome,
+    EmailDeliveryStatus,
+    EmailSuppressionPolicy,
 )
 
 if TYPE_CHECKING:
@@ -137,8 +142,25 @@ class EmailLog(Base):
 
     __tablename__ = "email_logs"
     __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "id",
+            name="uq_email_logs_org_id",
+        ),
+        CheckConstraint(
+            "suppression_policy IN "
+            f"('{EmailSuppressionPolicy.ENFORCE_ALL.value}', "
+            f"'{EmailSuppressionPolicy.ALLOW_OPT_OUT.value}')",
+            name="ck_email_logs_suppression_policy",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(attachment_manifest) = 'array'",
+            name="ck_email_logs_attachment_manifest_array",
+        ),
         Index("idx_email_logs_org", "organization_id", "created_at"),
+        Index("idx_email_logs_org_external_id", "organization_id", "external_id"),
         Index("idx_email_logs_surrogate", "surrogate_id", "created_at"),
+        Index("idx_email_logs_actor_user", "actor_user_id"),
         Index(
             "uq_email_logs_idempotency",
             "organization_id",
@@ -167,12 +189,48 @@ class EmailLog(Base):
     surrogate_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="SET NULL"), nullable=True
     )
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
     recipient_email: Mapped[str] = mapped_column(String(255), nullable=False)
     subject: Mapped[str] = mapped_column(String(200), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
+    text_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    from_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    reply_to_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    headers: Mapped[dict] = mapped_column(
+        JSONB,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+        nullable=False,
+    )
+    safe_tags: Mapped[list] = mapped_column(
+        JSONB,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+        nullable=False,
+    )
+    attachment_manifest: Mapped[list] = mapped_column(
+        JSONB,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+        nullable=False,
+    )
+    content_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    purpose: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    suppression_policy: Mapped[str] = mapped_column(
+        String(20),
+        server_default=text(f"'{EmailSuppressionPolicy.ENFORCE_ALL.value}'"),
+        nullable=False,
+    )
+    source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    provider: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    provider_scope: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    provider_account_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(256), nullable=True)
     status: Mapped[str] = mapped_column(
         String(20),
         server_default=text(f"'{DEFAULT_EMAIL_STATUS.value}'"),
@@ -187,12 +245,15 @@ class EmailLog(Base):
     )  # 'sent' | 'delivered' | 'bounced' | 'complained'
     delivered_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     bounced_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
-    bounce_type: Mapped[str | None] = mapped_column(String(20), nullable=True)  # 'hard' | 'soft'
+    bounce_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     complained_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     opened_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     open_count: Mapped[int] = mapped_column(Integer, server_default=text("0"), nullable=False)
     clicked_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     click_count: Mapped[int] = mapped_column(Integer, server_default=text("0"), nullable=False)
+    resend_status_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
@@ -204,6 +265,301 @@ class EmailLog(Base):
         back_populates="email_log",
         cascade="all, delete-orphan",
     )
+    resend_webhook_events: Mapped[list["ResendWebhookEvent"]] = relationship(
+        back_populates="email_log",
+        cascade="all, delete-orphan",
+    )
+    delivery: Mapped["EmailDelivery | None"] = relationship(
+        back_populates="email_log",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
+
+class EmailDelivery(Base):
+    """Leased transactional outbox row for one immutable email message."""
+
+    __tablename__ = "email_deliveries"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN "
+            "('pending', 'leased', 'retry_scheduled', 'sent', 'failed', "
+            "'cancelled', 'reconciliation_required')",
+            name="ck_email_deliveries_status",
+        ),
+        CheckConstraint(
+            "attempt_count >= 0 AND max_attempts >= 1 AND attempt_count <= max_attempts",
+            name="ck_email_deliveries_attempt_bounds",
+        ),
+        CheckConstraint(
+            "(status = 'leased' AND lease_token IS NOT NULL "
+            "AND lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL) "
+            "OR (status <> 'leased' AND lease_token IS NULL "
+            "AND lease_owner IS NULL AND lease_expires_at IS NULL)",
+            name="ck_email_deliveries_lease_coherence",
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "id",
+            name="uq_email_deliveries_org_id",
+        ),
+        UniqueConstraint(
+            "email_log_id",
+            name="uq_email_deliveries_email_log",
+        ),
+        UniqueConstraint(
+            "provider",
+            "provider_account_id",
+            "idempotency_key",
+            name="uq_email_deliveries_provider_idempotency",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "email_log_id"],
+            ["email_logs.organization_id", "email_logs.id"],
+            name="fk_email_deliveries_org_email_log",
+            ondelete="CASCADE",
+        ),
+        Index(
+            "idx_email_deliveries_due",
+            "status",
+            "run_at",
+            postgresql_where=text("status IN ('pending', 'retry_scheduled')"),
+        ),
+        Index(
+            "idx_email_deliveries_expired_lease",
+            "lease_expires_at",
+            postgresql_where=text("status = 'leased'"),
+        ),
+        Index("idx_email_deliveries_org_created", "organization_id", "created_at"),
+        Index(
+            "uq_email_deliveries_provider_message",
+            "provider",
+            "provider_account_id",
+            "provider_message_id",
+            unique=True,
+            postgresql_where=text("provider_message_id IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    email_log_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
+    provider_scope: Mapped[str] = mapped_column(String(20), nullable=False)
+    provider_account_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider_credential_fingerprint: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_expires_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(30),
+        server_default=text(f"'{EmailDeliveryStatus.PENDING.value}'"),
+        nullable=False,
+    )
+    run_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+    attempt_count: Mapped[int] = mapped_column(Integer, server_default=text("0"), nullable=False)
+    max_attempts: Mapped[int] = mapped_column(Integer, server_default=text("5"), nullable=False)
+    lease_token: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    lease_owner: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    first_attempt_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    last_attempt_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    last_error_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=text("now()"),
+        onupdate=text("now()"),
+        nullable=False,
+    )
+
+    organization: Mapped["Organization"] = relationship(overlaps="delivery,email_log")
+    email_log: Mapped["EmailLog"] = relationship(
+        back_populates="delivery",
+        overlaps="organization",
+    )
+    attempts: Mapped[list["EmailDeliveryAttempt"]] = relationship(
+        back_populates="delivery",
+        cascade="all, delete-orphan",
+        order_by="EmailDeliveryAttempt.attempt_number",
+    )
+
+
+class EmailDeliveryAttempt(Base):
+    """Sanitized diagnostic record for one provider delivery attempt."""
+
+    __tablename__ = "email_delivery_attempts"
+    __table_args__ = (
+        CheckConstraint(
+            "attempt_number >= 1",
+            name="ck_email_delivery_attempt_number",
+        ),
+        CheckConstraint(
+            "outcome IN "
+            "('in_progress', 'succeeded', 'retryable_error', "
+            "'terminal_error', 'lease_expired')",
+            name="ck_email_delivery_attempt_outcome",
+        ),
+        CheckConstraint(
+            "retry_after_seconds IS NULL OR retry_after_seconds >= 0",
+            name="ck_email_delivery_attempt_retry_after",
+        ),
+        UniqueConstraint(
+            "delivery_id",
+            "attempt_number",
+            name="uq_email_delivery_attempt_number",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "delivery_id"],
+            ["email_deliveries.organization_id", "email_deliveries.id"],
+            name="fk_email_delivery_attempts_org_delivery",
+            ondelete="CASCADE",
+        ),
+        Index(
+            "idx_email_delivery_attempts_org_delivery",
+            "organization_id",
+            "delivery_id",
+            "started_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    delivery_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    lease_token: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    outcome: Mapped[str] = mapped_column(
+        String(30),
+        server_default=text(f"'{EmailDeliveryAttemptOutcome.IN_PROGRESS.value}'"),
+        nullable=False,
+    )
+    provider_http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    retry_after_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    organization: Mapped["Organization"] = relationship(overlaps="attempts,delivery")
+    delivery: Mapped["EmailDelivery"] = relationship(
+        back_populates="attempts",
+        overlaps="organization",
+    )
+
+
+class EmailProviderAdmission(Base):
+    """Durable next-request slot for one provider credential account."""
+
+    __tablename__ = "email_provider_admission"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "provider_account_id",
+            name="uq_email_provider_admission_account",
+        ),
+        Index(
+            "idx_email_provider_admission_next_slot",
+            "next_slot_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
+    provider_account_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    next_slot_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=text("now()"),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=text("now()"),
+        onupdate=text("now()"),
+        nullable=False,
+    )
+
+
+class ResendWebhookEvent(Base):
+    """Verified Resend webhook event retained for deduplication and audit."""
+
+    __tablename__ = "resend_webhook_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "provider_event_id",
+            name="uq_resend_webhook_events_org_provider_event",
+        ),
+        Index(
+            "idx_resend_webhook_events_org_email_time",
+            "organization_id",
+            "email_log_id",
+            "event_created_at",
+        ),
+        Index("idx_resend_webhook_events_processed_at", "processed_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    email_log_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("email_logs.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    provider_event_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    event_created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    received_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+
+    organization: Mapped["Organization"] = relationship()
+    email_log: Mapped["EmailLog | None"] = relationship(back_populates="resend_webhook_events")
 
 
 class EmailLogAttachment(Base):

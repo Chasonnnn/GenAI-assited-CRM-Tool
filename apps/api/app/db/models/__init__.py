@@ -40,7 +40,16 @@ from app.db.models.auth import (
     UserSession,
 )
 from app.db.models.campaigns import Campaign, CampaignRecipient, CampaignRun, CampaignTrackingEvent
-from app.db.models.email import EmailLog, EmailLogAttachment, EmailSuppression, EmailTemplate
+from app.db.models.email import (
+    EmailDelivery,
+    EmailDeliveryAttempt,
+    EmailLog,
+    EmailLogAttachment,
+    EmailProviderAdmission,
+    EmailSuppression,
+    EmailTemplate,
+    ResendWebhookEvent,
+)
 from app.db.models.forms import (
     Form,
     FormFieldMapping,
@@ -180,9 +189,12 @@ __all__ = [
     "DataRetentionPolicy",
     "ImportMappingCorrection",
     "EmailLog",
+    "EmailDelivery",
+    "EmailDeliveryAttempt",
     "EmailLogAttachment",
     "EmailSuppression",
     "EmailTemplate",
+    "ResendWebhookEvent",
     "EntityNote",
     "EntityVersion",
     "ExportJob",
@@ -281,6 +293,7 @@ __all__ = [
     "EmailMessageThreadRef",
     "EmailMessageOccurrence",
     "EmailMessageAttachment",
+    "EmailProviderAdmission",
     "User",
     "UserIntegration",
     "UserNotificationSettings",
