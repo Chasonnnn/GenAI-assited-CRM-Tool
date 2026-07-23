@@ -16,6 +16,77 @@ branch_labels = None
 depends_on = None
 
 
+def _backfill_reconciliation_cases(connection) -> None:
+    """Backfill only source identifiers and controlled reconciliation codes."""
+    connection.execute(
+        sa.text(
+            """
+            INSERT INTO email_reconciliation_cases (
+                organization_id,
+                case_type,
+                status,
+                reason_code,
+                resend_webhook_event_id,
+                detected_at,
+                updated_at
+            )
+            SELECT
+                event.organization_id,
+                'orphan_webhook',
+                'pending',
+                'correlation_pending',
+                event.id,
+                event.received_at,
+                event.received_at
+            FROM resend_webhook_events AS event
+            WHERE event.processed_at IS NULL
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM email_reconciliation_cases AS existing
+                  WHERE existing.organization_id = event.organization_id
+                    AND existing.resend_webhook_event_id = event.id
+              )
+            """
+        )
+    )
+    connection.execute(
+        sa.text(
+            """
+            INSERT INTO email_reconciliation_cases (
+                organization_id,
+                case_type,
+                status,
+                reason_code,
+                email_delivery_id,
+                detected_at,
+                updated_at
+            )
+            SELECT
+                delivery.organization_id,
+                'unknown_delivery',
+                'action_required',
+                CASE delivery.last_error_type
+                    WHEN 'idempotency_window_expired' THEN 'idempotency_window_expired'
+                    WHEN 'lease_expired' THEN 'delivery_lease_expired'
+                    WHEN 'provider_outcome_unknown' THEN 'provider_outcome_unknown'
+                    ELSE 'provider_outcome_unknown'
+                END,
+                delivery.id,
+                COALESCE(delivery.completed_at, delivery.updated_at, delivery.created_at),
+                COALESCE(delivery.completed_at, delivery.updated_at, delivery.created_at)
+            FROM email_deliveries AS delivery
+            WHERE delivery.status = 'reconciliation_required'
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM email_reconciliation_cases AS existing
+                  WHERE existing.organization_id = delivery.organization_id
+                    AND existing.email_delivery_id = delivery.id
+              )
+            """
+        )
+    )
+
+
 def upgrade() -> None:
     op.create_unique_constraint(
         "uq_resend_webhook_events_org_id",
@@ -138,6 +209,7 @@ def upgrade() -> None:
         "email_reconciliation_cases",
         ["organization_id", "status", "detected_at", "id"],
     )
+    _backfill_reconciliation_cases(op.get_bind())
 
 
 def downgrade() -> None:

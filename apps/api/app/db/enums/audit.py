@@ -41,6 +41,7 @@ class AuditEventType(str, Enum):
     DATA_VIEW_SURROGATE = "data_view_surrogate"
     DATA_VIEW_NOTE = "data_view_note"
     DATA_EMAIL_SENT = "data_email_sent"
+    EMAIL_RECONCILIATION_RETRIED = "email_reconciliation_retried"
     PHI_VIEWED = "phi_viewed"
     DATA_IMPORT_STARTED = "data_import_started"
     DATA_IMPORT_COMPLETED = "data_import_completed"

@@ -20,6 +20,7 @@ from app.db.models import (
     EmailDeliveryAttempt,
     EmailLog,
     EmailLogAttachment,
+    EmailReconciliationCase,
     EmailSuppression,
     Organization,
 )
@@ -491,6 +492,18 @@ def test_retry_after_idempotency_expiry_requires_reconciliation(db, test_org):
     )
     assert attempt.outcome == EmailDeliveryAttemptOutcome.TERMINAL_ERROR.value
     assert attempt.retry_after_seconds is None
+    reconciliation_case = (
+        db.query(EmailReconciliationCase)
+        .filter(
+            EmailReconciliationCase.organization_id == test_org.id,
+            EmailReconciliationCase.email_delivery_id == delivery.id,
+        )
+        .one()
+    )
+    assert reconciliation_case.case_type == "unknown_delivery"
+    assert reconciliation_case.status == "action_required"
+    assert reconciliation_case.reason_code == "idempotency_window_expired"
+    assert not hasattr(reconciliation_case, "last_error")
 
 
 def test_due_retry_past_idempotency_expiry_is_not_sent_again(db, test_org):
@@ -668,6 +681,17 @@ def test_expired_final_lease_requires_reconciliation_instead_of_reclaiming_forev
     assert delivery.lease_token is None
     assert email_log.status == EmailStatus.PENDING.value
     assert "operator reconciliation" in (email_log.error or "").lower()
+    reconciliation_case = (
+        db.query(EmailReconciliationCase)
+        .filter(
+            EmailReconciliationCase.organization_id == test_org.id,
+            EmailReconciliationCase.email_delivery_id == delivery.id,
+        )
+        .one()
+    )
+    assert reconciliation_case.status == "action_required"
+    assert reconciliation_case.reason_code == "delivery_lease_expired"
+    assert reconciliation_case.detected_at == expired_at
 
 
 def test_queue_rendered_email_rolls_back_with_the_callers_transaction(

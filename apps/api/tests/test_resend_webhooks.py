@@ -1373,7 +1373,7 @@ class TestResendWebhookHandler:
         from datetime import datetime, timedelta, timezone
 
         from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
-        from app.db.models import EmailDeliveryAttempt
+        from app.db.models import EmailDeliveryAttempt, EmailReconciliationCase
         from app.services.email_delivery_service import (
             record_delivery_reconciliation_required,
         )
@@ -1430,6 +1430,17 @@ class TestResendWebhookHandler:
         assert attempt.outcome == EmailDeliveryAttemptOutcome.TERMINAL_ERROR.value
         assert attempt.error_type == "transport_error"
         assert attempt.provider_message_id is None
+        reconciliation_case = (
+            db.query(EmailReconciliationCase)
+            .filter(
+                EmailReconciliationCase.organization_id == test_org.id,
+                EmailReconciliationCase.email_delivery_id == delivery.id,
+            )
+            .one()
+        )
+        assert reconciliation_case.status == "resolved"
+        assert reconciliation_case.reason_code == "provider_acceptance_verified"
+        assert reconciliation_case.resolution_code == "provider_evidence_superseded"
 
     @pytest.mark.asyncio
     async def test_conflicting_provider_response_does_not_overwrite_verified_webhook_identity(
@@ -1509,7 +1520,12 @@ class TestResendWebhookHandler:
         import json
 
         from app.db.enums import EmailStatus
-        from app.db.models import EmailLog, Job, ResendWebhookEvent
+        from app.db.models import (
+            EmailLog,
+            EmailReconciliationCase,
+            Job,
+            ResendWebhookEvent,
+        )
         from app.jobs.handlers.resend import process_resend_event_reconcile
 
         _existing_log, settings, webhook_secret = setup_email_log
@@ -1579,6 +1595,17 @@ class TestResendWebhookHandler:
         assert committed_email_log.resend_status == "delivered"
         assert event.email_log_id == committed_email_log.id
         assert event.processed_at is not None
+        reconciliation_case = (
+            db.query(EmailReconciliationCase)
+            .filter(
+                EmailReconciliationCase.organization_id == test_org.id,
+                EmailReconciliationCase.resend_webhook_event_id == event.id,
+            )
+            .one()
+        )
+        assert reconciliation_case.status == "resolved"
+        assert reconciliation_case.resolution_code == "correlated_automatically"
+        assert reconciliation_case.resolved_at is not None
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -1830,7 +1857,7 @@ class TestResendWebhookHandler:
         """Signed events survive the send/commit race without consuming provider retries."""
         import json
 
-        from app.db.models import Job, ResendWebhookEvent
+        from app.db.models import EmailReconciliationCase, Job, ResendWebhookEvent
         from app.services import resend_settings_service
 
         settings = resend_settings_service.get_or_create_resend_settings(
@@ -1888,6 +1915,17 @@ class TestResendWebhookHandler:
             .one()
         )
         assert reconcile_job.status == "pending"
+        reconciliation_case = (
+            db.query(EmailReconciliationCase)
+            .filter(
+                EmailReconciliationCase.organization_id == test_org.id,
+                EmailReconciliationCase.resend_webhook_event_id == event.id,
+            )
+            .one()
+        )
+        assert reconciliation_case.case_type == "orphan_webhook"
+        assert reconciliation_case.status == "pending"
+        assert reconciliation_case.reason_code == "correlation_pending"
 
         from datetime import datetime, timedelta, timezone
 

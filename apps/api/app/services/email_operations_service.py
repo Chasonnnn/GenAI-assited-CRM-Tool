@@ -92,7 +92,7 @@ def _reconciliation_actions(case: EmailReconciliationCase) -> list[str]:
     return ["confirm_sent", "confirm_not_sent"]
 
 
-def _reconciliation_projection(
+def project_reconciliation_case(
     case: EmailReconciliationCase,
 ) -> EmailReconciliationCaseSummary:
     event = case.resend_webhook_event
@@ -178,7 +178,7 @@ def list_reconciliation_cases(
     )
     counts_by_status = {row[0]: int(row[1]) for row in count_rows}
     return EmailReconciliationCaseListResponse(
-        items=[_reconciliation_projection(case) for case in visible_rows],
+        items=[project_reconciliation_case(case) for case in visible_rows],
         next_cursor=next_cursor,
         counts=EmailReconciliationCounts(
             monitoring=counts_by_status.get("pending", 0)

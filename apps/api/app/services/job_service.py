@@ -241,6 +241,13 @@ def mark_job_failed(db: Session, job: Job, error: str) -> Job:
         job.status = JobStatus.PENDING.value
     else:
         job.status = JobStatus.FAILED.value
+        if job.job_type == JobType.RESEND_EVENT_RECONCILE.value:
+            from app.services import email_reconciliation_service
+
+            email_reconciliation_service.mark_orphan_case_exhausted_for_job(
+                db,
+                job=job,
+            )
     db.commit()
     db.refresh(job)
     return job

@@ -126,6 +126,7 @@ _RESEND_STATUS_RANK = {
 
 
 def _mark_reconciliation_required(
+    db: Session,
     delivery: EmailDelivery,
     *,
     completed_at: datetime,
@@ -142,6 +143,14 @@ def _mark_reconciliation_required(
     delivery.lease_expires_at = None
     delivery.email_log.status = EmailStatus.PENDING.value
     delivery.email_log.error = error_message
+    from app.services import email_reconciliation_service
+
+    email_reconciliation_service.ensure_unknown_delivery_case(
+        db,
+        delivery=delivery,
+        error_type=error_type,
+        detected_at=completed_at,
+    )
 
 
 def _assert_provider_message_identity(
@@ -838,7 +847,7 @@ def claim_due_deliveries(
             if stale_attempt is not None:
                 stale_attempt.outcome = EmailDeliveryAttemptOutcome.LEASE_EXPIRED.value
                 stale_attempt.completed_at = claimed_at
-            _mark_reconciliation_required(delivery, completed_at=claimed_at)
+            _mark_reconciliation_required(db, delivery, completed_at=claimed_at)
             _project_appointment_email_delivery(
                 db,
                 email_log=delivery.email_log,
@@ -854,6 +863,7 @@ def claim_due_deliveries(
                 stale_attempt.completed_at = claimed_at
             if delivery.attempt_count >= delivery.max_attempts:
                 _mark_reconciliation_required(
+                    db,
                     delivery,
                     completed_at=claimed_at,
                     error_type="lease_expired",
@@ -1222,6 +1232,7 @@ def record_delivery_reconciliation_required(
     )
     if not provider_acceptance_verified:
         _mark_reconciliation_required(
+            db,
             delivery,
             completed_at=completed_at,
             error_type=safe_error_type,
@@ -1326,7 +1337,7 @@ def record_delivery_failure(
         delivery.run_at = failed_at + retry_delay
         email_log.status = EmailStatus.PENDING.value
     elif idempotency_window_expired:
-        _mark_reconciliation_required(delivery, completed_at=failed_at)
+        _mark_reconciliation_required(db, delivery, completed_at=failed_at)
         _project_appointment_email_delivery(
             db,
             email_log=email_log,
@@ -1336,6 +1347,7 @@ def record_delivery_failure(
         )
     elif provider_outcome_unknown:
         _mark_reconciliation_required(
+            db,
             delivery,
             completed_at=failed_at,
             error_type="provider_outcome_unknown",

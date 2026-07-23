@@ -5,10 +5,15 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_permission
+from app.core.deps import (
+    get_current_session,
+    get_db,
+    require_csrf_header,
+    require_permission,
+)
 from app.core.permissions import PermissionKey as P
 from app.schemas.auth import UserSession
 from app.schemas.email_operations import (
@@ -16,11 +21,44 @@ from app.schemas.email_operations import (
     EmailOperationMessageListResponse,
     EmailOperationsReadinessResponse,
     EmailReconciliationCaseListResponse,
+    EmailReconciliationCaseSummary,
+    EmailReconciliationRetryRequest,
 )
-from app.services import email_operations_service
+from app.services import email_operations_service, email_reconciliation_service
 
 
 router = APIRouter(prefix="/email-operations", tags=["email-operations"])
+
+
+@router.post(
+    "/reconciliation-cases/{case_id}/retry-correlation",
+    dependencies=[Depends(require_csrf_header)],
+)
+def retry_reconciliation_correlation(
+    case_id: UUID,
+    body: EmailReconciliationRetryRequest,
+    request: Request,
+    session: Annotated[UserSession, Depends(require_permission(P.OPS_MANAGE))],
+    db: Annotated[Session, Depends(get_db)],
+) -> EmailReconciliationCaseSummary:
+    """Retry only local correlation for an exhausted orphan provider event."""
+    try:
+        case = email_reconciliation_service.retry_orphan_correlation(
+            db,
+            organization_id=session.org_id,
+            case_id=case_id,
+            expected_version=body.expected_version,
+            actor_user_id=session.user_id,
+            request=request,
+        )
+    except email_reconciliation_service.ReconciliationCaseNotFound as exc:
+        raise HTTPException(status_code=404, detail="Reconciliation case not found") from exc
+    except email_reconciliation_service.ReconciliationCaseConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="Reconciliation case changed; refresh and try again",
+        ) from exc
+    return email_operations_service.project_reconciliation_case(case)
 
 
 @router.get("/reconciliation-cases")

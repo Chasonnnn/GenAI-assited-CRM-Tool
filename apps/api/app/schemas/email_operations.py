@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 ReadinessOverall = Literal["ready", "needs_attention", "not_configured"]
@@ -194,3 +194,9 @@ class EmailReconciliationCaseListResponse(BaseModel):
     items: list[EmailReconciliationCaseSummary]
     next_cursor: str | None
     counts: EmailReconciliationCounts
+
+
+class EmailReconciliationRetryRequest(BaseModel):
+    """Optimistically fenced request to retry local event correlation."""
+
+    expected_version: int = Field(ge=1)

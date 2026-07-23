@@ -234,7 +234,7 @@ def _accept_verified_event(
 def _enqueue_event_reconciliation(db: Session, event: ResendWebhookEvent) -> None:
     """Ensure an accepted orphan event has a live bounded reconciliation job."""
     from app.db.enums import JobStatus, JobType
-    from app.services import job_service
+    from app.services import email_reconciliation_service, job_service
 
     idempotency_key = f"resend-event-reconcile/{event.organization_id}/{event.provider_event_id}"
     existing = job_service.get_job_by_idempotency_key(
@@ -253,6 +253,18 @@ def _enqueue_event_reconciliation(db: Session, event: ResendWebhookEvent) -> Non
             )
             existing.run_at = datetime.now(timezone.utc) + timedelta(seconds=5)
             existing.max_attempts = _EVENT_RECONCILE_MAX_ATTEMPTS
+            email_reconciliation_service.ensure_orphan_webhook_case(
+                db,
+                event=event,
+                status="pending",
+                reason_code="correlation_retried",
+                visible_transition=True,
+            )
+        else:
+            email_reconciliation_service.ensure_orphan_webhook_case(
+                db,
+                event=event,
+            )
         return
 
     job = job_service.enqueue_job(
@@ -267,6 +279,10 @@ def _enqueue_event_reconciliation(db: Session, event: ResendWebhookEvent) -> Non
     # Keep the bounded retry horizon beyond the normal two-minute delivery
     # lease so provider events can survive a send/commit race.
     job.max_attempts = _EVENT_RECONCILE_MAX_ATTEMPTS
+    email_reconciliation_service.ensure_orphan_webhook_case(
+        db,
+        event=event,
+    )
 
 
 def _campaign_recipient_for_email(db: Session, email_log: EmailLog):
@@ -676,6 +692,17 @@ def _process_verified_payload(
     )
     locked_event.email_log_id = locked_email_log.id
     locked_event.processed_at = datetime.now(timezone.utc)
+    from app.services import email_reconciliation_service
+
+    email_reconciliation_service.resolve_orphan_webhook_case(
+        db,
+        event=locked_event,
+    )
+    if locked_delivery is not None:
+        email_reconciliation_service.resolve_unknown_delivery_case(
+            db,
+            delivery=locked_delivery,
+        )
     db.commit()
     return {"status": "ok"}
 
