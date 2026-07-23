@@ -51,6 +51,7 @@ import {
     useDeleteSubmissionFile,
 } from "@/lib/hooks/use-forms"
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates"
+import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 import {
     exportSubmissionPdf,
     getSubmissionFileDownloadUrl,
@@ -1860,6 +1861,56 @@ function createSurrogateApplicationLinkHandlers(input: SurrogateApplicationLinkH
     return { copyFormLink, handleGenerateFormLink, handleSendEmailLink }
 }
 
+type SurrogateApplicationSendSelectionInput = {
+    baseUrl: string
+    emailTemplates: EmailTemplateListItem[]
+    selectedIntakeLinkIdOverride: string
+    selectedTemplateIdOverride: string
+    sendableIntakeLinks: FormIntakeLinkRead[]
+    setFormLink: (value: string) => void
+    setFormLinkCopied: (value: boolean) => void
+    setSelectedIntakeLinkIdOverride: (value: string) => void
+    setSelectedTemplateIdOverride: (value: string) => void
+    setSendOccurrenceId: (value: string | null) => void
+}
+
+function createSurrogateApplicationSendSelection(
+    input: SurrogateApplicationSendSelectionInput,
+) {
+    const selectedIntakeLinkId = input.sendableIntakeLinks.some(
+        (link) => link.id === input.selectedIntakeLinkIdOverride,
+    )
+        ? input.selectedIntakeLinkIdOverride
+        : input.sendableIntakeLinks[0]?.id || ""
+    const selectedIntakeLink =
+        input.sendableIntakeLinks.find((link) => link.id === selectedIntakeLinkId) || null
+    const selectedTemplateId = input.emailTemplates.some(
+        (template) => template.id === input.selectedTemplateIdOverride,
+    )
+        ? input.selectedTemplateIdOverride
+        : input.emailTemplates[0]?.id || ""
+    const selectIntakeLinkForSend = (value: string) => {
+        input.setSelectedIntakeLinkIdOverride(value)
+        input.setSendOccurrenceId(null)
+        const nextLink = input.sendableIntakeLinks.find((link) => link.id === value)
+        if (nextLink) {
+            input.setFormLink(resolveIntakeLink(input.baseUrl, nextLink))
+            input.setFormLinkCopied(false)
+        }
+    }
+    const selectTemplateForSend = (value: string) => {
+        input.setSelectedTemplateIdOverride(value)
+        input.setSendOccurrenceId(null)
+    }
+    return {
+        selectedIntakeLink,
+        selectedIntakeLinkId,
+        selectedTemplateId,
+        selectIntakeLinkForSend,
+        selectTemplateForSend,
+    }
+}
+
 type SurrogateApplicationFileHandlersInput = {
     deleteFileMutation: ReturnType<typeof useDeleteSubmissionFile>
     setDeletingFileId: (value: string | null) => void
@@ -2095,29 +2146,17 @@ export function SurrogateApplicationTab({
 
     const activeIntakeLinks = intakeLinks.filter((link) => link.is_active)
     const sendableIntakeLinks = activeIntakeLinks.length > 0 ? activeIntakeLinks : intakeLinks
-    const selectedIntakeLinkId =
-        sendableIntakeLinks.some((link) => link.id === selectedIntakeLinkIdOverride)
-            ? selectedIntakeLinkIdOverride
-            : sendableIntakeLinks[0]?.id || ""
-    const selectedIntakeLink =
-        sendableIntakeLinks.find((link) => link.id === selectedIntakeLinkId) || null
-    const selectedTemplateId =
-        emailTemplates.some((template) => template.id === selectedTemplateIdOverride)
-            ? selectedTemplateIdOverride
-            : emailTemplates[0]?.id || ""
-    const selectIntakeLinkForSend = (value: string) => {
-        setSelectedIntakeLinkIdOverride(value)
-        setSendOccurrenceId(null)
-        const nextLink = sendableIntakeLinks.find((link) => link.id === value)
-        if (nextLink) {
-            setFormLink(resolveIntakeLink(baseUrl, nextLink))
-            setFormLinkCopied(false)
-        }
-    }
-    const selectTemplateForSend = (value: string) => {
-        setSelectedTemplateIdOverride(value)
-        setSendOccurrenceId(null)
-    }
+    const {
+        selectedIntakeLink,
+        selectedIntakeLinkId,
+        selectedTemplateId,
+        selectIntakeLinkForSend,
+        selectTemplateForSend,
+    } = createSurrogateApplicationSendSelection({
+        baseUrl, emailTemplates, selectedIntakeLinkIdOverride, selectedTemplateIdOverride,
+        sendableIntakeLinks, setFormLink, setFormLinkCopied, setSelectedIntakeLinkIdOverride,
+        setSelectedTemplateIdOverride, setSendOccurrenceId,
+    })
     const submissionPages = submission?.schema_snapshot?.pages || []
     const submissionFileFields = submissionPages.flatMap((page) =>
         page.fields.filter((field) => field.type === "file"),
