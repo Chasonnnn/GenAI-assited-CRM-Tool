@@ -382,6 +382,8 @@ function useSurrogateDetailDataValue({
                 entityType: "surrogate",
                 entityId: surrogate.id,
                 entityName: `Surrogate #${surrogate.surrogate_number} - ${surrogate.full_name}`,
+                entityContextLabel: `Surrogate ${surrogate.surrogate_number}`,
+                entityStatusLabel: statusLabel,
             }
             : null
     )

@@ -1,57 +1,78 @@
 "use client"
 
-
-import { Button } from "@/components/ui/button"
-import * as React from "react"
-import { useAIContext } from "@/lib/context/ai-context"
 import { AIChatPanel } from "./AIChatPanel"
-import { cn } from "@/lib/utils"
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetTitle,
+} from "@/components/ui/sheet"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { useAIContext } from "@/lib/context/ai-context"
+
+function getAIChatFinalFocus() {
+    return document.querySelector<HTMLElement>("[data-ai-chat-trigger]")
+}
 
 export function AIChatDrawer() {
-    const { isOpen, closePanel, entityType, entityId, entityName, canUseAI } = useAIContext()
+    const {
+        isOpen,
+        closePanel,
+        entityType,
+        entityId,
+        entityName,
+        entityContextLabel,
+        entityStatusLabel,
+        canUseAI,
+    } = useAIContext()
+    const isMobile = useIsMobile()
 
-    // Don't render if AI is not available or panel is closed
-    if (!canUseAI || !isOpen) {
+    if (!canUseAI) {
         return null
     }
 
-    // Determine props for AIChatPanel
-    // Support surrogate and task context - otherwise works in global mode
-    // (Backend chat endpoint accepts entity_type: surrogate|task|global)
-    const getChatProps = () => {
-        if ((entityType === "surrogate" || entityType === "task") && entityId && entityName) {
-            return { entityType: entityType as "surrogate" | "task", entityId, entityName }
-        }
-        return { entityType: null, entityId: null, entityName: null }
-    }
-    const chatProps = getChatProps()
+    const chatProps =
+        (entityType === "surrogate" || entityType === "task") &&
+        entityId &&
+        entityName
+            ? {
+                entityType,
+                entityId,
+                entityName,
+                entityContextLabel,
+                entityStatusLabel,
+            }
+            : {
+                entityType: null,
+                entityId: null,
+                entityName: null,
+                entityContextLabel: null,
+                entityStatusLabel: null,
+            }
 
     return (
-        <>
-            {/* Backdrop for mobile */}
-            <Button unstyled
-                type="button"
-                aria-label="Close AI chat drawer"
-                className={cn(
-                    "fixed inset-0 z-40 bg-background/80 backdrop-blur-sm md:hidden",
-                    isOpen ? "block" : "hidden"
-                )}
-                onClick={closePanel}
-            />
-
-            {/* Drawer */}
-            <div
-                className={cn(
-                    "fixed inset-y-0 right-0 z-50 w-full max-w-md border-l bg-background shadow-xl transition-transform duration-300 ease-in-out",
-                    "md:w-[400px]",
-                    isOpen ? "translate-x-0" : "translate-x-full"
-                )}
+        <Sheet
+            open={isOpen}
+            onOpenChange={(open) => {
+                if (!open) closePanel()
+            }}
+            modal={isMobile}
+            disablePointerDismissal={!isMobile}
+        >
+            <SheetContent
+                side="right"
+                showCloseButton={false}
+                showOverlay={isMobile}
+                overlayClassName="bg-background/80 backdrop-blur-sm"
+                finalFocus={getAIChatFinalFocus}
+                className="w-full! max-w-none! p-0 md:w-[400px]!"
             >
-                <AIChatPanel
-                    {...chatProps}
-                    onClose={closePanel}
-                />
-            </div>
-        </>
+                <SheetTitle className="sr-only">AI Assistant</SheetTitle>
+                <SheetDescription className="sr-only">
+                    Context-aware assistant for the current workspace record.
+                </SheetDescription>
+                <AIChatPanel {...chatProps} onClose={closePanel} />
+            </SheetContent>
+        </Sheet>
     )
 }
