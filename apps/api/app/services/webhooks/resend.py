@@ -189,6 +189,8 @@ def _accept_verified_event(
     db: Session,
     *,
     organization_id: UUID,
+    provider_scope: str,
+    provider_account_id: str,
     email_log: EmailLog | None,
     provider_event_id: str,
     event_type: str,
@@ -200,6 +202,8 @@ def _accept_verified_event(
         insert(ResendWebhookEvent)
         .values(
             organization_id=organization_id,
+            provider_scope=provider_scope,
+            provider_account_id=provider_account_id,
             email_log_id=email_log.id if email_log else None,
             provider_event_id=provider_event_id,
             event_type=event_type,
@@ -228,6 +232,9 @@ def _accept_verified_event(
         )
         .one()
     )
+    if event.provider_scope is None and event.provider_account_id is None:
+        event.provider_scope = provider_scope
+        event.provider_account_id = provider_account_id
     return event, False
 
 
@@ -653,6 +660,12 @@ def _process_verified_payload(
     ).scalar_one_or_none()
     if locked_email_log is None:
         raise RuntimeError("Resend email projection target is missing")
+    if locked_event.provider_scope is not None and (
+        locked_email_log.provider != "resend"
+        or locked_email_log.provider_scope != locked_event.provider_scope
+        or locked_email_log.provider_account_id != locked_event.provider_account_id
+    ):
+        raise RuntimeError("Resend webhook event delivery route does not match email route")
     if locked_event.email_log_id is not None and locked_event.email_log_id != locked_email_log.id:
         raise RuntimeError("Resend webhook event is already linked to another email")
 
@@ -716,6 +729,8 @@ def _accept_or_process_verified_payload(
     db: Session,
     *,
     organization_id: UUID,
+    provider_scope: str,
+    provider_account_id: str,
     email_log: EmailLog | None,
     payload: dict,
     headers: dict[str, str],
@@ -730,12 +745,23 @@ def _accept_or_process_verified_payload(
     event, _inserted = _accept_verified_event(
         db,
         organization_id=organization_id,
+        provider_scope=provider_scope,
+        provider_account_id=provider_account_id,
         email_log=email_log,
         provider_event_id=provider_event_id,
         event_type=event_type,
         event_created_at=_parse_event_created_at(payload.get("created_at")),
         payload=payload,
     )
+    if event.provider_scope != provider_scope or event.provider_account_id != provider_account_id:
+        logger.warning(
+            "Resend webhook event route conflict ignored for org=%s "
+            "stored_scope=%s incoming_scope=%s",
+            organization_id,
+            event.provider_scope,
+            provider_scope,
+        )
+        return {"status": "ok"}
 
     if email_log is None:
         _enqueue_event_reconciliation(db, event)
@@ -756,8 +782,15 @@ def _organization_email_log_from_correlation_tags(
     organization_id: UUID,
     email_id: str,
     data: dict,
+    provider_scope: str = "organization",
+    provider_account_id: str | None = None,
 ) -> tuple[EmailLog | None, bool]:
-    """Resolve a tenant email by signed tags before using legacy provider-id lookup."""
+    """Resolve a tenant email on one trusted route before legacy provider-id lookup."""
+    expected_provider_account_id = (
+        provider_account_id
+        if provider_account_id is not None
+        else f"organization:{organization_id}"
+    )
     tags_value = data.get("tags")
     tags = tags_value if isinstance(tags_value, dict) else {}
     has_correlation_tags = "organization_id" in tags or "email_log_id" in tags
@@ -779,6 +812,9 @@ def _organization_email_log_from_correlation_tags(
         .filter(
             EmailLog.organization_id == organization_id,
             EmailLog.id == tagged_email_log_id,
+            EmailLog.provider == "resend",
+            EmailLog.provider_scope == provider_scope,
+            EmailLog.provider_account_id == expected_provider_account_id,
         )
         .one_or_none()
     )
@@ -870,6 +906,10 @@ class ResendWebhookHandler:
                 db.query(EmailLog)
                 .filter(
                     EmailLog.organization_id == resend_settings.organization_id,
+                    EmailLog.provider == "resend",
+                    EmailLog.provider_scope == "organization",
+                    EmailLog.provider_account_id
+                    == f"organization:{resend_settings.organization_id}",
                     EmailLog.external_id == email_id,
                 )
                 .first()
@@ -878,6 +918,8 @@ class ResendWebhookHandler:
         return _accept_or_process_verified_payload(
             db,
             organization_id=resend_settings.organization_id,
+            provider_scope="organization",
+            provider_account_id=f"organization:{resend_settings.organization_id}",
             email_log=email_log,
             payload=payload,
             headers=headers,
@@ -943,12 +985,17 @@ class PlatformResendWebhookHandler:
             .filter(
                 EmailLog.organization_id == organization_id,
                 EmailLog.id == email_log_id,
+                EmailLog.provider == "resend",
+                EmailLog.provider_scope == "platform",
+                EmailLog.provider_account_id == "platform:default",
             )
             .first()
         )
         return _accept_or_process_verified_payload(
             db,
             organization_id=organization_id,
+            provider_scope="platform",
+            provider_account_id="platform:default",
             email_log=email_log,
             payload=payload,
             headers=headers,

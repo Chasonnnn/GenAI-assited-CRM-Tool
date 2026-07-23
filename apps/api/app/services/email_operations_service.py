@@ -478,6 +478,7 @@ def get_readiness(
         .one_or_none()
     )
     provider = settings.email_provider if settings else None
+    organization_provider_account_id = f"organization:{organization_id}"
 
     route_evidence = None
     if provider:
@@ -490,8 +491,8 @@ def get_readiness(
             .filter(
                 EmailLog.organization_id == organization_id,
                 EmailLog.provider == provider,
-                EmailLog.provider_scope.is_not(None),
-                EmailLog.provider_account_id.is_not(None),
+                EmailLog.provider_scope == "organization",
+                EmailLog.provider_account_id == organization_provider_account_id,
             )
             .order_by(EmailLog.created_at.desc(), EmailLog.id.desc())
             .first()
@@ -604,21 +605,29 @@ def get_readiness(
         .filter(
             EmailLog.organization_id == organization_id,
             EmailLog.provider == "resend",
+            EmailLog.provider_scope == "organization",
+            EmailLog.provider_account_id == organization_provider_account_id,
             EmailLog.external_id.is_not(None),
             EmailLog.created_at >= cutoff,
         )
         .scalar()
         or 0
     )
-    latest_webhook_at = (
-        db.query(func.max(ResendWebhookEvent.received_at))
+    webhook_evidence = (
+        db.query(
+            func.count(ResendWebhookEvent.id).label("event_count"),
+            func.max(ResendWebhookEvent.received_at).label("latest_received_at"),
+        )
         .filter(
             ResendWebhookEvent.organization_id == organization_id,
+            ResendWebhookEvent.provider_scope == "organization",
+            ResendWebhookEvent.provider_account_id == organization_provider_account_id,
             ResendWebhookEvent.received_at >= cutoff,
         )
-        .scalar()
+        .one()
     )
-    if summary.webhook_events:
+    latest_webhook_at = webhook_evidence.latest_received_at
+    if int(webhook_evidence.event_count or 0):
         activity_check = EmailOperationsReadinessCheck(
             key="recent_webhook_activity",
             status="pass",

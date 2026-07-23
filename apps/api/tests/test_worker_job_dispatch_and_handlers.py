@@ -294,11 +294,16 @@ async def test_worker_reconciles_accepted_resend_event(db, test_org):
         recipient_email="reconcile@example.com",
         subject="Reconcile event",
         body="<p>Body</p>",
+        provider="resend",
+        provider_scope="organization",
+        provider_account_id=f"organization:{test_org.id}",
         status="sent",
         external_id="resend_reconcile_message",
     )
     event = ResendWebhookEvent(
         organization_id=test_org.id,
+        provider_scope="organization",
+        provider_account_id=f"organization:{test_org.id}",
         provider_event_id="svix_reconcile_event",
         event_type="email.delivered",
         event_created_at=datetime(2026, 7, 21, 14, 3, tzinfo=timezone.utc),
@@ -327,6 +332,63 @@ async def test_worker_reconciles_accepted_resend_event(db, test_org):
     assert event.processed_at is not None
     assert email_log.resend_status == "delivered"
     assert email_log.delivered_at.isoformat() == "2026-07-21T14:03:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_worker_reconciles_platform_event_only_to_platform_route(db, test_org):
+    """A platform send/commit race recovers without crossing into organization email."""
+    from app.db.models import EmailLog, ResendWebhookEvent
+
+    provider_message_id = "platform_reconcile_message"
+    platform_email_log = EmailLog(
+        id=uuid4(),
+        organization_id=test_org.id,
+        recipient_email="platform-reconcile@example.com",
+        subject="Reconcile platform event",
+        body="<p>Body</p>",
+        provider="resend",
+        provider_scope="platform",
+        provider_account_id="platform:default",
+        status="sent",
+        external_id=provider_message_id,
+    )
+    event = ResendWebhookEvent(
+        organization_id=test_org.id,
+        provider_scope="platform",
+        provider_account_id="platform:default",
+        provider_event_id="svix_platform_reconcile_event",
+        event_type="email.delivered",
+        event_created_at=datetime(2026, 7, 21, 14, 3, tzinfo=timezone.utc),
+        payload={
+            "type": "email.delivered",
+            "created_at": "2026-07-21T14:03:00.000Z",
+            "data": {
+                "email_id": provider_message_id,
+                "tags": {
+                    "organization_id": str(test_org.id),
+                    "email_log_id": str(platform_email_log.id),
+                },
+            },
+        },
+    )
+    db.add_all([platform_email_log, event])
+    db.commit()
+
+    job = _job(
+        job_type=JobType.RESEND_EVENT_RECONCILE.value,
+        status=JobStatus.RUNNING.value,
+        payload={"event_id": str(event.id)},
+    )
+    job.organization_id = test_org.id
+
+    completed = await worker.process_job(db, job)
+
+    assert completed is True
+    db.refresh(event)
+    db.refresh(platform_email_log)
+    assert event.email_log_id == platform_email_log.id
+    assert event.processed_at is not None
+    assert platform_email_log.resend_status == "delivered"
 
 
 @pytest.mark.asyncio
@@ -424,6 +486,55 @@ async def test_worker_reconciles_older_orphan_event_after_provider_acceptance(
     assert queued.email_log.status == expected_email_status
     assert queued.email_log.resend_status_at == provider_created_at
     assert getattr(queued.email_log, milestone_field) == provider_created_at
+
+
+def test_verified_resend_projection_rejects_a_cross_route_message(db, test_org):
+    """Every projection caller must preserve the event's trusted delivery route."""
+    from app.db.models import EmailLog, ResendWebhookEvent
+    from app.services.webhooks.resend import _process_verified_payload
+
+    provider_created_at = datetime(2026, 7, 21, 14, 3, tzinfo=timezone.utc)
+    platform_email_log = EmailLog(
+        organization_id=test_org.id,
+        recipient_email="cross-route@example.com",
+        subject="Cross-route projection",
+        body="<p>Body</p>",
+        provider="resend",
+        provider_scope="platform",
+        provider_account_id="platform:default",
+        status="sent",
+        external_id="resend_cross_route_projection",
+    )
+    payload = {
+        "type": "email.delivered",
+        "created_at": provider_created_at.isoformat(),
+        "data": {"email_id": platform_email_log.external_id},
+    }
+    organization_event = ResendWebhookEvent(
+        organization_id=test_org.id,
+        provider_scope="organization",
+        provider_account_id=f"organization:{test_org.id}",
+        provider_event_id="svix_cross_route_projection",
+        event_type="email.delivered",
+        event_created_at=provider_created_at,
+        payload=payload,
+    )
+    db.add_all([platform_email_log, organization_event])
+    db.commit()
+
+    with pytest.raises(RuntimeError, match="delivery route"):
+        _process_verified_payload(
+            db,
+            event=organization_event,
+            email_log=platform_email_log,
+            payload=payload,
+        )
+
+    db.refresh(platform_email_log)
+    db.refresh(organization_event)
+    assert platform_email_log.resend_status is None
+    assert organization_event.email_log_id is None
+    assert organization_event.processed_at is None
 
 
 def test_verified_resend_projection_locks_tenant_event_and_email_rows(db, test_org):

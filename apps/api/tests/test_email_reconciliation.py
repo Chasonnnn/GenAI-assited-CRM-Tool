@@ -599,6 +599,8 @@ async def test_link_orphan_event_projects_existing_message_atomically_without_se
     event = ResendWebhookEvent(
         id=uuid4(),
         organization_id=test_org.id,
+        provider_scope="organization",
+        provider_account_id=f"organization:{test_org.id}",
         provider_event_id=f"evt_link_{uuid4().hex}",
         event_type="email.delivered",
         event_created_at=detected_at,
@@ -691,6 +693,78 @@ async def test_link_orphan_event_projects_existing_message_atomically_without_se
         "reason_code": "correlation_succeeded",
         "to_version": 7,
     }
+
+
+@pytest.mark.asyncio
+async def test_link_orphan_event_rejects_a_message_from_another_delivery_route(
+    authed_client,
+    db,
+    test_org,
+):
+    detected_at = datetime.now(timezone.utc)
+    provider_message_id = f"route-conflict-{uuid4().hex}"
+    platform_log = EmailLog(
+        id=uuid4(),
+        organization_id=test_org.id,
+        recipient_email="platform@example.com",
+        subject="Platform message",
+        body="<p>Private body</p>",
+        provider="resend",
+        provider_scope="platform",
+        provider_account_id="platform:default",
+        status="sent",
+        created_at=detected_at,
+    )
+    event = ResendWebhookEvent(
+        id=uuid4(),
+        organization_id=test_org.id,
+        provider_scope="organization",
+        provider_account_id=f"organization:{test_org.id}",
+        provider_event_id=f"evt_route_conflict_{uuid4().hex}",
+        event_type="email.delivered",
+        event_created_at=detected_at,
+        received_at=detected_at,
+        payload={
+            "type": "email.delivered",
+            "created_at": detected_at.isoformat(),
+            "data": {
+                "email_id": provider_message_id,
+                "tags": {
+                    "organization_id": str(test_org.id),
+                    "email_log_id": str(platform_log.id),
+                },
+            },
+        },
+    )
+    case = EmailReconciliationCase(
+        id=uuid4(),
+        organization_id=test_org.id,
+        case_type="orphan_webhook",
+        status="action_required",
+        reason_code="automatic_correlation_exhausted",
+        version=1,
+        resend_webhook_event_id=event.id,
+        detected_at=detected_at,
+        updated_at=detected_at,
+    )
+    db.add_all([platform_log, event, case])
+    db.commit()
+
+    response = await authed_client.post(
+        f"/email-operations/reconciliation-cases/{case.id}/link-event",
+        json={
+            "expected_version": 1,
+            "email_log_id": str(platform_log.id),
+        },
+    )
+
+    assert response.status_code == 409
+    db.refresh(platform_log)
+    db.refresh(event)
+    assert platform_log.external_id is None
+    assert platform_log.resend_status is None
+    assert event.email_log_id is None
+    assert event.processed_at is None
 
 
 @pytest.mark.asyncio

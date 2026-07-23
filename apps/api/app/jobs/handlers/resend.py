@@ -46,12 +46,18 @@ async def process_resend_event_reconcile(db, job) -> None:
         organization_id=job.organization_id,
         email_id=email_id,
         data=data,
+        provider_scope=event.provider_scope or "organization",
+        provider_account_id=(event.provider_account_id or f"organization:{job.organization_id}"),
     )
     if not correlation_tags_present:
         email_log = (
             db.query(EmailLog)
             .filter(
                 EmailLog.organization_id == job.organization_id,
+                EmailLog.provider == "resend",
+                EmailLog.provider_scope == (event.provider_scope or "organization"),
+                EmailLog.provider_account_id
+                == (event.provider_account_id or f"organization:{job.organization_id}"),
                 EmailLog.external_id == email_id,
             )
             .first()

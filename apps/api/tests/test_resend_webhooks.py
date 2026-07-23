@@ -265,6 +265,9 @@ class TestResendWebhookHandler:
             recipient_email="test@recipient.com",
             subject="Test Email",
             body="<p>Test body</p>",
+            provider="resend",
+            provider_scope="organization",
+            provider_account_id=f"organization:{test_org.id}",
             status=EmailStatus.SENT.value,
             external_id="resend_msg_123",  # Resend message ID
         )
@@ -953,6 +956,9 @@ class TestResendWebhookHandler:
             recipient_email="tagged@recipient.com",
             subject="Tagged email",
             body="<p>Tagged body</p>",
+            provider="resend",
+            provider_scope="organization",
+            provider_account_id=f"organization:{test_org.id}",
             status=EmailStatus.SENT.value,
             external_id=None,
         )
@@ -991,6 +997,76 @@ class TestResendWebhookHandler:
         assert legacy_match.resend_status is None
         assert tagged_match.external_id == legacy_match.external_id
         assert tagged_match.resend_status == "delivered"
+
+    @pytest.mark.asyncio
+    async def test_organization_webhook_cannot_project_a_platform_resend_message(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+    ):
+        """An organization signature is evidence only for that organization route."""
+        import json
+
+        from app.db.enums import EmailStatus
+        from app.db.models import EmailLog, ResendWebhookEvent
+
+        _existing_log, settings, webhook_secret = setup_email_log
+        platform_email_log = EmailLog(
+            organization_id=test_org.id,
+            recipient_email="platform@recipient.com",
+            subject="Platform Resend email",
+            body="<p>Platform body</p>",
+            provider="resend",
+            provider_scope="platform",
+            provider_account_id="platform:default",
+            status=EmailStatus.SENT.value,
+            external_id=f"platform_msg_{uuid.uuid4().hex}",
+        )
+        db.add(platform_email_log)
+        db.commit()
+
+        payload = {
+            "type": "email.delivered",
+            "created_at": "2026-07-21T14:03:00.000Z",
+            "data": {
+                "email_id": platform_email_log.external_id,
+                "tags": {
+                    "organization_id": str(test_org.id),
+                    "email_log_id": str(platform_email_log.id),
+                },
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+
+        response = await client.post(
+            f"/webhooks/resend/{settings.webhook_id}",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+
+        assert response.status_code == 200
+        db.refresh(platform_email_log)
+        assert platform_email_log.resend_status is None
+        event = (
+            db.query(ResendWebhookEvent)
+            .filter(
+                ResendWebhookEvent.organization_id == test_org.id,
+                ResendWebhookEvent.provider_event_id == msg_id,
+            )
+            .one()
+        )
+        assert event.email_log_id is None
+        assert event.provider_scope == "organization"
+        assert event.provider_account_id == f"organization:{test_org.id}"
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -1581,6 +1657,9 @@ class TestResendWebhookHandler:
             recipient_email="race@recipient.com",
             subject="Race recovery",
             body="<p>Race recovery</p>",
+            provider="resend",
+            provider_scope="organization",
+            provider_account_id=f"organization:{test_org.id}",
             status=EmailStatus.SENT.value,
             external_id=None,
         )
@@ -1904,6 +1983,8 @@ class TestResendWebhookHandler:
         )
         assert event.email_log_id is None
         assert event.processed_at is None
+        assert event.provider_scope == "organization"
+        assert event.provider_account_id == f"organization:{test_org.id}"
 
         reconcile_job = (
             db.query(Job)
@@ -1982,7 +2063,7 @@ class TestResendWebhookHandler:
 
         from app.core.config import settings as app_settings
         from app.db.enums import EmailStatus
-        from app.db.models import EmailLog, Organization
+        from app.db.models import EmailLog, Organization, ResendWebhookEvent
 
         webhook_secret_bytes = b"platform_resend_webhook_secret"
         webhook_secret = "whsec_" + base64.urlsafe_b64encode(webhook_secret_bytes).decode(
@@ -1999,6 +2080,9 @@ class TestResendWebhookHandler:
             recipient_email="native@recipient.com",
             subject="Native platform email",
             body="<p>Native body</p>",
+            provider="resend",
+            provider_scope="platform",
+            provider_account_id="platform:default",
             status=EmailStatus.SENT.value,
             external_id=f"platform_msg_{uuid.uuid4().hex}",
         )
@@ -2017,6 +2101,9 @@ class TestResendWebhookHandler:
             recipient_email="other-native@recipient.com",
             subject="Other native platform email",
             body="<p>Other native body</p>",
+            provider="resend",
+            provider_scope="platform",
+            provider_account_id="platform:default",
             status=EmailStatus.SENT.value,
             external_id=email_log.external_id,
         )
@@ -2052,8 +2139,187 @@ class TestResendWebhookHandler:
         db.refresh(email_log)
         assert email_log.resend_status == "delivered"
         assert email_log.delivered_at.isoformat() == "2026-07-21T14:03:00+00:00"
+        event = (
+            db.query(ResendWebhookEvent)
+            .filter(
+                ResendWebhookEvent.organization_id == test_org.id,
+                ResendWebhookEvent.provider_event_id == msg_id,
+            )
+            .one()
+        )
+        assert event.provider_scope == "platform"
+        assert event.provider_account_id == "platform:default"
         db.refresh(colliding_email_log)
         assert colliding_email_log.resend_status is None
+
+    @pytest.mark.asyncio
+    async def test_platform_webhook_cannot_project_an_organization_resend_message(
+        self,
+        db,
+        test_org,
+        client,
+        monkeypatch,
+    ):
+        """A platform signature is evidence only for the platform delivery route."""
+        import json
+
+        from pydantic import SecretStr
+
+        from app.core.config import settings as app_settings
+        from app.db.enums import EmailStatus
+        from app.db.models import EmailLog, ResendWebhookEvent
+
+        webhook_secret_bytes = b"platform_route_isolation_secret"
+        webhook_secret = "whsec_" + base64.urlsafe_b64encode(webhook_secret_bytes).decode(
+            "utf-8"
+        ).rstrip("=")
+        monkeypatch.setattr(
+            app_settings,
+            "PLATFORM_RESEND_WEBHOOK_SECRET",
+            SecretStr(webhook_secret),
+        )
+
+        organization_email_log = EmailLog(
+            organization_id=test_org.id,
+            recipient_email="organization@recipient.com",
+            subject="Organization Resend email",
+            body="<p>Organization body</p>",
+            provider="resend",
+            provider_scope="organization",
+            provider_account_id=f"organization:{test_org.id}",
+            status=EmailStatus.SENT.value,
+            external_id=f"organization_msg_{uuid.uuid4().hex}",
+        )
+        db.add(organization_email_log)
+        db.commit()
+
+        payload = {
+            "type": "email.delivered",
+            "created_at": "2026-07-21T14:03:00.000Z",
+            "data": {
+                "email_id": organization_email_log.external_id,
+                "tags": {
+                    "organization_id": str(test_org.id),
+                    "email_log_id": str(organization_email_log.id),
+                },
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+
+        response = await client.post(
+            "/webhooks/resend/platform",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+
+        assert response.status_code == 200
+        db.refresh(organization_email_log)
+        assert organization_email_log.resend_status is None
+        event = (
+            db.query(ResendWebhookEvent)
+            .filter(
+                ResendWebhookEvent.organization_id == test_org.id,
+                ResendWebhookEvent.provider_event_id == msg_id,
+            )
+            .one()
+        )
+        assert event.email_log_id is None
+        assert event.provider_scope == "platform"
+        assert event.provider_account_id == "platform:default"
+
+    @pytest.mark.asyncio
+    async def test_webhook_event_id_replay_on_another_route_is_a_noop(
+        self,
+        db,
+        test_org,
+        client,
+        monkeypatch,
+    ):
+        """A Svix id already bound to one route cannot be replayed onto another."""
+        import json
+        from datetime import datetime, timezone
+
+        from pydantic import SecretStr
+
+        from app.core.config import settings as app_settings
+        from app.db.enums import EmailStatus
+        from app.db.models import EmailLog, ResendWebhookEvent
+
+        webhook_secret_bytes = b"platform_route_replay_secret"
+        webhook_secret = "whsec_" + base64.urlsafe_b64encode(webhook_secret_bytes).decode(
+            "utf-8"
+        ).rstrip("=")
+        monkeypatch.setattr(
+            app_settings,
+            "PLATFORM_RESEND_WEBHOOK_SECRET",
+            SecretStr(webhook_secret),
+        )
+
+        platform_email_log = EmailLog(
+            id=uuid.uuid4(),
+            organization_id=test_org.id,
+            recipient_email="platform-replay@recipient.com",
+            subject="Platform replay target",
+            body="<p>Platform body</p>",
+            provider="resend",
+            provider_scope="platform",
+            provider_account_id="platform:default",
+            status=EmailStatus.SENT.value,
+            external_id=f"platform_replay_{uuid.uuid4().hex}",
+        )
+        payload = {
+            "type": "email.delivered",
+            "created_at": "2026-07-21T14:03:00.000Z",
+            "data": {
+                "email_id": platform_email_log.external_id,
+                "tags": {
+                    "organization_id": str(test_org.id),
+                    "email_log_id": str(platform_email_log.id),
+                },
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+        organization_event = ResendWebhookEvent(
+            organization_id=test_org.id,
+            provider_scope="organization",
+            provider_account_id=f"organization:{test_org.id}",
+            provider_event_id=msg_id,
+            event_type="email.delivered",
+            event_created_at=datetime(2026, 7, 21, 14, 2, tzinfo=timezone.utc),
+            payload={"type": "email.delivered", "data": {"email_id": "organization-message"}},
+        )
+        db.add_all([platform_email_log, organization_event])
+        db.commit()
+
+        response = await client.post(
+            "/webhooks/resend/platform",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
+        db.refresh(platform_email_log)
+        db.refresh(organization_event)
+        assert platform_email_log.resend_status is None
+        assert organization_event.email_log_id is None
+        assert organization_event.processed_at is None
+        assert organization_event.provider_scope == "organization"
+        assert organization_event.provider_account_id == f"organization:{test_org.id}"
 
     @pytest.mark.asyncio
     async def test_platform_webhook_acknowledges_legacy_event_without_tenant_tags(

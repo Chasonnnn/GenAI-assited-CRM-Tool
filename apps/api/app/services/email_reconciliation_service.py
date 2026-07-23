@@ -378,6 +378,11 @@ def link_orphan_event(
     )
     if email_log is None:
         raise ReconciliationCaseNotFound
+    if event.provider_scope is not None and (
+        email_log.provider_scope != event.provider_scope
+        or email_log.provider_account_id != event.provider_account_id
+    ):
+        raise ReconciliationCaseConflict
 
     payload = event.payload if isinstance(event.payload, dict) else {}
     data_value = payload.get("data")

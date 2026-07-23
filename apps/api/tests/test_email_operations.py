@@ -388,7 +388,56 @@ async def test_readiness_keeps_send_and_tracking_independent_and_new_activity_un
 
 
 @pytest.mark.asyncio
-async def test_readiness_uses_org_scoped_webhook_evidence_and_24h_summary(
+async def test_readiness_ignores_a_newer_platform_message_when_selecting_org_route(
+    authed_client,
+    db,
+    test_org,
+):
+    now = datetime.now(timezone.utc)
+    organization_account_id = f"organization:{test_org.id}"
+    db.add(
+        ResendSettings(
+            id=uuid4(),
+            organization_id=test_org.id,
+            email_provider="resend",
+            api_key_encrypted="persisted-ciphertext",
+            from_email="operations@example.com",
+            verified_domain="example.com",
+            last_key_validated_at=now,
+            webhook_id=str(uuid4()),
+            webhook_secret_encrypted="persisted-webhook-ciphertext",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db.add_all(
+        [
+            _email_log(
+                organization_id=test_org.id,
+                created_at=now - timedelta(minutes=2),
+                provider_scope="organization",
+                provider_account_id=organization_account_id,
+            ),
+            _email_log(
+                organization_id=test_org.id,
+                created_at=now - timedelta(minutes=1),
+                provider_scope="platform",
+                provider_account_id="platform:default",
+            ),
+        ]
+    )
+    db.commit()
+
+    response = await authed_client.get("/email-operations/readiness")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["provider_scope"] == "organization"
+    assert payload["provider_account_id"] == organization_account_id
+
+
+@pytest.mark.asyncio
+async def test_platform_message_cannot_create_missing_webhook_failure_for_org_route(
     authed_client,
     db,
     test_org,
@@ -409,9 +458,117 @@ async def test_readiness_uses_org_scoped_webhook_evidence_and_24h_summary(
             updated_at=now,
         )
     )
+    db.add(
+        _email_log(
+            organization_id=test_org.id,
+            created_at=now - timedelta(minutes=1),
+            provider_scope="platform",
+            provider_account_id="platform:default",
+            external_id="platform-provider-message",
+        )
+    )
+    db.commit()
+
+    response = await authed_client.get("/email-operations/readiness")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["recent_webhook_activity"] == "unknown"
+    assert payload["last_webhook_received_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_platform_webhook_cannot_satisfy_organization_readiness(
+    authed_client,
+    db,
+    test_org,
+):
+    now = datetime.now(timezone.utc)
+    organization_account_id = f"organization:{test_org.id}"
+    db.add(
+        ResendSettings(
+            id=uuid4(),
+            organization_id=test_org.id,
+            email_provider="resend",
+            api_key_encrypted="persisted-ciphertext",
+            from_email="operations@example.com",
+            verified_domain="example.com",
+            last_key_validated_at=now,
+            webhook_id=str(uuid4()),
+            webhook_secret_encrypted="persisted-webhook-ciphertext",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    organization_message = _email_log(
+        organization_id=test_org.id,
+        created_at=now - timedelta(minutes=5),
+        provider_scope="organization",
+        provider_account_id=organization_account_id,
+        external_id="organization-provider-message",
+    )
+    platform_message = _email_log(
+        organization_id=test_org.id,
+        created_at=now - timedelta(minutes=4),
+        provider_scope="platform",
+        provider_account_id="platform:default",
+        external_id="platform-provider-message",
+    )
+    db.add_all([organization_message, platform_message])
+    db.flush()
+    db.add(
+        ResendWebhookEvent(
+            id=uuid4(),
+            organization_id=test_org.id,
+            email_log_id=platform_message.id,
+            provider_scope="platform",
+            provider_account_id="platform:default",
+            provider_event_id="platform-delivered-event",
+            event_type="email.delivered",
+            event_created_at=now - timedelta(minutes=3),
+            received_at=now - timedelta(minutes=2),
+            processed_at=now - timedelta(minutes=2),
+            payload={"private": "secret"},
+        )
+    )
+    db.commit()
+
+    response = await authed_client.get("/email-operations/readiness")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["recent_webhook_activity"] == "fail"
+    assert payload["last_webhook_received_at"] is None
+    assert payload["summary_24h"]["webhook_events"] == 1
+
+
+@pytest.mark.asyncio
+async def test_readiness_uses_org_scoped_webhook_evidence_and_24h_summary(
+    authed_client,
+    db,
+    test_org,
+):
+    now = datetime.now(timezone.utc)
+    organization_account_id = f"organization:{test_org.id}"
+    db.add(
+        ResendSettings(
+            id=uuid4(),
+            organization_id=test_org.id,
+            email_provider="resend",
+            api_key_encrypted="persisted-ciphertext",
+            from_email="operations@example.com",
+            verified_domain="example.com",
+            last_key_validated_at=now,
+            webhook_id=str(uuid4()),
+            webhook_secret_encrypted="persisted-webhook-ciphertext",
+            created_at=now,
+            updated_at=now,
+        )
+    )
     recent_message = _email_log(
         organization_id=test_org.id,
         created_at=now - timedelta(hours=1),
+        provider_account_id=organization_account_id,
         external_id="recent-provider-message",
     )
     recent_message.delivered_at = now - timedelta(minutes=30)
@@ -420,6 +577,7 @@ async def test_readiness_uses_org_scoped_webhook_evidence_and_24h_summary(
     old_message = _email_log(
         organization_id=test_org.id,
         created_at=now - timedelta(hours=25),
+        provider_account_id=organization_account_id,
         external_id="old-provider-message",
     )
     other_org = Organization(
@@ -431,6 +589,7 @@ async def test_readiness_uses_org_scoped_webhook_evidence_and_24h_summary(
         organization_id=other_org.id,
         created_at=now - timedelta(minutes=5),
         status=EmailStatus.FAILED.value,
+        provider_account_id=f"organization:{other_org.id}",
         external_id="other-provider-message",
     )
     db.add(other_org)
@@ -442,6 +601,8 @@ async def test_readiness_uses_org_scoped_webhook_evidence_and_24h_summary(
                 id=uuid4(),
                 organization_id=test_org.id,
                 email_log_id=recent_message.id,
+                provider_scope="organization",
+                provider_account_id=organization_account_id,
                 provider_event_id="recent-event",
                 event_type="email.delivered",
                 event_created_at=now - timedelta(minutes=31),
@@ -453,6 +614,8 @@ async def test_readiness_uses_org_scoped_webhook_evidence_and_24h_summary(
                 id=uuid4(),
                 organization_id=other_org.id,
                 email_log_id=other_message.id,
+                provider_scope="organization",
+                provider_account_id=f"organization:{other_org.id}",
                 provider_event_id="other-event",
                 event_type="email.failed",
                 event_created_at=now - timedelta(minutes=4),
@@ -474,7 +637,7 @@ async def test_readiness_uses_org_scoped_webhook_evidence_and_24h_summary(
     assert checks["recent_webhook_activity"]["status"] == "pass"
     assert payload["provider"] == "resend"
     assert payload["provider_scope"] == "organization"
-    assert payload["provider_account_id"] == "stored-account"
+    assert payload["provider_account_id"] == organization_account_id
     assert payload["summary_24h"] == {
         "messages": 1,
         "pending": 0,

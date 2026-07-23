@@ -522,6 +522,13 @@ class ResendWebhookEvent(Base):
 
     __tablename__ = "resend_webhook_events"
     __table_args__ = (
+        CheckConstraint(
+            "(provider_scope IS NULL AND provider_account_id IS NULL) OR "
+            "(provider_scope IN ('platform', 'organization') "
+            "AND provider_account_id IS NOT NULL "
+            "AND btrim(provider_account_id) <> '')",
+            name="ck_resend_webhook_events_route",
+        ),
         UniqueConstraint(
             "organization_id",
             "id",
@@ -537,6 +544,13 @@ class ResendWebhookEvent(Base):
             "organization_id",
             "email_log_id",
             "event_created_at",
+        ),
+        Index(
+            "idx_resend_webhook_events_org_route_received",
+            "organization_id",
+            "provider_scope",
+            "provider_account_id",
+            "received_at",
         ),
         Index("idx_resend_webhook_events_processed_at", "processed_at"),
     )
@@ -554,6 +568,8 @@ class ResendWebhookEvent(Base):
         ForeignKey("email_logs.id", ondelete="CASCADE"),
         nullable=True,
     )
+    provider_scope: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    provider_account_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     provider_event_id: Mapped[str] = mapped_column(String(255), nullable=False)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
     event_created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
