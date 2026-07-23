@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 import { EmailTemplateHistorySheet } from "@/components/email/EmailTemplateHistorySheet"
-import type { EmailTemplateVersion } from "@/lib/api/email-templates"
+import type { EmailTemplateVersion } from "@/lib/api/email-template-history"
 
 const VERSIONS: EmailTemplateVersion[] = [
     {

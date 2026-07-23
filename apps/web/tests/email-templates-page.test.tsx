@@ -7,8 +7,8 @@ import type {
     EmailTemplateLibraryDetail,
     EmailTemplateLibraryItem,
     EmailTemplateListItem,
-    EmailTemplateVersion,
 } from "@/lib/api/email-templates"
+import type { EmailTemplateVersion } from "@/lib/api/email-template-history"
 
 const mockUseAuth = vi.fn()
 const mockRichTextEditorProps = vi.fn()
@@ -321,10 +321,36 @@ describe("EmailTemplatesPage", () => {
                 payload: {
                     to_email: "qa@example.com",
                     variables: { full_name: "Custom Recipient" },
+                    idempotency_key: expect.stringMatching(
+                        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+                    ),
                     ignore_opt_out: true,
                 },
             })
         })
+    })
+
+    it("reuses one test-send occurrence after a request failure", async () => {
+        mockSendTestEmailTemplate
+            .mockRejectedValueOnce(new Error("Temporary failure"))
+            .mockResolvedValueOnce({ queued: true, provider_used: "resend" })
+
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Personal Template" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Send test email" }))
+        fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+
+        await waitFor(() => expect(mockSendTestEmailTemplate).toHaveBeenCalledTimes(1))
+        expect(await screen.findByRole("dialog")).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+        await waitFor(() => expect(mockSendTestEmailTemplate).toHaveBeenCalledTimes(2))
+
+        const firstKey = mockSendTestEmailTemplate.mock.calls[0][0].payload.idempotency_key
+        const retriedKey = mockSendTestEmailTemplate.mock.calls[1][0].payload.idempotency_key
+        expect(firstKey).toEqual(expect.any(String))
+        expect(retriedKey).toBe(firstKey)
     })
 
     it("updates untouched email variable samples when the test recipient changes", async () => {

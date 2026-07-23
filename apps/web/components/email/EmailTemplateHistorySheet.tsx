@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatDateTime } from "@/lib/formatters"
-import type { EmailTemplateVersion } from "@/lib/api/email-templates"
+import type { EmailTemplateVersion } from "@/lib/api/email-template-history"
 
 interface EmailTemplateHistorySheetProps {
     open: boolean

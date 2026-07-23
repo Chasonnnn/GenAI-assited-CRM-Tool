@@ -80,15 +80,8 @@ export interface EmailTemplateUpdate {
     expected_version?: number
 }
 
-export interface EmailTemplateVersion {
-    id: string
-    version: number
-    created_by_user_id: string | null
-    comment: string | null
-    created_at: string
-}
-
 export interface EmailSendRequest {
+    idempotency_key: string
     template_id: string
     recipient_email: string
     variables?: Record<string, string>
@@ -99,12 +92,13 @@ export interface EmailSendRequest {
 export interface EmailTemplateTestSendRequest {
     to_email: string
     variables?: Record<string, string>
-    idempotency_key?: string | null
+    idempotency_key: string
     ignore_opt_out?: boolean
 }
 
 export interface EmailTemplateTestSendResponse {
     success: boolean
+    queued?: boolean
     provider_used?: 'resend' | 'gmail' | null
     email_log_id?: string | null
     message_id?: string | null
@@ -160,25 +154,6 @@ export async function createTemplate(data: EmailTemplateCreate): Promise<EmailTe
 
 export async function updateTemplate(id: string, data: EmailTemplateUpdate): Promise<EmailTemplate> {
     return api.patch<EmailTemplate>(`/email-templates/${id}`, data)
-}
-
-export async function listEmailTemplateVersions(
-    id: string,
-    limit = 50,
-): Promise<EmailTemplateVersion[]> {
-    const searchParams = new URLSearchParams({ limit: String(limit) })
-    return api.get<EmailTemplateVersion[]>(
-        `/email-templates/${id}/versions?${searchParams.toString()}`,
-    )
-}
-
-export async function rollbackEmailTemplate(
-    id: string,
-    targetVersion: number,
-): Promise<EmailTemplate> {
-    return api.post<EmailTemplate>(`/email-templates/${id}/rollback`, {
-        target_version: targetVersion,
-    })
 }
 
 export async function deleteTemplate(id: string): Promise<void> {

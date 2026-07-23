@@ -511,6 +511,21 @@ function testSendDialogReducer(
     }
 }
 
+function createEmailTestOccurrenceId(): string {
+    const cryptoApi = globalThis.crypto
+    if (typeof cryptoApi?.randomUUID === "function") {
+        return cryptoApi.randomUUID()
+    }
+    if (typeof cryptoApi?.getRandomValues !== "function") {
+        throw new Error("Secure random UUID generation is unavailable")
+    }
+    const bytes = cryptoApi.getRandomValues(new Uint8Array(16))
+    bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40
+    bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"))
+    return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`
+}
+
 function hasAdvancedTemplateHtml(body: string | null | undefined) {
     return /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(body || "")
 }
@@ -949,6 +964,7 @@ export default function EmailTemplatesPage() {
         testSendDialogReducer,
         initialTestSendDialogState,
     )
+    const testSendOccurrenceIdRef = useRef<string | null>(null)
 
     // Platform library copy/preview state
     const [libraryCopyOpen, setLibraryCopyOpen] = useState(false)
@@ -1159,10 +1175,12 @@ export default function EmailTemplatesPage() {
     }
 
     const handleOpenTestDialog = (template: EmailTemplateListItem) => {
+        testSendOccurrenceIdRef.current = createEmailTestOccurrenceId()
         dispatchTestSend({ type: "open", target: template, toEmail: user?.email || "" })
     }
 
     const handleCloseTestDialog = () => {
+        testSendOccurrenceIdRef.current = null
         dispatchTestSend({ type: "close" })
     }
 
@@ -1182,11 +1200,15 @@ export default function EmailTemplatesPage() {
         }
 
         try {
+            const occurrenceId =
+                testSendOccurrenceIdRef.current ?? createEmailTestOccurrenceId()
+            testSendOccurrenceIdRef.current = occurrenceId
             const result = await sendTest.mutateAsync({
                 id: testSendState.target.id,
                 payload: {
                     to_email: toEmail,
                     variables: overrides,
+                    idempotency_key: occurrenceId,
                     ...(testSendState.ignoreOptOut ? { ignore_opt_out: true } : {}),
                 },
             })
@@ -1196,7 +1218,11 @@ export default function EmailTemplatesPage() {
                     : result.provider_used === "gmail"
                         ? "Gmail"
                         : "provider"
-            toast.success(`Test email sent via ${providerLabel}`)
+            toast.success(
+                result.queued
+                    ? `Test email queued via ${providerLabel}`
+                    : `Test email sent via ${providerLabel}`,
+            )
             handleCloseTestDialog()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to send test email")
@@ -2416,20 +2442,26 @@ export default function EmailTemplatesPage() {
                                 id="test-send-to"
                                 type="email"
                                 value={testSendState.toEmail}
-                                onChange={(e) => dispatchTestSend({
-                                    type: "changeToEmail",
-                                    value: e.target.value,
-                                })}
+                                onChange={(e) => {
+                                    testSendOccurrenceIdRef.current = null
+                                    dispatchTestSend({
+                                        type: "changeToEmail",
+                                        value: e.target.value,
+                                    })
+                                }}
                                 placeholder="test@example.com"
                             />
                             <div className="flex items-start gap-3 rounded-lg border bg-muted/20 p-3">
                                 <Checkbox
                                     id="test-send-ignore-opt-out"
                                     checked={testSendState.ignoreOptOut}
-                                    onCheckedChange={(checked) => dispatchTestSend({
-                                        type: "changeIgnoreOptOut",
-                                        value: checked === true,
-                                    })}
+                                    onCheckedChange={(checked) => {
+                                        testSendOccurrenceIdRef.current = null
+                                        dispatchTestSend({
+                                            type: "changeIgnoreOptOut",
+                                            value: checked === true,
+                                        })
+                                    }}
                                 />
                                 <div className="space-y-1">
                                     <Label htmlFor="test-send-ignore-opt-out" className="cursor-pointer">
@@ -2481,6 +2513,7 @@ export default function EmailTemplatesPage() {
                                                                 id={`test-var-${variableName}`}
                                                                 value={testSendVariables[variableName] ?? ""}
                                                                 onChange={(e) => {
+                                                                    testSendOccurrenceIdRef.current = null
                                                                     dispatchTestSend({
                                                                         type: "changeVariable",
                                                                         name: variableName,

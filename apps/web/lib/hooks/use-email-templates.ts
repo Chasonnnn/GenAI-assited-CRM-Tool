@@ -25,11 +25,13 @@ import {
     listTemplateLibrary,
     getTemplateLibraryItem,
     copyTemplateFromLibrary,
-    listEmailTemplateVersions,
-    rollbackEmailTemplate,
     EmailTemplateLibraryItem,
     EmailTemplateLibraryDetail,
 } from '@/lib/api/email-templates'
+import {
+    listEmailTemplateVersions,
+    rollbackEmailTemplate,
+} from '@/lib/api/email-template-history'
 import type { TemplateVariableRead } from '@/lib/types/template-variable'
 import { surrogateKeys } from './use-surrogates'
 

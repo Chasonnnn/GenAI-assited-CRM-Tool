@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
     listEmailTemplateVersions,
     rollbackEmailTemplate,
-} from "@/lib/api/email-templates"
+} from "@/lib/api/email-template-history"
 
 const mockGet = vi.fn()
 const mockPost = vi.fn()

@@ -11,11 +11,15 @@ const mocks = vi.hoisted(() => ({
     deleteTemplate: vi.fn(),
     sendTest: vi.fn(),
     sendCampaign: vi.fn(),
+    toastSuccess: vi.fn(),
+    toastError: vi.fn(),
     listOrganizations: vi.fn(),
     listMembers: vi.fn(),
+    refetchTemplate: vi.fn(),
     richTextEditor: vi.fn(),
     state: {
         templateBody: "<table><tbody><tr><td>Hello {{org_name}}</td></tr></tbody></table>",
+        templateQueryError: false,
     },
 }))
 
@@ -35,8 +39,8 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/components/ui/toast", () => ({
     toast: {
-        success: vi.fn(),
-        error: vi.fn(),
+        success: mocks.toastSuccess,
+        error: mocks.toastError,
     },
 }))
 
@@ -58,19 +62,33 @@ vi.mock("@/lib/api/platform", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-platform-templates", () => ({
-    usePlatformSystemEmailTemplate: () => ({
-        data: {
-            system_key: "org_invite",
-            name: "Organization Invite",
-            subject: "Invite {{org_name}}",
-            from_email: "Invites <welcome@surrogacyforce.com>",
-            body: mocks.state.templateBody,
-            is_active: true,
-            current_version: 7,
-            updated_at: new Date().toISOString(),
-        },
-        isLoading: false,
-    }),
+    usePlatformSystemEmailTemplate: () =>
+        mocks.state.templateQueryError
+            ? {
+                  data: undefined,
+                  error: new Error("sensitive backend failure detail"),
+                  isError: true,
+                  isFetching: false,
+                  isLoading: false,
+                  refetch: mocks.refetchTemplate,
+              }
+            : {
+                  data: {
+                      system_key: "org_invite",
+                      name: "Organization Invite",
+                      subject: "Invite {{org_name}}",
+                      from_email: "Invites <welcome@surrogacyforce.com>",
+                      body: mocks.state.templateBody,
+                      is_active: true,
+                      current_version: 7,
+                      updated_at: new Date().toISOString(),
+                  },
+                  error: null,
+                  isError: false,
+                  isFetching: false,
+                  isLoading: false,
+                  refetch: mocks.refetchTemplate,
+              },
     usePlatformSystemEmailTemplateVariables: () => ({
         data: [
             {
@@ -104,6 +122,7 @@ vi.mock("@/lib/hooks/use-platform-templates", () => ({
 describe("PlatformSystemEmailTemplatePage", () => {
     beforeEach(() => {
         mocks.state.templateBody = "<table><tbody><tr><td>Hello {{org_name}}</td></tr></tbody></table>"
+        mocks.state.templateQueryError = false
         mocks.push.mockReset()
         mocks.update.mockReset()
         mocks.updateBranding.mockReset()
@@ -111,9 +130,13 @@ describe("PlatformSystemEmailTemplatePage", () => {
         mocks.deleteTemplate.mockReset()
         mocks.sendTest.mockReset()
         mocks.sendCampaign.mockReset()
+        mocks.toastSuccess.mockReset()
+        mocks.toastError.mockReset()
         mocks.listOrganizations.mockReset()
         mocks.listMembers.mockReset()
+        mocks.refetchTemplate.mockReset()
         mocks.richTextEditor.mockClear()
+        mocks.refetchTemplate.mockResolvedValue(undefined)
         mocks.listOrganizations.mockResolvedValue({
             items: [
                 {
@@ -140,6 +163,17 @@ describe("PlatformSystemEmailTemplatePage", () => {
         expect(await screen.findByPlaceholderText("Paste or edit the HTML for this template...")).toHaveValue(
             mocks.state.templateBody
         )
+    })
+
+    it("shows a retryable terminal state when system template loading fails", () => {
+        mocks.state.templateQueryError = true
+
+        render(<PlatformSystemEmailTemplatePage />)
+
+        expect(screen.getByText("Unable to load system template")).toBeInTheDocument()
+        expect(screen.queryByText("sensitive backend failure detail")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Retry" }))
+        expect(mocks.refetchTemplate).toHaveBeenCalledOnce()
     })
 
     it("reenables save after an update failure and sends the latest draft with version guard", async () => {
@@ -194,7 +228,7 @@ describe("PlatformSystemEmailTemplatePage", () => {
                 created_at: "2026-01-01T00:00:00Z",
             },
         ])
-        mocks.sendCampaign.mockResolvedValue({ sent: 1, suppressed: 0, failed: 0 })
+        mocks.sendCampaign.mockResolvedValue({ queued: 1, suppressed: 0, failed: 0 })
 
         render(<PlatformSystemEmailTemplatePage />)
 
@@ -213,14 +247,143 @@ describe("PlatformSystemEmailTemplatePage", () => {
             expect(mocks.sendCampaign).toHaveBeenCalledWith({
                 systemKey: "org_invite",
                 payload: {
+                    campaign_occurrence_id: expect.stringMatching(
+                        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+                    ),
                     targets: [{ org_id: "org-1", user_ids: ["user-active"] }],
                 },
             })
         )
+        expect(mocks.toastSuccess).toHaveBeenCalledWith(
+            "Campaign queued: 1 queued, 0 suppressed, 0 failed"
+        )
     })
 
-    it("reenables test send after a failure", async () => {
-        mocks.sendTest.mockRejectedValueOnce(new Error("Send failed"))
+    it("keeps a partially queued campaign open with a safe retry summary", async () => {
+        mocks.listMembers.mockResolvedValue([
+            {
+                id: "member-1",
+                user_id: "user-active",
+                email: "active@example.com",
+                display_name: "Active Member",
+                role: "admin",
+                is_active: true,
+                created_at: "2026-01-01T00:00:00Z",
+            },
+        ])
+        mocks.sendCampaign
+            .mockResolvedValueOnce({
+                queued: 0,
+                suppressed: 0,
+                failed: 1,
+                recipients: 1,
+                failures: [
+                    {
+                        org_id: "org-1",
+                        user_id: "user-active",
+                        error: "raw provider failure detail",
+                    },
+                ],
+            })
+            .mockResolvedValueOnce({
+                queued: 1,
+                suppressed: 0,
+                failed: 0,
+                recipients: 1,
+                failures: [],
+            })
+
+        render(<PlatformSystemEmailTemplatePage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Send campaign" }))
+        await screen.findByText("Acme Surrogacy")
+        fireEvent.click(screen.getByText("Acme Surrogacy"))
+        await screen.findByText("Active Member")
+
+        const dialog = screen.getByRole("dialog")
+        fireEvent.click(within(dialog).getByRole("button", { name: "Send campaign" }))
+
+        await waitFor(() => expect(mocks.sendCampaign).toHaveBeenCalledTimes(1))
+        expect(screen.getByRole("dialog")).toBeInTheDocument()
+        expect(within(dialog).getByRole("alert")).toHaveAttribute("data-slot", "alert")
+        expect(within(dialog).getByText("Campaign needs attention")).toBeInTheDocument()
+        expect(
+            within(dialog).getByText(
+                "1 recipient could not be queued. Review the selected recipients, then retry this campaign."
+            )
+        ).toBeInTheDocument()
+        expect(within(dialog).queryByText("raw provider failure detail")).not.toBeInTheDocument()
+        expect(mocks.toastError).toHaveBeenCalledWith(
+            "Campaign partially queued. Review the selected recipients and retry."
+        )
+        expect(mocks.toastSuccess).not.toHaveBeenCalled()
+
+        fireEvent.click(within(dialog).getByRole("button", { name: "Send campaign" }))
+        await waitFor(() => expect(mocks.sendCampaign).toHaveBeenCalledTimes(2))
+
+        const firstOccurrenceId =
+            mocks.sendCampaign.mock.calls[0][0].payload.campaign_occurrence_id
+        const retriedOccurrenceId =
+            mocks.sendCampaign.mock.calls[1][0].payload.campaign_occurrence_id
+        expect(retriedOccurrenceId).toBe(firstOccurrenceId)
+    })
+
+    it("reuses one campaign occurrence after an error and creates a new one after reopening", async () => {
+        mocks.listMembers.mockResolvedValue([
+            {
+                id: "member-1",
+                user_id: "user-active",
+                email: "active@example.com",
+                display_name: "Active Member",
+                role: "admin",
+                is_active: true,
+                created_at: "2026-01-01T00:00:00Z",
+            },
+        ])
+        mocks.sendCampaign
+            .mockRejectedValueOnce(new Error("Temporary failure"))
+            .mockResolvedValue({ queued: 1, suppressed: 0, failed: 0 })
+
+        render(<PlatformSystemEmailTemplatePage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Send campaign" }))
+        await screen.findByText("Acme Surrogacy")
+        fireEvent.click(screen.getByText("Acme Surrogacy"))
+        await screen.findByText("Active Member")
+
+        let dialog = screen.getByRole("dialog")
+        fireEvent.click(within(dialog).getByRole("button", { name: "Send campaign" }))
+        await waitFor(() => expect(mocks.sendCampaign).toHaveBeenCalledTimes(1))
+
+        fireEvent.click(within(dialog).getByRole("button", { name: "Send campaign" }))
+        await waitFor(() => expect(mocks.sendCampaign).toHaveBeenCalledTimes(2))
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+
+        const firstOccurrenceId =
+            mocks.sendCampaign.mock.calls[0][0].payload.campaign_occurrence_id
+        const retriedOccurrenceId =
+            mocks.sendCampaign.mock.calls[1][0].payload.campaign_occurrence_id
+        expect(retriedOccurrenceId).toBe(firstOccurrenceId)
+
+        fireEvent.click(screen.getByRole("button", { name: "Send campaign" }))
+        await screen.findByText("Acme Surrogacy")
+        dialog = screen.getByRole("dialog")
+        fireEvent.click(within(dialog).getByRole("button", { name: "Send campaign" }))
+        await waitFor(() => expect(mocks.sendCampaign).toHaveBeenCalledTimes(3))
+
+        const nextOccurrenceId =
+            mocks.sendCampaign.mock.calls[2][0].payload.campaign_occurrence_id
+        expect(nextOccurrenceId).not.toBe(firstOccurrenceId)
+    })
+
+    it("reuses a test-send occurrence after failure and reports durable queue acceptance", async () => {
+        mocks.sendTest
+            .mockRejectedValueOnce(new Error("Send failed"))
+            .mockResolvedValueOnce({
+                queued: true,
+                message_id: null,
+                email_log_id: "log-1",
+            })
 
         render(<PlatformSystemEmailTemplatePage />)
 
@@ -238,10 +401,21 @@ describe("PlatformSystemEmailTemplatePage", () => {
                 payload: {
                     to_email: "qa@example.com",
                     org_id: "org-1",
+                    idempotency_key: expect.any(String),
                 },
             })
         )
         expect(screen.getByRole("button", { name: "Send test" })).toBeEnabled()
+
+        fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+        await waitFor(() => expect(mocks.sendTest).toHaveBeenCalledTimes(2))
+
+        const firstOccurrenceId =
+            mocks.sendTest.mock.calls[0][0].payload.idempotency_key
+        const retriedOccurrenceId =
+            mocks.sendTest.mock.calls[1][0].payload.idempotency_key
+        expect(retriedOccurrenceId).toBe(firstOccurrenceId)
+        expect(mocks.toastSuccess).toHaveBeenCalledWith("Test email queued")
     })
 
     it("labels the platform branding logo upload control", () => {
