@@ -190,10 +190,7 @@ async def update_settings(
                 "verified_domain" in fields_set
                 and explicit_domain != current_settings.verified_domain
             )
-            or (
-                "from_email" in fields_set
-                and explicit_from_email != current_settings.from_email
-            )
+            or ("from_email" in fields_set and explicit_from_email != current_settings.from_email)
         )
     )
     if requested_provider == "resend" and sender_identity_changed and not new_api_key:
@@ -219,7 +216,7 @@ async def update_settings(
                 detail="From email is required when saving a Resend API key.",
             )
 
-        validation = await resend_settings_service.test_api_key(new_api_key)
+        validation = await resend_settings_service.test_api_key(new_api_key, db=db)
         if not validation.valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -358,12 +355,13 @@ async def update_settings(
 )
 async def test_api_key(
     request: TestKeyRequest,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(P.INTEGRATIONS_MANAGE)
     ),
 ) -> TestKeyResponse:
     """Test if a Resend API key is valid."""
-    result = await resend_settings_service.test_api_key(request.api_key)
+    result = await resend_settings_service.test_api_key(request.api_key, db=db)
     return TestKeyResponse(
         valid=result.valid,
         error=result.error,

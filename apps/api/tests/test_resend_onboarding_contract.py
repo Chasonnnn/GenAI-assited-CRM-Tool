@@ -26,9 +26,18 @@ class _FakeDomainsClient:
         return self.response
 
 
+class _FakeTimeoutDomainsClient(_FakeDomainsClient):
+    async def get(self, url: str, *, headers: dict[str, str]):
+        self.requests.append({"method": "GET", "url": url, "headers": headers})
+        raise httpx.ReadTimeout(
+            "raw timeout detail",
+            request=httpx.Request("GET", url, headers=headers),
+        )
+
+
 @pytest.mark.asyncio
-async def test_resend_domains_restricted_key_is_valid_but_permission_limited(monkeypatch):
-    from app.services import resend_settings_service
+async def test_resend_domains_restricted_key_is_valid_but_permission_limited(db, monkeypatch):
+    from app.services import resend_control_plane, resend_settings_service
 
     client = _FakeDomainsClient(
         httpx.Response(
@@ -40,12 +49,12 @@ async def test_resend_domains_restricted_key_is_valid_but_permission_limited(mon
         )
     )
     monkeypatch.setattr(
-        resend_settings_service.httpx,
+        resend_control_plane.httpx,
         "AsyncClient",
         lambda **_kwargs: client,
     )
 
-    result = await resend_settings_service.test_api_key("re_sending_access")
+    result = await resend_settings_service.test_api_key("re_sending_access", db=db)
 
     assert result.valid is True
     assert result.error is None
@@ -63,8 +72,8 @@ async def test_resend_domains_restricted_key_is_valid_but_permission_limited(mon
 
 
 @pytest.mark.asyncio
-async def test_resend_domains_invalid_key_is_rejected(monkeypatch):
-    from app.services import resend_settings_service
+async def test_resend_domains_invalid_key_is_rejected(db, monkeypatch):
+    from app.services import resend_control_plane, resend_settings_service
 
     client = _FakeDomainsClient(
         httpx.Response(
@@ -73,12 +82,12 @@ async def test_resend_domains_invalid_key_is_rejected(monkeypatch):
         )
     )
     monkeypatch.setattr(
-        resend_settings_service.httpx,
+        resend_control_plane.httpx,
         "AsyncClient",
         lambda **_kwargs: client,
     )
 
-    result = await resend_settings_service.test_api_key("re_invalid")
+    result = await resend_settings_service.test_api_key("re_invalid", db=db)
 
     assert result.valid is False
     assert result.error == "Invalid API key"
@@ -100,23 +109,24 @@ async def test_resend_domains_invalid_key_is_rejected(monkeypatch):
     ],
 )
 async def test_resend_domains_unknown_auth_errors_fail_closed(
+    db,
     monkeypatch,
     status_code,
     name,
 ):
-    from app.services import resend_settings_service
+    from app.services import resend_control_plane, resend_settings_service
 
     payload = {"message": "Authentication failed"}
     if name is not None:
         payload["name"] = name
     client = _FakeDomainsClient(httpx.Response(status_code, json=payload))
     monkeypatch.setattr(
-        resend_settings_service.httpx,
+        resend_control_plane.httpx,
         "AsyncClient",
         lambda **_kwargs: client,
     )
 
-    result = await resend_settings_service.test_api_key("re_untrusted")
+    result = await resend_settings_service.test_api_key("re_untrusted", db=db)
 
     assert result.valid is False
     assert result.error == "Invalid API key"
@@ -126,28 +136,86 @@ async def test_resend_domains_unknown_auth_errors_fail_closed(
 
 
 @pytest.mark.asyncio
-async def test_resend_domains_200_returns_only_verified_domains(monkeypatch):
-    from app.services import resend_settings_service
+@pytest.mark.parametrize("status_code", [429, 503])
+async def test_resend_transient_api_status_preserves_safe_onboarding_error(
+    db,
+    monkeypatch,
+    status_code,
+):
+    from app.services import resend_control_plane, resend_settings_service
+
+    client = _FakeDomainsClient(
+        httpx.Response(
+            status_code,
+            text="raw provider error must be discarded",
+        )
+    )
+    monkeypatch.setattr(
+        resend_control_plane.httpx,
+        "AsyncClient",
+        lambda **_kwargs: client,
+    )
+
+    result = await resend_settings_service.test_api_key("re_transient", db=db)
+
+    assert result.valid is False
+    assert result.error == f"Resend API error: {status_code}"
+    assert result.permission_limited is False
+
+
+@pytest.mark.asyncio
+async def test_resend_timeout_preserves_safe_onboarding_error(db, monkeypatch):
+    from app.services import resend_control_plane, resend_settings_service
+
+    client = _FakeTimeoutDomainsClient(httpx.Response(200))
+    monkeypatch.setattr(
+        resend_control_plane.httpx,
+        "AsyncClient",
+        lambda **_kwargs: client,
+    )
+
+    result = await resend_settings_service.test_api_key("re_timeout", db=db)
+
+    assert result.valid is False
+    assert result.error == "Connection timeout"
+    assert result.permission_limited is False
+
+
+@pytest.mark.asyncio
+async def test_resend_domains_200_returns_only_verified_domains(db, monkeypatch):
+    from app.services import resend_control_plane, resend_settings_service
 
     client = _FakeDomainsClient(
         httpx.Response(
             200,
             json={
                 "data": [
-                    {"name": "first.example", "status": "verified"},
-                    {"name": "pending.example", "status": "pending"},
-                    {"name": "second.example", "status": "verified"},
+                    {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "name": "first.example",
+                        "status": "verified",
+                    },
+                    {
+                        "id": "00000000-0000-4000-8000-000000000002",
+                        "name": "pending.example",
+                        "status": "pending",
+                    },
+                    {
+                        "id": "00000000-0000-4000-8000-000000000003",
+                        "name": "second.example",
+                        "status": "verified",
+                    },
                 ]
             },
         )
     )
     monkeypatch.setattr(
-        resend_settings_service.httpx,
+        resend_control_plane.httpx,
         "AsyncClient",
         lambda **_kwargs: client,
     )
 
-    result = await resend_settings_service.test_api_key("re_full_access")
+    result = await resend_settings_service.test_api_key("re_full_access", db=db)
 
     assert result.valid is True
     assert result.error is None
@@ -168,7 +236,7 @@ async def test_key_test_endpoint_exposes_permission_limited_warning(
         "Enter a domain already verified in Resend."
     )
 
-    async def fake_test_api_key(_api_key: str):
+    async def fake_test_api_key(_api_key: str, **_kwargs):
         return resend_settings_service.ResendKeyValidationResult(
             valid=True,
             error=None,
@@ -203,7 +271,7 @@ async def test_new_key_requires_explicit_verified_domain_and_never_chooses_first
 ):
     from app.services import resend_settings_service
 
-    async def fake_test_api_key(_api_key: str):
+    async def fake_test_api_key(_api_key: str, **_kwargs):
         return resend_settings_service.ResendKeyValidationResult(
             valid=True,
             error=None,
@@ -237,7 +305,7 @@ async def test_new_key_requires_explicit_from_email(
 ):
     from app.services import resend_settings_service
 
-    async def fake_test_api_key(_api_key: str):
+    async def fake_test_api_key(_api_key: str, **_kwargs):
         return resend_settings_service.ResendKeyValidationResult(
             valid=True,
             error=None,
@@ -270,7 +338,7 @@ async def test_full_access_key_accepts_explicit_nonfirst_verified_domain(
 ):
     from app.services import resend_settings_service
 
-    async def fake_test_api_key(_api_key: str):
+    async def fake_test_api_key(_api_key: str, **_kwargs):
         return resend_settings_service.ResendKeyValidationResult(
             valid=True,
             error=None,
@@ -309,7 +377,7 @@ async def test_full_access_key_rejects_domain_outside_verified_list(
 ):
     from app.services import resend_settings_service
 
-    async def fake_test_api_key(_api_key: str):
+    async def fake_test_api_key(_api_key: str, **_kwargs):
         return resend_settings_service.ResendKeyValidationResult(
             valid=True,
             error=None,
@@ -343,7 +411,7 @@ async def test_permission_limited_key_accepts_explicit_domain_with_matching_send
 ):
     from app.services import resend_settings_service
 
-    async def fake_test_api_key(_api_key: str):
+    async def fake_test_api_key(_api_key: str, **_kwargs):
         return resend_settings_service.ResendKeyValidationResult(
             valid=True,
             error=None,
@@ -404,7 +472,7 @@ async def test_sender_identity_change_requires_key_revalidation_in_same_request(
     )
     original_version = settings.current_version
 
-    async def unexpected_validation(_api_key: str):
+    async def unexpected_validation(_api_key: str, **_kwargs):
         raise AssertionError("stored credentials must not be silently reused")
 
     monkeypatch.setattr(

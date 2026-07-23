@@ -9,20 +9,17 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-import httpx
 from cryptography.fernet import Fernet
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import Membership, ResendSettings, User, UserIntegration
+from app.services import resend_control_plane
 
 UNSET = object()
 
 logger = logging.getLogger(__name__)
 
-# Resend API
-RESEND_API_BASE = "https://api.resend.com"
-RESEND_TIMEOUT = 10.0
 PERMISSION_LIMITED_WARNING = (
     "This API key cannot list domains. It may be limited to Resend Sending access "
     "and could still send email. Enter a domain already verified in Resend; this "
@@ -225,7 +222,11 @@ def rotate_webhook_id(
     return s
 
 
-async def test_api_key(api_key: str) -> ResendKeyValidationResult:
+async def test_api_key(
+    api_key: str,
+    *,
+    db: Session,
+) -> ResendKeyValidationResult:
     """
     Test a Resend API key by fetching domains without sending email.
 
@@ -233,91 +234,46 @@ async def test_api_key(api_key: str) -> ResendKeyValidationResult:
     sending-only key cannot list domains. All other authentication errors fail
     closed, including ``invalid_api_key`` with HTTP 403.
     """
-    try:
-        async with httpx.AsyncClient(timeout=RESEND_TIMEOUT) as client:
-            response = await client.get(
-                f"{RESEND_API_BASE}/domains",
-                headers={"Authorization": f"Bearer {api_key}"},
-            )
-
-        if response.status_code in {401, 403}:
-            try:
-                error_payload = response.json()
-            except ValueError:
-                error_payload = {}
-            error_name = (
-                error_payload.get("name")
-                if isinstance(error_payload, dict)
-                else None
-            )
-
-            if (
-                response.status_code == 401
-                and error_name == "restricted_api_key"
-            ):
-                return ResendKeyValidationResult(
-                    valid=True,
-                    error=None,
-                    verified_domains=[],
-                    permission_limited=True,
-                    warning=PERMISSION_LIMITED_WARNING,
-                )
-
-            return ResendKeyValidationResult(
-                valid=False,
-                error="Invalid API key",
-                verified_domains=[],
-                permission_limited=False,
-                warning=None,
-            )
-
-        if response.status_code != 200:
-            return ResendKeyValidationResult(
-                valid=False,
-                error=f"Resend API error: {response.status_code}",
-                verified_domains=[],
-                permission_limited=False,
-                warning=None,
-            )
-
-        data = response.json()
-        domains = data.get("data", [])
-
-        # Extract verified domains
-        verified = [
-            d.get("name").strip().lower()
-            for d in domains
-            if isinstance(d, dict)
-            and d.get("status") == "verified"
-            and isinstance(d.get("name"), str)
-            and d.get("name").strip()
-        ]
-
+    result = await resend_control_plane.ResendControlPlaneClient(
+        db=db,
+        api_key=api_key,
+        provider_account_id=(resend_control_plane.RESEND_UNCLASSIFIED_PROVIDER_ACCOUNT_ID),
+        requests_per_second=(resend_control_plane.RESEND_UNCLASSIFIED_REQUESTS_PER_SECOND),
+    ).list_domains()
+    if result.status is resend_control_plane.ResendControlPlaneStatus.OK:
+        domains = result.value or ()
         return ResendKeyValidationResult(
             valid=True,
             error=None,
-            verified_domains=verified,
+            verified_domains=[domain.name for domain in domains if domain.status == "verified"],
             permission_limited=False,
             warning=None,
         )
-
-    except httpx.TimeoutException:
+    if result.status is resend_control_plane.ResendControlPlaneStatus.LIMITED:
         return ResendKeyValidationResult(
-            valid=False,
-            error="Connection timeout",
+            valid=True,
+            error=None,
             verified_domains=[],
-            permission_limited=False,
-            warning=None,
+            permission_limited=True,
+            warning=PERMISSION_LIMITED_WARNING,
         )
-    except Exception as e:
-        logger.exception("Error testing Resend API key")
-        return ResendKeyValidationResult(
-            valid=False,
-            error=f"Connection error: {e.__class__.__name__}",
-            verified_domains=[],
-            permission_limited=False,
-            warning=None,
+    if result.reason is resend_control_plane.ResendControlPlaneReason.TIMEOUT:
+        error = "Connection timeout"
+    elif result.provider_status_code is not None:
+        error = f"Resend API error: {result.provider_status_code}"
+    else:
+        error = (
+            "Invalid API key"
+            if result.status is resend_control_plane.ResendControlPlaneStatus.FAIL
+            else "Resend API status is unknown"
         )
+    return ResendKeyValidationResult(
+        valid=False,
+        error=error,
+        verified_domains=[],
+        permission_limited=False,
+        warning=None,
+    )
 
 
 def validate_from_email(from_email: str, verified_domain: str | None) -> tuple[bool, str | None]:
