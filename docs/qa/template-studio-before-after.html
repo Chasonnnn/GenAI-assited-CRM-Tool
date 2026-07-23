@@ -103,6 +103,43 @@
       color: #83216a;
     }
 
+    .journey-note {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: 14px;
+      margin: -6px 0 20px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      font-size: 13px;
+    }
+
+    .journey-note strong {
+      white-space: nowrap;
+    }
+
+    .journey-steps {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 7px;
+      color: var(--muted-foreground);
+    }
+
+    .journey-step {
+      padding: 5px 8px;
+      border-radius: 999px;
+      color: var(--foreground);
+      background: var(--muted);
+      font-weight: 650;
+    }
+
+    .journey-arrow {
+      color: #a1a1aa;
+    }
+
     .comparison-toolbar {
       display: flex;
       align-items: center;
@@ -913,7 +950,9 @@
       The current editor already supports visual and HTML composition, reusable variables, previews,
       test sends, and organization history. The proposed concepts keep that foundation while making
       publishing safer, versions easier to understand, and Resend an optional delivery sync target—not
-      the source of truth for templates also used by Gmail and platform sends.
+      the source of truth for templates also used by Gmail and platform sends. Existing production
+      templates are preserved in place and become the initial published versions; the Studio adds drafts
+      and version history without changing their current identity or send behavior.
     </p>
 
     <div class="concept-note">
@@ -922,6 +961,17 @@
         The left side is a real local capture; the right side explores three shadcn-aligned Studio structures.
       </span>
       <span class="tag proposed">No production data</span>
+    </div>
+
+    <div class="journey-note">
+      <strong>One workflow—not three competing choices</strong>
+      <div class="journey-steps" aria-label="Recommended Template Studio journey">
+        <span class="journey-step">C · Find and manage</span>
+        <span class="journey-arrow">→</span>
+        <span class="journey-step">A · Edit and preview</span>
+        <span class="journey-arrow">→</span>
+        <span class="journey-step">B · Review and publish</span>
+      </div>
     </div>
 
     <div class="comparison-toolbar">
