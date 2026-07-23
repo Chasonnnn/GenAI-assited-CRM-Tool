@@ -178,6 +178,32 @@ async def update_settings(
         update.from_email.strip() if "from_email" in fields_set and update.from_email else None
     )
     new_api_key = update.api_key.strip() if "api_key" in fields_set and update.api_key else None
+    requested_provider = (
+        update.email_provider
+        if "email_provider" in fields_set
+        else (current_settings.email_provider if current_settings else None)
+    )
+    sender_identity_changed = bool(
+        current_settings
+        and (
+            (
+                "verified_domain" in fields_set
+                and explicit_domain != current_settings.verified_domain
+            )
+            or (
+                "from_email" in fields_set
+                and explicit_from_email != current_settings.from_email
+            )
+        )
+    )
+    if requested_provider == "resend" and sender_identity_changed and not new_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Re-enter the Resend API key to revalidate a changed sender "
+                "email or verified domain."
+            ),
+        )
 
     # A new key must always be paired with administrator-supplied route identity.
     # Domain-list results are evidence only and never select configuration.

@@ -370,3 +370,64 @@ async def test_permission_limited_key_accepts_explicit_domain_with_matching_send
     stored = resend_settings_service.get_resend_settings(db, test_org.id)
     assert stored is not None
     assert stored.verified_domain == "explicit.example"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "identity_update",
+    [
+        {
+            "verified_domain": "new.example",
+            "from_email": "sender@new.example",
+        },
+        {"from_email": "other@verified.example"},
+    ],
+)
+async def test_sender_identity_change_requires_key_revalidation_in_same_request(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+    monkeypatch,
+    identity_update,
+):
+    from app.services import resend_settings_service
+
+    settings = resend_settings_service.update_resend_settings(
+        db,
+        test_org.id,
+        test_user.id,
+        email_provider="resend",
+        api_key="re_existing",
+        verified_domain="verified.example",
+        from_email="sender@verified.example",
+    )
+    original_version = settings.current_version
+
+    async def unexpected_validation(_api_key: str):
+        raise AssertionError("stored credentials must not be silently reused")
+
+    monkeypatch.setattr(
+        resend_settings_service,
+        "test_api_key",
+        unexpected_validation,
+    )
+
+    response = await authed_client.patch(
+        "/resend/settings",
+        json={
+            **identity_update,
+            "expected_version": original_version,
+        },
+    )
+
+    assert response.status_code == 400
+    assert "api key" in response.json()["detail"].lower()
+    assert "revalid" in response.json()["detail"].lower()
+
+    db.expire_all()
+    stored = resend_settings_service.get_resend_settings(db, test_org.id)
+    assert stored is not None
+    assert stored.verified_domain == "verified.example"
+    assert stored.from_email == "sender@verified.example"
+    assert stored.current_version == original_version
