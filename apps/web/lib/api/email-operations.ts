@@ -72,6 +72,81 @@ export interface EmailOperationMessagePage {
     next_cursor: string | null
 }
 
+export type EmailReconciliationCaseType = "orphan_webhook" | "unknown_delivery"
+export type EmailReconciliationStatus =
+    | "pending"
+    | "running"
+    | "action_required"
+    | "resolved"
+    | "dismissed"
+export type EmailReconciliationListStatus = "monitoring" | EmailReconciliationStatus
+export type EmailReconciliationAction =
+    | "retry_correlation"
+    | "link_event"
+    | "dismiss"
+    | "confirm_sent"
+    | "confirm_not_sent"
+
+export interface EmailReconciliationCase {
+    id: string
+    case_type: EmailReconciliationCaseType
+    status: EmailReconciliationStatus
+    reason_code: string
+    version: number
+    provider: "resend"
+    event_type: string | null
+    event_created_at: string | null
+    received_at: string | null
+    message_id: string | null
+    delivery_id: string | null
+    attempt_count: number | null
+    max_attempts: number | null
+    next_attempt_at: string | null
+    available_actions: EmailReconciliationAction[]
+    detected_at: string
+    updated_at: string
+}
+
+export interface EmailReconciliationCounts {
+    monitoring: number
+    action_required: number
+    resolved: number
+}
+
+export interface EmailReconciliationCasePage {
+    items: EmailReconciliationCase[]
+    next_cursor: string | null
+    counts: EmailReconciliationCounts
+}
+
+export interface RetryEmailReconciliationCaseInput {
+    caseId: string
+    expectedVersion: number
+}
+
+export type EmailReconciliationDismissResolution =
+    | "unsupported_event"
+    | "test_event"
+    | "not_actionable"
+
+export interface DismissEmailReconciliationCaseInput
+    extends RetryEmailReconciliationCaseInput {
+    resolutionCode: EmailReconciliationDismissResolution
+}
+
+export interface LinkEmailReconciliationEventInput
+    extends RetryEmailReconciliationCaseInput {
+    emailLogId: string
+}
+
+export interface ConfirmEmailReconciliationSentInput
+    extends RetryEmailReconciliationCaseInput {
+    providerMessageId: string
+}
+
+export type ConfirmEmailReconciliationNotSentInput =
+    RetryEmailReconciliationCaseInput
+
 export interface EmailOperationDelivery {
     id: string
     status: string
@@ -135,5 +210,85 @@ export async function getEmailOperationMessage(
 ): Promise<EmailOperationMessageDetail> {
     return api.get<EmailOperationMessageDetail>(
         `/email-operations/messages/${encodeURIComponent(messageId)}`,
+    )
+}
+
+export async function getEmailReconciliationCases(options?: {
+    status?: EmailReconciliationListStatus
+    limit?: number
+    cursor?: string
+}): Promise<EmailReconciliationCasePage> {
+    const params = new URLSearchParams()
+    params.set("limit", String(options?.limit ?? 25))
+    params.set("status", options?.status ?? "action_required")
+    if (options?.cursor) params.set("cursor", options.cursor)
+    return api.get<EmailReconciliationCasePage>(
+        `/email-operations/reconciliation-cases?${params.toString()}`,
+    )
+}
+
+export async function retryEmailReconciliationCorrelation({
+    caseId,
+    expectedVersion,
+}: RetryEmailReconciliationCaseInput): Promise<EmailReconciliationCase> {
+    return api.post<EmailReconciliationCase>(
+        `/email-operations/reconciliation-cases/${encodeURIComponent(caseId)}/retry-correlation`,
+        { expected_version: expectedVersion },
+    )
+}
+
+export async function dismissEmailReconciliationCase({
+    caseId,
+    expectedVersion,
+    resolutionCode,
+}: DismissEmailReconciliationCaseInput): Promise<EmailReconciliationCase> {
+    return api.post<EmailReconciliationCase>(
+        `/email-operations/reconciliation-cases/${encodeURIComponent(caseId)}/dismiss`,
+        {
+            expected_version: expectedVersion,
+            resolution_code: resolutionCode,
+        },
+    )
+}
+
+export async function linkEmailReconciliationEvent({
+    caseId,
+    expectedVersion,
+    emailLogId,
+}: LinkEmailReconciliationEventInput): Promise<EmailReconciliationCase> {
+    return api.post<EmailReconciliationCase>(
+        `/email-operations/reconciliation-cases/${encodeURIComponent(caseId)}/link-event`,
+        {
+            expected_version: expectedVersion,
+            email_log_id: emailLogId,
+        },
+    )
+}
+
+export async function confirmEmailReconciliationSent({
+    caseId,
+    expectedVersion,
+    providerMessageId,
+}: ConfirmEmailReconciliationSentInput): Promise<EmailReconciliationCase> {
+    return api.post<EmailReconciliationCase>(
+        `/email-operations/reconciliation-cases/${encodeURIComponent(caseId)}/resolve-delivery`,
+        {
+            expected_version: expectedVersion,
+            outcome: "confirm_sent",
+            provider_message_id: providerMessageId,
+        },
+    )
+}
+
+export async function confirmEmailReconciliationNotSent({
+    caseId,
+    expectedVersion,
+}: ConfirmEmailReconciliationNotSentInput): Promise<EmailReconciliationCase> {
+    return api.post<EmailReconciliationCase>(
+        `/email-operations/reconciliation-cases/${encodeURIComponent(caseId)}/resolve-delivery`,
+        {
+            expected_version: expectedVersion,
+            outcome: "confirm_not_sent",
+        },
     )
 }
