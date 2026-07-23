@@ -1022,6 +1022,23 @@
       "422"
     ]
   },
+  "/email-operations/messages": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-operations/messages/{message_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-operations/readiness": {
+    "GET": [
+      "200"
+    ]
+  },
   "/email-templates": {
     "GET": [
       "200",
