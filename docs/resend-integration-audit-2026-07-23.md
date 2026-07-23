@@ -29,8 +29,9 @@ The highest-risk defects found in the audit are addressed:
 - Webhook signatures are checked against the unmodified request body, accepted
   events are deduplicated by `svix-id`, and lifecycle projection is safe for
   at-least-once, unordered delivery. A fast webhook cannot be overwritten by a
-  later send response, retryable transport failure, or final lease expiry, and
-  can resolve a fenced unknown delivery outcome.
+  later send response or retryable transport failure. A final expired lease is
+  reconciled instead of falsely failed, and signed evidence can resolve it
+  whether the webhook arrives before or after expiry.
 - Organization onboarding accepts permission-limited Sending access keys,
   requires an explicit domain and sender, and no longer silently selects the
   first domain returned by Resend. Changing a stored sender identity now
@@ -246,8 +247,9 @@ response merges acceptance monotonically and cannot regress delivered,
 bounced, failed, suppressed, or complained state. If that response is instead a
 retryable failure—or the worker disappears until its final lease expires—the
 verified provider identity still resolves the outbox as accepted and prevents a
-duplicate retry or false dead-letter while preserving the webhook's canonical
-message state.
+duplicate retry while preserving the webhook's canonical message state. Without
+that evidence, the expired final lease becomes `reconciliation_required`
+instead of a false dead-letter; a later signed webhook can still resolve it.
 
 An unmatched event with a known organization is retained and receives a
 bounded reconciliation job. The current job has eight attempts with
@@ -476,8 +478,8 @@ The implementation is covered by focused tests for:
 - webhook signature rejection, `svix-id` deduplication, orphan acceptance,
   unordered lifecycle events, concurrent engagement events, provider-ID
   conflicts, fast-webhook/send-response races, reconciliation resolution,
-  retryable-failure and final-lease races after verified acceptance,
-  suppressions, and campaign aggregates;
+  retryable-failure and final-lease races both before and after verified
+  acceptance, suppressions, and campaign aggregates;
 - organization scoping and sanitization of Email Operations APIs;
 - Email Operations, case engagement, restricted-key onboarding, and template
   history/rollback UI behavior;
@@ -490,7 +492,7 @@ The implementation is covered by focused tests for:
 
 The final repository state passed:
 
-- backend: `1983 passed` with the full pytest suite and `ruff check .`;
+- backend: `1984 passed` with the full pytest suite and `ruff check .`;
 - frontend: `221` test files and `1402` tests passed, plus ESLint and
   `tsc --noEmit`;
 - database: Alembic current/head both resolve to `20260723_0210`, and
