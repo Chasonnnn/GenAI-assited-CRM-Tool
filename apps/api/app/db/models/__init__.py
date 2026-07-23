@@ -112,6 +112,7 @@ from app.db.models.platform_templates import (
 )
 from app.db.models.pipelines import EntityVersion, Pipeline, PipelineStage
 from app.db.models.queues import Queue, QueueMember
+from app.db.models.resend_readiness import ResendReadinessSnapshot
 from app.db.models.status_changes import StatusChangeRequest
 from app.db.models.surrogates import (
     CustomField,
@@ -262,6 +263,7 @@ __all__ = [
     "Queue",
     "QueueMember",
     "RequestMetricsRollup",
+    "ResendReadinessSnapshot",
     "ResendSettings",
     "ZapierInboundWebhook",
     "ZapierOutboundEvent",
