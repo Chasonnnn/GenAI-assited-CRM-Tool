@@ -246,12 +246,12 @@ def test_terminal_delivery_failure_marks_appointment_email_failed(
     assert appointment_log.error == "Provider rejected the sender"
 
 
-def test_final_expired_lease_marks_appointment_email_failed(
+def test_final_expired_lease_marks_appointment_email_for_reconciliation(
     db,
     test_org,
     test_user,
 ):
-    from app.db.enums import AppointmentEmailType, EmailStatus
+    from app.db.enums import AppointmentEmailType, EmailDeliveryStatus, EmailStatus
     from app.db.models import EmailDelivery
     from app.services import appointment_email_service, email_delivery_service
 
@@ -291,11 +291,16 @@ def test_final_expired_lease_marks_appointment_email_failed(
         lease_for=timedelta(minutes=1),
     )
 
+    db.refresh(delivery)
     db.refresh(appointment_log)
-    assert appointment_log.status == EmailStatus.FAILED.value
+    assert delivery.status == EmailDeliveryStatus.RECONCILIATION_REQUIRED.value
+    assert appointment_log.status == EmailStatus.PENDING.value
     assert appointment_log.sent_at is None
     assert appointment_log.external_message_id is None
-    assert appointment_log.error == "Delivery lease expired after final attempt"
+    assert appointment_log.error == (
+        "Delivery lease expired after the final attempt; provider outcome is unknown "
+        "and operator reconciliation is required"
+    )
 
 
 def test_suppressed_appointment_email_is_atomically_recorded_as_skipped(
