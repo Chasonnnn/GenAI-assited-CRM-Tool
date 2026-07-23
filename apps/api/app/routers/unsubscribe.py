@@ -61,4 +61,4 @@ async def unsubscribe_post(
 ) -> HTMLResponse:
     """Handle List-Unsubscribe-Post one-click requests."""
     _ = await request.body()  # body not required; consumed to avoid warnings
-    return await unsubscribe_get(token, db)
+    return unsubscribe_get(token, db)
