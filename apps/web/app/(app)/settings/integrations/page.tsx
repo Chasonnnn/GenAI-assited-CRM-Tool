@@ -1672,6 +1672,19 @@ function EmailConfigurationSectionContent({
     const hasFromEmail = Boolean(emailForm.fromEmail.trim())
     const hasGmailSender = Boolean(emailForm.defaultSender)
     const normalizedVerifiedDomain = emailForm.verifiedDomain.trim().toLowerCase()
+    const normalizedFromEmail = emailForm.fromEmail.trim().toLowerCase()
+    const senderIdentityChanged = Boolean(
+        emailForm.provider === "resend" &&
+        (normalizedVerifiedDomain !==
+            (settings?.verified_domain?.trim().toLowerCase() ?? "") ||
+            normalizedFromEmail !==
+            (settings?.from_email?.trim().toLowerCase() ?? "")),
+    )
+    const storedCredentialRetestRequired = Boolean(
+        settings?.api_key_masked &&
+        senderIdentityChanged &&
+        !emailUi.keyTested?.valid,
+    )
     const testedDomains = emailUi.keyTested?.verified_domains ?? []
     const testedDomainMismatch = Boolean(
         emailUi.keyTested?.valid &&
@@ -1684,6 +1697,7 @@ function EmailConfigurationSectionContent({
             newResendKeyValidated &&
             hasVerifiedDomain &&
             hasFromEmail &&
+            !storedCredentialRetestRequired &&
             !testedDomainMismatch)
     const gmailReady = emailForm.provider !== "gmail" || hasGmailSender
     const canSave = Boolean(emailForm.provider) && resendReady && gmailReady
@@ -1711,6 +1725,7 @@ function EmailConfigurationSectionContent({
                 eligibleSenders={eligibleSenders ?? []}
                 eligibleSendersLoading={eligibleSendersLoading}
                 showMaskedKey={showMaskedKey}
+                storedCredentialRetestRequired={storedCredentialRetestRequired}
                 canSave={canSave}
                 pendingState={{
                     keyTest: testKey.isPending,
@@ -1796,6 +1811,7 @@ function EmailSettingsCard({
     eligibleSenders,
     eligibleSendersLoading,
     showMaskedKey,
+    storedCredentialRetestRequired,
     canSave,
     pendingState,
     onProviderChange,
@@ -1814,6 +1830,7 @@ function EmailSettingsCard({
     eligibleSenders: EligibleSender[]
     eligibleSendersLoading: boolean
     showMaskedKey: boolean
+    storedCredentialRetestRequired: boolean
     canSave: boolean
     pendingState: {
         keyTest: boolean
@@ -1863,6 +1880,7 @@ function EmailSettingsCard({
                         ui={ui}
                         settings={settings}
                         showMaskedKey={showMaskedKey}
+                        storedCredentialRetestRequired={storedCredentialRetestRequired}
                         pendingState={pendingState}
                         updateEmailForm={updateEmailForm}
                         onApiKeyChange={onApiKeyChange}
@@ -1938,6 +1956,7 @@ function ResendConfigurationFields({
     ui,
     settings,
     showMaskedKey,
+    storedCredentialRetestRequired,
     pendingState,
     updateEmailForm,
     onApiKeyChange,
@@ -1951,6 +1970,7 @@ function ResendConfigurationFields({
     ui: EmailConfigurationUiState
     settings: ResendSettings | undefined
     showMaskedKey: boolean
+    storedCredentialRetestRequired: boolean
     pendingState: {
         keyTest: boolean
         webhookRotate: boolean
@@ -1980,9 +2000,25 @@ function ResendConfigurationFields({
                 onTestKey={onTestKey}
             />
 
+            {storedCredentialRetestRequired ? (
+                <Alert
+                    id="resend-sender-retest-alert"
+                    variant="destructive"
+                >
+                    <AlertTriangleIcon aria-hidden="true" />
+                    <AlertTitle>Re-test sender access</AlertTitle>
+                    <AlertDescription>
+                        These sender changes are not verified. Re-enter the
+                        stored Resend credential with Change Key, then test it
+                        before saving.
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+
             <ResendVerifiedDomainField
                 value={form.verifiedDomain}
                 keyTested={ui.keyTested}
+                storedCredentialRetestRequired={storedCredentialRetestRequired}
                 onChange={(verifiedDomain) =>
                     updateEmailForm("verifiedDomain", verifiedDomain, true)
                 }
@@ -1995,6 +2031,12 @@ function ResendConfigurationFields({
                     type="email"
                     value={form.fromEmail}
                     onChange={(event) => updateEmailForm("fromEmail", event.target.value, true)}
+                    aria-invalid={storedCredentialRetestRequired}
+                    aria-describedby={
+                        storedCredentialRetestRequired
+                            ? "resend-sender-retest-alert"
+                            : undefined
+                    }
                     placeholder={
                         form.verifiedDomain
                             ? `no-reply@${form.verifiedDomain}`
@@ -2148,46 +2190,7 @@ function ResendApiKeyField({
                     </div>
                 )}
             </div>
-            {keyTested?.valid && keyTested.permission_limited ? (
-                <Alert>
-                    <AlertTriangleIcon aria-hidden="true" />
-                    <AlertTitle>Domain access is permission-limited</AlertTitle>
-                    <AlertDescription className="space-y-1">
-                        <p>{keyTested.warning}</p>
-                        <p>
-                            Enter a domain you have already verified in Resend.
-                            This app cannot confirm domain verification with this
-                            key.
-                        </p>
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-            {keyTested?.valid && !keyTested.permission_limited ? (
-                <Alert>
-                    <CheckCircleIcon aria-hidden="true" />
-                    <AlertTitle>API key accepted</AlertTitle>
-                    <AlertDescription className="space-y-1">
-                        <p>
-                            No domain was selected automatically. Enter one of the
-                            verified domains in the field below.
-                        </p>
-                        <p>
-                            {keyTested.verified_domains.length > 0
-                                ? `Available verified domains: ${keyTested.verified_domains.join(", ")}`
-                                : "No verified domains were returned for this account."}
-                        </p>
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-            {keyTested && !keyTested.valid ? (
-                <Alert variant="destructive">
-                    <XCircleIcon aria-hidden="true" />
-                    <AlertTitle>API key is invalid</AlertTitle>
-                    <AlertDescription>
-                        {keyTested.error || "Resend rejected this API key."}
-                    </AlertDescription>
-                </Alert>
-            ) : null}
+            <ResendVerifiedDomainBanner keyTested={keyTested} />
             <p className="text-xs text-muted-foreground">
                 Testing checks Resend domain access only and never sends an
                 email. Full access keys can list verified domains; Sending
@@ -2216,13 +2219,71 @@ function ResendApiKeyField({
     )
 }
 
+function ResendVerifiedDomainBanner({
+    keyTested,
+}: {
+    keyTested: EmailConfigurationUiState["keyTested"]
+}) {
+    if (keyTested?.valid && keyTested.permission_limited) {
+        return (
+            <Alert>
+                <AlertTriangleIcon aria-hidden="true" />
+                <AlertTitle>Domain access is permission-limited</AlertTitle>
+                <AlertDescription className="space-y-1">
+                    <p>{keyTested.warning}</p>
+                    <p>
+                        Enter a domain you have already verified in Resend. This
+                        app cannot confirm domain verification with this key.
+                    </p>
+                </AlertDescription>
+            </Alert>
+        )
+    }
+
+    if (keyTested?.valid) {
+        return (
+            <Alert>
+                <CheckCircleIcon aria-hidden="true" />
+                <AlertTitle>API key accepted</AlertTitle>
+                <AlertDescription className="space-y-1">
+                    <p>
+                        No domain was selected automatically. Enter one of the
+                        verified domains in the field below.
+                    </p>
+                    <p>
+                        {keyTested.verified_domains.length > 0
+                            ? `Available verified domains: ${keyTested.verified_domains.join(", ")}`
+                            : "No verified domains were returned for this account."}
+                    </p>
+                </AlertDescription>
+            </Alert>
+        )
+    }
+
+    if (keyTested && !keyTested.valid) {
+        return (
+            <Alert variant="destructive">
+                <XCircleIcon aria-hidden="true" />
+                <AlertTitle>API key is invalid</AlertTitle>
+                <AlertDescription>
+                    {keyTested.error || "Resend rejected this API key."}
+                </AlertDescription>
+            </Alert>
+        )
+    }
+
+    return null
+}
+
 function ResendVerifiedDomainField({
     value,
     keyTested,
+    storedCredentialRetestRequired,
     onChange,
 }: {
     value: string
     keyTested: EmailConfigurationUiState["keyTested"]
+    storedCredentialRetestRequired: boolean
     onChange: (verifiedDomain: string) => void
 }) {
     const normalizedValue = value.trim().toLowerCase()
@@ -2243,8 +2304,15 @@ function ResendVerifiedDomainField({
                 placeholder="example.com"
                 name="resend-verified-domain"
                 autoComplete="off"
-                aria-invalid={domainRejectedByFullAccessKey}
-                aria-describedby="resend-verified-domain-help"
+                aria-invalid={
+                    storedCredentialRetestRequired ||
+                    domainRejectedByFullAccessKey
+                }
+                aria-describedby={
+                    storedCredentialRetestRequired
+                        ? "resend-verified-domain-help resend-sender-retest-alert"
+                        : "resend-verified-domain-help"
+                }
             />
             <p
                 id="resend-verified-domain-help"

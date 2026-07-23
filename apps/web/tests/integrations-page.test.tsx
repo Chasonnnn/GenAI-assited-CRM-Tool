@@ -688,6 +688,79 @@ describe('IntegrationsPage', () => {
         ).toBeInTheDocument()
     })
 
+    it('requires the stored Resend credential to be re-tested before saving a changed sender identity', async () => {
+        mockTestResendKey.mockResolvedValue({
+            valid: true,
+            error: null,
+            verified_domains: ['mail.example'],
+            permission_limited: false,
+            warning: null,
+        })
+        mockUpdateResendSettings.mockResolvedValue({
+            ...resendSettingsData,
+            verified_domain: 'mail.example',
+            from_email: 'updates@mail.example',
+        })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        fireEvent.change(within(dialog).getByLabelText('Verified domain'), {
+            target: { value: 'mail.example' },
+        })
+        fireEvent.change(within(dialog).getByLabelText('From Email'), {
+            target: { value: 'updates@mail.example' },
+        })
+
+        const saveButton = within(dialog).getByRole('button', {
+            name: /save email configuration/i,
+        })
+        expect(saveButton).toBeDisabled()
+        expect(
+            within(dialog).getByText(/these sender changes are not verified/i)
+        ).toBeInTheDocument()
+        expect(within(dialog).getByLabelText('Verified domain')).toHaveAttribute(
+            'aria-invalid',
+            'true'
+        )
+        expect(
+            within(dialog).queryByText(/api key accepted/i)
+        ).not.toBeInTheDocument()
+        expect(mockUpdateResendSettings).not.toHaveBeenCalled()
+
+        fireEvent.click(within(dialog).getByRole('button', { name: /change key/i }))
+        fireEvent.change(within(dialog).getByLabelText('API Key'), {
+            target: { value: 're_stored_credential' },
+        })
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Test' }))
+        })
+
+        expect(mockTestResendKey).toHaveBeenCalledWith('re_stored_credential')
+        expect(
+            within(dialog).queryByText(/these sender changes are not verified/i)
+        ).not.toBeInTheDocument()
+        expect(within(dialog).getByText(/api key accepted/i)).toBeInTheDocument()
+        expect(within(dialog).getByLabelText('Verified domain')).not.toHaveAttribute(
+            'aria-invalid',
+            'true'
+        )
+        expect(saveButton).toBeEnabled()
+
+        await act(async () => {
+            fireEvent.click(saveButton)
+        })
+
+        expect(mockUpdateResendSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                api_key: 're_stored_credential',
+                verified_domain: 'mail.example',
+                from_email: 'updates@mail.example',
+            })
+        )
+    })
+
     it('does not auto-select a domain or synthesize a sender after a full-access key test', async () => {
         mockUseResendSettingsQuery.mockImplementation(() => ({
             data: {
