@@ -1384,6 +1384,23 @@ def remove_from_suppression(db: Session, org_id: UUID, email: str) -> bool:
 # =============================================================================
 
 
+def _campaign_run_result(
+    run: CampaignRun,
+    *,
+    retried_count: int | None = None,
+) -> dict:
+    result = {
+        "sent_count": run.sent_count,
+        "delivered_count": run.delivered_count,
+        "failed_count": run.failed_count,
+        "skipped_count": run.skipped_count,
+        "total_count": run.total_count,
+    }
+    if retried_count is not None:
+        result["retried_count"] = retried_count
+    return result
+
+
 def execute_campaign_run(
     db: Session,
     org_id: UUID,
@@ -1402,35 +1419,27 @@ def execute_campaign_run(
     """
     from app.services import email_service
 
-    # Get campaign
-    campaign = (
-        db.query(Campaign)
-        .filter(
-            Campaign.id == campaign_id,
-            Campaign.organization_id == org_id,
-        )
-        .first()
+    locked = _lock_campaign_run_and_campaign(
+        db,
+        organization_id=org_id,
+        run_id=run_id,
     )
-
-    if not campaign:
-        raise Exception(f"Campaign {campaign_id} not found")
-
-    # Get run
-    run = (
-        db.query(CampaignRun)
-        .filter(
-            CampaignRun.id == run_id,
-            CampaignRun.campaign_id == campaign_id,
-        )
-        .first()
-    )
-
-    if not run:
+    if locked is None:
         raise Exception(f"Campaign run {run_id} not found")
+    run, campaign = locked
+    if campaign.id != campaign_id:
+        raise Exception(f"Campaign run {run_id} not found")
+    if campaign.status == CampaignStatus.CANCELLED.value:
+        return _campaign_run_result(run)
 
     # Get template
     template = (
-        db.query(EmailTemplate).filter(EmailTemplate.id == campaign.email_template_id).first()
+        db.query(EmailTemplate)
+        .filter(
+            EmailTemplate.id == campaign.email_template_id,
+            EmailTemplate.organization_id == org_id,
+        )
+        .first()
     )
 
     if not template:
@@ -1442,13 +1451,7 @@ def execute_campaign_run(
     portal_base_url = org_service.get_org_portal_base_url(org)
 
     if run.status == "completed":
-        return {
-            "sent_count": run.sent_count,
-            "delivered_count": run.delivered_count,
-            "failed_count": run.failed_count,
-            "skipped_count": run.skipped_count,
-            "total_count": run.total_count,
-        }
+        return _campaign_run_result(run)
 
     # Mark campaign as sending
     campaign.status = CampaignStatus.SENDING.value
@@ -1511,13 +1514,7 @@ def execute_campaign_run(
         ):
             raise RuntimeError("Campaign aggregate target is missing")
 
-        return {
-            "sent_count": run.sent_count,
-            "delivered_count": run.delivered_count,
-            "failed_count": run.failed_count,
-            "skipped_count": run.skipped_count,
-            "total_count": run.total_count,
-        }
+        return _campaign_run_result(run)
 
     def _is_cancelled() -> bool:
         db.refresh(campaign)
@@ -1687,13 +1684,7 @@ def execute_campaign_run(
     ):
         raise RuntimeError("Campaign aggregate target is missing")
 
-    return {
-        "sent_count": run.sent_count,
-        "delivered_count": run.delivered_count,
-        "failed_count": run.failed_count,
-        "skipped_count": run.skipped_count,
-        "total_count": run.total_count,
-    }
+    return _campaign_run_result(run)
 
 
 def retry_failed_campaign_run(
@@ -1706,30 +1697,26 @@ def retry_failed_campaign_run(
     """Retry failed recipients for an existing campaign run."""
     from app.services import email_service
 
-    campaign = (
-        db.query(Campaign)
-        .filter(
-            Campaign.id == campaign_id,
-            Campaign.organization_id == org_id,
-        )
-        .first()
+    locked = _lock_campaign_run_and_campaign(
+        db,
+        organization_id=org_id,
+        run_id=run_id,
     )
-    if not campaign:
-        raise Exception(f"Campaign {campaign_id} not found")
-
-    run = (
-        db.query(CampaignRun)
-        .filter(
-            CampaignRun.id == run_id,
-            CampaignRun.campaign_id == campaign_id,
-        )
-        .first()
-    )
-    if not run:
+    if locked is None:
         raise Exception(f"Campaign run {run_id} not found")
+    run, campaign = locked
+    if campaign.id != campaign_id:
+        raise Exception(f"Campaign run {run_id} not found")
+    if campaign.status == CampaignStatus.CANCELLED.value:
+        return _campaign_run_result(run, retried_count=0)
 
     template = (
-        db.query(EmailTemplate).filter(EmailTemplate.id == campaign.email_template_id).first()
+        db.query(EmailTemplate)
+        .filter(
+            EmailTemplate.id == campaign.email_template_id,
+            EmailTemplate.organization_id == org_id,
+        )
+        .first()
     )
     if not template:
         raise Exception(f"Email template {campaign.email_template_id} not found")
@@ -1749,14 +1736,7 @@ def retry_failed_campaign_run(
         .all()
     )
     if not failed_recipients:
-        return {
-            "sent_count": run.sent_count,
-            "delivered_count": run.delivered_count,
-            "failed_count": run.failed_count,
-            "skipped_count": run.skipped_count,
-            "total_count": run.total_count,
-            "retried_count": 0,
-        }
+        return _campaign_run_result(run, retried_count=0)
 
     campaign.status = CampaignStatus.SENDING.value
     run.status = "running"
@@ -1913,11 +1893,4 @@ def retry_failed_campaign_run(
     ):
         raise RuntimeError("Campaign aggregate target is missing")
 
-    return {
-        "sent_count": run.sent_count,
-        "delivered_count": run.delivered_count,
-        "failed_count": run.failed_count,
-        "skipped_count": run.skipped_count,
-        "total_count": run.total_count,
-        "retried_count": retried_count,
-    }
+    return _campaign_run_result(run, retried_count=retried_count)

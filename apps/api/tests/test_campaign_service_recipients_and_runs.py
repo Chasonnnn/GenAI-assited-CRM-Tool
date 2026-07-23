@@ -1245,6 +1245,46 @@ def test_execute_campaign_run_completed_short_circuit(db, test_org, test_user):
     }
 
 
+def test_execute_campaign_run_does_not_revive_concurrently_cancelled_campaign(
+    db,
+    test_org,
+    test_user,
+):
+    template = _create_template(db, test_org.id)
+    campaign = _create_campaign(
+        db,
+        test_org.id,
+        test_user.id,
+        template.id,
+        status=CampaignStatus.CANCELLED.value,
+    )
+    run = _create_run(db, test_org.id, campaign.id, status="failed")
+    run.error_message = "cancelled"
+    run.completed_at = datetime.now(timezone.utc)
+    db.commit()
+
+    result = campaign_service.execute_campaign_run(
+        db,
+        org_id=test_org.id,
+        campaign_id=campaign.id,
+        run_id=run.id,
+        actor_user_id=test_user.id,
+    )
+
+    db.refresh(campaign)
+    db.refresh(run)
+    assert campaign.status == CampaignStatus.CANCELLED.value
+    assert run.status == "failed"
+    assert run.error_message == "cancelled"
+    assert result == {
+        "sent_count": 0,
+        "delivered_count": 0,
+        "failed_count": 0,
+        "skipped_count": 0,
+        "total_count": 0,
+    }
+
+
 def test_retry_failed_campaign_run_updates_recipients(
     monkeypatch, db, test_org, test_user, default_stage
 ):
@@ -1340,6 +1380,78 @@ def test_retry_failed_campaign_run_updates_recipients(
     assert failed_recipient.status == CampaignRecipientStatus.PENDING.value
     assert run.opened_count == 1
     assert run.clicked_count == 1
+
+
+def test_retry_failed_campaign_run_does_not_revive_concurrently_cancelled_campaign(
+    db,
+    test_org,
+    test_user,
+    default_stage,
+):
+    from app.db.models import EmailLog
+
+    _configure_resend_provider(db, test_org.id)
+    template = _create_template(db, test_org.id)
+    campaign = _create_campaign(
+        db,
+        test_org.id,
+        test_user.id,
+        template.id,
+        status=CampaignStatus.CANCELLED.value,
+    )
+    run = _create_run(db, test_org.id, campaign.id, status="failed")
+    run.email_provider = "resend"
+    run.error_message = "cancelled"
+    run.completed_at = datetime.now(timezone.utc)
+    entity = _create_surrogate(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
+        email="cancelled-retry@example.com",
+        name="Cancelled Retry",
+    )
+    recipient = CampaignRecipient(
+        id=uuid4(),
+        run_id=run.id,
+        entity_type="case",
+        entity_id=entity.id,
+        recipient_email=entity.email,
+        recipient_name=entity.full_name,
+        status=CampaignRecipientStatus.FAILED.value,
+        send_revision=3,
+    )
+    db.add(recipient)
+    db.commit()
+
+    result = campaign_service.retry_failed_campaign_run(
+        db,
+        org_id=test_org.id,
+        campaign_id=campaign.id,
+        run_id=run.id,
+        actor_user_id=test_user.id,
+    )
+
+    db.refresh(campaign)
+    db.refresh(run)
+    db.refresh(recipient)
+    assert campaign.status == CampaignStatus.CANCELLED.value
+    assert run.status == "failed"
+    assert run.error_message == "cancelled"
+    assert recipient.status == CampaignRecipientStatus.FAILED.value
+    assert recipient.send_revision == 3
+    assert (
+        db.query(EmailLog)
+        .filter(
+            EmailLog.organization_id == test_org.id,
+            EmailLog.source_type == "campaign_recipient",
+            EmailLog.source_id == recipient.id,
+        )
+        .count()
+        == 0
+    )
+    assert result["retried_count"] == 0
 
 
 def test_retry_failed_campaign_recipient_advances_revision_and_keeps_prior_message(
