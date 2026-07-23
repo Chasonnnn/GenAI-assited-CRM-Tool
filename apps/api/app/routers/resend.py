@@ -56,6 +56,7 @@ class ResendSettingsUpdate(BaseModel):
     from_email: str | None = None
     from_name: str | None = None
     reply_to_email: str | None = None
+    verified_domain: str | None = None
     webhook_signing_secret: str | None = None  # Plain text, stored encrypted
     default_sender_user_id: str | None = None
     expected_version: int | None = Field(None, description="Required for optimistic locking")
@@ -72,7 +73,9 @@ class TestKeyResponse(BaseModel):
 
     valid: bool
     error: str | None = None
-    verified_domains: list[str] = []
+    verified_domains: list[str] = Field(default_factory=list)
+    permission_limited: bool = False
+    warning: str | None = None
 
 
 class RotateWebhookResponse(BaseModel):
@@ -164,26 +167,83 @@ async def update_settings(
         if not is_valid:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
 
-    # If API key is being updated, validate and get verified domain
-    verified_domain = None
-    if update.api_key:
-        is_valid, error, domains = await resend_settings_service.test_api_key(update.api_key)
-        if not is_valid:
+    current_settings = resend_settings_service.get_resend_settings(db, session.org_id)
+    fields_set = update.model_fields_set
+    explicit_domain = (
+        update.verified_domain.strip().lower()
+        if "verified_domain" in fields_set and update.verified_domain
+        else None
+    )
+    explicit_from_email = (
+        update.from_email.strip() if "from_email" in fields_set and update.from_email else None
+    )
+    new_api_key = update.api_key.strip() if "api_key" in fields_set and update.api_key else None
+
+    # A new key must always be paired with administrator-supplied route identity.
+    # Domain-list results are evidence only and never select configuration.
+    if new_api_key:
+        if not explicit_domain:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid API key: {error}",
+                detail="Verified domain is required when saving a Resend API key.",
             )
-        if domains:
-            verified_domain = domains[0]  # Use first verified domain
+        if not explicit_from_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="From email is required when saving a Resend API key.",
+            )
 
-    # If from_email is being updated, validate it matches verified domain
-    current_settings = resend_settings_service.get_resend_settings(db, session.org_id)
-    if update.from_email:
-        domain_to_check = verified_domain or (
-            current_settings.verified_domain if current_settings else None
-        )
+        validation = await resend_settings_service.test_api_key(new_api_key)
+        if not validation.valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid API key: {validation.error}",
+            )
+
+        if not validation.permission_limited and explicit_domain not in set(
+            validation.verified_domains
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Verified domain is not in the verified domains available "
+                    "to this Resend API key."
+                ),
+            )
+
+    effective_provider = current_settings.email_provider if current_settings else None
+    effective_domain = current_settings.verified_domain if current_settings else None
+    effective_from_email = current_settings.from_email if current_settings else None
+    if "email_provider" in fields_set:
+        effective_provider = update.email_provider
+    if "verified_domain" in fields_set:
+        effective_domain = explicit_domain
+    if "from_email" in fields_set:
+        effective_from_email = explicit_from_email
+    effective_key_configured = bool(
+        new_api_key
+        or ("api_key" not in fields_set and current_settings and current_settings.api_key_encrypted)
+    )
+
+    if effective_provider == "resend":
+        if not effective_key_configured:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Resend API key is required.",
+            )
+        if not effective_domain:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Verified domain is required.",
+            )
+        if not effective_from_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="From email is required.",
+            )
         is_valid, error = resend_settings_service.validate_from_email(
-            update.from_email, domain_to_check
+            effective_from_email,
+            effective_domain,
         )
         if not is_valid:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
@@ -196,17 +256,27 @@ async def update_settings(
         else:
             default_sender_arg = None
 
+    api_key_arg = None
+    if "api_key" in fields_set:
+        api_key_arg = new_api_key or ""
+    verified_domain_arg = None
+    if "verified_domain" in fields_set:
+        verified_domain_arg = explicit_domain or ""
+    from_email_arg = None
+    if "from_email" in fields_set:
+        from_email_arg = explicit_from_email or ""
+
     try:
         settings = resend_settings_service.update_resend_settings(
             db,
             session.org_id,
             session.user_id,
             email_provider=update.email_provider,
-            api_key=update.api_key,
-            from_email=update.from_email,
+            api_key=api_key_arg,
+            from_email=from_email_arg,
             from_name=update.from_name,
             reply_to_email=update.reply_to_email,
-            verified_domain=verified_domain,
+            verified_domain=verified_domain_arg,
             webhook_signing_secret=update.webhook_signing_secret,
             default_sender_user_id=default_sender_arg,
             expected_version=update.expected_version,
@@ -220,7 +290,7 @@ async def update_settings(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     # Update last_key_validated_at if key was tested
-    if update.api_key:
+    if new_api_key:
         from datetime import datetime, timezone
 
         settings.last_key_validated_at = datetime.now(timezone.utc)
@@ -267,8 +337,14 @@ async def test_api_key(
     ),
 ) -> TestKeyResponse:
     """Test if a Resend API key is valid."""
-    is_valid, error, domains = await resend_settings_service.test_api_key(request.api_key)
-    return TestKeyResponse(valid=is_valid, error=error, verified_domains=domains)
+    result = await resend_settings_service.test_api_key(request.api_key)
+    return TestKeyResponse(
+        valid=result.valid,
+        error=result.error,
+        verified_domains=result.verified_domains,
+        permission_limited=result.permission_limited,
+        warning=result.warning,
+    )
 
 
 @router.post(

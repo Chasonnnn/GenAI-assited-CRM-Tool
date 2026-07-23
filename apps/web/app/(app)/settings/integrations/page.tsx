@@ -107,7 +107,12 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { toast } from "@/components/ui/toast"
 import type { IntegrationStatus, GoogleCalendarStatusResponse } from "@/lib/api/integrations"
 import type { IntegrationHealth } from "@/lib/api/ops"
-import type { EligibleSender, ResendSettings } from "@/lib/api/resend"
+import type {
+    EligibleSender,
+    ResendSettings,
+    ResendSettingsUpdate,
+    TestKeyResponse,
+} from "@/lib/api/resend"
 import type { Pipeline, StageSemantics } from "@/lib/api/pipelines"
 import type {
     MetaCrmDatasetEventMappingItem,
@@ -463,6 +468,7 @@ type AiConfigurationUiState = {
 type EmailConfigurationFormState = {
     provider: "resend" | "gmail" | ""
     apiKey: string
+    verifiedDomain: string
     fromEmail: string
     fromName: string
     replyTo: string
@@ -471,7 +477,7 @@ type EmailConfigurationFormState = {
 }
 
 type EmailConfigurationUiState = {
-    keyTested: { valid: boolean; error?: string | null; verified_domains?: string[] } | null
+    keyTested: TestKeyResponse | null
     saved: boolean
     isEditingKey: boolean
     hasUserEdited: boolean
@@ -1532,6 +1538,7 @@ function EmailConfigurationSectionContent({
     const [emailForm, setEmailForm] = useState<EmailConfigurationFormState>(() => ({
         provider: settings?.email_provider || "resend",
         apiKey: "",
+        verifiedDomain: settings?.verified_domain || "",
         fromEmail: settings?.from_email || "",
         fromName: settings?.from_name || "",
         replyTo: settings?.reply_to_email || "",
@@ -1579,31 +1586,24 @@ function EmailConfigurationSectionContent({
         try {
             const result = await testKey.mutateAsync(emailForm.apiKey)
             setEmailUi((current) => ({ ...current, keyTested: result }))
-            if (result.valid && result.verified_domains.length > 0) {
-                const domain = result.verified_domains[0]
-                if (!emailForm.fromEmail) {
-                    setEmailForm((current) => ({ ...current, fromEmail: `no-reply@${domain}` }))
-                    setEmailUi((current) => ({ ...current, hasUserEdited: true }))
-                }
-            }
         } catch (error) {
             const message = getErrorMessage(error, "Failed to test key")
-            setEmailUi((current) => ({ ...current, keyTested: { valid: false, error: message } }))
+            setEmailUi((current) => ({
+                ...current,
+                keyTested: {
+                    valid: false,
+                    error: message,
+                    verified_domains: [],
+                    permission_limited: false,
+                    warning: null,
+                },
+            }))
             toast.error(message)
         }
     }
 
     const handleSave = async () => {
-        const update: {
-            email_provider?: "resend" | "gmail" | "";
-            api_key?: string;
-            from_email?: string;
-            from_name?: string;
-            reply_to_email?: string;
-            webhook_signing_secret?: string;
-            default_sender_user_id?: string | null;
-            expected_version?: number;
-        } = {
+        const update: ResendSettingsUpdate = {
             email_provider: emailForm.provider,
         }
 
@@ -1615,6 +1615,7 @@ function EmailConfigurationSectionContent({
             if (emailForm.apiKey.trim()) {
                 update.api_key = emailForm.apiKey
             }
+            update.verified_domain = emailForm.verifiedDomain.trim()
             update.from_email = emailForm.fromEmail
             update.from_name = emailForm.fromName
             update.reply_to_email = emailForm.replyTo
@@ -1664,9 +1665,26 @@ function EmailConfigurationSectionContent({
     }
 
     const hasResendKey = Boolean(emailForm.apiKey.trim() || settings?.api_key_masked)
+    const newResendKeyValidated = Boolean(
+        !emailForm.apiKey.trim() || emailUi.keyTested?.valid,
+    )
+    const hasVerifiedDomain = Boolean(emailForm.verifiedDomain.trim())
     const hasFromEmail = Boolean(emailForm.fromEmail.trim())
     const hasGmailSender = Boolean(emailForm.defaultSender)
-    const resendReady = emailForm.provider !== "resend" || (hasResendKey && hasFromEmail)
+    const normalizedVerifiedDomain = emailForm.verifiedDomain.trim().toLowerCase()
+    const testedDomains = emailUi.keyTested?.verified_domains ?? []
+    const testedDomainMismatch = Boolean(
+        emailUi.keyTested?.valid &&
+        !emailUi.keyTested.permission_limited &&
+        !testedDomains.includes(normalizedVerifiedDomain),
+    )
+    const resendReady =
+        emailForm.provider !== "resend" ||
+        (hasResendKey &&
+            newResendKeyValidated &&
+            hasVerifiedDomain &&
+            hasFromEmail &&
+            !testedDomainMismatch)
     const gmailReady = emailForm.provider !== "gmail" || hasGmailSender
     const canSave = Boolean(emailForm.provider) && resendReady && gmailReady
     const showMaskedKey = Boolean(settings?.api_key_masked) && !emailUi.isEditingKey && !emailForm.apiKey
@@ -1952,7 +1970,6 @@ function ResendConfigurationFields({
             <ResendApiKeyField
                 apiKey={form.apiKey}
                 apiKeyMasked={settings?.api_key_masked ?? null}
-                verifiedDomain={settings?.verified_domain ?? null}
                 keyTested={ui.keyTested}
                 editingKey={ui.isEditingKey}
                 showMaskedKey={showMaskedKey}
@@ -1963,7 +1980,13 @@ function ResendConfigurationFields({
                 onTestKey={onTestKey}
             />
 
-            <ResendVerifiedDomainBanner verifiedDomain={settings?.verified_domain ?? null} />
+            <ResendVerifiedDomainField
+                value={form.verifiedDomain}
+                keyTested={ui.keyTested}
+                onChange={(verifiedDomain) =>
+                    updateEmailForm("verifiedDomain", verifiedDomain, true)
+                }
+            />
 
             <div className="space-y-2">
                 <Label htmlFor="from-email">From Email</Label>
@@ -1972,15 +1995,18 @@ function ResendConfigurationFields({
                     type="email"
                     value={form.fromEmail}
                     onChange={(event) => updateEmailForm("fromEmail", event.target.value, true)}
-                    placeholder={settings?.verified_domain ? `no-reply@${settings.verified_domain}` : "no-reply@yourdomain.com"}
+                    placeholder={
+                        form.verifiedDomain
+                            ? `no-reply@${form.verifiedDomain}`
+                            : "no-reply@yourdomain.com"
+                    }
                     name="from-email"
                     autoComplete="email"
                 />
-                {settings?.verified_domain ? (
-                    <p className="text-xs text-muted-foreground">
-                        Must use your verified domain: @{settings.verified_domain}
-                    </p>
-                ) : null}
+                <p className="text-xs text-muted-foreground">
+                    Enter the complete sender address. Its domain must match the
+                    verified domain above.
+                </p>
             </div>
 
             <div className="space-y-2">
@@ -2045,7 +2071,6 @@ function ResendConfigurationFields({
 function ResendApiKeyField({
     apiKey,
     apiKeyMasked,
-    verifiedDomain,
     keyTested,
     editingKey,
     showMaskedKey,
@@ -2057,7 +2082,6 @@ function ResendApiKeyField({
 }: {
     apiKey: string
     apiKeyMasked: string | null
-    verifiedDomain: string | null
     keyTested: EmailConfigurationUiState["keyTested"]
     editingKey: boolean
     showMaskedKey: boolean
@@ -2124,28 +2148,117 @@ function ResendApiKeyField({
                     </div>
                 )}
             </div>
-            {keyTested?.valid ? (
-                <p className="text-xs text-green-600">
-                    API key is valid! Verified domain: {keyTested.verified_domains?.[0] || verifiedDomain}
-                </p>
+            {keyTested?.valid && keyTested.permission_limited ? (
+                <Alert>
+                    <AlertTriangleIcon aria-hidden="true" />
+                    <AlertTitle>Domain access is permission-limited</AlertTitle>
+                    <AlertDescription className="space-y-1">
+                        <p>{keyTested.warning}</p>
+                        <p>
+                            Enter a domain you have already verified in Resend.
+                            This app cannot confirm domain verification with this
+                            key.
+                        </p>
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+            {keyTested?.valid && !keyTested.permission_limited ? (
+                <Alert>
+                    <CheckCircleIcon aria-hidden="true" />
+                    <AlertTitle>API key accepted</AlertTitle>
+                    <AlertDescription className="space-y-1">
+                        <p>
+                            No domain was selected automatically. Enter one of the
+                            verified domains in the field below.
+                        </p>
+                        <p>
+                            {keyTested.verified_domains.length > 0
+                                ? `Available verified domains: ${keyTested.verified_domains.join(", ")}`
+                                : "No verified domains were returned for this account."}
+                        </p>
+                    </AlertDescription>
+                </Alert>
             ) : null}
             {keyTested && !keyTested.valid ? (
-                <p className="text-xs text-red-600">{keyTested.error || "API key is invalid"}</p>
+                <Alert variant="destructive">
+                    <XCircleIcon aria-hidden="true" />
+                    <AlertTitle>API key is invalid</AlertTitle>
+                    <AlertDescription>
+                        {keyTested.error || "Resend rejected this API key."}
+                    </AlertDescription>
+                </Alert>
             ) : null}
             <p className="text-xs text-muted-foreground">
-                Get your key from <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">resend.com/api-keys</a>
+                Testing checks Resend domain access only and never sends an
+                email. Full access keys can list verified domains; Sending
+                access keys may require manual domain entry. Test a new key
+                before saving. Get your key from{" "}
+                <a
+                    href="https://resend.com/api-keys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                >
+                    resend.com/api-keys
+                </a>
+                , or{" "}
+                <a
+                    href="https://resend.com/docs/dashboard/api-keys/introduction"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                >
+                    review Resend key permissions
+                </a>
+                .
             </p>
         </div>
     )
 }
 
-function ResendVerifiedDomainBanner({ verifiedDomain }: { verifiedDomain: string | null }) {
-    if (!verifiedDomain) return null
+function ResendVerifiedDomainField({
+    value,
+    keyTested,
+    onChange,
+}: {
+    value: string
+    keyTested: EmailConfigurationUiState["keyTested"]
+    onChange: (verifiedDomain: string) => void
+}) {
+    const normalizedValue = value.trim().toLowerCase()
+    const domainRejectedByFullAccessKey = Boolean(
+        normalizedValue &&
+        keyTested?.valid &&
+        !keyTested.permission_limited &&
+        !keyTested.verified_domains.includes(normalizedValue),
+    )
 
     return (
-        <div className="flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm dark:bg-green-900/20">
-            <CheckCircleIcon className="size-4 text-green-600" aria-hidden="true" />
-            <span>Verified domain: <strong>{verifiedDomain}</strong></span>
+        <div className="space-y-2">
+            <Label htmlFor="resend-verified-domain">Verified domain</Label>
+            <Input
+                id="resend-verified-domain"
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                placeholder="example.com"
+                name="resend-verified-domain"
+                autoComplete="off"
+                aria-invalid={domainRejectedByFullAccessKey}
+                aria-describedby="resend-verified-domain-help"
+            />
+            <p
+                id="resend-verified-domain-help"
+                className="text-xs text-muted-foreground"
+            >
+                Enter the domain exactly as it appears in Resend. This value is
+                never selected automatically.
+            </p>
+            {domainRejectedByFullAccessKey ? (
+                <p className="text-xs font-medium text-destructive" role="alert">
+                    This domain is not in the verified domains returned for this
+                    API key.
+                </p>
+            ) : null}
         </div>
     )
 }

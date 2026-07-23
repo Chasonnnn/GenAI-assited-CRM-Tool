@@ -6,6 +6,7 @@ Supports Resend API and Gmail default sender.
 
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import httpx
@@ -22,6 +23,22 @@ logger = logging.getLogger(__name__)
 # Resend API
 RESEND_API_BASE = "https://api.resend.com"
 RESEND_TIMEOUT = 10.0
+PERMISSION_LIMITED_WARNING = (
+    "This API key cannot list domains. It may be limited to Resend Sending access "
+    "and could still send email. Enter a domain already verified in Resend; this "
+    "check cannot confirm domain verification or sending capability."
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ResendKeyValidationResult:
+    """Evidence returned by the non-sending Resend key check."""
+
+    valid: bool
+    error: str | None
+    verified_domains: list[str]
+    permission_limited: bool
+    warning: str | None
 
 
 def _get_fernet() -> Fernet:
@@ -208,11 +225,12 @@ def rotate_webhook_id(
     return s
 
 
-async def test_api_key(api_key: str) -> tuple[bool, str | None, list[str]]:
+async def test_api_key(api_key: str) -> ResendKeyValidationResult:
     """
-    Test if a Resend API key is valid by fetching domains.
+    Test a Resend API key by fetching domains without sending email.
 
-    Returns (is_valid, error_message, verified_domains).
+    For this onboarding contract, a 403 is permission-limited domain evidence
+    rather than an authentication failure. A 401 remains invalid.
     """
     try:
         async with httpx.AsyncClient(timeout=RESEND_TIMEOUT) as client:
@@ -222,31 +240,70 @@ async def test_api_key(api_key: str) -> tuple[bool, str | None, list[str]]:
             )
 
         if response.status_code == 401:
-            return False, "Invalid API key", []
+            return ResendKeyValidationResult(
+                valid=False,
+                error="Invalid API key",
+                verified_domains=[],
+                permission_limited=False,
+                warning=None,
+            )
 
         if response.status_code == 403:
-            return False, "API key lacks permission to access domains", []
+            return ResendKeyValidationResult(
+                valid=True,
+                error=None,
+                verified_domains=[],
+                permission_limited=True,
+                warning=PERMISSION_LIMITED_WARNING,
+            )
 
         if response.status_code != 200:
-            return False, f"Resend API error: {response.status_code}", []
+            return ResendKeyValidationResult(
+                valid=False,
+                error=f"Resend API error: {response.status_code}",
+                verified_domains=[],
+                permission_limited=False,
+                warning=None,
+            )
 
         data = response.json()
         domains = data.get("data", [])
 
         # Extract verified domains
         verified = [
-            d.get("name")
+            d.get("name").strip().lower()
             for d in domains
-            if isinstance(d, dict) and d.get("status") == "verified" and d.get("name")
+            if isinstance(d, dict)
+            and d.get("status") == "verified"
+            and isinstance(d.get("name"), str)
+            and d.get("name").strip()
         ]
 
-        return True, None, verified
+        return ResendKeyValidationResult(
+            valid=True,
+            error=None,
+            verified_domains=verified,
+            permission_limited=False,
+            warning=None,
+        )
 
     except httpx.TimeoutException:
-        return False, "Connection timeout", []
+        return ResendKeyValidationResult(
+            valid=False,
+            error="Connection timeout",
+            verified_domains=[],
+            permission_limited=False,
+            warning=None,
+        )
     except Exception as e:
         logger.exception("Error testing Resend API key")
-        return False, f"Connection error: {e.__class__.__name__}", []
+        return ResendKeyValidationResult(
+            valid=False,
+            error=f"Connection error: {e.__class__.__name__}",
+            verified_domains=[],
+            permission_limited=False,
+            warning=None,
+        )
 
 
 def validate_from_email(from_email: str, verified_domain: str | None) -> tuple[bool, str | None]:

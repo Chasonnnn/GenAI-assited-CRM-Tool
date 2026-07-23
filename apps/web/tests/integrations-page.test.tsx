@@ -607,6 +607,9 @@ describe('IntegrationsPage', () => {
         mockUpdateMetaCrmDatasetSettings.mockReset()
         mockMetaCrmDatasetOutboundTest.mockReset()
         mockRetryMetaCrmDatasetEvent.mockReset()
+        mockUpdateResendSettings.mockReset()
+        mockTestResendKey.mockReset()
+        mockRotateWebhook.mockReset()
     })
 
     it('renders integration health and can refresh', () => {
@@ -667,6 +670,133 @@ describe('IntegrationsPage', () => {
         fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
 
         expect(within(screen.getByRole('dialog')).getByText('Email Configuration')).toBeInTheDocument()
+    })
+
+    it('requires administrators to explicitly enter the verified domain and sender', () => {
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        expect(within(dialog).getByLabelText('Verified domain')).toHaveValue(
+            'surrogacyforce.com'
+        )
+        expect(within(dialog).getByLabelText('From Email')).toHaveValue(
+            'no-reply@surrogacyforce.com'
+        )
+        expect(
+            within(dialog).getByText(/enter the domain exactly as it appears in resend/i)
+        ).toBeInTheDocument()
+    })
+
+    it('does not auto-select a domain or synthesize a sender after a full-access key test', async () => {
+        mockUseResendSettingsQuery.mockImplementation(() => ({
+            data: {
+                ...resendSettingsData,
+                api_key_masked: null,
+                from_email: null,
+                verified_domain: null,
+            },
+            isLoading: false,
+        }))
+        mockTestResendKey.mockResolvedValue({
+            valid: true,
+            error: null,
+            verified_domains: ['first.example', 'second.example'],
+            permission_limited: false,
+            warning: null,
+        })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        fireEvent.change(within(dialog).getByLabelText('API Key'), {
+            target: { value: 're_full_access' },
+        })
+        expect(
+            within(dialog).getByRole('button', {
+                name: /save email configuration/i,
+            })
+        ).toBeDisabled()
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Test' }))
+        })
+
+        expect(within(dialog).getByLabelText('Verified domain')).toHaveValue('')
+        expect(within(dialog).getByLabelText('From Email')).toHaveValue('')
+        expect(
+            within(dialog).getByText(/no domain was selected automatically/i)
+        ).toBeInTheDocument()
+        expect(within(dialog).getByText(/first\.example, second\.example/i)).toBeInTheDocument()
+        expect(
+            within(dialog).getByText(/never sends an email/i)
+        ).toBeInTheDocument()
+    })
+
+    it('shows permission-limited key evidence and accepts an explicit domain for saving', async () => {
+        mockUseResendSettingsQuery.mockImplementation(() => ({
+            data: {
+                ...resendSettingsData,
+                api_key_masked: null,
+                from_email: null,
+                verified_domain: null,
+            },
+            isLoading: false,
+        }))
+        mockTestResendKey.mockResolvedValue({
+            valid: true,
+            error: null,
+            verified_domains: [],
+            permission_limited: true,
+            warning:
+                'Resend accepted the key, but it cannot list domains. Enter a domain already verified in Resend.',
+        })
+        mockUpdateResendSettings.mockResolvedValue({
+            ...resendSettingsData,
+            verified_domain: 'explicit.example',
+            from_email: 'sender@explicit.example',
+        })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        fireEvent.change(within(dialog).getByLabelText('API Key'), {
+            target: { value: 're_sending_access' },
+        })
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Test' }))
+        })
+
+        expect(
+            within(dialog).getByText(/cannot list domains/i)
+        ).toBeInTheDocument()
+        expect(
+            within(dialog).getByText(/this app cannot confirm domain verification/i)
+        ).toBeInTheDocument()
+
+        fireEvent.change(within(dialog).getByLabelText('Verified domain'), {
+            target: { value: 'explicit.example' },
+        })
+        fireEvent.change(within(dialog).getByLabelText('From Email'), {
+            target: { value: 'sender@explicit.example' },
+        })
+        await act(async () => {
+            fireEvent.click(
+                within(dialog).getByRole('button', {
+                    name: /save email configuration/i,
+                })
+            )
+        })
+
+        expect(mockUpdateResendSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                email_provider: 'resend',
+                api_key: 're_sending_access',
+                verified_domain: 'explicit.example',
+                from_email: 'sender@explicit.example',
+            })
+        )
     })
 
     it('keeps the Meta dataset configuration usable when query results have fresh identity', () => {

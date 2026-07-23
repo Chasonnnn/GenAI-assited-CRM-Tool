@@ -24,6 +24,7 @@ export interface ResendSettings {
 export interface ResendSettingsUpdate {
     email_provider?: 'resend' | 'gmail' | '';
     api_key?: string;
+    verified_domain?: string;
     from_email?: string;
     from_name?: string;
     reply_to_email?: string;
@@ -36,6 +37,8 @@ export interface TestKeyResponse {
     valid: boolean;
     error: string | null;
     verified_domains: string[];
+    permission_limited: boolean;
+    warning: string | null;
 }
 
 export interface RotateWebhookResponse {
