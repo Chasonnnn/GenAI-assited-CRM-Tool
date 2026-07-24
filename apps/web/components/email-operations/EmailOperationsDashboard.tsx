@@ -67,11 +67,9 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { EmailOperationDetailSheet } from "./EmailOperationDetailSheet"
+import { EmailOperationsReadinessSummary } from "./EmailOperationsReadinessSummary"
 import { EmailReconciliationQueue } from "./EmailReconciliationQueue"
-import {
-    ResendLiveReadinessCard,
-    ResendOperationsReadinessSummary,
-} from "./ResendLiveReadinessCard"
+import { ResendLiveReadinessCard } from "./ResendLiveReadinessCard"
 import {
     getCheckStatusLabel,
     getMessageStatusLabel,
@@ -700,14 +698,26 @@ export function EmailOperationsDashboard() {
                     <DashboardSkeleton />
                 ) : (
                     <>
-                        <ResendOperationsReadinessSummary
+                        <EmailOperationsReadinessSummary
                             envelope={liveReadinessQuery.data}
-                            isLoading={liveReadinessQuery.isLoading}
-                            isError={liveReadinessQuery.isError}
-                            canCheck={canCheckLiveReadiness}
-                            isCheckPending={requestReadinessCheck.isPending}
-                            isCheckError={requestReadinessCheck.isError}
-                            onCheck={() => requestReadinessCheck.mutate()}
+                            state={{
+                                load: liveReadinessQuery.isLoading
+                                    ? "loading"
+                                    : liveReadinessQuery.isError
+                                      ? "error"
+                                      : "ready",
+                                check: requestReadinessCheck.isPending
+                                    ? "pending"
+                                    : requestReadinessCheck.isError
+                                      ? "error"
+                                      : "idle",
+                            }}
+                            {...(canCheckLiveReadiness
+                                ? {
+                                      onCheck: () =>
+                                          requestReadinessCheck.mutate(),
+                                  }
+                                : {})}
                         />
 
                         <Accordion
