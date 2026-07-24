@@ -41,6 +41,7 @@ from app.db.models.auth import (
 )
 from app.db.models.campaigns import Campaign, CampaignRecipient, CampaignRun, CampaignTrackingEvent
 from app.db.models.email import (
+    EmailTemplateDraft,
     EmailDelivery,
     EmailDeliveryAttempt,
     EmailLog,
@@ -196,6 +197,7 @@ __all__ = [
     "EmailLogAttachment",
     "EmailSuppression",
     "EmailTemplate",
+    "EmailTemplateDraft",
     "ResendWebhookEvent",
     "EntityNote",
     "EntityVersion",

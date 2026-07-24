@@ -133,6 +133,95 @@ class EmailTemplate(Base):
     source_template: Mapped["EmailTemplate | None"] = relationship(remote_side=[id])
 
 
+class EmailTemplateDraft(Base):
+    """Isolated working copy for a new or existing email template.
+
+    Published sends continue reading from ``email_templates``. Draft rows are
+    only promoted there by an explicit publish transaction.
+    """
+
+    __tablename__ = "email_template_drafts"
+    __table_args__ = (
+        UniqueConstraint("template_id", name="uq_email_template_drafts_template"),
+        CheckConstraint(
+            "scope IN ('org', 'personal')",
+            name="ck_email_template_drafts_scope",
+        ),
+        CheckConstraint(
+            "(scope = 'org' AND owner_user_id IS NULL) "
+            "OR (scope = 'personal' AND owner_user_id IS NOT NULL)",
+            name="ck_email_template_drafts_scope_owner",
+        ),
+        Index(
+            "idx_email_template_drafts_org_updated",
+            "organization_id",
+            "updated_at",
+        ),
+        Index(
+            "idx_email_template_drafts_owner",
+            "organization_id",
+            "owner_user_id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    template_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("email_templates.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    scope: Mapped[str] = mapped_column(String(20), nullable=False)
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    subject: Mapped[str] = mapped_column(String(200), nullable=False)
+    from_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
+    category: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    base_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    last_tested_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_tested_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=text("now()"),
+        onupdate=text("now()"),
+        nullable=False,
+    )
+
+    template: Mapped["EmailTemplate | None"] = relationship()
+    owner: Mapped["User | None"] = relationship(foreign_keys=[owner_user_id])
+
+
 class EmailLog(Base):
     """
     Log of all outbound emails for audit and debugging.
