@@ -54,6 +54,27 @@ def get_draft(
     return query.first()
 
 
+def get_draft_for_template(
+    db: Session,
+    *,
+    org_id: UUID,
+    template_id: UUID,
+) -> EmailTemplateDraft | None:
+    """Return the open draft for a published template within one tenant."""
+    return (
+        db.query(EmailTemplateDraft)
+        .options(
+            joinedload(EmailTemplateDraft.template),
+            joinedload(EmailTemplateDraft.owner),
+        )
+        .filter(
+            EmailTemplateDraft.organization_id == org_id,
+            EmailTemplateDraft.template_id == template_id,
+        )
+        .first()
+    )
+
+
 def list_drafts_for_user(
     db: Session,
     *,

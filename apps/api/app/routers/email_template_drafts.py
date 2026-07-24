@@ -5,7 +5,7 @@ operation that promotes draft content into the existing ``email_templates``
 projection.
 """
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -20,7 +20,6 @@ from app.core.deps import (
 )
 from app.core.policies import POLICIES
 from app.db.enums import Role
-from app.db.models import EmailTemplate, EmailTemplateDraft
 from app.schemas.email import EmailTemplateRead
 from app.schemas.email_template_drafts import (
     EmailTemplateDraftCreate,
@@ -83,7 +82,7 @@ def _require_template_editor(
         )
 
 
-def _require_draft_editor(db: Session, session, draft: EmailTemplateDraft) -> None:
+def _require_draft_editor(db: Session, session, draft: Any) -> None:
     _require_template_editor(
         db,
         session,
@@ -92,7 +91,7 @@ def _require_draft_editor(db: Session, session, draft: EmailTemplateDraft) -> No
     )
 
 
-def _build_draft_response(draft: EmailTemplateDraft) -> EmailTemplateDraftRead:
+def _build_draft_response(draft: Any) -> EmailTemplateDraftRead:
     published_version = draft.template.current_version if draft.template else None
     return EmailTemplateDraftRead(
         id=draft.id,
@@ -122,7 +121,7 @@ def _build_draft_response(draft: EmailTemplateDraft) -> EmailTemplateDraftRead:
     )
 
 
-def _build_template_response(db: Session, template: EmailTemplate) -> EmailTemplateRead:
+def _build_template_response(template: Any) -> EmailTemplateRead:
     owner_name = template.owner.display_name if template.owner else None
     return EmailTemplateRead(
         id=template.id,
@@ -229,13 +228,10 @@ def create_draft_from_template(
         )
     except IntegrityError:
         db.rollback()
-        draft = (
-            db.query(EmailTemplateDraft)
-            .filter(
-                EmailTemplateDraft.organization_id == session.org_id,
-                EmailTemplateDraft.template_id == template.id,
-            )
-            .first()
+        draft = email_template_draft_service.get_draft_for_template(
+            db,
+            org_id=session.org_id,
+            template_id=template.id,
         )
         if draft is None:
             raise
@@ -364,4 +360,4 @@ def publish_email_template_draft(
             status_code=409,
             detail="A published template with this name already exists",
         ) from exc
-    return _build_template_response(db, template)
+    return _build_template_response(template)
