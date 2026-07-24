@@ -486,6 +486,9 @@ async def test_dispatch_claim_preserves_idempotency_and_provider_retry_after(
         fake_send_email,
     )
     before_dispatch = datetime.now(timezone.utc)
+    credential_identity = (
+        "credential:f7240bc588740b1d7f0dae7cb89e18923b38a1c2cc27f9ccdd5945e196df481f"
+    )
 
     delivery = await email_delivery_dispatch.dispatch_claim(db, claim=claim)
 
@@ -501,6 +504,16 @@ async def test_dispatch_claim_preserves_idempotency_and_provider_retry_after(
     assert attempt.outcome == EmailDeliveryAttemptOutcome.RETRYABLE_ERROR.value
     assert attempt.provider_http_status == 429
     assert attempt.retry_after_seconds == 75
+    shared_admission = (
+        db.query(EmailProviderAdmission)
+        .filter(
+            EmailProviderAdmission.provider == "resend",
+            EmailProviderAdmission.provider_account_id == credential_identity,
+        )
+        .one()
+    )
+    assert shared_admission.next_slot_at >= before_dispatch + timedelta(seconds=75)
+    assert shared_admission.next_slot_at <= after_dispatch + timedelta(seconds=75)
 
 
 @pytest.mark.asyncio
@@ -1123,7 +1136,7 @@ async def test_dispatch_claim_encodes_all_linked_attachments_for_resend(
 
 
 @pytest.mark.asyncio
-async def test_dispatch_claim_resolves_platform_credentials_from_platform_identity(
+async def test_dispatch_claim_keeps_platform_route_while_using_team_admission_identity(
     monkeypatch,
     db,
     test_org,
@@ -1132,6 +1145,11 @@ async def test_dispatch_claim_resolves_platform_credentials_from_platform_identi
         settings,
         "PLATFORM_RESEND_API_KEY",
         SecretStr("re_platform_secret"),
+    )
+    monkeypatch.setattr(
+        settings,
+        "PLATFORM_RESEND_ADMISSION_GROUP_TOKEN",
+        SecretStr("Team-Rate-Limit-Group-Token-0001"),
     )
     queued = queue_rendered_email(
         db,
@@ -1169,6 +1187,17 @@ async def test_dispatch_claim_resolves_platform_credentials_from_platform_identi
     assert observed_api_key == "re_platform_secret"
     assert delivery.status == EmailDeliveryStatus.SENT.value
     assert delivery.email_log_id == queued.email_log.id
+    assert delivery.provider_account_id == "platform:default"
+    assert (
+        db.query(EmailProviderAdmission)
+        .filter(
+            EmailProviderAdmission.provider == "resend",
+            EmailProviderAdmission.provider_account_id
+            == "team:4e8474447c3fd54573744a0863e5142271c8f094f25d62f953fbf1c34f38a5ec",
+        )
+        .one_or_none()
+        is not None
+    )
 
 
 @pytest.mark.asyncio
@@ -1257,7 +1286,7 @@ async def test_dispatch_claim_commits_provider_admission_before_wait_and_network
                 seed_session,
                 provider="resend",
                 provider_account_id=provider_account_id,
-                requests_per_second=10,
+                requests_per_second=settings.RESEND_PROVIDER_REQUESTS_PER_SECOND,
                 now=future_base,
             )
             assert first.send_at == future_base
@@ -1275,7 +1304,7 @@ async def test_dispatch_claim_commits_provider_admission_before_wait_and_network
                     verification,
                     provider="resend",
                     provider_account_id=provider_account_id,
-                    requests_per_second=10,
+                    requests_per_second=settings.RESEND_PROVIDER_REQUESTS_PER_SECOND,
                     now=future_base,
                 )
                 observed["next_committed_slot"] = next_slot.send_at
@@ -1313,7 +1342,9 @@ async def test_dispatch_claim_commits_provider_admission_before_wait_and_network
     assert observed["delay_seconds"] > 0
     assert observed["transaction_open_during_wait"] is False
     assert observed["transaction_open_during_provider_io"] is False
-    assert observed["next_committed_slot"] == future_base + timedelta(milliseconds=200)
+    assert observed["next_committed_slot"] == future_base + timedelta(
+        seconds=2 / settings.RESEND_PROVIDER_REQUESTS_PER_SECOND
+    )
 
 
 @pytest.mark.asyncio
@@ -1372,6 +1403,64 @@ async def test_dispatch_claim_scopes_admission_to_the_bound_provider_credential(
         EmailProviderAdmission.provider_account_id.in_([credential_scope, synthetic_org_scope]),
     ).delete(synchronize_session=False)
     db.commit()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_claim_uses_team_admission_identity_without_changing_delivery_route(
+    monkeypatch,
+    db,
+    test_org,
+):
+    api_key = "re_grouped_org_secret"
+    group_fingerprint = "4e8474447c3fd54573744a0863e5142271c8f094f25d62f953fbf1c34f38a5ec"
+    team_identity = f"team:{group_fingerprint}"
+    credential_identity = f"credential:{hashlib.sha256(api_key.encode('utf-8')).hexdigest()}"
+    logical_route = f"organization:{test_org.id}"
+    db.add(
+        ResendSettings(
+            organization_id=test_org.id,
+            email_provider="resend",
+            api_key_encrypted=resend_settings_service.encrypt_api_key(api_key),
+            from_email="care@example.com",
+            webhook_id=str(uuid4()),
+            rate_limit_group_fingerprint=group_fingerprint,
+        )
+    )
+    db.flush()
+    queued, claim = _queue_and_claim(db, test_org)
+
+    async def fake_send_email(**_kwargs):
+        return ResendSendResult(success=True, message_id="resend-team-scope")
+
+    monkeypatch.setattr(
+        email_delivery_dispatch.resend_transport,
+        "send_email",
+        fake_send_email,
+    )
+
+    delivery = await email_delivery_dispatch.dispatch_claim(db, claim=claim)
+
+    assert delivery.status == EmailDeliveryStatus.SENT.value
+    assert delivery.provider_account_id == logical_route
+    assert queued.email_log.provider_account_id == logical_route
+    assert (
+        db.query(EmailProviderAdmission)
+        .filter(
+            EmailProviderAdmission.provider == "resend",
+            EmailProviderAdmission.provider_account_id == team_identity,
+        )
+        .one_or_none()
+        is not None
+    )
+    assert (
+        db.query(EmailProviderAdmission)
+        .filter(
+            EmailProviderAdmission.provider == "resend",
+            EmailProviderAdmission.provider_account_id == credential_identity,
+        )
+        .one_or_none()
+        is None
+    )
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,9 @@ from __future__ import annotations
 import httpx
 import pytest
 
+RATE_LIMIT_GROUP_TOKEN = "Team-Rate-Limit-Group-Token-0001"
+RATE_LIMIT_GROUP_FINGERPRINT = "4e8474447c3fd54573744a0863e5142271c8f094f25d62f953fbf1c34f38a5ec"
+
 
 class _FakeDomainsClient:
     def __init__(self, response: httpx.Response):
@@ -33,6 +36,30 @@ class _FakeTimeoutDomainsClient(_FakeDomainsClient):
             "raw timeout detail",
             request=httpx.Request("GET", url, headers=headers),
         )
+
+
+@pytest.mark.asyncio
+async def test_blank_key_fails_locally_without_provider_io(db, monkeypatch):
+    from app.services import resend_control_plane, resend_settings_service
+
+    def fail_if_provider_client_created(**_kwargs):
+        raise AssertionError("blank key must not create a provider client")
+
+    monkeypatch.setattr(
+        resend_control_plane.httpx,
+        "AsyncClient",
+        fail_if_provider_client_created,
+    )
+
+    result = await resend_settings_service.test_api_key("   ", db=db)
+
+    assert result == resend_settings_service.ResendKeyValidationResult(
+        valid=False,
+        error="Invalid API key",
+        verified_domains=[],
+        permission_limited=False,
+        warning=None,
+    )
 
 
 @pytest.mark.asyncio
@@ -368,6 +395,56 @@ async def test_full_access_key_accepts_explicit_nonfirst_verified_domain(
     assert stored is not None
     assert stored.verified_domain == "second.example"
     assert resend_settings_service.decrypt_api_key(stored.api_key_encrypted) == "re_full_access"
+
+
+@pytest.mark.asyncio
+async def test_new_key_and_rate_limit_group_share_team_admission_during_validation(
+    authed_client,
+    db,
+    monkeypatch,
+):
+    from app.db.models import EmailProviderAdmission
+    from app.services import resend_control_plane
+
+    client = _FakeDomainsClient(
+        httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "name": "verified.example",
+                        "status": "verified",
+                    }
+                ]
+            },
+        )
+    )
+    monkeypatch.setattr(
+        resend_control_plane.httpx,
+        "AsyncClient",
+        lambda **_kwargs: client,
+    )
+
+    response = await authed_client.patch(
+        "/resend/settings",
+        json={
+            "email_provider": "resend",
+            "api_key": "re_team_validation",
+            "verified_domain": "verified.example",
+            "from_email": "sender@verified.example",
+            "rate_limit_group_token": RATE_LIMIT_GROUP_TOKEN,
+        },
+    )
+
+    assert response.status_code == 200
+    admission_identities = {
+        identity
+        for (identity,) in db.query(EmailProviderAdmission.provider_account_id)
+        .filter(EmailProviderAdmission.provider == "resend")
+        .all()
+    }
+    assert admission_identities == {f"team:{RATE_LIMIT_GROUP_FINGERPRINT}"}
 
 
 @pytest.mark.asyncio

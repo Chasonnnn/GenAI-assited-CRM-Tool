@@ -19,6 +19,7 @@ from app.db.models import (
     ResendSettings,
 )
 from app.services import (
+    resend_admission_identity,
     resend_control_plane,
     resend_event_contract,
     resend_readiness_snapshot_service,
@@ -39,6 +40,7 @@ class ReadinessRefreshResult:
 class _RouteConfiguration:
     organization_id: UUID | None
     provider_account_id: str
+    admission_identity: str
     provider_enabled: bool
     api_key: str = field(repr=False)
     required_domains: tuple[str, ...]
@@ -89,6 +91,7 @@ def _resolve_organization_configuration(
         return _RouteConfiguration(
             organization_id=organization_id,
             provider_account_id=f"organization:{organization_id}",
+            admission_identity="",
             provider_enabled=False,
             api_key="",
             required_domains=(),
@@ -102,7 +105,7 @@ def _resolve_organization_configuration(
     api_key = ""
     if row.email_provider == "resend" and row.api_key_encrypted:
         try:
-            api_key = resend_settings_service.decrypt_api_key(row.api_key_encrypted)
+            api_key = resend_settings_service.decrypt_api_key(row.api_key_encrypted).strip()
         except Exception:
             api_key = ""
     verified_domain = (row.verified_domain or "").strip().lower().rstrip(".")
@@ -117,6 +120,12 @@ def _resolve_organization_configuration(
         except Exception:
             has_local_signing_secret = False
     required_domains = tuple(sorted({domain for domain in (verified_domain,) if domain}))
+    admission_identity = ""
+    if api_key:
+        admission_identity = resend_admission_identity.resolve_resend_admission_identity(
+            api_key=api_key,
+            group_fingerprint=row.rate_limit_group_fingerprint,
+        )
     fingerprint = _fingerprint(
         {
             "provider_scope": "organization",
@@ -127,11 +136,13 @@ def _resolve_organization_configuration(
             "from_domain": from_domain,
             "webhook_endpoint": endpoint or None,
             "webhook_secret_digest": _secret_digest(row.webhook_secret_encrypted),
+            "rate_limit_group_fingerprint": row.rate_limit_group_fingerprint,
         }
     )
     return _RouteConfiguration(
         organization_id=organization_id,
         provider_account_id=f"organization:{organization_id}",
+        admission_identity=admission_identity,
         provider_enabled=row.email_provider == "resend",
         api_key=api_key,
         required_domains=required_domains,
@@ -188,6 +199,16 @@ def _resolve_platform_configuration(db: Session) -> _RouteConfiguration:
         missing_sender_count = 1
 
     api_key = (settings.PLATFORM_RESEND_API_KEY.get_secret_value() or "").strip()
+    group_token = (settings.PLATFORM_RESEND_ADMISSION_GROUP_TOKEN.get_secret_value() or "").strip()
+    group_fingerprint = (
+        resend_admission_identity.admission_group_fingerprint(group_token) if group_token else None
+    )
+    admission_identity = ""
+    if api_key:
+        admission_identity = resend_admission_identity.resolve_resend_admission_identity(
+            api_key=api_key,
+            group_fingerprint=group_fingerprint,
+        )
     webhook_secret = (settings.PLATFORM_RESEND_WEBHOOK_SECRET.get_secret_value() or "").strip()
     endpoint = _platform_webhook_endpoint()
     fingerprint = _fingerprint(
@@ -199,11 +220,13 @@ def _resolve_platform_configuration(db: Session) -> _RouteConfiguration:
             "missing_sender_count": missing_sender_count,
             "webhook_endpoint": endpoint or None,
             "webhook_secret_digest": _secret_digest(webhook_secret),
+            "rate_limit_group_fingerprint": group_fingerprint,
         }
     )
     return _RouteConfiguration(
         organization_id=None,
         provider_account_id="platform:default",
+        admission_identity=admission_identity,
         provider_enabled=True,
         api_key=api_key,
         required_domains=sender_domains,
@@ -297,7 +320,7 @@ async def _probe_configuration(
     client = control_plane_client_factory(
         db=db,
         api_key=configuration.api_key,
-        provider_account_id=configuration.provider_account_id,
+        admission_identity=configuration.admission_identity,
     )
     domains_result = await client.list_domains()
     if (

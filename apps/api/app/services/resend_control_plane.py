@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
+import logging
 import re
 from typing import Generic, TypeVar
 from urllib.parse import urlsplit
@@ -18,10 +19,9 @@ from app.core.config import settings
 from app.services import email_provider_admission_service
 from app.services.resend_event_contract import RESEND_SANITIZED_WEBHOOK_EVENT_TYPES
 
+logger = logging.getLogger(__name__)
 RESEND_API_BASE = "https://api.resend.com"
 RESEND_CONTROL_PLANE_TIMEOUT_SECONDS = 10.0
-RESEND_UNCLASSIFIED_PROVIDER_ACCOUNT_ID = "resend:unclassified"
-RESEND_UNCLASSIFIED_REQUESTS_PER_SECOND = 1
 MAX_RETRY_AFTER_SECONDS = 3600
 
 _DOMAIN_NAME_PATTERN = re.compile(
@@ -132,7 +132,7 @@ class ResendControlPlaneClient:
 
     db: Session = field(repr=False)
     api_key: str = field(repr=False)
-    provider_account_id: str
+    admission_identity: str
     requests_per_second: int | None = None
 
     async def _get(self, path: str) -> _RawGetResult:
@@ -140,7 +140,7 @@ class ResendControlPlaneClient:
             reservation = email_provider_admission_service.reserve_provider_request_slot(
                 self.db,
                 provider="resend",
-                provider_account_id=self.provider_account_id,
+                provider_account_id=self.admission_identity,
                 requests_per_second=(
                     self.requests_per_second
                     if self.requests_per_second is not None
@@ -187,14 +187,35 @@ class ResendControlPlaneClient:
                 ):
                     return _RawGetResult(status=ResendControlPlaneStatus.LIMITED)
             if response.status_code == 429 or response.status_code >= 500:
+                retry_after_seconds = (
+                    _bounded_retry_after_seconds(response.headers.get("retry-after"))
+                    if response.status_code == 429
+                    else None
+                )
+                if response.status_code == 429:
+                    try:
+                        email_provider_admission_service.defer_provider_request_slot(
+                            self.db,
+                            provider="resend",
+                            provider_account_id=self.admission_identity,
+                            retry_after=timedelta(
+                                seconds=(
+                                    retry_after_seconds
+                                    if retry_after_seconds and retry_after_seconds > 0
+                                    else 1
+                                )
+                            ),
+                            max_delay=timedelta(seconds=MAX_RETRY_AFTER_SECONDS),
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "Resend control-plane cooldown could not be advanced",
+                            extra={"error_type": type(exc).__name__},
+                        )
                 return _RawGetResult(
                     status=ResendControlPlaneStatus.UNKNOWN,
                     provider_status_code=response.status_code,
-                    retry_after_seconds=(
-                        _bounded_retry_after_seconds(response.headers.get("retry-after"))
-                        if response.status_code == 429
-                        else None
-                    ),
+                    retry_after_seconds=retry_after_seconds,
                 )
             return _RawGetResult(status=ResendControlPlaneStatus.FAIL)
         try:

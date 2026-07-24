@@ -11,6 +11,7 @@ import pytest
 from app.db.models import (
     PlatformEmailTemplate,
     PlatformSystemEmailTemplate,
+    ResendReadinessSnapshot,
     ResendSettings,
 )
 from app.services import (
@@ -19,6 +20,9 @@ from app.services import (
     resend_readiness_snapshot_service,
     resend_settings_service,
 )
+
+RATE_LIMIT_GROUP_TOKEN = "Team-Rate-Limit-Group-Token-0001"
+RATE_LIMIT_GROUP_FINGERPRINT = "4e8474447c3fd54573744a0863e5142271c8f094f25d62f953fbf1c34f38a5ec"
 
 
 @dataclass
@@ -104,7 +108,13 @@ def _webhook(
     )
 
 
-def _configure_org_resend(db, organization_id: UUID, *, domain: str = "mail.example.com"):
+def _configure_org_resend(
+    db,
+    organization_id: UUID,
+    *,
+    domain: str = "mail.example.com",
+    rate_limit_group_fingerprint: str | None = None,
+):
     settings_row = ResendSettings(
         organization_id=organization_id,
         email_provider="resend",
@@ -113,6 +123,7 @@ def _configure_org_resend(db, organization_id: UUID, *, domain: str = "mail.exam
         verified_domain=domain,
         webhook_id=str(uuid4()),
         webhook_secret_encrypted=resend_settings_service.encrypt_api_key("whsec_org_readiness"),
+        rate_limit_group_fingerprint=rate_limit_group_fingerprint,
     )
     db.add(settings_row)
     db.flush()
@@ -129,7 +140,11 @@ async def test_verified_org_route_persists_ready_capabilities(
     from app.services import resend_readiness_service
 
     monkeypatch.setattr(settings, "API_BASE_URL", "https://api.surrogacyforce.test")
-    configured = _configure_org_resend(db, test_org.id)
+    configured = _configure_org_resend(
+        db,
+        test_org.id,
+        rate_limit_group_fingerprint=RATE_LIMIT_GROUP_FINGERPRINT,
+    )
     listed_domain, domain_detail = _domain(name="mail.example.com")
     client = _FakeControlPlaneClient(
         domain_list_result=resend_control_plane.ResendControlPlaneResult(
@@ -165,7 +180,8 @@ async def test_verified_org_route_persists_ready_capabilities(
     assert refresh.probe.enabled_webhook_count == 1
     assert refresh.probe.issue_codes == ()
     assert refresh.retry_after_seconds is None
-    assert client.init_kwargs["provider_account_id"] == f"organization:{test_org.id}"
+    assert client.init_kwargs["admission_identity"] == (f"team:{RATE_LIMIT_GROUP_FINGERPRINT}")
+    assert "provider_account_id" not in client.init_kwargs
     assert client.init_kwargs["api_key"] == "re_org_readiness"
     assert client.expected_webhook_endpoints == [
         f"https://api.surrogacyforce.test/webhooks/resend/{configured.webhook_id}"
@@ -178,6 +194,12 @@ async def test_verified_org_route_persists_ready_capabilities(
         now=refresh.probe.checked_at,
     )
     assert snapshot.overall_status == "ready"
+    stored_snapshot = (
+        db.query(ResendReadinessSnapshot)
+        .filter(ResendReadinessSnapshot.organization_id == test_org.id)
+        .one()
+    )
+    assert stored_snapshot.provider_account_id == f"organization:{test_org.id}"
 
 
 @pytest.mark.asyncio
@@ -665,6 +687,11 @@ async def test_platform_probe_checks_every_distinct_effective_template_domain(
     monkeypatch.setattr(settings, "PLATFORM_RESEND_API_KEY", SecretStr("re_platform"))
     monkeypatch.setattr(
         settings,
+        "PLATFORM_RESEND_ADMISSION_GROUP_TOKEN",
+        SecretStr(RATE_LIMIT_GROUP_TOKEN),
+    )
+    monkeypatch.setattr(
+        settings,
         "PLATFORM_RESEND_WEBHOOK_SECRET",
         SecretStr("whsec_platform"),
     )
@@ -766,7 +793,8 @@ async def test_platform_probe_checks_every_distinct_effective_template_domain(
     assert refresh.probe.overall_status == "ready"
     assert refresh.probe.verified_domain_count == 3
     assert set(client.requested_domain_ids) == {listed.id for listed in listed_domains}
-    assert client.init_kwargs["provider_account_id"] == "platform:default"
+    assert client.init_kwargs["admission_identity"] == (f"team:{RATE_LIMIT_GROUP_FINGERPRINT}")
+    assert "provider_account_id" not in client.init_kwargs
     assert client.init_kwargs["api_key"] == "re_platform"
     assert client.expected_webhook_endpoints == [
         "https://api.surrogacyforce.test/webhooks/resend/platform"
@@ -778,6 +806,12 @@ async def test_platform_probe_checks_every_distinct_effective_template_domain(
         now=refresh.probe.checked_at,
     )
     assert snapshot.overall_status == "ready"
+    stored_snapshot = (
+        db.query(ResendReadinessSnapshot)
+        .filter(ResendReadinessSnapshot.organization_id.is_(None))
+        .one()
+    )
+    assert stored_snapshot.provider_account_id == "platform:default"
 
 
 @pytest.mark.asyncio

@@ -19,7 +19,7 @@ from app.core.deps import (
 )
 from app.core.permissions import PermissionKey as P
 from app.schemas.auth import UserSession
-from app.services import resend_settings_service
+from app.services import resend_admission_identity, resend_settings_service
 
 router = APIRouter(prefix="/resend", tags=["resend"])
 logger = logging.getLogger(__name__)
@@ -182,6 +182,16 @@ async def update_settings(
 
     current_settings = resend_settings_service.get_resend_settings(db, session.org_id)
     fields_set = update.model_fields_set
+    if "rate_limit_group_token" in fields_set:
+        rate_limit_group_fingerprint = (
+            resend_admission_identity.admission_group_fingerprint(update.rate_limit_group_token)
+            if update.rate_limit_group_token
+            else None
+        )
+    else:
+        rate_limit_group_fingerprint = (
+            current_settings.rate_limit_group_fingerprint if current_settings is not None else None
+        )
     explicit_domain = (
         update.verified_domain.strip().lower()
         if "verified_domain" in fields_set and update.verified_domain
@@ -229,7 +239,11 @@ async def update_settings(
                 detail="From email is required when saving a Resend API key.",
             )
 
-        validation = await resend_settings_service.test_api_key(new_api_key, db=db)
+        validation = await resend_settings_service.test_api_key(
+            new_api_key,
+            db=db,
+            rate_limit_group_fingerprint=rate_limit_group_fingerprint,
+        )
         if not validation.valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -379,7 +393,14 @@ async def test_api_key(
     ),
 ) -> TestKeyResponse:
     """Test if a Resend API key is valid."""
-    result = await resend_settings_service.test_api_key(request.api_key, db=db)
+    current_settings = resend_settings_service.get_resend_settings(db, session.org_id)
+    result = await resend_settings_service.test_api_key(
+        request.api_key,
+        db=db,
+        rate_limit_group_fingerprint=(
+            current_settings.rate_limit_group_fingerprint if current_settings is not None else None
+        ),
+    )
     return TestKeyResponse(
         valid=result.valid,
         error=result.error,

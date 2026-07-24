@@ -25,6 +25,7 @@ PERMISSION_LIMITED_WARNING = (
     "and could still send email. Enter a domain already verified in Resend; this "
     "check cannot confirm domain verification or sending capability."
 )
+RESEND_KEY_VALIDATION_REQUESTS_PER_SECOND = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,6 +241,7 @@ async def test_api_key(
     api_key: str,
     *,
     db: Session,
+    rate_limit_group_fingerprint: str | None = None,
 ) -> ResendKeyValidationResult:
     """
     Test a Resend API key by fetching domains without sending email.
@@ -248,11 +250,24 @@ async def test_api_key(
     sending-only key cannot list domains. All other authentication errors fail
     closed, including ``invalid_api_key`` with HTTP 403.
     """
+    normalized_api_key = api_key.strip()
+    if not normalized_api_key:
+        return ResendKeyValidationResult(
+            valid=False,
+            error="Invalid API key",
+            verified_domains=[],
+            permission_limited=False,
+            warning=None,
+        )
+    admission_identity = resend_admission_identity.resolve_resend_admission_identity(
+        api_key=normalized_api_key,
+        group_fingerprint=rate_limit_group_fingerprint,
+    )
     result = await resend_control_plane.ResendControlPlaneClient(
         db=db,
-        api_key=api_key,
-        provider_account_id=(resend_control_plane.RESEND_UNCLASSIFIED_PROVIDER_ACCOUNT_ID),
-        requests_per_second=(resend_control_plane.RESEND_UNCLASSIFIED_REQUESTS_PER_SECOND),
+        api_key=normalized_api_key,
+        admission_identity=admission_identity,
+        requests_per_second=RESEND_KEY_VALIDATION_REQUESTS_PER_SECOND,
     ).list_domains()
     if result.status is resend_control_plane.ResendControlPlaneStatus.OK:
         domains = result.value or ()

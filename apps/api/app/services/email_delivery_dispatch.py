@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import hashlib
 import logging
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable, ContextManager
@@ -28,6 +28,7 @@ from app.db.models import EmailDelivery, ResendSettings
 from app.services import (
     email_provider_admission_service,
     email_service,
+    resend_admission_identity,
     resend_settings_service,
     resend_transport,
 )
@@ -47,6 +48,7 @@ logger = logging.getLogger(__name__)
 MAX_DELIVERY_BATCH_SIZE = 10
 MIN_DELIVERY_LEASE_SECONDS = 90
 MIN_PROVIDER_IO_WINDOW_SECONDS = 75
+MAX_SHARED_RETRY_AFTER_SECONDS = 3600
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +60,7 @@ class PreparedDelivery:
     idempotency_key: str
     provider: str
     provider_account_id: str
+    admission_identity: str
     provider_credential_fingerprint: str
     lease_expires_at: datetime
     idempotency_expires_at: datetime
@@ -148,17 +151,40 @@ def _raise_if_source_ineligible(db: Session, delivery: EmailDelivery) -> None:
             )
 
 
-def _resolve_api_key(db: Session, delivery: EmailDelivery) -> str:
+@dataclass(frozen=True, slots=True)
+class _ResolvedProviderCredential:
+    api_key: str
+    admission_identity: str
+
+
+def _resolve_provider_credential(
+    db: Session,
+    delivery: EmailDelivery,
+) -> _ResolvedProviderCredential:
     scope = delivery.provider_scope
     account_id = delivery.provider_account_id
 
     if scope == EmailProviderScope.PLATFORM.value:
         if account_id != "platform:default":
             raise DeliveryConfigurationError("Platform provider account identity is invalid")
-        api_key = settings.PLATFORM_RESEND_API_KEY.get_secret_value()
+        api_key = settings.PLATFORM_RESEND_API_KEY.get_secret_value().strip()
         if not api_key:
             raise DeliveryConfigurationError("Platform Resend sender is not configured")
-        return api_key
+        group_token = settings.PLATFORM_RESEND_ADMISSION_GROUP_TOKEN.get_secret_value().strip()
+        group_fingerprint = (
+            resend_admission_identity.admission_group_fingerprint(group_token)
+            if group_token
+            else None
+        )
+        return _ResolvedProviderCredential(
+            api_key=api_key,
+            admission_identity=(
+                resend_admission_identity.resolve_resend_admission_identity(
+                    api_key=api_key,
+                    group_fingerprint=group_fingerprint,
+                )
+            ),
+        )
 
     if scope == EmailProviderScope.ORGANIZATION.value:
         expected_account_id = f"organization:{delivery.organization_id}"
@@ -172,11 +198,24 @@ def _resolve_api_key(db: Session, delivery: EmailDelivery) -> str:
         if not resend_settings_service.is_resend_sender_configured(resend_settings):
             raise DeliveryConfigurationError("Organization Resend sender is not configured")
         try:
-            return resend_settings_service.decrypt_api_key(resend_settings.api_key_encrypted)
+            api_key = resend_settings_service.decrypt_api_key(
+                resend_settings.api_key_encrypted
+            ).strip()
         except Exception as exc:
             raise DeliveryConfigurationError(
                 "Organization Resend credentials are unavailable"
             ) from exc
+        if not api_key:
+            raise DeliveryConfigurationError("Organization Resend credentials are unavailable")
+        return _ResolvedProviderCredential(
+            api_key=api_key,
+            admission_identity=(
+                resend_admission_identity.resolve_resend_admission_identity(
+                    api_key=api_key,
+                    group_fingerprint=resend_settings.rate_limit_group_fingerprint,
+                )
+            ),
+        )
 
     raise DeliveryConfigurationError("Email provider scope is not supported")
 
@@ -229,8 +268,8 @@ def _prepare_delivery(db: Session, claim: DeliveryClaim) -> PreparedDelivery:
     if delivery.provider != EmailProvider.RESEND.value:
         raise DeliveryConfigurationError("Email provider is not supported")
 
-    api_key = _resolve_api_key(db, delivery)
-    credential_fingerprint = hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+    credential = _resolve_provider_credential(db, delivery)
+    credential_fingerprint = resend_admission_identity.credential_fingerprint(credential.api_key)
     if delivery.provider_credential_fingerprint is None:
         delivery.provider_credential_fingerprint = credential_fingerprint
         db.flush()
@@ -288,11 +327,12 @@ def _prepare_delivery(db: Session, claim: DeliveryClaim) -> PreparedDelivery:
         raise RecipientSuppressed
     _raise_if_source_ineligible(db, delivery)
     return PreparedDelivery(
-        api_key=api_key,
+        api_key=credential.api_key,
         payload=payload,
         idempotency_key=delivery.idempotency_key,
         provider=delivery.provider,
         provider_account_id=delivery.provider_account_id,
+        admission_identity=credential.admission_identity,
         provider_credential_fingerprint=credential_fingerprint,
         lease_expires_at=delivery.lease_expires_at,
         idempotency_expires_at=delivery.idempotency_expires_at,
@@ -396,10 +436,7 @@ async def dispatch_claim(
         reservation = email_provider_admission_service.reserve_provider_request_slot(
             db,
             provider=prepared.provider,
-            # Exact shared credentials use one admission lane across organizations.
-            # Distinct keys from the same Resend team still require an explicit
-            # shared account identity because the send API exposes no team ID.
-            provider_account_id=(f"credential:{prepared.provider_credential_fingerprint}"),
+            provider_account_id=prepared.admission_identity,
             requests_per_second=settings.RESEND_PROVIDER_REQUESTS_PER_SECOND,
         )
     except Exception as exc:
@@ -492,6 +529,36 @@ async def dispatch_claim(
             error_message="Provider transport failed",
             provider_outcome_unknown=True,
         )
+
+    if result.status_code == 429:
+        retry_after_seconds = result.retry_after_seconds
+        if (
+            retry_after_seconds is None
+            or not math.isfinite(retry_after_seconds)
+            or retry_after_seconds <= 0
+        ):
+            retry_after_seconds = 1
+        try:
+            email_provider_admission_service.defer_provider_request_slot(
+                db,
+                provider=prepared.provider,
+                provider_account_id=prepared.admission_identity,
+                retry_after=timedelta(
+                    seconds=min(
+                        retry_after_seconds,
+                        MAX_SHARED_RETRY_AFTER_SECONDS,
+                    )
+                ),
+                max_delay=timedelta(seconds=MAX_SHARED_RETRY_AFTER_SECONDS),
+            )
+        except Exception as exc:
+            logger.warning(
+                "Email provider admission cooldown could not be advanced",
+                extra={
+                    "delivery_id": str(claim.delivery_id),
+                    "error_type": type(exc).__name__,
+                },
+            )
 
     if result.ambiguous and not result.retryable:
         return record_delivery_reconciliation_required(
