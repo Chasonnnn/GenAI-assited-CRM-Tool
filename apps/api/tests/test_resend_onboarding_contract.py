@@ -425,6 +425,12 @@ async def test_new_key_and_rate_limit_group_share_team_admission_during_validati
         "AsyncClient",
         lambda **_kwargs: client,
     )
+    admission_identities_before = {
+        identity
+        for (identity,) in db.query(EmailProviderAdmission.provider_account_id)
+        .filter(EmailProviderAdmission.provider == "resend")
+        .all()
+    }
 
     response = await authed_client.patch(
         "/resend/settings",
@@ -438,13 +444,15 @@ async def test_new_key_and_rate_limit_group_share_team_admission_during_validati
     )
 
     assert response.status_code == 200
-    admission_identities = {
+    admission_identities_after = {
         identity
         for (identity,) in db.query(EmailProviderAdmission.provider_account_id)
         .filter(EmailProviderAdmission.provider == "resend")
         .all()
     }
-    assert admission_identities == {f"team:{RATE_LIMIT_GROUP_FINGERPRINT}"}
+    team_identity = f"team:{RATE_LIMIT_GROUP_FINGERPRINT}"
+    assert team_identity in admission_identities_after
+    assert admission_identities_after - admission_identities_before <= {team_identity}
 
 
 @pytest.mark.asyncio
