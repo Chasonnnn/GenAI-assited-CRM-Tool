@@ -13,7 +13,7 @@ from importlib.util import find_spec
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, select, func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -375,24 +375,26 @@ def create_export_job(
 
     one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
     recent_exports = (
-        db.query(ExportJob)
-        .filter(
-            ExportJob.organization_id == org_id,
-            ExportJob.created_at >= one_hour_ago,
+        db.scalar(
+            select(func.count(ExportJob.id)).where(
+                ExportJob.organization_id == org_id,
+                ExportJob.created_at >= one_hour_ago,
+            )
         )
-        .count()
+        or 0
     )
     if recent_exports >= settings.EXPORT_RATE_LIMIT_PER_HOUR:
         raise ValueError("Export rate limit exceeded")
 
     log_count = (
-        db.query(AuditLog)
-        .filter(
-            AuditLog.organization_id == org_id,
-            AuditLog.created_at >= start_date,
-            AuditLog.created_at <= end_date,
+        db.scalar(
+            select(func.count(AuditLog.id)).where(
+                AuditLog.organization_id == org_id,
+                AuditLog.created_at >= start_date,
+                AuditLog.created_at <= end_date,
+            )
         )
-        .count()
+        or 0
     )
     if log_count > settings.EXPORT_MAX_RECORDS:
         raise ValueError("Export exceeds maximum record limit")
