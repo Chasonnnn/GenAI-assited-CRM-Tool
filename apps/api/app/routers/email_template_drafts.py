@@ -303,6 +303,7 @@ def update_email_template_draft(
 )
 def discard_email_template_draft(
     draft_id: UUID,
+    expected_revision: Annotated[int, Query(ge=1)],
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ) -> Response:
@@ -315,7 +316,14 @@ def discard_email_template_draft(
     if draft is None:
         raise HTTPException(status_code=404, detail="Draft not found")
     _require_draft_editor(db, session, draft)
-    email_template_draft_service.discard_draft(db, draft)
+    try:
+        email_template_draft_service.discard_draft(
+            db,
+            draft,
+            expected_revision=expected_revision,
+        )
+    except email_template_draft_service.DraftRevisionConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

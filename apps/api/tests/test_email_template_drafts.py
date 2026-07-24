@@ -433,7 +433,17 @@ async def test_draft_conflicts_and_discard_never_create_or_overwrite_templates(
     assert retained.json()["subject"] == "Conflicting draft"
     assert retained.json()["revision"] == 1
 
-    discard = await authed_client.delete(f"/email-template-drafts/{draft['id']}")
+    stale_discard = await authed_client.delete(
+        f"/email-template-drafts/{draft['id']}?expected_revision=999"
+    )
+    assert stale_discard.status_code == 409
+    assert (
+        await authed_client.get(f"/email-template-drafts/{draft['id']}")
+    ).status_code == 200
+
+    discard = await authed_client.delete(
+        f"/email-template-drafts/{draft['id']}?expected_revision=1"
+    )
     assert discard.status_code == 204
     assert (
         db.query(EmailTemplate)

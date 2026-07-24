@@ -235,7 +235,16 @@ def update_draft(
     return draft
 
 
-def discard_draft(db: Session, draft: EmailTemplateDraft) -> None:
+def discard_draft(
+    db: Session,
+    draft: EmailTemplateDraft,
+    *,
+    expected_revision: int,
+) -> None:
+    if draft.revision != expected_revision:
+        raise DraftRevisionConflictError(
+            f"Draft revision mismatch: expected {expected_revision}, got {draft.revision}"
+        )
     db.delete(draft)
     db.commit()
 
