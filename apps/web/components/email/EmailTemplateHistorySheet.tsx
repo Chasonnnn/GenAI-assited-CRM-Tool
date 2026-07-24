@@ -46,6 +46,7 @@ interface EmailTemplateHistorySheetProps {
     onRetry: () => void
     onRestore: (version: number) => Promise<void> | void
     isRestoring: boolean
+    restoreMode?: "published" | "draft"
 }
 
 function getVersionActionLabel(comment: string | null): string {
@@ -92,6 +93,7 @@ export function EmailTemplateHistorySheet({
     onRetry,
     onRestore,
     isRestoring,
+    restoreMode = "published",
 }: EmailTemplateHistorySheetProps) {
     const [restoreTarget, setRestoreTarget] = useState<number | null>(null)
 
@@ -120,8 +122,9 @@ export function EmailTemplateHistorySheet({
                             </div>
                         </div>
                         <SheetDescription>
-                            Review saved changes or restore an earlier version. Restoring always
-                            adds a new version, so the audit trail stays intact.
+                            {restoreMode === "draft"
+                                ? "Review published versions or load one into an isolated draft. Production stays unchanged until you publish."
+                                : "Review saved changes or restore an earlier version. Restoring always adds a new version, so the audit trail stays intact."}
                         </SheetDescription>
                         {currentVersion !== null && (
                             <Badge variant="secondary" className="mt-2">
@@ -236,8 +239,9 @@ export function EmailTemplateHistorySheet({
                             Restore version {restoreTarget}?
                         </AlertDialogTitle>
                         <AlertDialogDescription>
-                            This replaces the editor draft with version {restoreTarget} and creates
-                            a new version. Existing history is never overwritten.
+                            {restoreMode === "draft"
+                                ? `This loads version ${restoreTarget} into your isolated draft. The published template stays unchanged until you publish.`
+                                : `This replaces the editor draft with version ${restoreTarget} and creates a new version. Existing history is never overwritten.`}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -249,7 +253,9 @@ export function EmailTemplateHistorySheet({
                             {isRestoring && (
                                 <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
                             )}
-                            Restore version
+                            {restoreMode === "draft"
+                                ? "Restore to draft"
+                                : "Restore version"}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

@@ -76,6 +76,30 @@ describe("EmailTemplateHistorySheet", () => {
         })
     })
 
+    it("explains draft-safe restoration without implying production changed", async () => {
+        const onRestore = vi.fn().mockResolvedValue(undefined)
+        renderHistory({ onRestore, restoreMode: "draft" })
+
+        expect(
+            screen.getByText(
+                "Review published versions or load one into an isolated draft. Production stays unchanged until you publish.",
+            ),
+        ).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Restore version 1" }))
+
+        expect(
+            screen.getByText(
+                "This loads version 1 into your isolated draft. The published template stays unchanged until you publish.",
+            ),
+        ).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Restore to draft" }))
+
+        await waitFor(() => {
+            expect(onRestore).toHaveBeenCalledWith(1)
+        })
+    })
+
     it("renders loading, error, and empty states", () => {
         const { rerender } = render(
             <EmailTemplateHistorySheet
