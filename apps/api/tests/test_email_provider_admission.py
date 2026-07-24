@@ -10,6 +10,7 @@ import pytest
 from app.core.config import Settings
 from app.db.models import EmailProviderAdmission
 from app.db.session import SessionLocal
+from app.services import email_provider_admission_service
 from app.services.email_provider_admission_service import (
     reserve_provider_request_slot,
 )
@@ -160,3 +161,196 @@ def test_reservation_uses_current_database_time_after_waiting_for_account_lock(
         seed.commit()
         locker.close()
         seed.close()
+
+
+def test_retry_deferral_is_bounded_monotonic_and_committed(db_engine):
+    provider_account_id = f"credential:{uuid4().hex}"
+    fixed_now = datetime.now(timezone.utc).replace(microsecond=0)
+    expected_next_slot = fixed_now + timedelta(seconds=30)
+    seed = SessionLocal(bind=db_engine)
+    verification = SessionLocal(bind=db_engine)
+    try:
+        seed.add(
+            EmailProviderAdmission(
+                provider="resend",
+                provider_account_id=provider_account_id,
+                next_slot_at=fixed_now + timedelta(seconds=5),
+            )
+        )
+        seed.commit()
+
+        deferred_until = email_provider_admission_service.defer_provider_request_slot(
+            seed,
+            provider="resend",
+            provider_account_id=provider_account_id,
+            retry_after=timedelta(minutes=10),
+            max_delay=timedelta(seconds=30),
+            now=fixed_now,
+        )
+        older_deferral = email_provider_admission_service.defer_provider_request_slot(
+            seed,
+            provider="resend",
+            provider_account_id=provider_account_id,
+            retry_after=timedelta(seconds=1),
+            max_delay=timedelta(seconds=30),
+            now=fixed_now - timedelta(seconds=20),
+        )
+
+        stored_next_slot = (
+            verification.query(EmailProviderAdmission.next_slot_at)
+            .filter(
+                EmailProviderAdmission.provider == "resend",
+                EmailProviderAdmission.provider_account_id == provider_account_id,
+            )
+            .scalar()
+        )
+        assert deferred_until == expected_next_slot
+        assert older_deferral == expected_next_slot
+        assert stored_next_slot == expected_next_slot
+    finally:
+        verification.close()
+        seed.rollback()
+        seed.query(EmailProviderAdmission).filter(
+            EmailProviderAdmission.provider == "resend",
+            EmailProviderAdmission.provider_account_id == provider_account_id,
+        ).delete()
+        seed.commit()
+        seed.close()
+
+
+def test_concurrent_retry_deferrals_preserve_latest_eligible_slot(db_engine):
+    if db_engine.dialect.name != "postgresql":
+        pytest.skip("Concurrent provider admission requires PostgreSQL row locks")
+
+    provider_account_id = f"credential:{uuid4().hex}"
+    fixed_now = datetime.now(timezone.utc).replace(microsecond=0)
+    expected_next_slot = fixed_now + timedelta(seconds=30)
+    seed = SessionLocal(bind=db_engine)
+    locker = SessionLocal(bind=db_engine)
+    result_lock = Lock()
+    later_started = Event()
+    older_started = Event()
+    results: list[datetime] = []
+    errors: list[Exception] = []
+    try:
+        seed.add(
+            EmailProviderAdmission(
+                provider="resend",
+                provider_account_id=provider_account_id,
+                next_slot_at=fixed_now,
+            )
+        )
+        seed.commit()
+        (
+            locker.query(EmailProviderAdmission)
+            .filter(
+                EmailProviderAdmission.provider == "resend",
+                EmailProviderAdmission.provider_account_id == provider_account_id,
+            )
+            .with_for_update()
+            .one()
+        )
+
+        def defer_while_locked(
+            *,
+            started: Event,
+            now: datetime,
+            retry_after: timedelta,
+        ) -> None:
+            contender = SessionLocal(bind=db_engine)
+            try:
+                started.set()
+                result = email_provider_admission_service.defer_provider_request_slot(
+                    contender,
+                    provider="resend",
+                    provider_account_id=provider_account_id,
+                    retry_after=retry_after,
+                    max_delay=timedelta(seconds=30),
+                    now=now,
+                )
+                with result_lock:
+                    results.append(result)
+            except Exception as exc:
+                contender.rollback()
+                with result_lock:
+                    errors.append(exc)
+            finally:
+                contender.close()
+
+        later_thread = Thread(
+            target=defer_while_locked,
+            kwargs={
+                "started": later_started,
+                "now": fixed_now,
+                "retry_after": timedelta(seconds=30),
+            },
+        )
+        older_thread = Thread(
+            target=defer_while_locked,
+            kwargs={
+                "started": older_started,
+                "now": fixed_now - timedelta(seconds=20),
+                "retry_after": timedelta(seconds=1),
+            },
+        )
+        later_thread.start()
+        assert later_started.wait(timeout=2)
+        time.sleep(0.1)
+        older_thread.start()
+        assert older_started.wait(timeout=2)
+        time.sleep(0.1)
+        locker.commit()
+        later_thread.join(timeout=5)
+        older_thread.join(timeout=5)
+
+        assert later_thread.is_alive() is False
+        assert older_thread.is_alive() is False
+        assert errors == []
+        assert len(results) == 2
+        assert expected_next_slot in results
+
+        seed.expire_all()
+        stored_next_slot = (
+            seed.query(EmailProviderAdmission.next_slot_at)
+            .filter(
+                EmailProviderAdmission.provider == "resend",
+                EmailProviderAdmission.provider_account_id == provider_account_id,
+            )
+            .scalar()
+        )
+        assert stored_next_slot == expected_next_slot
+    finally:
+        locker.rollback()
+        seed.rollback()
+        seed.query(EmailProviderAdmission).filter(
+            EmailProviderAdmission.provider == "resend",
+            EmailProviderAdmission.provider_account_id == provider_account_id,
+        ).delete()
+        seed.commit()
+        locker.close()
+        seed.close()
+
+
+@pytest.mark.parametrize(
+    ("retry_after", "max_delay"),
+    [
+        (timedelta(0), timedelta(seconds=1)),
+        (timedelta(seconds=-1), timedelta(seconds=1)),
+        (timedelta(seconds=1), timedelta(0)),
+        (timedelta(seconds=1), timedelta(seconds=-1)),
+    ],
+)
+def test_retry_deferral_rejects_nonpositive_durations(
+    db,
+    retry_after,
+    max_delay,
+):
+    with pytest.raises(ValueError):
+        email_provider_admission_service.defer_provider_request_slot(
+            db,
+            provider="resend",
+            provider_account_id=f"credential:{uuid4().hex}",
+            retry_after=retry_after,
+            max_delay=max_delay,
+            now=datetime.now(timezone.utc),
+        )

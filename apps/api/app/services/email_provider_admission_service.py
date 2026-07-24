@@ -21,6 +21,29 @@ class ProviderRequestReservation:
     next_slot_at: datetime
 
 
+def _normalize_admission_account(
+    *,
+    provider: str,
+    provider_account_id: str,
+) -> tuple[str, str]:
+    normalized_provider = provider.strip().lower()
+    normalized_account_id = provider_account_id.strip()
+    if not normalized_provider:
+        raise ValueError("provider is required")
+    if len(normalized_provider) > 20:
+        raise ValueError("provider must be 20 characters or fewer")
+    if not normalized_account_id:
+        raise ValueError("provider_account_id is required")
+    if len(normalized_account_id) > 255:
+        raise ValueError("provider_account_id must be 255 characters or fewer")
+    return normalized_provider, normalized_account_id
+
+
+def _validate_optional_now(now: datetime | None) -> None:
+    if now is not None and (now.tzinfo is None or now.utcoffset() is None):
+        raise ValueError("now must be timezone-aware")
+
+
 def _slot_interval(requests_per_second: int) -> timedelta:
     if requests_per_second < 1:
         raise ValueError("requests_per_second must be at least 1")
@@ -44,19 +67,11 @@ def reserve_provider_request_slot(
     The commit occurs before this function returns so callers can wait and
     perform provider I/O without holding a database transaction.
     """
-    normalized_provider = provider.strip().lower()
-    normalized_account_id = provider_account_id.strip()
-    if not normalized_provider:
-        raise ValueError("provider is required")
-    if len(normalized_provider) > 20:
-        raise ValueError("provider must be 20 characters or fewer")
-    if not normalized_account_id:
-        raise ValueError("provider_account_id is required")
-    if len(normalized_account_id) > 255:
-        raise ValueError("provider_account_id must be 255 characters or fewer")
-
-    if now is not None and (now.tzinfo is None or now.utcoffset() is None):
-        raise ValueError("now must be timezone-aware")
+    normalized_provider, normalized_account_id = _normalize_admission_account(
+        provider=provider,
+        provider_account_id=provider_account_id,
+    )
+    _validate_optional_now(now)
     interval = _slot_interval(requests_per_second)
 
     try:
@@ -96,3 +111,63 @@ def reserve_provider_request_slot(
         send_at=send_at,
         next_slot_at=next_slot_at,
     )
+
+
+def defer_provider_request_slot(
+    db: Session,
+    *,
+    provider: str,
+    provider_account_id: str,
+    retry_after: timedelta,
+    max_delay: timedelta,
+    now: datetime | None = None,
+) -> datetime:
+    """Commit a bounded, monotonic provider-account deferral.
+
+    The account row is locked before its current slot is compared so concurrent
+    workers cannot move the shared provider schedule backwards.
+    """
+    normalized_provider, normalized_account_id = _normalize_admission_account(
+        provider=provider,
+        provider_account_id=provider_account_id,
+    )
+    _validate_optional_now(now)
+    if retry_after <= timedelta(0):
+        raise ValueError("retry_after must be positive")
+    if max_delay <= timedelta(0):
+        raise ValueError("max_delay must be positive")
+
+    try:
+        initial_time = now or db.execute(select(func.clock_timestamp())).scalar_one()
+        db.execute(
+            insert(EmailProviderAdmission)
+            .values(
+                provider=normalized_provider,
+                provider_account_id=normalized_account_id,
+                next_slot_at=initial_time,
+            )
+            .on_conflict_do_nothing(
+                index_elements=[
+                    EmailProviderAdmission.provider,
+                    EmailProviderAdmission.provider_account_id,
+                ]
+            )
+        )
+        state = db.execute(
+            select(EmailProviderAdmission)
+            .where(
+                EmailProviderAdmission.provider == normalized_provider,
+                EmailProviderAdmission.provider_account_id == normalized_account_id,
+            )
+            .with_for_update()
+        ).scalar_one()
+        reference_time = now or db.execute(select(func.clock_timestamp())).scalar_one()
+        requested_next_slot = reference_time + min(retry_after, max_delay)
+        deferred_until = max(state.next_slot_at, requested_next_slot)
+        state.next_slot_at = deferred_until
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return deferred_until
