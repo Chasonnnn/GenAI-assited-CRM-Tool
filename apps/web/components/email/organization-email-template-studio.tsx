@@ -303,8 +303,6 @@ function OrganizationEmailTemplateEditor({
     const [bodyMode, setBodyMode] = useState<EmailTemplateBodyMode>(() =>
         getEmailTemplateBodyMode(initialFields.body),
     )
-    const [activeEditorField, setActiveEditorField] =
-        useState<ActiveEditorField>("body")
     const [isSaving, setIsSaving] = useState(false)
     const [saveError, setSaveError] = useState<string | null>(null)
     const [saveConflict, setSaveConflict] = useState(false)
@@ -326,6 +324,7 @@ function OrganizationEmailTemplateEditor({
     const subjectRef = useRef<HTMLInputElement>(null)
     const htmlBodyRef = useRef<HTMLTextAreaElement>(null)
     const visualBodyRef = useRef<RichTextEditorHandle | null>(null)
+    const activeEditorFieldRef = useRef<ActiveEditorField>("body")
     const testOccurrenceIdRef = useRef<string | null>(null)
 
     const isDirty = Object.keys(buildChangedFields(fields, savedFields)).length > 0
@@ -385,7 +384,7 @@ function OrganizationEmailTemplateEditor({
 
     const handleInsertVariable = (variable: TemplateVariableRead) => {
         const token = `{{${variable.name}}}`
-        if (activeEditorField === "subject") {
+        if (activeEditorFieldRef.current === "subject") {
             insertIntoTextField("subject", subjectRef.current, token)
             return
         }
@@ -596,11 +595,11 @@ function OrganizationEmailTemplateEditor({
         const idempotencyKey =
             testOccurrenceIdRef.current ?? createTestOccurrenceId()
         testOccurrenceIdRef.current = idempotencyKey
-        const variableOverrides = Object.fromEntries(
-            testVariableNames
-                .map((name) => [name, (testVariables[name] ?? "").trim()])
-                .filter(([, value]) => Boolean(value)),
-        )
+        const variableOverrides: Record<string, string> = {}
+        for (const name of testVariableNames) {
+            const value = (testVariables[name] ?? "").trim()
+            if (value) variableOverrides[name] = value
+        }
 
         setIsSendingTest(true)
         setTestError(null)
@@ -836,7 +835,9 @@ function OrganizationEmailTemplateEditor({
                                 ref={subjectRef}
                                 id="template-subject"
                                 value={fields.subject}
-                                onFocus={() => setActiveEditorField("subject")}
+                                onFocus={() => {
+                                    activeEditorFieldRef.current = "subject"
+                                }}
                                 onChange={(event) =>
                                     setFields((current) => ({
                                         ...current,
@@ -900,7 +901,9 @@ function OrganizationEmailTemplateEditor({
                                 aria-label="Email HTML"
                                 value={fields.body}
                                 className="min-h-80 resize-y font-mono text-xs leading-relaxed"
-                                onFocus={() => setActiveEditorField("body")}
+                                onFocus={() => {
+                                    activeEditorFieldRef.current = "body"
+                                }}
                                 onChange={(event) =>
                                     setFields((current) => ({
                                         ...current,
@@ -912,7 +915,9 @@ function OrganizationEmailTemplateEditor({
                             <RichTextEditor
                                 ref={visualBodyRef}
                                 content={fields.body}
-                                onFocus={() => setActiveEditorField("body")}
+                                onFocus={() => {
+                                    activeEditorFieldRef.current = "body"
+                                }}
                                 onChange={(body) =>
                                     setFields((current) => ({ ...current, body }))
                                 }
