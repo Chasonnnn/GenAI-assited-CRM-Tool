@@ -1115,6 +1115,12 @@
       "422"
     ]
   },
+  "/email-template-drafts/{draft_id}/restore-version": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/email-template-drafts/{draft_id}/test": {
     "POST": [
       "200",

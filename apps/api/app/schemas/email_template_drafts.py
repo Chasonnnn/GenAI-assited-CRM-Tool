@@ -44,6 +44,11 @@ class EmailTemplateDraftPublishRequest(BaseModel):
     expected_published_version: int | None = Field(default=None, ge=1)
 
 
+class EmailTemplateDraftRestoreVersionRequest(BaseModel):
+    target_version: int = Field(ge=1)
+    expected_revision: int = Field(ge=1)
+
+
 class EmailTemplateDraftTestSendRequest(EmailTemplateTestSendRequest):
     expected_revision: int = Field(ge=1)
 

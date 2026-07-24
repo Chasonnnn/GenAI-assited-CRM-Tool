@@ -9,7 +9,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import EmailTemplate, EmailTemplateDraft
-from app.services import email_service
+from app.services import email_service, version_service
 
 
 class DraftRevisionConflictError(Exception):
@@ -22,6 +22,14 @@ class PublishedTemplateConflictError(Exception):
 
 class DraftNameConflictError(Exception):
     """The draft name conflicts with another published template."""
+
+
+class DraftVersionNotFoundError(Exception):
+    """The requested published template version does not exist."""
+
+
+class DraftVersionIntegrityError(Exception):
+    """The requested published template version cannot be restored safely."""
 
 
 _UNSET = object()
@@ -230,6 +238,93 @@ def update_draft(
     draft.revision += 1
     draft.updated_by_user_id = user_id
     draft.updated_at = _utc_now()
+    db.commit()
+    db.refresh(draft)
+    return draft
+
+
+def _validate_version_payload(payload: object) -> None:
+    expected_fields = {"name", "subject", "from_email", "body", "is_active"}
+    if not isinstance(payload, dict) or set(payload) != expected_fields:
+        raise DraftVersionIntegrityError("Published template version payload has an invalid shape")
+    if (
+        not isinstance(payload["name"], str)
+        or not 1 <= len(payload["name"]) <= 100
+        or not isinstance(payload["subject"], str)
+        or not 1 <= len(payload["subject"]) <= 200
+        or not isinstance(payload["body"], str)
+        or not isinstance(payload["is_active"], bool)
+    ):
+        raise DraftVersionIntegrityError(
+            "Published template version payload has invalid field values"
+        )
+    from_email = payload["from_email"]
+    if from_email is not None and (not isinstance(from_email, str) or len(from_email) > 200):
+        raise DraftVersionIntegrityError(
+            "Published template version payload has invalid field values"
+        )
+
+
+def restore_version_to_draft(
+    db: Session,
+    *,
+    draft: EmailTemplateDraft,
+    user_id: UUID,
+    target_version: int,
+    expected_revision: int,
+) -> EmailTemplateDraft:
+    """Copy an immutable published snapshot into an isolated locked draft."""
+    if draft.revision != expected_revision:
+        raise DraftRevisionConflictError(
+            f"Draft revision mismatch: expected {expected_revision}, got {draft.revision}"
+        )
+    if draft.template_id is None:
+        raise ValueError("Only drafts linked to a published template can restore history")
+
+    version = version_service.get_version(
+        db,
+        draft.organization_id,
+        email_service.ENTITY_TYPE,
+        draft.template_id,
+        target_version,
+    )
+    if version is None:
+        raise DraftVersionNotFoundError(f"Published template version {target_version} not found")
+    if version.schema_version != 1:
+        raise DraftVersionIntegrityError(
+            "Published template version uses an unsupported payload schema"
+        )
+
+    try:
+        payload = version_service.decrypt_payload(version.payload_encrypted)
+        if not version_service.verify_checksum(
+            version.payload_encrypted,
+            version.checksum,
+        ):
+            raise DraftVersionIntegrityError(
+                "Published template version failed its integrity check"
+            )
+    except DraftVersionIntegrityError:
+        raise
+    except Exception as exc:
+        raise DraftVersionIntegrityError(
+            "Published template version could not be decrypted"
+        ) from exc
+
+    _validate_version_payload(payload)
+
+    # Historical snapshots are already canonical published data. Copy exact
+    # bytes rather than re-sanitizing or normalizing legacy content.
+    draft.name = payload["name"]
+    draft.subject = payload["subject"]
+    draft.from_email = payload["from_email"]
+    draft.body = payload["body"]
+    draft.is_active = payload["is_active"]
+    draft.revision += 1
+    draft.updated_by_user_id = user_id
+    draft.updated_at = _utc_now()
+    draft.last_tested_revision = None
+    draft.last_tested_at = None
     db.commit()
     db.refresh(draft)
     return draft

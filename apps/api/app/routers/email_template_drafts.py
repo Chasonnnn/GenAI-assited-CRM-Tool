@@ -25,6 +25,7 @@ from app.schemas.email_template_drafts import (
     EmailTemplateDraftCreate,
     EmailTemplateDraftPublishRequest,
     EmailTemplateDraftRead,
+    EmailTemplateDraftRestoreVersionRequest,
     EmailTemplateDraftUpdate,
 )
 from app.services import (
@@ -325,6 +326,46 @@ def discard_email_template_draft(
     except email_template_draft_service.DraftRevisionConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/{draft_id}/restore-version",
+    response_model=EmailTemplateDraftRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def restore_email_template_draft_version(
+    draft_id: UUID,
+    data: EmailTemplateDraftRestoreVersionRequest,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
+):
+    draft = email_template_draft_service.get_draft(
+        db,
+        org_id=session.org_id,
+        draft_id=draft_id,
+        for_update=True,
+    )
+    if draft is None:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    _require_draft_editor(db, session, draft)
+    try:
+        restored = email_template_draft_service.restore_version_to_draft(
+            db,
+            draft=draft,
+            user_id=session.user_id,
+            target_version=data.target_version,
+            expected_revision=data.expected_revision,
+        )
+    except email_template_draft_service.DraftRevisionConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except email_template_draft_service.DraftVersionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (
+        email_template_draft_service.DraftVersionIntegrityError,
+        ValueError,
+    ) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _build_draft_response(restored)
 
 
 @router.post(

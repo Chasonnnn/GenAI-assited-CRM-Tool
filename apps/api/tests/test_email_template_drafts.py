@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -10,7 +11,7 @@ from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token
 from app.db.enums import Role
-from app.db.models import EmailTemplate, Membership, Organization, User
+from app.db.models import EmailTemplate, EmailTemplateDraft, Membership, Organization, User
 from app.main import app
 from app.services import (
     email_service,
@@ -561,6 +562,12 @@ async def test_drafts_are_not_visible_or_mutable_across_organizations(
         )
         assert publish_response.status_code == 404
 
+        restore_response = await other_client.post(
+            f"/email-template-drafts/{draft['id']}/restore-version",
+            json={"target_version": 1, "expected_revision": 1},
+        )
+        assert restore_response.status_code == 404
+
     retained = (
         db.query(EmailTemplate)
         .filter(
@@ -570,3 +577,271 @@ async def test_drafts_are_not_visible_or_mutable_across_organizations(
         .first()
     )
     assert retained is None
+
+
+@pytest.mark.asyncio
+async def test_restore_published_version_updates_only_the_existing_draft(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+):
+    legacy_body = (
+        '<table style="mso-table-lspace:0"><tr><td>'
+        "<script>legacyRenderer()</script>{{ unknown_legacy_variable }}"
+        "</td></tr></table>"
+    )
+    legacy_from = "  Legacy Sender <legacy@example.com>  "
+    template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=test_user.id,
+        name="Historical journey",
+        subject="Historical subject",
+        from_email=legacy_from,
+        body=legacy_body,
+        scope="org",
+        owner_user_id=None,
+        is_active=True,
+        current_version=1,
+    )
+    db.add(template)
+    db.commit()
+
+    email_service.update_template(
+        db,
+        template=template,
+        user_id=test_user.id,
+        name="Current journey",
+        subject="Current subject",
+        from_email="Current Sender <current@example.com>",
+        body="<p>Current body</p>",
+        is_active=False,
+        expected_version=1,
+    )
+    draft_response = await authed_client.post(f"/email-template-drafts/from-template/{template.id}")
+    assert draft_response.status_code == 200
+    draft = draft_response.json()
+    updated_response = await authed_client.patch(
+        f"/email-template-drafts/{draft['id']}",
+        json={
+            "subject": "Unpublished working subject",
+            "expected_revision": 1,
+        },
+    )
+    assert updated_response.status_code == 200
+
+    draft_model = db.get(EmailTemplateDraft, uuid.UUID(draft["id"]))
+    assert draft_model is not None
+    draft_model.last_tested_revision = 2
+    draft_model.last_tested_at = datetime.now(timezone.utc)
+    db.commit()
+
+    db.refresh(template)
+    published_before = (
+        template.name,
+        template.subject,
+        template.from_email,
+        template.body,
+        template.is_active,
+        template.current_version,
+        template.created_at,
+        template.updated_at,
+    )
+    versions_before = [
+        (
+            version.id,
+            version.version,
+            version.payload_encrypted,
+            version.checksum,
+            version.created_by_user_id,
+            version.comment,
+            version.created_at,
+        )
+        for version in version_service.get_version_history(
+            db,
+            test_org.id,
+            "email_template",
+            template.id,
+        )
+    ]
+    historical_payload = version_service.decrypt_payload(
+        version_service.get_version(
+            db,
+            test_org.id,
+            "email_template",
+            template.id,
+            1,
+        ).payload_encrypted
+    )
+
+    response = await authed_client.post(
+        f"/email-template-drafts/{draft['id']}/restore-version",
+        json={"target_version": 1, "expected_revision": 2},
+    )
+
+    assert response.status_code == 200
+    restored = response.json()
+    assert {
+        field: restored[field] for field in ("name", "subject", "from_email", "body", "is_active")
+    } == historical_payload
+    assert restored["body"] == legacy_body
+    assert restored["from_email"] == legacy_from
+    assert restored["revision"] == 3
+    assert restored["base_version"] == 2
+    assert restored["published_version"] == 2
+    assert restored["is_stale"] is False
+    assert restored["last_tested_revision"] is None
+    assert restored["last_tested_at"] is None
+    assert restored["updated_by_user_id"] == str(test_user.id)
+
+    db.expire_all()
+    published_after = db.get(EmailTemplate, template.id)
+    assert published_after is not None
+    assert (
+        published_after.name,
+        published_after.subject,
+        published_after.from_email,
+        published_after.body,
+        published_after.is_active,
+        published_after.current_version,
+        published_after.created_at,
+        published_after.updated_at,
+    ) == published_before
+    versions_after = [
+        (
+            version.id,
+            version.version,
+            version.payload_encrypted,
+            version.checksum,
+            version.created_by_user_id,
+            version.comment,
+            version.created_at,
+        )
+        for version in version_service.get_version_history(
+            db,
+            test_org.id,
+            "email_template",
+            template.id,
+        )
+    ]
+    assert versions_after == versions_before
+
+
+@pytest.mark.asyncio
+async def test_restore_published_version_rejects_stale_draft_revision(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+):
+    template = email_service.create_template(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        name="Revision fence",
+        subject="Published subject",
+        body="<p>Published body</p>",
+        scope="org",
+    )
+    draft_response = await authed_client.post(f"/email-template-drafts/from-template/{template.id}")
+    draft = draft_response.json()
+    update_response = await authed_client.patch(
+        f"/email-template-drafts/{draft['id']}",
+        json={"subject": "Working subject", "expected_revision": 1},
+    )
+    assert update_response.status_code == 200
+
+    response = await authed_client.post(
+        f"/email-template-drafts/{draft['id']}/restore-version",
+        json={"target_version": 1, "expected_revision": 1},
+    )
+
+    assert response.status_code == 409
+    retained = await authed_client.get(f"/email-template-drafts/{draft['id']}")
+    assert retained.status_code == 200
+    assert retained.json()["subject"] == "Working subject"
+    assert retained.json()["revision"] == 2
+
+
+@pytest.mark.asyncio
+async def test_restore_published_version_requires_linked_draft_and_existing_history(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+):
+    new_draft_response = await authed_client.post(
+        "/email-template-drafts",
+        json={
+            "name": "Never published",
+            "subject": "Draft only",
+            "body": "<p>Draft only</p>",
+            "scope": "org",
+        },
+    )
+    new_draft = new_draft_response.json()
+    unlinked_response = await authed_client.post(
+        f"/email-template-drafts/{new_draft['id']}/restore-version",
+        json={"target_version": 1, "expected_revision": 1},
+    )
+    assert unlinked_response.status_code == 422
+
+    template = email_service.create_template(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        name="Missing history target",
+        subject="Published subject",
+        body="<p>Published body</p>",
+        scope="org",
+    )
+    linked_draft_response = await authed_client.post(
+        f"/email-template-drafts/from-template/{template.id}"
+    )
+    linked_draft = linked_draft_response.json()
+    missing_response = await authed_client.post(
+        f"/email-template-drafts/{linked_draft['id']}/restore-version",
+        json={"target_version": 999, "expected_revision": 1},
+    )
+    assert missing_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_restore_published_version_rejects_failed_integrity_check(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+):
+    template = email_service.create_template(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        name="Integrity fence",
+        subject="Published subject",
+        body="<p>Published body</p>",
+        scope="org",
+    )
+    draft_response = await authed_client.post(f"/email-template-drafts/from-template/{template.id}")
+    draft = draft_response.json()
+    version = version_service.get_version(
+        db,
+        test_org.id,
+        "email_template",
+        template.id,
+        1,
+    )
+    assert version is not None
+    version.checksum = "0" * 64
+    db.commit()
+
+    response = await authed_client.post(
+        f"/email-template-drafts/{draft['id']}/restore-version",
+        json={"target_version": 1, "expected_revision": 1},
+    )
+
+    assert response.status_code == 422
+    retained = await authed_client.get(f"/email-template-drafts/{draft['id']}")
+    assert retained.status_code == 200
+    assert retained.json()["revision"] == 1
