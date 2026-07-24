@@ -49,7 +49,7 @@ The highest-risk defects found in the audit are addressed:
 This is a material reliability upgrade, but it is not the end state. The most
 important remaining gaps are long-lived orphan-event operations, remote
 domain/webhook verification, cross-organization Resend-team rate identity,
-OAuth, append-only suppression evidence, and a full draft/publish template studio.
+append-only suppression evidence, and a full draft/publish template studio.
 
 ## Non-negotiable channel boundaries
 
@@ -302,8 +302,11 @@ administrator re-enters and tests the credential again; the API independently
 rejects a bypass attempt that omits same-request credential validation.
 
 The API key and webhook secret remain encrypted at rest and write-only through
-the API. Resend OAuth, PKCE, refresh-token rotation, revocation, and remote
-webhook provisioning are not implemented.
+the API. The product intentionally uses BYOK with guided manual webhook setup.
+Resend OAuth, PKCE, refresh-token rotation, revocation, and automatic remote
+webhook provisioning are not planned. Read-only readiness checks may compare
+the remote configuration with the expected local endpoint and event set, but
+they must never create, modify, or delete provider resources.
 
 ### 8. Email Operations and case visibility
 
@@ -401,25 +404,22 @@ outbox.
 
 ### P1 product and operations
 
-1. Add Resend OAuth with S256 PKCE, encrypted rotating refresh tokens,
-   serialized refresh, and revocation; retain encrypted BYOK as a fallback.
-2. Provision and rotate remote webhooks from the application, and compare the
-   configured event set with the local expected set.
-3. Add domain-level SPF, DKIM, DMARC, custom tracking-subdomain, quota, recent
+1. Add domain-level SPF, DKIM, DMARC, custom tracking-subdomain, quota, recent
    complaint/bounce, and last-test-send evidence.
-4. Add purpose-specific sending subdomains. Resend tracking configuration is
+2. Add purpose-specific sending subdomains. Resend tracking configuration is
    domain-level, so authentication/sensitive transactional links should not
    share a tracked domain with marketing mail.
-5. Restrict Email Operations diagnostics to a dedicated permission and define
+3. Restrict Email Operations diagnostics to a dedicated permission and define
    retention/export/deletion policy for stored email bodies and raw webhook
    payloads.
-6. Reuse a pooled HTTP client or supported SDK transport after preserving the
+4. Reuse a pooled HTTP client or supported SDK transport after preserving the
    current single-request/admission contract.
-7. Add bounded refresh for active campaign screens so the UI converges while
+5. Add bounded refresh for active campaign screens so the UI converges while
    outbox and webhook work is in flight.
-8. Split provider-result persistence from optional campaign/activity
+6. Split provider-result persistence from optional campaign/activity
    projections so an auxiliary projection fault cannot roll back a provider
    acceptance record.
+
 ### P2 authoring and deliverability
 
 1. Complete one `EmailTemplateStudio` with draft/publish/version pinning,
