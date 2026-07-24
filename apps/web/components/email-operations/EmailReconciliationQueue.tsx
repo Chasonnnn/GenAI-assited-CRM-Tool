@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { AlertCircleIcon, InboxIcon } from "lucide-react"
+import { AlertCircleIcon, CheckCircle2Icon, InboxIcon } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -71,6 +71,32 @@ export function EmailReconciliationQueue({
     const cases = query.data?.pages.flatMap((page) => page.items) ?? []
     const actionRequiredCount =
         query.data?.pages[0]?.counts.action_required ?? cases.length
+
+    if (
+        query.data &&
+        !query.isError &&
+        actionRequiredCount === 0 &&
+        cases.length === 0
+    ) {
+        return (
+            <Card>
+                <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                            <CheckCircle2Icon className="size-4" aria-hidden="true" />
+                        </div>
+                        <div>
+                            <h2 className="font-semibold">Reconciliation queue</h2>
+                            <p className="text-sm text-muted-foreground">
+                                No cases need action. Monitoring continues automatically.
+                            </p>
+                        </div>
+                    </div>
+                    <Badge variant="secondary">0 needs action</Badge>
+                </CardContent>
+            </Card>
+        )
+    }
 
     return (
         <>

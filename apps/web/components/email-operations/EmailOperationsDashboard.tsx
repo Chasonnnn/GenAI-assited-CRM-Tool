@@ -317,7 +317,7 @@ function ReadinessSection({
     )
 }
 
-function MetricCard({
+function MetricCell({
     testId,
     label,
     value,
@@ -329,67 +329,81 @@ function MetricCard({
     detail: string
 }) {
     return (
-        <Card data-testid={testId} className="gap-3 py-4">
-            <CardHeader className="px-4">
-                <CardDescription>{label}</CardDescription>
-                <CardTitle className="text-2xl tabular-nums">{value}</CardTitle>
-            </CardHeader>
-            <CardContent className="px-4">
-                <p className="text-xs text-muted-foreground">{detail}</p>
-            </CardContent>
-        </Card>
+        <div data-testid={testId} className="bg-background p-4">
+            <p className="text-xs font-medium text-muted-foreground">{label}</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+        </div>
     )
 }
 
 function MetricsSection({ summary }: { summary: EmailOperationsSummary24h }) {
     return (
-        <section aria-labelledby="metrics-heading" className="space-y-3">
-            <div>
-                <h2 id="metrics-heading" className="text-lg font-semibold">
-                    Last 24 hours
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                    Organization-scoped message and provider activity.
-                </p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-                <MetricCard
-                    testId="metric-messages"
-                    label="Messages"
-                    value={summary.messages}
-                    detail={`${summary.pending} pending`}
-                />
-                <MetricCard
-                    testId="metric-sent"
-                    label="Sent"
-                    value={summary.sent}
-                    detail={`${summary.delivery_attempts} attempts`}
-                />
-                <MetricCard
-                    testId="metric-delivered"
-                    label="Delivered"
-                    value={summary.delivered}
-                    detail={`${summary.webhook_events} provider events`}
-                />
-                <MetricCard
-                    testId="metric-failed"
-                    label="Failed"
-                    value={summary.failed}
-                    detail={`${summary.bounced} bounced`}
-                />
-                <MetricCard
-                    testId="metric-opens"
-                    label="Estimated opens"
-                    value={summary.estimated_opens}
-                    detail="Approximate engagement"
-                />
-                <MetricCard
-                    testId="metric-clicks"
-                    label="Clicks"
-                    value={summary.clicks}
-                    detail={`${summary.complained} complaints`}
-                />
-            </div>
+        <section aria-label="Recent activity">
+            <Card>
+                <CardHeader className="border-b">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <CardTitle>
+                                <h2>Recent activity</h2>
+                            </CardTitle>
+                            <CardDescription className="mt-1">
+                                Organization-scoped message and provider activity.
+                            </CardDescription>
+                        </div>
+                        <Badge variant="outline">Last 24 hours</Badge>
+                    </div>
+                </CardHeader>
+                <CardContent className="space-y-4 pt-6">
+                    <div className="grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                        <MetricCell
+                            testId="metric-messages"
+                            label="Messages"
+                            value={summary.messages}
+                            detail={`${summary.pending} pending`}
+                        />
+                        <MetricCell
+                            testId="metric-sent"
+                            label="Sent"
+                            value={summary.sent}
+                            detail={`${summary.delivery_attempts} attempts`}
+                        />
+                        <MetricCell
+                            testId="metric-delivered"
+                            label="Delivered"
+                            value={summary.delivered}
+                            detail={`${summary.webhook_events} provider events`}
+                        />
+                        <MetricCell
+                            testId="metric-failed"
+                            label="Failed"
+                            value={summary.failed}
+                            detail={`${summary.bounced} bounced`}
+                        />
+                        <MetricCell
+                            testId="metric-opens"
+                            label="Estimated opens"
+                            value={summary.estimated_opens}
+                            detail="Approximate engagement"
+                        />
+                        <MetricCell
+                            testId="metric-clicks"
+                            label="Clicks"
+                            value={summary.clicks}
+                            detail={`${summary.complained} complaints`}
+                        />
+                    </div>
+                    <Alert>
+                        <InfoIcon aria-hidden="true" />
+                        <AlertTitle>Open activity is approximate</AlertTitle>
+                        <AlertDescription>
+                            Privacy protections and inbox preloading can inflate open
+                            counts. Clicks and verified delivery events are stronger
+                            evidence.
+                        </AlertDescription>
+                    </Alert>
+                </CardContent>
+            </Card>
         </section>
     )
 }
@@ -789,29 +803,16 @@ export function EmailOperationsDashboard() {
                         )}
 
                         {!isFullError ? (
-                            <>
-                                <Alert>
-                                    <InfoIcon aria-hidden="true" />
-                                    <AlertTitle>Open activity is approximate</AlertTitle>
-                                    <AlertDescription>
-                                        Privacy protections and inbox preloading can inflate
-                                        open counts. Treat opens as a noisy directional
-                                        signal; clicks and verified delivery events are
-                                        stronger evidence.
-                                    </AlertDescription>
-                                </Alert>
-
-                                <MessagesSection
-                                    messages={messages}
-                                    isLoading={messagesQuery.isLoading}
-                                    isError={messagesQuery.isError}
-                                    hasNextPage={Boolean(messagesQuery.hasNextPage)}
-                                    isFetchingNextPage={messagesQuery.isFetchingNextPage}
-                                    onLoadMore={() => void messagesQuery.fetchNextPage()}
-                                    onRetry={() => void messagesQuery.refetch()}
-                                    onSelectMessage={setSelectedMessageId}
-                                />
-                            </>
+                            <MessagesSection
+                                messages={messages}
+                                isLoading={messagesQuery.isLoading}
+                                isError={messagesQuery.isError}
+                                hasNextPage={Boolean(messagesQuery.hasNextPage)}
+                                isFetchingNextPage={messagesQuery.isFetchingNextPage}
+                                onLoadMore={() => void messagesQuery.fetchNextPage()}
+                                onRetry={() => void messagesQuery.refetch()}
+                                onSelectMessage={setSelectedMessageId}
+                            />
                         ) : null}
                     </>
                 )}

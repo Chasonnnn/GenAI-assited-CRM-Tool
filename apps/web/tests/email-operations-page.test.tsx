@@ -850,7 +850,23 @@ describe("EmailOperationsDashboard", () => {
             reconciliationQueryResult([], { resolved: 2 }),
         )
         const emptyView = render(<EmailOperationsDashboard />)
-        expect(screen.getByText("No cases need action")).toBeInTheDocument()
+        const healthyQueue = screen
+            .getByRole("heading", { name: "Reconciliation queue" })
+            .closest('[data-slot="card"]')
+        expect(healthyQueue).not.toBeNull()
+        expect(
+            within(healthyQueue as HTMLElement).getByText(
+                "No cases need action. Monitoring continues automatically.",
+            ),
+        ).toBeInTheDocument()
+        expect(
+            within(healthyQueue as HTMLElement).getByText("0 needs action"),
+        ).toBeInTheDocument()
+        expect(
+            within(healthyQueue as HTMLElement).queryByText(
+                /new provider events and delivery outcomes/i,
+            ),
+        ).not.toBeInTheDocument()
         emptyView.unmount()
 
         mockUseReconciliationCases.mockReturnValueOnce(
@@ -879,6 +895,36 @@ describe("EmailOperationsDashboard", () => {
         expect(mockRefetchReadiness).toHaveBeenCalledTimes(1)
         expect(mockRefetchMessages).toHaveBeenCalledTimes(1)
         expect(mockRefetchReconciliation).toHaveBeenCalledTimes(1)
+    })
+
+    it("groups recent metrics and the open caveat into one operator summary", () => {
+        render(<EmailOperationsDashboard />)
+
+        const activity = screen.getByRole("region", {
+            name: "Recent activity",
+        })
+        expect(
+            within(activity).getByRole("heading", { name: "Recent activity" }),
+        ).toBeInTheDocument()
+        expect(within(activity).getByText("Last 24 hours")).toBeInTheDocument()
+        expect(within(activity).getByTestId("metric-messages")).toHaveTextContent(
+            "12",
+        )
+        expect(within(activity).getByTestId("metric-sent")).toHaveTextContent("10")
+        expect(within(activity).getByTestId("metric-delivered")).toHaveTextContent(
+            "8",
+        )
+        expect(within(activity).getByTestId("metric-failed")).toHaveTextContent("1")
+        expect(within(activity).getByTestId("metric-opens")).toHaveTextContent("19")
+        expect(within(activity).getByTestId("metric-clicks")).toHaveTextContent("6")
+        expect(
+            within(activity).getByText("Open activity is approximate"),
+        ).toBeInTheDocument()
+        expect(
+            within(activity).getByText(
+                /privacy protections and inbox preloading can inflate open counts/i,
+            ),
+        ).toBeInTheDocument()
     })
 
     it("separates send and tracking readiness while treating no activity as unknown", () => {
