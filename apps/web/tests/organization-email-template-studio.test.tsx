@@ -258,6 +258,11 @@ describe("OrganizationEmailTemplateStudio", () => {
         expect(
             screen.getByRole("heading", { name: "Publish this template?" }),
         ).toBeInTheDocument()
+        expect(
+            screen.getByText(
+                "This saved revision has not been test-sent. Testing is recommended, but not required to publish.",
+            ),
+        ).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole("button", { name: "Publish now" }))
 
@@ -387,6 +392,31 @@ describe("OrganizationEmailTemplateStudio", () => {
         expect(mocks.push).toHaveBeenCalledWith("/automation/email-templates")
     })
 
+    it("guards internal app links while local edits are unsaved", () => {
+        mocks.state.draft = draftFromPublished
+        const destination = document.createElement("a")
+        destination.href = "/settings/integrations/email"
+        destination.textContent = "Email settings"
+        document.body.append(destination)
+
+        render(<OrganizationEmailTemplateStudio templateId="template-1" />)
+        fireEvent.change(screen.getByLabelText("Subject"), {
+            target: { value: "Unsaved subject" },
+        })
+
+        fireEvent.click(destination)
+
+        expect(mocks.push).not.toHaveBeenCalled()
+        expect(
+            screen.getByRole("heading", { name: "Leave without saving?" }),
+        ).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Leave without saving" }))
+
+        expect(mocks.push).toHaveBeenCalledWith("/settings/integrations/email")
+        destination.remove()
+    })
+
     it("shows a sanitized live preview with the organization signature and managed footer", () => {
         mocks.state.draft = {
             ...draftFromPublished,
@@ -474,7 +504,7 @@ describe("OrganizationEmailTemplateStudio", () => {
 
         render(<OrganizationEmailTemplateStudio templateId="template-1" />)
 
-        expect(screen.getByText("Test required")).toBeInTheDocument()
+        expect(screen.getByText("Not tested")).toBeInTheDocument()
         fireEvent.click(screen.getByRole("button", { name: "Send test" }))
         fireEvent.change(screen.getByLabelText("Test recipient"), {
             target: { value: "qa@example.com" },
@@ -525,7 +555,7 @@ describe("OrganizationEmailTemplateStudio", () => {
         fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
 
         await waitFor(() => expect(mocks.sendTestDraft).toHaveBeenCalledOnce())
-        expect(screen.getByText("Test required")).toBeInTheDocument()
+        expect(screen.getByText("Not tested")).toBeInTheDocument()
     })
 
     it("opens a draft-only route without looking it up as a canonical template", () => {

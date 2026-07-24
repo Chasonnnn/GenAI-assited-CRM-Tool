@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { Route } from "next"
 import { useRouter } from "next/navigation"
 import { ArrowLeftIcon } from "lucide-react"
@@ -152,7 +152,10 @@ function createTestOccurrenceId() {
     return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`
 }
 
-function useUnsavedChangesWarning(isDirty: boolean) {
+function useUnsavedChangesWarning(
+    isDirty: boolean,
+    onInternalNavigation: (destination: string) => void,
+) {
     useEffect(() => {
         if (!isDirty) return
 
@@ -160,9 +163,49 @@ function useUnsavedChangesWarning(isDirty: boolean) {
             event.preventDefault()
             event.returnValue = ""
         }
+        const guardInternalNavigation = (event: MouseEvent) => {
+            if (
+                event.defaultPrevented ||
+                event.button !== 0 ||
+                event.metaKey ||
+                event.ctrlKey ||
+                event.shiftKey ||
+                event.altKey
+            ) {
+                return
+            }
+            const target =
+                event.target instanceof Element
+                    ? event.target.closest<HTMLAnchorElement>("a[href]")
+                    : null
+            if (
+                !target ||
+                target.hasAttribute("download") ||
+                (target.target && target.target !== "_self")
+            ) {
+                return
+            }
+            const destination = new URL(target.href, window.location.href)
+            if (
+                destination.origin !== window.location.origin ||
+                destination.href === window.location.href
+            ) {
+                return
+            }
+
+            event.preventDefault()
+            event.stopPropagation()
+            onInternalNavigation(
+                `${destination.pathname}${destination.search}${destination.hash}`,
+            )
+        }
         window.addEventListener("beforeunload", warnBeforeUnload)
-        return () => window.removeEventListener("beforeunload", warnBeforeUnload)
-    }, [isDirty])
+        document.addEventListener("click", guardInternalNavigation, true)
+        return () => {
+            window.removeEventListener("beforeunload", warnBeforeUnload)
+            document.removeEventListener("click", guardInternalNavigation, true)
+        }
+    }, [isDirty, onInternalNavigation])
 }
 
 export default function OrganizationEmailTemplateStudio({
@@ -268,7 +311,7 @@ function OrganizationEmailTemplateEditor({
     const [publishOpen, setPublishOpen] = useState(false)
     const [isPublishing, setIsPublishing] = useState(false)
     const [publishError, setPublishError] = useState<string | null>(null)
-    const [leaveOpen, setLeaveOpen] = useState(false)
+    const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
     const [testOpen, setTestOpen] = useState(false)
     const [testRecipient, setTestRecipient] = useState("")
     const [testVariables, setTestVariables] = useState<Record<string, string>>({})
@@ -281,7 +324,10 @@ function OrganizationEmailTemplateEditor({
     const testOccurrenceIdRef = useRef<string | null>(null)
 
     const isDirty = Object.keys(buildChangedFields(fields, savedFields)).length > 0
-    useUnsavedChangesWarning(isDirty)
+    const blockInternalNavigation = useCallback((destination: string) => {
+        setPendingNavigation(destination)
+    }, [])
+    useUnsavedChangesWarning(isDirty, blockInternalNavigation)
     const previewHtml = buildEmailTemplatePreviewHtml(fields.body, {
         scope: "org",
         orgCompanyName: null,
@@ -299,13 +345,14 @@ function OrganizationEmailTemplateEditor({
     const publishedVersion =
         draft?.published_version ?? publishedTemplate?.current_version ?? null
 
-    const leaveStudio = () => {
-        push("/automation/email-templates")
+    const leaveStudio = (destination = "/automation/email-templates") => {
+        setPendingNavigation(null)
+        push(destination as Route)
     }
 
     const handleBack = () => {
         if (isDirty) {
-            setLeaveOpen(true)
+            setPendingNavigation("/automation/email-templates")
             return
         }
         leaveStudio()
@@ -676,15 +723,15 @@ function OrganizationEmailTemplateEditor({
                         </div>
                     </div>
                     <div className="flex items-center justify-between gap-3 sm:block">
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            Test readiness
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                Test status
                         </p>
                         <div className="mt-1">
                             <Badge variant={isTestCurrent ? "default" : "secondary"}>
                                 {isTestCurrent
                                     ? "Tested current draft"
                                     : draft
-                                      ? "Test required"
+                                      ? "Not tested"
                                       : "Save draft to test"}
                             </Badge>
                         </div>
@@ -863,6 +910,16 @@ function OrganizationEmailTemplateEditor({
                             you confirm.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
+                    {!isTestCurrent ? (
+                        <Alert>
+                            <AlertDescription>
+                                <p>
+                                    This saved revision has not been test-sent. Testing is
+                                    recommended, but not required to publish.
+                                </p>
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
                     {publishError ? (
                         <p role="alert" className="text-sm text-destructive">
                             {publishError}
@@ -883,7 +940,12 @@ function OrganizationEmailTemplateEditor({
                 </AlertDialogContent>
             </AlertDialog>
 
-            <AlertDialog open={leaveOpen} onOpenChange={setLeaveOpen}>
+            <AlertDialog
+                open={pendingNavigation !== null}
+                onOpenChange={(open) => {
+                    if (!open) setPendingNavigation(null)
+                }}
+            >
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
@@ -893,7 +955,15 @@ function OrganizationEmailTemplateEditor({
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Keep editing</AlertDialogCancel>
-                        <AlertDialogAction type="button" onClick={leaveStudio}>
+                        <AlertDialogAction
+                            type="button"
+                            onClick={() =>
+                                leaveStudio(
+                                    pendingNavigation ??
+                                        "/automation/email-templates",
+                                )
+                            }
+                        >
                             Leave without saving
                         </AlertDialogAction>
                     </AlertDialogFooter>
