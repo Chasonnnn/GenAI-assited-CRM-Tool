@@ -156,6 +156,8 @@ class Settings(BaseSettings):
     # Intentionally separate from org-level campaign/workflow/direct email provider settings.
     PLATFORM_RESEND_API_KEY: SecretStr = SecretStr("")
     PLATFORM_RESEND_WEBHOOK_SECRET: SecretStr = SecretStr("")
+    # Optional write-only token shared only by routes using the same Resend team.
+    PLATFORM_RESEND_ADMISSION_GROUP_TOKEN: SecretStr = SecretStr("")
     # Resend's default limit is shared by every API key in a team. Increase this
     # only after the team's Settings > Usage page confirms a higher allowance.
     RESEND_PROVIDER_REQUESTS_PER_SECOND: int = Field(default=5, ge=1, le=1_000_000)
@@ -288,6 +290,13 @@ class Settings(BaseSettings):
     SLO_AVG_LATENCY_MS: int = 500
 
     def model_post_init(self, __context) -> None:
+        resend_group_token = self.PLATFORM_RESEND_ADMISSION_GROUP_TOKEN.get_secret_value().strip()
+        if resend_group_token and not 32 <= len(resend_group_token) <= 256:
+            raise ValueError(
+                "PLATFORM_RESEND_ADMISSION_GROUP_TOKEN must be between 32 and 256 characters"
+            )
+        self.PLATFORM_RESEND_ADMISSION_GROUP_TOKEN = SecretStr(resend_group_token)
+
         env = self.ENV.lower()
         if env in {"dev", "development", "test"}:
             if not self.JWT_SECRET.get_secret_value():

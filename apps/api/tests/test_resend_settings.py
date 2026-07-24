@@ -5,6 +5,10 @@ import uuid
 import pytest
 
 
+RATE_LIMIT_GROUP_TOKEN = "Team-Rate-Limit-Group-Token-0001"
+RATE_LIMIT_GROUP_FINGERPRINT = "4e8474447c3fd54573744a0863e5142271c8f094f25d62f953fbf1c34f38a5ec"
+
+
 class TestResendSettingsEncryption:
     """Test encryption/decryption/masking functions."""
 
@@ -131,6 +135,119 @@ class TestResendSettingsCRUD:
         )
 
         assert updated.email_provider is None
+
+
+class TestResendRateLimitGroupIdentity:
+    """The shared admission token is write-only and persisted as a fingerprint."""
+
+    def test_update_stores_only_namespaced_token_fingerprint(self, db, test_org):
+        from app.services import resend_settings_service
+
+        resend_settings_service.update_resend_settings(
+            db,
+            test_org.id,
+            test_org.id,
+            rate_limit_group_token=RATE_LIMIT_GROUP_TOKEN,
+        )
+
+        db.expire_all()
+        stored = resend_settings_service.get_resend_settings(db, test_org.id)
+
+        assert stored is not None
+        assert stored.rate_limit_group_fingerprint == RATE_LIMIT_GROUP_FINGERPRINT
+        assert len(stored.rate_limit_group_fingerprint) == 64
+        assert set(stored.rate_limit_group_fingerprint) <= set("0123456789abcdef")
+        assert "rate_limit_group_token" not in stored.__table__.columns.keys()
+        assert RATE_LIMIT_GROUP_TOKEN not in {
+            value
+            for column in stored.__table__.columns
+            if isinstance((value := getattr(stored, column.name)), str)
+        }
+
+    def test_omitted_token_preserves_existing_fingerprint(self, db, test_org):
+        from app.services import resend_settings_service
+
+        settings = resend_settings_service.update_resend_settings(
+            db,
+            test_org.id,
+            test_org.id,
+            rate_limit_group_token=RATE_LIMIT_GROUP_TOKEN,
+        )
+
+        updated = resend_settings_service.update_resend_settings(
+            db,
+            test_org.id,
+            test_org.id,
+            from_name="Existing team",
+            expected_version=settings.current_version,
+        )
+
+        assert updated.rate_limit_group_fingerprint == RATE_LIMIT_GROUP_FINGERPRINT
+
+    def test_empty_token_clears_existing_fingerprint(self, db, test_org):
+        from app.services import resend_settings_service
+
+        settings = resend_settings_service.update_resend_settings(
+            db,
+            test_org.id,
+            test_org.id,
+            rate_limit_group_token=RATE_LIMIT_GROUP_TOKEN,
+        )
+
+        updated = resend_settings_service.update_resend_settings(
+            db,
+            test_org.id,
+            test_org.id,
+            rate_limit_group_token="",
+            expected_version=settings.current_version,
+        )
+
+        assert updated.rate_limit_group_fingerprint is None
+
+    @pytest.mark.parametrize(
+        "invalid_token",
+        [
+            "x" * 31,
+            "x" * 257,
+        ],
+        ids=["too-short", "too-long"],
+    )
+    def test_configured_token_requires_32_to_256_characters(
+        self,
+        db,
+        test_org,
+        invalid_token,
+    ):
+        from app.services import resend_settings_service
+
+        with pytest.raises(ValueError, match=r"32.*256"):
+            resend_settings_service.update_resend_settings(
+                db,
+                test_org.id,
+                test_org.id,
+                rate_limit_group_token=invalid_token,
+            )
+
+        assert resend_settings_service.get_resend_settings(db, test_org.id) is None
+
+    def test_new_and_existing_unconfigured_rows_keep_null_fingerprint(self, db, test_org):
+        from app.services import resend_settings_service
+
+        created = resend_settings_service.get_or_create_resend_settings(
+            db,
+            test_org.id,
+            test_org.id,
+        )
+        assert created.rate_limit_group_fingerprint is None
+
+        existing = resend_settings_service.update_resend_settings(
+            db,
+            test_org.id,
+            test_org.id,
+            from_name="Existing organization",
+            expected_version=created.current_version,
+        )
+        assert existing.rate_limit_group_fingerprint is None
 
 
 class TestResendSettingsWebhook:

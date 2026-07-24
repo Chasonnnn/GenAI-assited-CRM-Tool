@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import Membership, ResendSettings, User, UserIntegration
-from app.services import resend_control_plane
+from app.services import resend_admission_identity, resend_control_plane
 
 UNSET = object()
 
@@ -137,10 +137,21 @@ def update_resend_settings(
     reply_to_email: str | None = None,
     verified_domain: str | None = None,
     webhook_signing_secret: str | None = None,  # Plain text, will be encrypted
+    rate_limit_group_token: str | object = UNSET,
     default_sender_user_id: uuid.UUID | None | object = UNSET,
     expected_version: int | None = None,
 ) -> ResendSettings:
     """Update Resend settings with optimistic locking."""
+    rate_limit_group_fingerprint: str | None | object = UNSET
+    if rate_limit_group_token is not UNSET:
+        if not isinstance(rate_limit_group_token, str):
+            raise ValueError("rate_limit_group_token must be a string")
+        rate_limit_group_fingerprint = (
+            resend_admission_identity.admission_group_fingerprint(rate_limit_group_token)
+            if rate_limit_group_token
+            else None
+        )
+
     s = get_or_create_resend_settings(db, organization_id, user_id)
 
     # Optimistic locking
@@ -173,6 +184,9 @@ def update_resend_settings(
         s.webhook_secret_encrypted = (
             encrypt_api_key(webhook_signing_secret) if webhook_signing_secret else None
         )
+
+    if rate_limit_group_fingerprint is not UNSET:
+        s.rate_limit_group_fingerprint = rate_limit_group_fingerprint
 
     if default_sender_user_id is not UNSET:
         s.default_sender_user_id = default_sender_user_id

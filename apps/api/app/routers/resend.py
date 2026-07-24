@@ -9,7 +9,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
@@ -45,6 +45,7 @@ class ResendSettingsResponse(BaseModel):
     default_sender_email: str | None
     webhook_url: str
     webhook_signing_secret_configured: bool
+    rate_limit_group_configured: bool
     current_version: int
 
 
@@ -58,8 +59,19 @@ class ResendSettingsUpdate(BaseModel):
     reply_to_email: str | None = None
     verified_domain: str | None = None
     webhook_signing_secret: str | None = None  # Plain text, stored encrypted
+    rate_limit_group_token: str | None = None
     default_sender_user_id: str | None = None
     expected_version: int | None = Field(None, description="Required for optimistic locking")
+
+    @field_validator("rate_limit_group_token")
+    @classmethod
+    def validate_rate_limit_group_token(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if normalized and not 32 <= len(normalized) <= 256:
+            raise ValueError("rate_limit_group_token must be between 32 and 256 characters")
+        return normalized
 
 
 class TestKeyRequest(BaseModel):
@@ -134,6 +146,7 @@ def get_settings(
         default_sender_email=default_sender_email,
         webhook_url=resend_settings_service.get_webhook_url(settings.webhook_id),
         webhook_signing_secret_configured=bool(settings.webhook_secret_encrypted),
+        rate_limit_group_configured=bool(settings.rate_limit_group_fingerprint),
         current_version=settings.current_version,
     )
 
@@ -288,6 +301,9 @@ async def update_settings(
     from_email_arg = None
     if "from_email" in fields_set:
         from_email_arg = explicit_from_email or ""
+    rate_limit_group_token_arg = resend_settings_service.UNSET
+    if "rate_limit_group_token" in fields_set:
+        rate_limit_group_token_arg = update.rate_limit_group_token or ""
 
     try:
         settings = resend_settings_service.update_resend_settings(
@@ -301,6 +317,7 @@ async def update_settings(
             reply_to_email=update.reply_to_email,
             verified_domain=verified_domain_arg,
             webhook_signing_secret=update.webhook_signing_secret,
+            rate_limit_group_token=rate_limit_group_token_arg,
             default_sender_user_id=default_sender_arg,
             expected_version=update.expected_version,
         )
@@ -344,6 +361,7 @@ async def update_settings(
         default_sender_email=default_sender_email,
         webhook_url=resend_settings_service.get_webhook_url(settings.webhook_id),
         webhook_signing_secret_configured=bool(settings.webhook_secret_encrypted),
+        rate_limit_group_configured=bool(settings.rate_limit_group_fingerprint),
         current_version=settings.current_version,
     )
 

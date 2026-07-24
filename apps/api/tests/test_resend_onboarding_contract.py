@@ -499,3 +499,76 @@ async def test_sender_identity_change_requires_key_revalidation_in_same_request(
     assert stored.verified_domain == "verified.example"
     assert stored.from_email == "sender@verified.example"
     assert stored.current_version == original_version
+
+
+@pytest.mark.asyncio
+async def test_settings_response_handles_new_and_existing_null_rate_limit_group(
+    authed_client,
+    db,
+    test_org,
+):
+    from app.services import resend_settings_service
+
+    first_response = await authed_client.get("/resend/settings")
+
+    assert first_response.status_code == 200
+    assert first_response.json()["rate_limit_group_configured"] is False
+    assert "rate_limit_group_token" not in first_response.json()
+    assert "rate_limit_group_fingerprint" not in first_response.json()
+
+    stored = resend_settings_service.get_resend_settings(db, test_org.id)
+    assert stored is not None
+    assert stored.rate_limit_group_fingerprint is None
+
+    second_response = await authed_client.get("/resend/settings")
+
+    assert second_response.status_code == 200
+    assert second_response.json()["rate_limit_group_configured"] is False
+
+
+@pytest.mark.asyncio
+async def test_settings_patch_trims_rate_limit_group_token_and_returns_only_boolean(
+    authed_client,
+    db,
+    test_org,
+):
+    from app.services import resend_settings_service
+
+    raw_token = "  Team-Rate-Limit-Group-Token-0001  "
+    response = await authed_client.patch(
+        "/resend/settings",
+        json={"rate_limit_group_token": raw_token},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["rate_limit_group_configured"] is True
+    assert "rate_limit_group_token" not in payload
+    assert "rate_limit_group_fingerprint" not in payload
+    assert raw_token not in response.text
+    assert "Team-Rate-Limit-Group-Token-0001" not in response.text
+
+    db.expire_all()
+    stored = resend_settings_service.get_resend_settings(db, test_org.id)
+    assert stored is not None
+    assert (
+        stored.rate_limit_group_fingerprint
+        == "4e8474447c3fd54573744a0863e5142271c8f094f25d62f953fbf1c34f38a5ec"
+    )
+
+
+@pytest.mark.asyncio
+async def test_settings_patch_rejects_token_that_is_too_short_after_trimming(
+    authed_client,
+    db,
+    test_org,
+):
+    from app.services import resend_settings_service
+
+    response = await authed_client.patch(
+        "/resend/settings",
+        json={"rate_limit_group_token": f"  {'x' * 31}  "},
+    )
+
+    assert response.status_code == 422
+    assert resend_settings_service.get_resend_settings(db, test_org.id) is None
