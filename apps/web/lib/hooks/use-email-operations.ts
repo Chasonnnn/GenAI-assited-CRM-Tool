@@ -12,16 +12,20 @@ import {
     confirmEmailReconciliationSent,
     dismissEmailReconciliationCase,
     getEmailOperationMessage,
+    getEmailOperationsLiveReadiness,
     getEmailOperationsMessages,
     getEmailOperationsReadiness,
     getEmailReconciliationCases,
     linkEmailReconciliationEvent,
+    requestEmailOperationsReadinessCheck,
     retryEmailReconciliationCorrelation,
 } from "@/lib/api/email-operations"
 
 export const emailOperationsKeys = {
     all: ["email-operations"] as const,
     readiness: () => [...emailOperationsKeys.all, "readiness"] as const,
+    liveReadiness: () =>
+        [...emailOperationsKeys.readiness(), "live"] as const,
     messages: () => [...emailOperationsKeys.all, "messages"] as const,
     reconciliation: () => [...emailOperationsKeys.all, "reconciliation"] as const,
     reconciliationCases: (status: EmailReconciliationListStatus) =>
@@ -51,6 +55,39 @@ export function useEmailOperationsReadiness() {
         queryKey: emailOperationsKeys.readiness(),
         queryFn: getEmailOperationsReadiness,
         staleTime: 30_000,
+    })
+}
+
+export function useEmailOperationsLiveReadiness({
+    enabled = true,
+}: { enabled?: boolean } = {}) {
+    return useQuery({
+        queryKey: emailOperationsKeys.liveReadiness(),
+        queryFn: getEmailOperationsLiveReadiness,
+        enabled,
+        staleTime: 30_000,
+        refetchInterval: (query) => {
+            const status = query.state.data?.check_status
+            return status === "queued" || status === "running" ? 5_000 : false
+        },
+        refetchIntervalInBackground: false,
+    })
+}
+
+export function useRequestEmailOperationsReadinessCheck() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: requestEmailOperationsReadinessCheck,
+        onSuccess: (readiness) => {
+            queryClient.setQueryData(
+                emailOperationsKeys.liveReadiness(),
+                readiness,
+            )
+            void queryClient.invalidateQueries({
+                queryKey: emailOperationsKeys.liveReadiness(),
+            })
+        },
     })
 }
 

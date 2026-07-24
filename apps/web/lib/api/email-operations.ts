@@ -1,4 +1,5 @@
 import api from "../api"
+import type { ResendReadinessEnvelope } from "@/lib/types/resend-readiness"
 
 export type EmailOperationsOverall = "ready" | "needs_attention" | "not_configured"
 export type EmailOperationsCheckStatus = "pass" | "fail" | "unknown" | "not_applicable"
@@ -191,6 +192,14 @@ export interface EmailOperationMessageDetail extends EmailOperationMessage {
 
 export async function getEmailOperationsReadiness(): Promise<EmailOperationsReadiness> {
     return api.get<EmailOperationsReadiness>("/email-operations/readiness")
+}
+
+export async function getEmailOperationsLiveReadiness(): Promise<ResendReadinessEnvelope> {
+    return api.get<ResendReadinessEnvelope>("/email-operations/readiness/live")
+}
+
+export async function requestEmailOperationsReadinessCheck(): Promise<ResendReadinessEnvelope> {
+    return api.post<ResendReadinessEnvelope>("/email-operations/readiness/check")
 }
 
 export async function getEmailOperationsMessages(options?: {

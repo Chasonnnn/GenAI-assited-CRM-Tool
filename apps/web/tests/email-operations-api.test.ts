@@ -5,10 +5,12 @@ import {
     confirmEmailReconciliationSent,
     dismissEmailReconciliationCase,
     getEmailOperationMessage,
+    getEmailOperationsLiveReadiness,
     getEmailOperationsMessages,
     getEmailOperationsReadiness,
     getEmailReconciliationCases,
     linkEmailReconciliationEvent,
+    requestEmailOperationsReadinessCheck,
     retryEmailReconciliationCorrelation,
 } from "@/lib/api/email-operations"
 
@@ -45,6 +47,20 @@ describe("email operations API", () => {
             3,
             "/email-operations/messages/message%2Fid",
         )
+    })
+
+    it("requests one read-only readiness check without a request payload", async () => {
+        await requestEmailOperationsReadinessCheck()
+
+        expect(mockPost).toHaveBeenCalledTimes(1)
+        expect(mockPost).toHaveBeenCalledWith("/email-operations/readiness/check")
+    })
+
+    it("reads live readiness from its cache-only endpoint", async () => {
+        await getEmailOperationsLiveReadiness()
+
+        expect(mockGet).toHaveBeenCalledTimes(1)
+        expect(mockGet).toHaveBeenCalledWith("/email-operations/readiness/live")
     })
 
     it("lists action-required reconciliation cases with an encoded cursor and retries by version", async () => {
