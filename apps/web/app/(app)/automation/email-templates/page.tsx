@@ -29,6 +29,16 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -78,6 +88,10 @@ import {
     useRollbackEmailTemplate,
 } from "@/lib/hooks/use-email-templates"
 import {
+    useDiscardEmailTemplateDraft,
+    useEmailTemplateDrafts,
+} from "@/lib/hooks/use-email-template-drafts"
+import {
     useUserSignature,
     useUpdateUserSignature,
     useSignaturePreview,
@@ -94,6 +108,7 @@ import type {
     EmailTemplateListItem,
     EmailTemplateScope,
 } from "@/lib/api/email-templates"
+import type { EmailTemplateDraft } from "@/lib/api/email-template-drafts"
 import { toast } from "@/components/ui/toast"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
@@ -825,6 +840,7 @@ export default function EmailTemplatesPage() {
     const libraryCopyTargetRef = useRef<EmailTemplateLibraryItem | null>(null)
     const [libraryCopyName, setLibraryCopyName] = useState("")
     const [libraryPreviewId, setLibraryPreviewId] = useState<string | null>(null)
+    const [draftToDiscard, setDraftToDiscard] = useState<EmailTemplateDraft | null>(null)
 
     const [signatureDraftOverrides, dispatchSignatureDraft] = useReducer(
         signatureDraftReducer,
@@ -843,7 +859,16 @@ export default function EmailTemplatesPage() {
         activeOnly: true,
         scope: "org",
     })
+    const {
+        data: loadedOrgDrafts = [],
+        isLoading: loadingOrgDrafts,
+    } = useEmailTemplateDrafts(
+        { scope: "org" },
+        canManageEmailTemplates,
+    )
+    const orgDrafts = canManageEmailTemplates ? loadedOrgDrafts : []
     const { data: libraryTemplates, isLoading: loadingLibrary } = useEmailTemplateLibrary()
+    const discardDraft = useDiscardEmailTemplateDraft()
 
     const createTemplate = useCreateEmailTemplate()
     const updateTemplate = useUpdateEmailTemplate()
@@ -1179,6 +1204,26 @@ export default function EmailTemplatesPage() {
         )
     }
 
+    const handleDiscardDraft = () => {
+        if (!draftToDiscard) return
+
+        discardDraft.mutate(
+            {
+                id: draftToDiscard.id,
+                expectedRevision: draftToDiscard.revision,
+            },
+            {
+                onSuccess: () => {
+                    toast.success("Draft discarded")
+                    setDraftToDiscard(null)
+                },
+                onError: (error: Error) => {
+                    toast.error(error.message || "Failed to discard draft")
+                },
+            },
+        )
+    }
+
     const insertToken = (token: string) => {
         const activeInsertionTarget = activeInsertionTargetRef.current
         if (activeInsertionTarget === "subject") {
@@ -1428,11 +1473,11 @@ export default function EmailTemplatesPage() {
 
                     {/* Org Templates Tab */}
                     <TabsContent value="org" className="space-y-4">
-                        {loadingOrg ? (
+                        {loadingOrg || loadingOrgDrafts ? (
                             <div className="flex items-center justify-center py-12">
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             </div>
-                        ) : !orgTemplates?.length ? (
+                        ) : !orgTemplates?.length && !orgDrafts.length ? (
                             <Card>
                                 <CardContent className="flex flex-col items-center justify-center py-12">
                                     <BuildingIcon className="size-12 text-muted-foreground mb-4" />
@@ -1446,51 +1491,119 @@ export default function EmailTemplatesPage() {
                                 </CardContent>
                             </Card>
                         ) : (
-                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                {orgTemplates.map((template) => {
-                                    const actions: TemplateCardActionKind[] = []
-                                    if (canManageEmailTemplates) {
-                                        actions.push("send_test")
-                                    }
-                                    if (canManageEmailTemplates && !template.is_system_template) {
-                                        actions.push("edit")
-                                    }
-                                    actions.push("copy")
-                                    if (canManageEmailTemplates && !template.is_system_template) {
-                                        actions.push("delete")
-                                    }
-                                    const controls: TemplateCardControls = !canManageEmailTemplates && !template.is_system_template
-                                        ? { kind: "read_only" }
-                                        : {
-                                            kind: "actions",
-                                            actions,
-                                            onAction: (action) => {
-                                                if (action === "send_test") {
-                                                    handleOpenTestDialog(template)
-                                                    return
+                            <>
+                                {orgDrafts.length > 0 && (
+                                    <section className="space-y-3" aria-labelledby="organization-drafts-heading">
+                                        <div>
+                                            <h2 id="organization-drafts-heading" className="text-sm font-semibold">
+                                                Drafts
+                                            </h2>
+                                            <p className="text-sm text-muted-foreground">
+                                                Continue work without changing the published template.
+                                            </p>
+                                        </div>
+                                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                            {orgDrafts.map((draft) => (
+                                                <Card key={draft.id}>
+                                                    <CardHeader className="pb-2">
+                                                        <div className="flex items-start justify-between gap-3">
+                                                            <div className="min-w-0 space-y-1">
+                                                                <CardTitle className="truncate text-base">
+                                                                    {draft.name}
+                                                                </CardTitle>
+                                                                <CardDescription className="line-clamp-2">
+                                                                    {draft.subject}
+                                                                </CardDescription>
+                                                            </div>
+                                                            <Badge variant="secondary">
+                                                                {draft.template_id
+                                                                    ? "Draft changes"
+                                                                    : "Unpublished draft"}
+                                                            </Badge>
+                                                        </div>
+                                                    </CardHeader>
+                                                    <CardContent className="flex items-center justify-between gap-3">
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Revision {draft.revision}
+                                                        </p>
+                                                        <div className="flex items-center gap-2">
+                                                            {canManageEmailTemplates && (
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    className="text-destructive hover:text-destructive"
+                                                                    aria-label={`Discard ${draft.name}`}
+                                                                    onClick={() => setDraftToDiscard(draft)}
+                                                                >
+                                                                    <TrashIcon className="mr-2 size-4" />
+                                                                    Discard
+                                                                </Button>
+                                                            )}
+                                                            <Button
+                                                                size="sm"
+                                                                aria-label={`Resume ${draft.name}`}
+                                                                onClick={() => router.push(
+                                                                    `/automation/email-templates/org/${draft.template_id ?? draft.id}`,
+                                                                )}
+                                                            >
+                                                                <EditIcon className="mr-2 size-4" />
+                                                                Resume
+                                                            </Button>
+                                                        </div>
+                                                    </CardContent>
+                                                </Card>
+                                            ))}
+                                        </div>
+                                    </section>
+                                )}
+                                {!!orgTemplates?.length && (
+                                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                        {orgTemplates.map((template) => {
+                                            const actions: TemplateCardActionKind[] = []
+                                            if (canManageEmailTemplates) {
+                                                actions.push("send_test")
+                                            }
+                                            if (canManageEmailTemplates && !template.is_system_template) {
+                                                actions.push("edit")
+                                            }
+                                            actions.push("copy")
+                                            if (canManageEmailTemplates && !template.is_system_template) {
+                                                actions.push("delete")
+                                            }
+                                            const controls: TemplateCardControls = !canManageEmailTemplates && !template.is_system_template
+                                                ? { kind: "read_only" }
+                                                : {
+                                                    kind: "actions",
+                                                    actions,
+                                                    onAction: (action) => {
+                                                        if (action === "send_test") {
+                                                            handleOpenTestDialog(template)
+                                                            return
+                                                        }
+                                                        if (action === "edit") {
+                                                            router.push(`/automation/email-templates/org/${template.id}`)
+                                                            return
+                                                        }
+                                                        if (action === "copy") {
+                                                            handleOpenCopyDialog(template)
+                                                            return
+                                                        }
+                                                        if (action === "delete") {
+                                                            handleDelete(template.id)
+                                                        }
+                                                    },
                                                 }
-                                                if (action === "edit") {
-                                                    router.push(`/automation/email-templates/org/${template.id}`)
-                                                    return
-                                                }
-                                                if (action === "copy") {
-                                                    handleOpenCopyDialog(template)
-                                                    return
-                                                }
-                                                if (action === "delete") {
-                                                    handleDelete(template.id)
-                                                }
-                                            },
-                                        }
-                                    return (
-                                        <TemplateCard
-                                            key={template.id}
-                                            template={template}
-                                            controls={controls}
-                                        />
-                                    )
-                                })}
-                            </div>
+                                            return (
+                                                <TemplateCard
+                                                    key={template.id}
+                                                    template={template}
+                                                    controls={controls}
+                                                />
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </>
                         )}
                     </TabsContent>
 
@@ -2270,6 +2383,40 @@ export default function EmailTemplatesPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <AlertDialog
+                open={draftToDiscard !== null}
+                onOpenChange={(open) => {
+                    if (!open && !discardDraft.isPending) {
+                        setDraftToDiscard(null)
+                    }
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Discard draft?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This removes the draft for {draftToDiscard?.name || "this template"}.
+                            The published template will not be changed.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={discardDraft.isPending}>
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            variant="destructive"
+                            disabled={discardDraft.isPending}
+                            onClick={handleDiscardDraft}
+                        >
+                            {discardDraft.isPending && (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            )}
+                            Discard draft
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             {/* Send Test Email Dialog */}
             <Dialog
