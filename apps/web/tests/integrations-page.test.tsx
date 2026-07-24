@@ -641,6 +641,26 @@ describe('IntegrationsPage', () => {
         expect(within(dialog).getByText('Enabled', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
     })
 
+    it('keeps the email status clear of the close control on narrow dialogs', () => {
+        render(<IntegrationsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        const title = within(dialog).getByText('Email Configuration')
+        const status = within(dialog).getByText('Configured', {
+            selector: '[data-slot="badge"]',
+        })
+        const header = title.parentElement?.parentElement?.parentElement
+
+        expect(header).toHaveClass('pr-10')
+        expect(status.parentElement).toHaveClass(
+            'flex-col',
+            'items-start',
+            'sm:flex-row'
+        )
+    })
+
     it('preserves an in-progress AI key edit when equivalent settings rerender', () => {
         const { rerender } = render(<IntegrationsPage />)
         fireEvent.click(screen.getByRole('button', { name: /configure ai/i }))

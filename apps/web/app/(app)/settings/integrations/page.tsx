@@ -6209,8 +6209,8 @@ function IntegrationConfigurationDialogs({
                 }}
             >
                 <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
-                    <DialogHeader>
-                        <div className="flex items-start justify-between gap-4">
+                    <DialogHeader className="pr-10">
+                        <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between sm:gap-4">
                             <div className="space-y-1">
                                 <DialogTitle>Email Configuration</DialogTitle>
                                 <DialogDescription>
