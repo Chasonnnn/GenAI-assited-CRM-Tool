@@ -53,13 +53,16 @@ import type {
 } from "@/lib/api/email-operations"
 import {
     useEmailOperationsMessages,
+    useEmailOperationsLiveReadiness,
     useEmailOperationsReadiness,
     useEmailReconciliationCases,
+    useRequestEmailOperationsReadinessCheck,
 } from "@/lib/hooks/use-email-operations"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { EmailOperationDetailSheet } from "./EmailOperationDetailSheet"
 import { EmailReconciliationQueue } from "./EmailReconciliationQueue"
+import { ResendLiveReadinessCard } from "./ResendLiveReadinessCard"
 import {
     getCheckStatusLabel,
     getMessageStatusLabel,
@@ -225,9 +228,14 @@ function ReadinessSection({
             <CardHeader className="border-b">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
-                        <CardTitle className="flex items-center gap-2">
-                            <ShieldCheckIcon className="size-5 text-primary" aria-hidden="true" />
-                            Delivery readiness
+                        <CardTitle>
+                            <h2 className="flex items-center gap-2">
+                                <ShieldCheckIcon
+                                    className="size-5 text-primary"
+                                    aria-hidden="true"
+                                />
+                                Stored configuration and route activity
+                            </h2>
                         </CardTitle>
                         <CardDescription className="mt-1">
                             Send capability, tracking capability, and observed provider evidence
@@ -582,6 +590,8 @@ export function EmailOperationsDashboard() {
         user?.user_id ?? null,
     )
     const readinessQuery = useEmailOperationsReadiness()
+    const liveReadinessQuery = useEmailOperationsLiveReadiness({ enabled: true })
+    const requestReadinessCheck = useRequestEmailOperationsReadinessCheck()
     const messagesQuery = useEmailOperationsMessages()
     const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
 
@@ -590,6 +600,8 @@ export function EmailOperationsDashboard() {
     )
     const canManageReconciliation =
         user?.role === "developer" || permissionSet.has("manage_ops")
+    const canCheckLiveReadiness =
+        user?.role === "developer" || permissionSet.has("manage_integrations")
     const reconciliationQuery = useEmailReconciliationCases({
         enabled: canManageReconciliation,
         status: "action_required",
@@ -606,12 +618,14 @@ export function EmailOperationsDashboard() {
         !messagesQuery.data
     const isRefreshing =
         readinessQuery.isFetching ||
+        liveReadinessQuery.isFetching ||
         messagesQuery.isFetching ||
         (canManageReconciliation && reconciliationQuery.isFetching)
 
     const refresh = () => {
         void Promise.all([
             readinessQuery.refetch(),
+            liveReadinessQuery.refetch(),
             messagesQuery.refetch(),
             ...(canManageReconciliation ? [reconciliationQuery.refetch()] : []),
         ])
@@ -661,29 +675,39 @@ export function EmailOperationsDashboard() {
             <main className="mx-auto max-w-7xl space-y-6 p-6">
                 {isInitialLoading ? (
                     <DashboardSkeleton />
-                ) : isFullError ? (
-                    <Alert variant="destructive">
-                        <AlertCircleIcon aria-hidden="true" />
-                        <AlertTitle>Email operations couldn’t load</AlertTitle>
-                        <AlertDescription>
-                            <p>
-                                Readiness and message activity are temporarily unavailable.
-                                Check your connection and try again.
-                            </p>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="mt-3"
-                                onClick={refresh}
-                            >
-                                Try again
-                            </Button>
-                        </AlertDescription>
-                    </Alert>
                 ) : (
                     <>
-                        {readinessQuery.data ? (
+                        <ResendLiveReadinessCard
+                            envelope={liveReadinessQuery.data}
+                            isLoading={liveReadinessQuery.isLoading}
+                            isError={liveReadinessQuery.isError}
+                            canCheck={canCheckLiveReadiness}
+                            isCheckPending={requestReadinessCheck.isPending}
+                            isCheckError={requestReadinessCheck.isError}
+                            onCheck={() => requestReadinessCheck.mutate()}
+                        />
+
+                        {isFullError ? (
+                            <Alert variant="destructive">
+                                <AlertCircleIcon aria-hidden="true" />
+                                <AlertTitle>Email operations couldn’t load</AlertTitle>
+                                <AlertDescription>
+                                    <p>
+                                        Stored readiness and message activity are temporarily
+                                        unavailable. Check your connection and try again.
+                                    </p>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="mt-3"
+                                        onClick={refresh}
+                                    >
+                                        Try again
+                                    </Button>
+                                </AlertDescription>
+                            </Alert>
+                        ) : readinessQuery.data ? (
                             <>
                                 <ReadinessSection readiness={readinessQuery.data} />
                                 {canManageReconciliation ? (
@@ -707,26 +731,31 @@ export function EmailOperationsDashboard() {
                             </Alert>
                         )}
 
-                        <Alert>
-                            <InfoIcon aria-hidden="true" />
-                            <AlertTitle>Open activity is approximate</AlertTitle>
-                            <AlertDescription>
-                                Privacy protections and inbox preloading can inflate open
-                                counts. Treat opens as a noisy directional signal; clicks and
-                                verified delivery events are stronger evidence.
-                            </AlertDescription>
-                        </Alert>
+                        {!isFullError ? (
+                            <>
+                                <Alert>
+                                    <InfoIcon aria-hidden="true" />
+                                    <AlertTitle>Open activity is approximate</AlertTitle>
+                                    <AlertDescription>
+                                        Privacy protections and inbox preloading can inflate
+                                        open counts. Treat opens as a noisy directional
+                                        signal; clicks and verified delivery events are
+                                        stronger evidence.
+                                    </AlertDescription>
+                                </Alert>
 
-                        <MessagesSection
-                            messages={messages}
-                            isLoading={messagesQuery.isLoading}
-                            isError={messagesQuery.isError}
-                            hasNextPage={Boolean(messagesQuery.hasNextPage)}
-                            isFetchingNextPage={messagesQuery.isFetchingNextPage}
-                            onLoadMore={() => void messagesQuery.fetchNextPage()}
-                            onRetry={() => void messagesQuery.refetch()}
-                            onSelectMessage={setSelectedMessageId}
-                        />
+                                <MessagesSection
+                                    messages={messages}
+                                    isLoading={messagesQuery.isLoading}
+                                    isError={messagesQuery.isError}
+                                    hasNextPage={Boolean(messagesQuery.hasNextPage)}
+                                    isFetchingNextPage={messagesQuery.isFetchingNextPage}
+                                    onLoadMore={() => void messagesQuery.fetchNextPage()}
+                                    onRetry={() => void messagesQuery.refetch()}
+                                    onSelectMessage={setSelectedMessageId}
+                                />
+                            </>
+                        ) : null}
                     </>
                 )}
             </main>

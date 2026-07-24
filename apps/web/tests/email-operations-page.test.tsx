@@ -5,6 +5,8 @@ import { EmailOperationsDashboard } from "@/components/email-operations/EmailOpe
 import { ApiError } from "@/lib/api"
 
 const mockUseReadiness = vi.fn()
+const mockUseLiveReadiness = vi.fn()
+const mockUseRequestReadinessCheck = vi.fn()
 const mockUseMessages = vi.fn()
 const mockUseMessage = vi.fn()
 const mockUseReconciliationCases = vi.fn()
@@ -18,6 +20,7 @@ const mockUseEffectivePermissions = vi.fn()
 const mockFetchNextPage = vi.fn()
 const mockFetchNextReconciliationPage = vi.fn()
 const mockRefetchReadiness = vi.fn()
+const mockRefetchLiveReadiness = vi.fn()
 const mockRefetchMessages = vi.fn()
 const mockRefetchReconciliation = vi.fn()
 const mockRetryReconciliation = vi.fn()
@@ -25,6 +28,7 @@ const mockDismissReconciliation = vi.fn()
 const mockLinkReconciliation = vi.fn()
 const mockConfirmSentReconciliation = vi.fn()
 const mockConfirmNotSentReconciliation = vi.fn()
+const mockRequestReadinessCheck = vi.fn()
 const mockToastSuccess = vi.fn()
 
 vi.mock("next/navigation", () => ({
@@ -37,6 +41,10 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/hooks/use-email-operations", () => ({
     useEmailOperationsReadiness: () => mockUseReadiness(),
+    useEmailOperationsLiveReadiness: (options: unknown) =>
+        mockUseLiveReadiness(options),
+    useRequestEmailOperationsReadinessCheck: () =>
+        mockUseRequestReadinessCheck(),
     useEmailOperationsMessages: () => mockUseMessages(),
     useEmailOperationMessage: (messageId: string | null) => mockUseMessage(messageId),
     useEmailReconciliationCases: (options: unknown) =>
@@ -100,6 +108,25 @@ const readiness = {
         clicks: 6,
         delivery_attempts: 13,
         webhook_events: 27,
+    },
+} as const
+
+const liveReadiness = {
+    check_status: "idle",
+    last_snapshot: {
+        freshness: "fresh",
+        probe_status: "succeeded",
+        overall_status: "ready",
+        domain_status: "ready",
+        webhook_status: "ready",
+        sending_status: "ready",
+        delivery_tracking_status: "ready",
+        engagement_tracking_status: "ready",
+        verified_domain_count: 1,
+        enabled_webhook_count: 1,
+        issue_codes: [],
+        checked_at: "2026-07-23T16:00:00Z",
+        last_success_at: "2026-07-23T16:00:00Z",
     },
 } as const
 
@@ -267,6 +294,7 @@ describe("EmailOperationsDashboard", () => {
         mockFetchNextPage.mockReset()
         mockFetchNextReconciliationPage.mockReset()
         mockRefetchReadiness.mockReset()
+        mockRefetchLiveReadiness.mockReset()
         mockRefetchMessages.mockReset()
         mockRefetchReconciliation.mockReset()
         mockRetryReconciliation.mockReset()
@@ -274,6 +302,7 @@ describe("EmailOperationsDashboard", () => {
         mockLinkReconciliation.mockReset()
         mockConfirmSentReconciliation.mockReset()
         mockConfirmNotSentReconciliation.mockReset()
+        mockRequestReadinessCheck.mockReset()
         mockToastSuccess.mockReset()
         mockUseAuth.mockReturnValue({
             user: {
@@ -292,6 +321,18 @@ describe("EmailOperationsDashboard", () => {
             isError: false,
             isFetching: false,
             refetch: mockRefetchReadiness,
+        })
+        mockUseLiveReadiness.mockReturnValue({
+            data: liveReadiness,
+            isLoading: false,
+            isError: false,
+            isFetching: false,
+            refetch: mockRefetchLiveReadiness,
+        })
+        mockUseRequestReadinessCheck.mockReturnValue({
+            mutate: mockRequestReadinessCheck,
+            isPending: false,
+            isError: false,
         })
         mockUseMessages.mockReturnValue({
             data: {
@@ -361,6 +402,61 @@ describe("EmailOperationsDashboard", () => {
         expect(
             screen.queryByRole("heading", { name: "Reconciliation queue" }),
         ).not.toBeInTheDocument()
+    })
+
+    it("shows cached live readiness to viewers but hides the provider check action", () => {
+        render(<EmailOperationsDashboard />)
+
+        expect(mockUseLiveReadiness).toHaveBeenCalledWith({ enabled: true })
+        expect(
+            screen.getByRole("heading", { name: "Live Resend readiness" }),
+        ).toBeInTheDocument()
+        expect(
+            screen.queryByRole("button", { name: "Check Resend now" }),
+        ).not.toBeInTheDocument()
+
+        const headings = screen.getAllByRole("heading")
+        const liveIndex = headings.findIndex(
+            (heading) => heading.textContent === "Live Resend readiness",
+        )
+        const storedIndex = headings.findIndex(
+            (heading) =>
+                heading.textContent === "Stored configuration and route activity",
+        )
+        expect(liveIndex).toBeGreaterThanOrEqual(0)
+        expect(storedIndex).toBeGreaterThan(liveIndex)
+    })
+
+    it.each([
+        {
+            name: "integration manager",
+            user: { user_id: "manager-1", role: "case_manager" },
+            permissions: ["manage_integrations"],
+        },
+        {
+            name: "developer",
+            user: { user_id: "developer-1", role: "developer" },
+            permissions: [],
+        },
+    ])("allows a $name to start one read-only provider check", ({ user, permissions }) => {
+        mockUseAuth.mockReturnValue({ user })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions },
+        })
+
+        render(<EmailOperationsDashboard />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Check Resend now" }))
+        expect(mockRequestReadinessCheck).toHaveBeenCalledOnce()
+    })
+
+    it("refreshes the cached live result without starting a provider check", () => {
+        render(<EmailOperationsDashboard />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Refresh" }))
+
+        expect(mockRefetchLiveReadiness).toHaveBeenCalledOnce()
+        expect(mockRequestReadinessCheck).not.toHaveBeenCalled()
     })
 
     it("renders only friendly, sanitized reconciliation details for an authorized operator", () => {
@@ -738,7 +834,17 @@ describe("EmailOperationsDashboard", () => {
         render(<EmailOperationsDashboard />)
 
         expect(screen.getByRole("heading", { name: "Email Operations" })).toBeInTheDocument()
-        expect(screen.getByText("Ready", { selector: '[data-slot="badge"]' })).toBeInTheDocument()
+        const storedReadinessCard = screen
+            .getByRole("heading", {
+                name: "Stored configuration and route activity",
+            })
+            .closest('[data-slot="card"]')
+        expect(storedReadinessCard).not.toBeNull()
+        expect(
+            within(storedReadinessCard as HTMLElement).getByText("Ready", {
+                selector: '[data-slot="badge"]',
+            }),
+        ).toBeInTheDocument()
         expect(
             within(screen.getByTestId("sending-readiness")).getByText("Available"),
         ).toBeInTheDocument()
