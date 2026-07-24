@@ -87,6 +87,16 @@ type ResendCompactReadinessSummaryProps = {
     onCheck: () => void
 }
 
+type ResendOperationsReadinessSummaryProps = {
+    envelope: ResendReadinessEnvelope | undefined
+    isLoading: boolean
+    isError: boolean
+    canCheck: boolean
+    isCheckPending: boolean
+    isCheckError: boolean
+    onCheck: () => void
+}
+
 function getIssueLabel(code: string): string {
     return ISSUE_LABELS[code as ResendReadinessIssueCode] ??
         "Resend readiness needs review"
@@ -250,21 +260,24 @@ function CheckButtonLabel({
     return "Check Resend now"
 }
 
-function getCompactStateTitle(snapshot: ResendReadinessSnapshot): string | null {
+function getCompactStateTitle(
+    snapshot: ResendReadinessSnapshot,
+    subject = "Shared sender",
+): string | null {
     if (snapshot.freshness === "never_checked") {
-        return "Shared sender has not been checked"
+        return `${subject} has not been checked`
     }
     if (snapshot.freshness === "stale") {
-        return "Shared sender result is stale"
+        return `${subject} result is stale`
     }
     if (snapshot.probe_status === "limited") {
-        return "Shared sender visibility is limited"
+        return `${subject} visibility is limited`
     }
     if (
         snapshot.probe_status === "failed" ||
         snapshot.overall_status === "needs_attention"
     ) {
-        return "Shared sender needs attention"
+        return `${subject} needs attention`
     }
     return null
 }
@@ -501,6 +514,170 @@ export function ResendLiveReadinessCard({
                 </p>
             </CardContent>
         </Card>
+    )
+}
+
+export function ResendOperationsReadinessSummary({
+    envelope,
+    isLoading,
+    isError,
+    canCheck,
+    isCheckPending,
+    isCheckError,
+    onCheck,
+}: ResendOperationsReadinessSummaryProps) {
+    if (isLoading && !envelope) {
+        return (
+            <section
+                aria-label="Email readiness"
+                className="rounded-xl border bg-card p-5"
+            >
+                <div className="space-y-3" aria-label="Loading email readiness">
+                    <Skeleton className="h-5 w-52" />
+                    <Skeleton className="h-8 w-full" />
+                    <Skeleton className="h-4 w-44" />
+                </div>
+            </section>
+        )
+    }
+
+    if (!envelope) {
+        return (
+            <section aria-label="Email readiness">
+                <Alert variant={isError ? "destructive" : "default"}>
+                    <AlertCircleIcon aria-hidden="true" />
+                    <AlertTitle>Email readiness is unavailable</AlertTitle>
+                    <AlertDescription>
+                        Refresh the saved operations data and try again.
+                    </AlertDescription>
+                </Alert>
+            </section>
+        )
+    }
+
+    const snapshot = envelope.last_snapshot
+    const stateTitle = getCompactStateTitle(snapshot, "Email delivery")
+    const isCheckActive =
+        envelope.check_status === "queued" ||
+        envelope.check_status === "running" ||
+        isCheckPending
+    const issueLabels = Array.from(
+        new Set(snapshot.issue_codes.map((code) => getIssueLabel(code))),
+    )
+
+    return (
+        <section
+            aria-label="Email readiness"
+            className="rounded-xl border bg-card p-5 shadow-sm"
+        >
+            <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <RadarIcon className="size-4 text-primary" aria-hidden="true" />
+                        <h2 className="font-semibold">
+                            Email delivery readiness
+                        </h2>
+                        <Badge variant={getOverallVariant(snapshot)}>
+                            {getOverallLabel(snapshot)}
+                        </Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        Live provider status with locally saved evidence.
+                    </p>
+                </div>
+                {canCheck ? (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isCheckActive}
+                        onClick={onCheck}
+                    >
+                        {isCheckActive ? (
+                            <RefreshCwIcon
+                                className="animate-spin motion-reduce:animate-none"
+                                aria-hidden="true"
+                            />
+                        ) : (
+                            <RadarIcon aria-hidden="true" />
+                        )}
+                        <CheckButtonLabel
+                            envelope={envelope}
+                            isPending={isCheckPending}
+                        />
+                    </Button>
+                ) : null}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+                <Badge variant="outline">
+                    {getCompactCapabilityLabel("Domain", snapshot.domain_status)}
+                </Badge>
+                <Badge variant="outline">
+                    {getCompactCapabilityLabel("Sending", snapshot.sending_status)}
+                </Badge>
+                <Badge variant="outline">
+                    {getCompactCapabilityLabel("Webhook", snapshot.webhook_status)}
+                </Badge>
+                <Badge variant="outline">
+                    {getCompactCapabilityLabel(
+                        "Delivery",
+                        snapshot.delivery_tracking_status,
+                    )}
+                </Badge>
+                <Badge variant="outline">
+                    {getCompactCapabilityLabel(
+                        "Engagement",
+                        snapshot.engagement_tracking_status,
+                    )}
+                </Badge>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                <p>
+                    Last checked{" "}
+                    {snapshot.checked_at ? (
+                        <time dateTime={snapshot.checked_at}>
+                            {formatDateTime(snapshot.checked_at, "Unknown")}
+                        </time>
+                    ) : (
+                        "Not checked"
+                    )}
+                </p>
+                <p>The check is read-only and sends no email.</p>
+            </div>
+
+            {stateTitle ? (
+                <Alert
+                    className="mt-4"
+                    variant={
+                        snapshot.probe_status === "failed" ||
+                        snapshot.overall_status === "needs_attention"
+                            ? "destructive"
+                            : "default"
+                    }
+                >
+                    <ShieldAlertIcon aria-hidden="true" />
+                    <AlertTitle>{stateTitle}</AlertTitle>
+                    {issueLabels.length > 0 ? (
+                        <AlertDescription>
+                            {issueLabels.join(". ")}. Open Diagnostics for the saved
+                            provider evidence.
+                        </AlertDescription>
+                    ) : null}
+                </Alert>
+            ) : null}
+
+            {isCheckError ? (
+                <Alert className="mt-4" variant="destructive">
+                    <AlertCircleIcon aria-hidden="true" />
+                    <AlertTitle>Couldn’t start the live check</AlertTitle>
+                    <AlertDescription>
+                        The saved readiness is unchanged. Try again in a moment.
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+        </section>
     )
 }
 

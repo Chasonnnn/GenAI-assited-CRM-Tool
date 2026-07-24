@@ -408,23 +408,74 @@ describe("EmailOperationsDashboard", () => {
         render(<EmailOperationsDashboard />)
 
         expect(mockUseLiveReadiness).toHaveBeenCalledWith({ enabled: true })
+        const readinessSummary = screen.getByRole("region", {
+            name: "Email readiness",
+        })
         expect(
-            screen.getByRole("heading", { name: "Live Resend readiness" }),
+            within(readinessSummary).getByRole("heading", {
+                name: "Email delivery readiness",
+            }),
         ).toBeInTheDocument()
+        expect(within(readinessSummary).getByText("Domain ready")).toBeInTheDocument()
+        expect(within(readinessSummary).getByText("Sending ready")).toBeInTheDocument()
+        expect(within(readinessSummary).getByText("Webhook ready")).toBeInTheDocument()
+        expect(within(readinessSummary).getByText("Delivery ready")).toBeInTheDocument()
+        expect(within(readinessSummary).getByText("Engagement ready")).toBeInTheDocument()
+        expect(within(readinessSummary).getByText(/Last checked/i)).toBeInTheDocument()
         expect(
             screen.queryByRole("button", { name: "Check Resend now" }),
         ).not.toBeInTheDocument()
+        expect(
+            screen.queryByRole("heading", { name: "Live Resend readiness" }),
+        ).not.toBeInTheDocument()
+        expect(
+            screen.queryByRole("heading", {
+                name: "Stored configuration and route activity",
+            }),
+        ).not.toBeInTheDocument()
+        expect(
+            screen.getByRole("button", { name: /Diagnostics/i }),
+        ).toHaveAttribute("aria-expanded", "false")
+    })
 
-        const headings = screen.getAllByRole("heading")
-        const liveIndex = headings.findIndex(
-            (heading) => heading.textContent === "Live Resend readiness",
-        )
-        const storedIndex = headings.findIndex(
-            (heading) =>
-                heading.textContent === "Stored configuration and route activity",
-        )
-        expect(liveIndex).toBeGreaterThanOrEqual(0)
-        expect(storedIndex).toBeGreaterThan(liveIndex)
+    it("reveals detailed provider evidence only on request", () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: {
+                permissions: ["manage_integrations"],
+            },
+        })
+
+        render(<EmailOperationsDashboard />)
+
+        expect(
+            screen.queryByRole("region", { name: "Provider diagnostics" }),
+        ).not.toBeInTheDocument()
+
+        const diagnosticsTrigger = screen.getByRole("button", {
+            name: /Diagnostics/i,
+        })
+        fireEvent.click(diagnosticsTrigger)
+
+        expect(diagnosticsTrigger).toHaveAttribute("aria-expanded", "true")
+        const diagnostics = screen.getByRole("region", {
+            name: "Provider diagnostics",
+        })
+        expect(
+            within(diagnostics).getByRole("heading", {
+                name: "Live Resend readiness",
+            }),
+        ).toBeInTheDocument()
+        expect(
+            within(diagnostics).getByRole("heading", {
+                name: "Stored configuration and route activity",
+            }),
+        ).toBeInTheDocument()
+        expect(within(diagnostics).getAllByText("Organization credential")).not.toHaveLength(0)
+        expect(within(diagnostics).getByText("stored-account")).toBeInTheDocument()
+        expect(within(diagnostics).getByText("API key stored")).toBeInTheDocument()
+        expect(
+            screen.getAllByRole("button", { name: "Check Resend now" }),
+        ).toHaveLength(1)
     })
 
     it.each([
@@ -834,6 +885,7 @@ describe("EmailOperationsDashboard", () => {
         render(<EmailOperationsDashboard />)
 
         expect(screen.getByRole("heading", { name: "Email Operations" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: /Diagnostics/i }))
         const storedReadinessCard = screen
             .getByRole("heading", {
                 name: "Stored configuration and route activity",

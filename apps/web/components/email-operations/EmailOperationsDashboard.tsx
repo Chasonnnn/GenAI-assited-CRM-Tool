@@ -17,6 +17,12 @@ import {
 } from "lucide-react"
 
 import Link from "@/components/app-link"
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -62,7 +68,10 @@ import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { EmailOperationDetailSheet } from "./EmailOperationDetailSheet"
 import { EmailReconciliationQueue } from "./EmailReconciliationQueue"
-import { ResendLiveReadinessCard } from "./ResendLiveReadinessCard"
+import {
+    ResendLiveReadinessCard,
+    ResendOperationsReadinessSummary,
+} from "./ResendLiveReadinessCard"
 import {
     getCheckStatusLabel,
     getMessageStatusLabel,
@@ -677,7 +686,7 @@ export function EmailOperationsDashboard() {
                     <DashboardSkeleton />
                 ) : (
                     <>
-                        <ResendLiveReadinessCard
+                        <ResendOperationsReadinessSummary
                             envelope={liveReadinessQuery.data}
                             isLoading={liveReadinessQuery.isLoading}
                             isError={liveReadinessQuery.isError}
@@ -686,6 +695,55 @@ export function EmailOperationsDashboard() {
                             isCheckError={requestReadinessCheck.isError}
                             onCheck={() => requestReadinessCheck.mutate()}
                         />
+
+                        <Accordion
+                            defaultValue={[]}
+                            className="rounded-xl bg-background"
+                        >
+                            <AccordionItem value="provider-diagnostics">
+                                <AccordionTrigger className="items-center px-5 py-4 hover:no-underline">
+                                    <span className="flex flex-col gap-1 text-left">
+                                        <span className="font-semibold">Diagnostics</span>
+                                        <span className="text-xs font-normal text-muted-foreground">
+                                            Provider configuration, live counts, and stored
+                                            evidence.
+                                        </span>
+                                    </span>
+                                </AccordionTrigger>
+                                <AccordionContent className="space-y-4 pt-2">
+                                    <section
+                                        aria-label="Provider diagnostics"
+                                        className="space-y-4"
+                                    >
+                                        <ResendLiveReadinessCard
+                                            envelope={liveReadinessQuery.data}
+                                            isLoading={liveReadinessQuery.isLoading}
+                                            isError={liveReadinessQuery.isError}
+                                            canCheck={false}
+                                            onCheck={() =>
+                                                requestReadinessCheck.mutate()
+                                            }
+                                        />
+                                        {readinessQuery.data ? (
+                                            <ReadinessSection
+                                                readiness={readinessQuery.data}
+                                            />
+                                        ) : (
+                                            <Alert variant="destructive">
+                                                <AlertTriangleIcon aria-hidden="true" />
+                                                <AlertTitle>
+                                                    Stored readiness is unavailable
+                                                </AlertTitle>
+                                                <AlertDescription>
+                                                    Refresh the page to reload saved
+                                                    configuration evidence.
+                                                </AlertDescription>
+                                            </Alert>
+                                        )}
+                                    </section>
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
 
                         {isFullError ? (
                             <Alert variant="destructive">
@@ -709,7 +767,6 @@ export function EmailOperationsDashboard() {
                             </Alert>
                         ) : readinessQuery.data ? (
                             <>
-                                <ReadinessSection readiness={readinessQuery.data} />
                                 {canManageReconciliation ? (
                                     <EmailReconciliationQueue
                                         query={reconciliationQuery}
