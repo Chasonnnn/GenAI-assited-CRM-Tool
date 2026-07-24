@@ -63,6 +63,7 @@ async def test_test_send_renders_the_saved_draft_without_publishing_it(
             "to_email": "draft-recipient@example.com",
             "variables": {"full_name": "Avery"},
             "idempotency_key": f"template-draft-test/{uuid.uuid4()}",
+            "expected_revision": 2,
         },
     )
     assert test_response.status_code == 200
@@ -70,6 +71,7 @@ async def test_test_send_renders_the_saved_draft_without_publishing_it(
     assert result["success"] is True
     assert result["queued"] is True
     assert result["provider_used"] == "resend"
+    assert result["tested_revision"] == 2
 
     log = db.get(EmailLog, uuid.UUID(result["email_log_id"]))
     assert log is not None
@@ -102,3 +104,15 @@ async def test_test_send_renders_the_saved_draft_without_publishing_it(
     assert changed_after_test.status_code == 200
     assert changed_after_test.json()["revision"] == 3
     assert changed_after_test.json()["last_tested_revision"] == 2
+
+    log_count_before_stale_test = db.query(EmailLog).count()
+    stale_test_response = await authed_client.post(
+        f"/email-template-drafts/{draft['id']}/test",
+        json={
+            "to_email": "draft-recipient@example.com",
+            "idempotency_key": f"template-draft-test/{uuid.uuid4()}",
+            "expected_revision": 2,
+        },
+    )
+    assert stale_test_response.status_code == 409
+    assert db.query(EmailLog).count() == log_count_before_stale_test

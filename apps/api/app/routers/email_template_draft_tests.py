@@ -14,9 +14,9 @@ from app.core.deps import (
 )
 from app.core.policies import POLICIES
 from app.routers.email_template_drafts import _require_draft_editor
-from app.schemas.email import (
-    EmailTemplateTestSendRequest,
-    EmailTemplateTestSendResponse,
+from app.schemas.email_template_drafts import (
+    EmailTemplateDraftTestSendRequest,
+    EmailTemplateDraftTestSendResponse,
 )
 from app.services import email_template_draft_service
 
@@ -30,15 +30,15 @@ router = APIRouter(
 
 @router.post(
     "/{draft_id}/test",
-    response_model=EmailTemplateTestSendResponse,
+    response_model=EmailTemplateDraftTestSendResponse,
     dependencies=[Depends(require_csrf_header)],
 )
 async def send_email_template_draft_test(
     draft_id: UUID,
-    body: EmailTemplateTestSendRequest,
+    body: EmailTemplateDraftTestSendRequest,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
-) -> EmailTemplateTestSendResponse:
+) -> EmailTemplateDraftTestSendResponse:
     draft = email_template_draft_service.get_draft(
         db,
         org_id=session.org_id,
@@ -48,6 +48,14 @@ async def send_email_template_draft_test(
     if draft is None:
         raise HTTPException(status_code=404, detail="Draft not found")
     _require_draft_editor(db, session, draft)
+    if draft.revision != body.expected_revision:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Draft revision mismatch: "
+                f"expected {body.expected_revision}, got {draft.revision}"
+            ),
+        )
 
     if draft.template is not None and draft.template.system_key:
         from app.services import system_email_template_service
@@ -89,4 +97,7 @@ async def send_email_template_draft_test(
             draft_id=draft.id,
             tested_revision=tested_revision,
         )
-    return EmailTemplateTestSendResponse(**result)
+    return EmailTemplateDraftTestSendResponse(
+        **result,
+        tested_revision=tested_revision,
+    )

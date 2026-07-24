@@ -6,6 +6,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.email import (
+    EmailTemplateTestSendRequest,
+    EmailTemplateTestSendResponse,
+)
+
 
 EmailTemplateDraftScope = Literal["org", "personal"]
 
@@ -37,6 +42,14 @@ class EmailTemplateDraftUpdate(BaseModel):
 class EmailTemplateDraftPublishRequest(BaseModel):
     expected_revision: int = Field(ge=1)
     expected_published_version: int | None = Field(default=None, ge=1)
+
+
+class EmailTemplateDraftTestSendRequest(EmailTemplateTestSendRequest):
+    expected_revision: int = Field(ge=1)
+
+
+class EmailTemplateDraftTestSendResponse(EmailTemplateTestSendResponse):
+    tested_revision: int = Field(ge=1)
 
 
 class EmailTemplateDraftRead(BaseModel):
