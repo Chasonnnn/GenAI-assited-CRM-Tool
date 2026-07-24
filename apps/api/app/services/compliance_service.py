@@ -377,6 +377,7 @@ def create_export_job(
     recent_exports = (
         db.scalar(
             select(func.count(ExportJob.id)).where(
+                # Optimization: Use a scalar func.count query instead of .count() to avoid inefficient subqueries and reduce DB load.
                 ExportJob.organization_id == org_id,
                 ExportJob.created_at >= one_hour_ago,
             )
@@ -392,6 +393,7 @@ def create_export_job(
                 AuditLog.organization_id == org_id,
                 AuditLog.created_at >= start_date,
                 AuditLog.created_at <= end_date,
+                # Optimization: Use a scalar func.count query instead of .count() to avoid inefficient subqueries and reduce DB load.
             )
         )
         or 0
