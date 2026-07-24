@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import NextImage from "next/image"
+import { useRouter } from "next/navigation"
 import { useState, useRef, useReducer } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -780,6 +781,7 @@ function TemplateCard({ template, controls }: TemplateCardProps) {
 // =============================================================================
 
 export default function EmailTemplatesPage() {
+    const router = useRouter()
     const { user } = useAuth()
     const isAdmin = user?.role === "admin" || user?.role === "developer"
     const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
@@ -1302,7 +1304,7 @@ export default function EmailTemplatesPage() {
                             </>
                         )}
                         {activeTab === "org" && canManageEmailTemplates && (
-                            <Button onClick={() => handleOpenModal(undefined, "org")}>
+                            <Button onClick={() => router.push("/automation/email-templates/org/new")}>
                                 <PlusIcon className="mr-2 size-4" />
                                 Create Org Template
                             </Button>
@@ -1436,7 +1438,7 @@ export default function EmailTemplatesPage() {
                                     <BuildingIcon className="size-12 text-muted-foreground mb-4" />
                                     <p className="text-muted-foreground mb-4">No organization templates yet</p>
                                     {canManageEmailTemplates && (
-                                        <Button onClick={() => handleOpenModal(undefined, "org")}>
+                                        <Button onClick={() => router.push("/automation/email-templates/org/new")}>
                                             <PlusIcon className="mr-2 size-4" />
                                             Create Org Template
                                         </Button>
@@ -1468,7 +1470,7 @@ export default function EmailTemplatesPage() {
                                                     return
                                                 }
                                                 if (action === "edit") {
-                                                    handleOpenModal(template)
+                                                    router.push(`/automation/email-templates/org/${template.id}`)
                                                     return
                                                 }
                                                 if (action === "copy") {

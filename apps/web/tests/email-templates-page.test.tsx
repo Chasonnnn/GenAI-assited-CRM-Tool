@@ -17,6 +17,7 @@ const mockCreateEmailTemplate = vi.fn()
 const mockUpdateEmailTemplate = vi.fn()
 const mockSendTestEmailTemplate = vi.fn()
 const mockRollbackEmailTemplate = vi.fn()
+const mockRouterPush = vi.fn()
 let userSignatureData: Record<string, string | null> | null = null
 const FIXED_TIMESTAMP = "2026-01-01T00:00:00.000Z"
 const TEMPLATE_VARIABLES = [
@@ -157,7 +158,7 @@ vi.mock("@/lib/hooks/use-permissions", () => ({
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({
-        push: vi.fn(),
+        push: mockRouterPush,
         replace: vi.fn(),
         back: vi.fn(),
         prefetch: vi.fn(),
@@ -249,6 +250,7 @@ describe("EmailTemplatesPage", () => {
         mockUpdateEmailTemplate.mockReset()
         mockSendTestEmailTemplate.mockReset()
         mockRollbackEmailTemplate.mockReset()
+        mockRouterPush.mockReset()
         mockSendTestEmailTemplate.mockResolvedValue({ provider_used: "resend" })
         mockRollbackEmailTemplate.mockResolvedValue({
             ...TEMPLATE_DETAIL_BY_ID.tpl_org_1,
@@ -279,6 +281,7 @@ describe("EmailTemplatesPage", () => {
         render(<EmailTemplatesPage />)
         expect(screen.getByRole("tab", { name: "My Email Templates" })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: "Organization Templates" })).toBeInTheDocument()
+        expect(screen.getByRole("tab", { name: "Platform Templates" })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: "My Signature" })).toBeInTheDocument()
     })
 
@@ -542,33 +545,50 @@ describe("EmailTemplatesPage", () => {
         expect(screen.queryByTestId("rich-text-editor")).not.toBeInTheDocument()
     })
 
-    it("creates an organization template with the current editor draft", async () => {
+    it("routes organization template creation to the Studio", () => {
         render(<EmailTemplatesPage />)
 
         fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
         fireEvent.click(screen.getByRole("button", { name: /Create Org Template/i }))
-        fireEvent.change(screen.getByLabelText("Template Name"), {
-            target: { value: "New Org Template" },
-        })
-        fireEvent.change(screen.getByLabelText("Subject Line"), {
-            target: { value: "Hello {{full_name}}" },
-        })
 
-        fireEvent.click(screen.getByRole("button", { name: "HTML" }))
-        fireEvent.change(await screen.findByLabelText("Email Body"), {
-            target: { value: "<p>Welcome</p>" },
-        })
-        fireEvent.click(screen.getByRole("button", { name: "Create Template" }))
+        expect(mockRouterPush).toHaveBeenCalledWith("/automation/email-templates/org/new")
+        expect(screen.queryByRole("heading", { name: "Create Template" })).not.toBeInTheDocument()
+    })
 
-        expect(mockCreateEmailTemplate).toHaveBeenCalledWith(
-            {
-                name: "New Org Template",
-                subject: "Hello {{full_name}}",
-                body: "<p>Welcome</p>",
-                scope: "org",
-            },
-            expect.any(Object),
+    it("routes empty-state organization template creation to the Studio", () => {
+        orgTemplatesFixture = []
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        const createButtons = screen.getAllByRole("button", { name: "Create Org Template" })
+        fireEvent.click(createButtons[1]!)
+
+        expect(mockRouterPush).toHaveBeenCalledWith("/automation/email-templates/org/new")
+        expect(screen.queryByRole("heading", { name: "Create Template" })).not.toBeInTheDocument()
+    })
+
+    it("routes organization template editing to the Studio", async () => {
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Org Template" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
+
+        expect(mockRouterPush).toHaveBeenCalledWith(
+            "/automation/email-templates/org/tpl_org_1",
         )
+        expect(screen.queryByRole("heading", { name: "Edit Template" })).not.toBeInTheDocument()
+    })
+
+    it("keeps personal template editing in the existing modal", async () => {
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Personal Template" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
+
+        expect(mockRouterPush).not.toHaveBeenCalled()
+        expect(await screen.findByRole("heading", { name: "Edit Template" })).toBeInTheDocument()
+        expect(screen.getByLabelText("Template Name")).toHaveValue("Personal Template")
     })
 
     it("updates an existing template and resets stale edit draft on create reopen", async () => {
@@ -607,51 +627,6 @@ describe("EmailTemplatesPage", () => {
         expect(screen.getByLabelText("Template Name")).toHaveValue("")
         expect(screen.getByLabelText("Subject Line")).toHaveValue("")
         expect(screen.getByText("Personal")).toBeInTheDocument()
-    })
-
-    it("uses org signature in preview for organization templates", async () => {
-        render(<EmailTemplatesPage />)
-
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
-
-        fireEvent.click(await screen.findByRole("button", { name: "Actions for Org Template" }))
-
-        fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
-        fireEvent.click(await screen.findByRole("button", { name: "Preview" }))
-
-        expect(await screen.findByText("Email Preview")).toBeInTheDocument()
-        expect(screen.getByText("Org Signature")).toBeInTheDocument()
-        expect(screen.queryByText("Personal Signature")).not.toBeInTheDocument()
-    })
-
-    it("opens organization template history from the editor and restores a version", async () => {
-        render(<EmailTemplatesPage />)
-
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
-        fireEvent.click(await screen.findByRole("button", { name: "Actions for Org Template" }))
-        fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
-        fireEvent.click(await screen.findByRole("button", { name: "View history" }))
-
-        expect(
-            await screen.findByRole("heading", { name: "Template history" }),
-        ).toBeInTheDocument()
-        expect(screen.getByText("Template updated")).toBeInTheDocument()
-
-        fireEvent.click(screen.getByRole("button", { name: "Restore version 1" }))
-        fireEvent.click(screen.getByRole("button", { name: "Restore version" }))
-
-        await waitFor(() => {
-            expect(mockRollbackEmailTemplate).toHaveBeenCalledWith({
-                id: "tpl_org_1",
-                version: 1,
-            })
-        })
-
-        fireEvent.click(screen.getByRole("button", { name: "Close" }))
-        expect(await screen.findByLabelText("Template Name")).toHaveValue(
-            "Restored Org Template",
-        )
-        expect(screen.getByLabelText("Subject Line")).toHaveValue("Restored subject")
     })
 
     it.each(["admin", "developer"] as const)(
