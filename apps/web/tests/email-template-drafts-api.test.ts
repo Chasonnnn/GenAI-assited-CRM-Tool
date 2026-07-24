@@ -137,6 +137,7 @@ describe("email template drafts API", () => {
             variables: { full_name: "Avery" },
             idempotency_key: "template-draft-test/123",
             ignore_opt_out: true,
+            expected_revision: 4,
         }
 
         await sendTestEmailTemplateDraft("draft/id", payload)

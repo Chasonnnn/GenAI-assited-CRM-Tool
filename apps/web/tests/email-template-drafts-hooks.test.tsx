@@ -90,6 +90,7 @@ describe("email template draft hooks", () => {
         vi.mocked(sendTestEmailTemplateDraft).mockResolvedValue({
             success: true,
             queued: true,
+            tested_revision: 3,
         })
         vi.mocked(updateEmailTemplateDraft).mockReset()
         vi.mocked(updateEmailTemplateDraft).mockResolvedValue(draft)
@@ -242,6 +243,7 @@ describe("email template draft hooks", () => {
         const payload = {
             to_email: "reviewer@example.com",
             idempotency_key: "template-draft-test/123",
+            expected_revision: 3,
         }
 
         await act(async () => {

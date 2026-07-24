@@ -60,6 +60,16 @@ export interface EmailTemplateDraftPublishRequest {
     expected_published_version: number | null
 }
 
+export interface EmailTemplateDraftTestSendRequest
+    extends EmailTemplateTestSendRequest {
+    expected_revision: number
+}
+
+export interface EmailTemplateDraftTestSendResponse
+    extends EmailTemplateTestSendResponse {
+    tested_revision: number
+}
+
 export interface ListEmailTemplateDraftsParams {
     scope?: EmailTemplateDraftScope | null
     showAllPersonal?: boolean
@@ -127,9 +137,9 @@ export async function publishEmailTemplateDraft(
 
 export async function sendTestEmailTemplateDraft(
     id: string,
-    payload: EmailTemplateTestSendRequest,
-): Promise<EmailTemplateTestSendResponse> {
-    return api.post<EmailTemplateTestSendResponse>(
+    payload: EmailTemplateDraftTestSendRequest,
+): Promise<EmailTemplateDraftTestSendResponse> {
+    return api.post<EmailTemplateDraftTestSendResponse>(
         `/email-template-drafts/${encodeURIComponent(id)}/test`,
         payload,
     )

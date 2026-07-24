@@ -14,9 +14,9 @@ import {
     updateEmailTemplateDraft,
     type EmailTemplateDraftCreate,
     type EmailTemplateDraftPublishRequest,
+    type EmailTemplateDraftTestSendRequest,
+    type EmailTemplateDraftTestSendResponse,
     type EmailTemplateDraftUpdate,
-    type EmailTemplateTestSendRequest,
-    type EmailTemplateTestSendResponse,
     type ListEmailTemplateDraftsParams,
 } from '@/lib/api/email-template-drafts'
 
@@ -146,8 +146,8 @@ export function useSendTestEmailTemplateDraft() {
             payload,
         }: {
             id: string
-            payload: EmailTemplateTestSendRequest
-        }): Promise<EmailTemplateTestSendResponse> => {
+            payload: EmailTemplateDraftTestSendRequest
+        }): Promise<EmailTemplateDraftTestSendResponse> => {
             const result = await sendTestEmailTemplateDraft(id, payload)
             if (!result.success) {
                 throw new Error(result.error || 'Failed to send test email')
