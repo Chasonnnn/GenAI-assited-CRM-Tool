@@ -235,6 +235,11 @@ def _normalize_from_email(value: str | None) -> str | None:
     return text
 
 
+def normalize_template_from_email(value: str | None) -> str | None:
+    """Validate and normalize a user-edited template From override."""
+    return _normalize_from_email(value)
+
+
 def _template_payload(template: EmailTemplate) -> dict:
     """Extract versionable payload from template."""
     return {
@@ -246,6 +251,73 @@ def _template_payload(template: EmailTemplate) -> dict:
     }
 
 
+class TemplateVersionHistoryConflictError(Exception):
+    """Published state cannot be reconciled safely with recorded history."""
+
+
+def ensure_template_current_version_snapshot(
+    db: Session,
+    template: EmailTemplate,
+    *,
+    user_id: UUID | None = None,
+) -> None:
+    """Ensure the current published content is represented in history.
+
+    Some legacy/seed/copy/import paths created ``email_templates`` rows without
+    an ``entity_versions`` snapshot. Studio publishing must capture that exact
+    live content before applying a draft so rollback can always recover it.
+    """
+    current_payload = _template_payload(template)
+    existing = version_service.get_version(
+        db,
+        template.organization_id,
+        ENTITY_TYPE,
+        template.id,
+        template.current_version,
+    )
+    if existing is not None:
+        try:
+            recorded_payload = version_service.decrypt_payload(existing.payload_encrypted)
+        except Exception as exc:
+            raise TemplateVersionHistoryConflictError(
+                "Current template history could not be decrypted"
+            ) from exc
+        if not version_service.verify_checksum(
+            existing.payload_encrypted,
+            existing.checksum,
+        ):
+            raise TemplateVersionHistoryConflictError(
+                "Current template history failed its integrity check"
+            )
+        if recorded_payload != current_payload:
+            raise TemplateVersionHistoryConflictError(
+                "Current template content does not match its version history"
+            )
+        return
+
+    latest = version_service.get_latest_version(
+        db,
+        template.organization_id,
+        ENTITY_TYPE,
+        template.id,
+    )
+    if latest is not None and latest.version > template.current_version:
+        raise TemplateVersionHistoryConflictError(
+            "Template version history is ahead of the published template"
+        )
+
+    version_service.create_version_at(
+        db=db,
+        org_id=template.organization_id,
+        entity_type=ENTITY_TYPE,
+        entity_id=template.id,
+        version_number=template.current_version,
+        payload=current_payload,
+        created_by_user_id=user_id,
+        comment="Backfilled published state",
+    )
+
+
 def create_template(
     db: Session,
     org_id: UUID,
@@ -255,6 +327,9 @@ def create_template(
     body: str,
     from_email: str | None = None,
     scope: str = "org",
+    category: str | None = None,
+    *,
+    commit: bool = True,
 ) -> EmailTemplate:
     """Create a new email template with initial version snapshot."""
     clean_body = sanitize_template_html(body)
@@ -272,6 +347,7 @@ def create_template(
         is_active=True,
         scope=scope,
         owner_user_id=owner_user_id,
+        category=category,
         current_version=1,
     )
     db.add(template)
@@ -288,8 +364,11 @@ def create_template(
         comment="Created",
     )
 
-    db.commit()
-    db.refresh(template)
+    if commit:
+        db.commit()
+        db.refresh(template)
+    else:
+        db.flush()
     return template
 
 
@@ -304,6 +383,8 @@ def update_template(
     is_active: bool | None = None,
     expected_version: int | None = None,
     comment: str | None = None,
+    *,
+    commit: bool = True,
 ) -> EmailTemplate:
     """
     Update an email template with version control.
@@ -314,6 +395,8 @@ def update_template(
     # Optimistic locking
     if expected_version is not None:
         version_service.check_version(template.current_version, expected_version)
+
+    ensure_template_current_version_snapshot(db, template, user_id=user_id)
 
     if name is not None:
         template.name = name
@@ -328,11 +411,10 @@ def update_template(
     if is_active is not None:
         template.is_active = is_active
 
-    # Increment version and snapshot
-    template.current_version += 1
+    # Snapshot the new published state without rewriting prior history.
     template.updated_at = datetime.now(timezone.utc)
 
-    version_service.create_version(
+    version = version_service.create_version(
         db=db,
         org_id=template.organization_id,
         entity_type=ENTITY_TYPE,
@@ -341,9 +423,13 @@ def update_template(
         created_by_user_id=user_id,
         comment=comment or "Updated",
     )
+    template.current_version = version.version
 
-    db.commit()
-    db.refresh(template)
+    if commit:
+        db.commit()
+        db.refresh(template)
+    else:
+        db.flush()
     return template
 
 

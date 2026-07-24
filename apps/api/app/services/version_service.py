@@ -213,6 +213,41 @@ def create_version(
     return version
 
 
+def create_version_at(
+    db: Session,
+    org_id: UUID,
+    entity_type: str,
+    entity_id: UUID,
+    version_number: int,
+    payload: JsonObject,
+    created_by_user_id: UUID | None,
+    comment: str | None = None,
+) -> EntityVersion:
+    """Create a snapshot at an explicit version number.
+
+    This is reserved for reconciling legacy entities whose ``current_version``
+    predates version snapshots. It never overwrites an existing history row.
+    """
+    if version_number < 1:
+        raise ValueError("version_number must be at least 1")
+
+    version = EntityVersion(
+        organization_id=org_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        version=version_number,
+        schema_version=1,
+        payload_encrypted=encrypt_payload(payload),
+        checksum=compute_checksum(payload),
+        created_by_user_id=created_by_user_id,
+        comment=comment,
+    )
+    with db.begin_nested():
+        db.add(version)
+        db.flush()
+    return version
+
+
 def get_latest_version(
     db: Session,
     org_id: UUID,

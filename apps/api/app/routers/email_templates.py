@@ -369,6 +369,8 @@ def update_template(
             status_code=409,
             detail=f"Version conflict: expected {e.expected}, got {e.actual}",
         )
+    except email_service.TemplateVersionHistoryConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

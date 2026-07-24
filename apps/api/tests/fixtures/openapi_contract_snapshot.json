@@ -1079,6 +1079,42 @@
       "200"
     ]
   },
+  "/email-template-drafts": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/email-template-drafts/from-template/{template_id}": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-template-drafts/{draft_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-template-drafts/{draft_id}/publish": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/email-templates": {
     "GET": [
       "200",
