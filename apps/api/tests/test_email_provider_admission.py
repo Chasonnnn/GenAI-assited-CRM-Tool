@@ -7,11 +7,22 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.config import Settings
 from app.db.models import EmailProviderAdmission
 from app.db.session import SessionLocal
 from app.services.email_provider_admission_service import (
     reserve_provider_request_slot,
 )
+
+
+def test_default_resend_team_admission_limit_matches_provider_contract():
+    settings = Settings(
+        _env_file=None,
+        ENV="test",
+        DATABASE_URL="postgresql+psycopg://user:pass@localhost:5432/test",
+    )
+
+    assert settings.RESEND_PROVIDER_REQUESTS_PER_SECOND == 5
 
 
 def test_concurrent_workers_reserve_ten_strictly_spaced_slots_per_second(

@@ -156,7 +156,9 @@ class Settings(BaseSettings):
     # Intentionally separate from org-level campaign/workflow/direct email provider settings.
     PLATFORM_RESEND_API_KEY: SecretStr = SecretStr("")
     PLATFORM_RESEND_WEBHOOK_SECRET: SecretStr = SecretStr("")
-    RESEND_PROVIDER_REQUESTS_PER_SECOND: int = Field(default=10, ge=1, le=1_000_000)
+    # Resend's default limit is shared by every API key in a team. Increase this
+    # only after the team's Settings > Usage page confirms a higher allowance.
+    RESEND_PROVIDER_REQUESTS_PER_SECOND: int = Field(default=5, ge=1, le=1_000_000)
     # Optional fallback From header. Recommended: set per-template `from_email` in ops/system templates.
     PLATFORM_EMAIL_FROM: str = ""
 

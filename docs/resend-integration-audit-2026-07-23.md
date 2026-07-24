@@ -123,7 +123,7 @@ Current operational defaults are:
 - maximum batches drained per worker tick: 10;
 - delivery lease: 120 seconds;
 - maximum attempts per message: 5;
-- Resend admission: 10 requests/second per exact credential fingerprint;
+- Resend admission: 5 requests/second per exact credential fingerprint;
 - Resend idempotency window: 24 hours from the first claim.
 
 The transport performs exactly one HTTP request per admission slot. The durable
@@ -180,16 +180,16 @@ admission key. Two organizations using the exact same API key share one
 application-side lane. It is not Resend team discovery: Resend does not expose a
 team identifier through the send path used here. If two organizations configure
 different API keys belonging to the same Resend team, the application cannot
-coordinate their shared official 10 requests/second team pool. This limitation
+coordinate their shared official 5 requests/second team pool. This limitation
 must remain in production documentation until a stable remote account/team
 identity is available.
 
 ### 4. Credential-scoped no-burst request admission
 
 `email_provider_admission_service.py` serializes request reservations with a
-database row lock and PostgreSQL `clock_timestamp()`. At the default 10
+database row lock and PostgreSQL `clock_timestamp()`. At the default 5
 requests/second setting, each exact credential fingerprint receives one slot
-every 100 ms with no application-side burst.
+every 200 ms with no application-side burst.
 
 This prevents independent workers from each assuming they own the full
 allowance and eliminates inline transport retries that would bypass admission.
@@ -373,7 +373,7 @@ outbox.
 | --- | --- |
 | Transactional queueing | Business change and email intent can commit together; a process exit before provider I/O does not lose the send intent |
 | Fenced leases | At most one current lease token can project an attempt; expired workers cannot overwrite a newer attempt |
-| Provider admission | One slot every 100 ms at the default 10 requests/second per exact credential, with no local burst |
+| Provider admission | One slot every 200 ms at the default 5 requests/second per exact credential, with no local burst |
 | Idempotency | Automated producers reuse one payload-bound key; automatic sends stop at Resend's 24-hour safety boundary |
 | Attempt budget | Default maximum of 5 provider attempts, with sanitized per-attempt evidence |
 | Unknown provider outcomes | Safe retries reuse the original idempotency key; exhaustion becomes operator reconciliation rather than a false confirmed failure |
@@ -399,7 +399,7 @@ outbox.
    historical successful domain-list request is insufficient for ongoing
    readiness.
 4. Decide how shared Resend-team identity will be configured or discovered so
-   different organization keys in one team share one 10 requests/second
+   different organization keys in one team share one 5 requests/second
    admission pool.
 
 ### P1 product and operations
@@ -527,7 +527,7 @@ Schema revisions added by this batch run from
 - [Send email API](https://resend.com/docs/api-reference/emails/send-email)
 - [API errors](https://resend.com/docs/api-reference/errors)
 - [Idempotency keys: 24-hour retention](https://resend.com/docs/dashboard/emails/idempotency-keys)
-- [Rate limit: 10 requests/second per team](https://resend.com/docs/api-reference/rate-limit)
+- [Rate limit: 5 requests/second per team by default](https://resend.com/docs/api-reference/rate-limit)
 - [Webhook introduction: at-least-once and unordered](https://resend.com/docs/webhooks/introduction)
 - [Webhook retries and manual replays](https://resend.com/docs/webhooks/retries-and-replays)
 - [Verify webhooks using the raw body](https://resend.com/docs/webhooks/verify-webhooks-requests)
