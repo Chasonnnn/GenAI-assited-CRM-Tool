@@ -748,7 +748,7 @@ def render_template(
 
     def sanitize_subject_value(value: object) -> str:
         text = normalize_value(value)
-        return re.sub(r"[\\r\\n]+", " ", text).strip()
+        return re.sub(r"[\r\n]+", " ", text).strip()
 
     subject_vars = {k: sanitize_subject_value(v) for k, v in variables.items()}
     safe_html_vars = safe_html_vars or set()
