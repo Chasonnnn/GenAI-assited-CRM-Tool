@@ -4,7 +4,7 @@
  * Drafts are isolated from production templates until an explicit publish.
  */
 
-import api from '@/lib/api'
+import api from '../api'
 import type {
     EmailTemplate,
     EmailTemplateTestSendRequest,
