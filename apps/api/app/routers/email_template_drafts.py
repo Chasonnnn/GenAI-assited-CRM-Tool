@@ -32,6 +32,7 @@ from app.services import (
     email_service,
     email_template_draft_service,
     permission_service,
+    version_service,
 )
 
 
@@ -403,6 +404,11 @@ def publish_email_template_draft(
         email_service.TemplateVersionHistoryConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except version_service.VersionEncryptionConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Template publishing is temporarily unavailable",
+        ) from exc
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(

@@ -178,6 +178,59 @@ async def test_new_draft_is_not_visible_as_a_template_until_publish(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("version_encryption_key", ["", "not-a-fernet-key"])
+async def test_publish_is_unavailable_with_unusable_version_history_encryption(
+    authed_client,
+    db,
+    test_org,
+    monkeypatch,
+    version_encryption_key,
+):
+    create_response = await authed_client.post(
+        "/email-template-drafts",
+        json={
+            "name": "Encryption guarded draft",
+            "subject": "Draft remains isolated",
+            "body": "<p>Never partially publish this draft.</p>",
+            "scope": "org",
+        },
+    )
+    assert create_response.status_code == 201
+    draft = create_response.json()
+
+    monkeypatch.setattr(
+        version_service.settings,
+        "VERSION_ENCRYPTION_KEY",
+        version_encryption_key,
+    )
+    monkeypatch.setattr(version_service.settings, "META_ENCRYPTION_KEY", "")
+    monkeypatch.setattr(version_service, "_fernet", None)
+
+    publish_response = await authed_client.post(
+        f"/email-template-drafts/{draft['id']}/publish",
+        json={
+            "expected_revision": 1,
+            "expected_published_version": None,
+        },
+    )
+
+    assert publish_response.status_code == 503
+    assert publish_response.json() == {
+        "detail": "Template publishing is temporarily unavailable"
+    }
+    assert (
+        db.query(EmailTemplate)
+        .filter(
+            EmailTemplate.organization_id == test_org.id,
+            EmailTemplate.name == "Encryption guarded draft",
+        )
+        .count()
+        == 0
+    )
+    assert db.get(EmailTemplateDraft, uuid.UUID(draft["id"])) is not None
+
+
+@pytest.mark.asyncio
 async def test_stale_draft_cannot_overwrite_a_newer_published_template(
     authed_client,
     db,

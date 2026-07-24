@@ -35,6 +35,10 @@ from app.types import JsonObject
 _fernet: Fernet | None = None
 
 
+class VersionEncryptionConfigurationError(ValueError):
+    """Version history encryption is unavailable because its key cannot be used."""
+
+
 def get_fernet() -> Fernet:
     """Get or create Fernet instance for version encryption."""
     global _fernet
@@ -44,11 +48,16 @@ def get_fernet() -> Fernet:
             or settings.META_ENCRYPTION_KEY.get_secret_value()
         )
         if not key:
-            raise ValueError(
+            raise VersionEncryptionConfigurationError(
                 "VERSION_ENCRYPTION_KEY or META_ENCRYPTION_KEY must be set. "
                 "Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
             )
-        _fernet = Fernet(key.encode())
+        try:
+            _fernet = Fernet(key.encode())
+        except ValueError as exc:
+            raise VersionEncryptionConfigurationError(
+                "VERSION_ENCRYPTION_KEY or META_ENCRYPTION_KEY must be a valid Fernet key"
+            ) from exc
     return _fernet
 
 
