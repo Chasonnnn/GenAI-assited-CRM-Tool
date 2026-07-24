@@ -60,6 +60,11 @@ export interface EmailTemplateDraftPublishRequest {
     expected_published_version: number | null
 }
 
+export interface EmailTemplateDraftRestoreVersionRequest {
+    target_version: number
+    expected_revision: number
+}
+
 export interface EmailTemplateDraftTestSendRequest
     extends EmailTemplateTestSendRequest {
     expected_revision: number
@@ -136,6 +141,16 @@ export async function publishEmailTemplateDraft(
 ): Promise<EmailTemplate> {
     return api.post<EmailTemplate>(
         `/email-template-drafts/${encodeURIComponent(id)}/publish`,
+        data,
+    )
+}
+
+export async function restoreEmailTemplateDraftVersion(
+    id: string,
+    data: EmailTemplateDraftRestoreVersionRequest,
+): Promise<EmailTemplateDraft> {
+    return api.post<EmailTemplateDraft>(
+        `/email-template-drafts/${encodeURIComponent(id)}/restore-version`,
         data,
     )
 }

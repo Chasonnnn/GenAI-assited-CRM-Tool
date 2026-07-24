@@ -10,6 +10,7 @@ import {
     getEmailTemplateDraft,
     listEmailTemplateDrafts,
     publishEmailTemplateDraft,
+    restoreEmailTemplateDraftVersion,
     sendTestEmailTemplateDraft,
     updateEmailTemplateDraft,
     type EmailTemplateDraft,
@@ -22,6 +23,7 @@ import {
     useEmailTemplateDraft,
     useEmailTemplateDrafts,
     usePublishEmailTemplateDraft,
+    useRestoreEmailTemplateDraftVersion,
     useSendTestEmailTemplateDraft,
     useUpdateEmailTemplateDraft,
 } from "@/lib/hooks/use-email-template-drafts"
@@ -39,6 +41,7 @@ vi.mock("@/lib/api/email-template-drafts", async (importOriginal) => {
         getEmailTemplateDraft: vi.fn(),
         listEmailTemplateDrafts: vi.fn(),
         publishEmailTemplateDraft: vi.fn(),
+        restoreEmailTemplateDraftVersion: vi.fn(),
         sendTestEmailTemplateDraft: vi.fn(),
         updateEmailTemplateDraft: vi.fn(),
     }
@@ -86,6 +89,8 @@ describe("email template draft hooks", () => {
         vi.mocked(publishEmailTemplateDraft).mockResolvedValue({
             id: "template-1",
         } as never)
+        vi.mocked(restoreEmailTemplateDraftVersion).mockReset()
+        vi.mocked(restoreEmailTemplateDraftVersion).mockResolvedValue(draft)
         vi.mocked(sendTestEmailTemplateDraft).mockReset()
         vi.mocked(sendTestEmailTemplateDraft).mockResolvedValue({
             success: true,
@@ -236,6 +241,36 @@ describe("email template draft hooks", () => {
         ).toBeUndefined()
         expect(
             queryClient.getQueryState(["email-templates", "list"])?.isInvalidated,
+        ).toBe(true)
+    })
+
+    it("restores history into the draft and refreshes draft caches", async () => {
+        const queryClient = createQueryClient()
+        queryClient.setQueryData(emailTemplateDraftKeys.list({}), [draft])
+        queryClient.setQueryData(emailTemplateDraftKeys.detail(draft.id), draft)
+        const view = renderHook(() => useRestoreEmailTemplateDraftVersion(), {
+            wrapper: wrapperFor(queryClient),
+        })
+        const data = {
+            target_version: 2,
+            expected_revision: draft.revision,
+        }
+
+        await act(async () => {
+            await view.result.current.mutateAsync({ id: draft.id, data })
+        })
+
+        expect(restoreEmailTemplateDraftVersion).toHaveBeenCalledWith(
+            draft.id,
+            data,
+        )
+        expect(
+            queryClient.getQueryState(emailTemplateDraftKeys.list({}))
+                ?.isInvalidated,
+        ).toBe(true)
+        expect(
+            queryClient.getQueryState(emailTemplateDraftKeys.detail(draft.id))
+                ?.isInvalidated,
         ).toBe(true)
     })
 

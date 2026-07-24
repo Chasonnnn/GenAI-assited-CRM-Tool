@@ -10,10 +10,12 @@ import {
     getEmailTemplateDraft,
     listEmailTemplateDrafts,
     publishEmailTemplateDraft,
+    restoreEmailTemplateDraftVersion,
     sendTestEmailTemplateDraft,
     updateEmailTemplateDraft,
     type EmailTemplateDraftCreate,
     type EmailTemplateDraftPublishRequest,
+    type EmailTemplateDraftRestoreVersionRequest,
     type EmailTemplateDraftTestSendRequest,
     type EmailTemplateDraftTestSendResponse,
     type EmailTemplateDraftUpdate,
@@ -31,10 +33,12 @@ export const emailTemplateDraftKeys = {
 
 export function useEmailTemplateDrafts(
     params: ListEmailTemplateDraftsParams = {},
+    enabled = true,
 ) {
     return useQuery({
         queryKey: emailTemplateDraftKeys.list(params),
         queryFn: () => listEmailTemplateDrafts(params),
+        enabled,
     })
 }
 
@@ -138,6 +142,28 @@ export function usePublishEmailTemplateDraft() {
             })
             void queryClient.invalidateQueries({
                 queryKey: ['email-templates'],
+            })
+        },
+    })
+}
+
+export function useRestoreEmailTemplateDraftVersion() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({
+            id,
+            data,
+        }: {
+            id: string
+            data: EmailTemplateDraftRestoreVersionRequest
+        }) => restoreEmailTemplateDraftVersion(id, data),
+        onSuccess: (_draft, { id }) => {
+            void queryClient.invalidateQueries({
+                queryKey: emailTemplateDraftKeys.lists(),
+            })
+            void queryClient.invalidateQueries({
+                queryKey: emailTemplateDraftKeys.detail(id),
             })
         },
     })

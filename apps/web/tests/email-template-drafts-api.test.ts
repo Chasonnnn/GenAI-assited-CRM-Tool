@@ -7,6 +7,7 @@ import {
     getEmailTemplateDraft,
     listEmailTemplateDrafts,
     publishEmailTemplateDraft,
+    restoreEmailTemplateDraftVersion,
     sendTestEmailTemplateDraft,
     updateEmailTemplateDraft,
 } from "@/lib/api/email-template-drafts"
@@ -127,6 +128,20 @@ describe("email template drafts API", () => {
 
         expect(mockPost).toHaveBeenCalledWith(
             "/email-template-drafts/new-draft/publish",
+            data,
+        )
+    })
+
+    it("restores published history into a revision-fenced isolated draft", async () => {
+        const data = {
+            target_version: 3,
+            expected_revision: 5,
+        }
+
+        await restoreEmailTemplateDraftVersion("draft/id", data)
+
+        expect(mockPost).toHaveBeenCalledWith(
+            "/email-template-drafts/draft%2Fid/restore-version",
             data,
         )
     })
