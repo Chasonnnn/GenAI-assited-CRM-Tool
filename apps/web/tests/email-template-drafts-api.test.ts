@@ -92,14 +92,14 @@ describe("email template drafts API", () => {
         }
 
         await updateEmailTemplateDraft("draft/id", data)
-        await discardEmailTemplateDraft("draft/id")
+        await discardEmailTemplateDraft("draft/id", 4)
 
         expect(mockPatch).toHaveBeenCalledWith(
             "/email-template-drafts/draft%2Fid",
             data,
         )
         expect(mockDelete).toHaveBeenCalledWith(
-            "/email-template-drafts/draft%2Fid",
+            "/email-template-drafts/draft%2Fid?expected_revision=4",
         )
     })
 

@@ -100,7 +100,13 @@ export function useDiscardEmailTemplateDraft() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: ({ id }: { id: string }) => discardEmailTemplateDraft(id),
+        mutationFn: ({
+            id,
+            expectedRevision,
+        }: {
+            id: string
+            expectedRevision: number
+        }) => discardEmailTemplateDraft(id, expectedRevision),
         onSuccess: (_result, { id }) => {
             void queryClient.invalidateQueries({
                 queryKey: emailTemplateDraftKeys.lists(),

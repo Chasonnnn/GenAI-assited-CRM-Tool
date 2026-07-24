@@ -121,8 +121,13 @@ export async function updateEmailTemplateDraft(
     )
 }
 
-export async function discardEmailTemplateDraft(id: string): Promise<void> {
-    return api.delete<void>(`/email-template-drafts/${encodeURIComponent(id)}`)
+export async function discardEmailTemplateDraft(
+    id: string,
+    expectedRevision: number,
+): Promise<void> {
+    return api.delete<void>(
+        `/email-template-drafts/${encodeURIComponent(id)}?expected_revision=${expectedRevision}`,
+    )
 }
 
 export async function publishEmailTemplateDraft(

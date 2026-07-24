@@ -192,10 +192,16 @@ describe("email template draft hooks", () => {
         })
 
         await act(async () => {
-            await view.result.current.mutateAsync({ id: draft.id })
+            await view.result.current.mutateAsync({
+                id: draft.id,
+                expectedRevision: draft.revision,
+            })
         })
 
-        expect(discardEmailTemplateDraft).toHaveBeenCalledWith(draft.id)
+        expect(discardEmailTemplateDraft).toHaveBeenCalledWith(
+            draft.id,
+            draft.revision,
+        )
         expect(
             queryClient.getQueryState(emailTemplateDraftKeys.list({}))?.isInvalidated,
         ).toBe(true)
