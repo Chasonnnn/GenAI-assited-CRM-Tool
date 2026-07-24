@@ -544,3 +544,31 @@ async def refresh_platform_readiness(
         probe=probe,
         retry_after_seconds=retry_after_seconds,
     )
+
+
+def get_cached_organization_readiness(
+    db: Session,
+    *,
+    organization_id: UUID,
+) -> resend_readiness_snapshot_service.ReadinessSnapshotView:
+    """Read the current organization's fenced snapshot without provider I/O."""
+    configuration = _resolve_organization_configuration(
+        db,
+        organization_id=organization_id,
+    )
+    return resend_readiness_snapshot_service.get_organization_snapshot(
+        db,
+        organization_id=organization_id,
+        current_config_fingerprint=configuration.fingerprint,
+    )
+
+
+def get_cached_platform_readiness(
+    db: Session,
+) -> resend_readiness_snapshot_service.ReadinessSnapshotView:
+    """Read the current platform snapshot without provider I/O."""
+    configuration = _resolve_platform_configuration(db)
+    return resend_readiness_snapshot_service.get_platform_snapshot(
+        db,
+        current_config_fingerprint=configuration.fingerprint,
+    )

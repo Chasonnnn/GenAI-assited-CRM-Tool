@@ -54,6 +54,7 @@ class JobType(str, Enum):
     TICKET_APPLY_LINKING = "ticket_apply_linking"
     TICKET_OUTBOUND_SEND = "ticket_outbound_send"
     RESEND_EVENT_RECONCILE = "resend_event_reconcile"
+    RESEND_READINESS_CHECK = "resend_readiness_check"
 
 
 class JobStatus(str, Enum):

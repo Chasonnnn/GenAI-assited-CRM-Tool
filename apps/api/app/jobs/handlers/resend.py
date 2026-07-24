@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
+from app.db.enums import JobScope
 from app.db.models import EmailLog, ResendWebhookEvent
 
 
@@ -76,3 +77,35 @@ async def process_resend_event_reconcile(db, job) -> None:
         email_log=email_log,
         payload=event_payload,
     )
+
+
+async def process_resend_readiness_check(db, job) -> None:
+    """Probe exactly the durable job's trusted organization or platform route."""
+    from app.services import resend_readiness_service
+
+    payload = job.payload if isinstance(job.payload, dict) else {}
+    provider_scope = payload.get("provider_scope")
+    if (
+        job.job_scope == JobScope.ORGANIZATION.value
+        and job.organization_id is not None
+        and provider_scope == JobScope.ORGANIZATION.value
+    ):
+        result = await resend_readiness_service.refresh_organization_readiness(
+            db,
+            organization_id=job.organization_id,
+        )
+    elif (
+        job.job_scope == JobScope.PLATFORM.value
+        and job.organization_id is None
+        and provider_scope == JobScope.PLATFORM.value
+    ):
+        result = await resend_readiness_service.refresh_platform_readiness(db)
+    else:
+        raise ValueError("Invalid Resend readiness job scope")
+
+    retry_after = result.retry_after_seconds
+    if retry_after is not None or not result.persisted:
+        delay_seconds = max(0, min(3600, int(retry_after or 0)))
+        job.run_at = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
+        db.flush()
+        raise RuntimeError("Resend readiness retry requested")

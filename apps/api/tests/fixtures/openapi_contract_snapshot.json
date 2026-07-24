@@ -1069,6 +1069,16 @@
       "200"
     ]
   },
+  "/email-operations/readiness/check": {
+    "POST": [
+      "202"
+    ]
+  },
+  "/email-operations/readiness/live": {
+    "GET": [
+      "200"
+    ]
+  },
   "/email-templates": {
     "GET": [
       "200",
@@ -2430,6 +2440,16 @@
     "GET": [
       "200",
       "422"
+    ]
+  },
+  "/platform/email/readiness": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/platform/email/readiness/check": {
+    "POST": [
+      "202"
     ]
   },
   "/platform/email/status": {

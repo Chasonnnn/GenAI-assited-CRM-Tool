@@ -70,6 +70,7 @@ from app.schemas.email import (
     PlatformEmailTemplateTestSendRequest,
     TemplateVariableRead,
 )
+from app.schemas.resend_readiness import ResendReadinessEnvelope
 
 router = APIRouter(prefix="/platform", tags=["platform"])
 logger = logging.getLogger(__name__)
@@ -345,6 +346,34 @@ def get_platform_email_status(
         from_email=settings.PLATFORM_EMAIL_FROM or None,
         provider="resend",
     )
+
+
+@router.get("/email/readiness")
+def get_platform_email_readiness(
+    session: Annotated[PlatformUserSession, Depends(require_platform_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ResendReadinessEnvelope:
+    """Return the platform sender's cached readiness without provider I/O."""
+    from app.services import resend_readiness_orchestration_service
+
+    view = resend_readiness_orchestration_service.get_platform_envelope(db)
+    return ResendReadinessEnvelope.model_validate(view)
+
+
+@router.post(
+    "/email/readiness/check",
+    status_code=202,
+    dependencies=[Depends(require_csrf_header)],
+)
+def queue_platform_email_readiness_check(
+    session: Annotated[PlatformUserSession, Depends(require_platform_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ResendReadinessEnvelope:
+    """Queue one coalesced, read-only platform readiness check."""
+    from app.services import resend_readiness_orchestration_service
+
+    view = resend_readiness_orchestration_service.queue_platform_check(db)
+    return ResendReadinessEnvelope.model_validate(view)
 
 
 # =============================================================================

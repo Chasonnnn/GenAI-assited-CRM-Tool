@@ -27,7 +27,12 @@ from app.schemas.email_operations import (
     EmailReconciliationLinkRequest,
     EmailReconciliationRetryRequest,
 )
-from app.services import email_operations_service, email_reconciliation_service
+from app.schemas.resend_readiness import ResendReadinessEnvelope
+from app.services import (
+    email_operations_service,
+    email_reconciliation_service,
+    resend_readiness_orchestration_service,
+)
 
 
 router = APIRouter(prefix="/email-operations", tags=["email-operations"])
@@ -195,6 +200,36 @@ def get_readiness(
         db,
         organization_id=session.org_id,
     )
+
+
+@router.get("/readiness/live")
+def get_live_readiness(
+    session: Annotated[UserSession, Depends(get_current_session)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ResendReadinessEnvelope:
+    """Return the latest cached live-readiness result without provider I/O."""
+    view = resend_readiness_orchestration_service.get_organization_envelope(
+        db,
+        organization_id=session.org_id,
+    )
+    return ResendReadinessEnvelope.model_validate(view)
+
+
+@router.post(
+    "/readiness/check",
+    status_code=202,
+    dependencies=[Depends(require_csrf_header)],
+)
+def queue_live_readiness_check(
+    session: Annotated[UserSession, Depends(require_permission(P.INTEGRATIONS_MANAGE))],
+    db: Annotated[Session, Depends(get_db)],
+) -> ResendReadinessEnvelope:
+    """Queue one coalesced, read-only provider readiness check."""
+    view = resend_readiness_orchestration_service.queue_organization_check(
+        db,
+        organization_id=session.org_id,
+    )
+    return ResendReadinessEnvelope.model_validate(view)
 
 
 @router.get("/messages")
