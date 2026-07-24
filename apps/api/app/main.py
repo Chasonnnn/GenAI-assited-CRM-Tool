@@ -59,6 +59,7 @@ from app.routers import (
     dashboard,
     dev,
     email_operations,
+    email_template_draft_tests,
     email_template_drafts,
     email_templates,
     forms,
@@ -645,6 +646,7 @@ app.include_router(notifications.router)
 
 # Email and jobs routers
 app.include_router(email_operations.router)
+app.include_router(email_template_draft_tests.router)
 app.include_router(email_template_drafts.router)
 app.include_router(email_templates.router)
 app.include_router(unsubscribe.router)

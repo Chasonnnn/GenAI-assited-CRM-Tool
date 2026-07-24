@@ -354,3 +354,88 @@ async def send_test_via_user_gmail(
         idempotency_key=idempotency_key,
         ignore_opt_out=ignore_opt_out,
     )
+
+
+async def send_template_content_test(
+    *,
+    db: Session,
+    org_id: UUID,
+    actor_user_id: UUID,
+    actor_display_name: str | None,
+    scope: str,
+    subject_template: str,
+    body_template: str,
+    template_from_email: str | None,
+    template_id: UUID | None,
+    to_email: str,
+    variables: dict[str, str] | None,
+    idempotency_key: str,
+    ignore_opt_out: bool = False,
+) -> dict:
+    """Render and enqueue a test from explicit template content.
+
+    Callers can safely pass draft content without mutating the published
+    ``email_templates`` projection.
+    """
+    from app.services import (
+        email_composition_service,
+        email_service,
+        org_service,
+    )
+
+    cleaned_body_template = (
+        email_composition_service.strip_legacy_unsubscribe_placeholders(body_template)
+    )
+    variables_used = extract_variables(subject_template, cleaned_body_template)
+    base_vars = build_sample_variables(
+        db=db,
+        org_id=org_id,
+        to_email=to_email,
+        actor_display_name=actor_display_name,
+    )
+    base_vars = apply_unknown_variable_fallbacks(
+        variables_used=variables_used,
+        variables=base_vars,
+    )
+    final_vars = {**base_vars, **(variables or {})}
+
+    rendered_subject, rendered_body = email_service.render_template(
+        subject_template,
+        cleaned_body_template,
+        final_vars,
+    )
+    org = org_service.get_org_by_id(db, org_id)
+    portal_base_url = org_service.get_org_portal_base_url(org)
+    rendered_body = email_composition_service.compose_template_email_html(
+        db=db,
+        org_id=org_id,
+        recipient_email=to_email,
+        rendered_body_html=rendered_body,
+        scope="personal" if scope == "personal" else "org",
+        sender_user_id=actor_user_id if scope == "personal" else None,
+        portal_base_url=portal_base_url,
+    )
+
+    if scope == "personal":
+        return await send_test_via_user_gmail(
+            db=db,
+            org_id=org_id,
+            sender_user_id=actor_user_id,
+            to_email=to_email,
+            subject=rendered_subject,
+            html=rendered_body,
+            template_id=template_id,
+            idempotency_key=idempotency_key,
+            ignore_opt_out=ignore_opt_out,
+        )
+    return await send_test_via_org_provider(
+        db=db,
+        org_id=org_id,
+        to_email=to_email,
+        subject=rendered_subject,
+        html=rendered_body,
+        template_id=template_id,
+        idempotency_key=idempotency_key,
+        template_from_email=template_from_email,
+        ignore_opt_out=ignore_opt_out,
+    )
