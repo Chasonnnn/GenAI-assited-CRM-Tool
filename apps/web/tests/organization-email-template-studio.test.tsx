@@ -13,17 +13,35 @@ const mocks = vi.hoisted(() => ({
     updateDraft: vi.fn(),
     discardDraft: vi.fn(),
     publishDraft: vi.fn(),
+    restoreDraftVersion: vi.fn(),
     sendTestDraft: vi.fn(),
     richTextEditor: vi.fn(),
     refetchDrafts: vi.fn(),
     refetchPublished: vi.fn(),
     refetchDraft: vi.fn(),
+    refetchVersions: vi.fn(),
     state: {
         publishedTemplate: null as Record<string, unknown> | null,
         draft: null as Record<string, unknown> | null,
         publishedLookupErrorId: null as string | null,
         draftsLoading: false,
         draftsError: false,
+        versions: [
+            {
+                id: "version-7",
+                version: 7,
+                created_by_user_id: "user-1",
+                comment: "Updated",
+                created_at: "2026-07-23T12:00:00Z",
+            },
+            {
+                id: "version-3",
+                version: 3,
+                created_by_user_id: "user-1",
+                comment: "Created",
+                created_at: "2026-07-01T12:00:00Z",
+            },
+        ],
     },
 }))
 
@@ -92,6 +110,12 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
         refetch: mocks.refetchPublished,
     }),
     useEmailTemplateVariables: () => ({ data: [], isLoading: false }),
+    useEmailTemplateVersions: () => ({
+        data: mocks.state.versions,
+        isLoading: false,
+        isError: false,
+        refetch: mocks.refetchVersions,
+    }),
 }))
 
 vi.mock("@/lib/hooks/use-signature", () => ({
@@ -132,6 +156,10 @@ vi.mock("@/lib/hooks/use-email-template-drafts", () => ({
     }),
     usePublishEmailTemplateDraft: () => ({
         mutateAsync: mocks.publishDraft,
+        isPending: false,
+    }),
+    useRestoreEmailTemplateDraftVersion: () => ({
+        mutateAsync: mocks.restoreDraftVersion,
         isPending: false,
     }),
     useSendTestEmailTemplateDraft: () => ({
@@ -193,11 +221,13 @@ describe("OrganizationEmailTemplateStudio", () => {
         mocks.updateDraft.mockReset()
         mocks.discardDraft.mockReset()
         mocks.publishDraft.mockReset()
+        mocks.restoreDraftVersion.mockReset()
         mocks.sendTestDraft.mockReset()
         mocks.richTextEditor.mockReset()
         mocks.refetchDrafts.mockReset()
         mocks.refetchPublished.mockReset()
         mocks.refetchDraft.mockReset()
+        mocks.refetchVersions.mockReset()
         mocks.state.publishedTemplate = publishedTemplate
         mocks.state.draft = null
         mocks.state.publishedLookupErrorId = null
@@ -209,6 +239,14 @@ describe("OrganizationEmailTemplateStudio", () => {
             ...draftFromPublished,
             subject: "A safer subject",
             revision: 2,
+        })
+        mocks.restoreDraftVersion.mockResolvedValue({
+            ...draftFromPublished,
+            name: "Historical welcome",
+            subject: "Historical subject",
+            body: "<p>Historical body</p>",
+            revision: 2,
+            last_tested_revision: null,
         })
     })
 
@@ -278,6 +316,42 @@ describe("OrganizationEmailTemplateStudio", () => {
         expect(mocks.replace).toHaveBeenCalledWith(
             "/automation/email-templates/org/canonical-template-8",
         )
+    })
+
+    it("restores published history into an isolated draft before production changes", async () => {
+        render(<OrganizationEmailTemplateStudio templateId="template-1" />)
+
+        fireEvent.click(screen.getByRole("button", { name: "View history" }))
+        expect(
+            await screen.findByRole("heading", { name: "Template history" }),
+        ).toBeInTheDocument()
+        expect(
+            screen.getByText(
+                "Review published versions or load one into an isolated draft. Production stays unchanged until you publish.",
+            ),
+        ).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Restore version 3" }))
+        fireEvent.click(screen.getByRole("button", { name: "Restore to draft" }))
+
+        await waitFor(() => {
+            expect(mocks.createDraftFromTemplate).toHaveBeenCalledWith({
+                templateId: "template-1",
+            })
+        })
+        expect(mocks.restoreDraftVersion).toHaveBeenCalledWith({
+            id: "draft-1",
+            data: {
+                target_version: 3,
+                expected_revision: 1,
+            },
+        })
+        expect(screen.getByLabelText("Template name")).toHaveValue(
+            "Historical welcome",
+        )
+        expect(screen.getByLabelText("Subject")).toHaveValue("Historical subject")
+        expect(screen.getByText("Published version 7")).toBeInTheDocument()
+        expect(mocks.publishDraft).not.toHaveBeenCalled()
     })
 
     it("retains the saved draft and offers recovery when publish hits a version conflict", async () => {

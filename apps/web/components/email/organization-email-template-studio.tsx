@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { Route } from "next"
 import { useRouter } from "next/navigation"
-import { ArrowLeftIcon } from "lucide-react"
+import { ArrowLeftIcon, HistoryIcon } from "lucide-react"
 
+import { EmailTemplateHistorySheet } from "@/components/email/EmailTemplateHistorySheet"
 import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
 import {
     RichTextEditor,
@@ -63,11 +64,13 @@ import {
     useEmailTemplateDraft,
     useEmailTemplateDrafts,
     usePublishEmailTemplateDraft,
+    useRestoreEmailTemplateDraftVersion,
     useSendTestEmailTemplateDraft,
     useUpdateEmailTemplateDraft,
 } from "@/lib/hooks/use-email-template-drafts"
 import {
     useEmailTemplate,
+    useEmailTemplateVersions,
     useEmailTemplateVariables,
 } from "@/lib/hooks/use-email-templates"
 import { useOrgSignaturePreview } from "@/lib/hooks/use-signature"
@@ -286,6 +289,7 @@ function OrganizationEmailTemplateEditor({
     const updateDraft = useUpdateEmailTemplateDraft()
     const discardDraft = useDiscardEmailTemplateDraft()
     const publishDraft = usePublishEmailTemplateDraft()
+    const restoreDraftVersion = useRestoreEmailTemplateDraftVersion()
     const sendTestDraft = useSendTestEmailTemplateDraft()
     const orgSignaturePreview = useOrgSignaturePreview({
         enabled: true,
@@ -309,6 +313,7 @@ function OrganizationEmailTemplateEditor({
     const [isDiscarding, setIsDiscarding] = useState(false)
     const [discardError, setDiscardError] = useState<string | null>(null)
     const [publishOpen, setPublishOpen] = useState(false)
+    const [historyOpen, setHistoryOpen] = useState(false)
     const [isPublishing, setIsPublishing] = useState(false)
     const [publishError, setPublishError] = useState<string | null>(null)
     const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
@@ -344,6 +349,10 @@ function OrganizationEmailTemplateEditor({
     const requiresRefresh = saveConflict || Boolean(draft?.is_stale)
     const publishedVersion =
         draft?.published_version ?? publishedTemplate?.current_version ?? null
+    const templateVersions = useEmailTemplateVersions(
+        publishedTemplate?.id ?? null,
+        historyOpen,
+    )
 
     const leaveStudio = (destination = "/automation/email-templates") => {
         setPendingNavigation(null)
@@ -532,6 +541,43 @@ function OrganizationEmailTemplateEditor({
         }
     }
 
+    const handleRestoreVersion = async (targetVersion: number) => {
+        if (!publishedTemplate || isDirty || requiresRefresh) return
+
+        setSaveError(null)
+        try {
+            let activeDraft = draft
+            if (!activeDraft) {
+                activeDraft = await createDraftFromTemplate.mutateAsync({
+                    templateId: publishedTemplate.id,
+                })
+            }
+            const restoredDraft = await restoreDraftVersion.mutateAsync({
+                id: activeDraft.id,
+                data: {
+                    target_version: targetVersion,
+                    expected_revision: activeDraft.revision,
+                },
+            })
+            const restoredFields = fieldsFromTemplate(restoredDraft)
+            setDraft(restoredDraft)
+            setFields(restoredFields)
+            setSavedFields(restoredFields)
+            setBodyMode(getEmailTemplateBodyMode(restoredFields.body))
+            setHistoryOpen(false)
+        } catch (error) {
+            setHistoryOpen(false)
+            if (error instanceof ApiError && error.status === 409) {
+                setSaveConflict(true)
+            } else {
+                setSaveError(
+                    "That version could not be restored. Your published template was not changed.",
+                )
+            }
+            throw error
+        }
+    }
+
     const handleTestOpenChange = (open: boolean) => {
         setTestOpen(open)
         if (!open && !isSendingTest) {
@@ -606,7 +652,18 @@ function OrganizationEmailTemplateEditor({
                         {publishedTemplate ? "Edit email template" : "New email template"}
                     </h1>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                    {publishedTemplate ? (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setHistoryOpen(true)}
+                            disabled={requiresRefresh}
+                        >
+                            <HistoryIcon aria-hidden="true" />
+                            View history
+                        </Button>
+                    ) : null}
                     <Button
                         type="button"
                         variant="outline"
@@ -899,6 +956,28 @@ function OrganizationEmailTemplateEditor({
                     </CardContent>
                 </Card>
             </section>
+
+            {publishedTemplate ? (
+                <EmailTemplateHistorySheet
+                    open={historyOpen}
+                    onOpenChange={setHistoryOpen}
+                    templateName={fields.name || publishedTemplate.name}
+                    currentVersion={publishedTemplate.current_version}
+                    versions={templateVersions.data ?? []}
+                    isLoading={templateVersions.isLoading}
+                    isError={templateVersions.isError}
+                    onRetry={() => {
+                        void templateVersions.refetch()
+                    }}
+                    onRestore={handleRestoreVersion}
+                    isRestoring={
+                        restoreDraftVersion.isPending ||
+                        isDirty ||
+                        requiresRefresh
+                    }
+                    restoreMode="draft"
+                />
+            ) : null}
 
             <AlertDialog open={publishOpen} onOpenChange={setPublishOpen}>
                 <AlertDialogContent>
