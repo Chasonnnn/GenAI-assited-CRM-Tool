@@ -37,7 +37,12 @@ from app.jobs.handlers.meta import (  # noqa: F401
     process_meta_spend_sync,
 )
 from app.jobs.registry import resolve_job_handler
-from app.services import email_service, job_service, scan_dispatch_service
+from app.services import (
+    email_delivery_dispatch,
+    email_service,
+    job_service,
+    scan_dispatch_service,
+)
 
 monitoring = setup_gcp_monitoring(f"{settings.GCP_SERVICE_NAME}-worker")
 
@@ -77,6 +82,25 @@ GMAIL_SYNC_FALLBACK_ENABLED = _env_flag_enabled(
     default=True,
 )
 GMAIL_SYNC_FALLBACK_INTERVAL_SECONDS = int(os.getenv("GMAIL_SYNC_FALLBACK_INTERVAL_SECONDS", "60"))
+EMAIL_DELIVERY_DISPATCH_ENABLED = _env_flag_enabled(
+    os.getenv("EMAIL_DELIVERY_DISPATCH_ENABLED"),
+    default=True,
+)
+EMAIL_DELIVERY_BATCH_SIZE = max(
+    1,
+    min(
+        email_delivery_dispatch.MAX_DELIVERY_BATCH_SIZE,
+        int(os.getenv("EMAIL_DELIVERY_BATCH_SIZE", "10")),
+    ),
+)
+EMAIL_DELIVERY_MAX_BATCHES_PER_TICK = max(
+    1,
+    min(100, int(os.getenv("EMAIL_DELIVERY_MAX_BATCHES_PER_TICK", "10"))),
+)
+EMAIL_DELIVERY_LEASE_SECONDS = max(
+    email_delivery_dispatch.MIN_DELIVERY_LEASE_SECONDS,
+    int(os.getenv("EMAIL_DELIVERY_LEASE_SECONDS", "120")),
+)
 
 
 def parse_worker_job_types(raw: str | None) -> list[str] | None:
@@ -536,6 +560,28 @@ def _rate_limit_backoff_seconds(attempts: int) -> int:
     return delay + jitter
 
 
+def _mark_send_email_failed(db, job, error_msg: str) -> None:
+    """Project a legacy email failure without crossing the job's tenant boundary."""
+    email_log_id = (job.payload or {}).get("email_log_id")
+    if not email_log_id:
+        return
+    try:
+        parsed_email_log_id = UUID(email_log_id)
+    except (TypeError, ValueError):
+        return
+
+    email_log = (
+        db.query(EmailLog)
+        .filter(
+            EmailLog.id == parsed_email_log_id,
+            EmailLog.organization_id == job.organization_id,
+        )
+        .first()
+    )
+    if email_log:
+        email_service.mark_email_failed(db, email_log, error_msg)
+
+
 async def worker_loop() -> None:
     """Main worker loop - polls for and processes pending jobs."""
     claimed_job_types = _claimed_job_types()
@@ -557,8 +603,38 @@ async def worker_loop() -> None:
     last_session_cleanup = datetime.min.replace(tzinfo=timezone.utc)
     last_google_sync_schedule: datetime | None = None
     last_gmail_sync_schedule: datetime | None = None
+    email_delivery_worker_id = (
+        f"{os.getenv('HOSTNAME', 'worker')}:{os.getpid()}:{secrets.token_hex(4)}"
+    )
 
     while True:
+        if EMAIL_DELIVERY_DISPATCH_ENABLED:
+            try:
+                for _batch_index in range(EMAIL_DELIVERY_MAX_BATCHES_PER_TICK):
+                    summary = await email_delivery_dispatch.dispatch_due_delivery_batch(
+                        session_factory=SessionLocal,
+                        worker_id=email_delivery_worker_id,
+                        limit=EMAIL_DELIVERY_BATCH_SIZE,
+                        lease_for=timedelta(seconds=EMAIL_DELIVERY_LEASE_SECONDS),
+                    )
+                    if summary.claimed:
+                        logger.info(
+                            "Email delivery batch processed "
+                            "(claimed=%s sent=%s retry_scheduled=%s failed=%s "
+                            "cancelled=%s lease_lost=%s unexpected_errors=%s)",
+                            summary.claimed,
+                            summary.sent,
+                            summary.retry_scheduled,
+                            summary.failed,
+                            summary.cancelled,
+                            summary.lease_lost,
+                            summary.unexpected_errors,
+                        )
+                    if summary.claimed < EMAIL_DELIVERY_BATCH_SIZE:
+                        break
+            except Exception:
+                logger.exception("Email delivery batch failed")
+
         with SessionLocal() as db:
             try:
                 now = datetime.now(timezone.utc)
@@ -592,6 +668,22 @@ async def worker_loop() -> None:
                     except Exception as exc:
                         logger.warning("Session cleanup failed: %s", exc)
                     last_session_cleanup = now
+
+                stale_reconciliation = (
+                    job_service.recover_stale_resend_reconciliation_jobs(
+                        db,
+                        now=now,
+                    )
+                )
+                if stale_reconciliation.inspected:
+                    logger.warning(
+                        "Recovered stale Resend reconciliation jobs "
+                        "(inspected=%s requeued=%s failed=%s resolved=%s)",
+                        stale_reconciliation.inspected,
+                        stale_reconciliation.requeued,
+                        stale_reconciliation.failed,
+                        stale_reconciliation.resolved,
+                    )
 
                 jobs = job_service.claim_pending_jobs(
                     db,
@@ -648,15 +740,7 @@ async def worker_loop() -> None:
 
                         # Also mark email as failed if applicable
                         if job.job_type == JobType.SEND_EMAIL.value:
-                            email_log_id = job.payload.get("email_log_id")
-                            if email_log_id:
-                                email_log = (
-                                    db.query(EmailLog)
-                                    .filter(EmailLog.id == UUID(email_log_id))
-                                    .first()
-                                )
-                                if email_log:
-                                    email_service.mark_email_failed(db, email_log, error_msg)
+                            _mark_send_email_failed(db, job, error_msg)
 
             except Exception as e:
                 logger.error("Error in worker loop: %s", e)

@@ -6,6 +6,7 @@ import api from '../api';
 import type { FormSchema } from '@/lib/api/forms';
 import type { ActionConfig, Condition } from '@/lib/api/workflows';
 import type { JsonObject } from '@/lib/types/json';
+import type { ResendReadinessEnvelope } from '@/lib/types/resend-readiness';
 import type { TemplateVariableRead } from '@/lib/types/template-variable';
 
 // Platform user info (from /platform/me)
@@ -182,6 +183,7 @@ interface PlatformSystemEmailCampaignTarget {
 }
 
 export interface PlatformSystemEmailCampaignRequest {
+    campaign_occurrence_id: string;
     targets: PlatformSystemEmailCampaignTarget[];
 }
 
@@ -193,7 +195,7 @@ interface PlatformSystemEmailCampaignFailure {
 }
 
 export interface PlatformSystemEmailCampaignResponse {
-    sent: number;
+    queued: number;
     suppressed: number;
     failed: number;
     recipients: number;
@@ -247,6 +249,14 @@ export function createSupportSession(data: CreateSupportSessionRequest): Promise
  */
 export function getPlatformEmailStatus(): Promise<PlatformEmailStatus> {
     return api.get<PlatformEmailStatus>('/platform/email/status');
+}
+
+export function getPlatformEmailReadiness(): Promise<ResendReadinessEnvelope> {
+    return api.get<ResendReadinessEnvelope>('/platform/email/readiness');
+}
+
+export function requestPlatformEmailReadinessCheck(): Promise<ResendReadinessEnvelope> {
+    return api.post<ResendReadinessEnvelope>('/platform/email/readiness/check');
 }
 
 /**
@@ -468,8 +478,8 @@ export function deletePlatformSystemEmailTemplate(systemKey: string): Promise<vo
  */
 export function sendTestPlatformSystemEmailTemplate(
     systemKey: string,
-    data: { to_email: string; org_id: string }
-): Promise<{ sent: boolean; message_id?: string; email_log_id?: string }> {
+    data: { to_email: string; org_id: string; idempotency_key: string }
+): Promise<{ queued: boolean; message_id?: string | null; email_log_id?: string | null }> {
     return api.post(`/platform/email/system-templates/${systemKey}/test`, data);
 }
 
@@ -581,11 +591,12 @@ export interface PlatformEmailTemplateTestSendRequest {
     org_id: string
     to_email: string
     variables?: Record<string, string>
-    idempotency_key?: string | null
+    idempotency_key: string
 }
 
 export interface EmailTemplateTestSendResponse {
     success: boolean
+    queued?: boolean
     provider_used?: 'resend' | 'gmail' | null
     email_log_id?: string | null
     message_id?: string | null

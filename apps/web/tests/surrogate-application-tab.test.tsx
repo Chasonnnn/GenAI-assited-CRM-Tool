@@ -6,6 +6,7 @@ import { SurrogateApplicationTab } from "@/components/surrogates/SurrogateApplic
 const mockSendFormIntakeLink = vi.fn()
 const mockUseFormIntakeLinks = vi.fn()
 const mockUseSurrogateFormSubmission = vi.fn()
+const mockUseEmailTemplates = vi.fn()
 const FIXED_TIMESTAMP = "2026-01-01T00:00:00.000Z"
 
 vi.mock("@/lib/auth-context", () => ({
@@ -29,10 +30,7 @@ vi.mock("@/lib/hooks/use-forms", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-email-templates", () => ({
-    useEmailTemplates: () => ({
-        data: [{ id: "template-1", name: "Application Invite" }],
-        isLoading: false,
-    }),
+    useEmailTemplates: () => mockUseEmailTemplates(),
 }))
 
 vi.mock("@/lib/api/forms", () => ({
@@ -45,6 +43,14 @@ describe("SurrogateApplicationTab", () => {
         mockSendFormIntakeLink.mockReset()
         mockUseFormIntakeLinks.mockReset()
         mockUseSurrogateFormSubmission.mockReset()
+        mockUseEmailTemplates.mockReset()
+        mockUseEmailTemplates.mockReturnValue({
+            data: [
+                { id: "template-1", name: "Application Invite" },
+                { id: "template-2", name: "Application Reminder" },
+            ],
+            isLoading: false,
+        })
         mockUseSurrogateFormSubmission.mockReturnValue({
             data: null,
             isLoading: false,
@@ -78,7 +84,7 @@ describe("SurrogateApplicationTab", () => {
             intake_link_id: "link-1",
             template_id: "template-1",
             email_log_id: "email-log-1",
-            sent_at: FIXED_TIMESTAMP,
+            queued_at: FIXED_TIMESTAMP,
             intake_url: "https://portal.example.com/intake/shared-slug",
         })
 
@@ -113,8 +119,143 @@ describe("SurrogateApplicationTab", () => {
                 linkId: "link-1",
                 surrogateId: "surrogate-1",
                 templateId: "template-1",
+                idempotencyKey: expect.any(String),
             }),
         )
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+    })
+
+    it("reuses the intake-link occurrence id when a queued request is retried", async () => {
+        mockSendFormIntakeLink
+            .mockRejectedValueOnce(new Error("temporary failure"))
+            .mockResolvedValueOnce({
+                intake_link_id: "link-1",
+                template_id: "template-1",
+                email_log_id: "email-log-1",
+                queued_at: FIXED_TIMESTAMP,
+                intake_url: "https://portal.example.com/intake/shared-slug",
+            })
+
+        render(
+            <SurrogateApplicationTab
+                surrogateId="surrogate-1"
+                formId="form-1"
+                publishedForms={[
+                    {
+                        id: "form-1",
+                        name: "Application Form",
+                        status: "published",
+                        created_at: FIXED_TIMESTAMP,
+                        updated_at: FIXED_TIMESTAMP,
+                    },
+                ]}
+            />,
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: /send form link/i }))
+        const sendButton = await screen.findByRole("button", { name: /^send email$/i })
+        fireEvent.click(sendButton)
+        await waitFor(() => expect(mockSendFormIntakeLink).toHaveBeenCalledTimes(1))
+        await waitFor(() => expect(sendButton).toBeEnabled())
+
+        fireEvent.click(sendButton)
+        await waitFor(() => expect(mockSendFormIntakeLink).toHaveBeenCalledTimes(2))
+
+        const firstOccurrenceId = mockSendFormIntakeLink.mock.calls[0]?.[0]?.idempotencyKey
+        const secondOccurrenceId = mockSendFormIntakeLink.mock.calls[1]?.[0]?.idempotencyKey
+        expect(firstOccurrenceId).toEqual(expect.any(String))
+        expect(secondOccurrenceId).toBe(firstOccurrenceId)
+    })
+
+    it("regenerates the occurrence when the modal template or shared link changes", async () => {
+        mockUseFormIntakeLinks.mockReturnValue({
+            data: [
+                {
+                    id: "link-1",
+                    form_id: "form-1",
+                    slug: "shared-slug",
+                    campaign_name: "Default Shared Link",
+                    event_name: null,
+                    is_active: true,
+                    intake_url: "https://portal.example.com/intake/shared-slug",
+                    created_at: FIXED_TIMESTAMP,
+                    updated_at: FIXED_TIMESTAMP,
+                },
+                {
+                    id: "link-2",
+                    form_id: "form-1",
+                    slug: "reminder-link",
+                    campaign_name: "Reminder Link",
+                    event_name: null,
+                    is_active: true,
+                    intake_url: "https://portal.example.com/intake/reminder-link",
+                    created_at: FIXED_TIMESTAMP,
+                    updated_at: FIXED_TIMESTAMP,
+                },
+            ],
+            isLoading: false,
+            error: null,
+        })
+        mockSendFormIntakeLink
+            .mockRejectedValueOnce(new Error("temporary failure"))
+            .mockRejectedValueOnce(new Error("temporary failure"))
+            .mockResolvedValueOnce({
+                intake_link_id: "link-2",
+                template_id: "template-2",
+                email_log_id: "email-log-2",
+                queued_at: FIXED_TIMESTAMP,
+                intake_url: "https://portal.example.com/intake/reminder-link",
+            })
+
+        render(
+            <SurrogateApplicationTab
+                surrogateId="surrogate-1"
+                formId="form-1"
+                publishedForms={[
+                    {
+                        id: "form-1",
+                        name: "Application Form",
+                        status: "published",
+                        created_at: FIXED_TIMESTAMP,
+                        updated_at: FIXED_TIMESTAMP,
+                    },
+                ]}
+            />,
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: /send form link/i }))
+        const sendButton = await screen.findByRole("button", { name: /^send email$/i })
+        fireEvent.click(sendButton)
+        await waitFor(() => expect(mockSendFormIntakeLink).toHaveBeenCalledTimes(1))
+        await waitFor(() => expect(sendButton).toBeEnabled())
+
+        const templateSelect = screen.getByRole("combobox", { name: /email template/i })
+        fireEvent.click(templateSelect)
+        const templateOption = await screen.findByRole("option", {
+            name: "Application Reminder",
+        })
+        fireEvent.mouseMove(templateOption)
+        fireEvent.click(templateOption)
+        fireEvent.click(sendButton)
+        await waitFor(() => expect(mockSendFormIntakeLink).toHaveBeenCalledTimes(2))
+        await waitFor(() => expect(sendButton).toBeEnabled())
+
+        const linkSelect = screen.getByRole("combobox", { name: /shared intake link/i })
+        fireEvent.click(linkSelect)
+        const linkOption = await screen.findByRole("option", { name: "Reminder Link" })
+        fireEvent.mouseMove(linkOption)
+        fireEvent.click(linkOption)
+        fireEvent.click(sendButton)
+        await waitFor(() => expect(mockSendFormIntakeLink).toHaveBeenCalledTimes(3))
+
+        const firstCall = mockSendFormIntakeLink.mock.calls[0][0]
+        const templateChangedCall = mockSendFormIntakeLink.mock.calls[1][0]
+        const linkChangedCall = mockSendFormIntakeLink.mock.calls[2][0]
+        expect(templateChangedCall.idempotencyKey).not.toBe(firstCall.idempotencyKey)
+        expect(templateChangedCall.templateId).toBe("template-2")
+        expect(linkChangedCall.idempotencyKey).not.toBe(templateChangedCall.idempotencyKey)
+        expect(linkChangedCall.linkId).toBe("link-2")
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
     })
 
     it("uses shadcn selects for shared intake link and email template pickers", async () => {

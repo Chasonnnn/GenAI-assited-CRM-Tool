@@ -4,9 +4,22 @@ import pytest
 
 
 def test_send_email_skips_suppressed(db, test_org):
-    from app.services import email_service, campaign_service
+    from uuid import uuid4
+
+    from app.services import campaign_service, email_service, resend_settings_service
     from app.db.enums import EmailStatus
-    from app.db.models import Job
+    from app.db.models import Job, ResendSettings
+
+    db.add(
+        ResendSettings(
+            organization_id=test_org.id,
+            email_provider="resend",
+            api_key_encrypted=resend_settings_service.encrypt_api_key("re_test_key"),
+            from_email="care@example.com",
+            verified_domain="example.com",
+        )
+    )
+    db.flush()
 
     campaign_service.add_to_suppression(
         db,
@@ -14,20 +27,37 @@ def test_send_email_skips_suppressed(db, test_org):
         email="suppressed@example.com",
         reason="opt_out",
     )
+    occurrence_key = f"suppressed-email/{uuid4()}"
 
-    email_log, job = email_service.send_email(
+    email_log, delivery = email_service.send_email(
         db=db,
         org_id=test_org.id,
         template_id=None,
         recipient_email="suppressed@example.com",
         subject="Hello",
         body="<p>Hi</p>",
+        idempotency_key=occurrence_key,
+    )
+    retried_log, retried_delivery = email_service.send_email(
+        db=db,
+        org_id=test_org.id,
+        template_id=None,
+        recipient_email="suppressed@example.com",
+        subject="Hello",
+        body="<p>Hi</p>",
+        idempotency_key=occurrence_key,
     )
 
-    assert job is None
+    assert delivery is None
+    assert retried_delivery is None
+    assert retried_log.id == email_log.id
     assert email_log.status == EmailStatus.SKIPPED.value
     assert "suppressed" in (email_log.error or "").lower()
     assert email_log.job_id is None
+    assert email_log.idempotency_key == occurrence_key
+    assert email_log.provider == "resend"
+    assert email_log.provider_account_id == f"organization:{test_org.id}"
+    assert email_log.source_type == "organization_email"
 
     jobs = db.query(Job).filter(Job.organization_id == test_org.id).all()
     assert jobs == []
@@ -58,13 +88,18 @@ async def test_workflow_email_skips_suppressed(db, test_org, test_user, monkeypa
         reason="opt_out",
     )
 
-    def fail_resolve(*args, **kwargs):  # pragma: no cover - should not be called
-        raise AssertionError("Provider resolution should not be called for suppressed emails")
-
     monkeypatch.setattr(
         workflow_email_provider,
         "resolve_workflow_email_provider",
-        fail_resolve,
+        lambda **_kwargs: (
+            "resend",
+            {
+                "api_key_encrypted": "write-only",
+                "from_email": "care@example.com",
+                "from_name": "Care Team",
+                "reply_to": None,
+            },
+        ),
     )
 
     job = Job(

@@ -18,16 +18,19 @@ export interface ResendSettings {
     default_sender_email: string | null;
     webhook_url: string;
     webhook_signing_secret_configured: boolean;
+    rate_limit_group_configured: boolean;
     current_version: number;
 }
 
 export interface ResendSettingsUpdate {
     email_provider?: 'resend' | 'gmail' | '';
     api_key?: string;
+    verified_domain?: string;
     from_email?: string;
     from_name?: string;
     reply_to_email?: string;
     webhook_signing_secret?: string;
+    rate_limit_group_token?: string;
     default_sender_user_id?: string | null;
     expected_version?: number;
 }
@@ -36,6 +39,8 @@ export interface TestKeyResponse {
     valid: boolean;
     error: string | null;
     verified_domains: string[];
+    permission_limited: boolean;
+    warning: string | null;
 }
 
 export interface RotateWebhookResponse {

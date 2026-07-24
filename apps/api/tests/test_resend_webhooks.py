@@ -10,6 +10,69 @@ import pytest
 from sqlalchemy import event
 
 
+async def _post_signed_resend_event(
+    client,
+    *,
+    webhook_id: str,
+    webhook_secret: str,
+    payload: dict,
+):
+    import json
+
+    body = json.dumps(payload).encode("utf-8")
+    timestamp = str(int(time.time()))
+    msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+    response = await client.post(
+        f"/webhooks/resend/{webhook_id}",
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "svix-id": msg_id,
+            "svix-timestamp": timestamp,
+            "svix-signature": signature,
+        },
+    )
+    return response
+
+
+def _queue_claimed_resend_delivery(db, organization_id, *, claimed_at):
+    from datetime import timedelta
+
+    from app.services.email_delivery_service import (
+        DeliveryRoute,
+        EmailSource,
+        RenderedEmail,
+        claim_due_deliveries,
+        queue_rendered_email,
+    )
+
+    queued = queue_rendered_email(
+        db,
+        organization_id=organization_id,
+        route=DeliveryRoute.ORGANIZATION_RESEND,
+        provider_account_id=f"organization:{organization_id}",
+        rendered_email=RenderedEmail(
+            recipient_email="race@recipient.com",
+            subject="Provider chronology",
+            html="<p>Provider chronology</p>",
+            text="Provider chronology",
+            from_email="Surrogacy Force <care@example.com>",
+        ),
+        idempotency_key=f"provider-chronology/{uuid.uuid4()}",
+        source=EmailSource(source_type="test"),
+        schedule_at=claimed_at - timedelta(seconds=1),
+        commit=False,
+    )
+    claim = claim_due_deliveries(
+        db,
+        worker_id="worker-a",
+        now=claimed_at,
+        lease_for=timedelta(minutes=2),
+        limit=1,
+    )[0]
+    return queued, claim
+
+
 def _generate_svix_signature(body: bytes, secret: str, timestamp: str) -> str:
     """Generate a valid Svix signature for testing."""
     msg_id = str(uuid.uuid4())
@@ -202,6 +265,9 @@ class TestResendWebhookHandler:
             recipient_email="test@recipient.com",
             subject="Test Email",
             body="<p>Test body</p>",
+            provider="resend",
+            provider_scope="organization",
+            provider_account_id=f"organization:{test_org.id}",
             status=EmailStatus.SENT.value,
             external_id="resend_msg_123",  # Resend message ID
         )
@@ -229,6 +295,19 @@ class TestResendWebhookHandler:
         # Should return 200 even for invalid webhook ID
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
+
+    @pytest.mark.asyncio
+    async def test_resend_webhook_admission_allows_provider_burst(self, client):
+        """A normal provider burst must not inherit the low generic webhook ceiling."""
+        responses = [
+            await client.post(
+                "/webhooks/resend/provider-burst",
+                json={"type": "email.sent", "data": {"email_id": f"msg-{index}"}},
+            )
+            for index in range(101)
+        ]
+
+        assert all(response.status_code == 200 for response in responses)
 
     @pytest.mark.asyncio
     async def test_webhook_delivered_event(self, db, test_org, client, setup_email_log):
@@ -288,6 +367,24 @@ class TestResendWebhookHandler:
         assert response.status_code == 401
 
     @pytest.mark.asyncio
+    async def test_webhook_rejects_processing_when_signing_secret_is_not_configured(
+        self, db, test_org, client
+    ):
+        """An unguessable URL is not a substitute for Svix signature verification."""
+        from app.services import resend_settings_service
+
+        settings = resend_settings_service.get_or_create_resend_settings(
+            db, test_org.id, test_org.id
+        )
+
+        response = await client.post(
+            f"/webhooks/resend/{settings.webhook_id}",
+            json={"type": "email.delivered", "data": {"email_id": "msg_123"}},
+        )
+
+        assert response.status_code == 503
+
+    @pytest.mark.asyncio
     async def test_webhook_delivered_updates_campaign_run_counts(
         self, db, test_org, test_user, client, setup_email_log
     ):
@@ -295,6 +392,7 @@ class TestResendWebhookHandler:
         import json
         from uuid import uuid4
 
+        from app.db.enums import CampaignStatus
         from app.db.models import Campaign, CampaignRun, CampaignRecipient, EmailTemplate
 
         email_log, settings, webhook_secret = setup_email_log
@@ -345,7 +443,8 @@ class TestResendWebhookHandler:
             entity_id=uuid4(),
             recipient_email="test@recipient.com",
             status="sent",
-            external_message_id=str(email_log.id),
+            email_log_id=email_log.id,
+            external_message_id=email_log.external_id,
         )
         db.add(recipient)
         db.commit()
@@ -378,26 +477,131 @@ class TestResendWebhookHandler:
         finally:
             event.remove(engine, "before_cursor_execute", capture_sql)
 
-        campaign_recipient_statements = [
-            statement.lower()
-            for statement in statements
-            if "campaign_recipients" in statement.lower()
-        ]
-        aggregate_statements = [
-            statement
-            for statement in campaign_recipient_statements
-            if "sum(" in statement or "count(" in statement
-        ]
-
         assert response.status_code == 200
-        assert any("sum(" in statement for statement in aggregate_statements)
-        assert all("from (select" not in statement for statement in aggregate_statements)
+        locking_selects = [
+            statement.lower() for statement in statements if "for update" in statement.lower()
+        ]
+        run_lock_index = next(
+            index
+            for index, statement in enumerate(locking_selects)
+            if "from campaign_runs" in statement
+        )
+        campaign_lock_index = next(
+            index
+            for index, statement in enumerate(locking_selects)
+            if "from campaigns" in statement
+        )
+        email_lock_index = next(
+            index
+            for index, statement in enumerate(locking_selects)
+            if "from email_logs" in statement
+        )
+        assert run_lock_index < campaign_lock_index < email_lock_index
 
         db.refresh(recipient)
         db.refresh(run)
+        db.refresh(campaign)
         assert recipient.status == "delivered"
         assert run.delivered_count == 1
         assert run.sent_count == 1
+        assert run.status == "completed"
+        assert run.completed_at is not None
+        assert campaign.status == CampaignStatus.COMPLETED.value
+
+    @pytest.mark.asyncio
+    async def test_webhook_engagement_updates_campaign_run_counts(
+        self, db, test_org, test_user, client, setup_email_log
+    ):
+        """First open and click events must be visible in campaign aggregates immediately."""
+        import json
+        from uuid import uuid4
+
+        from app.db.models import Campaign, CampaignRecipient, CampaignRun, EmailTemplate
+
+        email_log, settings, webhook_secret = setup_email_log
+        template = EmailTemplate(
+            id=uuid4(),
+            organization_id=test_org.id,
+            name="Webhook Engagement Template",
+            subject="Hello",
+            body="<p>Test body</p>",
+            is_active=True,
+        )
+        db.add(template)
+        db.flush()
+        campaign = Campaign(
+            id=uuid4(),
+            organization_id=test_org.id,
+            name="Webhook Engagement Campaign",
+            email_template_id=template.id,
+            recipient_type="case",
+            filter_criteria={},
+            status="sending",
+            created_by_user_id=test_user.id,
+        )
+        db.add(campaign)
+        db.flush()
+        run = CampaignRun(
+            id=uuid4(),
+            organization_id=test_org.id,
+            campaign_id=campaign.id,
+            status="running",
+            total_count=1,
+            sent_count=1,
+            failed_count=0,
+            skipped_count=0,
+            opened_count=0,
+            clicked_count=0,
+        )
+        db.add(run)
+        db.flush()
+        recipient = CampaignRecipient(
+            id=uuid4(),
+            run_id=run.id,
+            entity_type="case",
+            entity_id=uuid4(),
+            recipient_email="test@recipient.com",
+            status="sent",
+            email_log_id=email_log.id,
+            external_message_id=email_log.external_id,
+        )
+        db.add(recipient)
+        db.commit()
+
+        async def post_event(event_type: str, created_at: str):
+            payload = {
+                "type": event_type,
+                "created_at": created_at,
+                "data": {"email_id": email_log.external_id},
+            }
+            body = json.dumps(payload).encode("utf-8")
+            timestamp = str(int(time.time()))
+            msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+            return await client.post(
+                f"/webhooks/resend/{settings.webhook_id}",
+                content=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "svix-id": msg_id,
+                    "svix-timestamp": timestamp,
+                    "svix-signature": signature,
+                },
+            )
+
+        opened = await post_event("email.opened", "2026-07-21T14:04:00.000Z")
+        clicked = await post_event("email.clicked", "2026-07-21T14:05:00.000Z")
+
+        assert opened.status_code == 200
+        assert clicked.status_code == 200
+        db.refresh(email_log)
+        db.refresh(recipient)
+        db.refresh(run)
+        assert email_log.open_count == 1
+        assert email_log.click_count == 1
+        assert recipient.open_count == 1
+        assert recipient.click_count == 1
+        assert run.opened_count == 1
+        assert run.clicked_count == 1
 
     @pytest.mark.asyncio
     async def test_webhook_bounced_hard_adds_suppression(
@@ -637,25 +841,1527 @@ class TestResendWebhookHandler:
         assert suppression.reason == "complaint"
 
     @pytest.mark.asyncio
-    async def test_webhook_no_email_log_found(self, db, test_org, client):
-        """Test that webhook handles missing EmailLog gracefully."""
+    async def test_webhook_complaint_escalates_existing_opt_out_suppression(
+        self, db, test_org, client, setup_email_log
+    ):
+        """A lower-severity row cannot hide later complaint evidence."""
+        import json
+
+        from app.db.models import EmailSuppression
+
+        email_log, settings, webhook_secret = setup_email_log
+        suppression = EmailSuppression(
+            organization_id=test_org.id,
+            email=email_log.recipient_email,
+            reason="opt_out",
+            source_type="unsubscribe",
+        )
+        db.add(suppression)
+        db.commit()
+
+        payload = {
+            "type": "email.complained",
+            "created_at": "2026-07-21T14:03:00.000Z",
+            "data": {"email_id": email_log.external_id},
+        }
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+
+        response = await client.post(
+            f"/webhooks/resend/{settings.webhook_id}",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+
+        assert response.status_code == 200
+        db.refresh(suppression)
+        assert suppression.reason == "complaint"
+        assert suppression.source_type == "email_log"
+        assert suppression.source_id == email_log.id
+
+    @pytest.mark.asyncio
+    async def test_webhook_duplicate_svix_event_is_processed_once(
+        self, db, test_org, client, setup_email_log
+    ):
+        """Resend is at-least-once; replaying one event must not inflate engagement."""
+        import json
+
+        from app.db.models import ResendWebhookEvent
+
+        email_log, settings, webhook_secret = setup_email_log
+        payload = {
+            "type": "email.opened",
+            "created_at": "2026-07-21T14:03:00.000Z",
+            "data": {"email_id": email_log.external_id},
+        }
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+        headers = {
+            "Content-Type": "application/json",
+            "svix-id": msg_id,
+            "svix-timestamp": timestamp,
+            "svix-signature": signature,
+        }
+
+        first = await client.post(
+            f"/webhooks/resend/{settings.webhook_id}",
+            content=body,
+            headers=headers,
+        )
+        second = await client.post(
+            f"/webhooks/resend/{settings.webhook_id}",
+            content=body,
+            headers=headers,
+        )
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        db.refresh(email_log)
+        assert email_log.open_count == 1
+        assert email_log.opened_at.isoformat() == "2026-07-21T14:03:00+00:00"
+        assert (
+            db.query(ResendWebhookEvent)
+            .filter(
+                ResendWebhookEvent.organization_id == test_org.id,
+                ResendWebhookEvent.provider_event_id == msg_id,
+            )
+            .count()
+            == 1
+        )
+
+    @pytest.mark.asyncio
+    async def test_organization_webhook_prefers_signed_correlation_tags(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+    ):
+        """Correlation tags disambiguate provider ids before the legacy lookup."""
+        import json
+
+        from app.db.enums import EmailStatus
+        from app.db.models import EmailLog
+
+        legacy_match, settings, webhook_secret = setup_email_log
+        tagged_match = EmailLog(
+            organization_id=test_org.id,
+            recipient_email="tagged@recipient.com",
+            subject="Tagged email",
+            body="<p>Tagged body</p>",
+            provider="resend",
+            provider_scope="organization",
+            provider_account_id=f"organization:{test_org.id}",
+            status=EmailStatus.SENT.value,
+            external_id=None,
+        )
+        db.add(tagged_match)
+        db.commit()
+
+        payload = {
+            "type": "email.delivered",
+            "created_at": "2026-07-21T14:03:00.000Z",
+            "data": {
+                "email_id": legacy_match.external_id,
+                "tags": {
+                    "organization_id": str(test_org.id),
+                    "email_log_id": str(tagged_match.id),
+                },
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+
+        response = await client.post(
+            f"/webhooks/resend/{settings.webhook_id}",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+
+        assert response.status_code == 200
+        db.refresh(legacy_match)
+        db.refresh(tagged_match)
+        assert legacy_match.resend_status is None
+        assert tagged_match.external_id == legacy_match.external_id
+        assert tagged_match.resend_status == "delivered"
+
+    @pytest.mark.asyncio
+    async def test_organization_webhook_cannot_project_a_platform_resend_message(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+    ):
+        """An organization signature is evidence only for that organization route."""
+        import json
+
+        from app.db.enums import EmailStatus
+        from app.db.models import EmailLog, ResendWebhookEvent
+
+        _existing_log, settings, webhook_secret = setup_email_log
+        platform_email_log = EmailLog(
+            organization_id=test_org.id,
+            recipient_email="platform@recipient.com",
+            subject="Platform Resend email",
+            body="<p>Platform body</p>",
+            provider="resend",
+            provider_scope="platform",
+            provider_account_id="platform:default",
+            status=EmailStatus.SENT.value,
+            external_id=f"platform_msg_{uuid.uuid4().hex}",
+        )
+        db.add(platform_email_log)
+        db.commit()
+
+        payload = {
+            "type": "email.delivered",
+            "created_at": "2026-07-21T14:03:00.000Z",
+            "data": {
+                "email_id": platform_email_log.external_id,
+                "tags": {
+                    "organization_id": str(test_org.id),
+                    "email_log_id": str(platform_email_log.id),
+                },
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+
+        response = await client.post(
+            f"/webhooks/resend/{settings.webhook_id}",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+
+        assert response.status_code == 200
+        db.refresh(platform_email_log)
+        assert platform_email_log.resend_status is None
+        event = (
+            db.query(ResendWebhookEvent)
+            .filter(
+                ResendWebhookEvent.organization_id == test_org.id,
+                ResendWebhookEvent.provider_event_id == msg_id,
+            )
+            .one()
+        )
+        assert event.email_log_id is None
+        assert event.provider_scope == "organization"
+        assert event.provider_account_id == f"organization:{test_org.id}"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("event_type", "expected_resend_status", "expected_email_status"),
+        [
+            ("email.delivered", "delivered", "sent"),
+            ("email.bounced", "bounced", "failed"),
+        ],
+    )
+    async def test_verified_webhook_before_provider_response_remains_canonical(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+        event_type,
+        expected_resend_status,
+        expected_email_status,
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
+        from app.db.models import EmailDeliveryAttempt
+        from app.services.email_delivery_service import record_delivery_success
+
+        _existing_log, settings, webhook_secret = setup_email_log
+        claimed_at = datetime.now(timezone.utc)
+        queued, claim = _queue_claimed_resend_delivery(
+            db,
+            test_org.id,
+            claimed_at=claimed_at,
+        )
+        provider_message_id = f"webhook-first-{uuid.uuid4().hex}"
+        event_created_at = claimed_at + timedelta(seconds=1)
+        response = await _post_signed_resend_event(
+            client,
+            webhook_id=settings.webhook_id,
+            webhook_secret=webhook_secret,
+            payload={
+                "type": event_type,
+                "created_at": event_created_at.isoformat(),
+                "data": {
+                    "email_id": provider_message_id,
+                    "bounce": {"type": "Permanent"},
+                    "tags": {
+                        "organization_id": str(test_org.id),
+                        "email_log_id": str(queued.email_log.id),
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200
+
+        delivery = record_delivery_success(
+            db,
+            claim=claim,
+            provider_message_id=provider_message_id,
+            now=claimed_at + timedelta(seconds=2),
+        )
+
+        db.expire_all()
+        email_log = db.get(type(queued.email_log), queued.email_log.id)
+        attempt = (
+            db.query(EmailDeliveryAttempt)
+            .filter(EmailDeliveryAttempt.delivery_id == delivery.id)
+            .one()
+        )
+        assert delivery.status == EmailDeliveryStatus.SENT.value
+        assert delivery.provider_message_id == provider_message_id
+        assert attempt.outcome == EmailDeliveryAttemptOutcome.SUCCEEDED.value
+        assert attempt.provider_message_id == provider_message_id
+        assert email_log.external_id == provider_message_id
+        assert email_log.resend_status == expected_resend_status
+        assert email_log.status == expected_email_status
+        assert email_log.resend_status_at == event_created_at
+
+    @pytest.mark.asyncio
+    async def test_ambiguous_provider_response_after_verified_webhook_resolves_delivery(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
+        from app.db.models import EmailDeliveryAttempt
+        from app.services.email_delivery_service import (
+            record_delivery_reconciliation_required,
+        )
+
+        _existing_log, settings, webhook_secret = setup_email_log
+        claimed_at = datetime.now(timezone.utc)
+        queued, claim = _queue_claimed_resend_delivery(
+            db,
+            test_org.id,
+            claimed_at=claimed_at,
+        )
+        provider_message_id = f"verified-before-timeout-{uuid.uuid4().hex}"
+        response = await _post_signed_resend_event(
+            client,
+            webhook_id=settings.webhook_id,
+            webhook_secret=webhook_secret,
+            payload={
+                "type": "email.delivered",
+                "created_at": (claimed_at + timedelta(seconds=1)).isoformat(),
+                "data": {
+                    "email_id": provider_message_id,
+                    "tags": {
+                        "organization_id": str(test_org.id),
+                        "email_log_id": str(queued.email_log.id),
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200
+
+        delivery = record_delivery_reconciliation_required(
+            db,
+            claim=claim,
+            error_type="transport_error",
+            error_message="Connection dropped before the response was read",
+            now=claimed_at + timedelta(seconds=2),
+        )
+
+        db.expire_all()
+        email_log = db.get(type(queued.email_log), queued.email_log.id)
+        attempt = (
+            db.query(EmailDeliveryAttempt)
+            .filter(EmailDeliveryAttempt.delivery_id == delivery.id)
+            .one()
+        )
+        assert delivery.status == EmailDeliveryStatus.SENT.value
+        assert delivery.provider_message_id == provider_message_id
+        assert delivery.last_error is None
+        assert email_log.external_id == provider_message_id
+        assert email_log.resend_status == "delivered"
+        assert email_log.status == "sent"
+        assert attempt.outcome == EmailDeliveryAttemptOutcome.TERMINAL_ERROR.value
+        assert attempt.error_type == "transport_error"
+
+    @pytest.mark.asyncio
+    async def test_retryable_failure_after_verified_webhook_does_not_schedule_duplicate(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
+        from app.db.models import EmailDeliveryAttempt
+        from app.services.email_delivery_service import record_delivery_failure
+
+        _existing_log, settings, webhook_secret = setup_email_log
+        claimed_at = datetime.now(timezone.utc)
+        queued, claim = _queue_claimed_resend_delivery(
+            db,
+            test_org.id,
+            claimed_at=claimed_at,
+        )
+        provider_message_id = f"verified-before-failure-{uuid.uuid4().hex}"
+        event_created_at = claimed_at + timedelta(seconds=1)
+        response = await _post_signed_resend_event(
+            client,
+            webhook_id=settings.webhook_id,
+            webhook_secret=webhook_secret,
+            payload={
+                "type": "email.bounced",
+                "created_at": event_created_at.isoformat(),
+                "data": {
+                    "email_id": provider_message_id,
+                    "bounce": {"type": "Permanent"},
+                    "tags": {
+                        "organization_id": str(test_org.id),
+                        "email_log_id": str(queued.email_log.id),
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200
+
+        db.expire_all()
+        webhook_email_log = db.get(type(queued.email_log), queued.email_log.id)
+        webhook_error = webhook_email_log.error
+        assert webhook_email_log.resend_status == "bounced"
+        assert webhook_email_log.status == "failed"
+
+        failed_at = claimed_at + timedelta(seconds=2)
+        delivery = record_delivery_failure(
+            db,
+            claim=claim,
+            retryable=True,
+            error_type="transport_error",
+            error_message="Connection dropped before the response was read",
+            provider_outcome_unknown=True,
+            now=failed_at,
+        )
+
+        db.expire_all()
+        email_log = db.get(type(queued.email_log), queued.email_log.id)
+        attempt = (
+            db.query(EmailDeliveryAttempt)
+            .filter(EmailDeliveryAttempt.delivery_id == delivery.id)
+            .one()
+        )
+        assert delivery.status == EmailDeliveryStatus.SENT.value
+        assert delivery.provider_message_id == provider_message_id
+        assert delivery.completed_at == failed_at
+        assert delivery.last_error is None
+        assert delivery.lease_token is None
+        assert email_log.external_id == provider_message_id
+        assert email_log.resend_status == "bounced"
+        assert email_log.resend_status_at == event_created_at
+        assert email_log.status == "failed"
+        assert email_log.error == webhook_error
+        assert attempt.outcome == EmailDeliveryAttemptOutcome.TERMINAL_ERROR.value
+        assert attempt.error_type == "transport_error"
+
+    @pytest.mark.asyncio
+    async def test_final_lease_expiry_after_verified_webhook_does_not_dead_letter(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
+        from app.db.models import EmailDeliveryAttempt
+        from app.services.email_delivery_service import claim_due_deliveries
+
+        _existing_log, settings, webhook_secret = setup_email_log
+        claimed_at = datetime.now(timezone.utc)
+        queued, _claim = _queue_claimed_resend_delivery(
+            db,
+            test_org.id,
+            claimed_at=claimed_at,
+        )
+        queued.delivery.max_attempts = 1
+        db.commit()
+
+        provider_message_id = f"verified-before-lease-expiry-{uuid.uuid4().hex}"
+        event_created_at = claimed_at + timedelta(seconds=1)
+        response = await _post_signed_resend_event(
+            client,
+            webhook_id=settings.webhook_id,
+            webhook_secret=webhook_secret,
+            payload={
+                "type": "email.bounced",
+                "created_at": event_created_at.isoformat(),
+                "data": {
+                    "email_id": provider_message_id,
+                    "bounce": {"type": "Permanent"},
+                    "tags": {
+                        "organization_id": str(test_org.id),
+                        "email_log_id": str(queued.email_log.id),
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200
+
+        expired_at = claimed_at + timedelta(minutes=3)
+        claims = claim_due_deliveries(
+            db,
+            worker_id="worker-b",
+            now=expired_at,
+            lease_for=timedelta(minutes=1),
+            limit=1,
+        )
+
+        assert claims == []
+        db.expire_all()
+        delivery = db.get(type(queued.delivery), queued.delivery.id)
+        email_log = db.get(type(queued.email_log), queued.email_log.id)
+        attempt = (
+            db.query(EmailDeliveryAttempt)
+            .filter(EmailDeliveryAttempt.delivery_id == delivery.id)
+            .one()
+        )
+        assert delivery.status == EmailDeliveryStatus.SENT.value
+        assert delivery.provider_message_id == provider_message_id
+        assert delivery.completed_at == expired_at
+        assert delivery.last_error is None
+        assert delivery.lease_token is None
+        assert email_log.external_id == provider_message_id
+        assert email_log.resend_status == "bounced"
+        assert email_log.resend_status_at == event_created_at
+        assert email_log.status == "failed"
+        assert attempt.outcome == EmailDeliveryAttemptOutcome.LEASE_EXPIRED.value
+
+    @pytest.mark.asyncio
+    async def test_verified_webhook_resolves_delivery_after_final_lease_expiry(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
+        from app.db.models import EmailDeliveryAttempt
+        from app.services.email_delivery_service import claim_due_deliveries
+
+        _existing_log, settings, webhook_secret = setup_email_log
+        claimed_at = datetime.now(timezone.utc)
+        queued, _claim = _queue_claimed_resend_delivery(
+            db,
+            test_org.id,
+            claimed_at=claimed_at,
+        )
+        queued.delivery.max_attempts = 1
+        db.commit()
+
+        expired_at = claimed_at + timedelta(minutes=3)
+        claims = claim_due_deliveries(
+            db,
+            worker_id="worker-b",
+            now=expired_at,
+            lease_for=timedelta(minutes=1),
+            limit=1,
+        )
+        assert claims == []
+
+        db.expire_all()
+        delivery = db.get(type(queued.delivery), queued.delivery.id)
+        assert delivery.status == EmailDeliveryStatus.RECONCILIATION_REQUIRED.value
+
+        provider_message_id = f"verified-after-lease-expiry-{uuid.uuid4().hex}"
+        event_created_at = expired_at + timedelta(seconds=1)
+        response = await _post_signed_resend_event(
+            client,
+            webhook_id=settings.webhook_id,
+            webhook_secret=webhook_secret,
+            payload={
+                "type": "email.delivered",
+                "created_at": event_created_at.isoformat(),
+                "data": {
+                    "email_id": provider_message_id,
+                    "tags": {
+                        "organization_id": str(test_org.id),
+                        "email_log_id": str(queued.email_log.id),
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200
+
+        db.expire_all()
+        delivery = db.get(type(queued.delivery), queued.delivery.id)
+        email_log = db.get(type(queued.email_log), queued.email_log.id)
+        attempt = (
+            db.query(EmailDeliveryAttempt)
+            .filter(EmailDeliveryAttempt.delivery_id == delivery.id)
+            .one()
+        )
+        assert delivery.status == EmailDeliveryStatus.SENT.value
+        assert delivery.provider_message_id == provider_message_id
+        assert delivery.completed_at == event_created_at
+        assert delivery.last_error is None
+        assert email_log.external_id == provider_message_id
+        assert email_log.resend_status == "delivered"
+        assert email_log.resend_status_at == event_created_at
+        assert email_log.status == "sent"
+        assert attempt.outcome == EmailDeliveryAttemptOutcome.LEASE_EXPIRED.value
+
+    @pytest.mark.asyncio
+    async def test_verified_webhook_resolves_reconciliation_required_delivery(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
+        from app.db.models import EmailDeliveryAttempt, EmailReconciliationCase
+        from app.services.email_delivery_service import (
+            record_delivery_reconciliation_required,
+        )
+
+        _existing_log, settings, webhook_secret = setup_email_log
+        claimed_at = datetime.now(timezone.utc)
+        queued, claim = _queue_claimed_resend_delivery(
+            db,
+            test_org.id,
+            claimed_at=claimed_at,
+        )
+        delivery = record_delivery_reconciliation_required(
+            db,
+            claim=claim,
+            error_type="transport_error",
+            error_message="Connection dropped before the response was read",
+            now=claimed_at + timedelta(seconds=1),
+        )
+        assert delivery.status == EmailDeliveryStatus.RECONCILIATION_REQUIRED.value
+
+        provider_message_id = f"reconciled-by-webhook-{uuid.uuid4().hex}"
+        response = await _post_signed_resend_event(
+            client,
+            webhook_id=settings.webhook_id,
+            webhook_secret=webhook_secret,
+            payload={
+                "type": "email.delivered",
+                "created_at": (claimed_at + timedelta(seconds=2)).isoformat(),
+                "data": {
+                    "email_id": provider_message_id,
+                    "tags": {
+                        "organization_id": str(test_org.id),
+                        "email_log_id": str(queued.email_log.id),
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200
+
+        db.expire_all()
+        delivery = db.get(type(delivery), delivery.id)
+        email_log = db.get(type(queued.email_log), queued.email_log.id)
+        attempt = (
+            db.query(EmailDeliveryAttempt)
+            .filter(EmailDeliveryAttempt.delivery_id == delivery.id)
+            .one()
+        )
+        assert delivery.status == EmailDeliveryStatus.SENT.value
+        assert delivery.provider_message_id == provider_message_id
+        assert delivery.last_error is None
+        assert email_log.external_id == provider_message_id
+        assert email_log.resend_status == "delivered"
+        assert email_log.status == "sent"
+        assert attempt.outcome == EmailDeliveryAttemptOutcome.TERMINAL_ERROR.value
+        assert attempt.error_type == "transport_error"
+        assert attempt.provider_message_id is None
+        reconciliation_case = (
+            db.query(EmailReconciliationCase)
+            .filter(
+                EmailReconciliationCase.organization_id == test_org.id,
+                EmailReconciliationCase.email_delivery_id == delivery.id,
+            )
+            .one()
+        )
+        assert reconciliation_case.status == "resolved"
+        assert reconciliation_case.reason_code == "provider_acceptance_verified"
+        assert reconciliation_case.resolution_code == "provider_evidence_superseded"
+
+    @pytest.mark.asyncio
+    async def test_conflicting_provider_response_does_not_overwrite_verified_webhook_identity(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
+        from app.db.models import EmailDeliveryAttempt
+        from app.services.email_delivery_service import (
+            EmailDeliveryConflict,
+            record_delivery_success,
+        )
+
+        _existing_log, settings, webhook_secret = setup_email_log
+        claimed_at = datetime.now(timezone.utc)
+        queued, claim = _queue_claimed_resend_delivery(
+            db,
+            test_org.id,
+            claimed_at=claimed_at,
+        )
+        verified_provider_message_id = f"verified-id-{uuid.uuid4().hex}"
+        response = await _post_signed_resend_event(
+            client,
+            webhook_id=settings.webhook_id,
+            webhook_secret=webhook_secret,
+            payload={
+                "type": "email.delivered",
+                "created_at": (claimed_at + timedelta(seconds=1)).isoformat(),
+                "data": {
+                    "email_id": verified_provider_message_id,
+                    "tags": {
+                        "organization_id": str(test_org.id),
+                        "email_log_id": str(queued.email_log.id),
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200
+
+        with pytest.raises(EmailDeliveryConflict, match="provider message id"):
+            record_delivery_success(
+                db,
+                claim=claim,
+                provider_message_id=f"conflicting-id-{uuid.uuid4().hex}",
+                now=claimed_at + timedelta(seconds=2),
+            )
+
+        db.expire_all()
+        delivery = db.get(type(queued.delivery), queued.delivery.id)
+        email_log = db.get(type(queued.email_log), queued.email_log.id)
+        attempt = (
+            db.query(EmailDeliveryAttempt)
+            .filter(EmailDeliveryAttempt.delivery_id == delivery.id)
+            .one()
+        )
+        assert delivery.status == EmailDeliveryStatus.LEASED.value
+        assert delivery.provider_message_id == verified_provider_message_id
+        assert email_log.external_id == verified_provider_message_id
+        assert email_log.resend_status == "delivered"
+        assert attempt.outcome == EmailDeliveryAttemptOutcome.IN_PROGRESS.value
+        assert attempt.provider_message_id is None
+
+    @pytest.mark.asyncio
+    async def test_reconcile_job_uses_tags_after_email_log_commit_race(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+    ):
+        """A later-created log is correlated without waiting for external-id projection."""
+        import json
+
+        from app.db.enums import EmailStatus
+        from app.db.models import (
+            EmailLog,
+            EmailReconciliationCase,
+            Job,
+            ResendWebhookEvent,
+        )
+        from app.jobs.handlers.resend import process_resend_event_reconcile
+
+        _existing_log, settings, webhook_secret = setup_email_log
+        future_email_log_id = uuid.uuid4()
+        provider_message_id = f"race_msg_{uuid.uuid4().hex}"
+        payload = {
+            "type": "email.delivered",
+            "created_at": "2026-07-21T14:03:00.000Z",
+            "data": {
+                "email_id": provider_message_id,
+                "tags": {
+                    "organization_id": str(test_org.id),
+                    "email_log_id": str(future_email_log_id),
+                },
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+
+        response = await client.post(
+            f"/webhooks/resend/{settings.webhook_id}",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+        assert response.status_code == 200
+
+        event = (
+            db.query(ResendWebhookEvent)
+            .filter(
+                ResendWebhookEvent.organization_id == test_org.id,
+                ResendWebhookEvent.provider_event_id == msg_id,
+            )
+            .one()
+        )
+        reconcile_job = (
+            db.query(Job)
+            .filter(
+                Job.organization_id == test_org.id,
+                Job.job_type == "resend_event_reconcile",
+                Job.payload["event_id"].astext == str(event.id),
+            )
+            .one()
+        )
+        committed_email_log = EmailLog(
+            id=future_email_log_id,
+            organization_id=test_org.id,
+            recipient_email="race@recipient.com",
+            subject="Race recovery",
+            body="<p>Race recovery</p>",
+            provider="resend",
+            provider_scope="organization",
+            provider_account_id=f"organization:{test_org.id}",
+            status=EmailStatus.SENT.value,
+            external_id=None,
+        )
+        db.add(committed_email_log)
+        db.commit()
+
+        await process_resend_event_reconcile(db, reconcile_job)
+
+        db.refresh(committed_email_log)
+        db.refresh(event)
+        assert committed_email_log.external_id == provider_message_id
+        assert committed_email_log.resend_status == "delivered"
+        assert event.email_log_id == committed_email_log.id
+        assert event.processed_at is not None
+        reconciliation_case = (
+            db.query(EmailReconciliationCase)
+            .filter(
+                EmailReconciliationCase.organization_id == test_org.id,
+                EmailReconciliationCase.resend_webhook_event_id == event.id,
+            )
+            .one()
+        )
+        assert reconciliation_case.status == "resolved"
+        assert reconciliation_case.resolution_code == "correlated_automatically"
+        assert reconciliation_case.resolved_at is not None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("event_type", "expected_resend_status", "expected_status"),
+        [
+            ("email.scheduled", "scheduled", "sent"),
+            ("email.sent", "sent", "sent"),
+            ("email.delivery_delayed", "delivery_delayed", "sent"),
+            ("email.failed", "failed", "failed"),
+            ("email.suppressed", "suppressed", "skipped"),
+        ],
+    )
+    async def test_webhook_tracks_current_delivery_lifecycle_events(
+        self,
+        db,
+        test_org,
+        client,
+        setup_email_log,
+        event_type,
+        expected_resend_status,
+        expected_status,
+    ):
+        import json
+
+        email_log, settings, webhook_secret = setup_email_log
+        event_created_at = "2026-07-21T14:03:00.000Z"
+        payload = {
+            "type": event_type,
+            "created_at": event_created_at,
+            "data": {
+                "email_id": email_log.external_id,
+                "error": {"message": "Provider rejected the message"},
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+
+        response = await client.post(
+            f"/webhooks/resend/{settings.webhook_id}",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+
+        assert response.status_code == 200
+        db.refresh(email_log)
+        assert email_log.resend_status == expected_resend_status
+        assert email_log.status == expected_status
+        assert email_log.resend_status_at.isoformat() == "2026-07-21T14:03:00+00:00"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("event_type", "expected_status", "expected_error"),
+        [
+            ("email.failed", "failed", "Provider rejected the message"),
+            ("email.suppressed", "skipped", "Provider rejected the message"),
+            ("email.bounced", "failed", "bounced"),
+        ],
+    )
+    async def test_terminal_webhook_projects_linked_appointment_email(
+        self,
+        db,
+        test_org,
+        test_user,
+        client,
+        setup_email_log,
+        event_type,
+        expected_status,
+        expected_error,
+    ):
+        import json
+        from datetime import datetime, timedelta, timezone
+        from uuid import uuid4
+
+        from app.db.enums import AppointmentStatus, MeetingMode
+        from app.db.models import Appointment, AppointmentEmailLog, AppointmentType
+
+        email_log, settings, webhook_secret = setup_email_log
+        accepted_at = datetime(2026, 7, 21, 14, 0, tzinfo=timezone.utc)
+        email_log.sent_at = accepted_at
+        appointment_type = AppointmentType(
+            id=uuid4(),
+            organization_id=test_org.id,
+            user_id=test_user.id,
+            slug=f"webhook-appointment-{uuid4().hex[:8]}",
+            name="Webhook Appointment",
+            duration_minutes=30,
+            meeting_mode=MeetingMode.ZOOM.value,
+            is_active=True,
+        )
+        appointment = Appointment(
+            id=uuid4(),
+            organization_id=test_org.id,
+            user_id=test_user.id,
+            appointment_type_id=appointment_type.id,
+            client_name="Webhook Client",
+            client_email=email_log.recipient_email,
+            client_phone="555-123-4567",
+            client_timezone="America/New_York",
+            scheduled_start=accepted_at + timedelta(days=2),
+            scheduled_end=accepted_at + timedelta(days=2, minutes=30),
+            duration_minutes=30,
+            meeting_mode=MeetingMode.ZOOM.value,
+            status=AppointmentStatus.CONFIRMED.value,
+        )
+        appointment_log = AppointmentEmailLog(
+            id=uuid4(),
+            organization_id=test_org.id,
+            appointment_id=appointment.id,
+            email_type="confirmed",
+            recipient_email=email_log.recipient_email,
+            subject=email_log.subject,
+            occurrence_key=f"appointment-email/{appointment.id}/confirmed/{accepted_at.isoformat()}",
+            email_log_id=email_log.id,
+            status="sent",
+            sent_at=accepted_at,
+            external_message_id=email_log.external_id,
+        )
+        email_log.source_type = "appointment_email"
+        email_log.source_id = appointment_log.id
+        db.add_all([appointment_type, appointment, appointment_log])
+        db.commit()
+
+        payload = {
+            "type": event_type,
+            "created_at": "2026-07-21T14:03:00.000Z",
+            "data": {
+                "email_id": email_log.external_id,
+                "error": {"message": "Provider rejected the message"},
+                "bounce": {"type": "Permanent"},
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+
+        response = await client.post(
+            f"/webhooks/resend/{settings.webhook_id}",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+
+        assert response.status_code == 200
+        db.refresh(appointment_log)
+        assert appointment_log.status == expected_status
+        assert appointment_log.error == expected_error
+        assert appointment_log.external_message_id == email_log.external_id
+        assert appointment_log.sent_at == accepted_at
+
+    @pytest.mark.asyncio
+    async def test_webhook_does_not_regress_delivery_state_from_an_older_event(
+        self, db, test_org, client, setup_email_log
+    ):
+        """Resend does not guarantee delivery order, so older events cannot regress state."""
+        import json
+
+        email_log, settings, webhook_secret = setup_email_log
+        timestamp = str(int(time.time()))
+
+        async def post_event(event_type: str, created_at: str):
+            payload = {
+                "type": event_type,
+                "created_at": created_at,
+                "data": {"email_id": email_log.external_id},
+            }
+            body = json.dumps(payload).encode("utf-8")
+            msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+            return await client.post(
+                f"/webhooks/resend/{settings.webhook_id}",
+                content=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "svix-id": msg_id,
+                    "svix-timestamp": timestamp,
+                    "svix-signature": signature,
+                },
+            )
+
+        delivered = await post_event("email.delivered", "2026-07-21T14:04:00.000Z")
+        stale_sent = await post_event("email.sent", "2026-07-21T14:03:00.000Z")
+
+        assert delivered.status_code == 200
+        assert stale_sent.status_code == 200
+        db.refresh(email_log)
+        assert email_log.resend_status == "delivered"
+        assert email_log.status == "sent"
+        assert email_log.resend_status_at.isoformat() == "2026-07-21T14:04:00+00:00"
+
+    @pytest.mark.asyncio
+    async def test_webhook_preserves_permanent_bounce_type_and_suppresses(
+        self, db, test_org, client, setup_email_log
+    ):
+        """Current Resend bounce labels remain auditable while permanent bounces suppress."""
+        import json
+
+        from app.db.models import EmailSuppression
+
+        email_log, settings, webhook_secret = setup_email_log
+        payload = {
+            "type": "email.bounced",
+            "created_at": "2026-07-21T14:03:00.000Z",
+            "data": {
+                "email_id": email_log.external_id,
+                "bounce": {"type": "Permanent"},
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+
+        response = await client.post(
+            f"/webhooks/resend/{settings.webhook_id}",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+
+        assert response.status_code == 200
+        db.refresh(email_log)
+        assert email_log.bounce_type == "Permanent"
+        assert (
+            db.query(EmailSuppression)
+            .filter(
+                EmailSuppression.organization_id == test_org.id,
+                EmailSuppression.email == email_log.recipient_email.lower(),
+            )
+            .count()
+            == 1
+        )
+
+    @pytest.mark.asyncio
+    async def test_webhook_unknown_email_is_durably_accepted_for_reconciliation(
+        self, db, test_org, client
+    ):
+        """Signed events survive the send/commit race without consuming provider retries."""
+        import json
+
+        from app.db.models import EmailReconciliationCase, Job, ResendWebhookEvent
         from app.services import resend_settings_service
 
         settings = resend_settings_service.get_or_create_resend_settings(
             db, test_org.id, test_org.id
+        )
+        webhook_secret_bytes = b"unknown_email_log_webhook_secret"
+        webhook_secret = "whsec_" + base64.urlsafe_b64encode(webhook_secret_bytes).decode(
+            "utf-8"
+        ).rstrip("=")
+        resend_settings_service.update_resend_settings(
+            db,
+            test_org.id,
+            test_org.id,
+            webhook_signing_secret=webhook_secret,
         )
 
         payload = {
             "type": "email.delivered",
             "data": {"email_id": "nonexistent_msg_id"},
         }
-
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
         response = await client.post(
             f"/webhooks/resend/{settings.webhook_id}",
-            json=payload,
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
         )
 
-        # Should return 200 even if EmailLog not found
+        assert response.status_code == 200
+
+        event = (
+            db.query(ResendWebhookEvent)
+            .filter(
+                ResendWebhookEvent.organization_id == test_org.id,
+                ResendWebhookEvent.provider_event_id == msg_id,
+            )
+            .one()
+        )
+        assert event.email_log_id is None
+        assert event.processed_at is None
+        assert event.provider_scope == "organization"
+        assert event.provider_account_id == f"organization:{test_org.id}"
+
+        reconcile_job = (
+            db.query(Job)
+            .filter(
+                Job.organization_id == test_org.id,
+                Job.job_type == "resend_event_reconcile",
+                Job.payload["event_id"].astext == str(event.id),
+            )
+            .one()
+        )
+        assert reconcile_job.status == "pending"
+        reconciliation_case = (
+            db.query(EmailReconciliationCase)
+            .filter(
+                EmailReconciliationCase.organization_id == test_org.id,
+                EmailReconciliationCase.resend_webhook_event_id == event.id,
+            )
+            .one()
+        )
+        assert reconciliation_case.case_type == "orphan_webhook"
+        assert reconciliation_case.status == "pending"
+        assert reconciliation_case.reason_code == "correlation_pending"
+
+        from datetime import datetime, timedelta, timezone
+
+        from app.db.enums import JobStatus
+        from app.jobs.handlers.resend import process_resend_event_reconcile
+        from app.services import job_service
+
+        reconcile_job.status = JobStatus.RUNNING.value
+        reconcile_job.attempts = 5
+        db.commit()
+        retry_started_at = datetime.now(timezone.utc)
+
+        with pytest.raises(RuntimeError, match="correlation pending"):
+            await process_resend_event_reconcile(db, reconcile_job)
+        job_service.mark_job_failed(
+            db,
+            reconcile_job,
+            "Resend event correlation pending",
+        )
+
+        assert reconcile_job.status == JobStatus.PENDING.value
+        assert reconcile_job.run_at >= retry_started_at + timedelta(seconds=70)
+
+        reconcile_job.status = JobStatus.FAILED.value
+        reconcile_job.attempts = reconcile_job.max_attempts
+        reconcile_job.last_error = "Reconciliation window exhausted"
+        db.commit()
+
+        duplicate = await client.post(
+            f"/webhooks/resend/{settings.webhook_id}",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+
+        assert duplicate.status_code == 200
+        db.refresh(reconcile_job)
+        assert reconcile_job.status == JobStatus.PENDING.value
+        assert reconcile_job.attempts == 0
+        assert reconcile_job.last_error is None
+
+    @pytest.mark.asyncio
+    async def test_platform_webhook_static_route_updates_native_email(
+        self, db, test_org, client, monkeypatch
+    ):
+        """The static native-email webhook route must win over the tenant wildcard route."""
+        import json
+
+        from pydantic import SecretStr
+
+        from app.core.config import settings as app_settings
+        from app.db.enums import EmailStatus
+        from app.db.models import EmailLog, Organization, ResendWebhookEvent
+
+        webhook_secret_bytes = b"platform_resend_webhook_secret"
+        webhook_secret = "whsec_" + base64.urlsafe_b64encode(webhook_secret_bytes).decode(
+            "utf-8"
+        ).rstrip("=")
+        monkeypatch.setattr(
+            app_settings,
+            "PLATFORM_RESEND_WEBHOOK_SECRET",
+            SecretStr(webhook_secret),
+        )
+
+        email_log = EmailLog(
+            organization_id=test_org.id,
+            recipient_email="native@recipient.com",
+            subject="Native platform email",
+            body="<p>Native body</p>",
+            provider="resend",
+            provider_scope="platform",
+            provider_account_id="platform:default",
+            status=EmailStatus.SENT.value,
+            external_id=f"platform_msg_{uuid.uuid4().hex}",
+        )
+        db.add(email_log)
+        db.flush()
+
+        other_org = Organization(
+            id=uuid.uuid4(),
+            name="Other Platform Email Organization",
+            slug=f"other-platform-email-{uuid.uuid4().hex[:8]}",
+        )
+        db.add(other_org)
+        db.flush()
+        colliding_email_log = EmailLog(
+            organization_id=other_org.id,
+            recipient_email="other-native@recipient.com",
+            subject="Other native platform email",
+            body="<p>Other native body</p>",
+            provider="resend",
+            provider_scope="platform",
+            provider_account_id="platform:default",
+            status=EmailStatus.SENT.value,
+            external_id=email_log.external_id,
+        )
+        db.add(colliding_email_log)
+        db.commit()
+
+        payload = {
+            "type": "email.delivered",
+            "created_at": "2026-07-21T14:03:00.000Z",
+            "data": {
+                "email_id": email_log.external_id,
+                "tags": {
+                    "organization_id": str(test_org.id),
+                    "email_log_id": str(email_log.id),
+                },
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+        response = await client.post(
+            "/webhooks/resend/platform",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+
+        assert response.status_code == 200
+        db.refresh(email_log)
+        assert email_log.resend_status == "delivered"
+        assert email_log.delivered_at.isoformat() == "2026-07-21T14:03:00+00:00"
+        event = (
+            db.query(ResendWebhookEvent)
+            .filter(
+                ResendWebhookEvent.organization_id == test_org.id,
+                ResendWebhookEvent.provider_event_id == msg_id,
+            )
+            .one()
+        )
+        assert event.provider_scope == "platform"
+        assert event.provider_account_id == "platform:default"
+        db.refresh(colliding_email_log)
+        assert colliding_email_log.resend_status is None
+
+    @pytest.mark.asyncio
+    async def test_platform_webhook_cannot_project_an_organization_resend_message(
+        self,
+        db,
+        test_org,
+        client,
+        monkeypatch,
+    ):
+        """A platform signature is evidence only for the platform delivery route."""
+        import json
+
+        from pydantic import SecretStr
+
+        from app.core.config import settings as app_settings
+        from app.db.enums import EmailStatus
+        from app.db.models import EmailLog, ResendWebhookEvent
+
+        webhook_secret_bytes = b"platform_route_isolation_secret"
+        webhook_secret = "whsec_" + base64.urlsafe_b64encode(webhook_secret_bytes).decode(
+            "utf-8"
+        ).rstrip("=")
+        monkeypatch.setattr(
+            app_settings,
+            "PLATFORM_RESEND_WEBHOOK_SECRET",
+            SecretStr(webhook_secret),
+        )
+
+        organization_email_log = EmailLog(
+            organization_id=test_org.id,
+            recipient_email="organization@recipient.com",
+            subject="Organization Resend email",
+            body="<p>Organization body</p>",
+            provider="resend",
+            provider_scope="organization",
+            provider_account_id=f"organization:{test_org.id}",
+            status=EmailStatus.SENT.value,
+            external_id=f"organization_msg_{uuid.uuid4().hex}",
+        )
+        db.add(organization_email_log)
+        db.commit()
+
+        payload = {
+            "type": "email.delivered",
+            "created_at": "2026-07-21T14:03:00.000Z",
+            "data": {
+                "email_id": organization_email_log.external_id,
+                "tags": {
+                    "organization_id": str(test_org.id),
+                    "email_log_id": str(organization_email_log.id),
+                },
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+
+        response = await client.post(
+            "/webhooks/resend/platform",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+
+        assert response.status_code == 200
+        db.refresh(organization_email_log)
+        assert organization_email_log.resend_status is None
+        event = (
+            db.query(ResendWebhookEvent)
+            .filter(
+                ResendWebhookEvent.organization_id == test_org.id,
+                ResendWebhookEvent.provider_event_id == msg_id,
+            )
+            .one()
+        )
+        assert event.email_log_id is None
+        assert event.provider_scope == "platform"
+        assert event.provider_account_id == "platform:default"
+
+    @pytest.mark.asyncio
+    async def test_webhook_event_id_replay_on_another_route_is_a_noop(
+        self,
+        db,
+        test_org,
+        client,
+        monkeypatch,
+    ):
+        """A Svix id already bound to one route cannot be replayed onto another."""
+        import json
+        from datetime import datetime, timezone
+
+        from pydantic import SecretStr
+
+        from app.core.config import settings as app_settings
+        from app.db.enums import EmailStatus
+        from app.db.models import EmailLog, ResendWebhookEvent
+
+        webhook_secret_bytes = b"platform_route_replay_secret"
+        webhook_secret = "whsec_" + base64.urlsafe_b64encode(webhook_secret_bytes).decode(
+            "utf-8"
+        ).rstrip("=")
+        monkeypatch.setattr(
+            app_settings,
+            "PLATFORM_RESEND_WEBHOOK_SECRET",
+            SecretStr(webhook_secret),
+        )
+
+        platform_email_log = EmailLog(
+            id=uuid.uuid4(),
+            organization_id=test_org.id,
+            recipient_email="platform-replay@recipient.com",
+            subject="Platform replay target",
+            body="<p>Platform body</p>",
+            provider="resend",
+            provider_scope="platform",
+            provider_account_id="platform:default",
+            status=EmailStatus.SENT.value,
+            external_id=f"platform_replay_{uuid.uuid4().hex}",
+        )
+        payload = {
+            "type": "email.delivered",
+            "created_at": "2026-07-21T14:03:00.000Z",
+            "data": {
+                "email_id": platform_email_log.external_id,
+                "tags": {
+                    "organization_id": str(test_org.id),
+                    "email_log_id": str(platform_email_log.id),
+                },
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+        organization_event = ResendWebhookEvent(
+            organization_id=test_org.id,
+            provider_scope="organization",
+            provider_account_id=f"organization:{test_org.id}",
+            provider_event_id=msg_id,
+            event_type="email.delivered",
+            event_created_at=datetime(2026, 7, 21, 14, 2, tzinfo=timezone.utc),
+            payload={"type": "email.delivered", "data": {"email_id": "organization-message"}},
+        )
+        db.add_all([platform_email_log, organization_event])
+        db.commit()
+
+        response = await client.post(
+            "/webhooks/resend/platform",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
+        db.refresh(platform_email_log)
+        db.refresh(organization_event)
+        assert platform_email_log.resend_status is None
+        assert organization_event.email_log_id is None
+        assert organization_event.processed_at is None
+        assert organization_event.provider_scope == "organization"
+        assert organization_event.provider_account_id == f"organization:{test_org.id}"
+
+    @pytest.mark.asyncio
+    async def test_platform_webhook_acknowledges_legacy_event_without_tenant_tags(
+        self, client, monkeypatch
+    ):
+        """Signed pre-tag platform events cannot be scoped and must not retry forever."""
+        import json
+
+        from pydantic import SecretStr
+
+        from app.core.config import settings as app_settings
+
+        webhook_secret_bytes = b"platform_legacy_webhook_secret"
+        webhook_secret = "whsec_" + base64.urlsafe_b64encode(webhook_secret_bytes).decode(
+            "utf-8"
+        ).rstrip("=")
+        monkeypatch.setattr(
+            app_settings,
+            "PLATFORM_RESEND_WEBHOOK_SECRET",
+            SecretStr(webhook_secret),
+        )
+
+        payload = {
+            "type": "email.delivered",
+            "created_at": "2026-07-21T14:03:00.000Z",
+            "data": {"email_id": f"legacy_platform_{uuid.uuid4().hex}"},
+        }
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+
+        response = await client.post(
+            "/webhooks/resend/platform",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
 

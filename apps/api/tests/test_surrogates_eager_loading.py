@@ -9,7 +9,15 @@ from sqlalchemy import event
 from sqlalchemy.orm import Query, joinedload
 
 from app.db.enums import Role
-from app.db.models import EmailTemplate, Membership, Queue, Surrogate, SurrogateActivityLog, User
+from app.db.models import (
+    EmailLog,
+    EmailTemplate,
+    Membership,
+    Queue,
+    Surrogate,
+    SurrogateActivityLog,
+    User,
+)
 from app.routers.surrogates_shared import _surrogate_to_read
 from app.schemas.surrogate import SurrogateCreate
 from app.services import pipeline_service, queue_service, surrogate_service
@@ -290,7 +298,9 @@ def test_list_claim_queue_does_not_use_query_count(db, test_org, test_user, monk
 
     monkeypatch.setattr(Query, "count", _count_should_not_be_called)
 
-    surrogates, total = surrogate_service.list_claim_queue(db=db, org_id=org_id, page=1, per_page=20)
+    surrogates, total = surrogate_service.list_claim_queue(
+        db=db, org_id=org_id, page=1, per_page=20
+    )
 
     assert total >= 1
     assert any(item.id == surrogate.id for item in surrogates)
@@ -558,6 +568,80 @@ def test_list_surrogate_activity_includes_template_name(db, test_org, test_user)
     )
     assert email_activity is not None
     assert email_activity["details"]["template_name"] == template.name
+
+
+def test_list_surrogate_activity_includes_email_delivery_engagement(db, test_org, test_user):
+    from datetime import datetime, timezone
+
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(
+            full_name="Activity Email Engagement",
+            email=f"activity-email-engagement-{uuid4().hex[:8]}@example.com",
+        ),
+    )
+    delivered_at = datetime(2026, 7, 21, 14, 3, tzinfo=timezone.utc)
+    opened_at = datetime(2026, 7, 21, 14, 8, tzinfo=timezone.utc)
+    clicked_at = datetime(2026, 7, 21, 14, 12, tzinfo=timezone.utc)
+    email_log = EmailLog(
+        organization_id=test_org.id,
+        surrogate_id=surrogate.id,
+        recipient_email="recipient@example.com",
+        subject="Welcome",
+        body="<p>Welcome</p>",
+        status="sent",
+        external_id="resend-engagement-123",
+        resend_status="delivered",
+        delivered_at=delivered_at,
+        opened_at=opened_at,
+        open_count=2,
+        clicked_at=clicked_at,
+        click_count=1,
+    )
+    db.add(email_log)
+    db.flush()
+    db.add(
+        SurrogateActivityLog(
+            surrogate_id=surrogate.id,
+            organization_id=test_org.id,
+            activity_type="email_sent",
+            actor_user_id=test_user.id,
+            details={
+                "email_log_id": str(email_log.id),
+                "subject": "Welcome",
+                "provider": "resend",
+            },
+        )
+    )
+    db.flush()
+
+    items, _ = surrogate_service.list_surrogate_activity(
+        db=db,
+        org_id=test_org.id,
+        surrogate_id=surrogate.id,
+        page=1,
+        per_page=20,
+    )
+
+    email_activity = next(
+        item
+        for item in items
+        if item["activity_type"] == "email_sent"
+        and item["details"].get("email_log_id") == str(email_log.id)
+    )
+    assert email_activity["details"] == {
+        "email_log_id": str(email_log.id),
+        "subject": "Welcome",
+        "provider": "resend",
+        "delivery_status": "delivered",
+        "delivered_at": delivered_at.isoformat(),
+        "opened_at": opened_at.isoformat(),
+        "open_count": 2,
+        "clicked_at": clicked_at.isoformat(),
+        "click_count": 1,
+    }
 
 
 def test_list_assignees_selects_only_required_columns():

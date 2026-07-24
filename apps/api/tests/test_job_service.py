@@ -29,27 +29,36 @@ def test_claim_pending_jobs_marks_running(db_engine):
         session.commit()
         org_id = org.id
 
-        job_1 = job_service.schedule_job(
-            db=session,
-            org_id=org.id,
-            job_type=JobType.NOTIFICATION,
+        claim_test_job_type = f"job_claim_test_{uuid.uuid4().hex[:12]}"
+        job_1 = Job(
+            organization_id=org.id,
+            job_type=claim_test_job_type,
             payload={"message": "job-1"},
             run_at=datetime.now(timezone.utc),
+            status=JobStatus.PENDING.value,
         )
-        job_2 = job_service.schedule_job(
-            db=session,
-            org_id=org.id,
-            job_type=JobType.NOTIFICATION,
+        job_2 = Job(
+            organization_id=org.id,
+            job_type=claim_test_job_type,
             payload={"message": "job-2"},
             run_at=datetime.now(timezone.utc),
+            status=JobStatus.PENDING.value,
         )
+        session.add_all([job_1, job_2])
+        session.commit()
         job_ids = [job_1.id, job_2.id]
 
-        claimed = job_service.claim_pending_jobs(session, limit=1)
+        claimed = job_service.claim_pending_jobs(
+            session,
+            limit=1,
+            job_types=[claim_test_job_type],
+        )
         assert len(claimed) == 1
         claimed_job = claimed[0]
         assert claimed_job.status == JobStatus.RUNNING.value
         assert claimed_job.attempts == 1
+        assert claimed_job.claim_token is not None
+        assert claimed_job.claimed_at is not None
 
         pending = (
             verification_session.query(Job)
@@ -62,6 +71,8 @@ def test_claim_pending_jobs_marks_running(db_engine):
         assert len(pending) == 1
         assert pending[0].id != claimed_job.id
         assert pending[0].status == JobStatus.PENDING.value
+        assert pending[0].claim_token is None
+        assert pending[0].claimed_at is None
     finally:
         session.rollback()
         verification_session.rollback()

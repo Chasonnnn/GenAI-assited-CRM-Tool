@@ -470,7 +470,9 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("RichTextEditorToolbar")
         expect(source).toContain("useSyncRichTextEditorContent(editor, content)")
         expect(contentSyncSource).toContain("useEffect(() =>")
-        expect(contentSyncSource).toContain("editor.commands.setContent(content)")
+        expect(contentSyncSource).toContain(
+            "editor.commands.setContent(content, { emitUpdate: false })",
+        )
         expect(contentSyncSource).toContain("}, [content, editor])")
         expect(source).not.toContain("emoji-picker-react")
         expect(source).not.toContain("BoldIcon")

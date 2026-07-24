@@ -35,6 +35,10 @@ from app.types import JsonObject
 _fernet: Fernet | None = None
 
 
+class VersionEncryptionConfigurationError(ValueError):
+    """Version history encryption is unavailable because its key cannot be used."""
+
+
 def get_fernet() -> Fernet:
     """Get or create Fernet instance for version encryption."""
     global _fernet
@@ -44,11 +48,16 @@ def get_fernet() -> Fernet:
             or settings.META_ENCRYPTION_KEY.get_secret_value()
         )
         if not key:
-            raise ValueError(
+            raise VersionEncryptionConfigurationError(
                 "VERSION_ENCRYPTION_KEY or META_ENCRYPTION_KEY must be set. "
                 "Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
             )
-        _fernet = Fernet(key.encode())
+        try:
+            _fernet = Fernet(key.encode())
+        except ValueError as exc:
+            raise VersionEncryptionConfigurationError(
+                "VERSION_ENCRYPTION_KEY or META_ENCRYPTION_KEY must be a valid Fernet key"
+            ) from exc
     return _fernet
 
 
@@ -210,6 +219,41 @@ def create_version(
                 continue
             raise
 
+    return version
+
+
+def create_version_at(
+    db: Session,
+    org_id: UUID,
+    entity_type: str,
+    entity_id: UUID,
+    version_number: int,
+    payload: JsonObject,
+    created_by_user_id: UUID | None,
+    comment: str | None = None,
+) -> EntityVersion:
+    """Create a snapshot at an explicit version number.
+
+    This is reserved for reconciling legacy entities whose ``current_version``
+    predates version snapshots. It never overwrites an existing history row.
+    """
+    if version_number < 1:
+        raise ValueError("version_number must be at least 1")
+
+    version = EntityVersion(
+        organization_id=org_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        version=version_number,
+        schema_version=1,
+        payload_encrypted=encrypt_payload(payload),
+        checksum=compute_checksum(payload),
+        created_by_user_id=created_by_user_id,
+        comment=comment,
+    )
+    with db.begin_nested():
+        db.add(version)
+        db.flush()
     return version
 
 

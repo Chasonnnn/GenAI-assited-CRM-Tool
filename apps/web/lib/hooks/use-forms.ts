@@ -293,12 +293,14 @@ export function useSendFormIntakeLink() {
             linkId,
             surrogateId,
             templateId,
+            idempotencyKey,
         }: {
             formId: string
             linkId: string
             surrogateId: string
             templateId?: string | null
-        }) => sendFormIntakeLink(formId, linkId, surrogateId, templateId),
+            idempotencyKey: string
+        }) => sendFormIntakeLink(formId, linkId, surrogateId, idempotencyKey, templateId),
         onSuccess: (_data, { surrogateId }) => {
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) })
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) })

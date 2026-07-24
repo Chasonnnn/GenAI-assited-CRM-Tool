@@ -35,7 +35,7 @@ from app.schemas.platform_templates import (
     EmailTemplateLibraryItem,
     EmailTemplateLibraryDetail,
 )
-from app.services import email_service, user_service
+from app.services import email_delivery_service, email_service, user_service
 
 router = APIRouter(
     tags=["Email Templates"],
@@ -369,6 +369,8 @@ def update_template(
             status_code=409,
             detail=f"Version conflict: expected {e.expected}, got {e.actual}",
         )
+    except email_service.TemplateVersionHistoryConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -520,9 +522,15 @@ def send_email(
             surrogate_id=data.surrogate_id,
             schedule_at=data.schedule_at,
             sender_user_id=session.user_id,
+            idempotency_key=data.idempotency_key,
         )
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except (
+        email_delivery_service.EmailDeliveryConflict,
+        email_service.EmailProviderConfigurationError,
+    ) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     if not result:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -586,70 +594,21 @@ async def send_test_email(
                 detail="You can only send tests for your templates unless you can manage email templates",
             )
 
-    from app.services import email_composition_service
-
-    cleaned_body_template = email_composition_service.strip_legacy_unsubscribe_placeholders(
-        template.body
-    )
-    variables_used = email_test_send_service.extract_variables(
-        template.subject, cleaned_body_template
-    )
-    base_vars = email_test_send_service.build_sample_variables(
+    result = await email_test_send_service.send_template_content_test(
         db=db,
         org_id=session.org_id,
-        to_email=str(body.to_email),
+        actor_user_id=session.user_id,
         actor_display_name=session.display_name,
+        scope=template.scope,
+        subject_template=template.subject,
+        body_template=template.body,
+        template_from_email=template.from_email,
+        template_id=template.id,
+        to_email=str(body.to_email),
+        variables=body.variables,
+        idempotency_key=body.idempotency_key,
+        ignore_opt_out=body.ignore_opt_out,
     )
-    base_vars = email_test_send_service.apply_unknown_variable_fallbacks(
-        variables_used=variables_used, variables=base_vars
-    )
-    final_vars = {**base_vars, **(body.variables or {})}
-
-    rendered_subject, rendered_body = email_service.render_template(
-        template.subject,
-        cleaned_body_template,
-        final_vars,
-    )
-
-    from app.services import org_service
-
-    org = org_service.get_org_by_id(db, session.org_id)
-    portal_base_url = org_service.get_org_portal_base_url(org)
-
-    rendered_body = email_composition_service.compose_template_email_html(
-        db=db,
-        org_id=session.org_id,
-        recipient_email=str(body.to_email),
-        rendered_body_html=rendered_body,
-        scope="personal" if template.scope == "personal" else "org",
-        sender_user_id=session.user_id if template.scope == "personal" else None,
-        portal_base_url=portal_base_url,
-    )
-
-    if template.scope == "personal":
-        result = await email_test_send_service.send_test_via_user_gmail(
-            db=db,
-            org_id=session.org_id,
-            sender_user_id=session.user_id,
-            to_email=str(body.to_email),
-            subject=rendered_subject,
-            html=rendered_body,
-            template_id=template.id,
-            idempotency_key=body.idempotency_key,
-            ignore_opt_out=body.ignore_opt_out,
-        )
-    else:
-        result = await email_test_send_service.send_test_via_org_provider(
-            db=db,
-            org_id=session.org_id,
-            to_email=str(body.to_email),
-            subject=rendered_subject,
-            html=rendered_body,
-            template_id=template.id,
-            idempotency_key=body.idempotency_key,
-            template_from_email=template.from_email,
-            ignore_opt_out=body.ignore_opt_out,
-        )
 
     return EmailTemplateTestSendResponse(**result)
 

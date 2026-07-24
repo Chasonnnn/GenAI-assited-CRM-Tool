@@ -81,6 +81,7 @@ export interface EmailTemplateUpdate {
 }
 
 export interface EmailSendRequest {
+    idempotency_key: string
     template_id: string
     recipient_email: string
     variables?: Record<string, string>
@@ -91,12 +92,13 @@ export interface EmailSendRequest {
 export interface EmailTemplateTestSendRequest {
     to_email: string
     variables?: Record<string, string>
-    idempotency_key?: string | null
+    idempotency_key: string
     ignore_opt_out?: boolean
 }
 
 export interface EmailTemplateTestSendResponse {
     success: boolean
+    queued?: boolean
     provider_used?: 'resend' | 'gmail' | null
     email_log_id?: string | null
     message_id?: string | null

@@ -28,6 +28,10 @@ import {
     EmailTemplateLibraryItem,
     EmailTemplateLibraryDetail,
 } from '@/lib/api/email-templates'
+import {
+    listEmailTemplateVersions,
+    rollbackEmailTemplate,
+} from '@/lib/api/email-template-history'
 import type { TemplateVariableRead } from '@/lib/types/template-variable'
 import { surrogateKeys } from './use-surrogates'
 
@@ -38,6 +42,7 @@ const emailTemplateKeys = {
     list: (params: ListTemplatesParams) => [...emailTemplateKeys.lists(), params] as const,
     details: () => [...emailTemplateKeys.all, 'detail'] as const,
     detail: (id: string) => [...emailTemplateKeys.details(), id] as const,
+    versions: (id: string) => [...emailTemplateKeys.all, 'versions', id] as const,
     library: () => [...emailTemplateKeys.all, 'library'] as const,
     libraryDetail: (id: string) => [...emailTemplateKeys.library(), id] as const,
     variables: () => [...emailTemplateKeys.all, 'variables'] as const,
@@ -56,6 +61,14 @@ export function useEmailTemplate(id: string | null) {
         queryKey: emailTemplateKeys.detail(id || ''),
         queryFn: () => getTemplate(id!),
         enabled: !!id,
+    })
+}
+
+export function useEmailTemplateVersions(id: string | null, enabled = true) {
+    return useQuery({
+        queryKey: emailTemplateKeys.versions(id || ''),
+        queryFn: () => listEmailTemplateVersions(id!),
+        enabled: enabled && !!id,
     })
 }
 
@@ -79,6 +92,21 @@ export function useUpdateEmailTemplate() {
         onSuccess: (_, { id }) => {
             void queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
             void queryClient.invalidateQueries({ queryKey: emailTemplateKeys.detail(id) })
+            void queryClient.invalidateQueries({ queryKey: emailTemplateKeys.versions(id) })
+        },
+    })
+}
+
+export function useRollbackEmailTemplate() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({ id, version }: { id: string; version: number }) =>
+            rollbackEmailTemplate(id, version),
+        onSuccess: (_, { id }) => {
+            void queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: emailTemplateKeys.detail(id) })
+            void queryClient.invalidateQueries({ queryKey: emailTemplateKeys.versions(id) })
         },
     })
 }
@@ -91,6 +119,7 @@ export function useDeleteEmailTemplate() {
         onSuccess: (_result, id) => {
             void queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
             queryClient.removeQueries({ queryKey: emailTemplateKeys.detail(id) })
+            queryClient.removeQueries({ queryKey: emailTemplateKeys.versions(id) })
         },
     })
 }

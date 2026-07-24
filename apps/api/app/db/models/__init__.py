@@ -40,7 +40,18 @@ from app.db.models.auth import (
     UserSession,
 )
 from app.db.models.campaigns import Campaign, CampaignRecipient, CampaignRun, CampaignTrackingEvent
-from app.db.models.email import EmailLog, EmailLogAttachment, EmailSuppression, EmailTemplate
+from app.db.models.email import (
+    EmailTemplateDraft,
+    EmailDelivery,
+    EmailDeliveryAttempt,
+    EmailLog,
+    EmailLogAttachment,
+    EmailProviderAdmission,
+    EmailReconciliationCase,
+    EmailSuppression,
+    EmailTemplate,
+    ResendWebhookEvent,
+)
 from app.db.models.forms import (
     Form,
     FormFieldMapping,
@@ -102,6 +113,7 @@ from app.db.models.platform_templates import (
 )
 from app.db.models.pipelines import EntityVersion, Pipeline, PipelineStage
 from app.db.models.queues import Queue, QueueMember
+from app.db.models.resend_readiness import ResendReadinessSnapshot
 from app.db.models.status_changes import StatusChangeRequest
 from app.db.models.surrogates import (
     CustomField,
@@ -180,9 +192,13 @@ __all__ = [
     "DataRetentionPolicy",
     "ImportMappingCorrection",
     "EmailLog",
+    "EmailDelivery",
+    "EmailDeliveryAttempt",
     "EmailLogAttachment",
     "EmailSuppression",
     "EmailTemplate",
+    "EmailTemplateDraft",
+    "ResendWebhookEvent",
     "EntityNote",
     "EntityVersion",
     "ExportJob",
@@ -249,6 +265,7 @@ __all__ = [
     "Queue",
     "QueueMember",
     "RequestMetricsRollup",
+    "ResendReadinessSnapshot",
     "ResendSettings",
     "ZapierInboundWebhook",
     "ZapierOutboundEvent",
@@ -281,6 +298,8 @@ __all__ = [
     "EmailMessageThreadRef",
     "EmailMessageOccurrence",
     "EmailMessageAttachment",
+    "EmailProviderAdmission",
+    "EmailReconciliationCase",
     "User",
     "UserIntegration",
     "UserNotificationSettings",

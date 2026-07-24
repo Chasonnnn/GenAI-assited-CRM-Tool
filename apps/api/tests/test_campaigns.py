@@ -376,7 +376,10 @@ def test_list_suppressions_skips_count_for_short_first_page(db, test_org, monkey
     original_count = Query.count
 
     def _count_should_not_be_called(self, *args, **kwargs):
-        if self.column_descriptions and self.column_descriptions[0].get("name") == "EmailSuppression":
+        if (
+            self.column_descriptions
+            and self.column_descriptions[0].get("name") == "EmailSuppression"
+        ):
             raise AssertionError("list_suppressions should not call Query.count()")
         return original_count(self, *args, **kwargs)
 
@@ -421,6 +424,119 @@ def test_add_to_suppression(db, test_org, test_user):
     assert result is not None
     assert result.email == "newsuppressed@example.com"
     assert result.reason == "opt_out"
+
+
+def test_add_to_suppression_uses_one_atomic_precedence_upsert(
+    db,
+    test_org,
+):
+    """Concurrent webhook evidence must not race through SELECT then INSERT."""
+    from sqlalchemy import event as sqlalchemy_event
+
+    from app.services import campaign_service
+
+    statements: list[str] = []
+
+    def capture_sql(conn, cursor, statement, parameters, context, executemany):
+        del conn, cursor, parameters, context, executemany
+        statements.append(statement.lower())
+
+    engine = db.get_bind()
+    sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        suppression = campaign_service.add_to_suppression(
+            db,
+            test_org.id,
+            "atomic-suppression@example.com",
+            "complaint",
+            "provider_webhook",
+            uuid4(),
+        )
+    finally:
+        sqlalchemy_event.remove(engine, "before_cursor_execute", capture_sql)
+
+    assert suppression.reason == "complaint"
+    writes = [statement for statement in statements if "email_suppressions" in statement]
+    assert any(
+        "insert into email_suppressions" in statement
+        and "on conflict" in statement
+        and "do update" in statement
+        for statement in writes
+    )
+    assert not any(statement.lstrip().startswith("select") for statement in writes)
+
+
+def test_concurrent_suppression_upserts_preserve_the_strongest_evidence(db_engine):
+    """Two webhook workers must converge on one non-regressing row."""
+    from threading import Barrier, Thread
+
+    from app.db.models import EmailSuppression, Organization
+    from app.db.session import SessionLocal
+    from app.services import campaign_service
+
+    organization_id = uuid4()
+    setup = SessionLocal(bind=db_engine)
+    try:
+        setup.add(
+            Organization(
+                id=organization_id,
+                name="Concurrent Suppression",
+                slug=f"concurrent-suppression-{uuid4().hex[:8]}",
+            )
+        )
+        setup.commit()
+    finally:
+        setup.close()
+
+    ready = Barrier(2)
+    errors: list[BaseException] = []
+
+    def upsert(reason: str, source_type: str) -> None:
+        session = SessionLocal(bind=db_engine)
+        try:
+            ready.wait(timeout=5)
+            campaign_service.add_to_suppression(
+                session,
+                organization_id,
+                "race@example.com",
+                reason,
+                source_type,
+                uuid4(),
+            )
+            session.commit()
+        except BaseException as exc:  # pragma: no cover - asserted below
+            errors.append(exc)
+            session.rollback()
+        finally:
+            session.close()
+
+    workers = [
+        Thread(target=upsert, args=("opt_out", "unsubscribe")),
+        Thread(target=upsert, args=("complaint", "provider_webhook")),
+    ]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=10)
+
+    verification = SessionLocal(bind=db_engine)
+    try:
+        rows = (
+            verification.query(EmailSuppression)
+            .filter(
+                EmailSuppression.organization_id == organization_id,
+                EmailSuppression.email == "race@example.com",
+            )
+            .all()
+        )
+        assert errors == []
+        assert len(rows) == 1
+        assert rows[0].reason == "complaint"
+        assert rows[0].source_type == "provider_webhook"
+    finally:
+        verification.query(Organization).filter(Organization.id == organization_id).delete()
+        verification.commit()
+        verification.close()
 
 
 def test_is_email_suppressed_can_ignore_opt_out(db, test_org):
@@ -633,11 +749,16 @@ def test_execute_campaign_run_with_no_recipients(db, test_org, test_user, test_t
     assert result["total_count"] == 0
 
 
-def test_execute_campaign_run_propagates_sender_user_id_to_send_email_jobs(
+def test_execute_campaign_run_queues_correlated_email_delivery(
     db, test_org, test_user, test_template, default_stage
 ):
-    from app.db.enums import JobType
-    from app.db.models import Campaign, CampaignRun, Job, Surrogate
+    from app.db.models import (
+        Campaign,
+        CampaignRecipient,
+        CampaignRun,
+        EmailDelivery,
+        Surrogate,
+    )
     from app.services import campaign_service
 
     recipient_email = normalize_email("campaign-sender@example.com")
@@ -682,6 +803,7 @@ def test_execute_campaign_run_propagates_sender_user_id_to_send_email_jobs(
     )
     db.add(run)
     db.flush()
+    _configure_resend_provider(db, test_org.id)
 
     campaign_service.execute_campaign_run(
         db=db,
@@ -691,17 +813,26 @@ def test_execute_campaign_run_propagates_sender_user_id_to_send_email_jobs(
         actor_user_id=test_user.id,
     )
 
-    job = (
-        db.query(Job)
+    recipient = (
+        db.query(CampaignRecipient)
+        .join(CampaignRun, CampaignRun.id == CampaignRecipient.run_id)
         .filter(
-            Job.organization_id == test_org.id,
-            Job.job_type == JobType.SEND_EMAIL.value,
+            CampaignRun.organization_id == test_org.id,
+            CampaignRecipient.run_id == run.id,
         )
-        .order_by(Job.created_at.desc())
+        .one()
+    )
+    delivery = (
+        db.query(EmailDelivery)
+        .filter(EmailDelivery.organization_id == test_org.id)
+        .order_by(EmailDelivery.created_at.desc())
         .first()
     )
-    assert job is not None
-    assert job.payload["sender_user_id"] == str(test_user.id)
+    assert delivery is not None
+    assert recipient.email_log_id == delivery.email_log_id
+    assert delivery.email_log.source_type == "campaign_recipient"
+    assert delivery.email_log.source_id == recipient.id
+    assert delivery.email_log.purpose == "marketing"
 
 
 def test_execute_campaign_run_skips_opt_out_by_default(
@@ -782,8 +913,6 @@ def test_execute_campaign_run_can_include_opt_out_when_configured(
     db, test_org, test_user, test_template, default_stage
 ):
     """Campaigns can optionally include opt-outs (still excluding bounces/complaints)."""
-    from uuid import UUID
-
     from app.db.models import (
         Surrogate,
         Campaign,
@@ -795,6 +924,7 @@ def test_execute_campaign_run_can_include_opt_out_when_configured(
     from app.services import campaign_service
     from app.db.enums import EmailStatus
 
+    _configure_resend_provider(db, test_org.id)
     email = normalize_email("optout-include@example.com")
     case = Surrogate(
         id=uuid4(),
@@ -859,11 +989,10 @@ def test_execute_campaign_run_can_include_opt_out_when_configured(
     recipient = db.query(CampaignRecipient).filter(CampaignRecipient.run_id == run.id).first()
     assert recipient is not None
     assert recipient.status == "pending"
-    assert recipient.external_message_id
+    assert recipient.email_log_id
+    assert recipient.external_message_id is None
 
-    email_log = (
-        db.query(EmailLog).filter(EmailLog.id == UUID(recipient.external_message_id)).first()
-    )
+    email_log = db.query(EmailLog).filter(EmailLog.id == recipient.email_log_id).first()
     assert email_log is not None
     assert email_log.status == EmailStatus.PENDING.value
 
@@ -1174,7 +1303,7 @@ def test_execute_campaign_run_streams_recipients(
     from types import SimpleNamespace
     from uuid import uuid4
 
-    from app.db.models import CampaignRun
+    from app.db.models import CampaignRun, EmailLog
     from app.schemas.campaign import CampaignCreate
     from app.services import campaign_service, email_service
 
@@ -1251,7 +1380,18 @@ def test_execute_campaign_run_streams_recipients(
     monkeypatch.setattr(email_service, "build_surrogate_template_variables", fake_build_variables)
 
     def fake_send_email(*args, **kwargs):
-        return SimpleNamespace(id=uuid4()), None
+        email_log = EmailLog(
+            organization_id=test_org.id,
+            recipient_email=kwargs["recipient_email"],
+            subject=kwargs["subject"],
+            body=kwargs["body"],
+            source_type=kwargs["source_type"],
+            source_id=kwargs["source_id"],
+            purpose=kwargs["purpose"],
+        )
+        db.add(email_log)
+        db.flush()
+        return email_log, None
 
     monkeypatch.setattr(email_service, "send_email", fake_send_email)
 
@@ -1272,7 +1412,7 @@ def test_execute_campaign_run_uses_bulk_suppression(
     from types import SimpleNamespace
     from uuid import uuid4
 
-    from app.db.models import CampaignRun
+    from app.db.models import CampaignRun, EmailLog
     from app.schemas.campaign import CampaignCreate
     from app.services import campaign_service, email_service
 
@@ -1342,7 +1482,18 @@ def test_execute_campaign_run_uses_bulk_suppression(
     monkeypatch.setattr(email_service, "build_surrogate_template_variables", fake_build_variables)
 
     def fake_send_email(*args, **kwargs):
-        return SimpleNamespace(id=uuid4()), None
+        email_log = EmailLog(
+            organization_id=test_org.id,
+            recipient_email=kwargs["recipient_email"],
+            subject=kwargs["subject"],
+            body=kwargs["body"],
+            source_type=kwargs["source_type"],
+            source_id=kwargs["source_id"],
+            purpose=kwargs["purpose"],
+        )
+        db.add(email_log)
+        db.flush()
+        return email_log, None
 
     monkeypatch.setattr(email_service, "send_email", fake_send_email)
 

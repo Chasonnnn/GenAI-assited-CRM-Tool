@@ -123,6 +123,7 @@ class TemplateVariableRead(BaseModel):
 class EmailSendRequest(BaseModel):
     """Request to send an email from a template."""
 
+    idempotency_key: str = Field(min_length=1, max_length=256)
     template_id: UUID
     recipient_email: EmailStr
     variables: dict[str, str] = {}
@@ -135,7 +136,7 @@ class EmailTemplateTestSendRequest(BaseModel):
 
     to_email: EmailStr
     variables: dict[str, str] = {}
-    idempotency_key: str | None = None
+    idempotency_key: str = Field(min_length=1, max_length=256)
     # Test-only: allows sending even if the recipient opted out of marketing emails.
     # Bounces/complaints remain suppressed.
     ignore_opt_out: bool = False
@@ -147,13 +148,14 @@ class PlatformEmailTemplateTestSendRequest(BaseModel):
     org_id: UUID
     to_email: EmailStr
     variables: dict[str, str] = {}
-    idempotency_key: str | None = None
+    idempotency_key: str = Field(min_length=1, max_length=256)
 
 
 class EmailTemplateTestSendResponse(BaseModel):
     """Response after sending a test email."""
 
     success: bool
+    queued: bool = False
     provider_used: Literal["resend", "gmail"] | None = None
     email_log_id: UUID | None = None
     message_id: str | None = None

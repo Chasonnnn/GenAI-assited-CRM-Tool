@@ -167,6 +167,27 @@ const SF_INVITE_BODY = `<div style="background-color: #f5f5f7; padding: 40px 12p
   </table>
 </div>`
 
+function createCampaignOccurrenceId(): string {
+    const cryptoApi = globalThis.crypto
+    if (typeof cryptoApi?.randomUUID === "function") {
+        return cryptoApi.randomUUID()
+    }
+    if (typeof cryptoApi?.getRandomValues !== "function") {
+        throw new Error("Secure random UUID generation is unavailable")
+    }
+    const bytes = cryptoApi.getRandomValues(new Uint8Array(16))
+    bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40
+    bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"))
+    return [
+        hex.slice(0, 4).join(""),
+        hex.slice(4, 6).join(""),
+        hex.slice(6, 8).join(""),
+        hex.slice(8, 10).join(""),
+        hex.slice(10, 16).join(""),
+    ].join("-")
+}
+
 type EditorMode = "visual" | "html"
 
 type ActiveInsertionTarget = "subject" | "body_html" | "body_visual" | null
@@ -463,13 +484,67 @@ function SystemTemplateCampaignRecipients({
     )
 }
 
+function SystemTemplateLoadError({
+    isRetrying,
+    onBack,
+    onRetry,
+}: {
+    isRetrying: boolean
+    onBack: () => void
+    onRetry: () => void
+}) {
+    return (
+        <div className="flex min-h-[60vh] items-center justify-center p-6">
+            <Card className="w-full max-w-lg">
+                <CardHeader>
+                    <CardTitle>System template unavailable</CardTitle>
+                    <CardDescription>
+                        The editor could not retrieve this system template.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <Alert variant="destructive">
+                        <AlertTriangleIcon aria-hidden="true" />
+                        <AlertTitle>Unable to load system template</AlertTitle>
+                        <AlertDescription>
+                            Check your connection and platform access, then try loading the template
+                            again.
+                        </AlertDescription>
+                    </Alert>
+                    <div className="flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" onClick={onBack}>
+                            <ArrowLeftIcon aria-hidden="true" />
+                            Back to templates
+                        </Button>
+                        <Button type="button" disabled={isRetrying} onClick={onRetry}>
+                            {isRetrying ? (
+                                <>
+                                    <Loader2Icon className="animate-spin" aria-hidden="true" />
+                                    Retrying&hellip;
+                                </>
+                            ) : (
+                                "Retry"
+                            )}
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    )
+}
+
 export default function PlatformSystemEmailTemplatePage() {
     const { push } = useRouter()
     const params = useParams()
     const systemKey = params?.systemKey as string
     const isOrgInvite = systemKey === "org_invite"
 
-    const { data: template, isLoading } = usePlatformSystemEmailTemplate(systemKey)
+    const {
+        data: template,
+        isFetching: templateFetching,
+        isLoading,
+        refetch: refetchTemplate,
+    } = usePlatformSystemEmailTemplate(systemKey)
     const { data: templateVariables = [], isLoading: variablesLoading } = usePlatformSystemEmailTemplateVariables(systemKey)
     const { data: branding } = usePlatformEmailBranding()
     const updateTemplate = useUpdatePlatformSystemEmailTemplate()
@@ -501,7 +576,10 @@ export default function PlatformSystemEmailTemplatePage() {
     const [membersLoading, setMembersLoading] = useState<Record<string, boolean>>({})
     const [selectedUsersByOrg, setSelectedUsersByOrg] = useState<Record<string, string[]>>({})
     const [campaignSending, setCampaignSending] = useState(false)
+    const [campaignFailureSummary, setCampaignFailureSummary] = useState<string | null>(null)
     const logoFileInputRef = useRef<HTMLInputElement | null>(null)
+    const testSendOccurrenceIdRef = useRef<string | null>(null)
+    const campaignOccurrenceIdRef = useRef<string | null>(null)
 
     const subjectRef = useRef<HTMLInputElement | null>(null)
     const subjectSelectionRef = useRef<{ start: number; end: number } | null>(null)
@@ -590,6 +668,8 @@ export default function PlatformSystemEmailTemplatePage() {
     const handleCampaignOpenChange = (open: boolean) => {
         setCampaignOpen(open)
         if (open) {
+            campaignOccurrenceIdRef.current = createCampaignOccurrenceId()
+            setCampaignFailureSummary(null)
             void loadOrganizations()
         }
     }
@@ -616,21 +696,19 @@ export default function PlatformSystemEmailTemplatePage() {
     }
 
     const toggleOrg = (orgId: string, next: boolean) => {
-        setSelectedOrgIds((prev) => {
-            if (next && !prev.includes(orgId)) {
-                void ensureMembersLoaded(orgId)
-                return [...prev, orgId]
-            }
-            if (!next) {
-                const updated = prev.filter((id) => id !== orgId)
-                setSelectedUsersByOrg((userPrev) => {
-                    const copy = { ...userPrev }
-                    delete copy[orgId]
-                    return copy
-                })
-                return updated
-            }
-            return prev
+        if (next) {
+            setSelectedOrgIds((prev) => (
+                prev.includes(orgId) ? prev : [...prev, orgId]
+            ))
+            void ensureMembersLoaded(orgId)
+            return
+        }
+
+        setSelectedOrgIds((prev) => prev.filter((id) => id !== orgId))
+        setSelectedUsersByOrg((prev) => {
+            const nextUsers = { ...prev }
+            delete nextUsers[orgId]
+            return nextUsers
         })
     }
 
@@ -781,6 +859,7 @@ export default function PlatformSystemEmailTemplatePage() {
                 payload,
             })
             currentVersionRef.current = { systemKey, version: updated.current_version }
+            testSendOccurrenceIdRef.current = null
             toast.success("System template updated")
             finishSaving()
         } catch (error) {
@@ -859,14 +938,24 @@ export default function PlatformSystemEmailTemplatePage() {
         setSending(true)
         const finishSending = () => setSending(false)
         try {
-            await sendTest.mutateAsync({
+            const testSendOccurrenceId =
+                testSendOccurrenceIdRef.current ?? createCampaignOccurrenceId()
+            testSendOccurrenceIdRef.current = testSendOccurrenceId
+            const result = await sendTest.mutateAsync({
                 systemKey,
                 payload: {
                     to_email: testEmail.trim(),
                     org_id: testOrgId.trim(),
+                    idempotency_key: testSendOccurrenceId,
                 },
             })
-            toast.success("Test email sent")
+            if (!result.queued) {
+                toast.error("Test email was not durably queued")
+                finishSending()
+                return
+            }
+            testSendOccurrenceIdRef.current = null
+            toast.success("Test email queued")
             finishSending()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to send test email")
@@ -891,12 +980,30 @@ export default function PlatformSystemEmailTemplatePage() {
         setCampaignSending(true)
         const finishSending = () => setCampaignSending(false)
         try {
+            const campaignOccurrenceId =
+                campaignOccurrenceIdRef.current ?? createCampaignOccurrenceId()
+            campaignOccurrenceIdRef.current = campaignOccurrenceId
             const result = await sendCampaign.mutateAsync({
                 systemKey,
-                payload: { targets },
+                payload: {
+                    campaign_occurrence_id: campaignOccurrenceId,
+                    targets,
+                },
             })
+            if (result.failed > 0) {
+                const recipientLabel = result.failed === 1 ? "recipient" : "recipients"
+                setCampaignFailureSummary(
+                    `${result.failed} ${recipientLabel} could not be queued. Review the selected recipients, then retry this campaign.`
+                )
+                toast.error(
+                    "Campaign partially queued. Review the selected recipients and retry."
+                )
+                finishSending()
+                return
+            }
+            setCampaignFailureSummary(null)
             toast.success(
-                `Campaign sent: ${result.sent} delivered, ${result.suppressed} suppressed, ${result.failed} failed`
+                `Campaign queued: ${result.queued} queued, ${result.suppressed} suppressed, ${result.failed} failed`
             )
             setCampaignOpen(false)
             finishSending()
@@ -906,11 +1013,23 @@ export default function PlatformSystemEmailTemplatePage() {
         }
     }
 
-    if (isLoading || !template) {
+    if (isLoading) {
         return (
             <div className="flex items-center justify-center p-10">
                 <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
             </div>
+        )
+    }
+
+    if (!template) {
+        return (
+            <SystemTemplateLoadError
+                isRetrying={templateFetching}
+                onBack={() => push("/ops/templates?tab=system")}
+                onRetry={() => {
+                    void refetchTemplate()
+                }}
+            />
         )
     }
 
@@ -984,6 +1103,15 @@ export default function PlatformSystemEmailTemplatePage() {
                                 </DialogDescription>
                             </DialogHeader>
                             <div className="space-y-4">
+                                {campaignFailureSummary ? (
+                                    <Alert variant="destructive">
+                                        <AlertTriangleIcon aria-hidden="true" />
+                                        <AlertTitle>Campaign needs attention</AlertTitle>
+                                        <AlertDescription>
+                                            {campaignFailureSummary}
+                                        </AlertDescription>
+                                    </Alert>
+                                ) : null}
                                 <div className="space-y-2">
                                     <Label>Organizations</Label>
                                     <div className="relative">
@@ -1356,7 +1484,10 @@ export default function PlatformSystemEmailTemplatePage() {
                                 <Input
                                     id="test-org-id"
                                     value={testOrgId}
-                                    onChange={(event) => setTestOrgId(event.target.value)}
+                                    onChange={(event) => {
+                                        testSendOccurrenceIdRef.current = null
+                                        setTestOrgId(event.target.value)
+                                    }}
                                     placeholder="UUID of an organization"
                                 />
                             </div>
@@ -1366,7 +1497,10 @@ export default function PlatformSystemEmailTemplatePage() {
                                     id="test-email"
                                     type="email"
                                     value={testEmail}
-                                    onChange={(event) => setTestEmail(event.target.value)}
+                                    onChange={(event) => {
+                                        testSendOccurrenceIdRef.current = null
+                                        setTestEmail(event.target.value)
+                                    }}
                                     placeholder="test@example.com"
                                 />
                             </div>

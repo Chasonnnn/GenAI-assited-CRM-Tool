@@ -7,19 +7,30 @@ Provides:
 """
 
 from datetime import datetime, timezone, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.models import Appointment, AppointmentEmailLog, Organization, User
-from app.db.enums import AppointmentEmailType
-from app.services import email_service, org_service
-from app.services.appointment_service import (
-    log_appointment_email,
-    mark_email_sent,
-    mark_email_failed,
+from app.db.enums import (
+    AppointmentEmailType,
+    AppointmentStatus,
+    EmailDeliveryStatus,
+    EmailStatus,
 )
+from app.db.models import (
+    Appointment,
+    AppointmentEmailLog,
+    AppointmentType,
+    EmailDelivery,
+    EmailLog,
+    Organization,
+    User,
+)
+from app.services import email_service, org_service
+from app.services.appointment_service import log_appointment_email
 
 
 # =============================================================================
@@ -406,6 +417,75 @@ def get_or_create_template(
 # =============================================================================
 
 
+def _utc_occurrence_marker(value: datetime | None) -> str:
+    if value is None:
+        return "unspecified"
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat(timespec="microseconds")
+
+
+def _appointment_email_occurrence_key(
+    appointment: Appointment,
+    email_type: AppointmentEmailType,
+    *,
+    old_start: datetime | None,
+    schedule_at: datetime | None,
+) -> str:
+    """Build a stable key for one business-level appointment notification."""
+    if email_type is AppointmentEmailType.REQUEST_RECEIVED:
+        marker = (
+            f"{_utc_occurrence_marker(appointment.created_at)}-at-"
+            f"{_utc_occurrence_marker(appointment.scheduled_start)}"
+        )
+    elif email_type is AppointmentEmailType.CONFIRMED:
+        marker = (
+            f"{_utc_occurrence_marker(appointment.approved_at)}-at-"
+            f"{_utc_occurrence_marker(appointment.scheduled_start)}"
+        )
+    elif email_type is AppointmentEmailType.RESCHEDULED:
+        marker = (
+            f"{_utc_occurrence_marker(old_start)}-to-"
+            f"{_utc_occurrence_marker(appointment.scheduled_start)}"
+        )
+    elif email_type is AppointmentEmailType.CANCELLED:
+        marker = _utc_occurrence_marker(appointment.cancelled_at)
+    else:
+        marker = _utc_occurrence_marker(schedule_at or appointment.scheduled_start)
+    return f"appointment-email/{appointment.id}/{email_type.value}/{marker}"
+
+
+def _appointment_email_occurrence_is_current(
+    appointment_log: AppointmentEmailLog,
+    appointment: Appointment,
+    delivery: EmailDelivery,
+) -> bool:
+    try:
+        email_type = AppointmentEmailType(appointment_log.email_type)
+    except ValueError:
+        return False
+
+    if email_type is AppointmentEmailType.RESCHEDULED:
+        return appointment_log.occurrence_key.endswith(
+            f"-to-{_utc_occurrence_marker(appointment.scheduled_start)}"
+        )
+    if email_type is AppointmentEmailType.REMINDER:
+        expected_key = _appointment_email_occurrence_key(
+            appointment,
+            email_type,
+            old_start=None,
+            schedule_at=delivery.run_at,
+        )
+    else:
+        expected_key = _appointment_email_occurrence_key(
+            appointment,
+            email_type,
+            old_start=None,
+            schedule_at=None,
+        )
+    return appointment_log.occurrence_key == expected_key
+
+
 def send_appointment_email(
     db: Session,
     appointment: Appointment,
@@ -454,33 +534,99 @@ def send_appointment_email(
 
     subject, _ = email_service.render_template(template.subject, "", variables)
 
-    # Log the email
-    email_log = log_appointment_email(
-        db=db,
-        org_id=org.id,
-        appointment_id=appointment.id,
-        email_type=email_type.value,
-        recipient_email=appointment.client_email,
-        subject=subject,
+    occurrence_key = _appointment_email_occurrence_key(
+        appointment,
+        email_type,
+        old_start=old_start,
+        schedule_at=schedule_at,
     )
-
-    # Queue the email
-    try:
-        result = email_service.send_from_template(
-            db=db,
-            org_id=org.id,
-            template_id=template_id,
-            recipient_email=appointment.client_email,
-            variables=variables,
-            schedule_at=schedule_at,
+    existing = (
+        db.query(AppointmentEmailLog)
+        .filter(
+            AppointmentEmailLog.organization_id == org.id,
+            AppointmentEmailLog.occurrence_key == occurrence_key,
         )
-        if result:
-            _, job = result
-            mark_email_sent(db, email_log, str(job.id) if job else None)
-    except Exception as e:
-        mark_email_failed(db, email_log, str(e))
+        .first()
+    )
+    if existing is not None and existing.email_log_id is not None:
+        return existing
 
-    return email_log
+    try:
+        with db.begin_nested():
+            appointment_log = existing or log_appointment_email(
+                db=db,
+                org_id=org.id,
+                appointment_id=appointment.id,
+                email_type=email_type.value,
+                recipient_email=appointment.client_email,
+                subject=subject,
+                occurrence_key=occurrence_key,
+                log_id=uuid4(),
+                commit=False,
+            )
+            result = email_service.send_from_template(
+                db=db,
+                org_id=org.id,
+                template_id=template_id,
+                recipient_email=appointment.client_email,
+                variables=variables,
+                schedule_at=schedule_at,
+                idempotency_key=occurrence_key,
+                source_type="appointment_email",
+                source_id=appointment_log.id,
+                commit=False,
+            )
+            if result is None:
+                raise RuntimeError("Appointment email template is unavailable")
+            outbound_log, _delivery = result
+            appointment_log.email_log_id = outbound_log.id
+            appointment_log.status = outbound_log.status
+            appointment_log.error = outbound_log.error
+            db.flush()
+        db.commit()
+        db.refresh(appointment_log)
+        return appointment_log
+    except IntegrityError:
+        db.expire_all()
+        concurrent = (
+            db.query(AppointmentEmailLog)
+            .filter(
+                AppointmentEmailLog.organization_id == org.id,
+                AppointmentEmailLog.occurrence_key == occurrence_key,
+            )
+            .one_or_none()
+        )
+        if concurrent is None:
+            raise
+        return concurrent
+    except Exception as exc:
+        # Configuration/rendering failures are observable but do not make the
+        # surrounding appointment mutation fail.
+        failed_log = (
+            db.query(AppointmentEmailLog)
+            .filter(
+                AppointmentEmailLog.organization_id == org.id,
+                AppointmentEmailLog.occurrence_key == occurrence_key,
+            )
+            .one_or_none()
+        )
+        if failed_log is None:
+            failed_log = log_appointment_email(
+                db=db,
+                org_id=org.id,
+                appointment_id=appointment.id,
+                email_type=email_type.value,
+                recipient_email=appointment.client_email,
+                subject=subject,
+                occurrence_key=occurrence_key,
+                log_id=uuid4(),
+                commit=False,
+            )
+        failed_log.status = EmailStatus.FAILED.value
+        failed_log.error = str(exc)
+        db.commit()
+        db.refresh(failed_log)
+        return failed_log
 
 
 def schedule_reminder_email(
@@ -506,6 +652,208 @@ def schedule_reminder_email(
         base_url=base_url,
         schedule_at=remind_at,
     )
+
+
+def cancel_queued_appointment_emails(
+    db: Session,
+    appointment: Appointment,
+    *,
+    reason_type: str,
+    reason_message: str,
+    email_types: tuple[AppointmentEmailType, ...] | None = None,
+    keep_run_at: datetime | None = None,
+    now: datetime | None = None,
+    commit: bool = True,
+) -> int:
+    """Cancel selected unleased appointment notifications."""
+    cancelled_at = now or datetime.now(timezone.utc)
+    query = (
+        select(AppointmentEmailLog, EmailLog, EmailDelivery)
+        .join(EmailLog, AppointmentEmailLog.email_log_id == EmailLog.id)
+        .join(EmailDelivery, EmailDelivery.email_log_id == EmailLog.id)
+        .where(
+            AppointmentEmailLog.organization_id == appointment.organization_id,
+            AppointmentEmailLog.appointment_id == appointment.id,
+            EmailLog.organization_id == appointment.organization_id,
+            EmailDelivery.organization_id == appointment.organization_id,
+            EmailDelivery.status.in_(
+                (
+                    EmailDeliveryStatus.PENDING.value,
+                    EmailDeliveryStatus.RETRY_SCHEDULED.value,
+                )
+            ),
+        )
+    )
+    if email_types is not None:
+        query = query.where(
+            AppointmentEmailLog.email_type.in_(email_type.value for email_type in email_types)
+        )
+    if keep_run_at is not None:
+        query = query.where(EmailDelivery.run_at != keep_run_at)
+    bind = db.get_bind()
+    if getattr(bind, "dialect", None) and bind.dialect.name == "postgresql":
+        query = query.with_for_update(of=EmailDelivery)
+
+    rows = db.execute(query).all()
+    for appointment_log, email_log, delivery in rows:
+        delivery.status = EmailDeliveryStatus.CANCELLED.value
+        delivery.completed_at = cancelled_at
+        delivery.last_error_type = reason_type
+        delivery.last_error = reason_message
+        delivery.lease_token = None
+        delivery.lease_owner = None
+        delivery.lease_expires_at = None
+        email_log.status = EmailStatus.SKIPPED.value
+        email_log.error = reason_message
+        appointment_log.status = EmailStatus.SKIPPED.value
+        appointment_log.sent_at = None
+        appointment_log.external_message_id = None
+        appointment_log.error = reason_message
+
+    if commit:
+        db.commit()
+    else:
+        db.flush()
+    return len(rows)
+
+
+def cancel_queued_reminders(
+    db: Session,
+    appointment: Appointment,
+    *,
+    reason_type: str,
+    reason_message: str,
+    keep_run_at: datetime | None = None,
+    now: datetime | None = None,
+    commit: bool = True,
+) -> int:
+    """Cancel unleased reminder deliveries that no longer match the appointment."""
+    return cancel_queued_appointment_emails(
+        db,
+        appointment,
+        reason_type=reason_type,
+        reason_message=reason_message,
+        email_types=(AppointmentEmailType.REMINDER,),
+        keep_run_at=keep_run_at,
+        now=now,
+        commit=commit,
+    )
+
+
+def replace_reminder_after_reschedule(
+    db: Session,
+    appointment: Appointment,
+    *,
+    base_url: str,
+    hours_before: int,
+) -> AppointmentEmailLog | None:
+    """Cancel stale unleased reminders and queue the current occurrence."""
+    if not appointment.scheduled_start:
+        return None
+    replacement_run_at = appointment.scheduled_start - timedelta(hours=hours_before)
+    cancel_queued_reminders(
+        db,
+        appointment,
+        reason_type="appointment_rescheduled",
+        reason_message="Appointment was rescheduled",
+        keep_run_at=replacement_run_at,
+        commit=False,
+    )
+    replacement = schedule_reminder_email(
+        db,
+        appointment,
+        base_url=base_url,
+        hours_before=hours_before,
+    )
+    if replacement is None:
+        db.commit()
+    return replacement
+
+
+def is_appointment_email_delivery_eligible(
+    db: Session,
+    organization_id: UUID,
+    appointment_email_log_id: UUID,
+) -> bool:
+    """Fail closed when a leased notification no longer matches its appointment."""
+    appointment_log = db.execute(
+        select(AppointmentEmailLog).where(
+            AppointmentEmailLog.id == appointment_email_log_id,
+            AppointmentEmailLog.organization_id == organization_id,
+        )
+    ).scalar_one_or_none()
+    if appointment_log is None or appointment_log.email_log_id is None:
+        return False
+
+    appointment_query = (
+        select(Appointment)
+        .where(
+            Appointment.id == appointment_log.appointment_id,
+            Appointment.organization_id == organization_id,
+        )
+        .execution_options(populate_existing=True)
+    )
+    delivery_query = (
+        select(EmailDelivery)
+        .where(
+            EmailDelivery.email_log_id == appointment_log.email_log_id,
+            EmailDelivery.organization_id == organization_id,
+        )
+        .execution_options(populate_existing=True)
+    )
+    bind = db.get_bind()
+    if getattr(bind, "dialect", None) and bind.dialect.name == "postgresql":
+        appointment_query = appointment_query.with_for_update()
+        delivery_query = delivery_query.with_for_update()
+
+    appointment = db.execute(appointment_query).scalar_one_or_none()
+    if appointment is None:
+        return False
+    delivery = db.execute(delivery_query).scalar_one_or_none()
+    if delivery is None or appointment_log.status != EmailStatus.PENDING.value:
+        return False
+
+    if not _appointment_email_occurrence_is_current(
+        appointment_log,
+        appointment,
+        delivery,
+    ):
+        return False
+
+    if appointment_log.email_type == AppointmentEmailType.REQUEST_RECEIVED.value:
+        return appointment.status == AppointmentStatus.PENDING.value
+    if appointment_log.email_type == AppointmentEmailType.CONFIRMED.value:
+        return appointment.status == AppointmentStatus.CONFIRMED.value
+    if appointment_log.email_type == AppointmentEmailType.RESCHEDULED.value:
+        return appointment.status in {
+            AppointmentStatus.PENDING.value,
+            AppointmentStatus.CONFIRMED.value,
+        }
+    if appointment_log.email_type == AppointmentEmailType.CANCELLED.value:
+        return appointment.status == AppointmentStatus.CANCELLED.value
+    if appointment_log.email_type != AppointmentEmailType.REMINDER.value:
+        return False
+    if (
+        appointment.status != AppointmentStatus.CONFIRMED.value
+        or appointment.appointment_type_id is None
+    ):
+        return False
+
+    appointment_type = (
+        db.query(AppointmentType)
+        .filter(
+            AppointmentType.id == appointment.appointment_type_id,
+            AppointmentType.organization_id == organization_id,
+        )
+        .one_or_none()
+    )
+    if appointment_type is None or appointment_type.reminder_hours_before <= 0:
+        return False
+
+    expected_run_at = appointment.scheduled_start - timedelta(
+        hours=appointment_type.reminder_hours_before
+    )
+    return delivery.run_at == expected_run_at
 
 
 # =============================================================================

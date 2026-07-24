@@ -23,7 +23,10 @@ describe("useSyncRichTextEditorContent", () => {
 
         view.rerender({ content: "<p>Updated externally</p>" })
         expect(setContent).toHaveBeenCalledTimes(1)
-        expect(setContent).toHaveBeenCalledWith("<p>Updated externally</p>")
+        expect(setContent).toHaveBeenCalledWith(
+            "<p>Updated externally</p>",
+            { emitUpdate: false },
+        )
 
         view.rerender({ content: "<p>Updated externally</p>" })
         expect(setContent).toHaveBeenCalledTimes(1)

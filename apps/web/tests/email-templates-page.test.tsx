@@ -8,13 +8,19 @@ import type {
     EmailTemplateLibraryItem,
     EmailTemplateListItem,
 } from "@/lib/api/email-templates"
+import type { EmailTemplateVersion } from "@/lib/api/email-template-history"
+import type { EmailTemplateDraft } from "@/lib/api/email-template-drafts"
 
 const mockUseAuth = vi.fn()
+const mockUseEffectivePermissions = vi.fn()
 const mockRichTextEditorProps = vi.fn()
 const mockUseEmailTemplates = vi.fn()
 const mockCreateEmailTemplate = vi.fn()
 const mockUpdateEmailTemplate = vi.fn()
 const mockSendTestEmailTemplate = vi.fn()
+const mockRollbackEmailTemplate = vi.fn()
+const mockDiscardEmailTemplateDraft = vi.fn()
+const mockRouterPush = vi.fn()
 let userSignatureData: Record<string, string | null> | null = null
 const FIXED_TIMESTAMP = "2026-01-01T00:00:00.000Z"
 const TEMPLATE_VARIABLES = [
@@ -25,6 +31,23 @@ const TEMPLATE_VARIABLES = [
         required: false,
         value_type: "text",
         html_safe: false,
+    },
+]
+
+const TEMPLATE_VERSIONS: EmailTemplateVersion[] = [
+    {
+        id: "version-2",
+        version: 2,
+        created_by_user_id: "user_1",
+        comment: "Updated",
+        created_at: "2026-01-02T00:00:00.000Z",
+    },
+    {
+        id: "version-1",
+        version: 1,
+        created_by_user_id: "user_1",
+        comment: "Created",
+        created_at: FIXED_TIMESTAMP,
     },
 ]
 
@@ -52,6 +75,31 @@ const PERSONAL_TEMPLATE: EmailTemplateListItem = {
     owner_user_id: "user_1",
     owner_name: "Admin",
     is_system_template: false,
+    created_at: FIXED_TIMESTAMP,
+    updated_at: FIXED_TIMESTAMP,
+}
+
+const NEW_ORG_DRAFT: EmailTemplateDraft = {
+    id: "draft_new_1",
+    organization_id: "org_1",
+    template_id: null,
+    created_by_user_id: "user_1",
+    updated_by_user_id: "user_1",
+    scope: "org",
+    owner_user_id: null,
+    owner_name: null,
+    name: "New Journey Draft",
+    subject: "Hello {{full_name}}",
+    from_email: null,
+    body: "<p>Hello</p>",
+    is_active: true,
+    category: null,
+    base_version: 0,
+    revision: 3,
+    published_version: null,
+    is_stale: false,
+    last_tested_revision: null,
+    last_tested_at: null,
     created_at: FIXED_TIMESTAMP,
     updated_at: FIXED_TIMESTAMP,
 }
@@ -97,7 +145,7 @@ const TEMPLATE_DETAIL_BY_ID: Record<string, EmailTemplate> = {
         owner_name: null,
         source_template_id: null,
         is_system_template: false,
-        current_version: 1,
+        current_version: 2,
         created_at: FIXED_TIMESTAMP,
         updated_at: FIXED_TIMESTAMP,
     },
@@ -127,18 +175,19 @@ const LIBRARY_TEMPLATE_DETAIL: EmailTemplateLibraryDetail = {
 let personalTemplatesFixture: EmailTemplateListItem[] = [PERSONAL_TEMPLATE]
 let orgTemplatesFixture: EmailTemplateListItem[] = [ORG_TEMPLATE]
 let libraryTemplateDetailFixture: EmailTemplateLibraryDetail | null = LIBRARY_TEMPLATE_DETAIL
+let orgDraftsFixture: EmailTemplateDraft[] = []
 
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => mockUseAuth(),
 }))
 
 vi.mock("@/lib/hooks/use-permissions", () => ({
-    useEffectivePermissions: () => ({ data: { permissions: ["manage_email_templates"] } }),
+    useEffectivePermissions: () => mockUseEffectivePermissions(),
 }))
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({
-        push: vi.fn(),
+        push: mockRouterPush,
         replace: vi.fn(),
         back: vi.fn(),
         prefetch: vi.fn(),
@@ -185,13 +234,34 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
         isLoading: false,
     }),
     useEmailTemplateVariables: () => ({ data: TEMPLATE_VARIABLES, isLoading: false }),
+    useEmailTemplateVersions: (id: string | null, enabled = true) => ({
+        data: id === "tpl_org_1" && enabled ? TEMPLATE_VERSIONS : [],
+        isLoading: false,
+        isError: false,
+        refetch: vi.fn(),
+    }),
     useCreateEmailTemplate: () => ({ mutate: mockCreateEmailTemplate, isPending: false }),
     useUpdateEmailTemplate: () => ({ mutate: mockUpdateEmailTemplate, isPending: false }),
+    useRollbackEmailTemplate: () => ({
+        mutateAsync: mockRollbackEmailTemplate,
+        isPending: false,
+    }),
     useDeleteEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
     useCopyTemplateToPersonal: () => ({ mutate: vi.fn(), isPending: false }),
     useShareTemplateWithOrg: () => ({ mutate: vi.fn(), isPending: false }),
     useCopyTemplateFromLibrary: () => ({ mutate: vi.fn(), isPending: false }),
     useSendTestEmailTemplate: () => ({ mutateAsync: mockSendTestEmailTemplate, isPending: false }),
+}))
+
+vi.mock("@/lib/hooks/use-email-template-drafts", () => ({
+    useEmailTemplateDrafts: () => ({
+        data: orgDraftsFixture,
+        isLoading: false,
+    }),
+    useDiscardEmailTemplateDraft: () => ({
+        mutate: mockDiscardEmailTemplateDraft,
+        isPending: false,
+    }),
 }))
 
 vi.mock("@/lib/hooks/use-signature", () => ({
@@ -219,10 +289,21 @@ describe("EmailTemplatesPage", () => {
         mockCreateEmailTemplate.mockReset()
         mockUpdateEmailTemplate.mockReset()
         mockSendTestEmailTemplate.mockReset()
+        mockRollbackEmailTemplate.mockReset()
+        mockDiscardEmailTemplateDraft.mockReset()
+        mockRouterPush.mockReset()
         mockSendTestEmailTemplate.mockResolvedValue({ provider_used: "resend" })
+        mockRollbackEmailTemplate.mockResolvedValue({
+            ...TEMPLATE_DETAIL_BY_ID.tpl_org_1,
+            name: "Restored Org Template",
+            subject: "Restored subject",
+            body: "<p>Restored body</p>",
+            current_version: 3,
+        })
         userSignatureData = null
         personalTemplatesFixture = [PERSONAL_TEMPLATE]
         orgTemplatesFixture = [ORG_TEMPLATE]
+        orgDraftsFixture = []
         libraryTemplateDetailFixture = LIBRARY_TEMPLATE_DETAIL
         TEMPLATE_DETAIL_BY_ID.tpl_personal_1.body = "<p>Personal Body</p>"
         TEMPLATE_DETAIL_BY_ID.tpl_org_1.body = "<p>Org Body</p>"
@@ -236,12 +317,16 @@ describe("EmailTemplatesPage", () => {
                 ai_enabled: false,
             },
         })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["manage_email_templates"] },
+        })
     })
 
     it("renders updated tabs", () => {
         render(<EmailTemplatesPage />)
         expect(screen.getByRole("tab", { name: "My Email Templates" })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: "Organization Templates" })).toBeInTheDocument()
+        expect(screen.getByRole("tab", { name: "Platform Templates" })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: "My Signature" })).toBeInTheDocument()
     })
 
@@ -284,10 +369,36 @@ describe("EmailTemplatesPage", () => {
                 payload: {
                     to_email: "qa@example.com",
                     variables: { full_name: "Custom Recipient" },
+                    idempotency_key: expect.stringMatching(
+                        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+                    ),
                     ignore_opt_out: true,
                 },
             })
         })
+    })
+
+    it("reuses one test-send occurrence after a request failure", async () => {
+        mockSendTestEmailTemplate
+            .mockRejectedValueOnce(new Error("Temporary failure"))
+            .mockResolvedValueOnce({ queued: true, provider_used: "resend" })
+
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Personal Template" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Send test email" }))
+        fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+
+        await waitFor(() => expect(mockSendTestEmailTemplate).toHaveBeenCalledTimes(1))
+        expect(await screen.findByRole("dialog")).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+        await waitFor(() => expect(mockSendTestEmailTemplate).toHaveBeenCalledTimes(2))
+
+        const firstKey = mockSendTestEmailTemplate.mock.calls[0][0].payload.idempotency_key
+        const retriedKey = mockSendTestEmailTemplate.mock.calls[1][0].payload.idempotency_key
+        expect(firstKey).toEqual(expect.any(String))
+        expect(retriedKey).toBe(firstKey)
     })
 
     it("updates untouched email variable samples when the test recipient changes", async () => {
@@ -479,33 +590,127 @@ describe("EmailTemplatesPage", () => {
         expect(screen.queryByTestId("rich-text-editor")).not.toBeInTheDocument()
     })
 
-    it("creates an organization template with the current editor draft", async () => {
+    it("routes organization template creation to the Studio", () => {
         render(<EmailTemplatesPage />)
 
         fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
         fireEvent.click(screen.getByRole("button", { name: /Create Org Template/i }))
-        fireEvent.change(screen.getByLabelText("Template Name"), {
-            target: { value: "New Org Template" },
-        })
-        fireEvent.change(screen.getByLabelText("Subject Line"), {
-            target: { value: "Hello {{full_name}}" },
-        })
 
-        fireEvent.click(screen.getByRole("button", { name: "HTML" }))
-        fireEvent.change(await screen.findByLabelText("Email Body"), {
-            target: { value: "<p>Welcome</p>" },
-        })
-        fireEvent.click(screen.getByRole("button", { name: "Create Template" }))
+        expect(mockRouterPush).toHaveBeenCalledWith("/automation/email-templates/org/new")
+        expect(screen.queryByRole("heading", { name: "Create Template" })).not.toBeInTheDocument()
+    })
 
-        expect(mockCreateEmailTemplate).toHaveBeenCalledWith(
+    it("routes empty-state organization template creation to the Studio", () => {
+        orgTemplatesFixture = []
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        const createButtons = screen.getAllByRole("button", { name: "Create Org Template" })
+        fireEvent.click(createButtons[1]!)
+
+        expect(mockRouterPush).toHaveBeenCalledWith("/automation/email-templates/org/new")
+        expect(screen.queryByRole("heading", { name: "Create Template" })).not.toBeInTheDocument()
+    })
+
+    it("routes organization template editing to the Studio", async () => {
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Org Template" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
+
+        expect(mockRouterPush).toHaveBeenCalledWith(
+            "/automation/email-templates/org/tpl_org_1",
+        )
+        expect(screen.queryByRole("heading", { name: "Edit Template" })).not.toBeInTheDocument()
+    })
+
+    it("shows and resumes an unpublished organization draft", () => {
+        orgDraftsFixture = [NEW_ORG_DRAFT]
+
+        render(<EmailTemplatesPage />)
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+
+        expect(screen.getByText("New Journey Draft")).toBeInTheDocument()
+        expect(screen.getByText("Unpublished draft")).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Resume New Journey Draft" }))
+
+        expect(mockRouterPush).toHaveBeenCalledWith(
+            "/automation/email-templates/org/draft_new_1",
+        )
+    })
+
+    it("resumes published-template drafts through their canonical template route", () => {
+        orgDraftsFixture = [{
+            ...NEW_ORG_DRAFT,
+            id: "draft_existing_1",
+            template_id: "tpl_org_1",
+            name: "Org Template updates",
+            base_version: 2,
+            published_version: 2,
+        }]
+
+        render(<EmailTemplatesPage />)
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("button", { name: "Resume Org Template updates" }))
+
+        expect(mockRouterPush).toHaveBeenCalledWith(
+            "/automation/email-templates/org/tpl_org_1",
+        )
+    })
+
+    it("requires confirmation before discarding the exact draft revision", async () => {
+        orgDraftsFixture = [NEW_ORG_DRAFT]
+
+        render(<EmailTemplatesPage />)
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("button", { name: "Discard New Journey Draft" }))
+
+        expect(mockDiscardEmailTemplateDraft).not.toHaveBeenCalled()
+        expect(await screen.findByRole("heading", { name: "Discard draft?" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Discard draft" }))
+
+        expect(mockDiscardEmailTemplateDraft).toHaveBeenCalledWith(
             {
-                name: "New Org Template",
-                subject: "Hello {{full_name}}",
-                body: "<p>Welcome</p>",
-                scope: "org",
+                id: "draft_new_1",
+                expectedRevision: 3,
             },
             expect.any(Object),
         )
+    })
+
+    it("does not expose organization drafts without template-management permission", () => {
+        orgDraftsFixture = [NEW_ORG_DRAFT]
+        mockUseAuth.mockReturnValue({
+            user: {
+                user_id: "user_1",
+                role: "case_manager",
+                email: "case-manager@example.com",
+                display_name: "Case Manager",
+                org_name: "Test Org",
+                ai_enabled: false,
+            },
+        })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: [] },
+        })
+
+        render(<EmailTemplatesPage />)
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+
+        expect(screen.queryByText("New Journey Draft")).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Resume New Journey Draft" })).not.toBeInTheDocument()
+    })
+
+    it("keeps personal template editing in the existing modal", async () => {
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Personal Template" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
+
+        expect(mockRouterPush).not.toHaveBeenCalled()
+        expect(await screen.findByRole("heading", { name: "Edit Template" })).toBeInTheDocument()
+        expect(screen.getByLabelText("Template Name")).toHaveValue("Personal Template")
     })
 
     it("updates an existing template and resets stale edit draft on create reopen", async () => {
@@ -544,21 +749,6 @@ describe("EmailTemplatesPage", () => {
         expect(screen.getByLabelText("Template Name")).toHaveValue("")
         expect(screen.getByLabelText("Subject Line")).toHaveValue("")
         expect(screen.getByText("Personal")).toBeInTheDocument()
-    })
-
-    it("uses org signature in preview for organization templates", async () => {
-        render(<EmailTemplatesPage />)
-
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
-
-        fireEvent.click(await screen.findByRole("button", { name: "Actions for Org Template" }))
-
-        fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
-        fireEvent.click(await screen.findByRole("button", { name: "Preview" }))
-
-        expect(await screen.findByText("Email Preview")).toBeInTheDocument()
-        expect(screen.getByText("Org Signature")).toBeInTheDocument()
-        expect(screen.queryByText("Personal Signature")).not.toBeInTheDocument()
     })
 
     it.each(["admin", "developer"] as const)(
