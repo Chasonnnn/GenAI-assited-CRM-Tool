@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, within, act } from '@testing-library/react'
 import IntegrationsPage from '../app/(app)/settings/integrations/page'
+import type { ResendSettings } from '../lib/api/resend'
 
 const mockUseAuth = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
@@ -228,8 +229,9 @@ const resendSettingsData = {
     default_sender_email: null,
     webhook_url: 'https://api.test/webhooks/resend/abc',
     webhook_signing_secret_configured: true,
+    rate_limit_group_configured: true,
     current_version: 1,
-} as const
+} as const satisfies ResendSettings
 
 const pipelineData = [
     {
@@ -686,6 +688,135 @@ describe('IntegrationsPage', () => {
         expect(
             within(dialog).getByText(/enter the domain exactly as it appears in resend/i)
         ).toBeInTheDocument()
+    })
+
+    it('shows a write-only shared-team rate-limit group without exposing a stored value', () => {
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        const groupToken = within(dialog).getByLabelText(
+            'Resend team rate-limit group token'
+        )
+
+        expect(groupToken).toHaveAttribute('type', 'password')
+        expect(groupToken).toHaveAttribute('autocomplete', 'off')
+        expect(groupToken).toHaveValue('')
+        expect(
+            within(dialog).getByText('Group configured', {
+                selector: '[data-slot="badge"]',
+            })
+        ).toBeInTheDocument()
+        expect(
+            within(dialog).getByText(/use the same token for every api key in the same resend team/i)
+        ).toBeInTheDocument()
+        expect(
+            within(dialog).getByText(/default limit is 5 requests per second shared (?:by|across) the team/i)
+        ).toBeInTheDocument()
+    })
+
+    it('preserves a configured rate-limit group when its write-only control is untouched', async () => {
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        expect(
+            within(dialog).getByLabelText('Resend team rate-limit group token')
+        ).toHaveValue('')
+
+        await act(async () => {
+            fireEvent.click(
+                within(dialog).getByRole('button', {
+                    name: /save email configuration/i,
+                })
+            )
+        })
+
+        expect(mockUpdateResendSettings).toHaveBeenCalledTimes(1)
+        expect(mockUpdateResendSettings.mock.calls[0]?.[0]).not.toHaveProperty(
+            'rate_limit_group_token'
+        )
+    })
+
+    it('validates and submits a case-sensitive Resend team rate-limit group token', async () => {
+        mockUpdateResendSettings.mockResolvedValue({
+            ...resendSettingsData,
+            rate_limit_group_configured: true,
+        })
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        const groupToken = within(dialog).getByLabelText(
+            'Resend team rate-limit group token'
+        )
+        const saveButton = within(dialog).getByRole('button', {
+            name: /save email configuration/i,
+        })
+
+        fireEvent.change(groupToken, {
+            target: { value: 'CaseSensitiveToken-Exactly-31!!' },
+        })
+
+        expect(
+            within(dialog).getByText(/token must be between 32 and 256 characters/i)
+        ).toBeInTheDocument()
+        expect(saveButton).toBeDisabled()
+
+        const validToken = 'TeamToken-CaseSensitive-ABC12345'
+        fireEvent.change(groupToken, { target: { value: validToken } })
+
+        expect(
+            within(dialog).queryByText(/token must be between 32 and 256 characters/i)
+        ).not.toBeInTheDocument()
+        expect(saveButton).toBeEnabled()
+
+        await act(async () => {
+            fireEvent.click(saveButton)
+        })
+
+        expect(mockUpdateResendSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                rate_limit_group_token: validToken,
+            })
+        )
+        expect(
+            mockUpdateResendSettings.mock.calls[0]?.[0].rate_limit_group_token
+        ).not.toBe(validToken.toLowerCase())
+        expect(groupToken).toHaveValue('')
+        expect(within(dialog).queryByText(validToken)).not.toBeInTheDocument()
+    })
+
+    it('clears a configured rate-limit group only after an explicit clear action', async () => {
+        mockUpdateResendSettings.mockResolvedValue({
+            ...resendSettingsData,
+            rate_limit_group_configured: false,
+        })
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(
+            within(dialog).getByRole('button', { name: /clear rate-limit group/i })
+        )
+
+        expect(
+            within(dialog).getByText(/rate-limit group will be cleared when you save/i)
+        ).toBeInTheDocument()
+
+        await act(async () => {
+            fireEvent.click(
+                within(dialog).getByRole('button', {
+                    name: /save email configuration/i,
+                })
+            )
+        })
+
+        expect(mockUpdateResendSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                rate_limit_group_token: '',
+            })
+        )
     })
 
     it('requires the stored Resend credential to be re-tested before saving a changed sender identity', async () => {

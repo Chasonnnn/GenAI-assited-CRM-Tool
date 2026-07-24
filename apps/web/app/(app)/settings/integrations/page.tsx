@@ -468,6 +468,8 @@ type AiConfigurationUiState = {
 type EmailConfigurationFormState = {
     provider: "resend" | "gmail" | ""
     apiKey: string
+    rateLimitGroupToken: string
+    clearRateLimitGroup: boolean
     verifiedDomain: string
     fromEmail: string
     fromName: string
@@ -1538,6 +1540,8 @@ function EmailConfigurationSectionContent({
     const [emailForm, setEmailForm] = useState<EmailConfigurationFormState>(() => ({
         provider: settings?.email_provider || "resend",
         apiKey: "",
+        rateLimitGroupToken: "",
+        clearRateLimitGroup: false,
         verifiedDomain: settings?.verified_domain || "",
         fromEmail: settings?.from_email || "",
         fromName: settings?.from_name || "",
@@ -1569,6 +1573,8 @@ function EmailConfigurationSectionContent({
             ...current,
             provider: value,
             apiKey: value !== "resend" ? "" : current.apiKey,
+            rateLimitGroupToken: value !== "resend" ? "" : current.rateLimitGroupToken,
+            clearRateLimitGroup: value !== "resend" ? false : current.clearRateLimitGroup,
             webhookSigningSecret: value !== "resend" ? "" : current.webhookSigningSecret,
         }))
         setEmailUi((current) => ({
@@ -1615,6 +1621,11 @@ function EmailConfigurationSectionContent({
             if (emailForm.apiKey.trim()) {
                 update.api_key = emailForm.apiKey
             }
+            if (emailForm.clearRateLimitGroup) {
+                update.rate_limit_group_token = ""
+            } else if (emailForm.rateLimitGroupToken.trim()) {
+                update.rate_limit_group_token = emailForm.rateLimitGroupToken.trim()
+            }
             update.verified_domain = emailForm.verifiedDomain.trim()
             update.from_email = emailForm.fromEmail
             update.from_name = emailForm.fromName
@@ -1631,6 +1642,8 @@ function EmailConfigurationSectionContent({
             setEmailForm((current) => ({
                 ...current,
                 apiKey: "",
+                rateLimitGroupToken: "",
+                clearRateLimitGroup: false,
                 webhookSigningSecret: "",
             }))
             setEmailUi((current) => ({
@@ -1671,6 +1684,12 @@ function EmailConfigurationSectionContent({
     const hasVerifiedDomain = Boolean(emailForm.verifiedDomain.trim())
     const hasFromEmail = Boolean(emailForm.fromEmail.trim())
     const hasGmailSender = Boolean(emailForm.defaultSender)
+    const normalizedRateLimitGroupToken = emailForm.rateLimitGroupToken.trim()
+    const rateLimitGroupTokenInvalid = Boolean(
+        normalizedRateLimitGroupToken &&
+        (normalizedRateLimitGroupToken.length < 32 ||
+            normalizedRateLimitGroupToken.length > 256),
+    )
     const normalizedVerifiedDomain = emailForm.verifiedDomain.trim().toLowerCase()
     const normalizedFromEmail = emailForm.fromEmail.trim().toLowerCase()
     const senderIdentityChanged = Boolean(
@@ -1700,7 +1719,11 @@ function EmailConfigurationSectionContent({
             !storedCredentialRetestRequired &&
             !testedDomainMismatch)
     const gmailReady = emailForm.provider !== "gmail" || hasGmailSender
-    const canSave = Boolean(emailForm.provider) && resendReady && gmailReady
+    const canSave =
+        Boolean(emailForm.provider) &&
+        resendReady &&
+        gmailReady &&
+        !rateLimitGroupTokenInvalid
     const showMaskedKey = Boolean(settings?.api_key_masked) && !emailUi.isEditingKey && !emailForm.apiKey
     const showHeading = variant === "page"
     const containerClass = showHeading ? "border-t pt-6" : "space-y-4"
@@ -1726,6 +1749,7 @@ function EmailConfigurationSectionContent({
                 eligibleSendersLoading={eligibleSendersLoading}
                 showMaskedKey={showMaskedKey}
                 storedCredentialRetestRequired={storedCredentialRetestRequired}
+                rateLimitGroupTokenInvalid={rateLimitGroupTokenInvalid}
                 canSave={canSave}
                 pendingState={{
                     keyTest: testKey.isPending,
@@ -1812,6 +1836,7 @@ function EmailSettingsCard({
     eligibleSendersLoading,
     showMaskedKey,
     storedCredentialRetestRequired,
+    rateLimitGroupTokenInvalid,
     canSave,
     pendingState,
     onProviderChange,
@@ -1831,6 +1856,7 @@ function EmailSettingsCard({
     eligibleSendersLoading: boolean
     showMaskedKey: boolean
     storedCredentialRetestRequired: boolean
+    rateLimitGroupTokenInvalid: boolean
     canSave: boolean
     pendingState: {
         keyTest: boolean
@@ -1881,6 +1907,7 @@ function EmailSettingsCard({
                         settings={settings}
                         showMaskedKey={showMaskedKey}
                         storedCredentialRetestRequired={storedCredentialRetestRequired}
+                        rateLimitGroupTokenInvalid={rateLimitGroupTokenInvalid}
                         pendingState={pendingState}
                         updateEmailForm={updateEmailForm}
                         onApiKeyChange={onApiKeyChange}
@@ -1957,6 +1984,7 @@ function ResendConfigurationFields({
     settings,
     showMaskedKey,
     storedCredentialRetestRequired,
+    rateLimitGroupTokenInvalid,
     pendingState,
     updateEmailForm,
     onApiKeyChange,
@@ -1971,6 +1999,7 @@ function ResendConfigurationFields({
     settings: ResendSettings | undefined
     showMaskedKey: boolean
     storedCredentialRetestRequired: boolean
+    rateLimitGroupTokenInvalid: boolean
     pendingState: {
         keyTest: boolean
         webhookRotate: boolean
@@ -1998,6 +2027,26 @@ function ResendConfigurationFields({
                 onEditKey={onEditKey}
                 onCancelKeyEdit={onCancelKeyEdit}
                 onTestKey={onTestKey}
+            />
+
+            <ResendRateLimitGroupField
+                configured={settings?.rate_limit_group_configured ?? false}
+                token={form.rateLimitGroupToken}
+                clearScheduled={form.clearRateLimitGroup}
+                invalid={rateLimitGroupTokenInvalid}
+                onTokenChange={(rateLimitGroupToken) => {
+                    updateEmailForm("rateLimitGroupToken", rateLimitGroupToken, true)
+                    if (form.clearRateLimitGroup) {
+                        updateEmailForm("clearRateLimitGroup", false)
+                    }
+                }}
+                onClear={() => {
+                    updateEmailForm("rateLimitGroupToken", "")
+                    updateEmailForm("clearRateLimitGroup", true, true)
+                }}
+                onCancelClear={() =>
+                    updateEmailForm("clearRateLimitGroup", false, true)
+                }
             />
 
             {storedCredentialRetestRequired ? (
@@ -2106,6 +2155,89 @@ function ResendConfigurationFields({
                     </p>
                 )}
             </div>
+        </div>
+    )
+}
+
+function ResendRateLimitGroupField({
+    configured,
+    token,
+    clearScheduled,
+    invalid,
+    onTokenChange,
+    onClear,
+    onCancelClear,
+}: {
+    configured: boolean
+    token: string
+    clearScheduled: boolean
+    invalid: boolean
+    onTokenChange: (token: string) => void
+    onClear: () => void
+    onCancelClear: () => void
+}) {
+    const statusLabel = clearScheduled
+        ? "Pending clear"
+        : configured
+            ? "Group configured"
+            : "Not configured"
+
+    return (
+        <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="space-y-1">
+                    <Label htmlFor="resend-rate-limit-group">
+                        Resend team rate-limit group token
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                        Write-only. The saved token is never returned by the API.
+                    </p>
+                </div>
+                <Badge variant={clearScheduled ? "secondary" : configured ? "default" : "outline"}>
+                    {statusLabel}
+                </Badge>
+            </div>
+
+            <Input
+                id="resend-rate-limit-group"
+                name="resend-rate-limit-group"
+                type="password"
+                autoComplete="off"
+                value={token}
+                onChange={(event) => onTokenChange(event.target.value)}
+                placeholder="Enter a shared token with at least 32 characters"
+                aria-invalid={invalid}
+                aria-describedby="resend-rate-limit-group-help"
+            />
+
+            <div id="resend-rate-limit-group-help" className="space-y-1 text-xs">
+                <p className="text-muted-foreground">
+                    Use the same token for every API key in the same Resend team.
+                    The default limit is 5 requests per second shared across the
+                    team.
+                </p>
+                {invalid ? (
+                    <p className="text-destructive">
+                        Token must be between 32 and 256 characters.
+                    </p>
+                ) : null}
+                {clearScheduled ? (
+                    <p className="font-medium text-foreground">
+                        Rate-limit group will be cleared when you save.
+                    </p>
+                ) : null}
+            </div>
+
+            {configured ? (
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={clearScheduled ? onCancelClear : onClear}
+                >
+                    {clearScheduled ? "Keep current group" : "Clear rate-limit group"}
+                </Button>
+            ) : null}
         </div>
     )
 }
