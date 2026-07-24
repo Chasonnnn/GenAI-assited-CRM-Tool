@@ -60,7 +60,6 @@ import {
     SendIcon,
     HistoryIcon,
 } from "lucide-react"
-import DOMPurify from "dompurify"
 import {
     useEmailTemplates,
     useEmailTemplate,
@@ -98,7 +97,12 @@ import { toast } from "@/components/ui/toast"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import Link from "@/components/app-link"
-import { normalizeTemplateHtml } from "@/lib/email-template-html"
+import {
+    buildEmailTemplatePreviewHtml,
+    extractEmailTemplateVariables as extractTemplateVariables,
+    getEmailTemplateBodyMode as getTemplateBodyMode,
+    hasAdvancedEmailTemplateHtml as hasAdvancedTemplateHtml,
+} from "@/lib/email-template-preview"
 import { formatDate } from "@/lib/formatters"
 import { insertAtCursor } from "@/lib/insert-at-cursor"
 import { SafeHtmlContent } from "@/components/safe-html-content"
@@ -322,8 +326,6 @@ function OrgSignaturePreviewComponent() {
 type EditorMode = "visual" | "html"
 type ActiveInsertionTarget = "subject" | "body_html" | "body_visual" | null
 type TextSelectionRef = React.MutableRefObject<{ start: number; end: number } | null>
-const PREVIEW_FONT_STACK =
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", Arial, sans-serif'
 
 type EmailTemplateEditorState = {
     isOpen: boolean
@@ -526,70 +528,6 @@ function createEmailTestOccurrenceId(): string {
     return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`
 }
 
-function hasAdvancedTemplateHtml(body: string | null | undefined) {
-    return /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(body || "")
-}
-
-function getTemplateBodyMode(body: string | null | undefined): EditorMode {
-    return hasAdvancedTemplateHtml(body) ? "html" : "visual"
-}
-
-function extractTemplateVariables(text: string): string[] {
-    if (!text) return []
-    const matches = text.match(/{{\s*([a-zA-Z0-9_]+)\s*}}/g) ?? []
-    const variables = matches.map((match) => match.replace(/{{\s*|\s*}}/g, ""))
-    return Array.from(new Set(variables))
-}
-
-function sanitizeTemplateHtml(html: string) {
-    return DOMPurify.sanitize(html, {
-        USE_PROFILES: { html: true },
-        ADD_TAGS: [
-            "table",
-            "thead",
-            "tbody",
-            "tfoot",
-            "tr",
-            "td",
-            "th",
-            "colgroup",
-            "col",
-            "img",
-            "hr",
-            "div",
-            "span",
-            "center",
-            "h1",
-            "h2",
-            "h3",
-            "h4",
-            "h5",
-            "h6",
-        ],
-        ADD_ATTR: [
-            "style",
-            "class",
-            "align",
-            "valign",
-            "width",
-            "height",
-            "cellpadding",
-            "cellspacing",
-            "border",
-            "bgcolor",
-            "colspan",
-            "rowspan",
-            "role",
-            "target",
-            "rel",
-            "href",
-            "src",
-            "alt",
-            "title",
-        ],
-    })
-}
-
 function buildTestVariableSample(
     variableName: string,
     context: {
@@ -670,92 +608,6 @@ function insertIntoTextControl(
         el.setSelectionRange(result.nextSelectionStart, result.nextSelectionEnd)
         selectionRef.current = { start: result.nextSelectionStart, end: result.nextSelectionEnd }
     })
-}
-
-function buildPreviewHtml(
-    rawHtml: string,
-    options: {
-        orgSignatureCompanyName: string | null | undefined
-        previewScope: EmailTemplateScope
-        personalSignatureHtml: string | null | undefined
-        orgSignatureHtml: string | null | undefined
-    }
-) {
-    let html = rawHtml
-        .replace(/\{\{full_name\}\}/g, "John Smith")
-        .replace(/\{\{email\}\}/g, "john@example.com")
-        .replace(/\{\{phone\}\}/g, "(555) 123-4567")
-        .replace(/\{\{surrogate_number\}\}/g, "S10001")
-        .replace(/\{\{status_label\}\}/g, "Pre-Qualified")
-        .replace(/\{\{owner_name\}\}/g, "Sara Manager")
-        .replace(/\{\{form_link\}\}/g, "https://app.surrogacyforce.com/intake/EXAMPLE_SLUG")
-        .replace(/\{\{appointment_link\}\}/g, "https://app.surrogacyforce.com/book/EXAMPLE_APPOINTMENT_SLUG")
-        .replace(
-            /\{\{appointment_manage_url\}\}/g,
-            "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/manage/EXAMPLE_TOKEN"
-        )
-        .replace(
-            /\{\{appointment_reschedule_url\}\}/g,
-            "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/reschedule/EXAMPLE_TOKEN"
-        )
-        .replace(
-            /\{\{appointment_cancel_url\}\}/g,
-            "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/cancel/EXAMPLE_TOKEN"
-        )
-        .replace(/\{\{org_name\}\}/g, options.orgSignatureCompanyName || "ABC Surrogacy")
-        .replace(/\{\{appointment_date\}\}/g, "January 15, 2025")
-        .replace(/\{\{appointment_time\}\}/g, "2:00 PM PST")
-        .replace(/\{\{appointment_location\}\}/g, "Virtual Appointment")
-        .replace(/\{\{\s*unsubscribe_url\s*\}\}/g, "")
-
-    html = html.replace(
-        /<a\b[^>]*\bhref\s*=\s*(["'])\s*\{\{\s*unsubscribe_url\s*\}\}\s*\1[^>]*>[\s\S]*?<\/a>/gi,
-        ""
-    )
-
-    const hasHtmlTags = /<[a-z][\s\S]*>/i.test(html)
-    if (!hasHtmlTags) {
-        const lines = html.split(/\n/)
-        html = lines
-            .map((line) => {
-                if (!line.trim()) {
-                    return `<p style="margin: 0 0 1em 0;">&nbsp;</p>`
-                }
-                return `<p style="margin: 0 0 1em 0;">${line}</p>`
-            })
-            .join("")
-    } else {
-        html = normalizeTemplateHtml(html)
-    }
-
-    if (!/<html\b|<body\b/i.test(html)) {
-        html = `<div style="font-family: ${PREVIEW_FONT_STACK}; font-size: 16px; line-height: 24px; color: #111827;">${html}</div>`
-    }
-
-    const signatureHtml = options.previewScope === "personal"
-        ? options.personalSignatureHtml || ""
-        : options.orgSignatureHtml || ""
-    const unsubscribeUrl = "https://app.surrogacyforce.com/email/unsubscribe/EXAMPLE"
-    const includeDivider = !signatureHtml
-    const unsubscribeFooterHtml = `
-        <div style="margin-top: 14px; font-size: 12px; color: #6b7280; ${includeDivider ? "padding-top: 16px; border-top: 1px solid #e5e7eb;" : ""}">
-            <p style="margin: 0;">
-                Manage email preferences:
-                <a href="${unsubscribeUrl}" target="_blank" style="color: #2563eb; text-decoration: none;">Unsubscribe</a>
-            </p>
-        </div>
-    `.trim()
-
-    const insertion = `${signatureHtml}${unsubscribeFooterHtml}`
-    if (/<\/body\s*>/i.test(html)) {
-        html = html.replace(/<\/body\s*>/i, `${insertion}</body>`)
-    } else if (/<\/html\s*>/i.test(html)) {
-        html = html.replace(/<\/html\s*>/i, `${insertion}</html>`)
-    } else {
-        html = `${html}${insertion}`
-    }
-
-    return sanitizeTemplateHtml(html)
 }
 
 async function handleCopySignatureHtml() {
@@ -1279,11 +1131,11 @@ export default function EmailTemplatesPage() {
         .replace(/\{\{full_name\}\}/g, "John Smith")
         .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy")
     const previewHtml = showPreview
-        ? buildPreviewHtml(
+        ? buildEmailTemplatePreviewHtml(
             libraryPreviewId ? libraryTemplateDetail?.body ?? "" : templateBody,
             {
-                orgSignatureCompanyName: signatureData?.org_signature_company_name,
-                previewScope,
+                orgCompanyName: signatureData?.org_signature_company_name,
+                scope: previewScope,
                 personalSignatureHtml: personalSignaturePreview?.html,
                 orgSignatureHtml: orgSignaturePreview?.html,
             }
