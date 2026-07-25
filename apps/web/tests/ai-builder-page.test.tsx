@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, fireEvent } from "@testing-library/react"
+import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import AIBuilderPage from "../app/(app)/automation/ai-builder/page"
 
 const mockUseAuth = vi.fn()
@@ -9,6 +9,8 @@ const mockUseSearchParams = vi.fn()
 const mockGenerateWorkflow = vi.fn()
 const mockSaveAIWorkflow = vi.fn()
 const mockGenerateEmailTemplate = vi.fn()
+const mockCreateEmailTemplateDraft = vi.fn()
+const mockRouterPush = vi.fn()
 
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => mockUseAuth(),
@@ -20,7 +22,7 @@ vi.mock("@/lib/hooks/use-permissions", () => ({
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({
-        push: vi.fn(),
+        push: mockRouterPush,
         replace: vi.fn(),
         back: vi.fn(),
     }),
@@ -34,7 +36,6 @@ vi.mock("@/lib/api/ai", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-email-templates", () => ({
-    useCreateEmailTemplate: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useEmailTemplateVariables: () => ({
         data: [
             { name: "first_name", description: "", category: "Recipient", required: false, value_type: "text", html_safe: false },
@@ -42,6 +43,13 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
         ],
         isLoading: false,
         error: null,
+    }),
+}))
+
+vi.mock("@/lib/hooks/use-email-template-drafts", () => ({
+    useCreateEmailTemplateDraft: () => ({
+        mutateAsync: mockCreateEmailTemplateDraft,
+        isPending: false,
     }),
 }))
 
@@ -53,6 +61,8 @@ describe("AIBuilderPage", () => {
         mockGenerateWorkflow.mockReset()
         mockSaveAIWorkflow.mockReset()
         mockGenerateEmailTemplate.mockReset()
+        mockCreateEmailTemplateDraft.mockReset()
+        mockRouterPush.mockReset()
     })
 
     it("shows disabled state when AI permission is missing", () => {
@@ -85,5 +95,47 @@ describe("AIBuilderPage", () => {
         expect(await screen.findByText(/variables detected/i)).toBeInTheDocument()
         expect(screen.getByText("first_name")).toBeInTheDocument()
         expect(screen.getByText("unsubscribe_url")).toBeInTheDocument()
+    })
+
+    it("saves generated personal templates as isolated Studio drafts", async () => {
+        mockUseSearchParams.mockReturnValue({
+            get: (key: string) => (key === "mode" ? "email_template" : null),
+        })
+        mockGenerateEmailTemplate.mockResolvedValue({
+            success: true,
+            template: {
+                name: "Welcome",
+                subject: "Hello {{first_name}}",
+                body_html: "<p>Hi {{first_name}}</p>",
+                variables_used: ["first_name"],
+            },
+            warnings: [],
+            validation_errors: [],
+            explanation: null,
+        })
+        mockCreateEmailTemplateDraft.mockResolvedValue({
+            id: "draft-ai-personal",
+        })
+
+        render(<AIBuilderPage />)
+        fireEvent.change(screen.getByRole("textbox"), {
+            target: { value: "Welcome email" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: /generate template/i }))
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Save Template" }),
+        )
+
+        await waitFor(() => {
+            expect(mockCreateEmailTemplateDraft).toHaveBeenCalledWith({
+                name: "Welcome",
+                subject: "Hello {{first_name}}",
+                body: "<p>Hi {{first_name}}</p>",
+                scope: "personal",
+            })
+        })
+        expect(mockRouterPush).toHaveBeenCalledWith(
+            "/automation/email-templates/personal/draft-ai-personal",
+        )
     })
 })
