@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import type { Route } from "next"
 import NextImage from "next/image"
 import { useRouter } from "next/navigation"
 import { useState, useRef, useReducer } from "react"
@@ -108,7 +109,10 @@ import type {
     EmailTemplateListItem,
     EmailTemplateScope,
 } from "@/lib/api/email-templates"
-import type { EmailTemplateDraft } from "@/lib/api/email-template-drafts"
+import type {
+    EmailTemplateDraft,
+    EmailTemplateDraftScope,
+} from "@/lib/api/email-template-drafts"
 import { toast } from "@/components/ui/toast"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
@@ -665,6 +669,17 @@ type TemplateCardActionConfig = {
     label: string
 }
 
+const personalTemplateVisibilityLabels: Record<"mine" | "all", string> = {
+    mine: "My Templates",
+    all: "All Personal Templates",
+}
+
+function getPersonalTemplateVisibilityLabel(value: string | null) {
+    return value === "all"
+        ? personalTemplateVisibilityLabels.all
+        : personalTemplateVisibilityLabels.mine
+}
+
 type TemplateCardControls =
     | {
         kind: "actions"
@@ -791,6 +806,94 @@ function TemplateCard({ template, controls }: TemplateCardProps) {
     )
 }
 
+type TemplateDraftSectionProps = {
+    drafts: EmailTemplateDraft[]
+    scope: EmailTemplateDraftScope
+    canDiscard: (draft: EmailTemplateDraft) => boolean
+    onDiscard: (draft: EmailTemplateDraft) => void
+    onResume: (draft: EmailTemplateDraft) => void
+}
+
+function TemplateDraftSection({
+    drafts,
+    scope,
+    canDiscard,
+    onDiscard,
+    onResume,
+}: TemplateDraftSectionProps) {
+    if (drafts.length === 0) return null
+
+    const headingId = `${scope}-template-drafts-heading`
+    return (
+        <section className="space-y-3" aria-labelledby={headingId}>
+            <div>
+                <h2 id={headingId} className="text-sm font-semibold">
+                    Drafts
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                    Continue work without changing the published template.
+                </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {drafts.map((draft) => (
+                    <Card key={draft.id}>
+                        <CardHeader className="pb-2">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0 space-y-1">
+                                    <CardTitle className="truncate text-base">
+                                        {draft.name}
+                                    </CardTitle>
+                                    <CardDescription className="line-clamp-2">
+                                        {draft.subject}
+                                    </CardDescription>
+                                    {scope === "personal" && draft.owner_name ? (
+                                        <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                                            <UserIcon className="size-3" aria-hidden="true" />
+                                            {draft.owner_name}
+                                        </p>
+                                    ) : null}
+                                </div>
+                                <Badge variant="secondary">
+                                    {draft.template_id
+                                        ? "Draft changes"
+                                        : "Unpublished draft"}
+                                </Badge>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="flex items-center justify-between gap-3">
+                            <p className="text-xs text-muted-foreground">
+                                Revision {draft.revision}
+                            </p>
+                            <div className="flex items-center gap-2">
+                                {canDiscard(draft) ? (
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="text-destructive hover:text-destructive"
+                                        aria-label={`Discard ${draft.name}`}
+                                        onClick={() => onDiscard(draft)}
+                                    >
+                                        <TrashIcon className="mr-2 size-4" />
+                                        Discard
+                                    </Button>
+                                ) : null}
+                                <Button
+                                    size="sm"
+                                    aria-label={`Resume ${draft.name}`}
+                                    onClick={() => onResume(draft)}
+                                >
+                                    <EditIcon className="mr-2 size-4" />
+                                    Resume
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+        </section>
+    )
+}
+
 // =============================================================================
 // Main Page Component
 // =============================================================================
@@ -858,6 +961,15 @@ export default function EmailTemplatesPage() {
     const { data: orgTemplates, isLoading: loadingOrg } = useEmailTemplates({
         activeOnly: true,
         scope: "org",
+    })
+    const {
+        data: personalDrafts = [],
+        isLoading: loadingPersonalDrafts,
+        isError: personalDraftsError,
+        refetch: refetchPersonalDrafts,
+    } = useEmailTemplateDrafts({
+        scope: "personal",
+        showAllPersonal: isAdmin && showAllPersonal,
     })
     const {
         data: loadedOrgDrafts = [],
@@ -971,16 +1083,6 @@ export default function EmailTemplatesPage() {
     const missingRequiredVariables = canValidateVariables
         ? requiredVariableNames.filter((variable) => !usedVariableNamesSet.has(variable))
         : []
-
-    const handleOpenModal = (template?: EmailTemplateListItem, scope: EmailTemplateScope = "personal") => {
-        activeInsertionTargetRef.current = null
-        setHistoryOpen(false)
-        if (template) {
-            dispatchEditor({ type: "openEdit", template })
-        } else {
-            dispatchEditor({ type: "openCreate", scope })
-        }
-    }
 
     const handleSave = () => {
         if (!editorState.name.trim() || !editorState.subject.trim() || !templateBody.trim()) return
@@ -1342,7 +1444,13 @@ export default function EmailTemplatesPage() {
                                         Generate with AI
                                     </Button>
                                 )}
-                                <Button onClick={() => handleOpenModal(undefined, "personal")}>
+                                <Button
+                                    onClick={() =>
+                                        router.push(
+                                            "/automation/email-templates/personal/new" as Route,
+                                        )
+                                    }
+                                >
                                     <PlusIcon className="mr-2 size-4" />
                                     Create Template
                                 </Button>
@@ -1385,7 +1493,13 @@ export default function EmailTemplatesPage() {
                                 onValueChange={(v) => setShowAllPersonal(v === "all")}
                             >
                                 <SelectTrigger className="w-[180px]">
-                                    <SelectValue />
+                                    <SelectValue>
+                                        {(value: string | null) =>
+                                            getPersonalTemplateVisibilityLabel(
+                                                value,
+                                            )
+                                        }
+                                    </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="mine">My Templates</SelectItem>
@@ -1397,11 +1511,32 @@ export default function EmailTemplatesPage() {
 
                     {/* Personal Templates Tab */}
                     <TabsContent value="personal" className="space-y-4">
-                        {loadingPersonal ? (
+                        {loadingPersonal || loadingPersonalDrafts ? (
                             <div className="flex items-center justify-center py-12">
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             </div>
-                        ) : !personalTemplates?.length ? (
+                        ) : personalDraftsError ? (
+                            <Alert variant="destructive">
+                                <AlertTriangleIcon aria-hidden="true" />
+                                <AlertTitle>
+                                    Unable to load personal drafts
+                                </AlertTitle>
+                                <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                                    <span>
+                                        Published templates are unchanged. Retry to
+                                        recover any saved draft work.
+                                    </span>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => void refetchPersonalDrafts()}
+                                    >
+                                        Retry drafts
+                                    </Button>
+                                </AlertDescription>
+                            </Alert>
+                        ) : !personalTemplates?.length && !personalDrafts.length ? (
                             <Card>
                                 <CardContent className="flex flex-col items-center justify-center py-12">
                                     <UserIcon className="size-12 text-muted-foreground mb-4" />
@@ -1411,7 +1546,13 @@ export default function EmailTemplatesPage() {
                                             : "You don't have any personal templates yet"}
                                     </p>
                                     {!showAllPersonal && (
-                                        <Button onClick={() => handleOpenModal(undefined, "personal")}>
+                                        <Button
+                                            onClick={() =>
+                                                router.push(
+                                                    "/automation/email-templates/personal/new" as Route,
+                                                )
+                                            }
+                                        >
                                             <PlusIcon className="mr-2 size-4" />
                                             Create Your First Template
                                         </Button>
@@ -1419,55 +1560,75 @@ export default function EmailTemplatesPage() {
                                 </CardContent>
                             </Card>
                         ) : (
-                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                {personalTemplates.map((template) => {
-                                    const isOwner = template.owner_user_id === user?.user_id
-                                    const canSendPersonalTest = isOwner || canManageEmailTemplates
-                                    const actions: TemplateCardActionKind[] = []
-                                    if (canSendPersonalTest) {
-                                        actions.push("send_test")
+                            <>
+                                <TemplateDraftSection
+                                    drafts={personalDrafts}
+                                    scope="personal"
+                                    canDiscard={(draft) =>
+                                        draft.owner_user_id === user?.user_id ||
+                                        isAdmin
                                     }
-                                    if (!template.is_system_template) {
-                                        actions.push("edit")
+                                    onDiscard={setDraftToDiscard}
+                                    onResume={(draft) =>
+                                        router.push(
+                                            `/automation/email-templates/personal/${draft.template_id ?? draft.id}` as Route,
+                                        )
                                     }
-                                    if (isOwner) {
-                                        actions.push("share")
-                                    }
-                                    if (isOwner && !template.is_system_template) {
-                                        actions.push("delete")
-                                    }
-                                    const controls: TemplateCardControls = !isOwner && !isAdmin
-                                        ? { kind: "read_only" }
-                                        : {
-                                            kind: "actions",
-                                            actions,
-                                            onAction: (action) => {
-                                                if (action === "send_test") {
-                                                    handleOpenTestDialog(template)
-                                                    return
+                                />
+                                {!!personalTemplates?.length && (
+                                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                        {personalTemplates.map((template) => {
+                                            const isOwner = template.owner_user_id === user?.user_id
+                                            const canSendPersonalTest = isOwner || canManageEmailTemplates
+                                            const actions: TemplateCardActionKind[] = []
+                                            if (canSendPersonalTest) {
+                                                actions.push("send_test")
+                                            }
+                                            if (!template.is_system_template) {
+                                                actions.push("edit")
+                                            }
+                                            if (isOwner) {
+                                                actions.push("share")
+                                            }
+                                            if (isOwner && !template.is_system_template) {
+                                                actions.push("delete")
+                                            }
+                                            const controls: TemplateCardControls = !isOwner && !isAdmin
+                                                ? { kind: "read_only" }
+                                                : {
+                                                    kind: "actions",
+                                                    actions,
+                                                    onAction: (action) => {
+                                                        if (action === "send_test") {
+                                                            handleOpenTestDialog(template)
+                                                            return
+                                                        }
+                                                        if (action === "edit") {
+                                                            router.push(
+                                                                `/automation/email-templates/personal/${template.id}` as Route,
+                                                            )
+                                                            return
+                                                        }
+                                                        if (action === "share") {
+                                                            handleOpenShareDialog(template)
+                                                            return
+                                                        }
+                                                        if (action === "delete") {
+                                                            handleDelete(template.id)
+                                                        }
+                                                    },
                                                 }
-                                                if (action === "edit") {
-                                                    handleOpenModal(template)
-                                                    return
-                                                }
-                                                if (action === "share") {
-                                                    handleOpenShareDialog(template)
-                                                    return
-                                                }
-                                                if (action === "delete") {
-                                                    handleDelete(template.id)
-                                                }
-                                            },
-                                        }
-                                    return (
-                                        <TemplateCard
-                                            key={template.id}
-                                            template={template}
-                                            controls={controls}
-                                        />
-                                    )
-                                })}
-                            </div>
+                                            return (
+                                                <TemplateCard
+                                                    key={template.id}
+                                                    template={template}
+                                                    controls={controls}
+                                                />
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </>
                         )}
                     </TabsContent>
 
@@ -1492,70 +1653,17 @@ export default function EmailTemplatesPage() {
                             </Card>
                         ) : (
                             <>
-                                {orgDrafts.length > 0 && (
-                                    <section className="space-y-3" aria-labelledby="organization-drafts-heading">
-                                        <div>
-                                            <h2 id="organization-drafts-heading" className="text-sm font-semibold">
-                                                Drafts
-                                            </h2>
-                                            <p className="text-sm text-muted-foreground">
-                                                Continue work without changing the published template.
-                                            </p>
-                                        </div>
-                                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                            {orgDrafts.map((draft) => (
-                                                <Card key={draft.id}>
-                                                    <CardHeader className="pb-2">
-                                                        <div className="flex items-start justify-between gap-3">
-                                                            <div className="min-w-0 space-y-1">
-                                                                <CardTitle className="truncate text-base">
-                                                                    {draft.name}
-                                                                </CardTitle>
-                                                                <CardDescription className="line-clamp-2">
-                                                                    {draft.subject}
-                                                                </CardDescription>
-                                                            </div>
-                                                            <Badge variant="secondary">
-                                                                {draft.template_id
-                                                                    ? "Draft changes"
-                                                                    : "Unpublished draft"}
-                                                            </Badge>
-                                                        </div>
-                                                    </CardHeader>
-                                                    <CardContent className="flex items-center justify-between gap-3">
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Revision {draft.revision}
-                                                        </p>
-                                                        <div className="flex items-center gap-2">
-                                                            {canManageEmailTemplates && (
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="ghost"
-                                                                    className="text-destructive hover:text-destructive"
-                                                                    aria-label={`Discard ${draft.name}`}
-                                                                    onClick={() => setDraftToDiscard(draft)}
-                                                                >
-                                                                    <TrashIcon className="mr-2 size-4" />
-                                                                    Discard
-                                                                </Button>
-                                                            )}
-                                                            <Button
-                                                                size="sm"
-                                                                aria-label={`Resume ${draft.name}`}
-                                                                onClick={() => router.push(
-                                                                    `/automation/email-templates/org/${draft.template_id ?? draft.id}`,
-                                                                )}
-                                                            >
-                                                                <EditIcon className="mr-2 size-4" />
-                                                                Resume
-                                                            </Button>
-                                                        </div>
-                                                    </CardContent>
-                                                </Card>
-                                            ))}
-                                        </div>
-                                    </section>
-                                )}
+                                <TemplateDraftSection
+                                    drafts={orgDrafts}
+                                    scope="org"
+                                    canDiscard={() => canManageEmailTemplates}
+                                    onDiscard={setDraftToDiscard}
+                                    onResume={(draft) =>
+                                        router.push(
+                                            `/automation/email-templates/org/${draft.template_id ?? draft.id}`,
+                                        )
+                                    }
+                                />
                                 {!!orgTemplates?.length && (
                                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                                         {orgTemplates.map((template) => {
