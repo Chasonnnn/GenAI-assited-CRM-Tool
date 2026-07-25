@@ -536,7 +536,7 @@ def _rate_limit_backoff_seconds(attempts: int) -> int:
     return delay + jitter
 
 
-async def worker_loop() -> None:
+async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
     """Main worker loop - polls for and processes pending jobs."""
     claimed_job_types = _claimed_job_types()
     if WORKER_JOB_TYPES is None and claimed_job_types is None:
@@ -558,7 +558,7 @@ async def worker_loop() -> None:
     last_google_sync_schedule: datetime | None = None
     last_gmail_sync_schedule: datetime | None = None
 
-    while True:
+    while stop_event is None or not stop_event.is_set():
         with SessionLocal() as db:
             try:
                 now = datetime.now(timezone.utc)
@@ -594,6 +594,9 @@ async def worker_loop() -> None:
                     last_session_cleanup = now
 
                 for _ in range(BATCH_SIZE):
+                    if stop_event is not None and stop_event.is_set():
+                        break
+
                     jobs = job_service.claim_pending_jobs(
                         db,
                         limit=1,
@@ -662,7 +665,16 @@ async def worker_loop() -> None:
             except Exception as e:
                 logger.error("Error in worker loop: %s", e)
 
-        await asyncio.sleep(POLL_INTERVAL_SECONDS)
+        if stop_event is None:
+            await asyncio.sleep(POLL_INTERVAL_SECONDS)
+        elif not stop_event.is_set():
+            try:
+                await asyncio.wait_for(
+                    stop_event.wait(),
+                    timeout=POLL_INTERVAL_SECONDS,
+                )
+            except TimeoutError:
+                pass
 
 
 def main() -> None:

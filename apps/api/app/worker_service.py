@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import os
 from contextlib import asynccontextmanager
 
@@ -19,14 +18,15 @@ async def lifespan(_: FastAPI):
     global _worker_task
     _sync_clamav_signatures()
     _ensure_attachment_scanner_available()
-    _worker_task = asyncio.create_task(worker_loop())
+    stop_event = asyncio.Event()
+    _worker_task = asyncio.create_task(worker_loop(stop_event))
     try:
         yield
     finally:
         if _worker_task:
-            _worker_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await _worker_task
+            stop_event.set()
+            await _worker_task
+            _worker_task = None
 
 
 app = FastAPI(lifespan=lifespan)

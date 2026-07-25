@@ -327,6 +327,51 @@ async def test_worker_claims_one_job_at_a_time_within_each_batch(monkeypatch, db
 
 
 @pytest.mark.asyncio
+async def test_worker_finishes_active_job_without_claiming_another_after_stop(monkeypatch, db):
+    pending_jobs = [
+        _job(job_type=JobType.CAMPAIGN_SEND.value),
+        _job(job_type=JobType.NOTIFICATION.value),
+    ]
+    processed: list[str] = []
+    stop_event = worker.asyncio.Event()
+
+    monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(db))
+    monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
+    monkeypatch.setattr(worker, "BATCH_SIZE", 2)
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_google_calendar_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_gmail_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+
+    def _claim(session, *, limit, job_types):
+        claimed = pending_jobs[:limit]
+        del pending_jobs[:limit]
+        return claimed
+
+    monkeypatch.setattr(worker.job_service, "claim_pending_jobs", _claim)
+
+    async def _process(session, job):
+        processed.append(job.job_type)
+        stop_event.set()
+        return True
+
+    monkeypatch.setattr(worker, "process_job", _process)
+    monkeypatch.setattr(worker.job_service, "mark_job_completed", lambda *args: None)
+    monkeypatch.setattr(worker, "_record_job_success", lambda *args, **kwargs: None)
+
+    await worker.worker_loop(stop_event)
+
+    assert processed == [JobType.CAMPAIGN_SEND.value]
+    assert [job.job_type for job in pending_jobs] == [JobType.NOTIFICATION.value]
+
+
+@pytest.mark.asyncio
 async def test_worker_loop_leaves_job_running_when_handler_defers_completion(monkeypatch, db):
     job = _job(
         job_type=JobType.ATTACHMENT_SCAN.value,
