@@ -33,9 +33,62 @@ from app.schemas.campaign import (
     FilterCriteria,
 )
 from app.utils.pagination import paginate_query_by_offset
+from app.services.email_template_snapshot import (
+    EmailTemplateSnapshot,
+    build_snapshot,
+    format_from_address,
+    parse_snapshot,
+)
 
 
 CAMPAIGN_SEND_BATCH_SIZE = int(os.getenv("CAMPAIGN_SEND_BATCH_SIZE", "200"))
+
+
+def _snapshot_campaign_template(template: EmailTemplate, provider_config) -> dict:
+    template_from = (template.from_email or "").strip()
+    effective_from = format_from_address(
+        template_from or getattr(provider_config, "from_email", None),
+        getattr(provider_config, "from_name", None),
+    )
+    return build_snapshot(
+        template,
+        effective_from_email=effective_from,
+    )
+
+
+def _load_campaign_run_template(
+    db: Session,
+    *,
+    org_id: UUID,
+    campaign: Campaign,
+    run: CampaignRun,
+) -> EmailTemplateSnapshot:
+    if run.email_template_snapshot is not None:
+        snapshot = parse_snapshot(run.email_template_snapshot)
+        if snapshot.organization_id != org_id or snapshot.template_id != campaign.email_template_id:
+            raise ValueError("Campaign email template snapshot does not match campaign")
+        return snapshot
+
+    # Compatibility for completed/legacy rows that were not eligible for the
+    # migration backfill. New runs always persist a snapshot before queueing.
+    template = (
+        db.query(EmailTemplate)
+        .filter(
+            EmailTemplate.id == campaign.email_template_id,
+            EmailTemplate.organization_id == org_id,
+        )
+        .first()
+    )
+    if template is None:
+        raise Exception(f"Email template {campaign.email_template_id} not found")
+    return EmailTemplateSnapshot(
+        organization_id=org_id,
+        template_id=template.id,
+        template_version=template.current_version,
+        subject=template.subject,
+        body=template.body,
+        from_email=template.from_email,
+    )
 
 
 def _ensure_future_datetime(value: datetime | None, field_name: str) -> None:
@@ -334,6 +387,11 @@ def update_campaign(
     if data.description is not None:
         campaign.description = data.description
     if data.email_template_id is not None:
+        if (
+            campaign.status == CampaignStatus.SCHEDULED.value
+            and data.email_template_id != campaign.email_template_id
+        ):
+            raise ValueError("Cannot change email template after campaign is scheduled")
         # SECURITY: Validate template belongs to org before updating
         template = (
             db.query(EmailTemplate)
@@ -626,9 +684,24 @@ def enqueue_campaign_send(
 
     # Validate and lock email provider at run creation time
     try:
-        provider_type, _ = email_provider_service.resolve_campaign_provider(db, org_id)
+        provider_type, provider_config = email_provider_service.resolve_campaign_provider(
+            db, org_id
+        )
     except email_provider_service.ConfigurationError as e:
         raise ValueError(str(e))
+
+    template = (
+        db.query(EmailTemplate)
+        .filter(
+            EmailTemplate.id == campaign.email_template_id,
+            EmailTemplate.organization_id == org_id,
+        )
+        .with_for_update()
+        .first()
+    )
+    if template is None:
+        raise ValueError("Email template not found")
+    template_snapshot = _snapshot_campaign_template(template, provider_config)
 
     if send_now:
         # Create run immediately with locked provider
@@ -637,6 +710,7 @@ def enqueue_campaign_send(
             campaign_id=campaign.id,
             status="running",
             email_provider=provider_type,  # Lock provider at creation
+            email_template_snapshot=template_snapshot,
             total_count=0,
             sent_count=0,
             delivered_count=0,
@@ -677,6 +751,7 @@ def enqueue_campaign_send(
         campaign_id=campaign.id,
         status="running",
         email_provider=provider_type,  # Lock provider at creation
+        email_template_snapshot=template_snapshot,
         total_count=0,
         sent_count=0,
         delivered_count=0,
@@ -1432,18 +1507,12 @@ def execute_campaign_run(
     if campaign.status == CampaignStatus.CANCELLED.value:
         return _campaign_run_result(run)
 
-    # Get template
-    template = (
-        db.query(EmailTemplate)
-        .filter(
-            EmailTemplate.id == campaign.email_template_id,
-            EmailTemplate.organization_id == org_id,
-        )
-        .first()
+    template = _load_campaign_run_template(
+        db,
+        org_id=org_id,
+        campaign=campaign,
+        run=run,
     )
-
-    if not template:
-        raise Exception(f"Email template {campaign.email_template_id} not found")
 
     from app.services import org_service
 
@@ -1634,7 +1703,7 @@ def execute_campaign_run(
                 email_log, _job = email_service.send_email(
                     db=db,
                     org_id=org_id,
-                    template_id=template.id,
+                    template_id=template.template_id,
                     recipient_email=email,
                     subject=subject,
                     body=tracked_body,
@@ -1646,6 +1715,7 @@ def execute_campaign_run(
                     source_type="campaign_recipient",
                     source_id=cr.id,
                     purpose="marketing",
+                    from_email=template.from_email,
                 )
                 cr.email_log_id = email_log.id
                 if email_log.status == EmailStatus.SKIPPED.value:
@@ -1710,16 +1780,12 @@ def retry_failed_campaign_run(
     if campaign.status == CampaignStatus.CANCELLED.value:
         return _campaign_run_result(run, retried_count=0)
 
-    template = (
-        db.query(EmailTemplate)
-        .filter(
-            EmailTemplate.id == campaign.email_template_id,
-            EmailTemplate.organization_id == org_id,
-        )
-        .first()
+    template = _load_campaign_run_template(
+        db,
+        org_id=org_id,
+        campaign=campaign,
+        run=run,
     )
-    if not template:
-        raise Exception(f"Email template {campaign.email_template_id} not found")
 
     from app.services import org_service
 
@@ -1851,7 +1917,7 @@ def retry_failed_campaign_run(
             email_log, _job = email_service.send_email(
                 db=db,
                 org_id=org_id,
-                template_id=template.id,
+                template_id=template.template_id,
                 recipient_email=email,
                 subject=subject,
                 body=tracked_body,
@@ -1863,6 +1929,7 @@ def retry_failed_campaign_run(
                 source_type="campaign_recipient",
                 source_id=recipient.id,
                 purpose="marketing",
+                from_email=template.from_email,
             )
         except Exception as exc:
             recipient.status = CampaignRecipientStatus.FAILED.value

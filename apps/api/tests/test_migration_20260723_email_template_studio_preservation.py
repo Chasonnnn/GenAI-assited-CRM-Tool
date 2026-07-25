@@ -1,5 +1,6 @@
 """Production-shaped preservation rehearsal for the Email Template Studio migration."""
 
+import json
 import logging
 from pathlib import Path
 import uuid
@@ -12,6 +13,7 @@ from sqlalchemy import text
 API_ROOT = Path(__file__).resolve().parents[1]
 PRE_STUDIO_REVISION = "20260723_0270"
 STUDIO_REVISION = "20260723_0280"
+PINNED_SEND_REVISION = "20260725_0290"
 
 ORG_ID = uuid.UUID("10000000-0000-0000-0000-000000000001")
 USER_ID = uuid.UUID("20000000-0000-0000-0000-000000000001")
@@ -19,6 +21,10 @@ ORG_TEMPLATE_ID = uuid.UUID("30000000-0000-0000-0000-000000000001")
 PERSONAL_TEMPLATE_ID = uuid.UUID("30000000-0000-0000-0000-000000000002")
 PLATFORM_TEMPLATE_ID = uuid.UUID("40000000-0000-0000-0000-000000000001")
 SYSTEM_TEMPLATE_KEY = "studio_migration_preservation_rehearsal"
+CAMPAIGN_ID = uuid.UUID("50000000-0000-0000-0000-000000000001")
+CAMPAIGN_RUN_ID = uuid.UUID("50000000-0000-0000-0000-000000000002")
+WORKFLOW_JOB_ID = uuid.UUID("60000000-0000-0000-0000-000000000001")
+PERSONAL_WORKFLOW_JOB_ID = uuid.UUID("60000000-0000-0000-0000-000000000002")
 
 ORG_BODY = (
     "<section>\r\n"
@@ -149,6 +155,206 @@ def _seed_pre_studio_templates(connection) -> None:
                 "current_version": 4,
             },
         ],
+    )
+    connection.execute(
+        text(
+            """
+            INSERT INTO user_integrations (
+                user_id,
+                integration_type,
+                access_token_encrypted,
+                account_email
+            )
+            VALUES (
+                :user_id,
+                'gmail',
+                :access_token_encrypted,
+                :account_email
+            )
+            """
+        ),
+        {
+            "user_id": USER_ID,
+            "access_token_encrypted": "migration-rehearsal-token",
+            "account_email": "existing-owner@gmail.example.test",
+        },
+    )
+    connection.execute(
+        text(
+            """
+            INSERT INTO resend_settings (
+                organization_id,
+                email_provider,
+                api_key_encrypted,
+                from_email,
+                from_name,
+                verified_domain
+            )
+            VALUES (
+                :organization_id,
+                'resend',
+                :api_key_encrypted,
+                :from_email,
+                :from_name,
+                :verified_domain
+            )
+            """
+        ),
+        {
+            "organization_id": ORG_ID,
+            "api_key_encrypted": "migration-rehearsal-write-only",
+            "from_email": "fallback@example.test",
+            "from_name": "Fallback Team",
+            "verified_domain": "example.test",
+        },
+    )
+    connection.execute(
+        text(
+            """
+            INSERT INTO jobs (
+                id,
+                job_scope,
+                organization_id,
+                job_type,
+                payload,
+                status,
+                run_at
+            )
+            VALUES (
+                :id,
+                'organization',
+                :organization_id,
+                'workflow_email',
+                CAST(:payload AS jsonb),
+                'pending',
+                now() + interval '1 hour'
+            )
+            """
+        ),
+        {
+            "id": PERSONAL_WORKFLOW_JOB_ID,
+            "organization_id": ORG_ID,
+            "payload": json.dumps(
+                {
+                    "template_id": str(ORG_TEMPLATE_ID),
+                    "recipient_email": "personal-org-template@example.test",
+                    "variables": {"surrogate.first_name": "Personal"},
+                    "workflow_scope": "personal",
+                    "workflow_owner_id": str(USER_ID),
+                }
+            ),
+        },
+    )
+    connection.execute(
+        text(
+            """
+            INSERT INTO campaigns (
+                id,
+                organization_id,
+                name,
+                email_template_id,
+                recipient_type,
+                filter_criteria,
+                scheduled_at,
+                status,
+                created_by_user_id
+            )
+            VALUES (
+                :id,
+                :organization_id,
+                :name,
+                :email_template_id,
+                'case',
+                '{}'::jsonb,
+                now() + interval '2 hours',
+                'scheduled',
+                :created_by_user_id
+            )
+            """
+        ),
+        {
+            "id": CAMPAIGN_ID,
+            "organization_id": ORG_ID,
+            "name": "Existing Scheduled Campaign",
+            "email_template_id": ORG_TEMPLATE_ID,
+            "created_by_user_id": USER_ID,
+        },
+    )
+    connection.execute(
+        text(
+            """
+            INSERT INTO campaign_runs (
+                id,
+                organization_id,
+                campaign_id,
+                status,
+                email_provider,
+                total_count,
+                sent_count,
+                delivered_count,
+                failed_count,
+                skipped_count,
+                opened_count,
+                clicked_count
+            )
+            VALUES (
+                :id,
+                :organization_id,
+                :campaign_id,
+                'running',
+                'resend',
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+            )
+            """
+        ),
+        {
+            "id": CAMPAIGN_RUN_ID,
+            "organization_id": ORG_ID,
+            "campaign_id": CAMPAIGN_ID,
+        },
+    )
+    connection.execute(
+        text(
+            """
+            INSERT INTO jobs (
+                id,
+                job_scope,
+                organization_id,
+                job_type,
+                payload,
+                status,
+                run_at
+            )
+            VALUES (
+                :id,
+                'organization',
+                :organization_id,
+                'workflow_email',
+                CAST(:payload AS jsonb),
+                'pending',
+                now() + interval '1 hour'
+            )
+            """
+        ),
+        {
+            "id": WORKFLOW_JOB_ID,
+            "organization_id": ORG_ID,
+            "payload": json.dumps(
+                {
+                    "template_id": str(ORG_TEMPLATE_ID),
+                    "recipient_email": "existing-queued@example.test",
+                    "variables": {"surrogate.first_name": "Existing"},
+                    "workflow_scope": "org",
+                    "workflow_owner_id": None,
+                }
+            ),
+        },
     )
     connection.execute(
         text(
@@ -329,7 +535,7 @@ def _template_fingerprints(connection) -> dict[str, list[tuple]]:
 
 
 def test_template_studio_upgrade_preserves_existing_template_stores(db_engine) -> None:
-    """Revision 0280 adds drafts without rewriting any published template store."""
+    """Studio and queued-send snapshots preserve every published template byte."""
     ops_logger = logging.getLogger("app.ops")
     ops_logger.disabled = False
 
@@ -366,9 +572,85 @@ def test_template_studio_upgrade_preserves_existing_template_stores(db_engine) -
 
             assert _template_fingerprints(connection) == before_upgrade
             assert connection.scalar(text("SELECT count(*) FROM email_template_drafts")) == 0
+            campaign_snapshot = connection.scalar(
+                text(
+                    """
+                    SELECT email_template_snapshot
+                    FROM campaign_runs
+                    WHERE id = :id
+                    """
+                ),
+                {"id": CAMPAIGN_RUN_ID},
+            )
+            assert campaign_snapshot == {
+                "schema_version": 1,
+                "organization_id": str(ORG_ID),
+                "template_id": str(ORG_TEMPLATE_ID),
+                "template_version": 9,
+                "subject": "Welcome, {{surrogate.first_name}} — next steps",
+                "body": ORG_BODY,
+                "from_email": "Surrogacy Force <care+legacy@example.test>",
+            }
+            workflow_snapshot = connection.scalar(
+                text(
+                    """
+                    SELECT payload->'email_template_snapshot'
+                    FROM jobs
+                    WHERE id = :id
+                    """
+                ),
+                {"id": WORKFLOW_JOB_ID},
+            )
+            assert workflow_snapshot == {
+                "schema_version": 1,
+                "organization_id": str(ORG_ID),
+                "template_id": str(ORG_TEMPLATE_ID),
+                "template_version": 9,
+                "subject": "Welcome, {{surrogate.first_name}} — next steps",
+                "body": ORG_BODY,
+                "from_email": "Surrogacy Force <care+legacy@example.test>",
+                "scope": "org",
+                "owner_user_id": None,
+                "system_key": None,
+            }
+            personal_workflow_snapshot = connection.scalar(
+                text(
+                    """
+                    SELECT payload->'email_template_snapshot'
+                    FROM jobs
+                    WHERE id = :id
+                    """
+                ),
+                {"id": PERSONAL_WORKFLOW_JOB_ID},
+            )
+            assert personal_workflow_snapshot == {
+                "schema_version": 1,
+                "organization_id": str(ORG_ID),
+                "template_id": str(ORG_TEMPLATE_ID),
+                "template_version": 9,
+                "subject": "Welcome, {{surrogate.first_name}} — next steps",
+                "body": ORG_BODY,
+                "from_email": "existing-owner@gmail.example.test",
+                "scope": "org",
+                "owner_user_id": None,
+                "system_key": None,
+            }
+            assert (
+                connection.scalar(
+                    text(
+                        """
+                        SELECT count(*)
+                        FROM information_schema.columns
+                        WHERE table_name = 'email_logs'
+                          AND column_name = 'email_template_snapshot'
+                        """
+                    )
+                )
+                == 1
+            )
             assert (
                 connection.scalar(text("SELECT version_num FROM alembic_version"))
-                == STUDIO_REVISION
+                == PINNED_SEND_REVISION
             )
         finally:
             transaction.rollback()

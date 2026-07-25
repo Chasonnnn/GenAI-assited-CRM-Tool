@@ -65,6 +65,7 @@ class EmailSource:
     source_type: str
     source_id: UUID | None = None
     template_id: UUID | None = None
+    email_template_snapshot: Mapping[str, object] | None = None
     surrogate_id: UUID | None = None
     actor_user_id: UUID | None = None
     job_id: UUID | None = None
@@ -506,6 +507,7 @@ def stored_request_fingerprint_matches(delivery: EmailDelivery) -> bool:
                 source_type=email_log.source_type,
                 source_id=email_log.source_id,
                 template_id=email_log.template_id,
+                email_template_snapshot=email_log.email_template_snapshot,
                 surrogate_id=email_log.surrogate_id,
                 actor_user_id=email_log.actor_user_id,
                 job_id=email_log.job_id,
@@ -673,6 +675,9 @@ def queue_rendered_email(
         id=email_log_id,
         organization_id=organization_id,
         template_id=source.template_id,
+        email_template_snapshot=(
+            dict(source.email_template_snapshot) if source.email_template_snapshot else None
+        ),
         surrogate_id=source.surrogate_id,
         actor_user_id=source.actor_user_id,
         job_id=source.job_id,
@@ -1055,6 +1060,20 @@ def _project_source_delivery(
     if status == EmailStatus.SENT.value and email_log.surrogate_id is not None:
         from app.services import email_service
 
+        activity_template_id = email_log.template_id
+        if activity_template_id is None and email_log.email_template_snapshot is not None:
+            from app.services.email_template_snapshot import (
+                EmailTemplateSnapshotError,
+                parse_snapshot,
+            )
+
+            try:
+                activity_snapshot = parse_snapshot(email_log.email_template_snapshot)
+                if activity_snapshot.organization_id == email_log.organization_id:
+                    activity_template_id = activity_snapshot.template_id
+            except EmailTemplateSnapshotError:
+                activity_template_id = None
+
         email_service.log_surrogate_email_send_success(
             db=db,
             org_id=email_log.organization_id,
@@ -1062,7 +1081,7 @@ def _project_source_delivery(
             email_log_id=email_log.id,
             subject=email_log.subject,
             provider=EmailProvider.RESEND.value,
-            template_id=email_log.template_id,
+            template_id=activity_template_id,
             actor_user_id=email_log.actor_user_id,
             attachments=email_service.list_email_log_attachments(
                 db=db,

@@ -275,6 +275,7 @@ class EmailLog(Base):
         ForeignKey("email_templates.id", ondelete="SET NULL"),
         nullable=True,
     )
+    email_template_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     surrogate_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="SET NULL"), nullable=True
     )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
 
 import pytest
 
@@ -267,6 +268,7 @@ async def test_workflow_email_rejects_platform_system_template(
     from app.db.enums import JobType
     from app.db.models import EmailTemplate, Job
     from app.services import workflow_email_provider
+    from app.services.workflow_engine_adapters import DefaultWorkflowDomainAdapter
     from app.worker import process_workflow_email
 
     template = EmailTemplate(
@@ -289,6 +291,36 @@ async def test_workflow_email_rejects_platform_system_template(
         raise AssertionError("Provider resolution should not be called for platform templates")
 
     monkeypatch.setattr(workflow_email_provider, "resolve_workflow_email_provider", fail_resolve)
+
+    adapter = DefaultWorkflowDomainAdapter()
+    with pytest.raises(ValueError, match="Platform system template"):
+        adapter._action_send_email(
+            db=db,
+            action={
+                "action_type": "send_email",
+                "template_id": str(template.id),
+                "recipients": "surrogate",
+            },
+            entity=SimpleNamespace(
+                id=uuid.uuid4(),
+                organization_id=test_org.id,
+                email="recipient@test.com",
+                owner_type="user",
+                owner_id=test_user.id,
+                created_by_user_id=test_user.id,
+            ),
+            event_id=uuid.uuid4(),
+            workflow_scope="org",
+        )
+    assert (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.WORKFLOW_EMAIL.value,
+        )
+        .count()
+        == 0
+    )
 
     job = Job(
         id=uuid.uuid4(),

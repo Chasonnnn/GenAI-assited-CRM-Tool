@@ -5,6 +5,7 @@ from threading import Barrier, Thread
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
+import pytest
 
 from app.core.encryption import hash_email
 from app.db.enums import CampaignRecipientStatus, CampaignStatus, EmailStatus, JobStatus, JobType
@@ -242,6 +243,142 @@ def test_execute_campaign_run_queues_versioned_immutable_recipient_delivery(
         .one()
     )
     assert delivery.idempotency_key == f"campaign-recipient/{recipient.id}/v0"
+
+
+def test_scheduled_campaign_queues_the_template_selected_at_schedule_time(
+    monkeypatch,
+    db,
+    test_org,
+    test_user,
+    default_stage,
+):
+    from app.db.models import EmailLog
+
+    _configure_resend_provider(db, test_org.id)
+    template = _create_template(db, test_org.id)
+    replacement_template = _create_template(db, test_org.id)
+    template.subject = "Scheduled hello {{full_name}}"
+    template.body = "<p>Scheduled body for {{full_name}}</p>"
+    template.from_email = "Original Team <original@example.com>"
+    template.current_version = 7
+    campaign = _create_campaign(
+        db,
+        test_org.id,
+        test_user.id,
+        template.id,
+        status=CampaignStatus.DRAFT.value,
+    )
+    campaign.scheduled_at = datetime.now(timezone.utc) + timedelta(hours=2)
+    recipient = _create_surrogate(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
+        email="scheduled-campaign@example.com",
+        name="Scheduled Recipient",
+    )
+    db.commit()
+
+    monkeypatch.setattr(
+        "app.services.email_provider_service.resolve_campaign_provider",
+        lambda _db, _org_id: (
+            "resend",
+            SimpleNamespace(
+                from_email="campaigns@example.com",
+                from_name="Campaign Team",
+            ),
+        ),
+    )
+    _message, run_id, _scheduled_at = campaign_service.enqueue_campaign_send(
+        db,
+        org_id=test_org.id,
+        campaign_id=campaign.id,
+        user_id=test_user.id,
+        send_now=False,
+    )
+
+    from app.schemas.campaign import CampaignUpdate
+
+    with pytest.raises(
+        ValueError,
+        match="Cannot change email template after campaign is scheduled",
+    ):
+        campaign_service.update_campaign(
+            db,
+            test_org.id,
+            campaign.id,
+            CampaignUpdate(email_template_id=replacement_template.id),
+        )
+    db.refresh(campaign)
+    assert campaign.email_template_id == template.id
+
+    template.subject = "Edited hello {{full_name}}"
+    template.body = "<p>Edited body for {{full_name}}</p>"
+    template.from_email = "Edited Team <edited@example.com>"
+    template.current_version = 8
+    db.commit()
+
+    campaign_service.execute_campaign_run(
+        db,
+        org_id=test_org.id,
+        campaign_id=campaign.id,
+        run_id=run_id,
+        actor_user_id=test_user.id,
+    )
+
+    email_log = (
+        db.query(EmailLog)
+        .join(CampaignRecipient, CampaignRecipient.email_log_id == EmailLog.id)
+        .filter(
+            CampaignRecipient.run_id == run_id,
+            CampaignRecipient.entity_id == recipient.id,
+        )
+        .one()
+    )
+    assert email_log.template_id == template.id
+    assert email_log.subject == "Scheduled hello Scheduled Recipient"
+    assert "Scheduled body for Scheduled Recipient" in email_log.body
+    assert "Edited body" not in email_log.body
+    assert email_log.from_email == "Original Team <original@example.com>"
+
+
+def test_campaign_run_rejects_a_snapshot_for_another_template(
+    db,
+    test_org,
+    test_user,
+):
+    template = _create_template(db, test_org.id)
+    campaign = _create_campaign(
+        db,
+        test_org.id,
+        test_user.id,
+        template.id,
+        status=CampaignStatus.SENDING.value,
+    )
+    run = _create_run(db, test_org.id, campaign.id)
+    run.email_template_snapshot = {
+        "schema_version": 1,
+        "organization_id": str(test_org.id),
+        "template_id": str(uuid4()),
+        "template_version": 1,
+        "subject": "Cross-template subject",
+        "body": "<p>Cross-template body</p>",
+        "from_email": "sender@example.com",
+    }
+    db.commit()
+
+    with pytest.raises(
+        ValueError,
+        match="Campaign email template snapshot does not match campaign",
+    ):
+        campaign_service.execute_campaign_run(
+            db,
+            org_id=test_org.id,
+            campaign_id=campaign.id,
+            run_id=run.id,
+            actor_user_id=test_user.id,
+        )
 
 
 def test_campaign_retry_queue_and_cancel(monkeypatch, db, test_org, test_user):

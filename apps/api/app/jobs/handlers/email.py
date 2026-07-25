@@ -141,41 +141,105 @@ async def process_workflow_email(db, job) -> None:
     variables = job.payload.get("variables", {})
     workflow_scope = job.payload.get("workflow_scope", "org")
     workflow_owner_id = job.payload.get("workflow_owner_id")
+    template_snapshot_payload = job.payload.get("email_template_snapshot")
 
     if not template_id or not recipient_email:
         raise Exception("Missing template_id or recipient_email in workflow email job")
 
-    # Get template
-    template = (
-        db.query(EmailTemplate)
-        .filter(
-            EmailTemplate.id == UUID(template_id),
-            EmailTemplate.organization_id == job.organization_id,
-        )
-        .first()
+    from app.services.email_template_snapshot import (
+        EmailTemplateSnapshot,
+        build_snapshot,
+        parse_snapshot,
     )
-    if not template:
-        raise Exception(f"Email template {template_id} not found")
+
+    resolved_template_id = UUID(str(template_id))
+    log_template_id: UUID | None = None
+    legacy_template: EmailTemplate | None = None
+    if template_snapshot_payload is None:
+        # Compatibility for jobs queued before immutable snapshots were added.
+        template = (
+            db.query(EmailTemplate)
+            .filter(
+                EmailTemplate.id == resolved_template_id,
+                EmailTemplate.organization_id == job.organization_id,
+            )
+            .first()
+        )
+        if not template:
+            raise Exception(f"Email template {template_id} not found")
+        legacy_template = template
+
+        template_snapshot = EmailTemplateSnapshot(
+            organization_id=job.organization_id,
+            template_id=template.id,
+            template_version=template.current_version,
+            subject=template.subject,
+            body=template.body,
+            from_email=template.from_email,
+            scope=template.scope,
+            owner_user_id=template.owner_user_id,
+            system_key=template.system_key,
+        )
+        persisted_template_snapshot = build_snapshot(
+            template,
+            effective_from_email=template.from_email,
+            include_scope=True,
+        )
+        log_template_id = template.id
+    else:
+        template_snapshot = parse_snapshot(template_snapshot_payload, require_scope=True)
+        persisted_template_snapshot = dict(template_snapshot_payload)
+        # Preserve the relational link while the template still exists without
+        # consulting its mutable content. The snapshot remains the sole source
+        # for the queued subject, body, sender, scope, and version.
+        log_template_id = (
+            db.query(EmailTemplate.id)
+            .filter(
+                EmailTemplate.id == resolved_template_id,
+                EmailTemplate.organization_id == job.organization_id,
+            )
+            .scalar()
+        )
 
     from app.services import system_email_template_service
 
     if (
-        template.system_key
-        and template.system_key in system_email_template_service.DEFAULT_SYSTEM_TEMPLATES
+        template_snapshot.system_key
+        and template_snapshot.system_key in system_email_template_service.DEFAULT_SYSTEM_TEMPLATES
     ):
         raise Exception(
-            f"Platform system template '{template.system_key}' cannot be used in workflow emails. "
-            "Use the platform/system endpoint instead."
+            f"Platform system template '{template_snapshot.system_key}' cannot be used in workflow "
+            "emails. Use the platform/system endpoint instead."
         )
+
+    if (
+        template_snapshot.organization_id != job.organization_id
+        or template_snapshot.template_id != resolved_template_id
+    ):
+        raise Exception("Workflow email template snapshot does not match job scope")
+    if workflow_scope == "org":
+        if template_snapshot.scope != "org" or template_snapshot.owner_user_id is not None:
+            raise Exception("Workflow email template snapshot does not match workflow scope")
+    elif workflow_scope == "personal":
+        if not workflow_owner_id:
+            raise Exception("Personal workflow missing owner")
+        resolved_workflow_owner_id = UUID(str(workflow_owner_id))
+        if template_snapshot.scope == "personal":
+            if template_snapshot.owner_user_id != resolved_workflow_owner_id:
+                raise Exception("Workflow email template snapshot does not match workflow owner")
+        elif template_snapshot.scope != "org" or template_snapshot.owner_user_id is not None:
+            raise Exception("Workflow email template snapshot does not match workflow scope")
+    else:
+        raise Exception("Workflow email template snapshot does not match workflow scope")
 
     # Resolve subject and body with variables (escaped)
     from app.services import email_composition_service
 
     cleaned_body_template = email_composition_service.strip_legacy_unsubscribe_placeholders(
-        template.body
+        template_snapshot.body
     )
     subject, body = email_service.render_template(
-        template.subject, cleaned_body_template, variables
+        template_snapshot.subject, cleaned_body_template, variables
     )
 
     from app.services import org_service
@@ -213,7 +277,8 @@ async def process_workflow_email(db, job) -> None:
             .values(
                 organization_id=job.organization_id,
                 job_id=job.id,
-                template_id=template.id,
+                template_id=log_template_id,
+                email_template_snapshot=persisted_template_snapshot,
                 surrogate_id=resolved_surrogate_id,
                 actor_user_id=actor_user_id,
                 recipient_email=recipient_email,
@@ -234,7 +299,8 @@ async def process_workflow_email(db, job) -> None:
                     "error": error_message[:500],
                     "subject": subject,
                     "body": body,
-                    "template_id": template.id,
+                    "template_id": log_template_id,
+                    "email_template_snapshot": persisted_template_snapshot,
                     "surrogate_id": resolved_surrogate_id,
                     "actor_user_id": actor_user_id,
                 },
@@ -289,6 +355,41 @@ async def process_workflow_email(db, job) -> None:
         record_configuration_failure(error_message)
         raise Exception(error_message)
 
+    if provider == "user_gmail" and template_snapshot_payload is not None:
+        pinned_sender = (template_snapshot.from_email or "").strip()
+        current_sender = str(config.get("email") or "").strip()
+        if (
+            not pinned_sender
+            or not current_sender
+            or pinned_sender.casefold() != current_sender.casefold()
+        ):
+            raise Exception(
+                "Workflow Gmail sender changed after this email was queued. "
+                "Queue a new workflow email before sending."
+            )
+
+    if template_snapshot_payload is None and legacy_template is not None:
+        from dataclasses import replace
+
+        from app.services.email_template_snapshot import format_from_address
+
+        if provider == "resend":
+            effective_from_email = format_from_address(
+                template_snapshot.from_email or config.get("from_email"),
+                config.get("from_name"),
+            )
+        else:
+            effective_from_email = (config.get("email") or "").strip() or None
+        template_snapshot = replace(
+            template_snapshot,
+            from_email=effective_from_email,
+        )
+        persisted_template_snapshot = build_snapshot(
+            legacy_template,
+            effective_from_email=effective_from_email,
+            include_scope=True,
+        )
+
     from app.services import unsubscribe_service
 
     headers = unsubscribe_service.build_list_unsubscribe_headers(
@@ -306,13 +407,8 @@ async def process_workflow_email(db, job) -> None:
             queue_rendered_email,
         )
 
-        configured_from = (template.from_email or config["from_email"]).strip()
-        from_name = (config.get("from_name") or "").strip()
-        from_address = (
-            f"{from_name} <{configured_from}>"
-            if from_name and "<" not in configured_from
-            else configured_from
-        )
+        configured_from = (template_snapshot.from_email or config["from_email"]).strip()
+        from_address = configured_from
         queued = queue_rendered_email(
             db,
             organization_id=job.organization_id,
@@ -332,7 +428,8 @@ async def process_workflow_email(db, job) -> None:
             source=EmailSource(
                 source_type="workflow_job",
                 source_id=job.id,
-                template_id=template.id,
+                template_id=log_template_id,
+                email_template_snapshot=persisted_template_snapshot,
                 surrogate_id=resolved_surrogate_id,
                 actor_user_id=actor_user_id,
                 job_id=job.id,
@@ -369,12 +466,14 @@ async def process_workflow_email(db, job) -> None:
     email_log = EmailLog(
         organization_id=job.organization_id,
         job_id=job.id,
-        template_id=template.id,
+        template_id=log_template_id,
+        email_template_snapshot=persisted_template_snapshot,
         surrogate_id=resolved_surrogate_id,
         actor_user_id=actor_user_id,
         recipient_email=recipient_email,
         subject=subject,
         body=body,
+        from_email=template_snapshot.from_email,
         status="pending",
         provider="gmail",
         source_type="workflow_job",
@@ -405,7 +504,7 @@ async def process_workflow_email(db, job) -> None:
             email_log_id=email_log.id,
             subject=email_log.subject,
             provider="gmail",
-            template_id=email_log.template_id,
+            template_id=template_snapshot.template_id,
             actor_user_id=actor_user_id,
         )
 

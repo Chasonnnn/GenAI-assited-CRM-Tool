@@ -1452,6 +1452,7 @@ def send_email(
     source_type: str = "organization_email",
     source_id: UUID | None = None,
     purpose: str = "transactional",
+    from_email: str | None = None,
 ) -> tuple[EmailLog, EmailDelivery | None]:
     """
     Queue an email for sending.
@@ -1476,7 +1477,7 @@ def send_email(
     organization = org_service.get_org_by_id(db, org_id)
     if organization is None:
         raise EmailProviderConfigurationError("Organization not found")
-    from_address = (
+    from_address = (from_email or "").strip() or (
         f"{resend_settings.from_name} <{resend_settings.from_email}>"
         if resend_settings.from_name
         else str(resend_settings.from_email)
