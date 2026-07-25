@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.db.models import Job
@@ -118,6 +118,8 @@ def claim_pending_jobs(
         .values(
             status=JobStatus.RUNNING.value,
             attempts=Job.attempts + 1,
+            claim_token=func.gen_random_uuid(),
+            claimed_at=now,
         )
         .execution_options(synchronize_session=False)
     )

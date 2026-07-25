@@ -13,6 +13,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    TIMESTAMP,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -70,6 +71,11 @@ class Job(Base):
     attempts: Mapped[int] = mapped_column(Integer, server_default=text("0"), nullable=False)
     max_attempts: Mapped[int] = mapped_column(Integer, server_default=text("3"), nullable=False)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    claim_token: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True,
+    )
 
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
