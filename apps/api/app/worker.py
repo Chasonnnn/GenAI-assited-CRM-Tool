@@ -607,10 +607,15 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
 
                     logger.info("Found %s pending jobs", len(jobs))
                     job = jobs[0]
+                    claim_token = job.claim_token
                     try:
                         should_mark_completed = await process_job(db, job)
                         if should_mark_completed:
-                            job_service.mark_job_completed(db, job)
+                            job = job_service.complete_claimed_job(
+                                db,
+                                job_id=job.id,
+                                claim_token=claim_token,
+                            )
                             logger.info("Job %s completed successfully", job.id)
                         else:
                             logger.info("Job %s delegated for out-of-process completion", job.id)
@@ -621,7 +626,12 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
 
                     except Exception as e:
                         error_msg = str(e)
-                        job_service.mark_job_failed(db, job, error_msg)
+                        job = job_service.fail_claimed_job(
+                            db,
+                            job_id=job.id,
+                            claim_token=claim_token,
+                            error=error_msg,
+                        )
                         _log_job_failure(job, e)
 
                         # Apply rate limit backoff for Meta throttling errors

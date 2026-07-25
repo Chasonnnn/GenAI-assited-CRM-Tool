@@ -6,8 +6,10 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import update
 
 from app.db.enums import JobStatus, JobType
+from app.db.models import Job
 from app import worker
 
 
@@ -29,6 +31,7 @@ def _job(
     attempts: int = 1,
     max_attempts: int = 3,
     payload: dict | None = None,
+    claim_token=None,
 ):
     return SimpleNamespace(
         id=uuid4(),
@@ -39,6 +42,7 @@ def _job(
         max_attempts=max_attempts,
         payload=payload or {},
         run_at=datetime.now(timezone.utc),
+        claim_token=claim_token,
     )
 
 
@@ -237,15 +241,19 @@ async def test_worker_loop_single_iteration_success_and_failure(monkeypatch, db)
 
     monkeypatch.setattr(worker.job_service, "claim_pending_jobs", _claim)
 
-    def _mark_completed(session, job):
+    def _complete_claimed_job(session, *, job_id, claim_token):
+        job = next(item for item in jobs if item.id == job_id)
         job.status = JobStatus.COMPLETED.value
+        return job
 
-    def _mark_failed(session, job, error_msg):
+    def _fail_claimed_job(session, *, job_id, claim_token, error):
+        job = next(item for item in jobs if item.id == job_id)
         job.status = JobStatus.FAILED.value
         job.attempts += 1
+        return job
 
-    monkeypatch.setattr(worker.job_service, "mark_job_completed", _mark_completed)
-    monkeypatch.setattr(worker.job_service, "mark_job_failed", _mark_failed)
+    monkeypatch.setattr(worker.job_service, "complete_claimed_job", _complete_claimed_job)
+    monkeypatch.setattr(worker.job_service, "fail_claimed_job", _fail_claimed_job)
     monkeypatch.setattr(worker, "_record_job_success", lambda *args, **kwargs: None)
     monkeypatch.setattr(worker, "_record_job_failure", lambda *args, **kwargs: None)
     monkeypatch.setattr(worker.email_service, "mark_email_failed", lambda *args, **kwargs: None)
@@ -280,6 +288,7 @@ async def test_worker_claims_one_job_at_a_time_within_each_batch(monkeypatch, db
         _job(job_type=JobType.CAMPAIGN_SEND.value),
         _job(job_type=JobType.NOTIFICATION.value),
     ]
+    all_jobs = pending_jobs.copy()
     processed: list[str] = []
     claim_limits: list[int] = []
 
@@ -311,7 +320,13 @@ async def test_worker_claims_one_job_at_a_time_within_each_batch(monkeypatch, db
         return True
 
     monkeypatch.setattr(worker, "process_job", _process)
-    monkeypatch.setattr(worker.job_service, "mark_job_completed", lambda *args: None)
+    monkeypatch.setattr(
+        worker.job_service,
+        "complete_claimed_job",
+        lambda _session, *, job_id, claim_token: next(
+            item for item in all_jobs if item.id == job_id
+        ),
+    )
     monkeypatch.setattr(worker, "_record_job_success", lambda *args, **kwargs: None)
 
     async def _sleep(seconds):
@@ -332,6 +347,7 @@ async def test_worker_finishes_active_job_without_claiming_another_after_stop(mo
         _job(job_type=JobType.CAMPAIGN_SEND.value),
         _job(job_type=JobType.NOTIFICATION.value),
     ]
+    all_jobs = pending_jobs.copy()
     processed: list[str] = []
     stop_event = worker.asyncio.Event()
 
@@ -362,13 +378,94 @@ async def test_worker_finishes_active_job_without_claiming_another_after_stop(mo
         return True
 
     monkeypatch.setattr(worker, "process_job", _process)
-    monkeypatch.setattr(worker.job_service, "mark_job_completed", lambda *args: None)
+    monkeypatch.setattr(
+        worker.job_service,
+        "complete_claimed_job",
+        lambda _session, *, job_id, claim_token: next(
+            item for item in all_jobs if item.id == job_id
+        ),
+    )
     monkeypatch.setattr(worker, "_record_job_success", lambda *args, **kwargs: None)
 
     await worker.worker_loop(stop_event)
 
     assert processed == [JobType.CAMPAIGN_SEND.value]
     assert [job.job_type for job in pending_jobs] == [JobType.NOTIFICATION.value]
+
+
+@pytest.mark.asyncio
+async def test_worker_cannot_adopt_a_newer_claim_after_handler_expires_job(
+    monkeypatch,
+    db,
+    test_org,
+):
+    original_token = uuid4()
+    newer_token = uuid4()
+    job = Job(
+        id=uuid4(),
+        organization_id=test_org.id,
+        job_type=JobType.NOTIFICATION.value,
+        status=JobStatus.RUNNING.value,
+        payload={},
+        run_at=datetime.now(timezone.utc),
+        attempts=1,
+        max_attempts=3,
+        claim_token=original_token,
+        claimed_at=datetime.now(timezone.utc),
+    )
+    db.add(job)
+    db.commit()
+    stop_event = worker.asyncio.Event()
+    claimed = False
+
+    monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(db))
+    monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
+    monkeypatch.setattr(worker, "BATCH_SIZE", 1)
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_google_calendar_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_gmail_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+
+    def _claim(*_args, **_kwargs):
+        nonlocal claimed
+        if claimed:
+            return []
+        claimed = True
+        return [job]
+
+    monkeypatch.setattr(worker.job_service, "claim_pending_jobs", _claim)
+
+    async def _process(session, claimed_job):
+        assert claimed_job.id == job.id
+        session.execute(
+            update(Job)
+            .where(Job.id == job.id)
+            .values(
+                claim_token=newer_token,
+                claimed_at=datetime.now(timezone.utc),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        session.commit()
+        stop_event.set()
+        return True
+
+    monkeypatch.setattr(worker, "process_job", _process)
+    monkeypatch.setattr(worker, "_record_job_success", lambda *args, **kwargs: None)
+
+    await worker.worker_loop(stop_event)
+
+    db.expire_all()
+    current = db.query(Job).filter(Job.id == job.id).one()
+    assert current.status == JobStatus.RUNNING.value
+    assert current.claim_token == newer_token
+    assert current.completed_at is None
 
 
 @pytest.mark.asyncio
