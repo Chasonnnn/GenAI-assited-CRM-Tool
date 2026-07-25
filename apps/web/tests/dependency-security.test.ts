@@ -54,7 +54,7 @@ describe("Dependency security guards", () => {
         const braceExpansionOverride = readPnpmOverrides()["brace-expansion"]
 
         expect(braceExpansionOverride).toBeDefined()
-        expect(compareVersions(braceExpansionOverride!, "5.0.6")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(braceExpansionOverride!, "5.0.8")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins DOMPurify to a non-vulnerable version", () => {
@@ -97,7 +97,7 @@ describe("Dependency security guards", () => {
         const postcssOverride = readPnpmOverrides().postcss
 
         expect(postcssOverride).toBeDefined()
-        expect(compareVersions(postcssOverride!, "8.5.10")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(postcssOverride!, "8.5.18")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins ws to a non-vulnerable version in pnpm overrides", () => {
@@ -132,6 +132,21 @@ describe("Dependency security guards", () => {
         expect(compareVersions(vitestVersion!, "4.1.0")).toBeGreaterThanOrEqual(0)
     })
 
+    it("pins Next and its bundle analyzer to the patched release", () => {
+        const packageJson = JSON.parse(
+            readFileSync(join(process.cwd(), "package.json"), "utf8"),
+        ) as PackageJson
+        const nextVersion = packageJson.dependencies?.next?.replace(/^[^\d]*/, "")
+        const bundleAnalyzerVersion = packageJson.devDependencies?.[
+            "@next/bundle-analyzer"
+        ]?.replace(/^[^\d]*/, "")
+
+        expect(nextVersion).toBeDefined()
+        expect(bundleAnalyzerVersion).toBeDefined()
+        expect(compareVersions(nextVersion!, "16.2.11")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(bundleAnalyzerVersion!, "16.2.11")).toBeGreaterThanOrEqual(0)
+    })
+
     it("resolves only non-vulnerable flatted versions in pnpm-lock.yaml", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
@@ -156,7 +171,7 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "5.0.6")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "5.0.8")).toBeGreaterThanOrEqual(0)
         }
     })
 
@@ -170,7 +185,7 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "8.5.10")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "8.5.18")).toBeGreaterThanOrEqual(0)
         }
     })
 
