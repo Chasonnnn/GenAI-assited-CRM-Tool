@@ -131,6 +131,33 @@ def upgrade() -> None:
     )
     op.execute(
         """
+        CREATE FUNCTION preserve_scheduled_campaign_template_0290()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $$
+        BEGIN
+            IF OLD.status = 'scheduled'
+               AND NEW.email_template_id IS DISTINCT FROM OLD.email_template_id
+            THEN
+                RAISE EXCEPTION
+                    'Cannot change email template after campaign is scheduled'
+                    USING ERRCODE = '23514';
+            END IF;
+            RETURN NEW;
+        END
+        $$
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER preserve_scheduled_campaign_template_0290
+        BEFORE UPDATE OF email_template_id ON campaigns
+        FOR EACH ROW
+        EXECUTE FUNCTION preserve_scheduled_campaign_template_0290()
+        """
+    )
+    op.execute(
+        """
         CREATE FUNCTION pin_legacy_workflow_job_template_snapshot_0290()
         RETURNS trigger
         LANGUAGE plpgsql
@@ -139,7 +166,7 @@ def upgrade() -> None:
             snapshot_payload jsonb;
         BEGIN
             IF NEW.job_type <> 'workflow_email'
-               OR NEW.status NOT IN ('pending', 'running')
+               OR NEW.status NOT IN ('pending', 'running', 'failed')
                OR jsonb_typeof(NEW.payload) <> 'object'
                OR NEW.payload ? 'email_template_snapshot'
             THEN
@@ -197,6 +224,13 @@ def upgrade() -> None:
                     snapshot_payload,
                     true
                 );
+            ELSIF TG_OP = 'UPDATE'
+                  AND OLD.status = 'failed'
+                  AND NEW.status = 'pending'
+            THEN
+                RAISE EXCEPTION
+                    'Cannot replay workflow email: queued template snapshot is unavailable'
+                    USING ERRCODE = '23514';
             END IF;
             RETURN NEW;
         END
@@ -206,7 +240,7 @@ def upgrade() -> None:
     op.execute(
         """
         CREATE TRIGGER pin_legacy_workflow_job_template_snapshot_0290
-        BEFORE INSERT ON jobs
+        BEFORE INSERT OR UPDATE OF status, payload, job_type, organization_id ON jobs
         FOR EACH ROW
         EXECUTE FUNCTION pin_legacy_workflow_job_template_snapshot_0290()
         """
@@ -260,7 +294,7 @@ def upgrade() -> None:
             LEFT JOIN resend_settings AS settings
               ON settings.organization_id = template.organization_id
             WHERE job.job_type = 'workflow_email'
-              AND job.status IN ('pending', 'running')
+              AND job.status IN ('pending', 'running', 'failed')
               AND job.organization_id = template.organization_id
               AND job.payload->>'template_id' = template.id::text
               AND (
@@ -276,6 +310,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute("DROP TRIGGER IF EXISTS pin_legacy_workflow_job_template_snapshot_0290 ON jobs")
     op.execute("DROP FUNCTION IF EXISTS pin_legacy_workflow_job_template_snapshot_0290()")
+    op.execute("DROP TRIGGER IF EXISTS preserve_scheduled_campaign_template_0290 ON campaigns")
+    op.execute("DROP FUNCTION IF EXISTS preserve_scheduled_campaign_template_0290()")
     op.execute(
         "DROP TRIGGER IF EXISTS pin_legacy_campaign_run_template_snapshot_0290 ON campaign_runs"
     )

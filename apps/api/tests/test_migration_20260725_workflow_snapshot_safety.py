@@ -10,6 +10,7 @@ from alembic import command
 from alembic.config import Config
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 
@@ -25,6 +26,8 @@ LEGACY_WORKFLOW_JOB_ID = uuid.UUID("83000000-0000-4000-8000-000000000002")
 SUPPLIED_WORKFLOW_JOB_ID = uuid.UUID("83000000-0000-4000-8000-000000000003")
 POST_MIGRATION_SYSTEM_JOB_ID = uuid.UUID("83000000-0000-4000-8000-000000000004")
 CROSS_ORG_WORKFLOW_JOB_ID = uuid.UUID("83000000-0000-4000-8000-000000000005")
+FAILED_WORKFLOW_JOB_ID = uuid.UUID("83000000-0000-4000-8000-000000000006")
+FAILED_SYSTEM_WORKFLOW_JOB_ID = uuid.UUID("83000000-0000-4000-8000-000000000007")
 USER_ID = uuid.UUID("84000000-0000-4000-8000-000000000001")
 CAMPAIGN_ID = uuid.UUID("85000000-0000-4000-8000-000000000001")
 LEGACY_CAMPAIGN_RUN_ID = uuid.UUID("86000000-0000-4000-8000-000000000001")
@@ -549,5 +552,186 @@ def test_upgrade_snapshots_legacy_api_inserts_without_overwriting_new_payloads(
             )
             assert "email_template_snapshot" not in job_payloads[POST_MIGRATION_SYSTEM_JOB_ID]
             assert "email_template_snapshot" not in job_payloads[CROSS_ORG_WORKFLOW_JOB_ID]
+        finally:
+            transaction.rollback()
+
+
+def test_upgrade_pins_failed_workflow_jobs_before_dlq_replay(db_engine) -> None:
+    """Failed legacy intents keep their migration-time bytes or fail closed."""
+    with db_engine.connect() as connection:
+        transaction = connection.begin()
+        config = _alembic_config(connection)
+        try:
+            command.upgrade(config, "head")
+            command.downgrade(config, PRE_SNAPSHOT_REVISION)
+            _seed_legacy_producer_inputs(connection)
+
+            base_payload = {
+                "recipient_email": "legacy-replay@example.test",
+                "variables": {},
+                "workflow_scope": "org",
+                "workflow_owner_id": None,
+            }
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO jobs (
+                        id,
+                        job_scope,
+                        organization_id,
+                        job_type,
+                        payload,
+                        status,
+                        run_at,
+                        attempts,
+                        max_attempts,
+                        last_error
+                    )
+                    VALUES
+                        (
+                            :normal_id,
+                            'organization',
+                            :organization_id,
+                            'workflow_email',
+                            CAST(:normal_payload AS jsonb),
+                            'failed',
+                            now() - interval '1 hour',
+                            3,
+                            3,
+                            'provider timeout'
+                        ),
+                        (
+                            :system_id,
+                            'organization',
+                            :organization_id,
+                            'workflow_email',
+                            CAST(:system_payload AS jsonb),
+                            'failed',
+                            now() - interval '1 hour',
+                            3,
+                            3,
+                            'unsafe legacy intent'
+                        )
+                    """
+                ),
+                {
+                    "normal_id": FAILED_WORKFLOW_JOB_ID,
+                    "system_id": FAILED_SYSTEM_WORKFLOW_JOB_ID,
+                    "organization_id": ORG_ID,
+                    "normal_payload": json.dumps(
+                        {"template_id": str(NORMAL_TEMPLATE_ID), **base_payload}
+                    ),
+                    "system_payload": json.dumps(
+                        {"template_id": str(SYSTEM_TEMPLATE_ID), **base_payload}
+                    ),
+                },
+            )
+
+            command.upgrade(config, "head")
+            connection.execute(
+                text(
+                    """
+                    UPDATE email_templates
+                    SET subject = 'Edited after deployment',
+                        body = '<p>Edited after deployment</p>',
+                        current_version = current_version + 1
+                    WHERE id = :id
+                    """
+                ),
+                {"id": NORMAL_TEMPLATE_ID},
+            )
+
+            from app.db.models import Job
+            from app.services import job_service
+
+            session = Session(bind=connection, join_transaction_mode="create_savepoint")
+            try:
+                replayed = job_service.replay_failed_job(
+                    session,
+                    org_id=ORG_ID,
+                    job_id=FAILED_WORKFLOW_JOB_ID,
+                )
+                assert replayed.status == "pending"
+                assert replayed.payload["email_template_snapshot"]["subject"] == "Pinned subject"
+                assert replayed.payload["email_template_snapshot"]["body"] == "<p>Pinned body</p>"
+                assert replayed.payload["email_template_snapshot"]["template_version"] == 5
+
+                unsafe_job = (
+                    session.query(Job).filter(Job.id == FAILED_SYSTEM_WORKFLOW_JOB_ID).one()
+                )
+                assert "email_template_snapshot" not in unsafe_job.payload
+                with pytest.raises(
+                    ValueError,
+                    match="queued template snapshot is unavailable",
+                ):
+                    job_service.replay_failed_job(
+                        session,
+                        org_id=ORG_ID,
+                        job_id=FAILED_SYSTEM_WORKFLOW_JOB_ID,
+                    )
+                assert unsafe_job.status == "failed"
+
+                with pytest.raises(
+                    DBAPIError,
+                    match="queued template snapshot is unavailable",
+                ):
+                    with connection.begin_nested():
+                        connection.execute(
+                            text(
+                                """
+                                UPDATE jobs
+                                SET status = 'pending'
+                                WHERE id = :id
+                                """
+                            ),
+                            {"id": FAILED_SYSTEM_WORKFLOW_JOB_ID},
+                        )
+            finally:
+                session.close()
+        finally:
+            transaction.rollback()
+
+
+def test_upgrade_blocks_legacy_api_template_changes_for_scheduled_campaigns(
+    db_engine,
+) -> None:
+    """The database closes the migration-to-new-API campaign mutation window."""
+    with db_engine.connect() as connection:
+        transaction = connection.begin()
+        config = _alembic_config(connection)
+        try:
+            command.upgrade(config, "head")
+            command.downgrade(config, PRE_SNAPSHOT_REVISION)
+            _seed_legacy_producer_inputs(connection)
+            command.upgrade(config, "head")
+
+            with pytest.raises(
+                DBAPIError,
+                match="Cannot change email template after campaign is scheduled",
+            ):
+                with connection.begin_nested():
+                    connection.execute(
+                        text(
+                            """
+                            UPDATE campaigns
+                            SET email_template_id = :replacement_template_id
+                            WHERE id = :campaign_id
+                              AND organization_id = :organization_id
+                            """
+                        ),
+                        {
+                            "replacement_template_id": SYSTEM_TEMPLATE_ID,
+                            "campaign_id": CAMPAIGN_ID,
+                            "organization_id": ORG_ID,
+                        },
+                    )
+
+            assert (
+                connection.scalar(
+                    text("SELECT email_template_id FROM campaigns WHERE id = :id"),
+                    {"id": CAMPAIGN_ID},
+                )
+                == NORMAL_TEMPLATE_ID
+            )
         finally:
             transaction.rollback()

@@ -518,6 +518,11 @@ def replay_failed_job(
 
     now = datetime.now(timezone.utc)
     payload = dict(job.payload or {})
+    if (
+        job.job_type == JobType.WORKFLOW_EMAIL.value
+        and payload.get("email_template_snapshot") is None
+    ):
+        raise ValueError("Cannot replay workflow email: queued template snapshot is unavailable")
     replay_meta = payload.get("_replay")
     if not isinstance(replay_meta, dict):
         replay_meta = {}
