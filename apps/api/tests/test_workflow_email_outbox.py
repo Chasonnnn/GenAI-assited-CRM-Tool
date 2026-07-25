@@ -254,8 +254,8 @@ async def test_org_workflow_queues_resend_outbox_without_provider_io(
     monkeypatch,
 ):
     from app.db.enums import EmailDeliveryStatus, EmailStatus, JobType
-    from app.db.models import EmailDelivery, EmailLog, EmailTemplate, Job
-    from app.services import resend_transport, workflow_email_provider
+    from app.db.models import EmailDelivery, EmailLog, EmailTemplate, Job, ResendSettings
+    from app.services import resend_transport
     from app.worker import process_workflow_email
 
     template = EmailTemplate(
@@ -271,19 +271,15 @@ async def test_org_workflow_queues_resend_outbox_without_provider_io(
     )
     db.add(template)
     db.flush()
-
-    monkeypatch.setattr(
-        workflow_email_provider,
-        "resolve_workflow_email_provider",
-        lambda **_kwargs: (
-            "resend",
-            {
-                "api_key_encrypted": "write-only",
-                "from_email": "care@example.com",
-                "from_name": "Care Team",
-                "reply_to": "reply@example.com",
-            },
-        ),
+    db.add(
+        ResendSettings(
+            organization_id=test_org.id,
+            email_provider="resend",
+            api_key_encrypted="write-only",
+            from_email="care@example.com",
+            from_name="Care Team",
+            reply_to_email="reply@example.com",
+        )
     )
 
     async def fail_direct_send(**_kwargs):
@@ -305,6 +301,9 @@ async def test_org_workflow_queues_resend_outbox_without_provider_io(
     )
     db.add(job)
     db.commit()
+    db.refresh(job)
+
+    assert job.payload["email_template_snapshot"]["from_email"] == ("Care Team <care@example.com>")
 
     await process_workflow_email(db, job)
 
@@ -677,8 +676,8 @@ async def test_personal_workflow_stays_on_user_gmail(
     monkeypatch,
 ):
     from app.db.enums import JobType
-    from app.db.models import EmailDelivery, EmailLog, EmailTemplate, Job
-    from app.services import gmail_service, workflow_email_provider
+    from app.db.models import EmailDelivery, EmailLog, EmailTemplate, Job, UserIntegration
+    from app.services import gmail_service
     from app.worker import process_workflow_email
 
     template = EmailTemplate(
@@ -694,14 +693,13 @@ async def test_personal_workflow_stays_on_user_gmail(
     )
     db.add(template)
     db.flush()
-
-    monkeypatch.setattr(
-        workflow_email_provider,
-        "resolve_workflow_email_provider",
-        lambda **_kwargs: (
-            "user_gmail",
-            {"user_id": test_user.id},
-        ),
+    db.add(
+        UserIntegration(
+            user_id=test_user.id,
+            integration_type="gmail",
+            access_token_encrypted="unused-provider-token",
+            account_email="workflow-owner@example.com",
+        )
     )
 
     async def fake_gmail_send(**_kwargs):
@@ -723,6 +721,9 @@ async def test_personal_workflow_stays_on_user_gmail(
     )
     db.add(job)
     db.commit()
+    db.refresh(job)
+
+    assert job.payload["email_template_snapshot"]["from_email"] == "workflow-owner@example.com"
 
     await process_workflow_email(db, job)
 
