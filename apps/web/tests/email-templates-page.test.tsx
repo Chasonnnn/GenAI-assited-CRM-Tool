@@ -794,4 +794,34 @@ describe("EmailTemplatesPage", () => {
         expect(screen.getByText("You don't have any personal templates yet")).toBeInTheDocument()
     })
 
+    it("lets users recover inactive personal templates in the Studio", async () => {
+        personalTemplatesFixture = [{
+            ...PERSONAL_TEMPLATE,
+            id: "tpl_personal_inactive",
+            name: "Inactive Personal Template",
+            is_active: false,
+        }]
+
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(
+            screen.getByRole("checkbox", {
+                name: "Show inactive personal templates",
+            }),
+        )
+        expect(
+            await screen.findByText("Inactive Personal Template"),
+        ).toBeInTheDocument()
+
+        fireEvent.click(
+            screen.getByRole("button", {
+                name: "Actions for Inactive Personal Template",
+            }),
+        )
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
+        expect(mockRouterPush).toHaveBeenCalledWith(
+            "/automation/email-templates/personal/tpl_personal_inactive",
+        )
+    })
+
 })

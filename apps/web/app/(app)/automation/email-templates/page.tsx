@@ -909,6 +909,7 @@ export default function EmailTemplatesPage() {
 
     const [activeTab, setActiveTab] = useState("personal")
     const [showAllPersonal, setShowAllPersonal] = useState(false)
+    const [showInactivePersonal, setShowInactivePersonal] = useState(false)
     const [editorState, dispatchEditor] = useReducer(
         emailTemplateEditorReducer,
         initialEmailTemplateEditorState,
@@ -954,7 +955,7 @@ export default function EmailTemplatesPage() {
 
     // API hooks for templates
     const { data: personalTemplates, isLoading: loadingPersonal } = useEmailTemplates({
-        activeOnly: true,
+        activeOnly: !showInactivePersonal,
         scope: "personal",
         showAllPersonal: isAdmin && showAllPersonal,
     })
@@ -1486,26 +1487,44 @@ export default function EmailTemplatesPage() {
                             <TabsTrigger value="signature">My Signature</TabsTrigger>
                         </TabsList>
 
-                        {/* Admin filter for personal templates */}
-                        {activeTab === "personal" && isAdmin && (
-                            <Select
-                                value={showAllPersonal ? "all" : "mine"}
-                                onValueChange={(v) => setShowAllPersonal(v === "all")}
-                            >
-                                <SelectTrigger className="w-[180px]">
-                                    <SelectValue>
-                                        {(value: string | null) =>
-                                            getPersonalTemplateVisibilityLabel(
-                                                value,
-                                            )
+                        {activeTab === "personal" && (
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                    <Checkbox
+                                        id="show-inactive-personal-templates"
+                                        checked={showInactivePersonal}
+                                        onCheckedChange={(checked) =>
+                                            setShowInactivePersonal(checked === true)
                                         }
-                                    </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="mine">My Templates</SelectItem>
-                                    <SelectItem value="all">All Personal Templates</SelectItem>
-                                </SelectContent>
-                            </Select>
+                                    />
+                                    <Label
+                                        htmlFor="show-inactive-personal-templates"
+                                        className="cursor-pointer text-sm font-normal"
+                                    >
+                                        Show inactive personal templates
+                                    </Label>
+                                </div>
+                                {isAdmin && (
+                                    <Select
+                                        value={showAllPersonal ? "all" : "mine"}
+                                        onValueChange={(v) => setShowAllPersonal(v === "all")}
+                                    >
+                                        <SelectTrigger className="w-[180px]">
+                                            <SelectValue>
+                                                {(value: string | null) =>
+                                                    getPersonalTemplateVisibilityLabel(
+                                                        value,
+                                                    )
+                                                }
+                                            </SelectValue>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="mine">My Templates</SelectItem>
+                                            <SelectItem value="all">All Personal Templates</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                            </div>
                         )}
                     </div>
 
