@@ -677,6 +677,32 @@ describe("OrganizationEmailTemplateStudio", () => {
         expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled()
     })
 
+    it("shows the visual editor as the selected default for normal templates", () => {
+        mocks.state.draft = {
+            ...draftFromPublished,
+            body: "<p>Simple visual content</p>",
+        }
+
+        render(<OrganizationEmailTemplateStudio templateId="template-1" />)
+
+        expect(
+            screen.getByRole("group", { name: "Email body editor mode" }),
+        ).toBeInTheDocument()
+        const visualMode = screen.getByRole("button", { name: "Visual editor" })
+        const htmlMode = screen.getByRole("button", { name: "HTML source" })
+        expect(visualMode).toHaveAttribute("aria-pressed", "true")
+        expect(htmlMode).toHaveAttribute("aria-pressed", "false")
+        expect(visualMode).toHaveClass("aria-pressed:bg-background")
+
+        fireEvent.click(htmlMode)
+
+        expect(visualMode).toHaveAttribute("aria-pressed", "false")
+        expect(htmlMode).toHaveAttribute("aria-pressed", "true")
+        expect(screen.getByLabelText("Email HTML")).toHaveValue(
+            "<p>Simple visual content</p>",
+        )
+    })
+
     it("inserts a variable into the field being edited", () => {
         mocks.state.draft = {
             ...draftFromPublished,

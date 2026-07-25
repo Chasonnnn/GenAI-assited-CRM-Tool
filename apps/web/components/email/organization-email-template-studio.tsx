@@ -44,6 +44,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useAuth } from "@/lib/auth-context"
 import type {
     EmailTemplateDraft,
@@ -931,27 +932,32 @@ function OrganizationEmailTemplateEditor({
                                 onSelect={handleInsertVariable}
                             />
                         </div>
-                        <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant={bodyMode === "visual" ? "secondary" : "ghost"}
-                                aria-pressed={bodyMode === "visual"}
+                        <ToggleGroup
+                            aria-label="Email body editor mode"
+                            className="rounded-lg bg-muted p-1"
+                            multiple={false}
+                            value={[bodyMode]}
+                            onValueChange={(value) => {
+                                const nextMode = value[0] as
+                                    | EmailTemplateBodyMode
+                                    | undefined
+                                if (nextMode) setBodyMode(nextMode)
+                            }}
+                        >
+                            <ToggleGroupItem
+                                value="visual"
                                 disabled={advancedBody}
-                                onClick={() => setBodyMode("visual")}
+                                className="h-9 min-w-32 rounded-md px-4 text-muted-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm aria-pressed:ring-1 aria-pressed:ring-border"
                             >
                                 Visual editor
-                            </Button>
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant={bodyMode === "html" ? "secondary" : "ghost"}
-                                aria-pressed={bodyMode === "html"}
-                                onClick={() => setBodyMode("html")}
+                            </ToggleGroupItem>
+                            <ToggleGroupItem
+                                value="html"
+                                className="h-9 min-w-32 rounded-md px-4 text-muted-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm aria-pressed:ring-1 aria-pressed:ring-border"
                             >
                                 HTML source
-                            </Button>
-                        </div>
+                            </ToggleGroupItem>
+                        </ToggleGroup>
                         {bodyMode === "html" ? (
                             <Textarea
                                 ref={htmlBodyRef}
