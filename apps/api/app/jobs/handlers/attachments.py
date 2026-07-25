@@ -14,9 +14,12 @@ async def process_attachment_scan(db, job) -> bool:
 
     attachment_uuid = UUID(attachment_id)
     if scan_dispatch_service.remote_scan_dispatch_configured():
+        if job.claim_token is None:
+            raise RuntimeError("Attachment scan job is missing claim identity")
         await scan_dispatch_service.dispatch_attachment_scan_job(
             job_id=job.id,
             attachment_id=attachment_uuid,
+            claim_token=job.claim_token,
         )
         return False
 

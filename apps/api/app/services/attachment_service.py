@@ -589,21 +589,18 @@ def ensure_attachment_scan_job(
     for job in in_flight_jobs:
         payload = job.payload or {}
         if payload.get("attachment_id") == attachment_id_str:
-            if job.status == JobStatus.RUNNING.value and job.run_at <= now - timedelta(
-                seconds=stale_after_seconds
-            ):
-                job.status = JobStatus.PENDING.value
-                job.last_error = (
-                    "Recovered stale attachment scan job after exceeding "
-                    f"{stale_after_seconds}s lease"
+            if job.status == JobStatus.RUNNING.value:
+                return job_service.recover_stale_running_job(
+                    db,
+                    job=job,
+                    stale_before=now - timedelta(seconds=stale_after_seconds),
+                    recovered_at=now,
+                    error=(
+                        "Recovered stale attachment scan job after exceeding "
+                        f"{stale_after_seconds}s lease"
+                    ),
+                    commit=commit,
                 )
-                job.run_at = now
-                job.completed_at = None
-                if commit:
-                    db.commit()
-                else:
-                    db.flush()
-                return True
             return False
 
     job_service.enqueue_job(
@@ -661,16 +658,18 @@ def dispatch_attachment_scan_if_needed(
         selected_job.run_at = now
         db.flush()
     elif selected_job.status == JobStatus.RUNNING.value:
-        if selected_job.run_at > now - timedelta(seconds=stale_after_seconds):
-            return False
-        selected_job.status = JobStatus.PENDING.value
-        selected_job.last_error = (
-            f"Recovered stale attachment scan job after exceeding {stale_after_seconds}s lease"
+        recovered = job_service.recover_stale_running_job(
+            db,
+            job=selected_job,
+            stale_before=now - timedelta(seconds=stale_after_seconds),
+            recovered_at=now,
+            error=(
+                f"Recovered stale attachment scan job after exceeding {stale_after_seconds}s lease"
+            ),
+            commit=True,
         )
-        selected_job.run_at = now
-        selected_job.completed_at = None
-        db.commit()
-        db.refresh(selected_job)
+        if not recovered:
+            return False
 
     if not scan_dispatch_service.remote_scan_dispatch_configured():
         return False
@@ -680,9 +679,12 @@ def dispatch_attachment_scan_if_needed(
         return False
 
     try:
+        if claimed_job.claim_token is None:
+            raise RuntimeError("Attachment scan job is missing claim identity")
         scan_dispatch_service.dispatch_attachment_scan_job_sync(
             job_id=claimed_job.id,
             attachment_id=attachment_id,
+            claim_token=claimed_job.claim_token,
         )
     except Exception as exc:
         job_service.mark_job_failed(db, claimed_job, str(exc))

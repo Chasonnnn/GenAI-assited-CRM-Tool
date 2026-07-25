@@ -96,6 +96,47 @@ def test_ensure_attachment_scan_job_reclaims_stale_running_job(db, test_org, mon
     assert stale_job.last_error is not None
 
 
+def test_recent_attachment_claim_is_not_reclaimed_when_run_at_is_old(
+    db,
+    test_org,
+    monkeypatch,
+):
+    attachment_id = uuid.uuid4()
+    claim_token = uuid.uuid4()
+    job = Job(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        job_type=JobType.ATTACHMENT_SCAN.value,
+        status=JobStatus.RUNNING.value,
+        payload={"attachment_id": str(attachment_id)},
+        run_at=datetime.now(timezone.utc) - timedelta(days=30),
+        attempts=1,
+        max_attempts=3,
+        claim_token=claim_token,
+        claimed_at=datetime.now(timezone.utc),
+    )
+    db.add(job)
+    db.commit()
+    monkeypatch.setattr(
+        settings,
+        "ATTACHMENT_SCAN_STALE_RUNNING_SECONDS",
+        300,
+        raising=False,
+    )
+
+    created = attachment_service.ensure_attachment_scan_job(
+        db=db,
+        org_id=test_org.id,
+        attachment_id=attachment_id,
+        commit=False,
+    )
+
+    db.refresh(job)
+    assert created is False
+    assert job.status == JobStatus.RUNNING.value
+    assert job.claim_token == claim_token
+
+
 def test_upload_attachment_enqueues_scan_job(db, test_org, test_user, default_stage, monkeypatch):
     monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", True, raising=False)
     monkeypatch.setattr(attachment_service, "store_file", lambda *_args, **_kwargs: None)
@@ -352,6 +393,89 @@ def test_ensure_form_submission_file_scan_job_reclaims_stale_running_job(db, tes
     assert stale_job.last_error is not None
 
 
+def test_recent_form_submission_claim_is_not_reclaimed_when_run_at_is_old(
+    db,
+    test_org,
+    monkeypatch,
+):
+    submission_file_id = uuid.uuid4()
+    claim_token = uuid.uuid4()
+    job = Job(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        job_type=JobType.FORM_SUBMISSION_FILE_SCAN.value,
+        status=JobStatus.RUNNING.value,
+        payload={"submission_file_id": str(submission_file_id)},
+        run_at=datetime.now(timezone.utc) - timedelta(days=30),
+        attempts=1,
+        max_attempts=3,
+        claim_token=claim_token,
+        claimed_at=datetime.now(timezone.utc),
+    )
+    db.add(job)
+    db.commit()
+    monkeypatch.setattr(
+        settings,
+        "ATTACHMENT_SCAN_STALE_RUNNING_SECONDS",
+        300,
+        raising=False,
+    )
+
+    created = form_submission_service.ensure_submission_file_scan_job(
+        db=db,
+        org_id=test_org.id,
+        submission_file_id=submission_file_id,
+        commit=False,
+    )
+
+    db.refresh(job)
+    assert created is False
+    assert job.status == JobStatus.RUNNING.value
+    assert job.claim_token == claim_token
+
+
+def test_stale_form_submission_claim_is_reclaimed_and_identity_cleared(
+    db,
+    test_org,
+    monkeypatch,
+):
+    submission_file_id = uuid.uuid4()
+    job = Job(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        job_type=JobType.FORM_SUBMISSION_FILE_SCAN.value,
+        status=JobStatus.RUNNING.value,
+        payload={"submission_file_id": str(submission_file_id)},
+        run_at=datetime.now(timezone.utc),
+        attempts=1,
+        max_attempts=3,
+        claim_token=uuid.uuid4(),
+        claimed_at=datetime.now(timezone.utc) - timedelta(minutes=10),
+    )
+    db.add(job)
+    db.commit()
+    monkeypatch.setattr(
+        settings,
+        "ATTACHMENT_SCAN_STALE_RUNNING_SECONDS",
+        300,
+        raising=False,
+    )
+
+    created = form_submission_service.ensure_submission_file_scan_job(
+        db=db,
+        org_id=test_org.id,
+        submission_file_id=submission_file_id,
+        commit=False,
+    )
+
+    db.refresh(job)
+    assert created is True
+    assert job.status == JobStatus.PENDING.value
+    assert job.claim_token is None
+    assert job.claimed_at is None
+    assert job.last_error is not None
+
+
 def test_dispatch_attachment_scan_if_needed_dispatches_pending_remote_scan(
     db, test_org, monkeypatch
 ):
@@ -374,9 +498,10 @@ def test_dispatch_attachment_scan_if_needed_dispatches_pending_remote_scan(
     monkeypatch.setattr(scan_dispatch_service, "remote_scan_dispatch_configured", lambda: True)
     captured: dict[str, object] = {}
 
-    def _dispatch_attachment_scan_job_sync(*, job_id, attachment_id):
+    def _dispatch_attachment_scan_job_sync(*, job_id, attachment_id, claim_token):
         captured["job_id"] = job_id
         captured["attachment_id"] = attachment_id
+        captured["claim_token"] = claim_token
 
     monkeypatch.setattr(
         scan_dispatch_service,
@@ -392,7 +517,11 @@ def test_dispatch_attachment_scan_if_needed_dispatches_pending_remote_scan(
 
     db.refresh(job)
     assert dispatched is True
-    assert captured == {"job_id": job.id, "attachment_id": attachment_id}
+    assert captured == {
+        "job_id": job.id,
+        "attachment_id": attachment_id,
+        "claim_token": job.claim_token,
+    }
     assert job.status == JobStatus.RUNNING.value
     assert job.attempts == 1
 
@@ -419,9 +548,10 @@ def test_dispatch_submission_file_scan_if_needed_dispatches_pending_remote_scan(
     monkeypatch.setattr(scan_dispatch_service, "remote_scan_dispatch_configured", lambda: True)
     captured: dict[str, object] = {}
 
-    def _dispatch_form_submission_file_scan_job_sync(*, job_id, submission_file_id):
+    def _dispatch_form_submission_file_scan_job_sync(*, job_id, submission_file_id, claim_token):
         captured["job_id"] = job_id
         captured["submission_file_id"] = submission_file_id
+        captured["claim_token"] = claim_token
 
     monkeypatch.setattr(
         scan_dispatch_service,
@@ -437,7 +567,11 @@ def test_dispatch_submission_file_scan_if_needed_dispatches_pending_remote_scan(
 
     db.refresh(job)
     assert dispatched is True
-    assert captured == {"job_id": job.id, "submission_file_id": submission_file_id}
+    assert captured == {
+        "job_id": job.id,
+        "submission_file_id": submission_file_id,
+        "claim_token": job.claim_token,
+    }
     assert job.status == JobStatus.RUNNING.value
     assert job.attempts == 1
 
@@ -496,9 +630,10 @@ async def test_download_pending_attachment_requeues_scan_job_when_missing(
     monkeypatch.setattr(scan_dispatch_service, "remote_scan_dispatch_configured", lambda: True)
     captured: dict[str, object] = {}
 
-    def _dispatch_attachment_scan_job_sync(*, job_id, attachment_id):
+    def _dispatch_attachment_scan_job_sync(*, job_id, attachment_id, claim_token):
         captured["job_id"] = job_id
         captured["attachment_id"] = attachment_id
+        captured["claim_token"] = claim_token
 
     monkeypatch.setattr(
         scan_dispatch_service,
@@ -521,4 +656,8 @@ async def test_download_pending_attachment_requeues_scan_job_when_missing(
     assert len(jobs) == 1
     assert jobs[0].status == JobStatus.RUNNING.value
     assert jobs[0].payload.get("attachment_id") == str(attachment.id)
-    assert captured == {"job_id": jobs[0].id, "attachment_id": attachment.id}
+    assert captured == {
+        "job_id": jobs[0].id,
+        "attachment_id": attachment.id,
+        "claim_token": jobs[0].claim_token,
+    }

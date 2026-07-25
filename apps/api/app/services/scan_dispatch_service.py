@@ -64,7 +64,13 @@ def _access_token() -> str:
     return str(token)
 
 
-def _run_payload(*, scan_type: str, resource_id: UUID, job_id: UUID) -> dict[str, object]:
+def _run_payload(
+    *,
+    scan_type: str,
+    resource_id: UUID,
+    job_id: UUID,
+    claim_token: UUID,
+) -> dict[str, object]:
     return {
         "overrides": {
             "containerOverrides": [
@@ -76,6 +82,8 @@ def _run_payload(*, scan_type: str, resource_id: UUID, job_id: UUID) -> dict[str
                         str(resource_id),
                         "--job-id",
                         str(job_id),
+                        "--claim-token",
+                        str(claim_token),
                     ]
                 }
             ],
@@ -85,13 +93,24 @@ def _run_payload(*, scan_type: str, resource_id: UUID, job_id: UUID) -> dict[str
     }
 
 
-async def _dispatch_scan_job(*, scan_type: str, resource_id: UUID, job_id: UUID) -> None:
+async def _dispatch_scan_job(
+    *,
+    scan_type: str,
+    resource_id: UUID,
+    job_id: UUID,
+    claim_token: UUID,
+) -> None:
     token = _access_token()
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
-    payload = _run_payload(scan_type=scan_type, resource_id=resource_id, job_id=job_id)
+    payload = _run_payload(
+        scan_type=scan_type,
+        resource_id=resource_id,
+        job_id=job_id,
+        claim_token=claim_token,
+    )
 
     async with httpx.AsyncClient(timeout=SCAN_JOB_TIMEOUT_SECONDS) as client:
 
@@ -157,13 +176,24 @@ def _raise_for_dispatch_response(
     raise RuntimeError(f"Dedicated scan job dispatch failed: {response.status_code}")
 
 
-def _dispatch_scan_job_sync(*, scan_type: str, resource_id: UUID, job_id: UUID) -> None:
+def _dispatch_scan_job_sync(
+    *,
+    scan_type: str,
+    resource_id: UUID,
+    job_id: UUID,
+    claim_token: UUID,
+) -> None:
     token = _access_token()
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
-    payload = _run_payload(scan_type=scan_type, resource_id=resource_id, job_id=job_id)
+    payload = _run_payload(
+        scan_type=scan_type,
+        resource_id=resource_id,
+        job_id=job_id,
+        claim_token=claim_token,
+    )
 
     with httpx.Client(timeout=SCAN_JOB_TIMEOUT_SECONDS) as client:
 
@@ -186,33 +216,57 @@ def _dispatch_scan_job_sync(*, scan_type: str, resource_id: UUID, job_id: UUID) 
     )
 
 
-async def dispatch_attachment_scan_job(*, job_id: UUID, attachment_id: UUID) -> None:
+async def dispatch_attachment_scan_job(
+    *,
+    job_id: UUID,
+    attachment_id: UUID,
+    claim_token: UUID,
+) -> None:
     await _dispatch_scan_job(
         scan_type="attachment",
         resource_id=attachment_id,
         job_id=job_id,
+        claim_token=claim_token,
     )
 
 
-async def dispatch_form_submission_file_scan_job(*, job_id: UUID, submission_file_id: UUID) -> None:
+async def dispatch_form_submission_file_scan_job(
+    *,
+    job_id: UUID,
+    submission_file_id: UUID,
+    claim_token: UUID,
+) -> None:
     await _dispatch_scan_job(
         scan_type="form_submission_file",
         resource_id=submission_file_id,
         job_id=job_id,
+        claim_token=claim_token,
     )
 
 
-def dispatch_attachment_scan_job_sync(*, job_id: UUID, attachment_id: UUID) -> None:
+def dispatch_attachment_scan_job_sync(
+    *,
+    job_id: UUID,
+    attachment_id: UUID,
+    claim_token: UUID,
+) -> None:
     _dispatch_scan_job_sync(
         scan_type="attachment",
         resource_id=attachment_id,
         job_id=job_id,
+        claim_token=claim_token,
     )
 
 
-def dispatch_form_submission_file_scan_job_sync(*, job_id: UUID, submission_file_id: UUID) -> None:
+def dispatch_form_submission_file_scan_job_sync(
+    *,
+    job_id: UUID,
+    submission_file_id: UUID,
+    claim_token: UUID,
+) -> None:
     _dispatch_scan_job_sync(
         scan_type="form_submission_file",
         resource_id=submission_file_id,
         job_id=job_id,
+        claim_token=claim_token,
     )

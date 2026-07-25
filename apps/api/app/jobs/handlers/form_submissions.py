@@ -14,9 +14,12 @@ async def process_form_submission_file_scan(db, job) -> bool:
 
     file_uuid = UUID(file_id)
     if scan_dispatch_service.remote_scan_dispatch_configured():
+        if job.claim_token is None:
+            raise RuntimeError("Form submission scan job is missing claim identity")
         await scan_dispatch_service.dispatch_form_submission_file_scan_job(
             job_id=job.id,
             submission_file_id=file_uuid,
+            claim_token=job.claim_token,
         )
         return False
 

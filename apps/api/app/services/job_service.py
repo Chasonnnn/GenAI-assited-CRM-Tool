@@ -166,6 +166,52 @@ def claim_job_for_dispatch(db: Session, job_id: UUID) -> Job | None:
     return db.query(Job).filter(Job.id == job_id).first()
 
 
+def recover_stale_running_job(
+    db: Session,
+    *,
+    job: Job,
+    stale_before: datetime,
+    recovered_at: datetime,
+    error: str,
+    commit: bool = False,
+) -> bool:
+    """Atomically requeue a stale job without overwriting a newer claim."""
+    expected_claim_token = job.claim_token
+    if expected_claim_token is None:
+        claim_filter = Job.claim_token.is_(None)
+        stale_filter = Job.run_at <= stale_before
+    else:
+        claim_filter = Job.claim_token == expected_claim_token
+        stale_filter = Job.claimed_at <= stale_before
+
+    result = db.execute(
+        update(Job)
+        .where(
+            Job.id == job.id,
+            Job.status == JobStatus.RUNNING.value,
+            claim_filter,
+            stale_filter,
+        )
+        .values(
+            status=JobStatus.PENDING.value,
+            last_error=error,
+            run_at=recovered_at,
+            completed_at=None,
+            claim_token=None,
+            claimed_at=None,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    recovered = (result.rowcount or 0) == 1
+    if recovered:
+        if commit:
+            db.commit()
+        else:
+            db.flush()
+    db.expire(job)
+    return recovered
+
+
 def get_job(db: Session, job_id: UUID, org_id: UUID | None = None) -> Job | None:
     """Get a job by ID, optionally scoped to org."""
     query = db.query(Job).filter(Job.id == job_id)
@@ -250,16 +296,19 @@ def complete_claimed_job(
     db: Session,
     *,
     job_id: UUID,
-    claim_token: UUID,
+    claim_token: UUID | None,
 ) -> Job:
     """Complete only the still-current worker claim."""
     completed_at = datetime.now(timezone.utc)
+    claim_filter = (
+        Job.claim_token.is_(None) if claim_token is None else Job.claim_token == claim_token
+    )
     result = db.execute(
         update(Job)
         .where(
             Job.id == job_id,
             Job.status == JobStatus.RUNNING.value,
-            Job.claim_token == claim_token,
+            claim_filter,
         )
         .values(
             status=JobStatus.COMPLETED.value,
@@ -308,16 +357,19 @@ def fail_claimed_job(
     db: Session,
     *,
     job_id: UUID,
-    claim_token: UUID,
+    claim_token: UUID | None,
     error: str,
 ) -> Job:
     """Fail or requeue only the still-current worker claim."""
+    claim_filter = (
+        Job.claim_token.is_(None) if claim_token is None else Job.claim_token == claim_token
+    )
     job = db.execute(
         select(Job)
         .where(
             Job.id == job_id,
             Job.status == JobStatus.RUNNING.value,
-            Job.claim_token == claim_token,
+            claim_filter,
         )
         .with_for_update()
         .execution_options(populate_existing=True)

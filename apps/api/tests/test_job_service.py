@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import uuid
 
 import pytest
@@ -283,3 +283,47 @@ def test_stale_claim_token_cannot_complete_a_newer_claim(db, test_org):
     assert current.status == JobStatus.RUNNING.value
     assert current.claim_token == newer_token
     assert current.completed_at is None
+
+
+def test_stale_recovery_does_not_clear_a_newer_claim(db, test_org):
+    old_token = uuid.uuid4()
+    newer_token = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+    job = Job(
+        organization_id=test_org.id,
+        job_type=JobType.ATTACHMENT_SCAN.value,
+        payload={"attachment_id": str(uuid.uuid4())},
+        run_at=now - timedelta(minutes=10),
+        status=JobStatus.RUNNING.value,
+        attempts=1,
+        claim_token=old_token,
+        claimed_at=now - timedelta(minutes=10),
+    )
+    db.add(job)
+    db.commit()
+    assert job.claim_token == old_token
+
+    db.execute(
+        update(Job)
+        .where(Job.id == job.id)
+        .values(
+            claim_token=newer_token,
+            claimed_at=now,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    db.flush()
+
+    recovered = job_service.recover_stale_running_job(
+        db,
+        job=job,
+        stale_before=now - timedelta(minutes=5),
+        recovered_at=now,
+        error="stale scan lease",
+    )
+
+    assert recovered is False
+    current = db.query(Job).filter(Job.id == job.id).one()
+    assert current.status == JobStatus.RUNNING.value
+    assert current.claim_token == newer_token
+    assert current.claimed_at == now
