@@ -131,6 +131,50 @@ async def test_personal_templates_visible_only_to_owner(db, test_org):
 
 
 @pytest.mark.asyncio
+async def test_personal_template_owner_can_view_history_without_org_manage_permission(
+    db,
+    test_org,
+):
+    owner = create_user_with_role(db, test_org.id, Role.CASE_MANAGER)
+    other = create_user_with_role(db, test_org.id, Role.CASE_MANAGER)
+    template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=owner.id,
+        name="Owner history",
+        subject="Subject",
+        body="<p>Body</p>",
+        scope="personal",
+        owner_user_id=owner.id,
+        is_active=True,
+    )
+    db.add(template)
+    db.commit()
+
+    async with authed_client_for_user(
+        db,
+        test_org.id,
+        owner,
+        Role.CASE_MANAGER,
+    ) as client:
+        owner_response = await client.get(
+            f"/email-templates/{template.id}/versions"
+        )
+        assert owner_response.status_code == 200
+
+    async with authed_client_for_user(
+        db,
+        test_org.id,
+        other,
+        Role.CASE_MANAGER,
+    ) as client:
+        other_response = await client.get(
+            f"/email-templates/{template.id}/versions"
+        )
+        assert other_response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_org_templates_exclude_platform_system_keys(db, test_org):
     admin = create_user_with_role(db, test_org.id, Role.ADMIN)
 

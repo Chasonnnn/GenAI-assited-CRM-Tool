@@ -637,14 +637,37 @@ def get_template_versions(
     template_id: UUID,
     limit: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=100),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[object, "fastapi_param"] = Depends(
-        require_permission(POLICIES["email_templates"].actions["manage"])
-    ),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
-    """Get version history for a template. Developer-only."""
+    """Get version history for a template the current user can edit."""
+    from app.services import permission_service
+
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
+
+    if template.scope == "personal":
+        is_admin = session.role in (Role.ADMIN, Role.DEVELOPER)
+        if template.owner_user_id != session.user_id and not is_admin:
+            raise HTTPException(status_code=404, detail="Template not found")
+    else:
+        manage_perm = POLICIES["email_templates"].actions["manage"]
+        perm_key = (
+            manage_perm.value
+            if hasattr(manage_perm, "value")
+            else str(manage_perm)
+        )
+        if not permission_service.check_permission(
+            db,
+            session.org_id,
+            session.user_id,
+            session.role.value,
+            perm_key,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Missing permission: {perm_key}",
+            )
 
     versions = email_service.get_template_versions(db, session.org_id, template_id, limit)
     return [
