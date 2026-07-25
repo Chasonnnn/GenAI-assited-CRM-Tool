@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { Route } from "next"
 import { useRouter } from "next/navigation"
 import { ArrowLeftIcon, HistoryIcon } from "lucide-react"
@@ -44,8 +44,10 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { useAuth } from "@/lib/auth-context"
 import type {
     EmailTemplateDraft,
+    EmailTemplateDraftScope,
     EmailTemplateDraftUpdate,
 } from "@/lib/api/email-template-drafts"
 import type { EmailTemplate } from "@/lib/api/email-templates"
@@ -73,11 +75,15 @@ import {
     useEmailTemplateVersions,
     useEmailTemplateVariables,
 } from "@/lib/hooks/use-email-templates"
-import { useOrgSignaturePreview } from "@/lib/hooks/use-signature"
+import {
+    useOrgSignaturePreview,
+    useSignaturePreview,
+} from "@/lib/hooks/use-signature"
 import type { TemplateVariableRead } from "@/lib/types/template-variable"
 
 type OrganizationEmailTemplateStudioProps = {
     templateId?: string
+    scope?: EmailTemplateDraftScope
 }
 
 type EditorFields = {
@@ -213,8 +219,12 @@ function useUnsavedChangesWarning(
 
 export default function OrganizationEmailTemplateStudio({
     templateId,
+    scope = "org",
 }: OrganizationEmailTemplateStudioProps) {
-    const draftList = useEmailTemplateDrafts({ scope: "org" })
+    const draftList = useEmailTemplateDrafts({
+        scope,
+        showAllPersonal: scope === "personal",
+    })
     const matchingDraft = draftList.data?.find(
         (draft) => draft.id === templateId || draft.template_id === templateId,
     )
@@ -258,10 +268,24 @@ export default function OrganizationEmailTemplateStudio({
 
     const draft = draftDetail.data ?? matchingDraft ?? null
     const published = publishedTemplate.data ?? null
+    if (
+        (draft && draft.scope !== scope) ||
+        (published && published.scope !== scope)
+    ) {
+        return (
+            <div className="p-6">
+                <h1 className="text-xl font-semibold">Template not found</h1>
+                <p className="mt-2 text-sm text-muted-foreground">
+                    This template is not available in the selected Studio.
+                </p>
+            </div>
+        )
+    }
 
     return (
         <OrganizationEmailTemplateEditor
             key={draft?.id ?? published?.id ?? "new"}
+            scope={scope}
             routeTemplateId={templateId}
             initialDraft={draft}
             publishedTemplate={published}
@@ -271,6 +295,7 @@ export default function OrganizationEmailTemplateStudio({
 }
 
 type OrganizationEmailTemplateEditorProps = {
+    scope: EmailTemplateDraftScope
     routeTemplateId: string | undefined
     initialDraft: EmailTemplateDraft | null
     publishedTemplate: EmailTemplate | null
@@ -278,12 +303,14 @@ type OrganizationEmailTemplateEditorProps = {
 }
 
 function OrganizationEmailTemplateEditor({
+    scope,
     routeTemplateId,
     initialDraft,
     publishedTemplate,
     variables,
 }: OrganizationEmailTemplateEditorProps) {
     const { push, replace } = useRouter()
+    const { user } = useAuth()
     const createDraft = useCreateEmailTemplateDraft()
     const createDraftFromTemplate = useCreateEmailTemplateDraftFromTemplate()
     const updateDraft = useUpdateEmailTemplateDraft()
@@ -291,8 +318,11 @@ function OrganizationEmailTemplateEditor({
     const publishDraft = usePublishEmailTemplateDraft()
     const restoreDraftVersion = useRestoreEmailTemplateDraftVersion()
     const sendTestDraft = useSendTestEmailTemplateDraft()
+    const personalSignaturePreview = useSignaturePreview({
+        enabled: scope === "personal",
+    })
     const orgSignaturePreview = useOrgSignaturePreview({
-        enabled: true,
+        enabled: scope === "org",
         mode: "org_only",
     })
 
@@ -316,7 +346,9 @@ function OrganizationEmailTemplateEditor({
     const [publishError, setPublishError] = useState<string | null>(null)
     const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
     const [testOpen, setTestOpen] = useState(false)
-    const [testRecipient, setTestRecipient] = useState("")
+    const [testRecipient, setTestRecipient] = useState(
+        scope === "personal" ? (user?.email ?? "") : "",
+    )
     const [testVariables, setTestVariables] = useState<Record<string, string>>({})
     const [ignoreOptOut, setIgnoreOptOut] = useState(false)
     const [isSendingTest, setIsSendingTest] = useState(false)
@@ -328,14 +360,11 @@ function OrganizationEmailTemplateEditor({
     const testOccurrenceIdRef = useRef<string | null>(null)
 
     const isDirty = Object.keys(buildChangedFields(fields, savedFields)).length > 0
-    const blockInternalNavigation = useCallback((destination: string) => {
-        setPendingNavigation(destination)
-    }, [])
-    useUnsavedChangesWarning(isDirty, blockInternalNavigation)
+    useUnsavedChangesWarning(isDirty, setPendingNavigation)
     const previewHtml = buildEmailTemplatePreviewHtml(fields.body, {
-        scope: "org",
+        scope,
         orgCompanyName: null,
-        personalSignatureHtml: null,
+        personalSignatureHtml: personalSignaturePreview.data?.html,
         orgSignatureHtml: orgSignaturePreview.data?.html,
     })
     const previewSubject = buildPreviewSubject(fields.subject)
@@ -415,6 +444,7 @@ function OrganizationEmailTemplateEditor({
         try {
             const explicitLocalChanges = buildChangedFields(fields, savedFields)
             let activeDraft = draft
+            let shouldUpdateDraft = true
             if (!activeDraft && publishedTemplate && routeTemplateId) {
                 activeDraft = await createDraftFromTemplate.mutateAsync({
                     templateId: routeTemplateId,
@@ -428,7 +458,7 @@ function OrganizationEmailTemplateEditor({
                 ) {
                     setDraft(activeDraft)
                     setSaveConflict(true)
-                    return
+                    shouldUpdateDraft = false
                 }
             } else if (!activeDraft) {
                 activeDraft = await createDraft.mutateAsync({
@@ -436,40 +466,43 @@ function OrganizationEmailTemplateEditor({
                     subject: fields.subject,
                     from_email: fields.from_email,
                     body: fields.body,
-                    scope: "org",
+                    scope,
                 })
                 const createdFields = fieldsFromTemplate(activeDraft)
                 setDraft(activeDraft)
                 setFields(createdFields)
                 setSavedFields(createdFields)
-                push(`/automation/email-templates/org/${activeDraft.id}` as Route)
-                return
+                push(
+                    `/automation/email-templates/${scope}/${activeDraft.id}` as Route,
+                )
+                shouldUpdateDraft = false
             }
 
-            const savedDraft =
-                Object.keys(explicitLocalChanges).length > 0
-                    ? await updateDraft.mutateAsync({
-                          id: activeDraft.id,
-                          data: {
-                              expected_revision: activeDraft.revision,
-                              ...explicitLocalChanges,
-                          },
-                      })
-                    : activeDraft
+            if (shouldUpdateDraft) {
+                const savedDraft =
+                    Object.keys(explicitLocalChanges).length > 0
+                        ? await updateDraft.mutateAsync({
+                              id: activeDraft.id,
+                              data: {
+                                  expected_revision: activeDraft.revision,
+                                  ...explicitLocalChanges,
+                              },
+                          })
+                        : activeDraft
 
-            const nextSavedFields = fieldsFromTemplate(savedDraft)
-            setDraft(savedDraft)
-            setFields(nextSavedFields)
-            setSavedFields(nextSavedFields)
+                const nextSavedFields = fieldsFromTemplate(savedDraft)
+                setDraft(savedDraft)
+                setFields(nextSavedFields)
+                setSavedFields(nextSavedFields)
+            }
         } catch (error) {
             if (error instanceof ApiError && error.status === 409) {
                 setSaveConflict(true)
             } else {
                 setSaveError("Draft could not be saved. Your changes are still here.")
             }
-        } finally {
-            setIsSaving(false)
         }
+        setIsSaving(false)
     }
 
     const handleCopyLocalDraft = async () => {
@@ -505,9 +538,8 @@ function OrganizationEmailTemplateEditor({
             setDiscardError(
                 "The stale draft could not be discarded. Your published template was not changed.",
             )
-        } finally {
-            setIsDiscarding(false)
         }
+        setIsDiscarding(false)
     }
 
     const handlePublish = async () => {
@@ -524,7 +556,7 @@ function OrganizationEmailTemplateEditor({
             })
             setPublishOpen(false)
             replace(
-                `/automation/email-templates/org/${encodeURIComponent(publishedTemplateResult.id)}` as Route,
+                `/automation/email-templates/${scope}/${encodeURIComponent(publishedTemplateResult.id)}` as Route,
             )
         } catch (error) {
             if (error instanceof ApiError && error.status === 409) {
@@ -535,9 +567,8 @@ function OrganizationEmailTemplateEditor({
                     "Template could not be published. Your draft is still saved.",
                 )
             }
-        } finally {
-            setIsPublishing(false)
         }
+        setIsPublishing(false)
     }
 
     const handleRestoreVersion = async (targetVersion: number) => {
@@ -627,9 +658,8 @@ function OrganizationEmailTemplateEditor({
             } else {
                 setTestError("Test email failed. Your draft was not changed.")
             }
-        } finally {
-            setIsSendingTest(false)
         }
+        setIsSendingTest(false)
     }
 
     return (
@@ -646,7 +676,11 @@ function OrganizationEmailTemplateEditor({
                         <ArrowLeftIcon aria-hidden="true" />
                         Back to email templates
                     </Button>
-                    <p className="text-sm font-medium text-primary">Organization template</p>
+                    <p className="text-sm font-medium text-primary">
+                        {scope === "personal"
+                            ? "Personal template"
+                            : "Organization template"}
+                    </p>
                     <h1 className="text-2xl font-semibold tracking-tight">
                         {publishedTemplate ? "Edit email template" : "New email template"}
                     </h1>
@@ -846,19 +880,24 @@ function OrganizationEmailTemplateEditor({
                                 }
                             />
                         </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor="template-from-email">From email</Label>
-                            <Input
-                                id="template-from-email"
-                                value={fields.from_email ?? ""}
-                                onChange={(event) =>
-                                    setFields((current) => ({
-                                        ...current,
-                                        from_email: event.target.value || null,
-                                    }))
-                                }
-                            />
-                        </div>
+                        {scope === "org" ? (
+                            <div className="grid gap-2">
+                                <Label htmlFor="template-from-email">
+                                    From email
+                                </Label>
+                                <Input
+                                    id="template-from-email"
+                                    value={fields.from_email ?? ""}
+                                    onChange={(event) =>
+                                        setFields((current) => ({
+                                            ...current,
+                                            from_email:
+                                                event.target.value || null,
+                                        }))
+                                    }
+                                />
+                            </div>
+                        ) : null}
                         <div className="flex items-center justify-between gap-3">
                             <div className="space-y-1">
                                 <Label id="template-body-label">Email body</Label>
@@ -938,7 +977,9 @@ function OrganizationEmailTemplateEditor({
                             <h2>Live preview</h2>
                         </CardTitle>
                         <CardDescription>
-                            Organization signature and managed unsubscribe footer included.
+                            {scope === "personal"
+                                ? "Your personal signature and managed unsubscribe footer are included."
+                                : "Organization signature and managed unsubscribe footer included."}
                         </CardDescription>
                     </CardHeader>
                     <CardContent>

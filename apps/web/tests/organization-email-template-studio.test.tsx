@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     restoreDraftVersion: vi.fn(),
     sendTestDraft: vi.fn(),
     richTextEditor: vi.fn(),
+    draftListParams: vi.fn(),
     refetchDrafts: vi.fn(),
     refetchPublished: vi.fn(),
     refetchDraft: vi.fn(),
@@ -49,18 +50,33 @@ vi.mock("next/navigation", () => ({
     useRouter: () => ({ push: mocks.push, replace: mocks.replace }),
 }))
 
+vi.mock("@/lib/auth-context", () => ({
+    useAuth: () => ({
+        user: {
+            email: "owner@example.com",
+        },
+    }),
+}))
+
 vi.mock("@/components/rich-text-editor", () => ({
     RichTextEditor: ({
         content,
         onChange,
         ariaLabel,
+        enableEmojiPicker,
     }: {
         content?: string
         onChange?: (value: string) => void
         ariaLabel?: string
+        enableEmojiPicker?: boolean
     }) => (
         <>
-            {mocks.richTextEditor({ content, onChange, ariaLabel })}
+            {mocks.richTextEditor({
+                content,
+                onChange,
+                ariaLabel,
+                enableEmojiPicker,
+            })}
             <textarea
                 aria-label={ariaLabel ?? "Email body"}
                 value={content ?? ""}
@@ -119,6 +135,10 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-signature", () => ({
+    useSignaturePreview: () => ({
+        data: { html: "<div><strong>Personal signature</strong></div>" },
+        isLoading: false,
+    }),
     useOrgSignaturePreview: () => ({
         data: { html: "<div><strong>Agency signature</strong></div>" },
         isLoading: false,
@@ -126,12 +146,15 @@ vi.mock("@/lib/hooks/use-signature", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-email-template-drafts", () => ({
-    useEmailTemplateDrafts: () => ({
-        data: mocks.state.draft ? [mocks.state.draft] : [],
-        isLoading: mocks.state.draftsLoading,
-        isError: mocks.state.draftsError,
-        refetch: mocks.refetchDrafts,
-    }),
+    useEmailTemplateDrafts: (params: Record<string, unknown>) => {
+        mocks.draftListParams(params)
+        return {
+            data: mocks.state.draft ? [mocks.state.draft] : [],
+            isLoading: mocks.state.draftsLoading,
+            isError: mocks.state.draftsError,
+            refetch: mocks.refetchDrafts,
+        }
+    },
     useEmailTemplateDraft: () => ({
         data: mocks.state.draft,
         isLoading: false,
@@ -224,6 +247,7 @@ describe("OrganizationEmailTemplateStudio", () => {
         mocks.restoreDraftVersion.mockReset()
         mocks.sendTestDraft.mockReset()
         mocks.richTextEditor.mockReset()
+        mocks.draftListParams.mockReset()
         mocks.refetchDrafts.mockReset()
         mocks.refetchPublished.mockReset()
         mocks.refetchDraft.mockReset()
@@ -256,6 +280,62 @@ describe("OrganizationEmailTemplateStudio", () => {
         expect(screen.getByText("No draft")).toBeInTheDocument()
         expect(screen.getByText("Published version 7")).toBeInTheDocument()
         expect(screen.getByText("Save draft to test")).toBeInTheDocument()
+    })
+
+    it("loads personal drafts when the Studio is opened for personal scope", () => {
+        render(
+            <OrganizationEmailTemplateStudio
+                templateId="template-1"
+                scope="personal"
+            />,
+        )
+
+        expect(mocks.draftListParams).toHaveBeenCalledWith({
+            scope: "personal",
+            showAllPersonal: true,
+        })
+    })
+
+    it("creates a personal draft in personal scope without publishing it", async () => {
+        mocks.state.publishedTemplate = null
+        mocks.createDraft.mockResolvedValue({
+            ...draftFromPublished,
+            id: "draft-personal-created",
+            template_id: null,
+            scope: "personal",
+            owner_user_id: "user-1",
+            name: "My follow-up",
+            subject: "Hello there",
+            from_email: null,
+            body: "<p>Welcome</p>",
+            published_version: null,
+        })
+
+        render(<OrganizationEmailTemplateStudio scope="personal" />)
+        fireEvent.change(screen.getByLabelText("Template name"), {
+            target: { value: "My follow-up" },
+        })
+        fireEvent.change(screen.getByLabelText("Subject"), {
+            target: { value: "Hello there" },
+        })
+        fireEvent.change(screen.getByLabelText("Email body"), {
+            target: { value: "<p>Welcome</p>" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+
+        await waitFor(() => {
+            expect(mocks.createDraft).toHaveBeenCalledWith({
+                name: "My follow-up",
+                subject: "Hello there",
+                from_email: null,
+                body: "<p>Welcome</p>",
+                scope: "personal",
+            })
+        })
+        expect(mocks.publishDraft).not.toHaveBeenCalled()
+        expect(mocks.push).toHaveBeenCalledWith(
+            "/automation/email-templates/personal/draft-personal-created",
+        )
     })
 
     it("saves a subject-only edit without resending unchanged legacy body or sender", async () => {
@@ -512,6 +592,55 @@ describe("OrganizationEmailTemplateStudio", () => {
         expect(container.querySelector("script")).toBeNull()
     })
 
+    it("shows the personal signature for a personal template preview", () => {
+        mocks.state.publishedTemplate = {
+            ...publishedTemplate,
+            scope: "personal",
+            owner_user_id: "user-1",
+        }
+        mocks.state.draft = {
+            ...draftFromPublished,
+            scope: "personal",
+            owner_user_id: "user-1",
+        }
+
+        render(
+            <OrganizationEmailTemplateStudio
+                templateId="template-1"
+                scope="personal"
+            />,
+        )
+
+        expect(screen.getByText("Personal signature")).toBeInTheDocument()
+        expect(screen.queryByText("Agency signature")).not.toBeInTheDocument()
+    })
+
+    it("uses personal sending semantics in the personal Studio", () => {
+        mocks.state.publishedTemplate = {
+            ...publishedTemplate,
+            scope: "personal",
+            owner_user_id: "user-1",
+        }
+        mocks.state.draft = {
+            ...draftFromPublished,
+            scope: "personal",
+            owner_user_id: "user-1",
+        }
+
+        render(
+            <OrganizationEmailTemplateStudio
+                templateId="template-1"
+                scope="personal"
+            />,
+        )
+
+        expect(screen.queryByLabelText("From email")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+        expect(screen.getByLabelText("Test recipient")).toHaveValue(
+            "owner@example.com",
+        )
+    })
+
     it("keeps advanced legacy HTML in source mode without mounting it in the rich editor", () => {
         mocks.state.draft = draftFromPublished
 
@@ -542,6 +671,7 @@ describe("OrganizationEmailTemplateStudio", () => {
         expect(mocks.richTextEditor).toHaveBeenCalledWith(
             expect.objectContaining({
                 content: "<p style=\"margin:0\">Simple legacy HTML</p>",
+                enableEmojiPicker: true,
             }),
         )
         expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled()

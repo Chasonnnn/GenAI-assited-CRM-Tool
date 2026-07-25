@@ -52,10 +52,12 @@ export function useUpdateUserSignature() {
     })
 }
 
-export function useSignaturePreview() {
+export function useSignaturePreview(options: { enabled?: boolean } = {}) {
+    const { enabled = true } = options
     return useQuery({
         queryKey: signatureKeys.preview(),
         queryFn: getSignaturePreview,
+        enabled,
     })
 }
 
