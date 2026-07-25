@@ -412,16 +412,18 @@ def ensure_system_template(db: Session, *, system_key: str) -> PlatformSystemEma
     migrated_body = None
     migrated_from_email = None
     if system_key == ORG_INVITE_SYSTEM_KEY:
-        legacy = (
+        legacy_candidates = (
             db.query(EmailTemplate)
             .filter(
                 EmailTemplate.is_system_template.is_(True),
                 EmailTemplate.system_key == system_key,
             )
             .order_by(EmailTemplate.updated_at.desc().nullslast())
-            .first()
+            .limit(2)
+            .all()
         )
-        if legacy:
+        if len(legacy_candidates) == 1:
+            legacy = legacy_candidates[0]
             migrated_subject = legacy.subject
             migrated_body = legacy.body
             migrated_from_email = legacy.from_email

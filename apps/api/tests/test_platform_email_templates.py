@@ -1,7 +1,10 @@
 import re
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
+
+from app.db.models import EmailTemplate, Organization
 
 
 @pytest.mark.asyncio
@@ -44,6 +47,73 @@ async def test_platform_get_system_email_template_creates_default(
     assert "as <strong>{{role_title}}</strong>." in body
     assert re.search(r"<h1[^>]*>\s*You're invited to join\s*</h1>", body)
     assert re.search(r"<div[^>]*font-size:\s*22px[^>]*>\s*{{org_name}}\s*</div>", body)
+
+
+def test_ambiguous_legacy_org_invites_never_promote_one_tenant_to_global(
+    db,
+    test_org,
+):
+    from app.services import system_email_template_service
+
+    other_org = Organization(
+        id=uuid4(),
+        name="Other organization",
+        slug=f"other-{uuid4().hex[:8]}",
+    )
+    db.add(other_org)
+    db.flush()
+
+    older = EmailTemplate(
+        id=uuid4(),
+        organization_id=test_org.id,
+        name="Organization Invite",
+        subject="Tenant one invite",
+        body="<p>Tenant one branding</p>",
+        from_email="Tenant One <one@example.com>",
+        scope="org",
+        is_system_template=True,
+        system_key=system_email_template_service.ORG_INVITE_SYSTEM_KEY,
+        updated_at=datetime.now(timezone.utc) - timedelta(days=1),
+    )
+    newer = EmailTemplate(
+        id=uuid4(),
+        organization_id=other_org.id,
+        name="Organization Invite",
+        subject="Tenant two invite",
+        body="<p>Tenant two branding</p>",
+        from_email="Tenant Two <two@example.com>",
+        scope="org",
+        is_system_template=True,
+        system_key=system_email_template_service.ORG_INVITE_SYSTEM_KEY,
+        updated_at=datetime.now(timezone.utc),
+    )
+    db.add_all([older, newer])
+    db.commit()
+
+    defaults = system_email_template_service.get_system_template_defaults(
+        system_email_template_service.ORG_INVITE_SYSTEM_KEY
+    )
+    promoted = system_email_template_service.ensure_system_template(
+        db,
+        system_key=system_email_template_service.ORG_INVITE_SYSTEM_KEY,
+    )
+
+    assert promoted.subject == defaults["subject"]
+    assert promoted.body == defaults["body"]
+    assert promoted.from_email is None
+
+    db.refresh(older)
+    db.refresh(newer)
+    assert (older.subject, older.body, older.from_email) == (
+        "Tenant one invite",
+        "<p>Tenant one branding</p>",
+        "Tenant One <one@example.com>",
+    )
+    assert (newer.subject, newer.body, newer.from_email) == (
+        "Tenant two invite",
+        "<p>Tenant two branding</p>",
+        "Tenant Two <two@example.com>",
+    )
 
 
 @pytest.mark.asyncio
