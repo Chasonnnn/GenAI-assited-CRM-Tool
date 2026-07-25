@@ -12,14 +12,14 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import {
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetHeader,
-    SheetTitle,
-} from "@/components/ui/sheet"
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatDateTime } from "@/lib/formatters"
 import { useEmailOperationMessage } from "@/lib/hooks/use-email-operations"
@@ -32,7 +32,7 @@ import {
     getProviderScopeLabel,
 } from "./email-operation-labels"
 
-interface EmailOperationDetailSheetProps {
+interface EmailOperationDetailDialogProps {
     messageId: string | null
     onOpenChange: (open: boolean) => void
 }
@@ -73,10 +73,10 @@ function DetailField({ label, value }: { label: string; value: string }) {
     )
 }
 
-export function EmailOperationDetailSheet({
+export function EmailOperationDetailDialog({
     messageId,
     onOpenChange,
-}: EmailOperationDetailSheetProps) {
+}: EmailOperationDetailDialogProps) {
     const detailQuery = useEmailOperationMessage(messageId)
     const message = detailQuery.data
     const effectiveStatus = message
@@ -84,31 +84,31 @@ export function EmailOperationDetailSheet({
         : null
 
     return (
-        <Sheet
+        <Dialog
             open={messageId !== null}
             onOpenChange={(open) => {
                 onOpenChange(open)
             }}
         >
-            <SheetContent className="w-full sm:max-w-xl lg:max-w-2xl">
-                <SheetHeader className="border-b pr-16">
+            <DialogContent className="max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-xl lg:max-w-2xl">
+                <DialogHeader className="border-b p-6 pr-16">
                     <div className="flex items-center gap-3">
                         <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
                             <MailCheckIcon className="size-5" aria-hidden="true" />
                         </div>
                         <div className="min-w-0">
-                            <SheetTitle>Message details</SheetTitle>
+                            <DialogTitle>Message details</DialogTitle>
                             <p className="truncate font-medium">
                                 {message?.subject ?? "Loading message"}
                             </p>
                         </div>
                     </div>
-                    <SheetDescription>
+                    <DialogDescription>
                         {message
                             ? `Recipient: ${message.recipient_email}. Content, headers, and raw provider payloads are intentionally excluded.`
                             : "Loading sanitized delivery diagnostics."}
-                    </SheetDescription>
-                </SheetHeader>
+                    </DialogDescription>
+                </DialogHeader>
 
                 {detailQuery.isLoading ? (
                     <DetailSkeleton />
@@ -133,7 +133,7 @@ export function EmailOperationDetailSheet({
                         </Alert>
                     </div>
                 ) : (
-                    <ScrollArea className="min-h-0 flex-1">
+                    <ScrollArea className="min-h-0 max-h-[calc(100svh-12rem)]">
                         <div className="space-y-6 p-6">
                             <section
                                 className="space-y-4 rounded-xl border bg-card p-4"
@@ -377,7 +377,7 @@ export function EmailOperationDetailSheet({
                         </div>
                     </ScrollArea>
                 )}
-            </SheetContent>
-        </Sheet>
+            </DialogContent>
+        </Dialog>
     )
 }

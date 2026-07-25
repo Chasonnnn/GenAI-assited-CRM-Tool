@@ -23,19 +23,19 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import {
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetHeader,
-    SheetTitle,
-} from "@/components/ui/sheet"
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatDateTime } from "@/lib/formatters"
 import type { EmailTemplateVersion } from "@/lib/api/email-template-history"
 
-interface EmailTemplateHistorySheetProps {
+interface EmailTemplateHistoryDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     templateName: string
@@ -82,7 +82,7 @@ function HistorySkeleton() {
     )
 }
 
-export function EmailTemplateHistorySheet({
+export function EmailTemplateHistoryDialog({
     open,
     onOpenChange,
     templateName,
@@ -94,7 +94,7 @@ export function EmailTemplateHistorySheet({
     onRestore,
     isRestoring,
     restoreMode = "published",
-}: EmailTemplateHistorySheetProps) {
+}: EmailTemplateHistoryDialogProps) {
     const [restoreTarget, setRestoreTarget] = useState<number | null>(null)
 
     const handleRestore = async () => {
@@ -109,29 +109,29 @@ export function EmailTemplateHistorySheet({
 
     return (
         <>
-            <Sheet open={open} onOpenChange={onOpenChange}>
-                <SheetContent className="w-full sm:max-w-lg">
-                    <SheetHeader className="border-b pr-16">
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                <DialogContent className="max-h-[min(48rem,calc(100dvh-2rem))] w-[calc(100%-2rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-lg">
+                    <DialogHeader className="border-b px-6 py-5 pr-14">
                         <div className="flex items-center gap-2">
                             <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
                                 <HistoryIcon className="size-4" aria-hidden="true" />
                             </div>
                             <div className="min-w-0">
-                                <SheetTitle>Template history</SheetTitle>
+                                <DialogTitle>Template history</DialogTitle>
                                 <p className="truncate text-sm font-medium">{templateName}</p>
                             </div>
                         </div>
-                        <SheetDescription>
+                        <DialogDescription>
                             {restoreMode === "draft"
                                 ? "Review published versions or load one into an isolated draft. Production stays unchanged until you publish."
                                 : "Review saved changes or restore an earlier version. Restoring always adds a new version, so the audit trail stays intact."}
-                        </SheetDescription>
+                        </DialogDescription>
                         {currentVersion !== null && (
                             <Badge variant="secondary" className="mt-2">
                                 Current version {currentVersion}
                             </Badge>
                         )}
-                    </SheetHeader>
+                    </DialogHeader>
 
                     {isLoading ? (
                         <HistorySkeleton />
@@ -161,7 +161,9 @@ export function EmailTemplateHistorySheet({
                             </div>
                             <h3 className="font-medium">No saved versions yet</h3>
                             <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-                                Version history will appear after this organization template is saved.
+                                {restoreMode === "draft"
+                                    ? "Version history will appear after this template is published."
+                                    : "Version history will appear after this template is saved."}
                             </p>
                         </div>
                     ) : (
@@ -224,8 +226,8 @@ export function EmailTemplateHistorySheet({
                             </div>
                         </ScrollArea>
                     )}
-                </SheetContent>
-            </Sheet>
+                </DialogContent>
+            </Dialog>
 
             <AlertDialog
                 open={restoreTarget !== null}

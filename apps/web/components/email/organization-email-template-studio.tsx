@@ -5,7 +5,7 @@ import type { Route } from "next"
 import { useRouter } from "next/navigation"
 import { ArrowLeftIcon, HistoryIcon } from "lucide-react"
 
-import { EmailTemplateHistorySheet } from "@/components/email/EmailTemplateHistorySheet"
+import { EmailTemplateHistoryDialog } from "@/components/email/EmailTemplateHistoryDialog"
 import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
 import {
     RichTextEditor,
@@ -1004,7 +1004,7 @@ function OrganizationEmailTemplateEditor({
             </section>
 
             {publishedTemplate ? (
-                <EmailTemplateHistorySheet
+                <EmailTemplateHistoryDialog
                     open={historyOpen}
                     onOpenChange={setHistoryOpen}
                     templateName={fields.name || publishedTemplate.name}

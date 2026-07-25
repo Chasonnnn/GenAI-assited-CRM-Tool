@@ -35,13 +35,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import {
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetHeader,
-    SheetTitle,
-} from "@/components/ui/sheet"
 import { toast } from "@/components/ui/toast"
 import { ApiError } from "@/lib/api"
 import type {
@@ -285,48 +278,48 @@ export function EmailReconciliationActionDialogs({
 
     if (action === "link_event") {
         return (
-            <Sheet
+            <Dialog
                 open
                 onOpenChange={(open) => {
                     if (!open && !linkMutation.isPending) onClose()
                 }}
             >
-                <SheetContent
-                    className="sm:max-w-lg"
+                <DialogContent
+                    className="max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:max-w-lg"
                     showCloseButton={!linkMutation.isPending}
                 >
-                    <SheetHeader className="border-b">
-                        <SheetTitle>Link provider event</SheetTitle>
-                        <SheetDescription>
+                    <DialogHeader className="border-b p-6 pr-16">
+                        <DialogTitle>Link provider event</DialogTitle>
+                        <DialogDescription>
                             Linking updates local delivery history only. It does not
                             send or resend email.
-                        </SheetDescription>
-                    </SheetHeader>
-                    <div className="flex min-h-0 flex-1 flex-col gap-4 px-6">
-                        <ActionError error={linkMutation.error} />
-                        <div>
-                            <p className="font-medium">Choose a recent message</p>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                                Match the signed provider event to an existing Resend
-                                message in this organization.
-                            </p>
-                        </div>
-                        {recentResendMessages.length === 0 ? (
-                            <Empty className="border">
-                                <EmptyHeader>
-                                    <EmptyMedia variant="icon">
-                                        <InboxIcon aria-hidden="true" />
-                                    </EmptyMedia>
-                                    <EmptyTitle>No recent Resend messages</EmptyTitle>
-                                    <EmptyDescription>
-                                        Refresh Email Operations after the matching
-                                        message is available.
-                                    </EmptyDescription>
-                                </EmptyHeader>
-                            </Empty>
-                        ) : (
-                            <ScrollArea className="min-h-0 flex-1 pr-3">
-                                <div className="space-y-2 pb-4">
+                        </DialogDescription>
+                    </DialogHeader>
+                    <ScrollArea className="min-h-0 max-h-[calc(100svh-16rem)]">
+                        <div className="space-y-4 p-6">
+                            <ActionError error={linkMutation.error} />
+                            <div>
+                                <p className="font-medium">Choose a recent message</p>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    Match the signed provider event to an existing
+                                    Resend message in this organization.
+                                </p>
+                            </div>
+                            {recentResendMessages.length === 0 ? (
+                                <Empty className="border">
+                                    <EmptyHeader>
+                                        <EmptyMedia variant="icon">
+                                            <InboxIcon aria-hidden="true" />
+                                        </EmptyMedia>
+                                        <EmptyTitle>No recent Resend messages</EmptyTitle>
+                                        <EmptyDescription>
+                                            Refresh Email Operations after the matching
+                                            message is available.
+                                        </EmptyDescription>
+                                    </EmptyHeader>
+                                </Empty>
+                            ) : (
+                                <div className="space-y-2">
                                     {recentResendMessages.map((message) => {
                                         const isSelected =
                                             selectedMessageId === message.id
@@ -377,10 +370,10 @@ export function EmailReconciliationActionDialogs({
                                         )
                                     })}
                                 </div>
-                            </ScrollArea>
-                        )}
-                    </div>
-                    <div className="flex flex-col-reverse gap-2 border-t p-6 sm:flex-row sm:justify-end">
+                            )}
+                        </div>
+                    </ScrollArea>
+                    <DialogFooter className="border-t p-6">
                         <Button
                             type="button"
                             variant="outline"
@@ -416,9 +409,9 @@ export function EmailReconciliationActionDialogs({
                                 ? "Linking..."
                                 : "Link event"}
                         </Button>
-                    </div>
-                </SheetContent>
-            </Sheet>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         )
     }
 

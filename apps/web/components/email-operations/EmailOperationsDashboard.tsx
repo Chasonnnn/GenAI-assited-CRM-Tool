@@ -66,7 +66,7 @@ import {
 } from "@/lib/hooks/use-email-operations"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
-import { EmailOperationDetailSheet } from "./EmailOperationDetailSheet"
+import { EmailOperationDetailDialog } from "./EmailOperationDetailDialog"
 import { EmailOperationsReadinessSummary } from "./EmailOperationsReadinessSummary"
 import { EmailReconciliationQueue } from "./EmailReconciliationQueue"
 import { ResendLiveReadinessCard } from "./ResendLiveReadinessCard"
@@ -828,7 +828,7 @@ export function EmailOperationsDashboard() {
                 )}
             </main>
 
-            <EmailOperationDetailSheet
+            <EmailOperationDetailDialog
                 messageId={selectedMessageId}
                 onOpenChange={(open) => {
                     if (!open) setSelectedMessageId(null)

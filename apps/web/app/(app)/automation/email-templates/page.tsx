@@ -126,7 +126,7 @@ import {
 import { formatDate } from "@/lib/formatters"
 import { insertAtCursor } from "@/lib/insert-at-cursor"
 import { SafeHtmlContent } from "@/components/safe-html-content"
-import { EmailTemplateHistorySheet } from "@/components/email/EmailTemplateHistorySheet"
+import { EmailTemplateHistoryDialog } from "@/components/email/EmailTemplateHistoryDialog"
 
 // =============================================================================
 // Signature Override Field Component
@@ -2382,7 +2382,7 @@ export default function EmailTemplatesPage() {
                 </DialogContent>
             </Dialog>
 
-            <EmailTemplateHistorySheet
+            <EmailTemplateHistoryDialog
                 open={historyOpen && Boolean(historyTemplateId)}
                 onOpenChange={setHistoryOpen}
                 templateName={editorState.name || "Organization template"}

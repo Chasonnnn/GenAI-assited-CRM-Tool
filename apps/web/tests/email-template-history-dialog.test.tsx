@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 
-import { EmailTemplateHistorySheet } from "@/components/email/EmailTemplateHistorySheet"
+import { EmailTemplateHistoryDialog } from "@/components/email/EmailTemplateHistoryDialog"
 import type { EmailTemplateVersion } from "@/lib/api/email-template-history"
 
 const VERSIONS: EmailTemplateVersion[] = [
@@ -28,11 +28,11 @@ const VERSIONS: EmailTemplateVersion[] = [
     },
 ]
 
-function renderHistory(
-    overrides: Partial<React.ComponentProps<typeof EmailTemplateHistorySheet>> = {},
+function renderHistoryDialog(
+    overrides: Partial<React.ComponentProps<typeof EmailTemplateHistoryDialog>> = {},
 ) {
     return render(
-        <EmailTemplateHistorySheet
+        <EmailTemplateHistoryDialog
             open
             onOpenChange={vi.fn()}
             templateName="Welcome email"
@@ -48,9 +48,9 @@ function renderHistory(
     )
 }
 
-describe("EmailTemplateHistorySheet", () => {
+describe("EmailTemplateHistoryDialog", () => {
     it("shows friendly saved-version labels without exposing user ids", () => {
-        renderHistory()
+        renderHistoryDialog()
 
         expect(screen.getByRole("heading", { name: "Template history" })).toBeInTheDocument()
         expect(screen.getByText("Version 3")).toBeInTheDocument()
@@ -63,7 +63,7 @@ describe("EmailTemplateHistorySheet", () => {
 
     it("confirms a restore and explains that history remains append-only", async () => {
         const onRestore = vi.fn().mockResolvedValue(undefined)
-        renderHistory({ onRestore })
+        renderHistoryDialog({ onRestore })
 
         fireEvent.click(screen.getByRole("button", { name: "Restore version 1" }))
 
@@ -78,7 +78,7 @@ describe("EmailTemplateHistorySheet", () => {
 
     it("explains draft-safe restoration without implying production changed", async () => {
         const onRestore = vi.fn().mockResolvedValue(undefined)
-        renderHistory({ onRestore, restoreMode: "draft" })
+        renderHistoryDialog({ onRestore, restoreMode: "draft" })
 
         expect(
             screen.getByText(
@@ -100,9 +100,23 @@ describe("EmailTemplateHistorySheet", () => {
         })
     })
 
+    it("uses scope-neutral copy when a Studio template has no saved versions", () => {
+        renderHistoryDialog({
+            versions: [],
+            restoreMode: "draft",
+        })
+
+        expect(
+            screen.getByText(
+                "Version history will appear after this template is published.",
+            ),
+        ).toBeInTheDocument()
+        expect(screen.queryByText(/organization template/i)).not.toBeInTheDocument()
+    })
+
     it("renders loading, error, and empty states", () => {
         const { rerender } = render(
-            <EmailTemplateHistorySheet
+            <EmailTemplateHistoryDialog
                 open
                 onOpenChange={vi.fn()}
                 templateName="Welcome email"
@@ -120,7 +134,7 @@ describe("EmailTemplateHistorySheet", () => {
 
         const onRetry = vi.fn()
         rerender(
-            <EmailTemplateHistorySheet
+            <EmailTemplateHistoryDialog
                 open
                 onOpenChange={vi.fn()}
                 templateName="Welcome email"
@@ -138,7 +152,7 @@ describe("EmailTemplateHistorySheet", () => {
         expect(onRetry).toHaveBeenCalledOnce()
 
         rerender(
-            <EmailTemplateHistorySheet
+            <EmailTemplateHistoryDialog
                 open
                 onOpenChange={vi.fn()}
                 templateName="Welcome email"

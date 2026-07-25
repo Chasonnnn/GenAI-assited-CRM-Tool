@@ -690,27 +690,27 @@ describe("EmailOperationsDashboard", () => {
         render(<EmailOperationsDashboard />)
 
         fireEvent.click(screen.getByRole("button", { name: "Link to message" }))
-        const sheet = screen.getByRole("dialog", {
+        const dialog = screen.getByRole("dialog", {
             name: "Link provider event",
         })
         expect(
-            within(sheet).getByText(
+            within(dialog).getByText(
                 "Linking updates local delivery history only. It does not send or resend email.",
             ),
         ).toBeInTheDocument()
         expect(
-            within(sheet).getByText("Welcome to Surrogacy Force"),
+            within(dialog).getByText("Welcome to Surrogacy Force"),
         ).toBeInTheDocument()
-        expect(within(sheet).getByText("recipient@example.com")).toBeInTheDocument()
-        expect(within(sheet).queryByText("message-1")).not.toBeInTheDocument()
+        expect(within(dialog).getByText("recipient@example.com")).toBeInTheDocument()
+        expect(within(dialog).queryByText("message-1")).not.toBeInTheDocument()
 
         fireEvent.click(
-            within(sheet).getByRole("button", {
+            within(dialog).getByRole("button", {
                 name: "Select Welcome to Surrogacy Force to recipient@example.com",
             }),
         )
         fireEvent.click(
-            within(sheet).getByRole("button", { name: "Link event" }),
+            within(dialog).getByRole("button", { name: "Link event" }),
         )
         expect(mockLinkReconciliation).toHaveBeenCalledWith(
             {
@@ -960,7 +960,7 @@ describe("EmailOperationsDashboard", () => {
         ).toBeInTheDocument()
     })
 
-    it("paginates messages and opens a sanitized attempt and provider-event sheet", () => {
+    it("paginates messages and opens a sanitized attempt and provider-event dialog", () => {
         render(<EmailOperationsDashboard />)
 
         expect(screen.getByText("Welcome to Surrogacy Force")).toBeInTheDocument()
@@ -974,15 +974,15 @@ describe("EmailOperationsDashboard", () => {
             }),
         )
 
-        const sheet = screen.getByRole("dialog")
-        expect(within(sheet).getByRole("heading", { name: "Message details" })).toBeInTheDocument()
-        expect(within(sheet).getByText("Attempt 1")).toBeInTheDocument()
-        expect(within(sheet).getByText("Rate limited")).toBeInTheDocument()
-        expect(within(sheet).getByText("Sent", { selector: '[data-slot="badge"]' })).toBeInTheDocument()
-        expect(within(sheet).getByText("Delivered")).toBeInTheDocument()
-        expect(within(sheet).getByText("Estimated opens")).toBeInTheDocument()
-        expect(within(sheet).queryByText(/private body/i)).not.toBeInTheDocument()
-        expect(within(sheet).queryByText(/https?:\/\//i)).not.toBeInTheDocument()
+        const dialog = screen.getByRole("dialog")
+        expect(within(dialog).getByRole("heading", { name: "Message details" })).toBeInTheDocument()
+        expect(within(dialog).getByText("Attempt 1")).toBeInTheDocument()
+        expect(within(dialog).getByText("Rate limited")).toBeInTheDocument()
+        expect(within(dialog).getByText("Sent", { selector: '[data-slot="badge"]' })).toBeInTheDocument()
+        expect(within(dialog).getByText("Delivered")).toBeInTheDocument()
+        expect(within(dialog).getByText("Estimated opens")).toBeInTheDocument()
+        expect(within(dialog).queryByText(/private body/i)).not.toBeInTheDocument()
+        expect(within(dialog).queryByText(/https?:\/\//i)).not.toBeInTheDocument()
     })
 
     it.each(["pending", "suppressed", "cancelled"])(
