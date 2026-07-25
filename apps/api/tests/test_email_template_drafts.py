@@ -127,6 +127,214 @@ async def test_existing_template_draft_is_isolated_until_explicit_publish(
 
 
 @pytest.mark.asyncio
+async def test_existing_personal_template_draft_preserves_identity_content_and_tenant(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+):
+    legacy_body = (
+        '<table style="mso-table-lspace:0"><tr><td>'
+        "<script>legacyPersonalRenderer()</script>{{ unknown_personal_variable }}"
+        "</td></tr></table>"
+    )
+    legacy_from = "  Personal Sender <personal@example.com>  "
+    template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=test_user.id,
+        name="Existing personal journey",
+        subject="Original personal subject",
+        from_email=legacy_from,
+        body=legacy_body,
+        scope="personal",
+        owner_user_id=test_user.id,
+        is_active=True,
+        current_version=4,
+    )
+    db.add(template)
+    db.commit()
+
+    original_response = await authed_client.get(f"/email-templates/{template.id}")
+    assert original_response.status_code == 200
+    original = original_response.json()
+
+    draft_response = await authed_client.post(
+        f"/email-template-drafts/from-template/{template.id}"
+    )
+    assert draft_response.status_code == 200
+    draft = draft_response.json()
+    assert {
+        field: draft[field]
+        for field in (
+            "template_id",
+            "organization_id",
+            "scope",
+            "owner_user_id",
+            "name",
+            "subject",
+            "from_email",
+            "body",
+            "is_active",
+        )
+    } == {
+        "template_id": original["id"],
+        "organization_id": original["organization_id"],
+        "scope": "personal",
+        "owner_user_id": original["owner_user_id"],
+        "name": original["name"],
+        "subject": original["subject"],
+        "from_email": legacy_from,
+        "body": legacy_body,
+        "is_active": original["is_active"],
+    }
+    assert draft["base_version"] == 4
+    assert draft["published_version"] == 4
+
+    update_response = await authed_client.patch(
+        f"/email-template-drafts/{draft['id']}",
+        json={
+            "subject": "Published personal subject",
+            "expected_revision": 1,
+        },
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["revision"] == 2
+
+    before_publish_response = await authed_client.get(f"/email-templates/{template.id}")
+    assert before_publish_response.status_code == 200
+    before_publish = before_publish_response.json()
+    preserved_fields = (
+        "id",
+        "organization_id",
+        "created_by_user_id",
+        "scope",
+        "owner_user_id",
+        "name",
+        "subject",
+        "from_email",
+        "body",
+        "is_active",
+        "current_version",
+        "created_at",
+        "updated_at",
+    )
+    assert {field: before_publish[field] for field in preserved_fields} == {
+        field: original[field] for field in preserved_fields
+    }
+
+    publish_response = await authed_client.post(
+        f"/email-template-drafts/{draft['id']}/publish",
+        json={
+            "expected_revision": 2,
+            "expected_published_version": 4,
+        },
+    )
+    assert publish_response.status_code == 200
+    published = publish_response.json()
+    assert {
+        field: published[field]
+        for field in (
+            "id",
+            "organization_id",
+            "created_by_user_id",
+            "scope",
+            "owner_user_id",
+            "name",
+            "from_email",
+            "body",
+            "is_active",
+            "created_at",
+        )
+    } == {
+        field: original[field]
+        for field in (
+            "id",
+            "organization_id",
+            "created_by_user_id",
+            "scope",
+            "owner_user_id",
+            "name",
+            "from_email",
+            "body",
+            "is_active",
+            "created_at",
+        )
+    }
+    assert published["subject"] == "Published personal subject"
+    assert published["current_version"] == 5
+
+    owner_get_response = await authed_client.get(f"/email-templates/{template.id}")
+    assert owner_get_response.status_code == 200
+    assert owner_get_response.json()["id"] == original["id"]
+    discarded_draft_response = await authed_client.get(
+        f"/email-template-drafts/{draft['id']}"
+    )
+    assert discarded_draft_response.status_code == 404
+
+    other_user = User(
+        id=uuid.uuid4(),
+        email=f"same-org-{uuid.uuid4().hex[:8]}@example.com",
+        display_name="Same organization user",
+        token_version=1,
+        is_active=True,
+    )
+    other_org = Organization(
+        id=uuid.uuid4(),
+        name="Other personal-template organization",
+        slug=f"other-personal-{uuid.uuid4().hex[:8]}",
+    )
+    other_org_user = User(
+        id=uuid.uuid4(),
+        email=f"other-org-{uuid.uuid4().hex[:8]}@example.com",
+        display_name="Other organization developer",
+        token_version=1,
+        is_active=True,
+    )
+    db.add_all([other_user, other_org, other_org_user])
+    db.flush()
+    db.add_all(
+        [
+            Membership(
+                id=uuid.uuid4(),
+                user_id=other_user.id,
+                organization_id=test_org.id,
+                role=Role.CASE_MANAGER,
+            ),
+            Membership(
+                id=uuid.uuid4(),
+                user_id=other_org_user.id,
+                organization_id=other_org.id,
+                role=Role.DEVELOPER,
+            ),
+        ]
+    )
+    db.commit()
+
+    async with authed_client_for_user(
+        db,
+        user=other_user,
+        org_id=test_org.id,
+        role=Role.CASE_MANAGER,
+    ) as non_owner_client:
+        non_owner_response = await non_owner_client.get(
+            f"/email-templates/{template.id}"
+        )
+        assert non_owner_response.status_code == 404
+
+    async with authed_client_for_user(
+        db,
+        user=other_org_user,
+        org_id=other_org.id,
+        role=Role.DEVELOPER,
+    ) as other_org_client:
+        other_org_response = await other_org_client.get(
+            f"/email-templates/{template.id}"
+        )
+        assert other_org_response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_new_draft_is_not_visible_as_a_template_until_publish(
     authed_client,
     db,
