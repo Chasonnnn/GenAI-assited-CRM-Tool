@@ -302,11 +302,13 @@ def mark_job_failed(db: Session, job: Job, error: str) -> Job:
     If attempts < max_attempts, reset to pending for retry.
     """
     if job.claim_token is not None:
+        retry_run_at = job.run_at
         return fail_claimed_job(
             db,
             job_id=job.id,
             claim_token=job.claim_token,
             error=error,
+            retry_run_at=retry_run_at,
         )
 
     job.last_error = error
@@ -366,6 +368,7 @@ def fail_claimed_job(
     job_id: UUID,
     claim_token: UUID,
     error: str,
+    retry_run_at: datetime | None = None,
 ) -> Job:
     """Fail or requeue only the still-current worker claim."""
     job = db.execute(
@@ -385,6 +388,8 @@ def fail_claimed_job(
     job.last_error = error
     if job.attempts < job.max_attempts:
         job.status = JobStatus.PENDING.value
+        if retry_run_at is not None:
+            job.run_at = retry_run_at
     else:
         job.status = JobStatus.FAILED.value
         if job.job_type == JobType.RESEND_EVENT_RECONCILE.value:

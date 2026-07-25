@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -28,6 +29,8 @@ async def test_attachment_handler_dispatches_remote_scan_when_configured(monkeyp
         organization_id=uuid4(),
         job_type=JobType.ATTACHMENT_SCAN.value,
         status=JobStatus.RUNNING.value,
+        claim_token=uuid4(),
+        claimed_at=datetime.now(timezone.utc),
         payload={"attachment_id": str(attachment_id)},
         attempts=1,
         max_attempts=3,
@@ -97,6 +100,8 @@ def test_scan_job_runner_marks_job_completed(db, test_org, monkeypatch):
         organization_id=test_org.id,
         job_type=JobType.ATTACHMENT_SCAN.value,
         status=JobStatus.RUNNING.value,
+        claim_token=uuid4(),
+        claimed_at=datetime.now(timezone.utc),
         payload={"attachment_id": str(attachment_id)},
         attempts=1,
         max_attempts=3,

@@ -599,6 +599,8 @@ def ensure_attachment_scan_job(
                 )
                 job.run_at = now
                 job.completed_at = None
+                job.claim_token = None
+                job.claimed_at = None
                 if commit:
                     db.commit()
                 else:
@@ -669,6 +671,8 @@ def dispatch_attachment_scan_if_needed(
         )
         selected_job.run_at = now
         selected_job.completed_at = None
+        selected_job.claim_token = None
+        selected_job.claimed_at = None
         db.commit()
         db.refresh(selected_job)
 

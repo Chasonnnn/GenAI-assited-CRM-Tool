@@ -332,6 +332,8 @@ def test_final_automatic_correlation_failure_requires_operator_action(
         status="running",
         attempts=8,
         max_attempts=8,
+        claim_token=uuid4(),
+        claimed_at=detected_at,
         idempotency_key=(f"resend-event-reconcile/{test_org.id}/{event.provider_event_id}"),
     )
     db.add_all([event, case, job])

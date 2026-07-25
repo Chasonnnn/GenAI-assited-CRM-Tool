@@ -2014,7 +2014,7 @@ class TestResendWebhookHandler:
         from app.jobs.handlers.resend import process_resend_event_reconcile
         from app.services import job_service
 
-        reconcile_job.status = JobStatus.RUNNING.value
+        reconcile_job = job_service.mark_job_running(db, reconcile_job)
         reconcile_job.attempts = 5
         db.commit()
         retry_started_at = datetime.now(timezone.utc)
