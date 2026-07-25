@@ -170,3 +170,21 @@ def test_claim_pending_jobs_filters_by_type(db, test_org):
     claimed = job_service.claim_pending_jobs(db, limit=10, job_types=[JobType.NOTIFICATION])
     assert len(claimed) == 1
     assert claimed[0].job_type == JobType.NOTIFICATION.value
+
+
+def test_claim_job_for_dispatch_writes_claim_identity(db, test_org):
+    job = job_service.schedule_job(
+        db=db,
+        org_id=test_org.id,
+        job_type=JobType.ATTACHMENT_SCAN,
+        payload={"attachment_id": str(uuid.uuid4())},
+        run_at=datetime.now(timezone.utc),
+    )
+
+    claimed = job_service.claim_job_for_dispatch(db, job.id)
+
+    assert claimed is not None
+    assert claimed.status == JobStatus.RUNNING.value
+    assert claimed.attempts == 1
+    assert claimed.claim_token is not None
+    assert claimed.claimed_at is not None

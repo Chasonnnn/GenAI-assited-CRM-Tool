@@ -148,6 +148,8 @@ def claim_job_for_dispatch(db: Session, job_id: UUID) -> Job | None:
             run_at=now,
             completed_at=None,
             last_error=None,
+            claim_token=func.gen_random_uuid(),
+            claimed_at=now,
         )
         .execution_options(synchronize_session=False)
     )
