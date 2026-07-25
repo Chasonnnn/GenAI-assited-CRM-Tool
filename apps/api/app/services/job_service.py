@@ -10,6 +10,10 @@ from app.db.models import Job
 from app.db.enums import JobStatus, JobType
 
 
+class JobClaimLost(RuntimeError):
+    """A stale worker tried to finish a job claimed by a newer generation."""
+
+
 def enqueue_job(
     db: Session,
     org_id: UUID,
@@ -226,12 +230,52 @@ def mark_job_running(db: Session, job: Job) -> Job:
 
 def mark_job_completed(db: Session, job: Job) -> Job:
     """Mark a job as completed."""
+    if job.claim_token is not None:
+        return complete_claimed_job(
+            db,
+            job_id=job.id,
+            claim_token=job.claim_token,
+        )
     job.status = JobStatus.COMPLETED.value
     job.completed_at = datetime.now(timezone.utc)
     job.last_error = None
+    job.claim_token = None
+    job.claimed_at = None
     db.commit()
     db.refresh(job)
     return job
+
+
+def complete_claimed_job(
+    db: Session,
+    *,
+    job_id: UUID,
+    claim_token: UUID,
+) -> Job:
+    """Complete only the still-current worker claim."""
+    completed_at = datetime.now(timezone.utc)
+    result = db.execute(
+        update(Job)
+        .where(
+            Job.id == job_id,
+            Job.status == JobStatus.RUNNING.value,
+            Job.claim_token == claim_token,
+        )
+        .values(
+            status=JobStatus.COMPLETED.value,
+            completed_at=completed_at,
+            last_error=None,
+            claim_token=None,
+            claimed_at=None,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if (result.rowcount or 0) != 1:
+        db.expire_all()
+        raise JobClaimLost("job claim is no longer current")
+    db.commit()
+    db.expire_all()
+    return db.query(Job).filter(Job.id == job_id).one()
 
 
 def mark_job_failed(db: Session, job: Job, error: str) -> Job:
@@ -240,11 +284,55 @@ def mark_job_failed(db: Session, job: Job, error: str) -> Job:
 
     If attempts < max_attempts, reset to pending for retry.
     """
+    if job.claim_token is not None:
+        return fail_claimed_job(
+            db,
+            job_id=job.id,
+            claim_token=job.claim_token,
+            error=error,
+        )
+
     job.last_error = error
     if job.attempts < job.max_attempts:
         job.status = JobStatus.PENDING.value
     else:
         job.status = JobStatus.FAILED.value
+    job.claim_token = None
+    job.claimed_at = None
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def fail_claimed_job(
+    db: Session,
+    *,
+    job_id: UUID,
+    claim_token: UUID,
+    error: str,
+) -> Job:
+    """Fail or requeue only the still-current worker claim."""
+    job = db.execute(
+        select(Job)
+        .where(
+            Job.id == job_id,
+            Job.status == JobStatus.RUNNING.value,
+            Job.claim_token == claim_token,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+    if job is None:
+        db.expire_all()
+        raise JobClaimLost("job claim is no longer current")
+
+    job.last_error = error
+    if job.attempts < job.max_attempts:
+        job.status = JobStatus.PENDING.value
+    else:
+        job.status = JobStatus.FAILED.value
+    job.claim_token = None
+    job.claimed_at = None
     db.commit()
     db.refresh(job)
     return job

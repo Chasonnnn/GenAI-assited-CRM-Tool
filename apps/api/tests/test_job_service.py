@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 import uuid
 
 import pytest
+from sqlalchemy import update
 
 from app.db.enums import JobStatus, JobType
 from app.db.models import Job, Organization
@@ -188,3 +189,97 @@ def test_claim_job_for_dispatch_writes_claim_identity(db, test_org):
     assert claimed.attempts == 1
     assert claimed.claim_token is not None
     assert claimed.claimed_at is not None
+
+
+def test_mark_job_completed_clears_current_claim_identity(db, test_org):
+    claim_test_job_type = f"job_complete_test_{uuid.uuid4().hex[:12]}"
+    job = Job(
+        organization_id=test_org.id,
+        job_type=claim_test_job_type,
+        payload={},
+        run_at=datetime.now(timezone.utc),
+        status=JobStatus.PENDING.value,
+    )
+    db.add(job)
+    db.commit()
+    claimed = job_service.claim_pending_jobs(
+        db,
+        limit=1,
+        job_types=[claim_test_job_type],
+    )[0]
+
+    completed = job_service.mark_job_completed(db, claimed)
+
+    assert completed.status == JobStatus.COMPLETED.value
+    assert completed.claim_token is None
+    assert completed.claimed_at is None
+
+
+def test_mark_job_failed_clears_current_claim_before_retry(db, test_org):
+    claim_test_job_type = f"job_failure_test_{uuid.uuid4().hex[:12]}"
+    job = Job(
+        organization_id=test_org.id,
+        job_type=claim_test_job_type,
+        payload={},
+        run_at=datetime.now(timezone.utc),
+        status=JobStatus.PENDING.value,
+        max_attempts=3,
+    )
+    db.add(job)
+    db.commit()
+    claimed = job_service.claim_pending_jobs(
+        db,
+        limit=1,
+        job_types=[claim_test_job_type],
+    )[0]
+
+    retried = job_service.mark_job_failed(db, claimed, "retryable failure")
+
+    assert retried.status == JobStatus.PENDING.value
+    assert retried.last_error == "retryable failure"
+    assert retried.claim_token is None
+    assert retried.claimed_at is None
+
+
+def test_stale_claim_token_cannot_complete_a_newer_claim(db, test_org):
+    claim_test_job_type = f"job_stale_claim_test_{uuid.uuid4().hex[:12]}"
+    job = Job(
+        organization_id=test_org.id,
+        job_type=claim_test_job_type,
+        payload={},
+        run_at=datetime.now(timezone.utc),
+        status=JobStatus.PENDING.value,
+    )
+    db.add(job)
+    db.commit()
+    claimed = job_service.claim_pending_jobs(
+        db,
+        limit=1,
+        job_types=[claim_test_job_type],
+    )[0]
+    stale_token = claimed.claim_token
+    assert stale_token is not None
+    newer_token = uuid.uuid4()
+    db.execute(
+        update(Job)
+        .where(Job.id == claimed.id)
+        .values(
+            claim_token=newer_token,
+            claimed_at=datetime.now(timezone.utc),
+        )
+        .execution_options(synchronize_session=False)
+    )
+    db.commit()
+
+    with pytest.raises(job_service.JobClaimLost, match="no longer current"):
+        job_service.complete_claimed_job(
+            db,
+            job_id=claimed.id,
+            claim_token=stale_token,
+        )
+
+    db.expire_all()
+    current = db.query(Job).filter(Job.id == claimed.id).one()
+    assert current.status == JobStatus.RUNNING.value
+    assert current.claim_token == newer_token
+    assert current.completed_at is None
