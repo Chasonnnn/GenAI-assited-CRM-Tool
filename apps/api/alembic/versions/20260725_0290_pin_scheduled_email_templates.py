@@ -17,6 +17,11 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Fence legacy campaign mutations before reading any queued intent. The
+    # preservation trigger is created later in this transaction and is not
+    # visible to the old API until commit, so locking first closes that gap.
+    op.execute("SET LOCAL lock_timeout = '5s'")
+    op.execute("LOCK TABLE campaigns, campaign_runs IN SHARE ROW EXCLUSIVE MODE")
     op.add_column(
         "campaign_runs",
         sa.Column("email_template_snapshot", postgresql.JSONB(), nullable=True),
@@ -168,7 +173,10 @@ def upgrade() -> None:
             IF NEW.job_type <> 'workflow_email'
                OR NEW.status NOT IN ('pending', 'running', 'failed')
                OR jsonb_typeof(NEW.payload) <> 'object'
-               OR NEW.payload ? 'email_template_snapshot'
+               OR (
+                   NEW.payload ? 'email_template_snapshot'
+                   AND NEW.payload->'email_template_snapshot' <> 'null'::jsonb
+               )
             THEN
                 RETURN NEW;
             END IF;
@@ -301,7 +309,10 @@ def upgrade() -> None:
                   template.system_key IS NULL
                   OR template.system_key NOT IN ('org_invite', 'platform_update')
               )
-              AND NOT (job.payload ? 'email_template_snapshot')
+              AND (
+                  NOT (job.payload ? 'email_template_snapshot')
+                  OR job.payload->'email_template_snapshot' = 'null'::jsonb
+              )
             """
         )
     )

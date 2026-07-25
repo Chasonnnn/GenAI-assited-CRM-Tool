@@ -16,6 +16,9 @@ from sqlalchemy.orm import Session
 
 API_ROOT = Path(__file__).resolve().parents[1]
 PRE_SNAPSHOT_REVISION = "20260723_0280"
+SNAPSHOT_MIGRATION = (
+    API_ROOT / "alembic" / "versions" / "20260725_0290_pin_scheduled_email_templates.py"
+)
 
 ORG_ID = uuid.UUID("81000000-0000-4000-8000-000000000001")
 OTHER_ORG_ID = uuid.UUID("81000000-0000-4000-8000-000000000002")
@@ -28,6 +31,7 @@ POST_MIGRATION_SYSTEM_JOB_ID = uuid.UUID("83000000-0000-4000-8000-000000000004")
 CROSS_ORG_WORKFLOW_JOB_ID = uuid.UUID("83000000-0000-4000-8000-000000000005")
 FAILED_WORKFLOW_JOB_ID = uuid.UUID("83000000-0000-4000-8000-000000000006")
 FAILED_SYSTEM_WORKFLOW_JOB_ID = uuid.UUID("83000000-0000-4000-8000-000000000007")
+NULL_SNAPSHOT_WORKFLOW_JOB_ID = uuid.UUID("83000000-0000-4000-8000-000000000008")
 USER_ID = uuid.UUID("84000000-0000-4000-8000-000000000001")
 CAMPAIGN_ID = uuid.UUID("85000000-0000-4000-8000-000000000001")
 LEGACY_CAMPAIGN_RUN_ID = uuid.UUID("86000000-0000-4000-8000-000000000001")
@@ -40,6 +44,21 @@ def _alembic_config(connection) -> Config:
     config.set_main_option("script_location", str(API_ROOT / "alembic"))
     config.attributes["connection"] = connection
     return config
+
+
+def test_migration_locks_campaign_writes_before_snapshot_backfill() -> None:
+    """No old-API campaign write can land between backfill and trigger creation."""
+    migration_source = SNAPSHOT_MIGRATION.read_text()
+
+    lock_offset = migration_source.index(
+        "LOCK TABLE campaigns, campaign_runs IN SHARE ROW EXCLUSIVE MODE"
+    )
+    campaign_backfill_offset = migration_source.index("UPDATE campaign_runs AS run")
+    campaign_trigger_offset = migration_source.index(
+        "CREATE TRIGGER preserve_scheduled_campaign_template_0290"
+    )
+
+    assert lock_offset < campaign_backfill_offset < campaign_trigger_offset
 
 
 def _seed_prohibited_workflow_job(connection) -> dict:
@@ -611,18 +630,38 @@ def test_upgrade_pins_failed_workflow_jobs_before_dlq_replay(db_engine) -> None:
                             3,
                             3,
                             'unsafe legacy intent'
+                        ),
+                        (
+                            :null_snapshot_id,
+                            'organization',
+                            :organization_id,
+                            'workflow_email',
+                            CAST(:null_snapshot_payload AS jsonb),
+                            'failed',
+                            now() - interval '1 hour',
+                            3,
+                            3,
+                            'legacy null snapshot'
                         )
                     """
                 ),
                 {
                     "normal_id": FAILED_WORKFLOW_JOB_ID,
                     "system_id": FAILED_SYSTEM_WORKFLOW_JOB_ID,
+                    "null_snapshot_id": NULL_SNAPSHOT_WORKFLOW_JOB_ID,
                     "organization_id": ORG_ID,
                     "normal_payload": json.dumps(
                         {"template_id": str(NORMAL_TEMPLATE_ID), **base_payload}
                     ),
                     "system_payload": json.dumps(
                         {"template_id": str(SYSTEM_TEMPLATE_ID), **base_payload}
+                    ),
+                    "null_snapshot_payload": json.dumps(
+                        {
+                            "template_id": str(NORMAL_TEMPLATE_ID),
+                            **base_payload,
+                            "email_template_snapshot": None,
+                        }
                     ),
                 },
             )
@@ -655,6 +694,21 @@ def test_upgrade_pins_failed_workflow_jobs_before_dlq_replay(db_engine) -> None:
                 assert replayed.payload["email_template_snapshot"]["subject"] == "Pinned subject"
                 assert replayed.payload["email_template_snapshot"]["body"] == "<p>Pinned body</p>"
                 assert replayed.payload["email_template_snapshot"]["template_version"] == 5
+
+                replayed_null_snapshot = job_service.replay_failed_job(
+                    session,
+                    org_id=ORG_ID,
+                    job_id=NULL_SNAPSHOT_WORKFLOW_JOB_ID,
+                )
+                assert replayed_null_snapshot.status == "pending"
+                assert (
+                    replayed_null_snapshot.payload["email_template_snapshot"]["subject"]
+                    == "Pinned subject"
+                )
+                assert (
+                    replayed_null_snapshot.payload["email_template_snapshot"]["template_version"]
+                    == 5
+                )
 
                 unsafe_job = (
                     session.query(Job).filter(Job.id == FAILED_SYSTEM_WORKFLOW_JOB_ID).one()
