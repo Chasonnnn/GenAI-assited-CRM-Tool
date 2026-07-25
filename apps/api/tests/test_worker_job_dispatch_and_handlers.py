@@ -216,6 +216,7 @@ async def test_worker_loop_single_iteration_success_and_failure(monkeypatch, db)
             payload={"email_log_id": str(uuid4())},
         ),
     ]
+    pending_jobs = jobs.copy()
 
     monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(db))
     monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
@@ -228,11 +229,13 @@ async def test_worker_loop_single_iteration_success_and_failure(monkeypatch, db)
     monkeypatch.setattr(
         worker, "maybe_schedule_gmail_sync_jobs", lambda *args, **kwargs: datetime.now(timezone.utc)
     )
-    monkeypatch.setattr(
-        worker.job_service,
-        "claim_pending_jobs",
-        lambda session, limit, job_types: jobs,
-    )
+
+    def _claim(session, limit, job_types):
+        claimed = pending_jobs[:limit]
+        del pending_jobs[:limit]
+        return claimed
+
+    monkeypatch.setattr(worker.job_service, "claim_pending_jobs", _claim)
 
     def _mark_completed(session, job):
         job.status = JobStatus.COMPLETED.value
@@ -269,6 +272,58 @@ async def test_worker_loop_single_iteration_success_and_failure(monkeypatch, db)
     assert slept["count"] == 1
     assert jobs[0].status == JobStatus.COMPLETED.value
     assert jobs[1].status == JobStatus.FAILED.value
+
+
+@pytest.mark.asyncio
+async def test_worker_claims_one_job_at_a_time_within_each_batch(monkeypatch, db):
+    pending_jobs = [
+        _job(job_type=JobType.CAMPAIGN_SEND.value),
+        _job(job_type=JobType.NOTIFICATION.value),
+    ]
+    processed: list[str] = []
+    claim_limits: list[int] = []
+
+    monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(db))
+    monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
+    monkeypatch.setattr(worker, "BATCH_SIZE", 2)
+    monkeypatch.setattr(worker, "POLL_INTERVAL_SECONDS", 0)
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_google_calendar_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_gmail_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+
+    def _claim(session, *, limit, job_types):
+        claim_limits.append(limit)
+        claimed = pending_jobs[:limit]
+        del pending_jobs[:limit]
+        return claimed
+
+    monkeypatch.setattr(worker.job_service, "claim_pending_jobs", _claim)
+
+    async def _process(session, job):
+        processed.append(job.job_type)
+        return True
+
+    monkeypatch.setattr(worker, "process_job", _process)
+    monkeypatch.setattr(worker.job_service, "mark_job_completed", lambda *args: None)
+    monkeypatch.setattr(worker, "_record_job_success", lambda *args, **kwargs: None)
+
+    async def _sleep(seconds):
+        raise RuntimeError("stop-loop")
+
+    monkeypatch.setattr(worker.asyncio, "sleep", _sleep)
+
+    with pytest.raises(RuntimeError, match="stop-loop"):
+        await worker.worker_loop()
+
+    assert claim_limits == [1, 1]
+    assert processed == [JobType.CAMPAIGN_SEND.value, JobType.NOTIFICATION.value]
 
 
 @pytest.mark.asyncio

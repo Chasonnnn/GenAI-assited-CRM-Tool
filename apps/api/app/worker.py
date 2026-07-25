@@ -593,16 +593,17 @@ async def worker_loop() -> None:
                         logger.warning("Session cleanup failed: %s", exc)
                     last_session_cleanup = now
 
-                jobs = job_service.claim_pending_jobs(
-                    db,
-                    limit=BATCH_SIZE,
-                    job_types=claimed_job_types,
-                )
+                for _ in range(BATCH_SIZE):
+                    jobs = job_service.claim_pending_jobs(
+                        db,
+                        limit=1,
+                        job_types=claimed_job_types,
+                    )
+                    if not jobs:
+                        break
 
-                if jobs:
                     logger.info("Found %s pending jobs", len(jobs))
-
-                for job in jobs:
+                    job = jobs[0]
                     try:
                         should_mark_completed = await process_job(db, job)
                         if should_mark_completed:
