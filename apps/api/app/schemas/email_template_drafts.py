@@ -54,7 +54,8 @@ class EmailTemplateDraftTestSendRequest(EmailTemplateTestSendRequest):
 
 
 class EmailTemplateDraftTestSendResponse(EmailTemplateTestSendResponse):
-    tested_revision: int = Field(ge=1)
+    submitted_revision: int = Field(ge=1)
+    tested_revision: int | None = Field(default=None, ge=1)
 
 
 class EmailTemplateDraftRead(BaseModel):

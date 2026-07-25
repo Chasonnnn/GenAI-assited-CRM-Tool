@@ -350,8 +350,8 @@ def record_successful_test(
     org_id: UUID,
     draft_id: UUID,
     tested_revision: int,
-) -> EmailTemplateDraft | None:
-    """Mark a test only if the draft did not change while it was being sent."""
+) -> int | None:
+    """Return the revision only when that exact draft revision was marked tested."""
     draft = (
         db.query(EmailTemplateDraft)
         .filter(
@@ -362,12 +362,12 @@ def record_successful_test(
         .first()
     )
     if draft is None or draft.revision != tested_revision:
-        return draft
+        return None
     draft.last_tested_revision = tested_revision
     draft.last_tested_at = _utc_now()
     db.commit()
     db.refresh(draft)
-    return draft
+    return tested_revision
 
 
 def _assert_name_available(

@@ -52,18 +52,14 @@ async def send_email_template_draft_test(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Draft revision mismatch: "
-                f"expected {body.expected_revision}, got {draft.revision}"
+                f"Draft revision mismatch: expected {body.expected_revision}, got {draft.revision}"
             ),
         )
 
     if draft.template is not None and draft.template.system_key:
         from app.services import system_email_template_service
 
-        if (
-            draft.template.system_key
-            in system_email_template_service.DEFAULT_SYSTEM_TEMPLATES
-        ):
+        if draft.template.system_key in system_email_template_service.DEFAULT_SYSTEM_TEMPLATES:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
@@ -74,7 +70,7 @@ async def send_email_template_draft_test(
 
     from app.services import email_test_send_service
 
-    tested_revision = draft.revision
+    submitted_revision = draft.revision
     result = await email_test_send_service.send_template_content_test(
         db=db,
         org_id=session.org_id,
@@ -90,14 +86,16 @@ async def send_email_template_draft_test(
         idempotency_key=body.idempotency_key,
         ignore_opt_out=body.ignore_opt_out,
     )
-    if result.get("success"):
-        email_template_draft_service.record_successful_test(
+    tested_revision = None
+    if result.get("success") and not result.get("queued"):
+        tested_revision = email_template_draft_service.record_successful_test(
             db,
             org_id=session.org_id,
             draft_id=draft.id,
-            tested_revision=tested_revision,
+            tested_revision=submitted_revision,
         )
     return EmailTemplateDraftTestSendResponse(
         **result,
+        submitted_revision=submitted_revision,
         tested_revision=tested_revision,
     )

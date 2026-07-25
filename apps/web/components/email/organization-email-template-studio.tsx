@@ -353,6 +353,7 @@ function OrganizationEmailTemplateEditor({
     const [ignoreOptOut, setIgnoreOptOut] = useState(false)
     const [isSendingTest, setIsSendingTest] = useState(false)
     const [testError, setTestError] = useState<string | null>(null)
+    const [queuedTestRevision, setQueuedTestRevision] = useState<number | null>(null)
     const subjectRef = useRef<HTMLInputElement>(null)
     const htmlBodyRef = useRef<HTMLTextAreaElement>(null)
     const visualBodyRef = useRef<RichTextEditorHandle | null>(null)
@@ -373,7 +374,9 @@ function OrganizationEmailTemplateEditor({
         `${fields.subject}\n${fields.body}`,
     ).filter((name) => name !== "unsubscribe_url")
     const isTestCurrent =
-        Boolean(draft) && draft?.last_tested_revision === draft?.revision
+        !isDirty && Boolean(draft) && draft?.last_tested_revision === draft?.revision
+    const isTestQueued =
+        !isDirty && Boolean(draft) && queuedTestRevision === draft?.revision
     const requiresRefresh = saveConflict || Boolean(draft?.is_stale)
     const publishedVersion =
         draft?.published_version ?? publishedTemplate?.current_version ?? null
@@ -645,12 +648,25 @@ function OrganizationEmailTemplateEditor({
                     expected_revision: draft.revision,
                 },
             })
-            setDraft({
-                ...draft,
-                last_tested_revision: result.tested_revision,
-            })
+            if (!result.success) {
+                setTestError(
+                    "Test email was not queued. Check the recipient and email integration, then try again.",
+                )
+                setIsSendingTest(false)
+                return
+            }
+            if (result.queued) {
+                setQueuedTestRevision(result.submitted_revision)
+            } else if (result.tested_revision !== null) {
+                setQueuedTestRevision(null)
+                setDraft({
+                    ...draft,
+                    last_tested_revision: result.tested_revision,
+                })
+            }
             setTestOpen(false)
             testOccurrenceIdRef.current = null
+            setIsSendingTest(false)
         } catch (error) {
             if (error instanceof ApiError && error.status === 409) {
                 setTestOpen(false)
@@ -658,8 +674,8 @@ function OrganizationEmailTemplateEditor({
             } else {
                 setTestError("Test email failed. Your draft was not changed.")
             }
+            setIsSendingTest(false)
         }
-        setIsSendingTest(false)
     }
 
     return (
@@ -819,7 +835,9 @@ function OrganizationEmailTemplateEditor({
                         <div className="mt-1">
                             <Badge variant={isTestCurrent ? "default" : "secondary"}>
                                 {isTestCurrent
-                                    ? "Tested current draft"
+                                    ? "Test sent for current draft"
+                                    : isTestQueued
+                                      ? "Test queued for current draft"
                                     : draft
                                       ? "Not tested"
                                       : "Save draft to test"}

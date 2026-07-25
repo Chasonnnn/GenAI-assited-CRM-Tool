@@ -95,7 +95,8 @@ describe("email template draft hooks", () => {
         vi.mocked(sendTestEmailTemplateDraft).mockResolvedValue({
             success: true,
             queued: true,
-            tested_revision: 3,
+            submitted_revision: 3,
+            tested_revision: null,
         })
         vi.mocked(updateEmailTemplateDraft).mockReset()
         vi.mocked(updateEmailTemplateDraft).mockResolvedValue(draft)
@@ -299,5 +300,40 @@ describe("email template draft hooks", () => {
             queryClient.getQueryState(emailTemplateDraftKeys.detail(draft.id))
                 ?.isInvalidated,
         ).toBe(true)
+    })
+
+    it("returns a resolved test-send failure for public-safe component handling", async () => {
+        vi.mocked(sendTestEmailTemplateDraft).mockResolvedValue({
+            success: false,
+            queued: false,
+            submitted_revision: 3,
+            tested_revision: null,
+            error: "private provider diagnostic",
+        })
+        const view = renderHook(() => useSendTestEmailTemplateDraft(), {
+            wrapper: wrapperFor(createQueryClient()),
+        })
+        const payload = {
+            to_email: "reviewer@example.com",
+            idempotency_key: "template-draft-test/failure",
+            expected_revision: 3,
+        }
+
+        let result
+        await act(async () => {
+            result = await view.result.current.mutateAsync({
+                id: draft.id,
+                payload,
+            })
+        })
+
+        expect(result).toEqual(
+            expect.objectContaining({
+                success: false,
+                queued: false,
+                submitted_revision: 3,
+                tested_revision: null,
+            }),
+        )
     })
 })

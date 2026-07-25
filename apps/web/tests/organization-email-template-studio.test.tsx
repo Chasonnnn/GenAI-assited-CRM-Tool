@@ -692,7 +692,7 @@ describe("OrganizationEmailTemplateStudio", () => {
         expect(subject).toHaveValue("Original subject{{first_name}}")
     })
 
-    it("reuses one test occurrence across retries and marks the current revision tested", async () => {
+    it("reuses one test occurrence across retries and reports a queued Resend test truthfully", async () => {
         mocks.state.draft = {
             ...draftFromPublished,
             body: "<p>Hello {{first_name}}</p>",
@@ -703,7 +703,8 @@ describe("OrganizationEmailTemplateStudio", () => {
                 success: true,
                 queued: true,
                 provider_used: "resend",
-                tested_revision: 1,
+                submitted_revision: 1,
+                tested_revision: null,
             })
 
         render(<OrganizationEmailTemplateStudio templateId="template-1" />)
@@ -739,16 +740,51 @@ describe("OrganizationEmailTemplateStudio", () => {
         expect(secondCall.payload.idempotency_key).toBe(
             firstCall.payload.idempotency_key,
         )
-        expect(await screen.findByText("Tested current draft")).toBeInTheDocument()
+        expect(
+            await screen.findByText("Test queued for current draft"),
+        ).toBeInTheDocument()
+        expect(screen.queryByText("Tested current draft")).not.toBeInTheDocument()
+    })
+
+    it("keeps the test dialog open when the provider returns a resolved failure", async () => {
+        mocks.state.draft = draftFromPublished
+        mocks.sendTestDraft.mockResolvedValue({
+            success: false,
+            queued: false,
+            provider_used: "resend",
+            submitted_revision: 1,
+            tested_revision: null,
+            error: "Recipient is suppressed",
+        })
+
+        render(<OrganizationEmailTemplateStudio templateId="template-1" />)
+        fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+        fireEvent.change(screen.getByLabelText("Test recipient"), {
+            target: { value: "qa@example.com" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
+
+        expect(
+            await screen.findByText(
+                "Test email was not queued. Check the recipient and email integration, then try again.",
+            ),
+        ).toBeInTheDocument()
+        expect(screen.queryByText("Recipient is suppressed")).not.toBeInTheDocument()
+        expect(screen.getByLabelText("Test recipient")).toHaveValue(
+            "qa@example.com",
+        )
+        expect(screen.getByRole("button", { name: "Send test email" })).toBeEnabled()
+        expect(screen.getByText("Not tested")).toBeInTheDocument()
     })
 
     it("uses the server-confirmed tested revision instead of assuming the current draft", async () => {
         mocks.state.draft = draftFromPublished
         mocks.sendTestDraft.mockResolvedValue({
             success: true,
-            queued: true,
-            provider_used: "resend",
-            tested_revision: 0,
+            queued: false,
+            provider_used: "gmail",
+            submitted_revision: 1,
+            tested_revision: 2,
         })
 
         render(<OrganizationEmailTemplateStudio templateId="template-1" />)

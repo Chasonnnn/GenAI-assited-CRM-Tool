@@ -180,11 +180,7 @@ export function useSendTestEmailTemplateDraft() {
             id: string
             payload: EmailTemplateDraftTestSendRequest
         }): Promise<EmailTemplateDraftTestSendResponse> => {
-            const result = await sendTestEmailTemplateDraft(id, payload)
-            if (!result.success) {
-                throw new Error(result.error || 'Failed to send test email')
-            }
-            return result
+            return sendTestEmailTemplateDraft(id, payload)
         },
         onSuccess: (_result, { id }) => {
             void queryClient.invalidateQueries({

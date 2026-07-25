@@ -72,7 +72,8 @@ export interface EmailTemplateDraftTestSendRequest
 
 export interface EmailTemplateDraftTestSendResponse
     extends EmailTemplateTestSendResponse {
-    tested_revision: number
+    submitted_revision: number
+    tested_revision: number | null
 }
 
 export interface ListEmailTemplateDraftsParams {
