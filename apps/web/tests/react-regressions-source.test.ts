@@ -104,7 +104,37 @@ function readApiModuleSources(): Array<{ path: string; source: string }> {
     return sources
 }
 
+function readTsxSourcesUnder(pathFromWebRoot: string): Array<{ path: string; source: string }> {
+    const absoluteRoot = join(process.cwd(), pathFromWebRoot)
+    const sources: Array<{ path: string; source: string }> = []
+
+    for (const entry of readdirSync(absoluteRoot, { withFileTypes: true })) {
+        const path = `${pathFromWebRoot}/${entry.name}`
+        if (entry.isDirectory()) {
+            sources.push(...readTsxSourcesUnder(path))
+        } else if (entry.isFile() && entry.name.endsWith(".tsx")) {
+            sources.push({ path, source: readSource(path) })
+        }
+    }
+
+    return sources
+}
+
 describe("React regression guards (source)", () => {
+    it("reserves side-sheet overlays for the calendar agenda", () => {
+        const sheetConsumers = [
+            ...readTsxSourcesUnder("app"),
+            ...readTsxSourcesUnder("components"),
+        ]
+            .filter(({ path }) => path !== "components/ui/sheet.tsx")
+            .filter(({ source }) => source.includes('from "@/components/ui/sheet"'))
+            .map(({ path }) => path)
+
+        expect(sheetConsumers).toEqual([
+            "components/appointments/UnifiedCalendar.tsx",
+        ])
+    })
+
     it("uses stable IDs for editable automation rows", () => {
         const source = readSource("app/(app)/automation/page.client.tsx")
 
@@ -3663,7 +3693,7 @@ describe("React regression guards (source)", () => {
     })
 
     it("uses warm neutral field-library colors instead of default slate text tokens", () => {
-        const source = readSource("components/forms/builder/FieldLibrarySheet.tsx")
+        const source = readSource("components/forms/builder/FieldLibraryDialog.tsx")
 
         expect(source).toContain("text-stone-900")
         expect(source).toContain("text-stone-950")
@@ -4296,7 +4326,7 @@ describe("React regression guards (source)", () => {
         const sources = [
             readSource("components/email/TemplateVariablePicker.tsx"),
             readSource("components/forms/FormBuilderPalette.tsx"),
-            readSource("components/forms/builder/FieldLibrarySheet.tsx"),
+            readSource("components/forms/builder/FieldLibraryDialog.tsx"),
             readSource("components/forms/builder/FormBuilderCanvasPreview.tsx"),
         ]
 
