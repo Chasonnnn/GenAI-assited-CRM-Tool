@@ -54,7 +54,7 @@ describe("Dependency security guards", () => {
         const braceExpansionOverride = readPnpmOverrides()["brace-expansion"]
 
         expect(braceExpansionOverride).toBeDefined()
-        expect(compareVersions(braceExpansionOverride!, "5.0.6")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(braceExpansionOverride!, "5.0.8")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins DOMPurify to a non-vulnerable version", () => {
@@ -97,7 +97,7 @@ describe("Dependency security guards", () => {
         const postcssOverride = readPnpmOverrides().postcss
 
         expect(postcssOverride).toBeDefined()
-        expect(compareVersions(postcssOverride!, "8.5.10")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(postcssOverride!, "8.5.18")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins ws to a non-vulnerable version in pnpm overrides", () => {
@@ -156,7 +156,7 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "5.0.6")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "5.0.8")).toBeGreaterThanOrEqual(0)
         }
     })
 
@@ -170,7 +170,7 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "8.5.10")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "8.5.18")).toBeGreaterThanOrEqual(0)
         }
     })
 
