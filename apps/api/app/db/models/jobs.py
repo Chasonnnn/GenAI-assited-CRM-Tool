@@ -62,6 +62,14 @@ class Job(Base):
             unique=True,
             postgresql_where=text("idempotency_key IS NOT NULL"),
         ),
+        Index(
+            "idx_jobs_stale_resend_reconciliation",
+            "claimed_at",
+            "id",
+            postgresql_where=text(
+                "status = 'running' AND job_type = 'resend_event_reconcile'"
+            ),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
