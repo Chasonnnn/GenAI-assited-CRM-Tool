@@ -659,21 +659,169 @@ describe("OrganizationEmailTemplateStudio", () => {
         )
     })
 
-    it("keeps advanced legacy HTML in source mode without mounting it in the rich editor", () => {
+    it("opens advanced legacy HTML in the visual editor without changing the stored body", () => {
         mocks.state.draft = draftFromPublished
 
         render(<OrganizationEmailTemplateStudio templateId="template-1" />)
 
-        expect(screen.getByLabelText("Email HTML")).toHaveValue(
-            publishedTemplate.body,
+        const visualMode = screen.getByRole("button", { name: "Visual editor" })
+        expect(visualMode).toBeEnabled()
+        expect(visualMode).toHaveAttribute("aria-pressed", "true")
+        const editor = screen.getByRole("textbox", { name: "Email body" })
+        expect(editor.querySelector("table")).not.toBeNull()
+        expect(editor).toHaveTextContent("{{unknown_legacy_token}}")
+        expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled()
+    })
+
+    it("keeps the advanced editor mounted when a visual edit removes the last layout element", () => {
+        mocks.state.draft = draftFromPublished
+
+        render(<OrganizationEmailTemplateStudio templateId="template-1" />)
+
+        const editor = screen.getByRole("textbox", { name: "Email body" })
+        editor.innerHTML =
+            '<div style="border-image: none"><p>Converted to a simple message</p></div>'
+        fireEvent.input(editor)
+
+        expect(screen.getByRole("textbox", { name: "Email body" })).toBe(editor)
+        expect(editor).toHaveTextContent("Converted to a simple message")
+        expect(screen.getByRole("button", { name: "Visual editor" })).toBeEnabled()
+        fireEvent.click(screen.getByRole("button", { name: "HTML source" }))
+        expect(screen.getByRole("button", { name: "Visual editor" })).toBeEnabled()
+        fireEvent.click(screen.getByRole("button", { name: "Visual editor" }))
+        expect(screen.getByRole("textbox", { name: "Email body" })).toHaveTextContent(
+            "Converted to a simple message",
         )
         expect(mocks.richTextEditor).not.toHaveBeenCalled()
+    })
+
+    it("keeps unsupported legacy markup source-only with an explicit reason", () => {
+        const unsupportedBody =
+            "<!doctype html><html><body><section><p>Legacy layout</p></section></body></html>"
+        mocks.state.publishedTemplate = {
+            ...publishedTemplate,
+            body: unsupportedBody,
+        }
+        mocks.state.draft = {
+            ...draftFromPublished,
+            body: unsupportedBody,
+        }
+
+        render(<OrganizationEmailTemplateStudio templateId="template-1" />)
+
+        expect(screen.getByLabelText("Email HTML")).toHaveValue(unsupportedBody)
+        expect(screen.getByRole("button", { name: "Visual editor" })).toBeDisabled()
         expect(
             screen.getByText(
-                "Source mode protects tables, images, and email-client layout.",
+                "Visual editing is unavailable because this template contains unsupported document-level or custom HTML.",
             ),
         ).toBeInTheDocument()
     })
+
+    it.each(["org", "personal"] as const)(
+        "saves a visual edit to advanced %s HTML without flattening its structure",
+        async (scope) => {
+            const advancedBody =
+                '<div style="padding:20px"><table width="100%"><tbody><tr><td>{{appointment_type}}</td></tr></tbody></table><p><br></p></div>'
+            const scopedDraft = {
+                ...draftFromPublished,
+                scope,
+                owner_user_id: scope === "personal" ? "user-1" : null,
+                body: advancedBody,
+            }
+            mocks.state.publishedTemplate = {
+                ...publishedTemplate,
+                scope,
+                owner_user_id: scope === "personal" ? "user-1" : null,
+                body: advancedBody,
+            }
+            mocks.state.draft = scopedDraft
+            mocks.updateDraft.mockResolvedValue({
+                ...scopedDraft,
+                body: advancedBody.replace(
+                    "{{appointment_type}}",
+                    "Updated {{appointment_type}}",
+                ),
+                revision: 2,
+            })
+
+            render(
+                <OrganizationEmailTemplateStudio
+                    templateId="template-1"
+                    scope={scope}
+                />,
+            )
+
+            const editor = screen.getByRole("textbox", { name: "Email body" })
+            const cell = editor.querySelector("td")
+            expect(cell).not.toBeNull()
+            if (!cell) return
+            cell.textContent = "Updated {{appointment_type}}"
+            fireEvent.input(editor)
+            fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+
+            await waitFor(() => expect(mocks.updateDraft).toHaveBeenCalledOnce())
+            const savedBody = mocks.updateDraft.mock.calls[0]?.[0]?.data?.body
+            expect(savedBody).toContain("Updated {{appointment_type}}")
+            expect(savedBody).toContain("<table")
+            expect(savedBody).toContain("<tbody><tr><td")
+            expect(savedBody).toMatch(/<p>(?:<br>|&nbsp;)<\/p>/)
+        },
+    )
+
+    it.each(["org", "personal"] as const)(
+        "previews the organization name but saves the raw token for %s templates",
+        async (scope) => {
+            const scopedDraft = {
+                ...draftFromPublished,
+                scope,
+                owner_user_id: scope === "personal" ? "user-1" : null,
+                subject: "Welcome to {{org_name}}",
+                body: "<p>Welcome to {{org_name}}</p>",
+            }
+            mocks.state.publishedTemplate = {
+                ...publishedTemplate,
+                scope,
+                owner_user_id: scope === "personal" ? "user-1" : null,
+                subject: scopedDraft.subject,
+                body: scopedDraft.body,
+            }
+            mocks.state.draft = scopedDraft
+            mocks.updateDraft.mockResolvedValue({
+                ...scopedDraft,
+                subject: "An update from {{org_name}}",
+                revision: 2,
+            })
+
+            render(
+                <OrganizationEmailTemplateStudio
+                    templateId="template-1"
+                    scope={scope}
+                />,
+            )
+
+            expect(
+                screen.getAllByText("Welcome to EWI Family Global"),
+            ).not.toHaveLength(0)
+            fireEvent.change(screen.getByLabelText("Subject"), {
+                target: { value: "An update from {{org_name}}" },
+            })
+            expect(
+                screen.getAllByText("An update from EWI Family Global"),
+            ).not.toHaveLength(0)
+            fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+
+            await waitFor(() => {
+                expect(mocks.updateDraft).toHaveBeenCalledWith({
+                    id: "draft-1",
+                    data: {
+                        expected_revision: 1,
+                        subject: "An update from {{org_name}}",
+                    },
+                })
+            })
+        },
+    )
 
     it("opens simple stored HTML in the visual editor without marking it changed", () => {
         mocks.state.draft = {

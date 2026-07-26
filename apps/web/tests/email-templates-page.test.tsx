@@ -17,6 +17,7 @@ const mockRichTextEditorProps = vi.fn()
 const mockUseEmailTemplates = vi.fn()
 const mockCreateEmailTemplate = vi.fn()
 const mockUpdateEmailTemplate = vi.fn()
+const mockDeleteEmailTemplate = vi.fn()
 const mockSendTestEmailTemplate = vi.fn()
 const mockRollbackEmailTemplate = vi.fn()
 const mockDiscardEmailTemplateDraft = vi.fn()
@@ -258,7 +259,7 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
         mutateAsync: mockRollbackEmailTemplate,
         isPending: false,
     }),
-    useDeleteEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
+    useDeleteEmailTemplate: () => ({ mutate: mockDeleteEmailTemplate, isPending: false }),
     useCopyTemplateToPersonal: () => ({ mutate: vi.fn(), isPending: false }),
     useShareTemplateWithOrg: () => ({ mutate: vi.fn(), isPending: false }),
     useCopyTemplateFromLibrary: () => ({ mutate: vi.fn(), isPending: false }),
@@ -305,6 +306,7 @@ describe("EmailTemplatesPage", () => {
         mockUseEmailTemplates.mockClear()
         mockCreateEmailTemplate.mockReset()
         mockUpdateEmailTemplate.mockReset()
+        mockDeleteEmailTemplate.mockReset()
         mockSendTestEmailTemplate.mockReset()
         mockRollbackEmailTemplate.mockReset()
         mockDiscardEmailTemplateDraft.mockReset()
@@ -372,6 +374,113 @@ describe("EmailTemplatesPage", () => {
         const toEmailInput = await screen.findByLabelText("To email")
         expect(toEmailInput).toBeInTheDocument()
         expect((toEmailInput as HTMLInputElement).value).toBe("admin@example.com")
+    })
+
+    it("lets a manager set an active organization template inactive from its card", async () => {
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Actions for Org Template" }),
+        )
+        fireEvent.click(
+            await screen.findByRole("menuitem", { name: "Set inactive" }),
+        )
+
+        expect(
+            await screen.findByRole("heading", {
+                name: "Set Org Template inactive?",
+            }),
+        ).toBeInTheDocument()
+        expect(
+            screen.getByText(/future automated workflow sends using it will stop/i),
+        ).toBeInTheDocument()
+        expect(mockUpdateEmailTemplate).not.toHaveBeenCalled()
+
+        fireEvent.click(screen.getByRole("button", { name: "Set inactive" }))
+
+        expect(mockUpdateEmailTemplate).toHaveBeenCalledWith(
+            {
+                id: "tpl_org_1",
+                data: { is_active: false },
+            },
+            expect.objectContaining({
+                onSuccess: expect.any(Function),
+                onError: expect.any(Function),
+            }),
+        )
+    })
+
+    it("lets a manager set a revealed inactive organization template active from its card", async () => {
+        orgTemplatesFixture = [{ ...ORG_TEMPLATE, is_active: false }]
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("checkbox", { name: "Hide Inactive" }))
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Actions for Org Template" }),
+        )
+        fireEvent.click(
+            await screen.findByRole("menuitem", { name: "Set active" }),
+        )
+
+        expect(
+            await screen.findByRole("heading", {
+                name: "Set Org Template active?",
+            }),
+        ).toBeInTheDocument()
+        expect(
+            screen.getByText(/future automated workflow sends using it may resume/i),
+        ).toBeInTheDocument()
+        expect(mockUpdateEmailTemplate).not.toHaveBeenCalled()
+
+        fireEvent.click(screen.getByRole("button", { name: "Set active" }))
+
+        expect(mockUpdateEmailTemplate).toHaveBeenCalledWith(
+            {
+                id: "tpl_org_1",
+                data: { is_active: true },
+            },
+            expect.objectContaining({
+                onSuccess: expect.any(Function),
+                onError: expect.any(Function),
+            }),
+        )
+    })
+
+    it("routes status changes through Studio when the template has a saved draft", async () => {
+        orgDraftsFixture = [{
+            ...NEW_ORG_DRAFT,
+            id: "draft_existing_status",
+            template_id: "tpl_org_1",
+            name: "Org Template changes",
+            base_version: 2,
+            published_version: 2,
+        }]
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Actions for Org Template" }),
+        )
+        fireEvent.click(
+            await screen.findByRole("menuitem", { name: "Set inactive" }),
+        )
+
+        expect(
+            await screen.findByRole("heading", { name: "Update status in Studio" }),
+        ).toBeInTheDocument()
+        expect(
+            screen.getByText(/changing status here would make that draft stale/i),
+        ).toBeInTheDocument()
+        expect(mockUpdateEmailTemplate).not.toHaveBeenCalled()
+
+        fireEvent.click(screen.getByRole("button", { name: "Open draft" }))
+
+        expect(mockRouterPush).toHaveBeenCalledWith(
+            "/automation/email-templates/org/tpl_org_1",
+        )
+        expect(mockUpdateEmailTemplate).not.toHaveBeenCalled()
     })
 
     it("sends a test email with touched variable overrides and opt-out override", async () => {
@@ -762,7 +871,7 @@ describe("EmailTemplatesPage", () => {
     })
 
     it.each(["admin", "developer"] as const)(
-        "allows %s to edit non-owned personal templates",
+        "allows %s to edit and delete non-owned personal templates",
         async (role) => {
             mockUseAuth.mockReturnValue({
                 user: {
@@ -784,7 +893,26 @@ describe("EmailTemplatesPage", () => {
             expect(triggers.length).toBeGreaterThan(0)
             fireEvent.click(triggers[0] as HTMLElement)
 
-            expect(await screen.findByText("Edit")).toBeInTheDocument()
+            expect(await screen.findByRole("menuitem", { name: "Edit" })).toBeInTheDocument()
+            fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }))
+
+            expect(
+                await screen.findByRole("heading", {
+                    name: "Delete Other User Personal Template?",
+                }),
+            ).toBeInTheDocument()
+            expect(screen.getByText(/owned by Maegan Fee/i)).toBeInTheDocument()
+            expect(screen.getByText(/can be reactivated later/i)).toBeInTheDocument()
+
+            fireEvent.click(screen.getByRole("button", { name: "Delete template" }))
+
+            expect(mockDeleteEmailTemplate).toHaveBeenCalledWith(
+                "tpl_personal_2",
+                expect.objectContaining({
+                    onSuccess: expect.any(Function),
+                    onError: expect.any(Function),
+                }),
+            )
         }
     )
 

@@ -162,6 +162,48 @@ def test_confirmed_email_reuses_one_pending_delivery_occurrence(
     )
 
 
+def test_inactive_appointment_template_skips_the_notification_without_failing(
+    db,
+    test_org,
+    test_user,
+):
+    from app.db.enums import AppointmentEmailType
+    from app.db.models import AppointmentEmailLog, EmailDelivery, EmailLog, EmailTemplate
+    from app.services import appointment_email_service, email_service
+
+    _configure_resend(db, test_org.id)
+    appointment = _create_confirmed_appointment(db, test_org, test_user)
+    template_id = appointment_email_service.get_or_create_template(
+        db,
+        test_org.id,
+        test_user.id,
+        AppointmentEmailType.CANCELLED,
+    )
+    template = db.get(EmailTemplate, template_id)
+    assert template is not None
+    template.is_active = False
+    db.flush()
+    assert email_service.get_template(db, template_id, test_org.id).is_active is False
+
+    result = appointment_email_service.send_appointment_email(
+        db,
+        appointment,
+        AppointmentEmailType.CANCELLED,
+        "https://portal.example.com",
+    )
+
+    assert result is None
+    assert db.query(AppointmentEmailLog).count() == 0
+    assert db.query(EmailLog).filter(EmailLog.template_id == template_id).count() == 0
+    assert (
+        db.query(EmailDelivery)
+        .join(EmailLog, EmailDelivery.email_log_id == EmailLog.id)
+        .filter(EmailLog.template_id == template_id)
+        .count()
+        == 0
+    )
+
+
 def test_provider_acceptance_marks_appointment_email_sent_with_resend_id(
     db,
     test_org,

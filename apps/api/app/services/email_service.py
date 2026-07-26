@@ -791,10 +791,23 @@ def share_template_with_org(
     return new_template
 
 
-def delete_template(db: Session, template: EmailTemplate) -> None:
-    """Soft delete a template (deactivate)."""
-    template.is_active = False
-    db.commit()
+def delete_template(
+    db: Session,
+    template: EmailTemplate,
+    *,
+    user_id: UUID,
+) -> EmailTemplate:
+    """Soft delete a template through the versioned published-state path."""
+    if not template.is_active:
+        return template
+
+    return update_template(
+        db=db,
+        template=template,
+        user_id=user_id,
+        is_active=False,
+        comment="Deactivated",
+    )
 
 
 def is_email_suppressed(
@@ -1610,10 +1623,10 @@ def send_from_template(
     Queue an email using a template.
 
     Renders the template with variables and queues for sending.
-    Returns (email_log, job) or None if template not found.
+    Returns (email_log, job) or None if the template is missing or inactive.
     """
     template = get_template(db, template_id, org_id)
-    if not template:
+    if not template or not template.is_active:
         return None
 
     from app.services import system_email_template_service

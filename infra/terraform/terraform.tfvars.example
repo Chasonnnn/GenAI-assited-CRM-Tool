@@ -32,17 +32,17 @@ enable_domain_mapping = true
 # run_cpu_idle = true
 # worker_cpu = "1000m"
 # worker_memory = "512Mi"
-# worker_min_instances = 0
+# worker_min_instances = 1
 # worker_max_instances = 1
 # worker_cpu_idle = false
 
-# Worker schedule (business hours)
-# worker_schedule_enabled = true
+# Legacy worker schedule (keep disabled for 24/7 automation)
+# worker_schedule_enabled = false
 # worker_schedule_timezone = "America/Los_Angeles"
 # worker_scale_up_cron = "0 8 * * 1-5"
 # worker_scale_down_cron = "0 17 * * 1-5"
 # worker_min_instances_day = 1
-# worker_min_instances_night = 0
+# worker_min_instances_night = 1
 
 # Dedicated malware scan job (recommended when ATTACHMENT_SCAN_ENABLED=true)
 # attachment_scan_job_enabled = true

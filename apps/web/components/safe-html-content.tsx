@@ -27,6 +27,15 @@ const LEGACY_EMAIL_TABLE_PROP_NAMES: Record<string, string> = {
     rowspan: "rowSpan",
 }
 
+const TABLE_STRUCTURE_TAGS = new Set([
+    "table",
+    "thead",
+    "tbody",
+    "tfoot",
+    "tr",
+    "colgroup",
+])
+
 function stripHtml(html: string) {
     return html
         .replace(/<br\s*\/?>/gi, "\n")
@@ -112,9 +121,19 @@ function nodeToReactNode(node: ChildNode, key: string): React.ReactNode {
     }
 
     const element = node as HTMLElement
-    const children = Array.from(element.childNodes).map((child, index) =>
-        nodeToReactNode(child, `${key}-${index}`),
+    const stripsIndentation = TABLE_STRUCTURE_TAGS.has(
+        element.tagName.toLowerCase(),
     )
+    const children = Array.from(element.childNodes).flatMap((child, index) => {
+        if (
+            stripsIndentation &&
+            child.nodeType === Node.TEXT_NODE &&
+            !child.textContent?.trim()
+        ) {
+            return []
+        }
+        return [nodeToReactNode(child, `${key}-${index}`)]
+    })
 
     return React.createElement(
         element.tagName.toLowerCase(),

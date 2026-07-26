@@ -529,7 +529,7 @@ def send_appointment_email(
 
     # Get template for subject
     template = email_service.get_template(db, template_id, org.id)
-    if not template:
+    if not template or not template.is_active:
         return None
 
     subject, _ = email_service.render_template(template.subject, "", variables)

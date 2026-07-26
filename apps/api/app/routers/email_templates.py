@@ -113,7 +113,7 @@ def list_templates(
         None, description="Filter by scope: 'org' or 'personal'"
     ),
     show_all_personal: Annotated[bool, "fastapi_param"] = Query(
-        False, description="Admin-only: view all users' personal templates (read-only)"
+        False, description="Admin/developer: view all users' personal templates"
     ),
     usage_context: Annotated[Literal["all", "manual"], "fastapi_param"] = Query(
         "all", description="Use 'manual' to exclude workflow-only templates from compose pickers"
@@ -127,9 +127,9 @@ def list_templates(
     - Without scope filter: returns org templates + user's personal templates
     - scope=org: returns only org/system templates
     - scope=personal: returns user's personal templates
-    - show_all_personal=true (admin only): returns all personal templates (read-only)
+    - show_all_personal=true (admin/developer): returns all personal templates
     """
-    # Check if user is admin for show_all_personal
+    # Admin and developer roles can manage all personal templates in the org.
     is_admin = session.role in (Role.ADMIN, Role.DEVELOPER)
 
     templates = email_service.list_templates_for_user(
@@ -306,7 +306,7 @@ def update_template(
     Update an email template. Creates version snapshot.
 
     - Org templates: requires manage permission
-    - Personal templates: only owner can edit
+    - Personal templates: owner, admin, or developer can edit
     """
     from app.services import permission_service, version_service
 
@@ -391,7 +391,7 @@ def delete_template(
     Soft delete (deactivate) an email template.
 
     - Org templates: requires manage permission
-    - Personal templates: only owner can delete
+    - Personal templates: owner, admin, or developer can delete
     """
     from app.services import permission_service
 
@@ -411,14 +411,15 @@ def delete_template(
                 detail="You don't have permission to delete organization templates",
             )
     else:
-        # Personal templates: only owner can delete
-        if template.owner_user_id != session.user_id:
+        # Personal templates: owner or admin/developer can delete
+        is_admin = session.role in (Role.ADMIN, Role.DEVELOPER)
+        if template.owner_user_id != session.user_id and not is_admin:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only delete your own personal templates",
             )
 
-    email_service.delete_template(db, template)
+    email_service.delete_template(db, template, user_id=session.user_id)
 
 
 # =============================================================================
@@ -695,10 +696,20 @@ def rollback_template(
         require_permission(POLICIES["email_templates"].actions["manage"])
     ),
 ):
-    """Rollback template to a previous version. Developer-only."""
+    """Rollback a template while enforcing its organization or personal scope."""
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
+
+    if (
+        template.scope == "personal"
+        and template.owner_user_id != session.user_id
+        and session.role not in (Role.ADMIN, Role.DEVELOPER)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only rollback your own personal templates",
+        )
 
     updated, error = email_service.rollback_template(
         db=db,
