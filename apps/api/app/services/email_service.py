@@ -207,8 +207,8 @@ def sanitize_template_html(html: str) -> str:
     # Many email clients collapse empty paragraphs. Preserve authoring intent by
     # turning `<p></p>` / `<p><br></p>` into a visible blank line.
     cleaned = re.sub(
-        r"<p>\s*(?:<br\s*/?>)?\s*</p>",
-        "<p>&nbsp;</p>",
+        r"(<p\b[^>]*>)\s*(?:<br\b[^>]*>)?\s*</p>",
+        r"\1&nbsp;</p>",
         cleaned,
         flags=re.IGNORECASE,
     )

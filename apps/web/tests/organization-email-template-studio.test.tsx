@@ -677,6 +677,42 @@ describe("OrganizationEmailTemplateStudio", () => {
         expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled()
     })
 
+    it.each(["org", "personal"] as const)(
+        "loads legacy %s plain text into the visual editor without collapsing blank lines",
+        (scope) => {
+            const legacyBody = "Hi there,\n\nThank you for reaching out."
+            mocks.state.publishedTemplate = {
+                ...publishedTemplate,
+                scope,
+                owner_user_id: scope === "personal" ? "user-1" : null,
+                body: legacyBody,
+            }
+            mocks.state.draft = {
+                ...draftFromPublished,
+                scope,
+                owner_user_id: scope === "personal" ? "user-1" : null,
+                body: legacyBody,
+            }
+
+            render(
+                <OrganizationEmailTemplateStudio
+                    templateId="template-1"
+                    scope={scope}
+                />,
+            )
+
+            expect(mocks.richTextEditor).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    content:
+                        "<p>Hi there,</p><p>&nbsp;</p><p>Thank you for reaching out.</p>",
+                }),
+            )
+            expect(
+                screen.getByRole("button", { name: "Save draft" }),
+            ).toBeDisabled()
+        },
+    )
+
     it("shows the visual editor as the selected default for normal templates", () => {
         mocks.state.draft = {
             ...draftFromPublished,

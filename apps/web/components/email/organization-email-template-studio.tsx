@@ -60,6 +60,7 @@ import {
     hasAdvancedEmailTemplateHtml,
     type EmailTemplateBodyMode,
 } from "@/lib/email-template-preview"
+import { prepareTemplateHtmlForVisualEditor } from "@/lib/email-template-html"
 import {
     useCreateEmailTemplateDraft,
     useCreateEmailTemplateDraftFromTemplate,
@@ -977,7 +978,9 @@ function OrganizationEmailTemplateEditor({
                         ) : (
                             <RichTextEditor
                                 ref={visualBodyRef}
-                                content={fields.body}
+                                content={prepareTemplateHtmlForVisualEditor(
+                                    fields.body,
+                                )}
                                 onFocus={() => {
                                     activeEditorFieldRef.current = "body"
                                 }}
