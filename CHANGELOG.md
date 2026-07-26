@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.49](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.48...surrogacy-crm-platform-v0.91.49) (2026-07-26)
+
+
+### Features
+
+* add reviewed legacy claim command ([aeb1741](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/aeb17417e586af7749d9f9f213cb941a27b47e0e))
+* add zero-write worker cutover hold ([d17333d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d17333dc01a9a1af5797947313e2783f6c23f064))
+* expand job claim metadata safely ([81bef51](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/81bef51831f46ef865dc89dcc403033a477c1e10))
+* reconcile legacy job claims atomically ([c2bd67c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c2bd67cd45806a3c9e75521ea18454bf33dcee26))
+
+
+### Bug Fixes
+
+* block replay of reconciled jobs ([5f77bfa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5f77bfab17560cf01b6011b124058e6b0a2febf2))
+* claim one worker job at a time ([6bb458d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6bb458d1056de202a5eff4372de021174723ef20))
+* drain active worker job on shutdown ([0ab7925](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0ab7925cdbf46637c33d434866a8aa35fda4ade8))
+* fence delegated scan claims ([20c27b9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/20c27b9292285b84adb0b4c306135fc7020696d9))
+* fence delegated scan side effects ([c970399](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c97039918bdc473aa54da6dba4b5af39af0b7277))
+* fence job claim completion ([c268dd7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c268dd7455b401ae4f852cd6d4bfa5feb8eb23a4))
+* gate legacy claim cutover on global residuals ([b0c1960](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b0c1960f86a3b028946e74458ca5a423149a4e35))
+* identify direct scan claims ([4cd4138](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4cd413804758c43737480bddd2fd7ba55308a574))
+* keep claim expansion lock safe ([d248352](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d248352af9ab1278030fe3095c15b2527dcabff8))
+* make claim cutover deployment fail closed ([7753d01](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7753d011d5903b1ecbc979b05dff40752f6bfd45))
+* make job-claim cutover safe for production ([c60fd80](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c60fd80ed0a423dfbf7a005d19c87979ec300840))
+* persist worker claim identity ([d58986c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d58986c5ed03981fb02207fae00939641fe9fecc))
+* pin release deployments to image digests ([9f5f62c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9f5f62c67f8509b16cffd5122fc17f05777c18fd))
+* preserve worker claim generation ([a51a883](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a51a88327c32bef86af360f54884db111c256ce7))
+* recover stale worker claims safely ([537fa46](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/537fa46e52be08c27a53f689b7a0838f6f572583))
+* rollback failed worker transactions before claim CAS ([7fa351b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7fa351b30f13ffad0c1bb923a800a1f7370488b8))
+* serialize organization audit chain appends ([914fcb5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/914fcb570b87ac96ac04a361fe26ce126973c826))
+
+
+### Maintenance
+
+* format touched scan service ([a7f3293](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a7f3293b479ecbda92821964d4db436b340cb339))
+
 ## [0.91.48](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.47...surrogacy-crm-platform-v0.91.48) (2026-07-26)
 
 
