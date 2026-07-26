@@ -11,7 +11,12 @@ from sqlalchemy import func
 from app.db.enums import JobType, Role
 from app.db.models import Organization, OrgInvite, User, Membership
 from app.db.session import SessionLocal
-from app.services import job_service, legacy_job_reconciliation_service, org_service
+from app.services import (
+    job_service,
+    legacy_job_reconciliation_service,
+    org_service,
+    template_blank_line_recovery_service,
+)
 from app.services.pipeline_default_rollout_service import rollout_surrogate_default_pipelines
 
 
@@ -822,6 +827,128 @@ def reconcile_legacy_job_claims_cli(
                 click.echo(f"  {reason_code}={count}")
         if require_no_residual and report.residual_count:
             click.get_current_context().exit(1)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    finally:
+        db.close()
+
+
+@cli.command("recover-template-blank-lines")
+@click.option("--organization-id", required=True, type=click.UUID)
+@click.option("--template-id", required=True, type=click.UUID)
+@click.option("--target-version", required=True, type=click.IntRange(min=1))
+@click.option(
+    "--apply",
+    is_flag=True,
+    help="Apply an exactly reviewed spacing-only recovery.",
+)
+@click.option("--expected-current-version", type=click.IntRange(min=1), default=None)
+@click.option("--expected-current-body-sha256", default=None)
+@click.option("--expected-target-body-sha256", default=None)
+@click.option("--review-reason", default=None)
+def recover_template_blank_lines_cli(
+    organization_id: UUID,
+    template_id: UUID,
+    target_version: int,
+    apply: bool,
+    expected_current_version: int | None,
+    expected_current_body_sha256: str | None,
+    expected_target_body_sha256: str | None,
+    review_reason: str | None,
+):
+    """Audit or apply one fail-closed, body-only template spacing recovery."""
+    normalized_current_sha256 = (
+        expected_current_body_sha256.strip().lower()
+        if expected_current_body_sha256 is not None
+        else None
+    )
+    normalized_target_sha256 = (
+        expected_target_body_sha256.strip().lower()
+        if expected_target_body_sha256 is not None
+        else None
+    )
+    normalized_review_reason = review_reason.strip() if review_reason is not None else None
+
+    if apply:
+        missing_options = []
+        if expected_current_version is None:
+            missing_options.append("--expected-current-version")
+        if not normalized_current_sha256:
+            missing_options.append("--expected-current-body-sha256")
+        if not normalized_target_sha256:
+            missing_options.append("--expected-target-body-sha256")
+        if not normalized_review_reason:
+            missing_options.append("--review-reason")
+        if missing_options:
+            raise click.UsageError("--apply requires " + ", ".join(missing_options))
+        for option_name, digest in (
+            ("--expected-current-body-sha256", normalized_current_sha256),
+            ("--expected-target-body-sha256", normalized_target_sha256),
+        ):
+            if len(digest) != 64 or any(
+                character not in "0123456789abcdef" for character in digest
+            ):
+                raise click.BadParameter(
+                    "must be a 64-character hexadecimal SHA-256 digest",
+                    param_hint=option_name,
+                )
+    else:
+        approval_options = []
+        if expected_current_version is not None:
+            approval_options.append("--expected-current-version")
+        if expected_current_body_sha256 is not None:
+            approval_options.append("--expected-current-body-sha256")
+        if expected_target_body_sha256 is not None:
+            approval_options.append("--expected-target-body-sha256")
+        if review_reason is not None:
+            approval_options.append("--review-reason")
+        if approval_options:
+            raise click.UsageError(
+                "approval options require --apply: " + ", ".join(approval_options)
+            )
+
+    db = SessionLocal()
+    try:
+        if apply:
+            recovered = template_blank_line_recovery_service.apply_recovery_plan(
+                db,
+                organization_id=organization_id,
+                template_id=template_id,
+                target_version=target_version,
+                expected_current_version=expected_current_version,
+                expected_current_body_sha256=normalized_current_sha256,
+                expected_target_body_sha256=normalized_target_sha256,
+                review_reason=normalized_review_reason,
+            )
+            payload = {
+                "schema_version": 1,
+                "mode": "apply",
+                "template_id": str(recovered.id),
+                "new_version": recovered.current_version,
+            }
+        else:
+            plan = template_blank_line_recovery_service.build_recovery_plan(
+                db,
+                organization_id=organization_id,
+                template_id=template_id,
+                target_version=target_version,
+            )
+            payload = {
+                "schema_version": 1,
+                "mode": "dry_run",
+                "template_id": str(plan.template_id),
+                "current_version": plan.current_version,
+                "target_version": plan.target_version,
+                "current_body_sha256": plan.current_body_sha256,
+                "target_body_sha256": plan.target_body_sha256,
+                "current_blank_line_count": plan.current_blank_line_count,
+                "target_blank_line_count": plan.target_blank_line_count,
+                "visible_text_equal": plan.visible_text_equal,
+                "variable_tokens_equal": plan.variable_tokens_equal,
+                "structural_content_equal": plan.structural_content_equal,
+                "eligible": plan.eligible,
+            }
+        click.echo(json.dumps(payload, sort_keys=True, separators=(",", ":")))
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
     finally:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import EmailTemplate, EmailTemplateDraft
@@ -166,6 +166,17 @@ def create_draft_from_template(
     template: EmailTemplate,
     user_id: UUID,
 ) -> EmailTemplateDraft:
+    # Coordinate with operator recovery so opening Studio never creates a draft
+    # from a version that changes before the draft row is committed.
+    template = db.execute(
+        select(EmailTemplate)
+        .where(
+            EmailTemplate.id == template.id,
+            EmailTemplate.organization_id == template.organization_id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one()
     existing = (
         db.query(EmailTemplateDraft)
         .options(
@@ -405,9 +416,7 @@ def publish_draft(
     with db.begin_nested():
         if draft.template_id is None:
             if expected_published_version is not None:
-                raise PublishedTemplateConflictError(
-                    "New drafts do not have a published version"
-                )
+                raise PublishedTemplateConflictError("New drafts do not have a published version")
             _assert_name_available(db, draft=draft, exclude_id=None)
             template = email_service.create_template(
                 db,

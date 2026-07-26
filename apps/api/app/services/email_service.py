@@ -375,7 +375,7 @@ def create_template(
 def update_template(
     db: Session,
     template: EmailTemplate,
-    user_id: UUID,
+    user_id: UUID | None,
     name: str | None = None,
     subject: str | None = None,
     from_email: str | None | object = _UNSET,
