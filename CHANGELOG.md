@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.50](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.49...surrogacy-crm-platform-v0.91.50) (2026-07-26)
+
+
+### Features
+
+* modernize Resend delivery, operations, and templates ([1bfbeca](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1bfbeca884c44de635d58389b5b4026d5db24bd2))
+
+
+### Bug Fixes
+
+* align CI with PostgreSQL 18 ([6ff36eb](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6ff36eb844ed843fe0b6e3dfca6b1965054b745a))
+* standardize PostgreSQL 18 defaults ([f45374a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f45374a181c8a5591b97d6926150fef18f7ce218))
+
+
+### Maintenance
+
+* merge Release A into Resend modernization ([667ac03](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/667ac03033c5f906b102c55b85a2e0af569b3a08))
+
 ## [0.91.49](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.48...surrogacy-crm-platform-v0.91.49) (2026-07-26)
 
 
