@@ -15,6 +15,7 @@ import {
 import {
     useImperativeHandle,
     useRef,
+    useState,
     type ClipboardEventHandler,
     type DragEventHandler,
     type FocusEventHandler,
@@ -120,8 +121,8 @@ export function EmailTemplateVisualEditor({
     maxHeight = "560px",
 }: EmailTemplateVisualEditorProps) {
     const editorRef = useRef<HTMLDivElement | null>(null)
-    const initialVisualBodyRef = useRef(sanitizeAuthoringHtml(content))
-    const currentVisualBodyRef = useRef(initialVisualBodyRef.current)
+    const [initialVisualBody] = useState(() => sanitizeAuthoringHtml(content))
+    const currentVisualBodyRef = useRef(initialVisualBody)
     const currentHtmlRef = useRef(content)
 
     const commitEditorHtml = () => {
@@ -235,10 +236,18 @@ export function EmailTemplateVisualEditor({
                         event.preventDefault()
                     }
                 }}
+                onKeyDownCapture={(event) => {
+                    if (
+                        event.key === "Enter" &&
+                        event.target instanceof HTMLAnchorElement
+                    ) {
+                        event.preventDefault()
+                    }
+                }}
                 className="prose prose-sm max-w-none overflow-y-auto bg-white px-4 py-3 text-stone-900 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [&_img]:max-w-full [&_p]:whitespace-pre-wrap"
                 style={{ minHeight, maxHeight }}
             >
-                <TrustedSanitizedHtmlFragment html={initialVisualBodyRef.current} />
+                <TrustedSanitizedHtmlFragment html={initialVisualBody} />
             </div>
             <p className="border-t bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
                 Stored layout, tables, images, and variables are preserved. Use
