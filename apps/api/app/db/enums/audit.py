@@ -45,6 +45,9 @@ class AuditEventType(str, Enum):
     DATA_IMPORT_STARTED = "data_import_started"
     DATA_IMPORT_COMPLETED = "data_import_completed"
 
+    # Job operations
+    JOB_LEGACY_CLAIM_RECONCILED = "job_legacy_claim_reconciled"
+
     # Compliance operations
     COMPLIANCE_EXPORT_REQUESTED = "compliance_export_requested"
     COMPLIANCE_EXPORT_DOWNLOADED = "compliance_export_downloaded"
