@@ -3,6 +3,13 @@
 from enum import Enum
 
 
+class JobScope(str, Enum):
+    """Ownership boundary for a background job."""
+
+    ORGANIZATION = "organization"
+    PLATFORM = "platform"
+
+
 class JobType(str, Enum):
     """Types of background jobs."""
 
@@ -46,6 +53,8 @@ class JobType(str, Enum):
     EMAIL_OCCURRENCE_STITCH = "email_occurrence_stitch"
     TICKET_APPLY_LINKING = "ticket_apply_linking"
     TICKET_OUTBOUND_SEND = "ticket_outbound_send"
+    RESEND_EVENT_RECONCILE = "resend_event_reconcile"
+    RESEND_READINESS_CHECK = "resend_readiness_check"
 
 
 class JobStatus(str, Enum):

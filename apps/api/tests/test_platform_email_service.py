@@ -1,18 +1,63 @@
-import httpx
 import pytest
-import base64
 
 
 @pytest.mark.asyncio
-async def test_send_email_logged_marks_failed_on_exception(db, test_org, monkeypatch):
-    from app.db.enums import EmailStatus
+async def test_send_email_logged_queues_platform_message_without_inline_network(
+    db,
+    test_org,
+    monkeypatch,
+):
+    from app.db.enums import EmailDeliveryStatus, EmailProviderScope, EmailStatus
+    from app.db.models import EmailDelivery, EmailLog
+    from app.services import platform_email_service
+
+    monkeypatch.setattr(
+        platform_email_service.settings,
+        "PLATFORM_RESEND_API_KEY",
+        "re_test_key",
+    )
+
+    result = await platform_email_service.send_email_logged(
+        db=db,
+        org_id=test_org.id,
+        to_email="to@example.com",
+        subject="Hello",
+        from_email="Invites <invites@surrogacyforce.com>",
+        html="<p>Hello <strong>world</strong></p>",
+        text=None,
+        idempotency_key="platform-queued-message",
+    )
+
+    assert result["success"] is True
+    assert result["queued"] is True
+    assert result["message_id"] is None
+
+    email_log = db.get(EmailLog, result["email_log_id"])
+    assert email_log.status == EmailStatus.PENDING.value
+    assert email_log.provider_scope == EmailProviderScope.PLATFORM.value
+    assert email_log.text_body == "Hello world"
+    delivery = (
+        db.query(EmailDelivery)
+        .filter(
+            EmailDelivery.organization_id == test_org.id,
+            EmailDelivery.email_log_id == email_log.id,
+        )
+        .one()
+    )
+    assert delivery.status == EmailDeliveryStatus.PENDING.value
+    assert delivery.provider_account_id == "platform:default"
+
+
+@pytest.mark.asyncio
+async def test_send_email_logged_does_not_enqueue_when_platform_sender_is_unconfigured(
+    db,
+    test_org,
+    monkeypatch,
+):
     from app.db.models import EmailLog
     from app.services import platform_email_service
 
-    async def boom(**_kwargs):
-        raise RuntimeError("network down")
-
-    monkeypatch.setattr(platform_email_service, "_send_resend_email", boom)
+    monkeypatch.setattr(platform_email_service.settings, "PLATFORM_RESEND_API_KEY", "")
 
     result = await platform_email_service.send_email_logged(
         db=db,
@@ -26,26 +71,21 @@ async def test_send_email_logged_marks_failed_on_exception(db, test_org, monkeyp
     )
 
     assert result["success"] is False
-    assert result["email_log_id"] is not None
-
-    log = db.query(EmailLog).filter(EmailLog.id == result["email_log_id"]).one()
-    assert log.status == EmailStatus.FAILED.value
-    assert log.error
+    assert result["queued"] is False
+    assert "not configured" in result["error"]
+    assert db.query(EmailLog).filter(EmailLog.organization_id == test_org.id).count() == 0
 
 
 @pytest.mark.asyncio
 async def test_send_email_logged_generates_text_fallback(db, test_org, monkeypatch):
+    from app.db.models import EmailLog
     from app.services import platform_email_service
 
-    async def fake_send_resend_email(**kwargs):
-        # We should always include text for deliverability, even if callers only provide HTML.
-        assert kwargs["text"]
-        assert "<" not in kwargs["text"]
-        assert "Hello" in kwargs["text"]
-        assert "world" in kwargs["text"]
-        return {"success": True, "message_id": "msg_123"}
-
-    monkeypatch.setattr(platform_email_service, "_send_resend_email", fake_send_resend_email)
+    monkeypatch.setattr(
+        platform_email_service.settings,
+        "PLATFORM_RESEND_API_KEY",
+        "re_test_key",
+    )
 
     result = await platform_email_service.send_email_logged(
         db=db,
@@ -59,83 +99,15 @@ async def test_send_email_logged_generates_text_fallback(db, test_org, monkeypat
     )
 
     assert result["success"] is True
-    assert result["message_id"] == "msg_123"
-
-
-@pytest.mark.asyncio
-async def test_send_resend_email_treats_409_as_duplicate_success(monkeypatch):
-    from app.services import platform_email_service
-
-    monkeypatch.setattr(platform_email_service.settings, "PLATFORM_RESEND_API_KEY", "re_test_key")
-
-    async def fake_request_with_retries(_request_fn, **_kwargs):
-        return httpx.Response(409, json={"message": "Idempotency key already used"})
-
-    monkeypatch.setattr(platform_email_service, "request_with_retries", fake_request_with_retries)
-
-    result = await platform_email_service._send_resend_email(
-        to_email="to@example.com",
-        subject="Hello",
-        from_email="Invites <invites@surrogacyforce.com>",
-        html="<p>Hello</p>",
-        text="Hello",
-        idempotency_key="dup-key",
-    )
-
-    assert result["success"] is True
-
-
-@pytest.mark.asyncio
-async def test_send_resend_email_includes_attachment_payload(monkeypatch):
-    from app.services import platform_email_service
-
-    monkeypatch.setattr(platform_email_service.settings, "PLATFORM_RESEND_API_KEY", "re_test_key")
-
-    captured: dict[str, object] = {}
-
-    class _FakeAsyncClient:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-        async def post(self, _url, headers=None, json=None):
-            captured["headers"] = headers
-            captured["payload"] = json
-            return httpx.Response(200, json={"id": "msg_123"})
-
-    async def fake_request_with_retries(request_fn, **_kwargs):
-        return await request_fn()
-
-    monkeypatch.setattr(
-        platform_email_service.httpx, "AsyncClient", lambda **_kwargs: _FakeAsyncClient()
-    )
-    monkeypatch.setattr(platform_email_service, "request_with_retries", fake_request_with_retries)
-
-    attachment_bytes = b"hello world"
-    result = await platform_email_service._send_resend_email(
-        to_email="to@example.com",
-        subject="Hello",
-        from_email="Invites <invites@surrogacyforce.com>",
-        html="<p>Hello</p>",
-        text="Hello",
-        idempotency_key="attachments-idem",
-        attachments=[
-            {
-                "filename": "greeting.txt",
-                "content_type": "text/plain",
-                "content_bytes": attachment_bytes,
-            }
-        ],
-    )
-
-    assert result["success"] is True
-    payload = captured["payload"]
-    assert isinstance(payload, dict)
-    assert "attachments" in payload
-    assert payload["attachments"][0]["filename"] == "greeting.txt"
-    assert payload["attachments"][0]["type"] == "text/plain"
-    assert payload["attachments"][0]["content"] == base64.b64encode(attachment_bytes).decode(
-        "ascii"
-    )
+    assert result["queued"] is True
+    assert result["message_id"] is None
+    email_log = db.get(EmailLog, result["email_log_id"])
+    assert email_log.text_body
+    assert "<" not in email_log.text_body
+    assert "Hello" in email_log.text_body
+    assert "world" in email_log.text_body
+    assert email_log.safe_tags == [
+        {"name": "message_kind", "value": "platform_transactional"},
+        {"name": "organization_id", "value": str(test_org.id)},
+        {"name": "email_log_id", "value": str(email_log.id)},
+    ]

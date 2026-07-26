@@ -56,6 +56,21 @@ type TemplatePageMode = "new" | "existing"
 
 type PublicationState = "published" | "draft"
 
+function createEmailTestOccurrenceId(): string {
+    const cryptoApi = globalThis.crypto
+    if (typeof cryptoApi?.randomUUID === "function") {
+        return cryptoApi.randomUUID()
+    }
+    if (typeof cryptoApi?.getRandomValues !== "function") {
+        throw new Error("Secure random UUID generation is unavailable")
+    }
+    const bytes = cryptoApi.getRandomValues(new Uint8Array(16))
+    bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40
+    bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"))
+    return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`
+}
+
 interface TemplatePageBusyState {
     deletePending: boolean
     saving: boolean
@@ -404,11 +419,56 @@ function buildPreviewHtml(body: string): string {
 
 function LoadingTemplate() {
     return (
-        <div className="flex h-screen items-center justify-center bg-stone-100 dark:bg-stone-950">
+        <div className="flex h-dvh items-center justify-center bg-stone-100 dark:bg-stone-950">
             <div className="flex items-center gap-2 text-stone-600 dark:text-stone-400">
                 <Loader2Icon className="size-5 animate-spin" />
                 <span>Loading template&hellip;</span>
             </div>
+        </div>
+    )
+}
+
+function TemplateLoadError({
+    isRetrying,
+    onRetry,
+}: {
+    isRetrying: boolean
+    onRetry: () => void
+}) {
+    return (
+        <div className="flex min-h-dvh items-center justify-center bg-stone-100 p-6 dark:bg-stone-950">
+            <Card className="w-full max-w-lg">
+                <CardHeader>
+                    <CardTitle>Template unavailable</CardTitle>
+                    <CardDescription>
+                        The editor could not retrieve this template.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <Alert variant="destructive">
+                        <AlertTriangleIcon aria-hidden="true" />
+                        <AlertTitle>Unable to load email template</AlertTitle>
+                        <AlertDescription>
+                            Check your connection and access, then try loading the template again.
+                        </AlertDescription>
+                    </Alert>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        disabled={isRetrying}
+                        onClick={onRetry}
+                    >
+                        {isRetrying ? (
+                            <>
+                                <Loader2Icon className="animate-spin" aria-hidden="true" />
+                                Retrying&hellip;
+                            </>
+                        ) : (
+                            "Retry"
+                        )}
+                    </Button>
+                </CardContent>
+            </Card>
         </div>
     )
 }
@@ -419,11 +479,28 @@ export default function PlatformEmailTemplatePage() {
     const isNew = id === "new"
     const templateId = isNew ? null : id
 
-    const { data: templateData, isLoading } = usePlatformEmailTemplate(templateId)
+    const {
+        data: templateData,
+        isError,
+        isFetching,
+        isLoading,
+        refetch,
+    } = usePlatformEmailTemplate(templateId)
     const { data: templateVariables = [], isLoading: variablesLoading } = usePlatformEmailTemplateVariables()
 
     if (!isNew && isLoading) {
         return <LoadingTemplate />
+    }
+
+    if (!isNew && isError && !templateData) {
+        return (
+            <TemplateLoadError
+                isRetrying={isFetching}
+                onRetry={() => {
+                    void refetch()
+                }}
+            />
+        )
     }
 
     if (!isNew && !templateData) return null
@@ -475,7 +552,7 @@ function PlatformEmailTemplateEditor({
     const mode: TemplatePageMode = isNew ? "new" : "existing"
 
     return (
-        <div className="min-h-screen bg-stone-100 dark:bg-stone-950">
+        <div className="min-h-dvh bg-stone-100 dark:bg-stone-950">
             <TemplatePageHeader
                 mode={mode}
                 name={state.name}
@@ -585,6 +662,7 @@ function useEmailTemplateController({
     const htmlBodyRef = useRef<HTMLTextAreaElement | null>(null)
     const htmlBodySelectionRef = useRef<{ start: number; end: number } | null>(null)
     const visualBodyRef = useRef<RichTextEditorHandle | null>(null)
+    const testSendOccurrenceIdRef = useRef<string | null>(null)
 
     const canValidateVariables = !variablesLoading && templateVariables.length > 0
     const allowedVariableNames = new Set(templateVariables.map((variable) => variable.name))
@@ -609,10 +687,12 @@ function useEmailTemplateController({
     const previewHtml = buildPreviewHtml(state.body)
 
     const setTextField = (field: TextFieldName, value: string) => {
+        testSendOccurrenceIdRef.current = null
         dispatch({ type: "setTextField", field, value })
     }
 
     const setBody = (value: string) => {
+        testSendOccurrenceIdRef.current = null
         dispatch({ type: "setBody", value })
     }
 
@@ -629,6 +709,7 @@ function useEmailTemplateController({
     }
 
     const setTestVariable = (name: string, value: string) => {
+        testSendOccurrenceIdRef.current = null
         dispatch({ type: "setTestVariable", name, value })
     }
 
@@ -645,6 +726,7 @@ function useEmailTemplateController({
     }
 
     const insertToken = (token: string) => {
+        testSendOccurrenceIdRef.current = null
         if (state.activeInsertionTarget === "subject") {
             applyTextInsertion(subjectRef.current, subjectSelectionRef, state.subject, token, (value) =>
                 dispatch({ type: "setTextField", field: "subject", value })
@@ -673,6 +755,7 @@ function useEmailTemplateController({
 
     const insertOrgLogo = () => {
         if (state.body.includes("{{org_logo_url}}")) return
+        testSendOccurrenceIdRef.current = null
         const logo = `<p><img src="{{org_logo_url}}" alt="{{org_name}} logo" style="max-width: 160px; height: auto; display: block;" /></p>\n`
         if (state.editorMode === "visual") {
             visualBodyRef.current?.insertHtml(logo)
@@ -800,12 +883,16 @@ function useEmailTemplateController({
         const finishSendingTest = () => dispatch({ type: "setBusy", flag: "isSendingTest", value: false })
         try {
             const saved = await persistTemplate()
+            const occurrenceId =
+                testSendOccurrenceIdRef.current ?? createEmailTestOccurrenceId()
+            testSendOccurrenceIdRef.current = occurrenceId
             const result = await sendTest.mutateAsync({
                 id: saved.id,
                 payload: {
                     org_id: state.testOrgId.trim(),
                     to_email: state.testEmail.trim(),
                     variables: overrides,
+                    idempotency_key: occurrenceId,
                 },
             })
 
@@ -815,7 +902,12 @@ function useEmailTemplateController({
                     : result.provider_used === "gmail"
                       ? "Gmail"
                       : "provider"
-            toast.success(`Test email sent via ${providerLabel}`)
+            toast.success(
+                result.queued
+                    ? `Test email queued via ${providerLabel}`
+                    : `Test email sent via ${providerLabel}`,
+            )
+            testSendOccurrenceIdRef.current = null
             finishSendingTest()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to send test email")

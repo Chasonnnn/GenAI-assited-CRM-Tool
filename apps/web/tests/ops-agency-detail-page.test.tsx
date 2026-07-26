@@ -11,6 +11,8 @@ const mockListMembers = vi.fn()
 const mockListInvites = vi.fn()
 const mockGetAdminActionLogs = vi.fn()
 const mockGetPlatformEmailStatus = vi.fn()
+const mockGetPlatformEmailReadiness = vi.fn()
+const mockRequestPlatformEmailReadinessCheck = vi.fn()
 const mockListAlerts = vi.fn()
 
 vi.unmock("@tanstack/react-query")
@@ -27,6 +29,10 @@ vi.mock("@/lib/api/platform", () => ({
     listInvites: (...args: unknown[]) => mockListInvites(...args),
     getAdminActionLogs: (...args: unknown[]) => mockGetAdminActionLogs(...args),
     getPlatformEmailStatus: (...args: unknown[]) => mockGetPlatformEmailStatus(...args),
+    getPlatformEmailReadiness: (...args: unknown[]) =>
+        mockGetPlatformEmailReadiness(...args),
+    requestPlatformEmailReadinessCheck: (...args: unknown[]) =>
+        mockRequestPlatformEmailReadinessCheck(...args),
     listAlerts: (...args: unknown[]) => mockListAlerts(...args),
     acknowledgeAlert: vi.fn(),
     resolveAlert: vi.fn(),
@@ -97,15 +103,33 @@ vi.mock("@/components/ops/agencies/AgencyUsersTab", () => ({
 vi.mock("@/components/ops/agencies/AgencyInvitesTab", () => ({
     AgencyInvitesTab: ({
         platformEmailStatus,
-        platformEmailLoading,
+        platformEmailStatusLoading,
+        platformEmailReadiness,
+        platformEmailReadinessLoading,
+        onCheckPlatformEmailReadiness,
     }: {
-        platformEmailStatus: { provider?: string | null } | null
-        platformEmailLoading: boolean
+        platformEmailStatus: { configured?: boolean } | null
+        platformEmailStatusLoading: boolean
+        platformEmailReadiness: {
+            last_snapshot?: { overall_status?: string | null }
+        } | null
+        platformEmailReadinessLoading: boolean
+        onCheckPlatformEmailReadiness: () => void
     }) => (
         <div>
-            {platformEmailLoading
-                ? "Loading sender status"
-                : `Sender: ${platformEmailStatus?.provider ?? "unavailable"}`}
+            <span>
+                {platformEmailStatusLoading
+                    ? "Loading stored sender"
+                    : `Stored sender: ${platformEmailStatus?.configured ? "configured" : "not configured"}`}
+            </span>
+            <span>
+                {platformEmailReadinessLoading
+                    ? "Loading sender readiness"
+                    : `Sender readiness: ${platformEmailReadiness?.last_snapshot?.overall_status ?? "unavailable"}`}
+            </span>
+            <button type="button" onClick={onCheckPlatformEmailReadiness}>
+                Run sender check
+            </button>
         </div>
     ),
 }))
@@ -142,6 +166,8 @@ describe("AgencyDetailPage", () => {
         mockListInvites.mockReset()
         mockGetAdminActionLogs.mockReset()
         mockGetPlatformEmailStatus.mockReset()
+        mockGetPlatformEmailReadiness.mockReset()
+        mockRequestPlatformEmailReadinessCheck.mockReset()
         mockListAlerts.mockReset()
 
         mockGetOrganization.mockResolvedValue({
@@ -164,24 +190,80 @@ describe("AgencyDetailPage", () => {
             configured: true,
             provider: "resend",
         })
+        mockGetPlatformEmailReadiness.mockResolvedValue({
+            check_status: "idle",
+            last_snapshot: {
+                freshness: "fresh",
+                probe_status: "succeeded",
+                overall_status: "ready",
+                domain_status: "ready",
+                webhook_status: "ready",
+                sending_status: "ready",
+                delivery_tracking_status: "ready",
+                engagement_tracking_status: "ready",
+                verified_domain_count: 1,
+                enabled_webhook_count: 1,
+                issue_codes: [],
+                checked_at: "2026-07-23T16:00:00Z",
+                last_success_at: "2026-07-23T16:00:00Z",
+            },
+        })
+        mockRequestPlatformEmailReadinessCheck.mockResolvedValue({
+            check_status: "queued",
+            last_snapshot: {
+                freshness: "fresh",
+                probe_status: "succeeded",
+                overall_status: "ready",
+                domain_status: "ready",
+                webhook_status: "ready",
+                sending_status: "ready",
+                delivery_tracking_status: "ready",
+                engagement_tracking_status: "ready",
+                verified_domain_count: 1,
+                enabled_webhook_count: 1,
+                issue_codes: [],
+                checked_at: "2026-07-23T16:00:00Z",
+                last_success_at: "2026-07-23T16:00:00Z",
+            },
+        })
     })
 
-    it("reuses fresh platform email status when the Invites tab is reopened", async () => {
+    it("reuses fresh platform email readiness when the Invites tab is reopened", async () => {
         renderAgencyDetailPage()
         expect(
             await screen.findByRole("heading", { name: "Test Agency" }),
         ).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole("button", { name: "Invites" }))
-        expect(await screen.findByText("Sender: resend")).toBeInTheDocument()
+        expect(await screen.findByText("Stored sender: configured")).toBeInTheDocument()
+        expect(await screen.findByText("Sender readiness: ready")).toBeInTheDocument()
         expect(mockGetPlatformEmailStatus).toHaveBeenCalledTimes(1)
+        expect(mockGetPlatformEmailReadiness).toHaveBeenCalledTimes(1)
 
         fireEvent.click(screen.getByRole("button", { name: "Overview" }))
         fireEvent.click(screen.getByRole("button", { name: "Invites" }))
 
         await waitFor(() => {
-            expect(screen.getByText("Sender: resend")).toBeInTheDocument()
+            expect(screen.getByText("Sender readiness: ready")).toBeInTheDocument()
+            expect(screen.getByText("Stored sender: configured")).toBeInTheDocument()
             expect(mockGetPlatformEmailStatus).toHaveBeenCalledTimes(1)
+            expect(mockGetPlatformEmailReadiness).toHaveBeenCalledTimes(1)
+        })
+    })
+
+    it("starts the shared sender check from the invites tab", async () => {
+        renderAgencyDetailPage()
+        expect(
+            await screen.findByRole("heading", { name: "Test Agency" }),
+        ).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Invites" }))
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Run sender check" }),
+        )
+
+        await waitFor(() => {
+            expect(mockRequestPlatformEmailReadinessCheck).toHaveBeenCalledOnce()
         })
     })
 

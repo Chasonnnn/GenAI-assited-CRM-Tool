@@ -2015,10 +2015,7 @@ def get_surrogate_stats(
 
     pending_tasks_stmt = select(func.count(Task.id)).select_from(Task).where(*task_filters)
     needs_task_surrogate_join = (
-        pipeline_id is not None
-        or start is not None
-        or end is not None
-        or role_filter is not None
+        pipeline_id is not None or start is not None or end is not None or role_filter is not None
     )
     if needs_task_surrogate_join:
         # Prevent implicit correlation with the outer Surrogate query.
@@ -2190,6 +2187,7 @@ def list_surrogate_activity(
     from app.db.models import (
         Appointment,
         AppointmentType,
+        EmailLog,
         EmailTemplate,
         Membership,
         Queue,
@@ -2267,6 +2265,7 @@ def list_surrogate_activity(
     queue_ids: set[UUID] = set()
     user_ids: set[UUID] = set()
     template_ids: set[UUID] = set()
+    email_log_ids: set[UUID] = set()
     for row in activity_rows:
         details = row.SurrogateActivityLog.details
         if not isinstance(details, dict):
@@ -2302,6 +2301,13 @@ def list_surrogate_activity(
         if template_id:
             try:
                 template_ids.add(UUID(str(template_id)))
+            except (TypeError, ValueError):
+                pass
+
+        email_log_id = details.get("email_log_id")
+        if email_log_id:
+            try:
+                email_log_ids.add(UUID(str(email_log_id)))
             except (TypeError, ValueError):
                 pass
 
@@ -2352,6 +2358,45 @@ def list_surrogate_activity(
         )
         template_name_by_id = {str(template_id): name for template_id, name in template_rows}
 
+    email_delivery_by_id: dict[str, dict[str, object]] = {}
+    if email_log_ids:
+        email_log_rows = (
+            db.query(
+                EmailLog.id,
+                EmailLog.resend_status,
+                EmailLog.delivered_at,
+                EmailLog.opened_at,
+                EmailLog.open_count,
+                EmailLog.clicked_at,
+                EmailLog.click_count,
+            )
+            .filter(
+                EmailLog.organization_id == org_id,
+                EmailLog.surrogate_id == surrogate_id,
+                EmailLog.id.in_(email_log_ids),
+            )
+            .all()
+        )
+        email_delivery_by_id = {
+            str(email_log_id): {
+                "delivery_status": resend_status,
+                "delivered_at": delivered_at.isoformat() if delivered_at else None,
+                "opened_at": opened_at.isoformat() if opened_at else None,
+                "open_count": open_count or 0,
+                "clicked_at": clicked_at.isoformat() if clicked_at else None,
+                "click_count": click_count or 0,
+            }
+            for (
+                email_log_id,
+                resend_status,
+                delivered_at,
+                opened_at,
+                open_count,
+                clicked_at,
+                click_count,
+            ) in email_log_rows
+        }
+
     items = []
     for row in activity_rows:
         activity = row.SurrogateActivityLog
@@ -2381,6 +2426,11 @@ def list_surrogate_activity(
             template_name = template_name_by_id.get(str(template_id)) if template_id else None
             if template_name:
                 details["template_name"] = template_name
+
+            email_log_id = details.get("email_log_id")
+            delivery_details = email_delivery_by_id.get(str(email_log_id)) if email_log_id else None
+            if delivery_details:
+                details.update(delivery_details)
 
             to_user_id = details.get("to_user_id")
             to_user_name = user_name_by_id.get(str(to_user_id)) if to_user_id else None

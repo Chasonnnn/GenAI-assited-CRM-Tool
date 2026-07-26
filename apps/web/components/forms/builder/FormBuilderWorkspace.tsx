@@ -6,7 +6,7 @@ import { CopyIcon, Layers2Icon, PlusIcon, Settings2Icon, Trash2Icon, XIcon } fro
 import { FormBuilderFieldPreview } from "@/components/forms/FormBuilderFieldPreview"
 import { FormBuilderPalette } from "@/components/forms/FormBuilderPalette"
 import { PublicFormFieldRenderer } from "@/components/forms/PublicFormFieldRenderer"
-import { FieldLibrarySheet } from "@/components/forms/builder/FieldLibrarySheet"
+import { FieldLibraryDialog } from "@/components/forms/builder/FieldLibraryDialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -1216,7 +1216,7 @@ export function FormBuilderWorkspace({
                 </div>
             </div>
 
-            <FieldLibrarySheet
+            <FieldLibraryDialog
                 open={fieldLibraryOpen}
                 activeCategory={fieldLibraryCategory}
                 search={fieldLibrarySearch}

@@ -1,24 +1,36 @@
 """Job service - business logic for background job scheduling and processing."""
 
 from collections.abc import Collection
-from datetime import datetime, timezone
-from uuid import UUID
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.db.models import Job
-from app.db.enums import JobStatus, JobType
+from app.db.enums import JobScope, JobStatus, JobType
 
 
 class JobClaimLost(RuntimeError):
     """A stale worker tried to finish a job claimed by a newer generation."""
 
 
-DELEGATED_SCAN_JOB_TYPES = frozenset(
+@dataclass(frozen=True, slots=True)
+class StaleReconciliationRecovery:
+    """Result of one bounded stale reconciliation-job sweep."""
+
+    inspected: int
+    requeued: int
+    failed: int
+    resolved: int
+
+
+SPECIALIZED_RECOVERY_JOB_TYPES = frozenset(
     {
         JobType.ATTACHMENT_SCAN.value,
         JobType.FORM_SUBMISSION_FILE_SCAN.value,
+        JobType.RESEND_EVENT_RECONCILE.value,
     }
 )
 
@@ -40,7 +52,35 @@ def enqueue_job(
     with IntegrityError (caller should catch and handle).
     """
     job = Job(
+        job_scope=JobScope.ORGANIZATION.value,
         organization_id=org_id,
+        job_type=job_type.value,
+        payload=payload,
+        run_at=run_at or datetime.now(timezone.utc),
+        status=JobStatus.PENDING.value,
+        idempotency_key=idempotency_key,
+    )
+    db.add(job)
+    if commit:
+        db.commit()
+        db.refresh(job)
+    else:
+        db.flush()
+    return job
+
+
+def enqueue_platform_job(
+    db: Session,
+    job_type: JobType,
+    payload: dict,
+    run_at: datetime | None = None,
+    idempotency_key: str | None = None,
+    commit: bool = True,
+) -> Job:
+    """Enqueue a platform-owned job without inventing an organization."""
+    job = Job(
+        job_scope=JobScope.PLATFORM.value,
+        organization_id=None,
         job_type=job_type.value,
         payload=payload,
         run_at=run_at or datetime.now(timezone.utc),
@@ -208,7 +248,7 @@ def recover_stale_worker_claims(
     limit: int,
 ) -> dict[str, int]:
     """Recover stale tokened worker claims without replaying uncertain side effects."""
-    safe_job_types = set(retry_safe_job_types) - DELEGATED_SCAN_JOB_TYPES
+    safe_job_types = set(retry_safe_job_types) - SPECIALIZED_RECOVERY_JOB_TYPES
     query = (
         select(Job)
         .where(
@@ -216,7 +256,7 @@ def recover_stale_worker_claims(
             Job.claim_token.is_not(None),
             Job.claimed_at.is_not(None),
             Job.claimed_at <= stale_before,
-            Job.job_type.notin_(DELEGATED_SCAN_JOB_TYPES),
+            Job.job_type.notin_(SPECIALIZED_RECOVERY_JOB_TYPES),
         )
         .order_by(Job.claimed_at, Job.id)
         .limit(max(1, limit))
@@ -327,8 +367,11 @@ def recover_stale_running_job(
 def get_job(db: Session, job_id: UUID, org_id: UUID | None = None) -> Job | None:
     """Get a job by ID, optionally scoped to org."""
     query = db.query(Job).filter(Job.id == job_id)
-    if org_id:
-        query = query.filter(Job.organization_id == org_id)
+    if org_id is not None:
+        query = query.filter(
+            Job.job_scope == JobScope.ORGANIZATION.value,
+            Job.organization_id == org_id,
+        )
     return query.first()
 
 
@@ -337,6 +380,7 @@ def get_job_by_idempotency_key(db: Session, *, org_id: UUID, idempotency_key: st
     return (
         db.query(Job)
         .filter(
+            Job.job_scope == JobScope.ORGANIZATION.value,
             Job.organization_id == org_id,
             Job.idempotency_key == idempotency_key,
         )
@@ -352,7 +396,10 @@ def list_jobs(
     limit: int = 50,
 ) -> list[Job]:
     """List jobs for an organization with optional filters."""
-    query = db.query(Job).filter(Job.organization_id == org_id)
+    query = db.query(Job).filter(
+        Job.job_scope == JobScope.ORGANIZATION.value,
+        Job.organization_id == org_id,
+    )
     if status:
         query = query.filter(Job.status == status.value)
     if job_type:
@@ -369,6 +416,7 @@ def list_dead_letter_jobs(
 ) -> list[Job]:
     """List failed (dead-letter) jobs for an organization."""
     query = db.query(Job).filter(
+        Job.job_scope == JobScope.ORGANIZATION.value,
         Job.organization_id == org_id,
         Job.status == JobStatus.FAILED.value,
     )
@@ -381,6 +429,8 @@ def mark_job_running(db: Session, job: Job) -> Job:
     """Mark a job as running (increment attempts)."""
     job.status = JobStatus.RUNNING.value
     job.attempts += 1
+    job.claim_token = uuid4()
+    job.claimed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(job)
     return job
@@ -446,11 +496,13 @@ def mark_job_failed(db: Session, job: Job, error: str) -> Job:
     If attempts < max_attempts, reset to pending for retry.
     """
     if job.claim_token is not None:
+        retry_run_at = job.run_at
         return fail_claimed_job(
             db,
             job_id=job.id,
             claim_token=job.claim_token,
             error=error,
+            retry_run_at=retry_run_at,
         )
 
     job.last_error = error
@@ -458,6 +510,13 @@ def mark_job_failed(db: Session, job: Job, error: str) -> Job:
         job.status = JobStatus.PENDING.value
     else:
         job.status = JobStatus.FAILED.value
+        if job.job_type == JobType.RESEND_EVENT_RECONCILE.value:
+            from app.services import email_reconciliation_service
+
+            email_reconciliation_service.mark_orphan_case_exhausted_for_job(
+                db,
+                job=job,
+            )
     job.claim_token = None
     job.claimed_at = None
     db.commit()
@@ -471,6 +530,7 @@ def fail_claimed_job(
     job_id: UUID,
     claim_token: UUID | None,
     error: str,
+    retry_run_at: datetime | None = None,
 ) -> Job:
     """Fail or requeue only the still-current worker claim."""
     claim_filter = (
@@ -493,13 +553,109 @@ def fail_claimed_job(
     job.last_error = error
     if job.attempts < job.max_attempts:
         job.status = JobStatus.PENDING.value
+        if retry_run_at is not None:
+            job.run_at = retry_run_at
     else:
         job.status = JobStatus.FAILED.value
+        if job.job_type == JobType.RESEND_EVENT_RECONCILE.value:
+            from app.services import email_reconciliation_service
+
+            email_reconciliation_service.mark_orphan_case_exhausted_for_job(
+                db,
+                job=job,
+            )
     job.claim_token = None
     job.claimed_at = None
     db.commit()
     db.refresh(job)
     return job
+
+
+def recover_stale_resend_reconciliation_jobs(
+    db: Session,
+    *,
+    now: datetime | None = None,
+    stale_after: timedelta = timedelta(minutes=5),
+    limit: int = 100,
+) -> StaleReconciliationRecovery:
+    """Recover crashed Resend correlation workers without reviving stale claims."""
+    evaluated_at = now or datetime.now(timezone.utc)
+    cutoff = evaluated_at - stale_after
+    query = (
+        select(Job)
+        .where(
+            Job.job_type == JobType.RESEND_EVENT_RECONCILE.value,
+            Job.status == JobStatus.RUNNING.value,
+            Job.claimed_at.is_not(None),
+            Job.claimed_at <= cutoff,
+        )
+        .order_by(Job.claimed_at, Job.id)
+        .limit(max(1, min(limit, 500)))
+    )
+    if getattr(db.get_bind(), "dialect", None) and db.get_bind().dialect.name == "postgresql":
+        query = query.with_for_update(skip_locked=True)
+    jobs = list(db.execute(query).scalars())
+
+    from app.db.models import ResendWebhookEvent
+    from app.services import email_reconciliation_service
+
+    requeued = 0
+    failed = 0
+    resolved = 0
+    for job in jobs:
+        payload = job.payload if isinstance(job.payload, dict) else {}
+        try:
+            event_id = UUID(str(payload.get("event_id")))
+        except (TypeError, ValueError):
+            event_id = None
+        event = None
+        if event_id is not None:
+            event = (
+                db.query(ResendWebhookEvent)
+                .filter(
+                    ResendWebhookEvent.organization_id == job.organization_id,
+                    ResendWebhookEvent.id == event_id,
+                )
+                .one_or_none()
+            )
+
+        if event is not None and event.processed_at is not None:
+            job.status = JobStatus.COMPLETED.value
+            job.completed_at = evaluated_at
+            job.last_error = None
+            email_reconciliation_service.resolve_orphan_webhook_case(
+                db,
+                event=event,
+            )
+            resolved += 1
+        elif job.attempts < job.max_attempts:
+            job.status = JobStatus.PENDING.value
+            job.run_at = evaluated_at
+            job.last_error = "reconciliation_worker_claim_expired"
+            email_reconciliation_service.mark_orphan_case_claim_expired(
+                db,
+                job=job,
+            )
+            requeued += 1
+        else:
+            job.status = JobStatus.FAILED.value
+            job.last_error = "automatic_reconciliation_exhausted"
+            email_reconciliation_service.mark_orphan_case_exhausted_for_job(
+                db,
+                job=job,
+            )
+            failed += 1
+        job.claim_token = None
+        job.claimed_at = None
+
+    if jobs:
+        db.commit()
+    return StaleReconciliationRecovery(
+        inspected=len(jobs),
+        requeued=requeued,
+        failed=failed,
+        resolved=resolved,
+    )
 
 
 def replay_failed_job(
@@ -515,6 +671,7 @@ def replay_failed_job(
         db.query(Job)
         .filter(
             Job.id == job_id,
+            Job.job_scope == JobScope.ORGANIZATION.value,
             Job.organization_id == org_id,
         )
         .first()
@@ -526,6 +683,11 @@ def replay_failed_job(
 
     now = datetime.now(timezone.utc)
     payload = dict(job.payload or {})
+    if (
+        job.job_type == JobType.WORKFLOW_EMAIL.value
+        and payload.get("email_template_snapshot") is None
+    ):
+        raise ValueError("Cannot replay workflow email: queued template snapshot is unavailable")
     reconciliation_meta = payload.get("_reconciliation")
     if isinstance(reconciliation_meta, dict) and reconciliation_meta.get("non_replayable") is True:
         raise ValueError("Cannot replay job with non-replayable reconciliation")
@@ -548,6 +710,8 @@ def replay_failed_job(
     job.attempts = 0
     job.completed_at = None
     job.last_error = None
+    job.claim_token = None
+    job.claimed_at = None
 
     if commit:
         db.commit()

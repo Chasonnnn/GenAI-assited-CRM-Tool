@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.db.enums import JobType
+from app.db.enums import JobScope, JobType
 
 
 class JobBase(BaseModel):
@@ -29,7 +29,8 @@ class JobRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    organization_id: UUID
+    organization_id: UUID | None
+    job_scope: JobScope
     job_type: str
     payload: dict
     run_at: datetime

@@ -35,6 +35,29 @@ async def test_unsubscribe_endpoint_adds_suppression(client, db, test_org):
 
 
 @pytest.mark.asyncio
+async def test_one_click_unsubscribe_post_adds_suppression(client, db, test_org):
+    from app.services import campaign_service, unsubscribe_service
+
+    token = unsubscribe_service.generate_unsubscribe_token(
+        org_id=test_org.id,
+        email="one-click@example.com",
+    )
+
+    response = await client.post(
+        f"/email/unsubscribe/{token}",
+        content="List-Unsubscribe=One-Click",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+
+    assert response.status_code == 200
+    assert campaign_service.is_email_suppressed(
+        db,
+        test_org.id,
+        "one-click@example.com",
+    )
+
+
+@pytest.mark.asyncio
 async def test_unsubscribe_endpoint_handles_invalid_token(client, db, test_org):
     from app.services import campaign_service
 

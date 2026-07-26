@@ -1022,6 +1022,111 @@
       "422"
     ]
   },
+  "/email-operations/messages": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-operations/messages/{message_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-operations/reconciliation-cases": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-operations/reconciliation-cases/{case_id}/dismiss": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-operations/reconciliation-cases/{case_id}/link-event": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-operations/reconciliation-cases/{case_id}/resolve-delivery": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-operations/reconciliation-cases/{case_id}/retry-correlation": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-operations/readiness": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/email-operations/readiness/check": {
+    "POST": [
+      "202"
+    ]
+  },
+  "/email-operations/readiness/live": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/email-template-drafts": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/email-template-drafts/from-template/{template_id}": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-template-drafts/{draft_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-template-drafts/{draft_id}/publish": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-template-drafts/{draft_id}/restore-version": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-template-drafts/{draft_id}/test": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/email-templates": {
     "GET": [
       "200",
@@ -2383,6 +2488,16 @@
     "GET": [
       "200",
       "422"
+    ]
+  },
+  "/platform/email/readiness": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/platform/email/readiness/check": {
+    "POST": [
+      "202"
     ]
   },
   "/platform/email/status": {

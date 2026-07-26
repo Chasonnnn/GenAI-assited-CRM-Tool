@@ -393,7 +393,7 @@ def test_stale_claim_reaper_requeues_only_explicitly_retry_safe_types(db, test_o
     assert quarantined_unknown.payload["_claim_recovery"]["non_replayable"] is True
 
 
-def test_stale_claim_reaper_cannot_touch_fresh_replaced_or_delegated_claims(db, test_org):
+def test_stale_claim_reaper_cannot_touch_fresh_replaced_or_specialized_claims(db, test_org):
     now = datetime.now(timezone.utc)
     stale_at = now - timedelta(minutes=10)
     fresh_token = uuid.uuid4()
@@ -428,7 +428,17 @@ def test_stale_claim_reaper_cannot_touch_fresh_replaced_or_delegated_claims(db, 
         claim_token=uuid.uuid4(),
         claimed_at=stale_at,
     )
-    db.add_all([fresh, replaced, delegated_scan])
+    resend_reconciliation = Job(
+        organization_id=test_org.id,
+        job_type=JobType.RESEND_EVENT_RECONCILE.value,
+        payload={"event_id": str(uuid.uuid4())},
+        run_at=stale_at,
+        status=JobStatus.RUNNING.value,
+        attempts=1,
+        claim_token=uuid.uuid4(),
+        claimed_at=stale_at,
+    )
+    db.add_all([fresh, replaced, delegated_scan, resend_reconciliation])
     db.commit()
     replaced_id = replaced.id
     db.execute(
@@ -452,6 +462,9 @@ def test_stale_claim_reaper_cannot_touch_fresh_replaced_or_delegated_claims(db, 
     current_fresh = db.query(Job).filter(Job.id == fresh.id).one()
     current_replaced = db.query(Job).filter(Job.id == replaced_id).one()
     current_scan = db.query(Job).filter(Job.id == delegated_scan.id).one()
+    current_reconciliation = (
+        db.query(Job).filter(Job.id == resend_reconciliation.id).one()
+    )
     assert current_fresh.status == JobStatus.RUNNING.value
     assert current_fresh.claim_token == fresh_token
     assert current_fresh.claimed_at == now
@@ -460,6 +473,9 @@ def test_stale_claim_reaper_cannot_touch_fresh_replaced_or_delegated_claims(db, 
     assert current_replaced.claimed_at == now
     assert current_scan.status == JobStatus.RUNNING.value
     assert current_scan.claim_token is not None
+    assert current_reconciliation.status == JobStatus.RUNNING.value
+    assert current_reconciliation.claim_token is not None
+    assert current_reconciliation.payload.get("_claim_recovery") is None
     assert current_scan.claimed_at == stale_at
 
 

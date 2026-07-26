@@ -70,6 +70,7 @@ from app.schemas.email import (
     PlatformEmailTemplateTestSendRequest,
     TemplateVariableRead,
 )
+from app.schemas.resend_readiness import ResendReadinessEnvelope
 
 router = APIRouter(prefix="/platform", tags=["platform"])
 logger = logging.getLogger(__name__)
@@ -279,6 +280,7 @@ class UpdateSystemEmailTemplateRequest(BaseModel):
 class SendTestSystemEmailRequest(BaseModel):
     to_email: EmailStr
     org_id: UUID | None = None
+    idempotency_key: UUID
 
 
 class SystemEmailCampaignTarget(BaseModel):
@@ -294,6 +296,7 @@ class SystemEmailCampaignTarget(BaseModel):
 
 
 class SystemEmailCampaignRequest(BaseModel):
+    campaign_occurrence_id: UUID
     targets: list[SystemEmailCampaignTarget]
 
     @field_validator("targets")
@@ -343,6 +346,34 @@ def get_platform_email_status(
         from_email=settings.PLATFORM_EMAIL_FROM or None,
         provider="resend",
     )
+
+
+@router.get("/email/readiness")
+def get_platform_email_readiness(
+    session: Annotated[PlatformUserSession, Depends(require_platform_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ResendReadinessEnvelope:
+    """Return the platform sender's cached readiness without provider I/O."""
+    from app.services import resend_readiness_orchestration_service
+
+    view = resend_readiness_orchestration_service.get_platform_envelope(db)
+    return ResendReadinessEnvelope.model_validate(view)
+
+
+@router.post(
+    "/email/readiness/check",
+    status_code=202,
+    dependencies=[Depends(require_csrf_header)],
+)
+def queue_platform_email_readiness_check(
+    session: Annotated[PlatformUserSession, Depends(require_platform_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ResendReadinessEnvelope:
+    """Queue one coalesced, read-only platform readiness check."""
+    from app.services import resend_readiness_orchestration_service
+
+    view = resend_readiness_orchestration_service.queue_platform_check(db)
+    return ResendReadinessEnvelope.model_validate(view)
 
 
 # =============================================================================
@@ -494,6 +525,8 @@ def create_organization(
             admin_email=body.admin_email,
             request=request,
         )
+    except platform_service.EmailQueueUnavailableError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -807,6 +840,8 @@ def create_invite(
             role=body.role,
             request=request,
         )
+    except platform_service.EmailQueueUnavailableError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -854,6 +889,8 @@ def resend_invite(
             actor_id=session.user_id,
             request=request,
         )
+    except platform_service.EmailQueueUnavailableError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1336,6 +1373,7 @@ async def send_test_platform_system_email_template(
         system_key=system_key,
         to_email=str(body.to_email),
         org_id=test_org_id,
+        idempotency_key=body.idempotency_key,
         request=request,
         session=session,
     )
@@ -1357,6 +1395,7 @@ async def send_platform_system_email_campaign(
         return await platform_service.send_system_email_campaign(
             db=db,
             system_key=system_key,
+            campaign_occurrence_id=body.campaign_occurrence_id,
             targets=[target.model_dump() for target in body.targets],
             actor_id=session.user_id,
             actor_display_name=session.display_name,
@@ -1374,6 +1413,7 @@ async def _send_test_system_template(
     system_key: str,
     to_email: str,
     org_id: UUID,
+    idempotency_key: UUID,
     request: Request,
     session: PlatformUserSession,
 ) -> dict:
@@ -1445,7 +1485,7 @@ async def _send_test_system_template(
         text=(f"Test email for {org_name}\nInvite URL: {invite_url}\nRole: Admin\n"),
         template_id=None,
         surrogate_id=None,
-        idempotency_key=None,
+        idempotency_key=f"platform-system-test:{system_key}:{idempotency_key}",
     )
 
     platform_service.log_admin_action(
@@ -1455,6 +1495,7 @@ async def _send_test_system_template(
         target_org_id=org_id,
         metadata={
             "system_key": system_key,
+            "idempotency_key": str(idempotency_key),
             "email_hash": audit_service.hash_email(str(to_email)),
         },
         request=request,
@@ -1463,9 +1504,11 @@ async def _send_test_system_template(
 
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=str(result.get("error") or "Send failed"))
+    if not result.get("queued"):
+        raise HTTPException(status_code=500, detail="Test email was not durably queued")
 
     return {
-        "sent": True,
+        "queued": True,
         "message_id": result.get("message_id"),
         "email_log_id": result.get("email_log_id"),
     }
@@ -1572,6 +1615,7 @@ async def send_test_org_system_email_template(
         system_key=system_key,
         to_email=str(body.to_email),
         org_id=org_id,
+        idempotency_key=body.idempotency_key,
         request=request,
         session=session,
     )

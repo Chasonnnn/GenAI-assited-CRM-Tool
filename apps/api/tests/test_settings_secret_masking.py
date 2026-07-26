@@ -6,7 +6,8 @@ and Sentry events. Typing them as ``pydantic.SecretStr`` masks the value at the
 type level while keeping it retrievable via ``.get_secret_value()``.
 """
 
-from pydantic import SecretStr
+import pytest
+from pydantic import SecretStr, ValidationError
 
 from app.core.config import Settings
 
@@ -20,6 +21,7 @@ SECRET_FIELDS = [
     "GOOGLE_CLIENT_SECRET",
     "PLATFORM_RESEND_API_KEY",
     "PLATFORM_RESEND_WEBHOOK_SECRET",
+    "PLATFORM_RESEND_ADMISSION_GROUP_TOKEN",
     "AUDIT_HMAC_SECRET",
     "DEV_SECRET",
     "META_VERIFY_TOKEN",
@@ -70,9 +72,7 @@ def test_database_url_is_masked_secretstr():
 def test_secret_fields_are_secretstr():
     s = _settings_with_sentinels()
     for field in SECRET_FIELDS:
-        assert isinstance(getattr(s, field), SecretStr), (
-            f"{field} must be typed as SecretStr"
-        )
+        assert isinstance(getattr(s, field), SecretStr), f"{field} must be typed as SecretStr"
 
 
 def test_secret_values_still_retrievable():
@@ -104,3 +104,18 @@ def test_jwt_secrets_property_returns_plaintext():
     assert all(isinstance(item, str) for item in secrets)
     assert secrets[0] == _SENTINEL
     assert "previous-secret-value" in secrets
+
+
+@pytest.mark.parametrize(
+    "token",
+    ["x" * 31, "x" * 257],
+    ids=["too-short", "too-long"],
+)
+def test_platform_resend_admission_group_token_requires_32_to_256_characters(token):
+    with pytest.raises(ValidationError, match=r"32.*256"):
+        Settings(
+            _env_file=None,
+            ENV="test",
+            DATABASE_URL="postgresql+psycopg://u:p@localhost:5432/db",
+            PLATFORM_RESEND_ADMISSION_GROUP_TOKEN=token,
+        )

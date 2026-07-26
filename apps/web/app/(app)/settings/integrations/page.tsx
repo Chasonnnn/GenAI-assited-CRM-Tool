@@ -107,7 +107,12 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { toast } from "@/components/ui/toast"
 import type { IntegrationStatus, GoogleCalendarStatusResponse } from "@/lib/api/integrations"
 import type { IntegrationHealth } from "@/lib/api/ops"
-import type { EligibleSender, ResendSettings } from "@/lib/api/resend"
+import type {
+    EligibleSender,
+    ResendSettings,
+    ResendSettingsUpdate,
+    TestKeyResponse,
+} from "@/lib/api/resend"
 import type { Pipeline, StageSemantics } from "@/lib/api/pipelines"
 import type {
     MetaCrmDatasetEventMappingItem,
@@ -463,6 +468,9 @@ type AiConfigurationUiState = {
 type EmailConfigurationFormState = {
     provider: "resend" | "gmail" | ""
     apiKey: string
+    rateLimitGroupToken: string
+    clearRateLimitGroup: boolean
+    verifiedDomain: string
     fromEmail: string
     fromName: string
     replyTo: string
@@ -471,7 +479,7 @@ type EmailConfigurationFormState = {
 }
 
 type EmailConfigurationUiState = {
-    keyTested: { valid: boolean; error?: string | null; verified_domains?: string[] } | null
+    keyTested: TestKeyResponse | null
     saved: boolean
     isEditingKey: boolean
     hasUserEdited: boolean
@@ -1532,6 +1540,9 @@ function EmailConfigurationSectionContent({
     const [emailForm, setEmailForm] = useState<EmailConfigurationFormState>(() => ({
         provider: settings?.email_provider || "resend",
         apiKey: "",
+        rateLimitGroupToken: "",
+        clearRateLimitGroup: false,
+        verifiedDomain: settings?.verified_domain || "",
         fromEmail: settings?.from_email || "",
         fromName: settings?.from_name || "",
         replyTo: settings?.reply_to_email || "",
@@ -1562,6 +1573,8 @@ function EmailConfigurationSectionContent({
             ...current,
             provider: value,
             apiKey: value !== "resend" ? "" : current.apiKey,
+            rateLimitGroupToken: value !== "resend" ? "" : current.rateLimitGroupToken,
+            clearRateLimitGroup: value !== "resend" ? false : current.clearRateLimitGroup,
             webhookSigningSecret: value !== "resend" ? "" : current.webhookSigningSecret,
         }))
         setEmailUi((current) => ({
@@ -1579,31 +1592,24 @@ function EmailConfigurationSectionContent({
         try {
             const result = await testKey.mutateAsync(emailForm.apiKey)
             setEmailUi((current) => ({ ...current, keyTested: result }))
-            if (result.valid && result.verified_domains.length > 0) {
-                const domain = result.verified_domains[0]
-                if (!emailForm.fromEmail) {
-                    setEmailForm((current) => ({ ...current, fromEmail: `no-reply@${domain}` }))
-                    setEmailUi((current) => ({ ...current, hasUserEdited: true }))
-                }
-            }
         } catch (error) {
             const message = getErrorMessage(error, "Failed to test key")
-            setEmailUi((current) => ({ ...current, keyTested: { valid: false, error: message } }))
+            setEmailUi((current) => ({
+                ...current,
+                keyTested: {
+                    valid: false,
+                    error: message,
+                    verified_domains: [],
+                    permission_limited: false,
+                    warning: null,
+                },
+            }))
             toast.error(message)
         }
     }
 
     const handleSave = async () => {
-        const update: {
-            email_provider?: "resend" | "gmail" | "";
-            api_key?: string;
-            from_email?: string;
-            from_name?: string;
-            reply_to_email?: string;
-            webhook_signing_secret?: string;
-            default_sender_user_id?: string | null;
-            expected_version?: number;
-        } = {
+        const update: ResendSettingsUpdate = {
             email_provider: emailForm.provider,
         }
 
@@ -1615,6 +1621,12 @@ function EmailConfigurationSectionContent({
             if (emailForm.apiKey.trim()) {
                 update.api_key = emailForm.apiKey
             }
+            if (emailForm.clearRateLimitGroup) {
+                update.rate_limit_group_token = ""
+            } else if (emailForm.rateLimitGroupToken.trim()) {
+                update.rate_limit_group_token = emailForm.rateLimitGroupToken.trim()
+            }
+            update.verified_domain = emailForm.verifiedDomain.trim()
             update.from_email = emailForm.fromEmail
             update.from_name = emailForm.fromName
             update.reply_to_email = emailForm.replyTo
@@ -1630,6 +1642,8 @@ function EmailConfigurationSectionContent({
             setEmailForm((current) => ({
                 ...current,
                 apiKey: "",
+                rateLimitGroupToken: "",
+                clearRateLimitGroup: false,
                 webhookSigningSecret: "",
             }))
             setEmailUi((current) => ({
@@ -1664,11 +1678,52 @@ function EmailConfigurationSectionContent({
     }
 
     const hasResendKey = Boolean(emailForm.apiKey.trim() || settings?.api_key_masked)
+    const newResendKeyValidated = Boolean(
+        !emailForm.apiKey.trim() || emailUi.keyTested?.valid,
+    )
+    const hasVerifiedDomain = Boolean(emailForm.verifiedDomain.trim())
     const hasFromEmail = Boolean(emailForm.fromEmail.trim())
     const hasGmailSender = Boolean(emailForm.defaultSender)
-    const resendReady = emailForm.provider !== "resend" || (hasResendKey && hasFromEmail)
+    const normalizedRateLimitGroupToken = emailForm.rateLimitGroupToken.trim()
+    const rateLimitGroupTokenInvalid = Boolean(
+        normalizedRateLimitGroupToken &&
+        (normalizedRateLimitGroupToken.length < 32 ||
+            normalizedRateLimitGroupToken.length > 256),
+    )
+    const normalizedVerifiedDomain = emailForm.verifiedDomain.trim().toLowerCase()
+    const normalizedFromEmail = emailForm.fromEmail.trim().toLowerCase()
+    const senderIdentityChanged = Boolean(
+        emailForm.provider === "resend" &&
+        (normalizedVerifiedDomain !==
+            (settings?.verified_domain?.trim().toLowerCase() ?? "") ||
+            normalizedFromEmail !==
+            (settings?.from_email?.trim().toLowerCase() ?? "")),
+    )
+    const storedCredentialRetestRequired = Boolean(
+        settings?.api_key_masked &&
+        senderIdentityChanged &&
+        !emailUi.keyTested?.valid,
+    )
+    const testedDomains = emailUi.keyTested?.verified_domains ?? []
+    const testedDomainMismatch = Boolean(
+        emailUi.keyTested?.valid &&
+        !emailUi.keyTested.permission_limited &&
+        !testedDomains.includes(normalizedVerifiedDomain),
+    )
+    const resendReady =
+        emailForm.provider !== "resend" ||
+        (hasResendKey &&
+            newResendKeyValidated &&
+            hasVerifiedDomain &&
+            hasFromEmail &&
+            !storedCredentialRetestRequired &&
+            !testedDomainMismatch)
     const gmailReady = emailForm.provider !== "gmail" || hasGmailSender
-    const canSave = Boolean(emailForm.provider) && resendReady && gmailReady
+    const canSave =
+        Boolean(emailForm.provider) &&
+        resendReady &&
+        gmailReady &&
+        !rateLimitGroupTokenInvalid
     const showMaskedKey = Boolean(settings?.api_key_masked) && !emailUi.isEditingKey && !emailForm.apiKey
     const showHeading = variant === "page"
     const containerClass = showHeading ? "border-t pt-6" : "space-y-4"
@@ -1693,6 +1748,8 @@ function EmailConfigurationSectionContent({
                 eligibleSenders={eligibleSenders ?? []}
                 eligibleSendersLoading={eligibleSendersLoading}
                 showMaskedKey={showMaskedKey}
+                storedCredentialRetestRequired={storedCredentialRetestRequired}
+                rateLimitGroupTokenInvalid={rateLimitGroupTokenInvalid}
                 canSave={canSave}
                 pendingState={{
                     keyTest: testKey.isPending,
@@ -1778,6 +1835,8 @@ function EmailSettingsCard({
     eligibleSenders,
     eligibleSendersLoading,
     showMaskedKey,
+    storedCredentialRetestRequired,
+    rateLimitGroupTokenInvalid,
     canSave,
     pendingState,
     onProviderChange,
@@ -1796,6 +1855,8 @@ function EmailSettingsCard({
     eligibleSenders: EligibleSender[]
     eligibleSendersLoading: boolean
     showMaskedKey: boolean
+    storedCredentialRetestRequired: boolean
+    rateLimitGroupTokenInvalid: boolean
     canSave: boolean
     pendingState: {
         keyTest: boolean
@@ -1845,6 +1906,8 @@ function EmailSettingsCard({
                         ui={ui}
                         settings={settings}
                         showMaskedKey={showMaskedKey}
+                        storedCredentialRetestRequired={storedCredentialRetestRequired}
+                        rateLimitGroupTokenInvalid={rateLimitGroupTokenInvalid}
                         pendingState={pendingState}
                         updateEmailForm={updateEmailForm}
                         onApiKeyChange={onApiKeyChange}
@@ -1920,6 +1983,8 @@ function ResendConfigurationFields({
     ui,
     settings,
     showMaskedKey,
+    storedCredentialRetestRequired,
+    rateLimitGroupTokenInvalid,
     pendingState,
     updateEmailForm,
     onApiKeyChange,
@@ -1933,6 +1998,8 @@ function ResendConfigurationFields({
     ui: EmailConfigurationUiState
     settings: ResendSettings | undefined
     showMaskedKey: boolean
+    storedCredentialRetestRequired: boolean
+    rateLimitGroupTokenInvalid: boolean
     pendingState: {
         keyTest: boolean
         webhookRotate: boolean
@@ -1952,7 +2019,6 @@ function ResendConfigurationFields({
             <ResendApiKeyField
                 apiKey={form.apiKey}
                 apiKeyMasked={settings?.api_key_masked ?? null}
-                verifiedDomain={settings?.verified_domain ?? null}
                 keyTested={ui.keyTested}
                 editingKey={ui.isEditingKey}
                 showMaskedKey={showMaskedKey}
@@ -1963,7 +2029,49 @@ function ResendConfigurationFields({
                 onTestKey={onTestKey}
             />
 
-            <ResendVerifiedDomainBanner verifiedDomain={settings?.verified_domain ?? null} />
+            <ResendRateLimitGroupField
+                configured={settings?.rate_limit_group_configured ?? false}
+                token={form.rateLimitGroupToken}
+                clearScheduled={form.clearRateLimitGroup}
+                invalid={rateLimitGroupTokenInvalid}
+                onTokenChange={(rateLimitGroupToken) => {
+                    updateEmailForm("rateLimitGroupToken", rateLimitGroupToken, true)
+                    if (form.clearRateLimitGroup) {
+                        updateEmailForm("clearRateLimitGroup", false)
+                    }
+                }}
+                onClear={() => {
+                    updateEmailForm("rateLimitGroupToken", "")
+                    updateEmailForm("clearRateLimitGroup", true, true)
+                }}
+                onCancelClear={() =>
+                    updateEmailForm("clearRateLimitGroup", false, true)
+                }
+            />
+
+            {storedCredentialRetestRequired ? (
+                <Alert
+                    id="resend-sender-retest-alert"
+                    variant="destructive"
+                >
+                    <AlertTriangleIcon aria-hidden="true" />
+                    <AlertTitle>Re-test sender access</AlertTitle>
+                    <AlertDescription>
+                        These sender changes are not verified. Re-enter the
+                        stored Resend credential with Change Key, then test it
+                        before saving.
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+
+            <ResendVerifiedDomainField
+                value={form.verifiedDomain}
+                keyTested={ui.keyTested}
+                storedCredentialRetestRequired={storedCredentialRetestRequired}
+                onChange={(verifiedDomain) =>
+                    updateEmailForm("verifiedDomain", verifiedDomain, true)
+                }
+            />
 
             <div className="space-y-2">
                 <Label htmlFor="from-email">From Email</Label>
@@ -1972,15 +2080,24 @@ function ResendConfigurationFields({
                     type="email"
                     value={form.fromEmail}
                     onChange={(event) => updateEmailForm("fromEmail", event.target.value, true)}
-                    placeholder={settings?.verified_domain ? `no-reply@${settings.verified_domain}` : "no-reply@yourdomain.com"}
+                    aria-invalid={storedCredentialRetestRequired}
+                    aria-describedby={
+                        storedCredentialRetestRequired
+                            ? "resend-sender-retest-alert"
+                            : undefined
+                    }
+                    placeholder={
+                        form.verifiedDomain
+                            ? `no-reply@${form.verifiedDomain}`
+                            : "no-reply@yourdomain.com"
+                    }
                     name="from-email"
                     autoComplete="email"
                 />
-                {settings?.verified_domain ? (
-                    <p className="text-xs text-muted-foreground">
-                        Must use your verified domain: @{settings.verified_domain}
-                    </p>
-                ) : null}
+                <p className="text-xs text-muted-foreground">
+                    Enter the complete sender address. Its domain must match the
+                    verified domain above.
+                </p>
             </div>
 
             <div className="space-y-2">
@@ -2042,10 +2159,92 @@ function ResendConfigurationFields({
     )
 }
 
+function ResendRateLimitGroupField({
+    configured,
+    token,
+    clearScheduled,
+    invalid,
+    onTokenChange,
+    onClear,
+    onCancelClear,
+}: {
+    configured: boolean
+    token: string
+    clearScheduled: boolean
+    invalid: boolean
+    onTokenChange: (token: string) => void
+    onClear: () => void
+    onCancelClear: () => void
+}) {
+    const statusLabel = clearScheduled
+        ? "Pending clear"
+        : configured
+            ? "Group configured"
+            : "Not configured"
+
+    return (
+        <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="space-y-1">
+                    <Label htmlFor="resend-rate-limit-group">
+                        Resend team rate-limit group token
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                        Write-only. The saved token is never returned by the API.
+                    </p>
+                </div>
+                <Badge variant={clearScheduled ? "secondary" : configured ? "default" : "outline"}>
+                    {statusLabel}
+                </Badge>
+            </div>
+
+            <Input
+                id="resend-rate-limit-group"
+                name="resend-rate-limit-group"
+                type="password"
+                autoComplete="off"
+                value={token}
+                onChange={(event) => onTokenChange(event.target.value)}
+                placeholder="Enter a shared token with at least 32 characters"
+                aria-invalid={invalid}
+                aria-describedby="resend-rate-limit-group-help"
+            />
+
+            <div id="resend-rate-limit-group-help" className="space-y-1 text-xs">
+                <p className="text-muted-foreground">
+                    Use the same token for every API key in the same Resend team.
+                    The default limit is 5 requests per second shared across the
+                    team.
+                </p>
+                {invalid ? (
+                    <p className="text-destructive">
+                        Token must be between 32 and 256 characters.
+                    </p>
+                ) : null}
+                {clearScheduled ? (
+                    <p className="font-medium text-foreground">
+                        Rate-limit group will be cleared when you save.
+                    </p>
+                ) : null}
+            </div>
+
+            {configured ? (
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={clearScheduled ? onCancelClear : onClear}
+                >
+                    {clearScheduled ? "Keep current group" : "Clear rate-limit group"}
+                </Button>
+            ) : null}
+        </div>
+    )
+}
+
 function ResendApiKeyField({
     apiKey,
     apiKeyMasked,
-    verifiedDomain,
     keyTested,
     editingKey,
     showMaskedKey,
@@ -2057,7 +2256,6 @@ function ResendApiKeyField({
 }: {
     apiKey: string
     apiKeyMasked: string | null
-    verifiedDomain: string | null
     keyTested: EmailConfigurationUiState["keyTested"]
     editingKey: boolean
     showMaskedKey: boolean
@@ -2124,28 +2322,143 @@ function ResendApiKeyField({
                     </div>
                 )}
             </div>
-            {keyTested?.valid ? (
-                <p className="text-xs text-green-600">
-                    API key is valid! Verified domain: {keyTested.verified_domains?.[0] || verifiedDomain}
-                </p>
-            ) : null}
-            {keyTested && !keyTested.valid ? (
-                <p className="text-xs text-red-600">{keyTested.error || "API key is invalid"}</p>
-            ) : null}
+            <ResendVerifiedDomainBanner keyTested={keyTested} />
             <p className="text-xs text-muted-foreground">
-                Get your key from <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">resend.com/api-keys</a>
+                Testing checks Resend domain access only and never sends an
+                email. Full access keys can list verified domains; Sending
+                access keys may require manual domain entry. Test a new key
+                before saving. Get your key from{" "}
+                <a
+                    href="https://resend.com/api-keys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                >
+                    resend.com/api-keys
+                </a>
+                , or{" "}
+                <a
+                    href="https://resend.com/docs/dashboard/api-keys/introduction"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                >
+                    review Resend key permissions
+                </a>
+                .
             </p>
         </div>
     )
 }
 
-function ResendVerifiedDomainBanner({ verifiedDomain }: { verifiedDomain: string | null }) {
-    if (!verifiedDomain) return null
+function ResendVerifiedDomainBanner({
+    keyTested,
+}: {
+    keyTested: EmailConfigurationUiState["keyTested"]
+}) {
+    if (keyTested?.valid && keyTested.permission_limited) {
+        return (
+            <Alert>
+                <AlertTriangleIcon aria-hidden="true" />
+                <AlertTitle>Domain access is permission-limited</AlertTitle>
+                <AlertDescription className="space-y-1">
+                    <p>{keyTested.warning}</p>
+                    <p>
+                        Enter a domain you have already verified in Resend. This
+                        app cannot confirm domain verification with this key.
+                    </p>
+                </AlertDescription>
+            </Alert>
+        )
+    }
+
+    if (keyTested?.valid) {
+        return (
+            <Alert>
+                <CheckCircleIcon aria-hidden="true" />
+                <AlertTitle>API key accepted</AlertTitle>
+                <AlertDescription className="space-y-1">
+                    <p>
+                        No domain was selected automatically. Enter one of the
+                        verified domains in the field below.
+                    </p>
+                    <p>
+                        {keyTested.verified_domains.length > 0
+                            ? `Available verified domains: ${keyTested.verified_domains.join(", ")}`
+                            : "No verified domains were returned for this account."}
+                    </p>
+                </AlertDescription>
+            </Alert>
+        )
+    }
+
+    if (keyTested && !keyTested.valid) {
+        return (
+            <Alert variant="destructive">
+                <XCircleIcon aria-hidden="true" />
+                <AlertTitle>API key is invalid</AlertTitle>
+                <AlertDescription>
+                    {keyTested.error || "Resend rejected this API key."}
+                </AlertDescription>
+            </Alert>
+        )
+    }
+
+    return null
+}
+
+function ResendVerifiedDomainField({
+    value,
+    keyTested,
+    storedCredentialRetestRequired,
+    onChange,
+}: {
+    value: string
+    keyTested: EmailConfigurationUiState["keyTested"]
+    storedCredentialRetestRequired: boolean
+    onChange: (verifiedDomain: string) => void
+}) {
+    const normalizedValue = value.trim().toLowerCase()
+    const domainRejectedByFullAccessKey = Boolean(
+        normalizedValue &&
+        keyTested?.valid &&
+        !keyTested.permission_limited &&
+        !keyTested.verified_domains.includes(normalizedValue),
+    )
 
     return (
-        <div className="flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm dark:bg-green-900/20">
-            <CheckCircleIcon className="size-4 text-green-600" aria-hidden="true" />
-            <span>Verified domain: <strong>{verifiedDomain}</strong></span>
+        <div className="space-y-2">
+            <Label htmlFor="resend-verified-domain">Verified domain</Label>
+            <Input
+                id="resend-verified-domain"
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                placeholder="example.com"
+                name="resend-verified-domain"
+                autoComplete="off"
+                aria-invalid={
+                    storedCredentialRetestRequired ||
+                    domainRejectedByFullAccessKey
+                }
+                aria-describedby={
+                    storedCredentialRetestRequired
+                        ? "resend-verified-domain-help resend-sender-retest-alert"
+                        : "resend-verified-domain-help"
+                }
+            />
+            <p
+                id="resend-verified-domain-help"
+                className="text-xs text-muted-foreground"
+            >
+                Enter the domain exactly as it appears in Resend. This value is
+                never selected automatically.
+            </p>
+            {domainRejectedByFullAccessKey ? (
+                <p className="text-xs font-medium text-destructive" role="alert">
+                    This domain is not in the verified domains returned for this
+                    API key.
+                </p>
+            ) : null}
         </div>
     )
 }
@@ -5217,7 +5530,7 @@ export default function IntegrationsPage() {
     const MetaStatusIcon = metaStatusIcon
 
     return (
-        <div className="flex min-h-screen flex-col">
+        <div className="flex min-h-dvh flex-col">
             <IntegrationsPageHeader
                 canRefresh={organizationIntegrationsEnabled}
                 isFetching={isFetching}
@@ -5682,6 +5995,15 @@ function OrganizationIntegrationsSection({
                     <p className="text-xs text-muted-foreground">
                         {emailConfigured ? `${emailProviderLabel} · ${emailDetail}` : "Choose a provider to start sending"}
                     </p>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full"
+                        render={<Link href="/settings/integrations/email" />}
+                    >
+                        <ActivityIcon aria-hidden="true" />
+                        View email operations
+                    </Button>
                 </OrganizationIntegrationCard>
 
                 <OrganizationIntegrationCard
@@ -5887,8 +6209,8 @@ function IntegrationConfigurationDialogs({
                 }}
             >
                 <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
-                    <DialogHeader>
-                        <div className="flex items-start justify-between gap-4">
+                    <DialogHeader className="pr-10">
+                        <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between sm:gap-4">
                             <div className="space-y-1">
                                 <DialogTitle>Email Configuration</DialogTitle>
                                 <DialogDescription>

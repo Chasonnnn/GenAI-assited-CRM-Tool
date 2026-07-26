@@ -41,7 +41,7 @@ gcloud artifacts repositories create crm \
 ## 4) Cloud SQL (Postgres)
 ```bash
 gcloud sql instances create crm-db \
-  --database-version=POSTGRES_15 \
+  --database-version=POSTGRES_18 \
   --region="$REGION" \
   --tier=db-g1-small
 

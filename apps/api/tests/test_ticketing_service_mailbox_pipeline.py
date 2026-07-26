@@ -137,6 +137,8 @@ def test_pause_resume_and_get_mailbox_sync_status(db, test_org):
                 organization_id=test_org.id,
                 job_type=JobType.MAILBOX_WATCH_REFRESH.value,
                 status="running",
+                claim_token=uuid4(),
+                claimed_at=datetime.now(timezone.utc),
                 payload={"mailbox_id": str(mailbox.id)},
             ),
         ]

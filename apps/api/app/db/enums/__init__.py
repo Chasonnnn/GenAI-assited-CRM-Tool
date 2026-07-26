@@ -17,7 +17,15 @@ from app.db.enums.defaults import (
     DEFAULT_SURROGATE_STATUS,
     DEFAULT_TASK_TYPE,
 )
-from app.db.enums.email import EmailStatus, SuppressionReason
+from app.db.enums.email import (
+    EmailDeliveryAttemptOutcome,
+    EmailDeliveryStatus,
+    EmailProvider,
+    EmailProviderScope,
+    EmailSuppressionPolicy,
+    EmailStatus,
+    SuppressionReason,
+)
 from app.db.enums.entities import EntityType
 from app.db.enums.forms import (
     FieldSensitivity,
@@ -38,7 +46,7 @@ from app.db.enums.integration_health import (
     IntegrationType,
 )
 from app.db.enums.intended_parents import IntendedParentStatus
-from app.db.enums.jobs import JobStatus, JobType
+from app.db.enums.jobs import JobScope, JobStatus, JobType
 from app.db.enums.matches import MatchEventPerson, MatchEventType, MatchStatus
 from app.db.enums.notifications import NotificationType
 from app.db.enums.permissions import (
@@ -104,6 +112,11 @@ __all__ = [
     "DEFAULT_SURROGATE_STATUS",
     "DEFAULT_TASK_TYPE",
     "EmailStatus",
+    "EmailDeliveryAttemptOutcome",
+    "EmailDeliveryStatus",
+    "EmailProvider",
+    "EmailProviderScope",
+    "EmailSuppressionPolicy",
     "EntityType",
     "EmailDirection",
     "EmailOccurrenceState",
@@ -118,6 +131,7 @@ __all__ = [
     "IntegrationStatus",
     "IntegrationType",
     "IntendedParentStatus",
+    "JobScope",
     "JobStatus",
     "JobType",
     "MatchEventPerson",

@@ -101,8 +101,54 @@ gcloud secrets versions add REDIS_URL --data-file=- <<<"redis://:<redis-auth>@<r
 gcloud secrets versions add DUO_CLIENT_ID --data-file=- <<<"your-duo-client-id"
 gcloud secrets versions add DUO_CLIENT_SECRET --data-file=- <<<"your-duo-client-secret"
 gcloud secrets versions add DUO_API_HOST --data-file=- <<<"api-xxxxx.duosecurity.com"
+gcloud secrets versions add PLATFORM_RESEND_ADMISSION_GROUP_TOKEN --data-file=-
 gcloud secrets versions add BILLING_SLACK_WEBHOOK_URL --data-file=- <<<"https://hooks.slack.com/services/..."
 ```
+
+`PLATFORM_RESEND_ADMISSION_GROUP_TOKEN` is an application-only, write-only token;
+it is never sent to Resend. Paste a high-entropy value between 32 and 256
+characters on stdin, then press Ctrl-D. Use the same value only for application
+routes backed by API keys from the same Resend team. Before the first service
+deployment that references this variable, create the secret container with
+Terraform and add at least one enabled version.
+
+### Existing environment: two-phase admission-token rollout
+
+Do not start with a full apply. Cloud Run rejects a revision that references a
+Secret Manager container without an enabled version. Use the existing
+environment's reviewed variable file in every Terraform command:
+
+```bash
+terraform -chdir=infra/terraform init -reconfigure
+terraform -chdir=infra/terraform apply \
+  -var-file=/ABSOLUTE/PATH/TO/terraform.tfvars \
+  -target='google_secret_manager_secret.secrets["PLATFORM_RESEND_ADMISSION_GROUP_TOKEN"]'
+```
+
+After that targeted apply has created only the secret container, add the first
+version without putting the value in shell history. Paste the high-entropy token
+on stdin and press Ctrl-D:
+
+```bash
+gcloud secrets versions add PLATFORM_RESEND_ADMISSION_GROUP_TOKEN --data-file=- \
+  --project=YOUR_PROJECT_ID
+```
+
+Confirm that an enabled version exists, then review and apply the complete plan
+so the API, worker, migration job, and scan services can reference it:
+
+```bash
+gcloud secrets versions list PLATFORM_RESEND_ADMISSION_GROUP_TOKEN \
+  --project=YOUR_PROJECT_ID --filter='state=ENABLED'
+terraform -chdir=infra/terraform plan \
+  -var-file=/ABSOLUTE/PATH/TO/terraform.tfvars \
+  -out=/tmp/resend-admission.tfplan
+terraform -chdir=infra/terraform apply /tmp/resend-admission.tfplan
+```
+
+Stop if the enabled-version check is empty or the full plan proposes unrelated
+infrastructure changes; resolve that drift before deploying application
+revisions.
 
 Redis AUTH is enabled out-of-band to avoid storing auth strings in Terraform state:
 ```bash

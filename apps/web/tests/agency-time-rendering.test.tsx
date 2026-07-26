@@ -55,8 +55,35 @@ describe("agency time rendering", () => {
                 inviteResending={null}
                 inviteForm={{ email: "", role: "admin" }}
                 inviteError={null}
-                platformEmailStatus={{ configured: true, provider: "resend" }}
-                platformEmailLoading={false}
+                platformEmailStatus={{
+                    configured: true,
+                    from_email: "invites@example.com",
+                    provider: "resend",
+                }}
+                platformEmailStatusLoading={false}
+                platformEmailReadiness={{
+                    check_status: "idle",
+                    last_snapshot: {
+                        freshness: "fresh",
+                        probe_status: "succeeded",
+                        overall_status: "ready",
+                        domain_status: "ready",
+                        webhook_status: "ready",
+                        sending_status: "ready",
+                        delivery_tracking_status: "ready",
+                        engagement_tracking_status: "ready",
+                        verified_domain_count: 1,
+                        enabled_webhook_count: 1,
+                        issue_codes: [],
+                        checked_at: "2026-06-03T00:30:00.000Z",
+                        last_success_at: "2026-06-03T00:30:00.000Z",
+                    },
+                }}
+                platformEmailReadinessLoading={false}
+                platformEmailReadinessError={false}
+                platformEmailCheckPending={false}
+                platformEmailCheckError={false}
+                onCheckPlatformEmailReadiness={vi.fn()}
                 {...inviteHandlers}
             />,
         )

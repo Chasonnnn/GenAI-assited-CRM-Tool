@@ -10,6 +10,7 @@ from datetime import datetime
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     ForeignKey,
     Index,
     Integer,
@@ -53,6 +54,10 @@ class ResendSettings(Base):
 
     # Resend configuration
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rate_limit_group_fingerprint: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
     from_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     from_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     reply_to_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -86,7 +91,14 @@ class ResendSettings(Base):
     organization: Mapped["Organization"] = relationship()
     default_sender: Mapped["User | None"] = relationship()
 
-    __table_args__ = (Index("idx_resend_settings_webhook_id", "webhook_id", unique=True),)
+    __table_args__ = (
+        CheckConstraint(
+            "rate_limit_group_fingerprint IS NULL "
+            "OR rate_limit_group_fingerprint ~ '^[0-9a-f]{64}$'",
+            name="ck_resend_settings_rate_limit_group_fingerprint",
+        ),
+        Index("idx_resend_settings_webhook_id", "webhook_id", unique=True),
+    )
 
 
 class ZapierWebhookSettings(Base):

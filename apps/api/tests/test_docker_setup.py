@@ -100,3 +100,20 @@ def test_compose_uses_postgres_18_1_with_new_pgdata() -> None:
     content = _read("docker-compose.yml")
     assert "image: postgres:18.1" in content
     assert "- pgdata:/var/lib/postgresql" in content
+
+
+def test_ci_database_services_match_local_postgres_18_1() -> None:
+    content = _read(".github/workflows/ci.yml")
+
+    assert "image: postgres:16" not in content
+    assert content.count("image: postgres:18.1") == 3
+
+
+def test_infrastructure_and_docs_standardize_on_postgres_18() -> None:
+    terraform_variables = _read("infra/terraform/variables.tf")
+    deployment_guide = _read("deployment.md")
+    design_guide = _read("docs/DESIGN.md")
+
+    assert 'default     = "POSTGRES_18"' in terraform_variables
+    assert "--database-version=POSTGRES_18" in deployment_guide
+    assert "**Database**: PostgreSQL 18 with CITEXT extension" in design_guide

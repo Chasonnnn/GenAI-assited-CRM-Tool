@@ -156,20 +156,8 @@ async def send_surrogate_email(
     )
 
     if email_service.is_email_suppressed(db, session.org_id, surrogate.email):
-        email_log, _job = email_service.send_email(
-            db=db,
-            org_id=session.org_id,
-            template_id=data.template_id,
-            recipient_email=surrogate.email,
-            subject=subject,
-            body=body,
-            surrogate_id=surrogate_id,
-            attachments=selected_attachments,
-            sender_user_id=session.user_id,
-        )
         return SendEmailResponse(
             success=False,
-            email_log_id=email_log.id,
             error="Email suppressed",
         )
 

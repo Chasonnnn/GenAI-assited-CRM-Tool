@@ -15,155 +15,71 @@ DIRECT_RESEND_NOT_CONFIGURED_ERROR = "Org Resend is not configured for direct em
 
 
 async def send_email_async(email_log: EmailLog, db=None) -> str:
-    """
-    Send an email using the appropriate provider.
-
-    For campaign emails: uses the org's configured provider (Resend only).
-    For other queued emails: uses the org's configured Resend provider.
-    """
-    # Check if this is a campaign email and get the provider
-    campaign_provider = None
-    campaign_run = None
-    include_unsubscribed = False
-    if db:
-        from app.db.models import CampaignRecipient, CampaignRun, Campaign
-
-        # Find linked campaign recipient
-        campaign_recipient = (
-            db.query(CampaignRecipient)
-            .filter(CampaignRecipient.external_message_id == str(email_log.id))
-            .first()
-        )
-        if campaign_recipient:
-            campaign_run = (
-                db.query(CampaignRun).filter(CampaignRun.id == campaign_recipient.run_id).first()
-            )
-            if campaign_run:
-                campaign_provider = campaign_run.email_provider
-                campaign = (
-                    db.query(Campaign).filter(Campaign.id == campaign_run.campaign_id).first()
-                )
-                include_unsubscribed = bool(
-                    getattr(campaign, "include_unsubscribed", False) if campaign else False
-                )
-
-    # Global suppression check (best-effort)
-    if db:
-        try:
-            if email_service.is_email_suppressed(
-                db,
-                email_log.organization_id,
-                email_log.recipient_email,
-                ignore_opt_out=include_unsubscribed,
-            ):
-                logger.info(
-                    "Email suppressed for email_log=%s recipient=%s",
-                    email_log.id,
-                    mask_email(email_log.recipient_email),
-                )
-                return "skipped"
-        except Exception as exc:
-            logger.warning("Suppression check failed: %s", exc)
-
-    # Use org-level provider for campaigns
-    if campaign_provider and db:
-        if campaign_provider != "resend":
-            raise Exception(
-                "Campaign emails must use Resend. "
-                "Set Email provider to Resend in Settings → Integrations → Email Configuration."
-            )
-        provider_attachments = email_service.load_email_log_provider_attachments(
-            db=db,
-            org_id=email_log.organization_id,
-            email_log_id=email_log.id,
-        )
-        await _send_via_org_provider(
-            db,
-            email_log,
-            campaign_provider,
-            campaign_run.organization_id,
-            attachments=provider_attachments,
-        )
-        return "sent"
-
-    provider_attachments: list[dict[str, object]] = []
-    if db:
-        provider_attachments = email_service.load_email_log_provider_attachments(
-            db=db,
-            org_id=email_log.organization_id,
-            email_log_id=email_log.id,
-        )
-
-    if not db:
+    """Migrate a legacy SEND_EMAIL record into the durable Resend outbox."""
+    if db is None:
         raise Exception(DIRECT_RESEND_NOT_CONFIGURED_ERROR)
 
-    await _send_via_org_provider(
-        db,
-        email_log,
-        "resend",
-        email_log.organization_id,
-        attachments=provider_attachments,
-        missing_config_error=DIRECT_RESEND_NOT_CONFIGURED_ERROR,
+    campaign_provider = None
+    include_unsubscribed = False
+    from app.db.models import Campaign, CampaignRecipient, CampaignRun
+
+    campaign_recipient = (
+        db.query(CampaignRecipient)
+        .join(CampaignRun, CampaignRun.id == CampaignRecipient.run_id)
+        .filter(
+            CampaignRun.organization_id == email_log.organization_id,
+            CampaignRecipient.email_log_id == email_log.id,
+        )
+        .first()
     )
-    return "sent"
-
-
-async def _send_via_org_provider(
-    db,
-    email_log: EmailLog,
-    provider: str,
-    org_id,
-    attachments: list[dict[str, object]] | None = None,
-    missing_config_error: str = "Resend not configured for organization",
-) -> None:
-    """Send email using org-level provider configuration."""
-    from app.services import resend_settings_service, org_service
-
-    org = org_service.get_org_by_id(db, org_id)
-    portal_base_url = org_service.get_org_portal_base_url(org)
-
-    if provider == "resend":
-        settings = resend_settings_service.get_resend_settings(db, org_id)
-        if not resend_settings_service.is_resend_sender_configured(settings):
-            raise Exception(missing_config_error)
-
-        api_key = resend_settings_service.decrypt_api_key(settings.api_key_encrypted)
-
-        from app.services import resend_email_service
-        from app.services import unsubscribe_service
-
-        unsubscribe_url = unsubscribe_service.build_list_unsubscribe_url(
-            org_id=org_id,
-            email=email_log.recipient_email,
-            base_url=portal_base_url,
+    if campaign_recipient:
+        campaign_run = (
+            db.query(CampaignRun).filter(CampaignRun.id == campaign_recipient.run_id).first()
         )
-
-        success, error, message_id = await resend_email_service.send_email_direct(
-            api_key=api_key,
-            to_email=email_log.recipient_email,
-            subject=email_log.subject,
-            body=email_log.body,
-            from_email=settings.from_email,
-            from_name=settings.from_name,
-            reply_to=settings.reply_to_email,
-            idempotency_key=f"email-log/{email_log.id}",
-            unsubscribe_url=unsubscribe_url,
-            attachments=attachments,
-        )
-
-        if success:
-            email_log.external_id = message_id
-            email_log.resend_status = "sent"
-            logger.info(
-                "Email sent via org Resend for email_log=%s message_id=%s",
-                email_log.id,
-                message_id,
+        if campaign_run:
+            campaign_provider = campaign_run.email_provider
+            campaign = db.query(Campaign).filter(Campaign.id == campaign_run.campaign_id).first()
+            include_unsubscribed = bool(
+                getattr(campaign, "include_unsubscribed", False) if campaign else False
             )
-        else:
-            raise Exception(f"Resend send failed: {error}")
 
-    else:
-        raise Exception(f"Unknown email provider: {provider}")
+    if campaign_provider and campaign_provider != "resend":
+        raise Exception(
+            "Campaign emails must use Resend. "
+            "Set Email provider to Resend in Settings → Integrations → Email Configuration."
+        )
+
+    attachments = email_service.list_email_log_attachments(
+        db=db,
+        org_id=email_log.organization_id,
+        email_log_id=email_log.id,
+    )
+    actor_user_id = email_service._resolve_sender_user_id_from_job(db, email_log)
+    migrated_log, delivery = email_service.send_email(
+        db=db,
+        org_id=email_log.organization_id,
+        template_id=email_log.template_id,
+        recipient_email=email_log.recipient_email,
+        subject=email_log.subject,
+        body=email_log.body,
+        surrogate_id=email_log.surrogate_id,
+        attachments=attachments,
+        sender_user_id=actor_user_id,
+        ignore_opt_out=include_unsubscribed,
+        idempotency_key=f"legacy-email-log/{email_log.id}",
+        source_type="legacy_email_log",
+        source_id=email_log.id,
+        purpose="campaign" if campaign_recipient else "transactional",
+        commit=True,
+    )
+    if delivery is None:
+        return "skipped"
+    logger.info(
+        "Legacy email_log=%s migrated to durable email_log=%s",
+        email_log.id,
+        migrated_log.id,
+    )
+    return "queued"
 
 
 async def process_send_email(db, job) -> None:
@@ -173,15 +89,14 @@ async def process_send_email(db, job) -> None:
     if not email_log_id:
         raise Exception("Missing email_log_id in job payload")
 
-    sender_user_id = None
-    raw_sender_user_id = payload.get("sender_user_id")
-    if raw_sender_user_id:
-        try:
-            sender_user_id = UUID(str(raw_sender_user_id))
-        except (TypeError, ValueError):
-            sender_user_id = None
-
-    email_log = db.query(EmailLog).filter(EmailLog.id == UUID(email_log_id)).first()
+    email_log = (
+        db.query(EmailLog)
+        .filter(
+            EmailLog.id == UUID(email_log_id),
+            EmailLog.organization_id == job.organization_id,
+        )
+        .first()
+    )
     if not email_log:
         raise Exception(f"EmailLog {email_log_id} not found")
 
@@ -189,23 +104,9 @@ async def process_send_email(db, job) -> None:
     if result == "skipped":
         email_service.mark_email_skipped(db, email_log, "suppressed")
     else:
-        email_service.mark_email_sent(db, email_log)
-        attachments = email_service.list_email_log_attachments(
-            db=db,
-            org_id=email_log.organization_id,
-            email_log_id=email_log.id,
-        )
-        email_service.log_surrogate_email_send_success(
-            db=db,
-            org_id=email_log.organization_id,
-            surrogate_id=email_log.surrogate_id,
-            email_log_id=email_log.id,
-            subject=email_log.subject,
-            provider="resend",
-            template_id=email_log.template_id,
-            actor_user_id=sender_user_id,
-            attachments=attachments,
-        )
+        email_log.status = "skipped"
+        email_log.error = "migrated_to_durable_outbox"
+        db.commit()
 
 
 async def process_workflow_email(db, job) -> None:
@@ -228,12 +129,11 @@ async def process_workflow_email(db, job) -> None:
         - workflow_owner_id: Owner user ID (for personal workflows)
     """
     from app.db.models import EmailTemplate, EmailLog
-    from app.services import gmail_service, resend_settings_service
+    from app.services import gmail_service
     from app.services.workflow_email_provider import (
         resolve_workflow_email_provider,
         EmailProviderError,
     )
-    from app.services import resend_email_service
 
     template_id = job.payload.get("template_id")
     surrogate_id = job.payload.get("surrogate_id")
@@ -241,34 +141,105 @@ async def process_workflow_email(db, job) -> None:
     variables = job.payload.get("variables", {})
     workflow_scope = job.payload.get("workflow_scope", "org")
     workflow_owner_id = job.payload.get("workflow_owner_id")
+    template_snapshot_payload = job.payload.get("email_template_snapshot")
 
     if not template_id or not recipient_email:
         raise Exception("Missing template_id or recipient_email in workflow email job")
 
-    # Get template
-    template = db.query(EmailTemplate).filter(EmailTemplate.id == UUID(template_id)).first()
-    if not template:
-        raise Exception(f"Email template {template_id} not found")
+    from app.services.email_template_snapshot import (
+        EmailTemplateSnapshot,
+        build_snapshot,
+        parse_snapshot,
+    )
+
+    resolved_template_id = UUID(str(template_id))
+    log_template_id: UUID | None = None
+    legacy_template: EmailTemplate | None = None
+    if template_snapshot_payload is None:
+        # Compatibility for jobs queued before immutable snapshots were added.
+        template = (
+            db.query(EmailTemplate)
+            .filter(
+                EmailTemplate.id == resolved_template_id,
+                EmailTemplate.organization_id == job.organization_id,
+            )
+            .first()
+        )
+        if not template:
+            raise Exception(f"Email template {template_id} not found")
+        legacy_template = template
+
+        template_snapshot = EmailTemplateSnapshot(
+            organization_id=job.organization_id,
+            template_id=template.id,
+            template_version=template.current_version,
+            subject=template.subject,
+            body=template.body,
+            from_email=template.from_email,
+            scope=template.scope,
+            owner_user_id=template.owner_user_id,
+            system_key=template.system_key,
+        )
+        persisted_template_snapshot = build_snapshot(
+            template,
+            effective_from_email=template.from_email,
+            include_scope=True,
+        )
+        log_template_id = template.id
+    else:
+        template_snapshot = parse_snapshot(template_snapshot_payload, require_scope=True)
+        persisted_template_snapshot = dict(template_snapshot_payload)
+        # Preserve the relational link while the template still exists without
+        # consulting its mutable content. The snapshot remains the sole source
+        # for the queued subject, body, sender, scope, and version.
+        log_template_id = (
+            db.query(EmailTemplate.id)
+            .filter(
+                EmailTemplate.id == resolved_template_id,
+                EmailTemplate.organization_id == job.organization_id,
+            )
+            .scalar()
+        )
 
     from app.services import system_email_template_service
 
     if (
-        template.system_key
-        and template.system_key in system_email_template_service.DEFAULT_SYSTEM_TEMPLATES
+        template_snapshot.system_key
+        and template_snapshot.system_key in system_email_template_service.DEFAULT_SYSTEM_TEMPLATES
     ):
         raise Exception(
-            f"Platform system template '{template.system_key}' cannot be used in workflow emails. "
-            "Use the platform/system endpoint instead."
+            f"Platform system template '{template_snapshot.system_key}' cannot be used in workflow "
+            "emails. Use the platform/system endpoint instead."
         )
+
+    if (
+        template_snapshot.organization_id != job.organization_id
+        or template_snapshot.template_id != resolved_template_id
+    ):
+        raise Exception("Workflow email template snapshot does not match job scope")
+    if workflow_scope == "org":
+        if template_snapshot.scope != "org" or template_snapshot.owner_user_id is not None:
+            raise Exception("Workflow email template snapshot does not match workflow scope")
+    elif workflow_scope == "personal":
+        if not workflow_owner_id:
+            raise Exception("Personal workflow missing owner")
+        resolved_workflow_owner_id = UUID(str(workflow_owner_id))
+        if template_snapshot.scope == "personal":
+            if template_snapshot.owner_user_id != resolved_workflow_owner_id:
+                raise Exception("Workflow email template snapshot does not match workflow owner")
+        elif template_snapshot.scope != "org" or template_snapshot.owner_user_id is not None:
+            raise Exception("Workflow email template snapshot does not match workflow scope")
+    else:
+        raise Exception("Workflow email template snapshot does not match workflow scope")
 
     # Resolve subject and body with variables (escaped)
     from app.services import email_composition_service
 
     cleaned_body_template = email_composition_service.strip_legacy_unsubscribe_placeholders(
-        template.body
+        template_snapshot.body
     )
     subject, body = email_service.render_template(
-        template.subject, cleaned_body_template, variables
+        template_snapshot.subject, cleaned_body_template, variables
     )
 
     from app.services import org_service
@@ -288,23 +259,75 @@ async def process_workflow_email(db, job) -> None:
         portal_base_url=portal_base_url,
     )
 
-    # Create email log
-    email_log = EmailLog(
-        organization_id=job.organization_id,
-        job_id=job.id,
-        template_id=template.id,
-        surrogate_id=UUID(surrogate_id) if surrogate_id else None,
-        recipient_email=recipient_email,
-        subject=subject,
-        body=body,
-        status="pending",
-    )
-    db.add(email_log)
-    db.commit()
+    actor_user_id = UUID(workflow_owner_id) if workflow_owner_id else None
+    resolved_surrogate_id = UUID(surrogate_id) if surrogate_id else None
+    idempotency_key = f"workflow-email/{job.id}"
 
-    # Suppression check (global)
-    if email_service.is_email_suppressed(db, job.organization_id, recipient_email):
-        email_service.mark_email_skipped(db, email_log, "suppressed")
+    def upsert_terminal_email_log(
+        *,
+        occurrence_key: str,
+        status: str,
+        error_message: str,
+        purpose: str,
+    ) -> None:
+        from sqlalchemy.dialects.postgresql import insert
+
+        statement = (
+            insert(EmailLog)
+            .values(
+                organization_id=job.organization_id,
+                job_id=job.id,
+                template_id=log_template_id,
+                email_template_snapshot=persisted_template_snapshot,
+                surrogate_id=resolved_surrogate_id,
+                actor_user_id=actor_user_id,
+                recipient_email=recipient_email,
+                subject=subject,
+                body=body,
+                status=status,
+                error=error_message[:500],
+                source_type="workflow_job",
+                source_id=job.id,
+                idempotency_key=occurrence_key,
+                purpose=purpose,
+            )
+            .on_conflict_do_update(
+                index_elements=[EmailLog.organization_id, EmailLog.idempotency_key],
+                index_where=EmailLog.idempotency_key.is_not(None),
+                set_={
+                    "status": status,
+                    "error": error_message[:500],
+                    "subject": subject,
+                    "body": body,
+                    "template_id": log_template_id,
+                    "email_template_snapshot": persisted_template_snapshot,
+                    "surrogate_id": resolved_surrogate_id,
+                    "actor_user_id": actor_user_id,
+                },
+            )
+        )
+        db.execute(statement)
+        db.commit()
+
+    def record_configuration_failure(error_message: str) -> None:
+        upsert_terminal_email_log(
+            occurrence_key=f"workflow-email-config/{job.id}",
+            status="failed",
+            error_message=error_message,
+            purpose="configuration_diagnostic",
+        )
+
+    if workflow_scope == "personal" and email_service.is_email_suppressed(
+        db,
+        job.organization_id,
+        recipient_email,
+    ):
+        upsert_terminal_email_log(
+            occurrence_key=idempotency_key,
+            status="skipped",
+            error_message="suppressed",
+            purpose="transactional",
+        )
         logger.info(
             "Workflow email suppressed for org=%s recipient=%s",
             job.organization_id,
@@ -318,13 +341,10 @@ async def process_workflow_email(db, job) -> None:
             db=db,
             scope=workflow_scope,
             org_id=job.organization_id,
-            owner_user_id=UUID(workflow_owner_id) if workflow_owner_id else None,
+            owner_user_id=actor_user_id,
         )
     except EmailProviderError as e:
-        # Fail explicitly with clear error
-        email_log.status = "failed"
-        email_log.error = str(e)
-        db.commit()
+        record_configuration_failure(str(e))
         raise Exception(str(e))
 
     if workflow_scope == "org" and provider != "resend":
@@ -332,69 +352,150 @@ async def process_workflow_email(db, job) -> None:
             "Org workflows must use Resend. "
             "Set Email provider to Resend in Settings → Integrations → Email Configuration."
         )
-        email_log.status = "failed"
-        email_log.error = error_message
-        db.commit()
+        record_configuration_failure(error_message)
         raise Exception(error_message)
 
-    # Send via resolved provider
-    try:
-        from app.services import unsubscribe_service, org_service
+    if provider == "user_gmail" and template_snapshot_payload is not None:
+        pinned_sender = (template_snapshot.from_email or "").strip()
+        current_sender = str(config.get("email") or "").strip()
+        if (
+            not pinned_sender
+            or not current_sender
+            or pinned_sender.casefold() != current_sender.casefold()
+        ):
+            raise Exception(
+                "Workflow Gmail sender changed after this email was queued. "
+                "Queue a new workflow email before sending."
+            )
 
-        org = org_service.get_org_by_id(db, job.organization_id)
-        portal_base_url = org_service.get_org_portal_base_url(org)
+    if template_snapshot_payload is None and legacy_template is not None:
+        from dataclasses import replace
 
-        headers = unsubscribe_service.build_list_unsubscribe_headers(
-            org_id=job.organization_id,
-            email=recipient_email,
-            base_url=portal_base_url,
+        from app.services.email_template_snapshot import format_from_address
+
+        if provider == "resend":
+            effective_from_email = format_from_address(
+                template_snapshot.from_email or config.get("from_email"),
+                config.get("from_name"),
+            )
+        else:
+            effective_from_email = (config.get("email") or "").strip() or None
+        template_snapshot = replace(
+            template_snapshot,
+            from_email=effective_from_email,
+        )
+        persisted_template_snapshot = build_snapshot(
+            legacy_template,
+            effective_from_email=effective_from_email,
+            include_scope=True,
         )
 
-        if provider == "user_gmail":
-            # Personal workflow: send via user's Gmail
-            result = await gmail_service.send_email(
-                db=db,
-                user_id=str(config["user_id"]),
-                to=recipient_email,
+    from app.services import unsubscribe_service
+
+    headers = unsubscribe_service.build_list_unsubscribe_headers(
+        org_id=job.organization_id,
+        email=recipient_email,
+        base_url=portal_base_url,
+    )
+
+    if provider == "resend":
+        from app.services.email_content import html_to_text
+        from app.services.email_delivery_service import (
+            DeliveryRoute,
+            EmailSource,
+            RenderedEmail,
+            queue_rendered_email,
+        )
+
+        configured_from = (template_snapshot.from_email or config["from_email"]).strip()
+        from_address = configured_from
+        queued = queue_rendered_email(
+            db,
+            organization_id=job.organization_id,
+            route=DeliveryRoute.ORGANIZATION_RESEND,
+            provider_account_id=f"organization:{job.organization_id}",
+            rendered_email=RenderedEmail(
+                recipient_email=recipient_email,
                 subject=subject,
-                body=body,
-                html=True,
+                html=body,
+                text=html_to_text(body),
+                from_email=from_address,
+                reply_to_email=config.get("reply_to"),
                 headers=headers,
+                safe_tags=({"name": "message_kind", "value": "workflow"},),
+            ),
+            idempotency_key=idempotency_key,
+            source=EmailSource(
+                source_type="workflow_job",
+                source_id=job.id,
+                template_id=log_template_id,
+                email_template_snapshot=persisted_template_snapshot,
+                surrogate_id=resolved_surrogate_id,
+                actor_user_id=actor_user_id,
+                job_id=job.id,
+                purpose="transactional",
+            ),
+            commit=False,
+        )
+        db.commit()
+        db.refresh(queued.email_log)
+        if queued.delivery is not None:
+            db.refresh(queued.delivery)
+
+        if queued.delivery is None:
+            logger.info(
+                "Workflow email suppressed for org=%s recipient=%s",
+                job.organization_id,
+                mask_email(recipient_email),
             )
-            if not result.get("success"):
-                raise Exception(f"Gmail send failed: {result.get('error')}")
-            email_log.external_id = result.get("message_id")
+            return
 
-        elif provider == "resend":
-            # Org workflow via Resend
-            # For org workflows, use template from_email if set, otherwise org default
-            from_email = template.from_email or config["from_email"]
+        logger.info(
+            "Workflow email queued via Resend for case=%s recipient=%s email_log=%s",
+            surrogate_id,
+            mask_email(recipient_email),
+            queued.email_log.id,
+        )
+        return
 
-            api_key = resend_settings_service.decrypt_api_key(config["api_key_encrypted"])
-            unsubscribe_url = unsubscribe_service.build_list_unsubscribe_url(
-                org_id=job.organization_id,
-                email=recipient_email,
-                base_url=portal_base_url,
-            )
-            success, error, message_id = await resend_email_service.send_email_direct(
-                api_key=api_key,
-                to_email=recipient_email,
-                subject=subject,
-                body=body,
-                from_email=from_email,
-                from_name=config.get("from_name"),
-                reply_to=config.get("reply_to"),
-                idempotency_key=f"workflow-email/{email_log.id}",
-                unsubscribe_url=unsubscribe_url,
-            )
-            if not success:
-                raise Exception(f"Resend send failed: {error}")
-            email_log.external_id = message_id
+    if provider != "user_gmail":
+        error_message = f"Unknown email provider: {provider}"
+        record_configuration_failure(error_message)
+        raise Exception(error_message)
 
-        else:
-            raise Exception(f"Unknown email provider: {provider}")
+    email_log = EmailLog(
+        organization_id=job.organization_id,
+        job_id=job.id,
+        template_id=log_template_id,
+        email_template_snapshot=persisted_template_snapshot,
+        surrogate_id=resolved_surrogate_id,
+        actor_user_id=actor_user_id,
+        recipient_email=recipient_email,
+        subject=subject,
+        body=body,
+        from_email=template_snapshot.from_email,
+        status="pending",
+        provider="gmail",
+        source_type="workflow_job",
+        source_id=job.id,
+        idempotency_key=idempotency_key,
+    )
+    db.add(email_log)
+    db.commit()
 
-        # Mark as sent
+    try:
+        result = await gmail_service.send_email(
+            db=db,
+            user_id=str(config["user_id"]),
+            to=recipient_email,
+            subject=subject,
+            body=body,
+            html=True,
+            headers=headers,
+        )
+        if not result.get("success"):
+            raise Exception(f"Gmail send failed: {result.get('error')}")
+        email_log.external_id = result.get("message_id")
         email_service.mark_email_sent(db, email_log)
         email_service.log_surrogate_email_send_success(
             db=db,
@@ -402,14 +503,13 @@ async def process_workflow_email(db, job) -> None:
             surrogate_id=email_log.surrogate_id,
             email_log_id=email_log.id,
             subject=email_log.subject,
-            provider="gmail" if provider == "user_gmail" else provider,
-            template_id=email_log.template_id,
-            actor_user_id=UUID(workflow_owner_id) if workflow_owner_id else None,
+            provider="gmail",
+            template_id=template_snapshot.template_id,
+            actor_user_id=actor_user_id,
         )
 
         logger.info(
-            "Workflow email sent via %s for case=%s recipient=%s",
-            provider,
+            "Workflow email sent via Gmail for case=%s recipient=%s",
             surrogate_id,
             mask_email(recipient_email),
         )

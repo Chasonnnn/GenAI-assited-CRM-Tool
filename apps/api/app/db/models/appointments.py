@@ -31,7 +31,7 @@ from app.db.enums import (
 )
 
 if TYPE_CHECKING:
-    from app.db.models import IntendedParent, Organization, Surrogate, User
+    from app.db.models import EmailLog, IntendedParent, Organization, Surrogate, User
 
 
 class AppointmentType(Base):
@@ -391,6 +391,15 @@ class AppointmentEmailLog(Base):
 
     __tablename__ = "appointment_email_logs"
     __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "occurrence_key",
+            name="uq_appointment_email_logs_occurrence",
+        ),
+        UniqueConstraint(
+            "email_log_id",
+            name="uq_appointment_email_logs_email_log",
+        ),
         Index("idx_appointment_email_logs_appt", "appointment_id"),
         Index("idx_appointment_email_logs_org", "organization_id"),
     )
@@ -413,11 +422,17 @@ class AppointmentEmailLog(Base):
     email_type: Mapped[str] = mapped_column(String(30), nullable=False)
     recipient_email: Mapped[str] = mapped_column(CITEXT, nullable=False)
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    occurrence_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    email_log_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("email_logs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     # Status
     status: Mapped[str] = mapped_column(
         String(20), server_default=text("'pending'"), nullable=False
-    )  # pending, sent, failed
+    )  # pending, sent, failed, skipped
     sent_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -429,6 +444,7 @@ class AppointmentEmailLog(Base):
     # Relationships
     organization: Mapped["Organization"] = relationship()
     appointment: Mapped["Appointment"] = relationship(back_populates="email_logs")
+    email_log: Mapped["EmailLog | None"] = relationship()
 
 
 # =============================================================================

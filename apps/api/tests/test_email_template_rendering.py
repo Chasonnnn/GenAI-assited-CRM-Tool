@@ -19,11 +19,22 @@ def test_render_template_strips_newlines_from_subject():
     subject, _ = email_service.render_template(
         subject="Hello {{full_name}}",
         body="<p>{{full_name}}</p>",
-        variables={"full_name": "Bob\\r\\nBcc: evil@example.com"},
+        variables={"full_name": "Bob\r\nBcc: evil@example.com"},
     )
 
-    assert "\\n" not in subject
-    assert "\\r" not in subject
+    assert "\n" not in subject
+    assert "\r" not in subject
+    assert subject == "Hello Bob Bcc: evil@example.com"
+
+
+def test_render_template_preserves_ordinary_r_and_n_characters_in_subject_values():
+    subject, _ = email_service.render_template(
+        subject="Hello {{full_name}}",
+        body="<p>{{full_name}}</p>",
+        variables={"full_name": "Avery Anderson"},
+    )
+
+    assert subject == "Hello Avery Anderson"
 
 
 def test_render_template_supports_whitespace_in_tokens():

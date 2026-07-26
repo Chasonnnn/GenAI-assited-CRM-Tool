@@ -101,7 +101,11 @@ async def test_platform_template_studio_missing_resources_return_404(
         (
             "post",
             f"/platform/templates/email/{missing_id}/test",
-            {"to_email": "test@example.com", "org_id": str(test_org.id)},
+            {
+                "to_email": "test@example.com",
+                "org_id": str(test_org.id),
+                "idempotency_key": f"missing-template-test/{uuid.uuid4()}",
+            },
         ),
         ("get", f"/platform/templates/forms/{missing_id}", None),
         ("patch", f"/platform/templates/forms/{missing_id}", {"name": "x"}),

@@ -156,6 +156,11 @@ class Settings(BaseSettings):
     # Intentionally separate from org-level campaign/workflow/direct email provider settings.
     PLATFORM_RESEND_API_KEY: SecretStr = SecretStr("")
     PLATFORM_RESEND_WEBHOOK_SECRET: SecretStr = SecretStr("")
+    # Optional write-only token shared only by routes using the same Resend team.
+    PLATFORM_RESEND_ADMISSION_GROUP_TOKEN: SecretStr = SecretStr("")
+    # Resend's default limit is shared by every API key in a team. Increase this
+    # only after the team's Settings > Usage page confirms a higher allowance.
+    RESEND_PROVIDER_REQUESTS_PER_SECOND: int = Field(default=5, ge=1, le=1_000_000)
     # Optional fallback From header. Recommended: set per-template `from_email` in ops/system templates.
     PLATFORM_EMAIL_FROM: str = ""
 
@@ -202,10 +207,14 @@ class Settings(BaseSettings):
     ZOOM_CLIENT_ID: str = ""
     ZOOM_CLIENT_SECRET: SecretStr = SecretStr("")
     ZOOM_REDIRECT_URI: str = ""
-    ZOOM_WEBHOOK_SECRET: SecretStr = SecretStr("")  # Webhook verification token from Zoom app settings
+    ZOOM_WEBHOOK_SECRET: SecretStr = SecretStr(
+        ""
+    )  # Webhook verification token from Zoom app settings
 
     # Token Encryption (for storing OAuth tokens, AI API keys)
-    FERNET_KEY: SecretStr = SecretStr("")  # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    FERNET_KEY: SecretStr = SecretStr(
+        ""
+    )  # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
     # PII Field Encryption (cases, intended parents, etc.)
     DATA_ENCRYPTION_KEY: SecretStr = SecretStr("")  # Fernet key for PII encryption at rest
@@ -216,7 +225,9 @@ class Settings(BaseSettings):
     # Gmail push notifications (users.watch via Cloud Pub/Sub)
     GMAIL_PUSH_TOPIC: str = ""  # projects/{project}/topics/{topic}
     GMAIL_PUSH_LABEL_IDS: str = ""  # Optional comma-separated Gmail label IDs (e.g. INBOX,SENT)
-    GMAIL_PUSH_WEBHOOK_TOKEN: SecretStr = SecretStr("")  # Optional token query param for /webhooks/google-gmail
+    GMAIL_PUSH_WEBHOOK_TOKEN: SecretStr = SecretStr(
+        ""
+    )  # Optional token query param for /webhooks/google-gmail
     # Google Calendar OAuth (per-user, used for Meet + calendar sync)
     GOOGLE_CALENDAR_REDIRECT_URI: str = ""
     # Google Cloud OAuth (per-user, for Vertex AI setup)
@@ -239,6 +250,7 @@ class Settings(BaseSettings):
     # Rate Limiting (requests per minute)
     RATE_LIMIT_AUTH: int = 5  # Login attempts
     RATE_LIMIT_WEBHOOK: int = 100  # Meta webhooks
+    RATE_LIMIT_RESEND_WEBHOOK: int = 10000
     RATE_LIMIT_API: int = 60  # General API
     RATE_LIMIT_SEARCH: int = 30  # Global search
     RATE_LIMIT_PUBLIC_READ: int = 60  # Public GET endpoints
@@ -278,6 +290,13 @@ class Settings(BaseSettings):
     SLO_AVG_LATENCY_MS: int = 500
 
     def model_post_init(self, __context) -> None:
+        resend_group_token = self.PLATFORM_RESEND_ADMISSION_GROUP_TOKEN.get_secret_value().strip()
+        if resend_group_token and not 32 <= len(resend_group_token) <= 256:
+            raise ValueError(
+                "PLATFORM_RESEND_ADMISSION_GROUP_TOKEN must be between 32 and 256 characters"
+            )
+        self.PLATFORM_RESEND_ADMISSION_GROUP_TOKEN = SecretStr(resend_group_token)
+
         env = self.ENV.lower()
         if env in {"dev", "development", "test"}:
             if not self.JWT_SECRET.get_secret_value():

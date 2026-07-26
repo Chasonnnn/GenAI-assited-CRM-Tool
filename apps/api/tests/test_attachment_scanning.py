@@ -56,12 +56,17 @@ def test_ensure_attachment_scan_job_reclaims_stale_running_job(db, test_org, mon
         run_at=datetime.now(timezone.utc),
         attempts=1,
         max_attempts=3,
+        claim_token=uuid.uuid4(),
+        claimed_at=datetime.now(timezone.utc),
     )
     db.add(stale_job)
     db.flush()
 
     db.query(Job).filter(Job.id == stale_job.id).update(
-        {"run_at": datetime.now(timezone.utc) - timedelta(minutes=20)}
+        {
+            "run_at": datetime.now(timezone.utc) - timedelta(minutes=20),
+            "claimed_at": datetime.now(timezone.utc) - timedelta(minutes=20),
+        }
     )
     db.flush()
 
@@ -92,6 +97,8 @@ def test_ensure_attachment_scan_job_reclaims_stale_running_job(db, test_org, mon
     assert created is True
     assert len(jobs) == 1
     assert stale_job.status == JobStatus.PENDING.value
+    assert stale_job.claim_token is None
+    assert stale_job.claimed_at is None
     assert stale_job.payload.get("attachment_id") == str(attachment_id)
     assert stale_job.last_error is not None
 
@@ -358,12 +365,17 @@ def test_ensure_form_submission_file_scan_job_reclaims_stale_running_job(db, tes
         run_at=datetime.now(timezone.utc),
         attempts=1,
         max_attempts=3,
+        claim_token=uuid.uuid4(),
+        claimed_at=datetime.now(timezone.utc),
     )
     db.add(stale_job)
     db.flush()
 
     db.query(Job).filter(Job.id == stale_job.id).update(
-        {"run_at": datetime.now(timezone.utc) - timedelta(minutes=20)}
+        {
+            "run_at": datetime.now(timezone.utc) - timedelta(minutes=20),
+            "claimed_at": datetime.now(timezone.utc) - timedelta(minutes=20),
+        }
     )
     db.flush()
 
@@ -389,6 +401,8 @@ def test_ensure_form_submission_file_scan_job_reclaims_stale_running_job(db, tes
     assert created is True
     assert len(jobs) == 1
     assert stale_job.status == JobStatus.PENDING.value
+    assert stale_job.claim_token is None
+    assert stale_job.claimed_at is None
     assert stale_job.payload.get("submission_file_id") == str(submission_file_id)
     assert stale_job.last_error is not None
 

@@ -1,0 +1,1396 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Surrogacy Force — Template Studio before / proposed concept</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --background: #fafafa;
+      --foreground: #2b2b2b;
+      --card: #ffffff;
+      --muted: #f5f5f5;
+      --muted-foreground: #6b6b6b;
+      --border: #e5e5e5;
+      --primary: #e444a4;
+      --primary-deep: #9b1cca;
+      --primary-soft: #fdf0f8;
+      --success: #16794d;
+      --success-soft: #ecf8f1;
+      --warning: #9a5b00;
+      --warning-soft: #fff7e8;
+      --danger: #b42318;
+      --radius: 8px;
+      --shadow: 0 1px 2px rgb(0 0 0 / 5%), 0 8px 28px rgb(43 43 43 / 8%);
+      font-family: "Noto Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--foreground);
+      background:
+        radial-gradient(circle at 90% 2%, rgb(228 68 164 / 8%), transparent 24rem),
+        var(--background);
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    .page {
+      max-width: 1760px;
+      margin: 0 auto;
+      padding: 30px 32px 104px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--primary-deep);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      max-width: 920px;
+      margin-bottom: 10px;
+      font-size: 30px;
+      line-height: 1.2;
+      letter-spacing: -.025em;
+    }
+
+    .lede {
+      max-width: 1040px;
+      margin-bottom: 24px;
+      color: var(--muted-foreground);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .concept-note {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 20px;
+      padding: 12px 14px;
+      border: 1px solid #edc2dc;
+      border-radius: var(--radius);
+      background: #fff8fc;
+      font-size: 13px;
+    }
+
+    .concept-note strong {
+      color: #83216a;
+    }
+
+    .journey-note {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: 14px;
+      margin: -6px 0 20px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      font-size: 13px;
+    }
+
+    .journey-note strong {
+      white-space: nowrap;
+    }
+
+    .journey-steps {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 7px;
+      color: var(--muted-foreground);
+    }
+
+    .journey-step {
+      padding: 5px 8px;
+      border-radius: 999px;
+      color: var(--foreground);
+      background: var(--muted);
+      font-weight: 650;
+    }
+
+    .journey-arrow {
+      color: #a1a1aa;
+    }
+
+    .comparison-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    .segmented {
+      display: inline-flex;
+      gap: 3px;
+      padding: 3px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--card);
+    }
+
+    .segmented button,
+    .variant-switcher button {
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .segmented button {
+      padding: 8px 12px;
+      color: var(--muted-foreground);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .segmented button[aria-pressed="true"] {
+      color: var(--foreground);
+      background: var(--muted);
+      box-shadow: inset 0 0 0 1px #ececec;
+    }
+
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      color: var(--muted-foreground);
+      font-size: 12px;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend i {
+      width: 8px;
+      height: 8px;
+      border-radius: 99px;
+      background: #9b9b9b;
+    }
+
+    .legend .proposed-dot {
+      background: var(--primary);
+    }
+
+    .compare-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+    }
+
+    .compare-panel {
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--card);
+      box-shadow: var(--shadow);
+    }
+
+    .panel-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 46px;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--border);
+      background: #fff;
+    }
+
+    .panel-heading h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 3px 8px;
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      color: var(--muted-foreground);
+      background: var(--card);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .tag.proposed {
+      border-color: #edc2dc;
+      color: #83216a;
+      background: var(--primary-soft);
+    }
+
+    .viewport {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      overflow: hidden;
+      background: #f8f8f8;
+    }
+
+    .viewport img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top left;
+    }
+
+    .current-caption {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      color: var(--muted-foreground);
+      font-size: 11px;
+    }
+
+    .concept-shell {
+      display: grid;
+      grid-template-columns: 142px 1fr;
+      width: 100%;
+      height: 100%;
+      background: #fafafa;
+      font-size: clamp(7px, .65vw, 11px);
+    }
+
+    .concept-sidebar {
+      padding: 13px 9px;
+      border-right: 1px solid var(--border);
+      background: #fff;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 18px;
+      font-weight: 750;
+    }
+
+    .nav-label {
+      margin: 12px 5px 5px;
+      color: #929292;
+      font-size: .86em;
+    }
+
+    .nav-row {
+      margin: 2px 0;
+      padding: 6px 8px;
+      border-radius: 6px;
+      color: #565656;
+    }
+
+    .nav-row.active {
+      color: #4c1740;
+      background: #f8eaf3;
+      font-weight: 700;
+    }
+
+    .studio-main {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+    }
+
+    .studio-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 46px;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgb(255 255 255 / 94%);
+    }
+
+    .studio-title {
+      min-width: 0;
+    }
+
+    .studio-title h3 {
+      margin: 0 0 2px;
+      font-size: 1.45em;
+      line-height: 1.2;
+    }
+
+    .studio-title p {
+      margin: 0;
+      color: var(--muted-foreground);
+      font-size: .88em;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 26px;
+      padding: 5px 9px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--foreground);
+      background: #fff;
+      font-size: .9em;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .button.primary {
+      border-color: transparent;
+      color: white;
+      background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+    }
+
+    .button.subtle {
+      background: var(--muted);
+    }
+
+    .button.disabled {
+      color: #aaa;
+      background: #f7f7f7;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 20px;
+      padding: 3px 7px;
+      border-radius: 99px;
+      font-size: .84em;
+      font-weight: 700;
+    }
+
+    .status::before {
+      width: 5px;
+      height: 5px;
+      border-radius: 99px;
+      background: currentColor;
+      content: "";
+    }
+
+    .status.draft {
+      color: #7b4b00;
+      background: var(--warning-soft);
+    }
+
+    .status.ready,
+    .status.published {
+      color: var(--success);
+      background: var(--success-soft);
+    }
+
+    .status.blocked {
+      color: var(--danger);
+      background: #fef0ee;
+    }
+
+    .studio-content {
+      min-height: 0;
+      flex: 1;
+      padding: 10px;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: #fff;
+    }
+
+    .card-header {
+      padding: 9px 10px 7px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-header strong {
+      display: block;
+      margin-bottom: 2px;
+      font-size: .98em;
+    }
+
+    .card-header span,
+    .muted-copy {
+      color: var(--muted-foreground);
+    }
+
+    .field {
+      margin-bottom: 8px;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: .82em;
+      font-weight: 700;
+    }
+
+    .fake-input {
+      min-height: 28px;
+      padding: 6px 8px;
+      overflow: hidden;
+      border: 1px solid #dedede;
+      border-radius: 6px;
+      color: #414141;
+      background: #fff;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .fake-editor {
+      min-height: 132px;
+      padding: 9px;
+      border: 1px solid #dedede;
+      border-radius: 6px;
+      background:
+        linear-gradient(#fff, #fff) padding-box,
+        linear-gradient(90deg, #eee 70%, transparent) border-box;
+      line-height: 1.5;
+    }
+
+    .editor-toolbar {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 7px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+      color: #555;
+      font-weight: 700;
+    }
+
+    .token {
+      display: inline-block;
+      padding: 1px 4px;
+      border-radius: 4px;
+      color: #83216a;
+      background: var(--primary-soft);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: .88em;
+    }
+
+    .email-preview {
+      padding: 11px;
+      background: #f7f7f7;
+    }
+
+    .email-paper {
+      min-height: 190px;
+      padding: 18px;
+      border: 1px solid var(--border);
+      background: white;
+      box-shadow: 0 3px 12px rgb(0 0 0 / 6%);
+    }
+
+    .email-paper .email-logo {
+      margin-bottom: 15px;
+      color: #b42d87;
+      font-size: .9em;
+      font-weight: 800;
+    }
+
+    .email-paper h4 {
+      margin: 0 0 9px;
+      font-size: 1.3em;
+    }
+
+    .email-paper p {
+      margin-bottom: 8px;
+      color: #555;
+      line-height: 1.45;
+    }
+
+    .checks {
+      display: grid;
+      gap: 6px;
+      padding: 9px;
+    }
+
+    .check {
+      display: grid;
+      grid-template-columns: 10px 1fr auto;
+      gap: 6px;
+      align-items: start;
+    }
+
+    .check-dot {
+      width: 7px;
+      height: 7px;
+      margin-top: 3px;
+      border-radius: 99px;
+      background: var(--success);
+    }
+
+    .check-dot.warning {
+      background: #d98200;
+    }
+
+    .check strong {
+      font-size: .88em;
+    }
+
+    .check small {
+      display: block;
+      color: var(--muted-foreground);
+      line-height: 1.3;
+    }
+
+    .variant-a {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr) 150px;
+      gap: 8px;
+      height: 100%;
+    }
+
+    .variant-a .compose {
+      padding: 10px;
+    }
+
+    .variant-a .preview-card {
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .variant-a .rail {
+      display: grid;
+      align-content: start;
+      gap: 8px;
+    }
+
+    .rail-section {
+      padding: 8px;
+    }
+
+    .rail-section h4 {
+      margin: 0 0 7px;
+      font-size: .92em;
+    }
+
+    .rail-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 4px;
+      margin: 5px 0;
+      color: var(--muted-foreground);
+      font-size: .82em;
+    }
+
+    .rail-row b {
+      color: var(--foreground);
+      font-weight: 650;
+    }
+
+    .variant-b {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 8px;
+      height: 100%;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      padding: 8px;
+    }
+
+    .step {
+      padding: 7px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted-foreground);
+      background: #fff;
+    }
+
+    .step strong {
+      display: block;
+      margin-bottom: 2px;
+      color: var(--foreground);
+    }
+
+    .step.current {
+      border-color: #e78ac3;
+      background: var(--primary-soft);
+    }
+
+    .variant-b-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 190px;
+      gap: 8px;
+      min-height: 0;
+    }
+
+    .review {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 8px;
+      padding: 9px;
+    }
+
+    .review-summary {
+      padding: 10px;
+    }
+
+    .summary-row {
+      display: grid;
+      grid-template-columns: 82px 1fr;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .summary-row dt {
+      color: var(--muted-foreground);
+    }
+
+    .summary-row dd {
+      margin: 0;
+      font-weight: 650;
+    }
+
+    .publish-gate {
+      padding: 10px;
+    }
+
+    .publish-gate h4 {
+      margin: 0 0 5px;
+    }
+
+    .gate-score {
+      margin: 8px 0;
+      padding: 8px;
+      border-radius: 7px;
+      color: var(--success);
+      background: var(--success-soft);
+      text-align: center;
+      font-weight: 750;
+    }
+
+    .variant-c {
+      display: grid;
+      grid-template-columns: 205px minmax(0, 1fr);
+      gap: 8px;
+      height: 100%;
+    }
+
+    .library-list {
+      overflow: hidden;
+    }
+
+    .library-search {
+      margin: 8px;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted-foreground);
+    }
+
+    .template-row {
+      padding: 8px;
+      border-top: 1px solid var(--border);
+    }
+
+    .template-row.active {
+      border-left: 3px solid var(--primary);
+      background: var(--primary-soft);
+    }
+
+    .template-row strong {
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    .template-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      color: var(--muted-foreground);
+      font-size: .8em;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) 86px;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .workspace-top {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, .82fr);
+      gap: 8px;
+      min-height: 0;
+    }
+
+    .workspace .compose {
+      padding: 9px;
+    }
+
+    .version-strip {
+      display: grid;
+      grid-template-columns: 120px repeat(3, 1fr);
+      gap: 5px;
+      padding: 8px;
+    }
+
+    .version-title {
+      align-self: center;
+    }
+
+    .version {
+      padding: 6px 7px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+    }
+
+    .version.current {
+      border-color: #80c9a4;
+      background: var(--success-soft);
+    }
+
+    .version strong,
+    .version small {
+      display: block;
+    }
+
+    .version small {
+      margin-top: 2px;
+      color: var(--muted-foreground);
+    }
+
+    .outcomes {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .outcome {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgb(255 255 255 / 82%);
+    }
+
+    .outcome .number {
+      display: inline-grid;
+      width: 24px;
+      height: 24px;
+      margin-bottom: 9px;
+      place-items: center;
+      border-radius: 7px;
+      color: white;
+      background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .outcome h3 {
+      margin-bottom: 5px;
+      font-size: 13px;
+    }
+
+    .outcome p {
+      margin: 0;
+      color: var(--muted-foreground);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .variant-switcher {
+      position: fixed;
+      z-index: 20;
+      left: 50%;
+      bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px;
+      border: 1px solid #444;
+      border-radius: 999px;
+      color: white;
+      background: #242424;
+      box-shadow: 0 12px 34px rgb(0 0 0 / 28%);
+      transform: translateX(-50%);
+    }
+
+    .variant-switcher button {
+      min-width: 32px;
+      min-height: 30px;
+      padding: 5px 10px;
+      color: #efefef;
+    }
+
+    .variant-switcher button:hover {
+      background: #3a3a3a;
+    }
+
+    .variant-name {
+      min-width: 218px;
+      padding: 0 8px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    @media (max-width: 1500px) {
+      .page {
+        padding-inline: 20px;
+      }
+
+      .compare-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    @media (max-width: 1000px) {
+      .variant-a {
+        grid-template-columns: minmax(0, 1fr) minmax(0, .88fr);
+      }
+
+      .variant-a .rail {
+        display: none;
+      }
+    }
+
+    @media (max-width: 1100px) {
+      .outcomes {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .concept-shell {
+        grid-template-columns: 124px 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .page {
+        padding: 18px 12px 104px;
+      }
+
+      h1 {
+        font-size: 25px;
+      }
+
+      .concept-note,
+      .comparison-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .outcomes {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .variant-name {
+        min-width: 160px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <p class="eyebrow">Design decision artifact · July 23, 2026</p>
+    <h1>Email Template Studio: current experience and proposed direction</h1>
+    <p class="lede">
+      The current editor already supports visual and HTML composition, reusable variables, previews,
+      test sends, and organization history. The proposed concepts keep that foundation while making
+      publishing safer, versions easier to understand, and Resend an optional delivery sync target—not
+      the source of truth for templates also used by Gmail and platform sends. Existing production
+      templates are preserved in place and become the initial published versions; the Studio adds drafts
+      and version history without changing their current identity or send behavior.
+    </p>
+
+    <div class="concept-note">
+      <span>
+        <strong>Proposed concept—not implemented UI.</strong>
+        The left side is a real local capture; the right side explores three shadcn-aligned Studio structures.
+      </span>
+      <span class="tag proposed">No production data</span>
+    </div>
+
+    <div class="journey-note">
+      <strong>One workflow—not three competing choices</strong>
+      <div class="journey-steps" aria-label="Recommended Template Studio journey">
+        <span class="journey-step">C · Find and manage</span>
+        <span class="journey-arrow">→</span>
+        <span class="journey-step">A · Edit and preview</span>
+        <span class="journey-arrow">→</span>
+        <span class="journey-step">B · Review and publish</span>
+      </div>
+    </div>
+
+    <div class="comparison-toolbar">
+      <div class="segmented" aria-label="Current reference view">
+        <button type="button" data-reference="editor" aria-pressed="true">Editor comparison</button>
+        <button type="button" data-reference="library" aria-pressed="false">Library comparison</button>
+      </div>
+      <div class="legend" aria-label="Comparison legend">
+        <span><i></i> Real current capture</span>
+        <span><i class="proposed-dot"></i> Proposed concept</span>
+      </div>
+    </div>
+
+    <section class="compare-grid" aria-label="Before and proposed comparison">
+      <article class="compare-panel">
+        <div class="panel-heading">
+          <h2>Before · current local UI</h2>
+          <span class="tag">Observed</span>
+        </div>
+        <div class="viewport">
+          <img
+            id="current-capture"
+            src="template-studio-before-editor.png"
+            alt="Current Surrogacy Force create-template dialog"
+          >
+        </div>
+        <div class="current-caption">
+          <span id="current-caption">Direct create/save dialog with visual and HTML editing</span>
+          <span>1280 × 720 capture</span>
+        </div>
+      </article>
+
+      <article class="compare-panel">
+        <div class="panel-heading">
+          <h2 id="proposed-heading">After concept A · live split canvas</h2>
+          <span class="tag proposed">Proposed</span>
+        </div>
+        <div class="viewport">
+          <div class="concept-shell">
+            <aside class="concept-sidebar" aria-label="Concept navigation">
+              <div class="brand">
+                <span>Surrogacy Force</span>
+              </div>
+              <div class="nav-label">Automation</div>
+              <div class="nav-row">Workflows</div>
+              <div class="nav-row">Campaigns</div>
+              <div class="nav-row active">Template Studio</div>
+              <div class="nav-row">Form Builder</div>
+              <div class="nav-label">Operations</div>
+              <div class="nav-row">Email Operations</div>
+            </aside>
+
+            <section class="studio-main">
+              <header class="studio-header">
+                <div class="studio-title">
+                  <h3 id="studio-title">Journey Welcome</h3>
+                  <p id="studio-subtitle">Organization template · Draft saved just now</p>
+                </div>
+                <div class="header-actions">
+                  <span class="status draft">Draft</span>
+                  <span class="button">Send test</span>
+                  <span class="button primary">Review &amp; publish</span>
+                </div>
+              </header>
+
+              <div class="studio-content">
+                <div id="variant-a" class="variant variant-a">
+                  <section class="card compose">
+                    <div class="field">
+                      <label>Template name</label>
+                      <div class="fake-input">Journey Welcome</div>
+                    </div>
+                    <div class="field">
+                      <label>Subject</label>
+                      <div class="fake-input">Welcome to <span class="token">{{org_name}}</span>, <span class="token">{{full_name}}</span></div>
+                    </div>
+                    <div class="field">
+                      <label>Email body</label>
+                      <div class="fake-editor">
+                        <div class="editor-toolbar">Bold&nbsp;&nbsp; Italic&nbsp;&nbsp; Link&nbsp;&nbsp; Variable&nbsp;&nbsp; Logo</div>
+                        <p>Hi <span class="token">{{first_name}}</span>,</p>
+                        <p>Welcome to your journey with <span class="token">{{org_name}}</span>.</p>
+                        <p class="muted-copy">Your organization signature and unsubscribe footer are applied automatically.</p>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="card preview-card">
+                    <div class="card-header">
+                      <strong>Live preview</strong>
+                      <span>Desktop · Example data</span>
+                    </div>
+                    <div class="email-preview">
+                      <div class="email-paper">
+                        <div class="email-logo">Surrogacy Force</div>
+                        <h4>Welcome, Avery</h4>
+                        <p>We’re glad to be part of your journey.</p>
+                        <span class="button primary">View next steps</span>
+                      </div>
+                    </div>
+                  </section>
+
+                  <aside class="rail">
+                    <section class="card rail-section">
+                      <h4>Publish readiness</h4>
+                      <span class="status ready">5 of 5 checks</span>
+                      <div class="rail-row"><span>Variables</span><b>Valid</b></div>
+                      <div class="rail-row"><span>Sender</span><b>Ready</b></div>
+                      <div class="rail-row"><span>Unsubscribe</span><b>Applied</b></div>
+                    </section>
+                    <section class="card rail-section">
+                      <h4>Delivery targets</h4>
+                      <div class="rail-row"><span>Local source</span><b>Current</b></div>
+                      <div class="rail-row"><span>Resend sync</span><b>Optional</b></div>
+                      <div class="rail-row"><span>Gmail sends</span><b>Supported</b></div>
+                    </section>
+                    <section class="card rail-section">
+                      <h4>Version</h4>
+                      <div class="rail-row"><span>Published</span><b>v7</b></div>
+                      <div class="rail-row"><span>Draft</span><b>v8</b></div>
+                      <span class="button subtle">Compare changes</span>
+                    </section>
+                  </aside>
+                </div>
+
+                <div id="variant-b" class="variant variant-b" hidden>
+                  <div class="steps card">
+                    <div class="step">
+                      <strong>1 · Content</strong>
+                      Complete
+                    </div>
+                    <div class="step">
+                      <strong>2 · Variables</strong>
+                      4 mapped
+                    </div>
+                    <div class="step">
+                      <strong>3 · Delivery</strong>
+                      Sender ready
+                    </div>
+                    <div class="step current">
+                      <strong>4 · Review</strong>
+                      Ready to publish
+                    </div>
+                  </div>
+                  <div class="variant-b-body">
+                    <section class="card review">
+                      <div class="email-preview">
+                        <div class="email-paper">
+                          <div class="email-logo">Surrogacy Force</div>
+                          <h4>Welcome, Avery</h4>
+                          <p>We’re glad to be part of your journey.</p>
+                          <span class="button primary">View next steps</span>
+                        </div>
+                      </div>
+                      <dl class="review-summary">
+                        <div class="summary-row">
+                          <dt>Template</dt>
+                          <dd>Journey Welcome</dd>
+                        </div>
+                        <div class="summary-row">
+                          <dt>Subject</dt>
+                          <dd>Welcome to Acme Journey</dd>
+                        </div>
+                        <div class="summary-row">
+                          <dt>Audience</dt>
+                          <dd>Transactional</dd>
+                        </div>
+                        <div class="summary-row">
+                          <dt>Version</dt>
+                          <dd>Draft v8 from published v7</dd>
+                        </div>
+                        <div class="summary-row">
+                          <dt>Changed</dt>
+                          <dd>Subject, body, CTA</dd>
+                        </div>
+                        <span class="button">View version diff</span>
+                      </dl>
+                    </section>
+                    <aside class="card publish-gate">
+                      <h4>Publish gate</h4>
+                      <p class="muted-copy">All required checks passed.</p>
+                      <div class="gate-score">Ready to publish</div>
+                      <div class="checks">
+                        <div class="check">
+                          <span class="check-dot"></span>
+                          <span><strong>Variables resolve</strong><small>No unknown placeholders</small></span>
+                          <span>Pass</span>
+                        </div>
+                        <div class="check">
+                          <span class="check-dot"></span>
+                          <span><strong>Sender ready</strong><small>Domain is verified</small></span>
+                          <span>Pass</span>
+                        </div>
+                        <div class="check">
+                          <span class="check-dot"></span>
+                          <span><strong>Test delivered</strong><small>Latest test succeeded</small></span>
+                          <span>Pass</span>
+                        </div>
+                      </div>
+                      <span class="button primary" style="width:100%">Publish v8</span>
+                    </aside>
+                  </div>
+                </div>
+
+                <div id="variant-c" class="variant variant-c" hidden>
+                  <aside class="card library-list">
+                    <div class="card-header">
+                      <strong>Template library</strong>
+                      <span>12 organization templates</span>
+                    </div>
+                    <div class="library-search">Search templates</div>
+                    <div class="template-row active">
+                      <strong>Journey Welcome</strong>
+                      <div class="template-meta"><span>Draft v8</span><span>Just now</span></div>
+                    </div>
+                    <div class="template-row">
+                      <strong>Appointment reminder</strong>
+                      <div class="template-meta"><span>Published v4</span><span>2d ago</span></div>
+                    </div>
+                    <div class="template-row">
+                      <strong>Document request</strong>
+                      <div class="template-meta"><span>Needs review</span><span>5d ago</span></div>
+                    </div>
+                  </aside>
+                  <section class="workspace">
+                    <div class="workspace-top">
+                      <section class="card compose">
+                        <div class="field">
+                          <label>Subject</label>
+                          <div class="fake-input">Welcome to <span class="token">{{org_name}}</span>, <span class="token">{{full_name}}</span></div>
+                        </div>
+                        <div class="fake-editor">
+                          <div class="editor-toolbar">Visual&nbsp;&nbsp; HTML&nbsp;&nbsp; Variable&nbsp;&nbsp; Logo</div>
+                          <p>Hi <span class="token">{{first_name}}</span>,</p>
+                          <p>Welcome to your journey with <span class="token">{{org_name}}</span>.</p>
+                        </div>
+                      </section>
+                      <section class="card">
+                        <div class="card-header">
+                          <strong>Preview &amp; checks</strong>
+                          <span>Example data · Desktop</span>
+                        </div>
+                        <div class="checks">
+                          <div class="check">
+                            <span class="check-dot"></span>
+                            <span><strong>Content</strong><small>Subject and body complete</small></span>
+                            <span>Ready</span>
+                          </div>
+                          <div class="check">
+                            <span class="check-dot"></span>
+                            <span><strong>Required variables</strong><small>4 of 4 mapped</small></span>
+                            <span>Ready</span>
+                          </div>
+                          <div class="check">
+                            <span class="check-dot warning"></span>
+                            <span><strong>Resend sync</strong><small>Optional provider copy is v7</small></span>
+                            <span>Review</span>
+                          </div>
+                        </div>
+                        <div class="email-preview">
+                          <div class="email-paper" style="min-height:105px;padding:12px">
+                            <div class="email-logo">Surrogacy Force</div>
+                            <h4>Welcome, Avery</h4>
+                            <p>We’re glad to be part of your journey.</p>
+                          </div>
+                        </div>
+                      </section>
+                    </div>
+                    <section class="card version-strip">
+                      <div class="version-title">
+                        <strong>Version timeline</strong>
+                        <div class="muted-copy">Compare or restore</div>
+                      </div>
+                      <div class="version current">
+                        <strong>Draft v8</strong>
+                        <small>3 changes · just now</small>
+                      </div>
+                      <div class="version">
+                        <strong>Published v7</strong>
+                        <small>Published Jul 18</small>
+                      </div>
+                      <div class="version">
+                        <strong>v6</strong>
+                        <small>Published Jul 10</small>
+                      </div>
+                    </section>
+                  </section>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+        <div class="current-caption">
+          <span id="concept-caption">Editor, preview, readiness, and versions visible together</span>
+          <span>Same 16:9 product frame</span>
+        </div>
+      </article>
+    </section>
+
+    <section class="outcomes" aria-label="Expected product outcomes">
+      <article class="outcome">
+        <span class="number">1</span>
+        <h3>Safer changes</h3>
+        <p>Drafts can be saved and tested without changing the version active in workflows.</p>
+      </article>
+      <article class="outcome">
+        <span class="number">2</span>
+        <h3>Fewer delivery surprises</h3>
+        <p>Sender, variable, unsubscribe, and latest test status become visible publish gates.</p>
+      </article>
+      <article class="outcome">
+        <span class="number">3</span>
+        <h3>Fast recovery</h3>
+        <p>Version diffs and one-step restore make template releases understandable and reversible.</p>
+      </article>
+      <article class="outcome">
+        <span class="number">4</span>
+        <h3>Provider flexibility</h3>
+        <p>Surrogacy Force remains the source of truth; Resend sync is optional and observable.</p>
+      </article>
+    </section>
+  </main>
+
+  <nav class="variant-switcher" aria-label="Proposed layout variants">
+    <button type="button" id="previous-variant" aria-label="Previous concept">Previous</button>
+    <div class="variant-name" id="variant-name">A — Live split canvas</div>
+    <button type="button" id="next-variant" aria-label="Next concept">Next</button>
+  </nav>
+
+  <script>
+    const variants = [
+      {
+        key: "A",
+        name: "Live split canvas",
+        heading: "After concept A · live split canvas",
+        caption: "Editor, preview, readiness, and versions visible together",
+        title: "Journey Welcome",
+        subtitle: "Organization template · Draft saved just now",
+      },
+      {
+        key: "B",
+        name: "Guided publish workflow",
+        heading: "After concept B · guided publish workflow",
+        caption: "A deliberate review path for teams that want stronger release gates",
+        title: "Review & publish",
+        subtitle: "Journey Welcome · Draft v8",
+      },
+      {
+        key: "C",
+        name: "Library workspace",
+        heading: "After concept C · library workspace",
+        caption: "High-density template operations with editor and version context in place",
+        title: "Template Studio",
+        subtitle: "Organization library · 1 draft needs review",
+      },
+    ];
+
+    const params = new URLSearchParams(window.location.search);
+    const requested = (params.get("variant") || "A").toUpperCase();
+    let variantIndex = Math.max(0, variants.findIndex((item) => item.key === requested));
+
+    function renderVariant(nextIndex) {
+      variantIndex = (nextIndex + variants.length) % variants.length;
+      const variant = variants[variantIndex];
+      document.querySelectorAll(".variant").forEach((element) => {
+        element.hidden = element.id !== `variant-${variant.key.toLowerCase()}`;
+      });
+      document.getElementById("variant-name").textContent = `${variant.key} — ${variant.name}`;
+      document.getElementById("proposed-heading").textContent = variant.heading;
+      document.getElementById("concept-caption").textContent = variant.caption;
+      document.getElementById("studio-title").textContent = variant.title;
+      document.getElementById("studio-subtitle").textContent = variant.subtitle;
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.set("variant", variant.key);
+      window.history.replaceState({}, "", nextUrl);
+    }
+
+    document.getElementById("previous-variant").addEventListener("click", () => {
+      renderVariant(variantIndex - 1);
+    });
+
+    document.getElementById("next-variant").addEventListener("click", () => {
+      renderVariant(variantIndex + 1);
+    });
+
+    document.addEventListener("keydown", (event) => {
+      const target = event.target;
+      if (target.matches("input, textarea, [contenteditable='true']")) return;
+      if (event.key === "ArrowLeft") renderVariant(variantIndex - 1);
+      if (event.key === "ArrowRight") renderVariant(variantIndex + 1);
+    });
+
+    const references = {
+      editor: {
+        src: "template-studio-before-editor.png",
+        alt: "Current Surrogacy Force create-template dialog",
+        caption: "Direct create/save dialog with visual and HTML editing",
+      },
+      library: {
+        src: "template-studio-before-library.png",
+        alt: "Current Surrogacy Force email-template library",
+        caption: "Tabbed library with personal, organization, platform, and signature scopes",
+      },
+    };
+
+    document.querySelectorAll("[data-reference]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const reference = references[button.dataset.reference];
+        const capture = document.getElementById("current-capture");
+        capture.src = reference.src;
+        capture.alt = reference.alt;
+        document.getElementById("current-caption").textContent = reference.caption;
+        document.querySelectorAll("[data-reference]").forEach((candidate) => {
+          candidate.setAttribute("aria-pressed", String(candidate === button));
+        });
+      });
+    });
+
+    renderVariant(variantIndex);
+  </script>
+</body>
+</html>

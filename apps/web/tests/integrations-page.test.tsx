@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, within, act } from '@testing-library/react'
 import IntegrationsPage from '../app/(app)/settings/integrations/page'
+import type { ResendSettings } from '../lib/api/resend'
 
 const mockUseAuth = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
@@ -228,8 +229,9 @@ const resendSettingsData = {
     default_sender_email: null,
     webhook_url: 'https://api.test/webhooks/resend/abc',
     webhook_signing_secret_configured: true,
+    rate_limit_group_configured: true,
     current_version: 1,
-} as const
+} as const satisfies ResendSettings
 
 const pipelineData = [
     {
@@ -607,6 +609,9 @@ describe('IntegrationsPage', () => {
         mockUpdateMetaCrmDatasetSettings.mockReset()
         mockMetaCrmDatasetOutboundTest.mockReset()
         mockRetryMetaCrmDatasetEvent.mockReset()
+        mockUpdateResendSettings.mockReset()
+        mockTestResendKey.mockReset()
+        mockRotateWebhook.mockReset()
     })
 
     it('renders integration health and can refresh', () => {
@@ -616,6 +621,9 @@ describe('IntegrationsPage', () => {
         expect(screen.getAllByText('Meta Lead Ads').length).toBeGreaterThan(0)
         expect(screen.getByText('AI Assistant')).toBeInTheDocument()
         expect(screen.getByText('Email Delivery')).toBeInTheDocument()
+        expect(
+            screen.getByRole('link', { name: /view email operations/i })
+        ).toHaveAttribute('href', '/settings/integrations/email')
         expect(screen.getByText('Zapier')).toBeInTheDocument()
         expect(screen.getByRole('button', { name: /configure zapier/i })).toBeInTheDocument()
 
@@ -631,6 +639,26 @@ describe('IntegrationsPage', () => {
         const dialog = screen.getByRole('dialog')
         expect(within(dialog).getByText('AI Configuration')).toBeInTheDocument()
         expect(within(dialog).getByText('Enabled', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
+    })
+
+    it('keeps the email status clear of the close control on narrow dialogs', () => {
+        render(<IntegrationsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        const title = within(dialog).getByText('Email Configuration')
+        const status = within(dialog).getByText('Configured', {
+            selector: '[data-slot="badge"]',
+        })
+        const header = title.parentElement?.parentElement?.parentElement
+
+        expect(header).toHaveClass('pr-10')
+        expect(status.parentElement).toHaveClass(
+            'flex-col',
+            'items-start',
+            'sm:flex-row'
+        )
     })
 
     it('preserves an in-progress AI key edit when equivalent settings rerender', () => {
@@ -664,6 +692,335 @@ describe('IntegrationsPage', () => {
         fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
 
         expect(within(screen.getByRole('dialog')).getByText('Email Configuration')).toBeInTheDocument()
+    })
+
+    it('requires administrators to explicitly enter the verified domain and sender', () => {
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        expect(within(dialog).getByLabelText('Verified domain')).toHaveValue(
+            'surrogacyforce.com'
+        )
+        expect(within(dialog).getByLabelText('From Email')).toHaveValue(
+            'no-reply@surrogacyforce.com'
+        )
+        expect(
+            within(dialog).getByText(/enter the domain exactly as it appears in resend/i)
+        ).toBeInTheDocument()
+    })
+
+    it('shows a write-only shared-team rate-limit group without exposing a stored value', () => {
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        const groupToken = within(dialog).getByLabelText(
+            'Resend team rate-limit group token'
+        )
+
+        expect(groupToken).toHaveAttribute('type', 'password')
+        expect(groupToken).toHaveAttribute('autocomplete', 'off')
+        expect(groupToken).toHaveValue('')
+        expect(
+            within(dialog).getByText('Group configured', {
+                selector: '[data-slot="badge"]',
+            })
+        ).toBeInTheDocument()
+        expect(
+            within(dialog).getByText(/use the same token for every api key in the same resend team/i)
+        ).toBeInTheDocument()
+        expect(
+            within(dialog).getByText(/default limit is 5 requests per second shared (?:by|across) the team/i)
+        ).toBeInTheDocument()
+    })
+
+    it('preserves a configured rate-limit group when its write-only control is untouched', async () => {
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        expect(
+            within(dialog).getByLabelText('Resend team rate-limit group token')
+        ).toHaveValue('')
+
+        await act(async () => {
+            fireEvent.click(
+                within(dialog).getByRole('button', {
+                    name: /save email configuration/i,
+                })
+            )
+        })
+
+        expect(mockUpdateResendSettings).toHaveBeenCalledTimes(1)
+        expect(mockUpdateResendSettings.mock.calls[0]?.[0]).not.toHaveProperty(
+            'rate_limit_group_token'
+        )
+    })
+
+    it('validates and submits a case-sensitive Resend team rate-limit group token', async () => {
+        mockUpdateResendSettings.mockResolvedValue({
+            ...resendSettingsData,
+            rate_limit_group_configured: true,
+        })
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        const groupToken = within(dialog).getByLabelText(
+            'Resend team rate-limit group token'
+        )
+        const saveButton = within(dialog).getByRole('button', {
+            name: /save email configuration/i,
+        })
+
+        fireEvent.change(groupToken, {
+            target: { value: 'CaseSensitiveToken-Exactly-31!!' },
+        })
+
+        expect(
+            within(dialog).getByText(/token must be between 32 and 256 characters/i)
+        ).toBeInTheDocument()
+        expect(saveButton).toBeDisabled()
+
+        const validToken = 'TeamToken-CaseSensitive-ABC12345'
+        fireEvent.change(groupToken, { target: { value: validToken } })
+
+        expect(
+            within(dialog).queryByText(/token must be between 32 and 256 characters/i)
+        ).not.toBeInTheDocument()
+        expect(saveButton).toBeEnabled()
+
+        await act(async () => {
+            fireEvent.click(saveButton)
+        })
+
+        expect(mockUpdateResendSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                rate_limit_group_token: validToken,
+            })
+        )
+        expect(
+            mockUpdateResendSettings.mock.calls[0]?.[0].rate_limit_group_token
+        ).not.toBe(validToken.toLowerCase())
+        expect(groupToken).toHaveValue('')
+        expect(within(dialog).queryByText(validToken)).not.toBeInTheDocument()
+    })
+
+    it('clears a configured rate-limit group only after an explicit clear action', async () => {
+        mockUpdateResendSettings.mockResolvedValue({
+            ...resendSettingsData,
+            rate_limit_group_configured: false,
+        })
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(
+            within(dialog).getByRole('button', { name: /clear rate-limit group/i })
+        )
+
+        expect(
+            within(dialog).getByText(/rate-limit group will be cleared when you save/i)
+        ).toBeInTheDocument()
+
+        await act(async () => {
+            fireEvent.click(
+                within(dialog).getByRole('button', {
+                    name: /save email configuration/i,
+                })
+            )
+        })
+
+        expect(mockUpdateResendSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                rate_limit_group_token: '',
+            })
+        )
+    })
+
+    it('requires the stored Resend credential to be re-tested before saving a changed sender identity', async () => {
+        mockTestResendKey.mockResolvedValue({
+            valid: true,
+            error: null,
+            verified_domains: ['mail.example'],
+            permission_limited: false,
+            warning: null,
+        })
+        mockUpdateResendSettings.mockResolvedValue({
+            ...resendSettingsData,
+            verified_domain: 'mail.example',
+            from_email: 'updates@mail.example',
+        })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        fireEvent.change(within(dialog).getByLabelText('Verified domain'), {
+            target: { value: 'mail.example' },
+        })
+        fireEvent.change(within(dialog).getByLabelText('From Email'), {
+            target: { value: 'updates@mail.example' },
+        })
+
+        const saveButton = within(dialog).getByRole('button', {
+            name: /save email configuration/i,
+        })
+        expect(saveButton).toBeDisabled()
+        expect(
+            within(dialog).getByText(/these sender changes are not verified/i)
+        ).toBeInTheDocument()
+        expect(within(dialog).getByLabelText('Verified domain')).toHaveAttribute(
+            'aria-invalid',
+            'true'
+        )
+        expect(
+            within(dialog).queryByText(/api key accepted/i)
+        ).not.toBeInTheDocument()
+        expect(mockUpdateResendSettings).not.toHaveBeenCalled()
+
+        fireEvent.click(within(dialog).getByRole('button', { name: /change key/i }))
+        fireEvent.change(within(dialog).getByLabelText('API Key'), {
+            target: { value: 're_stored_credential' },
+        })
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Test' }))
+        })
+
+        expect(mockTestResendKey).toHaveBeenCalledWith('re_stored_credential')
+        expect(
+            within(dialog).queryByText(/these sender changes are not verified/i)
+        ).not.toBeInTheDocument()
+        expect(within(dialog).getByText(/api key accepted/i)).toBeInTheDocument()
+        expect(within(dialog).getByLabelText('Verified domain')).not.toHaveAttribute(
+            'aria-invalid',
+            'true'
+        )
+        expect(saveButton).toBeEnabled()
+
+        await act(async () => {
+            fireEvent.click(saveButton)
+        })
+
+        expect(mockUpdateResendSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                api_key: 're_stored_credential',
+                verified_domain: 'mail.example',
+                from_email: 'updates@mail.example',
+            })
+        )
+    })
+
+    it('does not auto-select a domain or synthesize a sender after a full-access key test', async () => {
+        mockUseResendSettingsQuery.mockImplementation(() => ({
+            data: {
+                ...resendSettingsData,
+                api_key_masked: null,
+                from_email: null,
+                verified_domain: null,
+            },
+            isLoading: false,
+        }))
+        mockTestResendKey.mockResolvedValue({
+            valid: true,
+            error: null,
+            verified_domains: ['first.example', 'second.example'],
+            permission_limited: false,
+            warning: null,
+        })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        fireEvent.change(within(dialog).getByLabelText('API Key'), {
+            target: { value: 're_full_access' },
+        })
+        expect(
+            within(dialog).getByRole('button', {
+                name: /save email configuration/i,
+            })
+        ).toBeDisabled()
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Test' }))
+        })
+
+        expect(within(dialog).getByLabelText('Verified domain')).toHaveValue('')
+        expect(within(dialog).getByLabelText('From Email')).toHaveValue('')
+        expect(
+            within(dialog).getByText(/no domain was selected automatically/i)
+        ).toBeInTheDocument()
+        expect(within(dialog).getByText(/first\.example, second\.example/i)).toBeInTheDocument()
+        expect(
+            within(dialog).getByText(/never sends an email/i)
+        ).toBeInTheDocument()
+    })
+
+    it('shows permission-limited key evidence and accepts an explicit domain for saving', async () => {
+        mockUseResendSettingsQuery.mockImplementation(() => ({
+            data: {
+                ...resendSettingsData,
+                api_key_masked: null,
+                from_email: null,
+                verified_domain: null,
+            },
+            isLoading: false,
+        }))
+        mockTestResendKey.mockResolvedValue({
+            valid: true,
+            error: null,
+            verified_domains: [],
+            permission_limited: true,
+            warning:
+                'Resend accepted the key, but it cannot list domains. Enter a domain already verified in Resend.',
+        })
+        mockUpdateResendSettings.mockResolvedValue({
+            ...resendSettingsData,
+            verified_domain: 'explicit.example',
+            from_email: 'sender@explicit.example',
+        })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        fireEvent.change(within(dialog).getByLabelText('API Key'), {
+            target: { value: 're_sending_access' },
+        })
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Test' }))
+        })
+
+        expect(
+            within(dialog).getByText(/cannot list domains/i)
+        ).toBeInTheDocument()
+        expect(
+            within(dialog).getByText(/this app cannot confirm domain verification/i)
+        ).toBeInTheDocument()
+
+        fireEvent.change(within(dialog).getByLabelText('Verified domain'), {
+            target: { value: 'explicit.example' },
+        })
+        fireEvent.change(within(dialog).getByLabelText('From Email'), {
+            target: { value: 'sender@explicit.example' },
+        })
+        await act(async () => {
+            fireEvent.click(
+                within(dialog).getByRole('button', {
+                    name: /save email configuration/i,
+                })
+            )
+        })
+
+        expect(mockUpdateResendSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                email_provider: 'resend',
+                api_key: 're_sending_access',
+                verified_domain: 'explicit.example',
+                from_email: 'sender@explicit.example',
+            })
+        )
     })
 
     it('keeps the Meta dataset configuration usable when query results have fresh identity', () => {

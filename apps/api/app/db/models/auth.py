@@ -440,6 +440,10 @@ class OrgInvite(Base):
 
     __tablename__ = "org_invites"
     __table_args__ = (
+        CheckConstraint(
+            "send_revision >= 0",
+            name="ck_org_invites_send_revision_nonnegative",
+        ),
         Index(
             "uq_pending_invite_email",
             "email",
@@ -468,6 +472,12 @@ class OrgInvite(Base):
 
     # Resend throttling
     resend_count: Mapped[int] = mapped_column(Integer, server_default=text("0"), nullable=False)
+    send_revision: Mapped[int] = mapped_column(
+        Integer,
+        server_default=text("0"),
+        nullable=False,
+        comment="Monotonic email-send occurrence used for provider idempotency",
+    )
     last_resent_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     # Revocation tracking

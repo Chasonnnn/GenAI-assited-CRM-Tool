@@ -214,6 +214,8 @@ async def test_send_invite_email_uses_platform_sender_when_configured(db, test_o
 
     assert result["success"] is True
     assert captured["to_email"] == invite.email
+    assert captured["source_type"] == "org_invite"
+    assert captured["source_id"] == invite.id
 
 
 @pytest.mark.asyncio
@@ -269,14 +271,13 @@ async def test_send_invite_email_uses_template_from_email_when_platform_sender(
 async def test_create_invite_allows_platform_sender_without_gmail(authed_client, monkeypatch):
     """Invites API should allow invite creation when platform sender is configured."""
     from app.core.config import settings
-    from app.services import platform_email_service
 
     monkeypatch.setattr(settings, "PLATFORM_RESEND_API_KEY", "test-resend-key")
-
-    async def fake_send_resend_email(**kwargs):
-        return {"success": True, "message_id": "msg_123"}
-
-    monkeypatch.setattr(platform_email_service, "_send_resend_email", fake_send_resend_email)
+    monkeypatch.setattr(
+        settings,
+        "PLATFORM_EMAIL_FROM",
+        "Invites <invites@surrogacyforce.com>",
+    )
 
     res = await authed_client.post(
         "/settings/invites",
@@ -286,6 +287,41 @@ async def test_create_invite_allows_platform_sender_without_gmail(authed_client,
     data = res.json()
     assert data["email"] == "new-user@example.com"
     assert data["role"] == "case_manager"
+
+
+@pytest.mark.asyncio
+async def test_create_invite_rolls_back_when_email_cannot_be_enqueued(
+    authed_client,
+    db,
+    test_org,
+    monkeypatch,
+):
+    from app.db.models import OrgInvite
+    from app.services import invite_email_service, platform_email_service
+
+    monkeypatch.setattr(platform_email_service, "platform_sender_configured", lambda: True)
+
+    async def fail_enqueue(*_args, **_kwargs):
+        return {"success": False, "error": "Outbox unavailable"}
+
+    monkeypatch.setattr(invite_email_service, "send_invite_email", fail_enqueue)
+    org_id = test_org.id
+
+    response = await authed_client.post(
+        "/settings/invites",
+        json={"email": "atomic-invite@example.com", "role": "case_manager"},
+    )
+
+    assert response.status_code == 503
+    assert (
+        db.query(OrgInvite)
+        .filter(
+            OrgInvite.organization_id == org_id,
+            OrgInvite.email == "atomic-invite@example.com",
+        )
+        .count()
+        == 0
+    )
 
 
 @pytest.mark.asyncio
@@ -408,6 +444,40 @@ async def test_create_invite_reuses_expired_pending_invite(
     db.refresh(existing)
     assert existing.expires_at is not None
     assert existing.expires_at > datetime.now(timezone.utc)
+
+
+def test_reactivating_expired_invite_advances_monotonic_send_revision(
+    db,
+    test_org,
+    test_user,
+):
+    from app.db.enums import Role
+    from app.db.models import OrgInvite
+    from app.services import invite_service
+
+    existing = OrgInvite(
+        organization_id=test_org.id,
+        email="reactivated-revision@example.com",
+        role=Role.CASE_MANAGER.value,
+        invited_by_user_id=test_user.id,
+        expires_at=datetime.now(timezone.utc) - timedelta(hours=2),
+        resend_count=2,
+        send_revision=7,
+    )
+    db.add(existing)
+    db.flush()
+
+    reactivated = invite_service.create_invite(
+        db=db,
+        org_id=test_org.id,
+        email=existing.email,
+        role=Role.ADMIN.value,
+        invited_by_user_id=test_user.id,
+    )
+
+    assert reactivated.id == existing.id
+    assert reactivated.resend_count == 0
+    assert reactivated.send_revision == 8
 
 
 @pytest.mark.asyncio

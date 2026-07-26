@@ -20,6 +20,7 @@ from app.jobs.handlers import (
     meta,
     notifications,
     orgs,
+    resend,
     reminders,
     ticketing,
     webhooks,
@@ -68,6 +69,8 @@ JOB_HANDLERS: Mapping[str, JobHandler] = {
     JobType.EMAIL_OCCURRENCE_STITCH.value: ticketing.process_email_occurrence_stitch,
     JobType.TICKET_APPLY_LINKING.value: ticketing.process_ticket_apply_linking,
     JobType.TICKET_OUTBOUND_SEND.value: ticketing.process_ticket_outbound_send,
+    JobType.RESEND_EVENT_RECONCILE.value: resend.process_resend_event_reconcile,
+    JobType.RESEND_READINESS_CHECK.value: resend.process_resend_readiness_check,
 }
 
 

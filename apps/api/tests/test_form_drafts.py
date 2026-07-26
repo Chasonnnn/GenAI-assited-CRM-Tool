@@ -4,7 +4,15 @@ import pytest
 
 from app.core.encryption import hash_email
 from app.db.enums import Role
-from app.db.models import AutomationWorkflow, Membership, Queue, Surrogate, User
+from app.db.models import (
+    AutomationWorkflow,
+    EmailTemplate,
+    Membership,
+    Queue,
+    ResendSettings,
+    Surrogate,
+    User,
+)
 from app.utils.normalization import normalize_email
 
 
@@ -33,6 +41,8 @@ def _create_surrogate(db, org_id, owner_type, owner_id, stage):
 async def test_org_workflow_send_email_all_admins_runs_for_queue_owned_surrogate(
     db, test_org, default_stage
 ):
+    from app.services import resend_settings_service
+
     admin_user = User(
         id=uuid.uuid4(),
         email=f"admin-{uuid.uuid4().hex[:8]}@test.com",
@@ -67,6 +77,26 @@ async def test_org_workflow_send_email_all_admins_runs_for_queue_owned_surrogate
     )
     db.flush()
 
+    template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=admin_user.id,
+        name="Admin workflow notice",
+        subject="Workflow notice",
+        body="<p>Workflow notice</p>",
+        scope="org",
+        is_active=True,
+    )
+    resend_settings = ResendSettings(
+        organization_id=test_org.id,
+        email_provider="resend",
+        api_key_encrypted=resend_settings_service.encrypt_api_key("re_test_key"),
+        from_email="care@example.test",
+        verified_domain="example.test",
+    )
+    db.add_all([template, resend_settings])
+    db.flush()
+
     queue = Queue(
         id=uuid.uuid4(),
         organization_id=test_org.id,
@@ -94,7 +124,7 @@ async def test_org_workflow_send_email_all_admins_runs_for_queue_owned_surrogate
         actions=[
             {
                 "action_type": "send_email",
-                "template_id": str(uuid.uuid4()),
+                "template_id": str(template.id),
                 "recipients": "all_admins",
             }
         ],

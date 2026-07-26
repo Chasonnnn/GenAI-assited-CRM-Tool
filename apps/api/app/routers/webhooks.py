@@ -162,8 +162,18 @@ async def google_gmail_push_webhook(
 # =============================================================================
 
 
+@router.post("/resend/platform")
+@limiter.limit(f"{settings.RATE_LIMIT_RESEND_WEBHOOK}/minute")
+async def resend_platform_webhook(
+    request: Request,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
+    handler = get_handler("resend_platform")
+    return await handler.handle(request, db)
+
+
 @router.post("/resend/{webhook_id}")
-@limiter.limit(f"{settings.RATE_LIMIT_WEBHOOK}/minute")
+@limiter.limit(f"{settings.RATE_LIMIT_RESEND_WEBHOOK}/minute")
 async def resend_webhook(
     webhook_id: str,
     request: Request,
@@ -171,16 +181,6 @@ async def resend_webhook(
 ) -> object:
     handler = get_handler("resend")
     return await handler.handle(request, db, webhook_id=webhook_id)
-
-
-@router.post("/resend/platform")
-@limiter.limit(f"{settings.RATE_LIMIT_WEBHOOK}/minute")
-async def resend_platform_webhook(
-    request: Request,
-    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-) -> object:
-    handler = get_handler("resend_platform")
-    return await handler.handle(request, db)
 
 
 # =============================================================================

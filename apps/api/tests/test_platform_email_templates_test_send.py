@@ -9,6 +9,18 @@ from app.db.models import Membership, PlatformEmailTemplate, User, UserIntegrati
 from app.services import resend_settings_service
 
 
+def test_platform_template_test_send_contract_requires_idempotency_key():
+    from pydantic import ValidationError
+
+    from app.schemas.email import PlatformEmailTemplateTestSendRequest
+
+    with pytest.raises(ValidationError):
+        PlatformEmailTemplateTestSendRequest(
+            org_id=uuid.uuid4(),
+            to_email="test@example.com",
+        )
+
+
 @pytest.mark.asyncio
 async def test_platform_email_template_test_send_respects_org_provider_settings(
     authed_client, db, test_org, test_user, monkeypatch
@@ -99,7 +111,11 @@ async def test_platform_email_template_test_send_respects_org_provider_settings(
 
     res = await authed_client.post(
         f"/platform/templates/email/{template.id}/test",
-        json={"org_id": str(test_org.id), "to_email": "test@example.com"},
+        json={
+            "org_id": str(test_org.id),
+            "to_email": "test@example.com",
+            "idempotency_key": f"platform-template-test/{uuid.uuid4()}",
+        },
     )
     assert res.status_code == 200
     data = res.json()

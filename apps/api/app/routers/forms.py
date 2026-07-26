@@ -74,6 +74,7 @@ from app.schemas.platform_templates import (
 )
 from app.services import (
     audit_service,
+    email_delivery_service,
     email_service,
     form_draft_service,
     form_intake_service,
@@ -944,15 +945,23 @@ def send_form_intake_link(
         org_service.get_org_portal_base_url(org),
         link.slug,
     )
-    result = email_service.send_from_template(
-        db=db,
-        org_id=session.org_id,
-        template_id=template.id,
-        recipient_email=surrogate.email,
-        variables={"form_link": intake_url},
-        surrogate_id=surrogate.id,
-        sender_user_id=session.user_id,
-    )
+    try:
+        result = email_service.send_from_template(
+            db=db,
+            org_id=session.org_id,
+            template_id=template.id,
+            recipient_email=surrogate.email,
+            variables={"form_link": intake_url},
+            surrogate_id=surrogate.id,
+            sender_user_id=session.user_id,
+            idempotency_key=body.idempotency_key,
+            source_type="form_intake_link",
+            source_id=link.id,
+        )
+    except email_service.EmailProviderConfigurationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except email_delivery_service.EmailDeliveryConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not result:
         raise HTTPException(status_code=404, detail="Email template not found")
 
@@ -961,7 +970,7 @@ def send_form_intake_link(
         intake_link_id=link.id,
         template_id=template.id,
         email_log_id=email_log.id,
-        sent_at=datetime.now(timezone.utc),
+        queued_at=email_log.created_at or datetime.now(timezone.utc),
         intake_url=intake_url,
     )
 

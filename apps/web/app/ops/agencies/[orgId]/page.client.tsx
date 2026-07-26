@@ -10,7 +10,6 @@ import {
     listMembers,
     listInvites,
     getAdminActionLogs,
-    getPlatformEmailStatus,
     listAlerts,
     acknowledgeAlert,
     resolveAlert,
@@ -29,8 +28,12 @@ import {
     type OrgMember,
     type OrgInvite,
     type AdminActionLog,
-    type PlatformEmailStatus,
 } from '@/lib/api/platform';
+import {
+    usePlatformEmailReadiness,
+    usePlatformEmailStatus,
+    useRequestPlatformEmailReadinessCheck,
+} from '@/lib/hooks/use-platform-email';
 import { getErrorMessage } from '@/lib/error-utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -177,23 +180,15 @@ function useAgencyDetailController() {
 
     const openAlertCount = orgAlerts.filter((alert) => alert.status === 'open').length;
 
-    const platformEmailQuery = useQuery({
-        queryKey: ['platform', 'email-status'],
-        queryFn: async () => {
-            try {
-                return await getPlatformEmailStatus();
-            } catch (error) {
-                console.error('Failed to fetch platform email status:', error);
-                toast.error('Failed to load platform email sender status');
-                throw error;
-            }
-        },
-        enabled: activeTab === 'invites',
-        retry: false,
-        staleTime: 30_000,
+    const platformEmailEnabled = activeTab === 'invites';
+    const platformEmailStatusQuery = usePlatformEmailStatus({
+        enabled: platformEmailEnabled,
     });
-    const platformEmailStatus: PlatformEmailStatus | null = platformEmailQuery.data ?? null;
-    const platformEmailLoading = platformEmailQuery.isFetching;
+    const platformEmailReadinessQuery = usePlatformEmailReadiness({
+        enabled: platformEmailEnabled,
+    });
+    const platformEmailReadinessCheck = useRequestPlatformEmailReadinessCheck();
+    const platformEmailReadiness = platformEmailReadinessQuery.data ?? null;
 
     const handleDeleteOrganization = async () => {
         if (!org) return;
@@ -493,8 +488,14 @@ function useAgencyDetailController() {
         openAlertCount,
         org,
         orgAlerts,
-        platformEmailLoading,
-        platformEmailStatus,
+        platformEmailCheckError: platformEmailReadinessCheck.isError,
+        platformEmailCheckPending: platformEmailReadinessCheck.isPending,
+        platformEmailReadiness,
+        platformEmailReadinessError: platformEmailReadinessQuery.isError,
+        platformEmailReadinessLoading: platformEmailReadinessQuery.isFetching,
+        platformEmailStatus: platformEmailStatusQuery.data ?? null,
+        platformEmailStatusLoading: platformEmailStatusQuery.isFetching,
+        requestPlatformEmailReadinessCheck: platformEmailReadinessCheck.mutate,
         purgeDate,
         purgeSubmitting,
         restoreSubmitting,
@@ -661,8 +662,14 @@ function AgencyDetailTabContent({ controller }: { controller: ReadyAgencyDetailC
         notesSaving,
         org,
         orgAlerts,
-        platformEmailLoading,
+        platformEmailCheckError,
+        platformEmailCheckPending,
+        platformEmailReadiness,
+        platformEmailReadinessError,
+        platformEmailReadinessLoading,
         platformEmailStatus,
+        platformEmailStatusLoading,
+        requestPlatformEmailReadinessCheck,
         purgeDate,
         purgeSubmitting,
         restoreSubmitting,
@@ -710,7 +717,15 @@ function AgencyDetailTabContent({ controller }: { controller: ReadyAgencyDetailC
                         inviteForm={inviteForm}
                         inviteError={inviteError}
                         platformEmailStatus={platformEmailStatus}
-                        platformEmailLoading={platformEmailLoading}
+                        platformEmailStatusLoading={platformEmailStatusLoading}
+                        platformEmailReadiness={platformEmailReadiness}
+                        platformEmailReadinessLoading={platformEmailReadinessLoading}
+                        platformEmailReadinessError={platformEmailReadinessError}
+                        platformEmailCheckPending={platformEmailCheckPending}
+                        platformEmailCheckError={platformEmailCheckError}
+                        onCheckPlatformEmailReadiness={() =>
+                            requestPlatformEmailReadinessCheck()
+                        }
                         onInviteOpenChange={setInviteOpen}
                         onInviteEmailChange={(email) =>
                             setInviteForm((prev) => ({ ...prev, email }))

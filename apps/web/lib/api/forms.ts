@@ -286,7 +286,7 @@ export interface FormIntakeLinkSendResponse {
     intake_link_id: string
     template_id: string
     email_log_id: string
-    sent_at: string
+    queued_at: string
     intake_url: string
 }
 
@@ -629,11 +629,13 @@ export function sendFormIntakeLink(
     formId: string,
     linkId: string,
     surrogateId: string,
+    idempotencyKey: string,
     templateId?: string | null,
 ): Promise<FormIntakeLinkSendResponse> {
     return api.post<FormIntakeLinkSendResponse>(`/forms/${formId}/intake-links/${linkId}/send`, {
         surrogate_id: surrogateId,
         template_id: templateId ?? null,
+        idempotency_key: idempotencyKey,
     })
 }
 

@@ -23,6 +23,7 @@ from app.db.models import (
     Appointment,
     Attachment,
     AutomationWorkflow,
+    EmailTemplate,
     EntityNote,
     FormSubmission,
     IntakeLead,
@@ -443,6 +444,73 @@ class DefaultWorkflowDomainAdapter:
         if not recipient_emails:
             return {"success": False, "error": "No recipient emails resolved"}
 
+        try:
+            resolved_template_id = UUID(str(template_id))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Email template not found") from exc
+        template = (
+            db.query(EmailTemplate)
+            .filter(
+                EmailTemplate.id == resolved_template_id,
+                EmailTemplate.organization_id == entity.organization_id,
+            )
+            .with_for_update()
+            .first()
+        )
+        if template is None or not template.is_active:
+            raise ValueError("Email template not found")
+        from app.services import system_email_template_service
+
+        if (
+            template.system_key
+            and template.system_key in system_email_template_service.DEFAULT_SYSTEM_TEMPLATES
+        ):
+            raise ValueError(
+                f"Platform system template '{template.system_key}' cannot be used in workflow "
+                "emails. Use the platform/system endpoint instead."
+            )
+        if workflow_scope == "org" and template.scope != "org":
+            raise ValueError("Email template not found")
+        if (
+            workflow_scope == "personal"
+            and template.scope == "personal"
+            and template.owner_user_id != workflow_owner_id
+        ):
+            raise ValueError("Email template not found")
+
+        from app.services.email_template_snapshot import (
+            build_snapshot,
+            format_from_address,
+        )
+        from app.services.workflow_email_provider import (
+            EmailProviderError,
+            resolve_workflow_email_provider,
+        )
+
+        try:
+            provider, provider_config = resolve_workflow_email_provider(
+                db=db,
+                scope=workflow_scope,
+                org_id=entity.organization_id,
+                owner_user_id=workflow_owner_id,
+            )
+        except EmailProviderError as exc:
+            raise ValueError(str(exc)) from exc
+        if workflow_scope == "org" and provider != "resend":
+            raise ValueError("Org workflows must use Resend")
+        if provider == "resend":
+            effective_from_email = format_from_address(
+                (template.from_email or "").strip() or provider_config.get("from_email"),
+                provider_config.get("from_name"),
+            )
+        else:
+            effective_from_email = (provider_config.get("email") or "").strip() or None
+        template_snapshot = build_snapshot(
+            template,
+            effective_from_email=effective_from_email,
+            include_scope=True,
+        )
+
         # Resolve variables
         variables = self._resolve_email_variables(db, entity)
 
@@ -453,7 +521,8 @@ class DefaultWorkflowDomainAdapter:
                 org_id=entity.organization_id,
                 job_type=JobType.WORKFLOW_EMAIL,
                 payload={
-                    "template_id": str(template_id),
+                    "template_id": str(resolved_template_id),
+                    "email_template_snapshot": template_snapshot,
                     "recipient_email": email,
                     "variables": variables,
                     "surrogate_id": str(entity.id),

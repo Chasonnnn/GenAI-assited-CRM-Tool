@@ -647,6 +647,31 @@ def test_default_adapter_execute_action_guardrails_and_error_path(monkeypatch):
 def test_default_adapter_action_helpers(monkeypatch):
     adapter = DefaultWorkflowDomainAdapter()
     org_id = uuid4()
+    template_id = uuid4()
+    template = SimpleNamespace(
+        id=template_id,
+        organization_id=org_id,
+        subject="Hello {{full_name}}",
+        body="<p>Hello</p>",
+        from_email="workflow@example.com",
+        current_version=1,
+        scope="org",
+        owner_user_id=None,
+        system_key=None,
+        is_active=True,
+    )
+
+    class _TemplateQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def with_for_update(self):
+            return self
+
+        def first(self):
+            return template
+
+    fake_db = SimpleNamespace(query=lambda *_args, **_kwargs: _TemplateQuery())
 
     queued: list[dict] = []
     monkeypatch.setattr(
@@ -658,6 +683,16 @@ def test_default_adapter_action_helpers(monkeypatch):
         "_resolve_email_variables",
         lambda _db, _surrogate: {"full_name": "Case Owner"},
     )
+    monkeypatch.setattr(
+        "app.services.workflow_email_provider.resolve_workflow_email_provider",
+        lambda **_kwargs: (
+            "resend",
+            {
+                "from_email": "workflow@example.com",
+                "from_name": "Workflow Team",
+            },
+        ),
+    )
 
     surrogate = SimpleNamespace(
         id=uuid4(),
@@ -668,8 +703,12 @@ def test_default_adapter_action_helpers(monkeypatch):
         created_by_user_id=None,
     )
     send_result = adapter._action_send_email(
-        db=SimpleNamespace(),
-        action={"action_type": "send_email", "template_id": uuid4(), "recipients": "surrogate"},
+        db=fake_db,
+        action={
+            "action_type": "send_email",
+            "template_id": template_id,
+            "recipients": "surrogate",
+        },
         entity=surrogate,
         event_id=uuid4(),
     )

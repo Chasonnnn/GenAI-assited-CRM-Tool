@@ -75,6 +75,8 @@ If you didn't expect this invitation, you can safely ignore this email.
 async def send_invite_email(
     db: Session,
     invite: OrgInvite,
+    *,
+    commit: bool = True,
 ) -> dict:
     """
     Send invitation email to invitee.
@@ -113,7 +115,7 @@ async def send_invite_email(
             inviter_name = inviter.display_name
 
     text_body = _build_invite_text(org_name, invite.role, invite_url, expires_at, inviter_name)
-    idempotency_key = f"invite:{invite.id}:v{invite.resend_count}"
+    idempotency_key = f"invite:{invite.id}:v{invite.send_revision}"
 
     if not platform_email_service.platform_sender_configured():
         return {"success": False, "error": "Platform email sender is not configured"}
@@ -193,6 +195,9 @@ async def send_invite_email(
         template_id=None,
         surrogate_id=None,
         idempotency_key=idempotency_key,
+        source_type="org_invite",
+        source_id=invite.id,
+        commit=commit,
     )
     integration_key = "resend_platform"
 

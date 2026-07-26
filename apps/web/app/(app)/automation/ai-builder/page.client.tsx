@@ -1,6 +1,7 @@
 "use client"
 
 import { useReducer, useState } from "react"
+import type { Route } from "next"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -32,7 +33,8 @@ import {
 } from "@/lib/api/ai"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
-import { useCreateEmailTemplate, useEmailTemplateVariables } from "@/lib/hooks/use-email-templates"
+import { useCreateEmailTemplateDraft } from "@/lib/hooks/use-email-template-drafts"
+import { useEmailTemplateVariables } from "@/lib/hooks/use-email-templates"
 import type { TemplateVariableRead } from "@/lib/types/template-variable"
 import Link from "@/components/app-link"
 
@@ -308,7 +310,7 @@ function useAIBuilderController() {
 
     const sanitizedTemplateBody = DOMPurify.sanitize(templateBody)
 
-    const createEmailTemplate = useCreateEmailTemplate()
+    const createEmailTemplateDraft = useCreateEmailTemplateDraft()
     const {
         data: templateVariableCatalog = [],
         isLoading: templateVariableCatalogLoading,
@@ -460,14 +462,16 @@ function useAIBuilderController() {
         }
 
         try {
-            await createEmailTemplate.mutateAsync({
+            const draft = await createEmailTemplateDraft.mutateAsync({
                 name: templateName.trim(),
                 subject: templateSubject.trim(),
                 body: templateBody,
                 scope: "personal",
             })
-            toast.success("Template saved to My Email Templates.")
-            push("/automation/email-templates")
+            toast.success("Template saved as a personal Studio draft.")
+            push(
+                `/automation/email-templates/personal/${draft.id}` as Route,
+            )
         } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to save template"
             toast.error(message)
@@ -494,7 +498,7 @@ function useAIBuilderController() {
         status: {
             isGenerating,
             isSavingWorkflow,
-            isSavingTemplate: createEmailTemplate.isPending,
+            isSavingTemplate: createEmailTemplateDraft.isPending,
         },
         workflowState,
         templateState,

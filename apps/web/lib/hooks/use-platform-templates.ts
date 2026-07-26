@@ -339,7 +339,13 @@ export function useDeletePlatformSystemEmailTemplate() {
 
 export function useSendTestPlatformSystemEmailTemplate() {
     return useMutation({
-        mutationFn: ({ systemKey, payload }: { systemKey: string; payload: { to_email: string; org_id: string } }) =>
+        mutationFn: ({
+            systemKey,
+            payload,
+        }: {
+            systemKey: string
+            payload: { to_email: string; org_id: string; idempotency_key: string }
+        }) =>
             sendTestPlatformSystemEmailTemplate(systemKey, payload),
     })
 }

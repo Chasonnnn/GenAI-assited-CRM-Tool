@@ -20,7 +20,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
     PlusIcon,
@@ -765,7 +764,7 @@ export default function AutomationPageClient({
     )
     const [emailTemplateModal, setEmailTemplateModal] = useState(INITIAL_EMAIL_TEMPLATE_MODAL_STATE)
     const [showCreateModal, setShowCreateModal] = useState(initialCreateOpen)
-    const [showHistoryPanel, setShowHistoryPanel] = useState(false)
+    const [showHistoryDialog, setShowHistoryDialog] = useState(false)
     const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null)
     const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null)
 
@@ -1011,7 +1010,7 @@ export default function AutomationPageClient({
 
     const handleViewHistory = (id: string) => {
         setSelectedWorkflowId(id)
-        setShowHistoryPanel(true)
+        setShowHistoryDialog(true)
     }
 
     const handleTest = (id: string) => {
@@ -2549,15 +2548,15 @@ export default function AutomationPageClient({
                 </DialogContent>
             </Dialog>
 
-            {/* Execution History Panel */}
-            <Sheet open={showHistoryPanel} onOpenChange={setShowHistoryPanel}>
-                <SheetContent className="w-[500px] sm:max-w-[500px]">
-                    <SheetHeader>
-                        <SheetTitle>Execution History</SheetTitle>
-                        <SheetDescription>Recent workflow execution logs</SheetDescription>
-                    </SheetHeader>
-                    <ScrollArea className="h-[calc(100vh-8rem)] pr-4">
-                        <div className="mt-6 space-y-4">
+            {/* Execution History Dialog */}
+            <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
+                <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-2xl">
+                    <DialogHeader className="shrink-0 border-b px-6 py-5 pr-14">
+                        <DialogTitle>Execution History</DialogTitle>
+                        <DialogDescription>Recent workflow execution logs</DialogDescription>
+                    </DialogHeader>
+                    <ScrollArea className="h-[min(70dvh,40rem)] min-h-0">
+                        <div className="space-y-4 p-6">
                             {!executions?.items?.length ? (
                                 <p className="text-sm text-muted-foreground">No execution history yet</p>
                             ) : (
@@ -2605,8 +2604,8 @@ export default function AutomationPageClient({
                             )}
                         </div>
                     </ScrollArea>
-                </SheetContent>
-            </Sheet>
+                </DialogContent>
+            </Dialog>
 
             {/* Test Workflow Dialog */}
             <Dialog open={showTestModal} onOpenChange={handleTestDialogOpenChange}>

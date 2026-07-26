@@ -43,8 +43,10 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Ban, Loader2, Mail, Plus, RotateCw } from "lucide-react"
 import type { OrgInvite, PlatformEmailStatus } from "@/lib/api/platform"
+import type { ResendReadinessEnvelope } from "@/lib/types/resend-readiness"
 import Link from "@/components/app-link"
 import { RelativeTime } from "@/components/ui/time-display"
+import { ResendCompactReadinessSummary } from "@/components/email-operations/ResendLiveReadinessCard"
 import {
     INVITE_ROLE_LABELS,
     INVITE_ROLE_OPTIONS,
@@ -61,7 +63,13 @@ type AgencyInvitesTabProps = {
     inviteForm: { email: string; role: InviteRole }
     inviteError: string | null
     platformEmailStatus: PlatformEmailStatus | null
-    platformEmailLoading: boolean
+    platformEmailStatusLoading: boolean
+    platformEmailReadiness: ResendReadinessEnvelope | null
+    platformEmailReadinessLoading: boolean
+    platformEmailReadinessError: boolean
+    platformEmailCheckPending: boolean
+    platformEmailCheckError: boolean
+    onCheckPlatformEmailReadiness: () => void
     onInviteOpenChange: (open: boolean) => void
     onInviteEmailChange: (value: string) => void
     onInviteRoleChange: (value: InviteRole) => void
@@ -86,7 +94,13 @@ export function AgencyInvitesTab({
     inviteForm,
     inviteError,
     platformEmailStatus,
-    platformEmailLoading,
+    platformEmailStatusLoading,
+    platformEmailReadiness,
+    platformEmailReadinessLoading,
+    platformEmailReadinessError,
+    platformEmailCheckPending,
+    platformEmailCheckError,
+    onCheckPlatformEmailReadiness,
     onInviteOpenChange,
     onInviteEmailChange,
     onInviteRoleChange,
@@ -161,31 +175,44 @@ export function AgencyInvitesTab({
                 </Dialog>
             </CardHeader>
             <CardContent>
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-600 dark:border-stone-800 dark:bg-stone-900 dark:text-stone-300">
-                    <div className="flex flex-col gap-1">
-                        <span>
-                            Invites use the platform <span className="font-mono">org_invite</span> system template.
-                        </span>
+                <div className="mb-4 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                        <div className="flex flex-col gap-1">
+                            <span>
+                                Invites use the platform{" "}
+                                <span className="font-mono">org_invite</span>{" "}
+                                system template.
+                            </span>
+                            {platformEmailStatusLoading ? (
+                                <span className="text-xs text-muted-foreground">
+                                    Loading sender status&hellip;
+                                </span>
+                            ) : platformEmailStatus?.configured ? (
+                                <span className="text-xs text-muted-foreground">
+                                    Platform sender configured (Resend)
+                                </span>
+                            ) : (
+                                <span className="text-xs text-yellow-700 dark:text-yellow-400">
+                                    Platform sender not configured; invite emails may
+                                    fail.
+                                </span>
+                            )}
+                        </div>
                         <Link
                             href="/ops/templates?tab=system"
                             className={buttonVariants({ variant: "outline", size: "sm" })}
                         >
                             Open system templates
                         </Link>
-                        {platformEmailLoading ? (
-                            <span className="text-xs text-muted-foreground">
-                                Loading sender status&hellip;
-                            </span>
-                        ) : platformEmailStatus?.configured ? (
-                            <span className="text-xs text-muted-foreground">
-                                Platform sender configured (Resend)
-                            </span>
-                        ) : (
-                            <span className="text-xs text-yellow-700 dark:text-yellow-400">
-                                Platform sender not configured; invite emails may fail.
-                            </span>
-                        )}
                     </div>
+                    <ResendCompactReadinessSummary
+                        envelope={platformEmailReadiness}
+                        isLoading={platformEmailReadinessLoading}
+                        isError={platformEmailReadinessError}
+                        isCheckPending={platformEmailCheckPending}
+                        isCheckError={platformEmailCheckError}
+                        onCheck={onCheckPlatformEmailReadiness}
+                    />
                 </div>
                 {invites.length === 0 ? (
                     <p className="text-center py-8 text-muted-foreground">No invites yet</p>

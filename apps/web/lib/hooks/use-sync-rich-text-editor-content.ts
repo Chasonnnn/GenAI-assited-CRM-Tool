@@ -3,7 +3,10 @@ import { useEffect } from "react"
 type RichTextContentEditor = {
     getHTML: () => string
     commands: {
-        setContent: (content: string) => unknown
+        setContent: (
+            content: string,
+            options?: { emitUpdate?: boolean },
+        ) => unknown
     }
 }
 
@@ -13,6 +16,6 @@ export function useSyncRichTextEditorContent(
 ) {
     useEffect(() => {
         if (!editor || content === editor.getHTML()) return
-        editor.commands.setContent(content)
+        editor.commands.setContent(content, { emitUpdate: false })
     }, [content, editor])
 }
