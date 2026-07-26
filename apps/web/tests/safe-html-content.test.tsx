@@ -45,4 +45,35 @@ describe("safe HTML rendering", () => {
             errorSpy.mockRestore()
         }
     })
+
+    it("drops indentation text nodes from email table structure", async () => {
+        const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined)
+
+        try {
+            render(
+                <TrustedSanitizedHtmlContent
+                    html={`<table>
+                        <tbody>
+                            <tr><td>Email preview</td></tr>
+                        </tbody>
+                    </table>`}
+                />,
+            )
+
+            const table = (await screen.findByText("Email preview")).closest("table")
+            const rowGroup = table?.querySelector("tbody")
+            expect(errorSpy).not.toHaveBeenCalled()
+            expect(
+                [table, rowGroup].some((element) =>
+                    Array.from(element?.childNodes ?? []).some(
+                        (node) =>
+                            node.nodeType === Node.TEXT_NODE &&
+                            !node.textContent?.trim(),
+                    ),
+                ),
+            ).toBe(false)
+        } finally {
+            errorSpy.mockRestore()
+        }
+    })
 })
