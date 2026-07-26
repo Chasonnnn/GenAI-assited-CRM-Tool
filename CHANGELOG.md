@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.53](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.52...surrogacy-crm-platform-v0.91.53) (2026-07-26)
+
+
+### Bug Fixes
+
+* deduplicate scheduled workflow occurrences ([378935e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/378935e8cb902258dd70795056a6148c03c244ab))
+* expose safe workflow fallback controls ([bb03177](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bb03177828ba4c7bc03bc4909b6bef0eebc73bfe))
+* harden scheduled workflow execution ([9b000ca](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9b000cacea696664239b20b154b978a1c3b4651d))
+* isolate time-based workflow execution ([1f1f5a4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1f1f5a40eaa35427b106118828d061872dc3a454))
+* keep automated email workflows available ([348ec49](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/348ec490f5498bff3a71eae75f3c8501b53b5866))
+* keep background worker available ([c15a860](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c15a860baa54941d4b2351e514ea8a64b06e9c48))
+* schedule workflow fallbacks safely ([8653012](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/86530128f26f74259a70ca487c08e8b2d1ed6961))
+* scope workflow task sweeps by organization ([e50ffef](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e50ffefe9b9d9d0ae071af64fae55b42abaa14e8))
+
 ## [0.91.52](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.51...surrogacy-crm-platform-v0.91.52) (2026-07-26)
 
 
