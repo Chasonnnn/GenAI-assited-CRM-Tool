@@ -89,21 +89,18 @@ def test_cloudbuild_resolves_and_deploys_one_digest_image_set() -> None:
     assert '"--image", "$_IMAGE_WORKER"' not in content
 
 
-def test_cloudbuild_leaves_the_new_worker_held_for_operator_resume() -> None:
+def test_cloudbuild_preserves_the_resumed_worker_configuration() -> None:
     content = _read("cloudbuild/api.yaml")
     worker_update = content.index('gcloud run services update "$_WORKER_SERVICE"')
     api_update = content.index('gcloud run services update "$_API_SERVICE"')
     worker_step = content[worker_update:api_update]
 
-    assert "--update-env-vars" in worker_step
-    assert "WORKER_CUTOVER_HOLD=true" in worker_step
-    assert "EMAIL_DELIVERY_DISPATCH_ENABLED=false" in worker_step
-    assert "WORKER_JOB_TYPES=" not in worker_step
-
-    after_worker_deploy = content[worker_update:]
-    assert "WORKER_CUTOVER_HOLD=false" not in after_worker_deploy
-    assert "EMAIL_DELIVERY_DISPATCH_ENABLED=true" not in after_worker_deploy
-    assert "--remove-env-vars" not in after_worker_deploy
+    assert '--image "$${worker_image_ref}"' in worker_step
+    assert "--update-env-vars" not in worker_step
+    assert "--remove-env-vars" not in worker_step
+    assert "WORKER_CUTOVER_HOLD" not in worker_step
+    assert "EMAIL_DELIVERY_DISPATCH_ENABLED" not in worker_step
+    assert "WORKER_JOB_TYPES" not in worker_step
 
 
 def test_release_a_runbook_requires_operator_gates_before_resume() -> None:
