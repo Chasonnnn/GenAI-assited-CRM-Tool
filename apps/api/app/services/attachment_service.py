@@ -574,9 +574,11 @@ def ensure_attachment_scan_job(
     Returns:
         True when a new job is enqueued; False when a matching job already exists.
     """
+    from app.services import scan_dispatch_service
+
     attachment_id_str = str(attachment_id)
     now = datetime.now(timezone.utc)
-    stale_after_seconds = max(0, settings.ATTACHMENT_SCAN_STALE_RUNNING_SECONDS)
+    stale_after_seconds = scan_dispatch_service.scan_stale_lease_seconds()
     in_flight_jobs = (
         db.query(Job)
         .filter(
@@ -589,23 +591,18 @@ def ensure_attachment_scan_job(
     for job in in_flight_jobs:
         payload = job.payload or {}
         if payload.get("attachment_id") == attachment_id_str:
-            if job.status == JobStatus.RUNNING.value and job.run_at <= now - timedelta(
-                seconds=stale_after_seconds
-            ):
-                job.status = JobStatus.PENDING.value
-                job.last_error = (
-                    "Recovered stale attachment scan job after exceeding "
-                    f"{stale_after_seconds}s lease"
+            if job.status == JobStatus.RUNNING.value:
+                return job_service.recover_stale_running_job(
+                    db,
+                    job=job,
+                    stale_before=now - timedelta(seconds=stale_after_seconds),
+                    recovered_at=now,
+                    error=(
+                        "Recovered stale attachment scan job after exceeding "
+                        f"{stale_after_seconds}s lease"
+                    ),
+                    commit=commit,
                 )
-                job.run_at = now
-                job.completed_at = None
-                job.claim_token = None
-                job.claimed_at = None
-                if commit:
-                    db.commit()
-                else:
-                    db.flush()
-                return True
             return False
 
     job_service.enqueue_job(
@@ -629,7 +626,7 @@ def dispatch_attachment_scan_if_needed(
 
     attachment_id_str = str(attachment_id)
     now = datetime.now(timezone.utc)
-    stale_after_seconds = max(0, settings.ATTACHMENT_SCAN_STALE_RUNNING_SECONDS)
+    stale_after_seconds = scan_dispatch_service.scan_stale_lease_seconds()
 
     job = (
         db.query(Job)
@@ -663,18 +660,18 @@ def dispatch_attachment_scan_if_needed(
         selected_job.run_at = now
         db.flush()
     elif selected_job.status == JobStatus.RUNNING.value:
-        if selected_job.run_at > now - timedelta(seconds=stale_after_seconds):
-            return False
-        selected_job.status = JobStatus.PENDING.value
-        selected_job.last_error = (
-            f"Recovered stale attachment scan job after exceeding {stale_after_seconds}s lease"
+        recovered = job_service.recover_stale_running_job(
+            db,
+            job=selected_job,
+            stale_before=now - timedelta(seconds=stale_after_seconds),
+            recovered_at=now,
+            error=(
+                f"Recovered stale attachment scan job after exceeding {stale_after_seconds}s lease"
+            ),
+            commit=True,
         )
-        selected_job.run_at = now
-        selected_job.completed_at = None
-        selected_job.claim_token = None
-        selected_job.claimed_at = None
-        db.commit()
-        db.refresh(selected_job)
+        if not recovered:
+            return False
 
     if not scan_dispatch_service.remote_scan_dispatch_configured():
         return False
@@ -684,10 +681,19 @@ def dispatch_attachment_scan_if_needed(
         return False
 
     try:
+        if claimed_job.claim_token is None:
+            raise RuntimeError("Attachment scan job is missing claim identity")
         scan_dispatch_service.dispatch_attachment_scan_job_sync(
             job_id=claimed_job.id,
             attachment_id=attachment_id,
+            claim_token=claimed_job.claim_token,
         )
+    except scan_dispatch_service.ScanDispatchAmbiguousError:
+        logger.warning(
+            "Attachment scan dispatch outcome is unknown; preserving claim job_id=%s",
+            claimed_job.id,
+        )
+        return True
     except Exception as exc:
         job_service.mark_job_failed(db, claimed_job, str(exc))
         logger.exception(

@@ -1,9 +1,17 @@
-"""Tests for Audit Log system - Unit tests only."""
+"""Tests for the audit log system."""
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import re
+from threading import Event
+import uuid
+
+import pytest
+from sqlalchemy import text
 
 from app.db.enums import AuditEventType
+from app.db.models import AuditLog, Organization
+from app.db.session import SessionLocal
 from app.services import audit_service
 from app.services import version_service
 
@@ -94,3 +102,103 @@ def test_audit_event_type_references_are_defined():
                 missing.setdefault(match, []).append(str(file_path))
 
     assert not missing, f"Undefined AuditEventType references found: {missing}"
+
+
+def test_concurrent_audit_appends_form_one_linear_org_chain(db_engine):
+    """Concurrent commits for one org must not fork from the same predecessor."""
+    if db_engine.dialect.name != "postgresql":
+        pytest.skip("Audit-chain concurrency requires PostgreSQL")
+
+    setup_connection = db_engine.connect()
+    setup_session = SessionLocal(bind=setup_connection)
+    cleanup_connection = db_engine.connect()
+    cleanup_session = SessionLocal(bind=cleanup_connection)
+    org_id = uuid.uuid4()
+    first_flushed = Event()
+    release_first_commit = Event()
+    second_started = Event()
+    second_appended = Event()
+
+    try:
+        setup_session.add(
+            Organization(
+                id=org_id,
+                name="Audit Chain Concurrency Org",
+                slug=f"audit-chain-concurrency-{uuid.uuid4().hex[:8]}",
+            )
+        )
+        setup_session.commit()
+
+        def _append_first() -> uuid.UUID:
+            connection = db_engine.connect()
+            session = SessionLocal(bind=connection)
+            try:
+                entry = audit_service.log_event(
+                    db=session,
+                    org_id=org_id,
+                    event_type=AuditEventType.AUTH_LOGIN_FAILED,
+                    details={"attempt": "first"},
+                )
+                session.flush()
+                first_flushed.set()
+                assert release_first_commit.wait(timeout=5)
+                session.commit()
+                return entry.id
+            finally:
+                session.close()
+                connection.close()
+
+        def _append_second() -> uuid.UUID:
+            connection = db_engine.connect()
+            session = SessionLocal(bind=connection)
+            try:
+                assert first_flushed.wait(timeout=5)
+                second_started.set()
+                entry = audit_service.log_event(
+                    db=session,
+                    org_id=org_id,
+                    event_type=AuditEventType.AUTH_LOGIN_FAILED,
+                    details={"attempt": "second"},
+                )
+                session.flush()
+                second_appended.set()
+                session.commit()
+                return entry.id
+            finally:
+                session.close()
+                connection.close()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first_future = executor.submit(_append_first)
+            assert first_flushed.wait(timeout=5)
+            second_future = executor.submit(_append_second)
+            assert second_started.wait(timeout=5)
+
+            second_returned_before_first_commit = second_appended.wait(timeout=0.5)
+            release_first_commit.set()
+            entry_ids = {first_future.result(timeout=5), second_future.result(timeout=5)}
+
+        newest_first, total, _actor_names = audit_service.list_audit_logs(
+            db=cleanup_session,
+            org_id=org_id,
+            page=1,
+            per_page=10,
+        )
+        logs = list(reversed(newest_first))
+
+        assert second_returned_before_first_commit is False
+        assert total == 2
+        assert {log.id for log in logs} == entry_ids
+        assert len(logs) == 2
+        assert logs[0].prev_hash == version_service.GENESIS_HASH
+        assert logs[1].prev_hash == logs[0].entry_hash
+    finally:
+        release_first_commit.set()
+        cleanup_session.execute(text("SET LOCAL session_replication_role = replica"))
+        cleanup_session.query(AuditLog).filter(AuditLog.organization_id == org_id).delete()
+        cleanup_session.query(Organization).filter(Organization.id == org_id).delete()
+        cleanup_session.commit()
+        cleanup_session.close()
+        cleanup_connection.close()
+        setup_session.close()
+        setup_connection.close()

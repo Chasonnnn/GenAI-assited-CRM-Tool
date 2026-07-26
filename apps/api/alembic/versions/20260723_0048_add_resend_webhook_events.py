@@ -1,7 +1,7 @@
 """Add durable Resend webhook events.
 
 Revision ID: 20260723_0048
-Revises: 20260701_1025
+Revises: 20260725_1800
 Create Date: 2026-07-23 00:48:00
 """
 
@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 
 
 revision = "20260723_0048"
-down_revision = "20260701_1025"
+down_revision = "20260725_1800"
 branch_labels = None
 depends_on = None
 

@@ -43,14 +43,85 @@ def test_worker_scale_scheduler_uses_dedicated_scaler_identity() -> None:
     assert '"run.services.update"' in schedule
     assert 'resource "google_project_iam_member" "worker_scaler_run_update"' in schedule
     assert 'resource "google_service_account_iam_member" "worker_scaler_sa_user_worker"' in schedule
-    assert 'service_account_email = google_service_account.worker_scaler[0].email' in schedule
+    assert "service_account_email = google_service_account.worker_scaler[0].email" in schedule
     assert "(var.clamav_update_enabled || var.worker_schedule_enabled)" not in clamav_iam
 
 
 def test_cloudbuild_updates_attachment_scan_job_image() -> None:
     content = _read("cloudbuild/api.yaml")
     assert "$_ATTACHMENT_SCAN_JOB" in content
-    assert (
-        'args: ["run", "jobs", "update", "$_ATTACHMENT_SCAN_JOB", "--image", "$_IMAGE_WORKER", "--region", "$_REGION", "--quiet"]'
-        in content
-    )
+    assert 'gcloud run jobs update "$_ATTACHMENT_SCAN_JOB"' in content
+    assert '--image "$${worker_image_ref}"' in content
+
+
+def test_cloudbuild_updates_compatible_scan_runner_before_claim_producers() -> None:
+    content = _read("cloudbuild/api.yaml")
+    migration_execute = content.index('gcloud beta run jobs execute "$_MIGRATE_JOB"')
+    scan_job_update = content.index('gcloud run jobs update "$_ATTACHMENT_SCAN_JOB"')
+    api_update = content.index('gcloud run services update "$_API_SERVICE"')
+    worker_update = content.index('gcloud run services update "$_WORKER_SERVICE"')
+
+    assert migration_execute < scan_job_update < worker_update < api_update
+
+
+def test_cloudbuild_resolves_and_deploys_one_digest_image_set() -> None:
+    content = _read("cloudbuild/api.yaml")
+
+    assert "RELEASE_SHA=$COMMIT_SHA" in content
+    assert "RELEASE_TAG=$COMMIT_SHA-$BUILD_ID" in content
+    assert 'test -n "$${RELEASE_SHA}"' in content
+    assert 'test -n "$${RELEASE_TAG}"' in content
+    assert 'api_image="$${IMAGE_API_LATEST%:*}:$${RELEASE_TAG}"' in content
+    assert 'worker_image="$${IMAGE_WORKER_LATEST%:*}:$${RELEASE_TAG}"' in content
+    assert content.count("gcloud artifacts docker images describe") == 2
+    assert "value(image_summary.digest)" in content
+    assert 'test "$${api_digest#sha256:}" != "$${api_digest}"' in content
+    assert 'test "$${worker_digest#sha256:}" != "$${worker_digest}"' in content
+    assert '[[ "$${api_digest}" =~ ^sha256:[0-9a-f]{64}$$ ]]' in content
+    assert '[[ "$${worker_digest}" =~ ^sha256:[0-9a-f]{64}$$ ]]' in content
+    assert "/workspace/release-api-image-ref" in content
+    assert "/workspace/release-worker-image-ref" in content
+    assert content.count('--image "$${api_image_ref}"') >= 2
+    assert content.count('--image "$${worker_image_ref}"') >= 3
+    assert '--image "$${api_image}"' not in content
+    assert '--image "$${worker_image}"' not in content
+    assert '"--image", "$_IMAGE_API"' not in content
+    assert '"--image", "$_IMAGE_WORKER"' not in content
+
+
+def test_cloudbuild_leaves_the_new_worker_held_for_operator_resume() -> None:
+    content = _read("cloudbuild/api.yaml")
+    worker_update = content.index('gcloud run services update "$_WORKER_SERVICE"')
+    api_update = content.index('gcloud run services update "$_API_SERVICE"')
+    worker_step = content[worker_update:api_update]
+
+    assert "--update-env-vars" in worker_step
+    assert "WORKER_CUTOVER_HOLD=true" in worker_step
+    assert "EMAIL_DELIVERY_DISPATCH_ENABLED=false" in worker_step
+    assert "WORKER_JOB_TYPES=" not in worker_step
+
+    after_worker_deploy = content[worker_update:]
+    assert "WORKER_CUTOVER_HOLD=false" not in after_worker_deploy
+    assert "EMAIL_DELIVERY_DISPATCH_ENABLED=true" not in after_worker_deploy
+    assert "--remove-env-vars" not in after_worker_deploy
+
+
+def test_release_a_runbook_requires_operator_gates_before_resume() -> None:
+    content = _read("docs/runbooks/release-a-job-claim-cutover.md")
+    normalized = " ".join(content.split())
+
+    assert "WORKER_CUTOVER_HOLD=true" in content
+    assert "EMAIL_DELIVERY_DISPATCH_ENABLED=false" in content
+    assert "does not change `WORKER_JOB_TYPES`" in normalized
+    assert "zero active `crm-attachment-scan` executions" in content
+    assert "reconcile-legacy-job-claims" in content
+    assert "--manifest" in content
+    assert "--expected-count" in content
+    assert "--expected-fingerprint" in content
+    assert "IAM-controlled" in content
+    assert "encrypted at rest" in content
+    assert "`applied_at`" in content
+    assert "No automatic resume" in content
+    assert "deploy the exact `@sha256:` API and worker digest" in normalized
+    assert "--remove-env-vars WORKER_CUTOVER_HOLD" in content
+    assert "restore the captured pre-cutover values" in normalized.lower()

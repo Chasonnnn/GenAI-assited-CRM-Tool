@@ -41,14 +41,6 @@ class Job(Base):
     __tablename__ = "jobs"
     __table_args__ = (
         CheckConstraint(
-            "(claim_token IS NULL) = (claimed_at IS NULL)",
-            name="ck_jobs_claim_pair",
-        ),
-        CheckConstraint(
-            "status <> 'running' OR (claim_token IS NOT NULL AND claimed_at IS NOT NULL)",
-            name="ck_jobs_running_claimed",
-        ),
-        CheckConstraint(
             "(job_scope = 'organization' AND organization_id IS NOT NULL) OR "
             "(job_scope = 'platform' AND organization_id IS NULL)",
             name="ck_jobs_scope_organization_coherence",

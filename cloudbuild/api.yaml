@@ -1,58 +1,164 @@
 steps:
+  - name: gcr.io/cloud-builders/gcloud
+    entrypoint: bash
+    env: ["RELEASE_SHA=$COMMIT_SHA", "RELEASE_TAG=$COMMIT_SHA-$BUILD_ID"]
+    args:
+      - -ceu
+      - |
+        test -n "$${RELEASE_SHA}"
+        test -n "$${RELEASE_TAG}"
   - name: gcr.io/cloud-builders/docker
     entrypoint: sh
     args: ["-c", "docker pull $_IMAGE_API || true"]
   - name: gcr.io/cloud-builders/docker
-    env: ["DOCKER_BUILDKIT=1"]
-    args:
+    entrypoint: bash
+    env:
       [
-        "build",
-        "--build-arg",
-        "BUILDKIT_INLINE_CACHE=1",
-        "--build-arg",
-        "CACHE_BUST=$_CACHE_BUST",
-        "--cache-from",
-        "$_IMAGE_API",
-        "-t",
-        "$_IMAGE_API",
-        "apps/api",
+        "DOCKER_BUILDKIT=1",
+        "IMAGE_API_LATEST=$_IMAGE_API",
+        "RELEASE_TAG=$COMMIT_SHA-$BUILD_ID",
       ]
+    args:
+      - -ceu
+      - |
+        api_image="$${IMAGE_API_LATEST%:*}:$${RELEASE_TAG}"
+        docker build \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          --build-arg CACHE_BUST=$_CACHE_BUST \
+          --cache-from "$${IMAGE_API_LATEST}" \
+          -t "$${IMAGE_API_LATEST}" \
+          -t "$${api_image}" \
+          apps/api
   - name: gcr.io/cloud-builders/docker
-    args: ["push", "$_IMAGE_API"]
+    entrypoint: bash
+    env: ["IMAGE_API_LATEST=$_IMAGE_API", "RELEASE_TAG=$COMMIT_SHA-$BUILD_ID"]
+    args:
+      - -ceu
+      - |
+        api_image="$${IMAGE_API_LATEST%:*}:$${RELEASE_TAG}"
+        docker push "$${api_image}"
   - name: gcr.io/cloud-builders/docker
     entrypoint: sh
     args: ["-c", "docker pull $_IMAGE_WORKER || true"]
   - name: gcr.io/cloud-builders/docker
-    env: ["DOCKER_BUILDKIT=1"]
-    args:
+    entrypoint: bash
+    env:
       [
-        "build",
-        "--build-arg",
-        "BUILDKIT_INLINE_CACHE=1",
-        "--build-arg",
-        "CACHE_BUST=$_CACHE_BUST",
-        "--cache-from",
-        "$_IMAGE_WORKER",
-        "-f",
-        "apps/api/Dockerfile.worker",
-        "-t",
-        "$_IMAGE_WORKER",
-        "apps/api",
+        "DOCKER_BUILDKIT=1",
+        "IMAGE_WORKER_LATEST=$_IMAGE_WORKER",
+        "RELEASE_TAG=$COMMIT_SHA-$BUILD_ID",
       ]
+    args:
+      - -ceu
+      - |
+        worker_image="$${IMAGE_WORKER_LATEST%:*}:$${RELEASE_TAG}"
+        docker build \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          --build-arg CACHE_BUST=$_CACHE_BUST \
+          --cache-from "$${IMAGE_WORKER_LATEST}" \
+          -f apps/api/Dockerfile.worker \
+          -t "$${IMAGE_WORKER_LATEST}" \
+          -t "$${worker_image}" \
+          apps/api
   - name: gcr.io/cloud-builders/docker
-    args: ["push", "$_IMAGE_WORKER"]
+    entrypoint: bash
+    env: ["IMAGE_WORKER_LATEST=$_IMAGE_WORKER", "RELEASE_TAG=$COMMIT_SHA-$BUILD_ID"]
+    args:
+      - -ceu
+      - |
+        worker_image="$${IMAGE_WORKER_LATEST%:*}:$${RELEASE_TAG}"
+        docker push "$${worker_image}"
+  # Resolve both release tags once, then carry immutable digest references
+  # through every deployment step. This prevents a mutable tag from changing
+  # the artifact deployed by a later step in the same release.
   - name: gcr.io/cloud-builders/gcloud
-    args: ["run", "jobs", "update", "$_MIGRATE_JOB", "--image", "$_IMAGE_API", "--region", "$_REGION", "--quiet"]
+    entrypoint: bash
+    env:
+      [
+        "IMAGE_API_LATEST=$_IMAGE_API",
+        "IMAGE_WORKER_LATEST=$_IMAGE_WORKER",
+        "RELEASE_TAG=$COMMIT_SHA-$BUILD_ID",
+      ]
+    args:
+      - -ceu
+      - |
+        api_image="$${IMAGE_API_LATEST%:*}:$${RELEASE_TAG}"
+        worker_image="$${IMAGE_WORKER_LATEST%:*}:$${RELEASE_TAG}"
+
+        api_digest="$$(gcloud artifacts docker images describe "$${api_image}" --format='value(image_summary.digest)')"
+        worker_digest="$$(gcloud artifacts docker images describe "$${worker_image}" --format='value(image_summary.digest)')"
+
+        test "$${api_digest#sha256:}" != "$${api_digest}"
+        test "$${worker_digest#sha256:}" != "$${worker_digest}"
+        [[ "$${api_digest}" =~ ^sha256:[0-9a-f]{64}$$ ]]
+        [[ "$${worker_digest}" =~ ^sha256:[0-9a-f]{64}$$ ]]
+
+        printf '%s@%s\n' "$${IMAGE_API_LATEST%:*}" "$${api_digest}" > /workspace/release-api-image-ref
+        printf '%s@%s\n' "$${IMAGE_WORKER_LATEST%:*}" "$${worker_digest}" > /workspace/release-worker-image-ref
   - name: gcr.io/cloud-builders/gcloud
-    args: ["beta", "run", "jobs", "execute", "$_MIGRATE_JOB", "--region", "$_REGION", "--wait", "--quiet"]
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        read -r api_image_ref < /workspace/release-api-image-ref
+        gcloud run jobs update "$_MIGRATE_JOB" \
+          --image "$${api_image_ref}" \
+          --region "$_REGION" \
+          --quiet
   - name: gcr.io/cloud-builders/gcloud
-    args: ["run", "services", "update", "$_WORKER_SERVICE", "--image", "$_IMAGE_WORKER", "--region", "$_REGION", "--quiet"]
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        gcloud beta run jobs execute "$_MIGRATE_JOB" \
+          --region "$_REGION" \
+          --wait \
+          --quiet
+  # The scan runner accepts both legacy tokenless claims and new fenced claims.
+  # Update it before either service can dispatch the new --claim-token argument.
   - name: gcr.io/cloud-builders/gcloud
-    args: ["run", "services", "update", "$_API_SERVICE", "--image", "$_IMAGE_API", "--region", "$_REGION", "--quiet"]
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        read -r worker_image_ref < /workspace/release-worker-image-ref
+        gcloud run jobs update "$_ATTACHMENT_SCAN_JOB" \
+          --image "$${worker_image_ref}" \
+          --region "$_REGION" \
+          --quiet
+  # Release A deliberately deploys the worker held. Operators restore the
+  # captured pre-cutover values only after reconciliation and verification.
   - name: gcr.io/cloud-builders/gcloud
-    args: ["run", "jobs", "update", "$_CLAMAV_UPDATE_JOB", "--image", "$_IMAGE_WORKER", "--region", "$_REGION", "--quiet"]
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        read -r worker_image_ref < /workspace/release-worker-image-ref
+        gcloud run services update "$_WORKER_SERVICE" \
+          --image "$${worker_image_ref}" \
+          --update-env-vars "WORKER_CUTOVER_HOLD=true,EMAIL_DELIVERY_DISPATCH_ENABLED=false" \
+          --region "$_REGION" \
+          --quiet
   - name: gcr.io/cloud-builders/gcloud
-    args: ["run", "jobs", "update", "$_ATTACHMENT_SCAN_JOB", "--image", "$_IMAGE_WORKER", "--region", "$_REGION", "--quiet"]
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        read -r api_image_ref < /workspace/release-api-image-ref
+        gcloud run services update "$_API_SERVICE" \
+          --image "$${api_image_ref}" \
+          --region "$_REGION" \
+          --quiet
+  - name: gcr.io/cloud-builders/gcloud
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        read -r worker_image_ref < /workspace/release-worker-image-ref
+        gcloud run jobs update "$_CLAMAV_UPDATE_JOB" \
+          --image "$${worker_image_ref}" \
+          --region "$_REGION" \
+          --quiet
 images:
   - "$_IMAGE_API"
   - "$_IMAGE_WORKER"

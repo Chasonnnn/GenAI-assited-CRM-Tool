@@ -91,7 +91,10 @@ def log_event(
 
     mark_explicit_event_emitted()
 
-    # Get previous hash for chain
+    # Hold one append slot per organization until the surrounding transaction ends.
+    version_service.acquire_audit_chain_lock(db, org_id)
+
+    # Get previous hash for chain after concurrent writers have committed.
     prev_hash = version_service.get_last_audit_hash(db, org_id)
 
     if request and hasattr(request.state, "support_session_id"):

@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
+import logging
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 
 from app.worker import _ensure_attachment_scanner_available, _sync_clamav_signatures, worker_loop
 
 _worker_task: asyncio.Task | None = None
+logger = logging.getLogger(__name__)
+WORKER_SHUTDOWN_DRAIN_SECONDS = float(os.getenv("WORKER_SHUTDOWN_DRAIN_SECONDS", "7"))
+if WORKER_SHUTDOWN_DRAIN_SECONDS <= 0:
+    raise RuntimeError("WORKER_SHUTDOWN_DRAIN_SECONDS must be positive")
 
 
 @asynccontextmanager
@@ -19,14 +23,29 @@ async def lifespan(_: FastAPI):
     global _worker_task
     _sync_clamav_signatures()
     _ensure_attachment_scanner_available()
-    _worker_task = asyncio.create_task(worker_loop())
+    stop_event = asyncio.Event()
+    _worker_task = asyncio.create_task(worker_loop(stop_event))
     try:
         yield
     finally:
         if _worker_task:
-            _worker_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await _worker_task
+            worker_task = _worker_task
+            stop_event.set()
+            try:
+                await asyncio.wait_for(
+                    asyncio.shield(worker_task),
+                    timeout=WORKER_SHUTDOWN_DRAIN_SECONDS,
+                )
+            except TimeoutError:
+                logger.warning(
+                    "Worker did not drain within %.1fs; cancelling the active handler",
+                    WORKER_SHUTDOWN_DRAIN_SECONDS,
+                )
+                worker_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await worker_task
+            finally:
+                _worker_task = None
 
 
 app = FastAPI(lifespan=lifespan)

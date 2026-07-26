@@ -8,12 +8,17 @@ from alembic import command
 from alembic.config import Config
 import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError, IntegrityError
 
 
 API_ROOT = Path(__file__).resolve().parents[1]
 PRE_FENCING_REVISION = "20260723_0220"
 FENCING_REVISION = "20260723_0230"
+CHAIN_ROOT_MIGRATION_PATH = (
+    API_ROOT / "alembic" / "versions" / "20260723_0048_add_resend_webhook_events.py"
+)
+FENCING_MIGRATION_PATH = (
+    API_ROOT / "alembic" / "versions" / "20260723_0230_fence_reconciliation_jobs.py"
+)
 
 ORG_ID = uuid.UUID("71000000-0000-4000-8000-000000000001")
 RUNNING_JOB_ID = uuid.UUID("72000000-0000-4000-8000-000000000001")
@@ -28,8 +33,22 @@ def _alembic_config(connection) -> Config:
     return config
 
 
+def test_resend_chain_inherits_expansion_without_reowning_claim_columns() -> None:
+    chain_root_source = CHAIN_ROOT_MIGRATION_PATH.read_text()
+    fencing_source = FENCING_MIGRATION_PATH.read_text()
+
+    assert 'down_revision = "20260725_1800"' in chain_root_source
+    assert 'down_revision = "20260723_0220"' in fencing_source
+    assert 'op.add_column(\n        "jobs"' not in fencing_source
+    assert 'op.drop_column("jobs", "claimed_at")' not in fencing_source
+    assert 'op.drop_column("jobs", "claim_token")' not in fencing_source
+    assert "ck_jobs_claim_pair" not in fencing_source
+    assert "ck_jobs_running_claimed" not in fencing_source
+    assert "idx_jobs_stale_resend_reconciliation" in fencing_source
+
+
 @pytest.mark.parametrize("job_type", ["notification", "resend_event_reconcile"])
-def test_upgrade_refuses_to_cut_over_while_an_old_worker_owns_a_job(
+def test_upgrade_preserves_tokenless_running_jobs_from_the_expansion(
     db_engine,
     job_type: str,
 ) -> None:
@@ -89,14 +108,36 @@ def test_upgrade_refuses_to_cut_over_while_an_old_worker_owns_a_job(
                 },
             )
 
-            with pytest.raises(DBAPIError, match="drain the old worker"):
-                command.upgrade(config, FENCING_REVISION)
+            command.upgrade(config, FENCING_REVISION)
+
+            row = (
+                connection.execute(
+                    text(
+                        """
+                        SELECT status, run_at, attempts, last_error, claim_token, claimed_at
+                        FROM jobs
+                        WHERE id = :id
+                        """
+                    ),
+                    {"id": RUNNING_JOB_ID},
+                )
+                .mappings()
+                .one()
+            )
+            assert dict(row) == {
+                "status": "running",
+                "run_at": ORIGINAL_RUN_AT,
+                "attempts": 1,
+                "last_error": ORIGINAL_ERROR,
+                "claim_token": None,
+                "claimed_at": None,
+            }
         finally:
             transaction.rollback()
 
 
-def test_upgrade_blocks_pre_fencing_workers_from_claiming_new_jobs(db_engine) -> None:
-    """An old worker cannot claim work during the migration-to-worker cutover gap."""
+def test_upgrade_keeps_rolling_legacy_claims_schema_compatible(db_engine) -> None:
+    """The Resend index revision must not reject a still-rolling legacy worker."""
     with db_engine.connect() as connection:
         transaction = connection.begin()
         config = _alembic_config(connection)
@@ -151,10 +192,22 @@ def test_upgrade_blocks_pre_fencing_workers_from_claiming_new_jobs(db_engine) ->
 
             command.upgrade(config, FENCING_REVISION)
 
-            with pytest.raises(IntegrityError, match="ck_jobs_running_claimed"):
+            connection.execute(
+                text("UPDATE jobs SET status = 'running' WHERE id = :id"),
+                {"id": RUNNING_JOB_ID},
+            )
+            row = (
                 connection.execute(
-                    text("UPDATE jobs SET status = 'running' WHERE id = :id"),
+                    text("SELECT status, claim_token, claimed_at FROM jobs WHERE id = :id"),
                     {"id": RUNNING_JOB_ID},
                 )
+                .mappings()
+                .one()
+            )
+            assert dict(row) == {
+                "status": "running",
+                "claim_token": None,
+                "claimed_at": None,
+            }
         finally:
             transaction.rollback()

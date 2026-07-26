@@ -1,5 +1,6 @@
 """Job service - business logic for background job scheduling and processing."""
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
@@ -23,6 +24,15 @@ class StaleReconciliationRecovery:
     requeued: int
     failed: int
     resolved: int
+
+
+SPECIALIZED_RECOVERY_JOB_TYPES = frozenset(
+    {
+        JobType.ATTACHMENT_SCAN.value,
+        JobType.FORM_SUBMISSION_FILE_SCAN.value,
+        JobType.RESEND_EVENT_RECONCILE.value,
+    }
+)
 
 
 def enqueue_job(
@@ -205,6 +215,155 @@ def claim_job_for_dispatch(db: Session, job_id: UUID) -> Job | None:
     return db.query(Job).filter(Job.id == job_id).first()
 
 
+def heartbeat_job_claim(
+    db: Session,
+    *,
+    job_id: UUID,
+    claim_token: UUID,
+    heartbeat_at: datetime | None = None,
+) -> bool:
+    """Extend only the still-current running claim lease."""
+    result = db.execute(
+        update(Job)
+        .where(
+            Job.id == job_id,
+            Job.status == JobStatus.RUNNING.value,
+            Job.claim_token == claim_token,
+        )
+        .values(claimed_at=heartbeat_at or datetime.now(timezone.utc))
+        .execution_options(synchronize_session=False)
+    )
+    refreshed = (result.rowcount or 0) == 1
+    db.commit()
+    db.expire_all()
+    return refreshed
+
+
+def recover_stale_worker_claims(
+    db: Session,
+    *,
+    stale_before: datetime,
+    recovered_at: datetime,
+    retry_safe_job_types: Collection[str],
+    limit: int,
+) -> dict[str, int]:
+    """Recover stale tokened worker claims without replaying uncertain side effects."""
+    safe_job_types = set(retry_safe_job_types) - SPECIALIZED_RECOVERY_JOB_TYPES
+    query = (
+        select(Job)
+        .where(
+            Job.status == JobStatus.RUNNING.value,
+            Job.claim_token.is_not(None),
+            Job.claimed_at.is_not(None),
+            Job.claimed_at <= stale_before,
+            Job.job_type.notin_(SPECIALIZED_RECOVERY_JOB_TYPES),
+        )
+        .order_by(Job.claimed_at, Job.id)
+        .limit(max(1, limit))
+    )
+    if getattr(db.get_bind(), "dialect", None) and db.get_bind().dialect.name == "postgresql":
+        query = query.with_for_update(skip_locked=True)
+
+    candidates = list(db.execute(query).scalars())
+    result_counts = {"requeued": 0, "quarantined": 0}
+    for job in candidates:
+        claim_token = job.claim_token
+        claimed_at = job.claimed_at
+        if claim_token is None or claimed_at is None:
+            continue
+
+        retry_safe = job.job_type in safe_job_types and job.attempts < job.max_attempts
+        action = "requeued" if retry_safe else "quarantined"
+        payload = dict(job.payload or {})
+        payload["_claim_recovery"] = {
+            "schema_version": 1,
+            "non_replayable": not retry_safe,
+            "reason_code": (
+                "stale_claim_retry_safe" if retry_safe else "stale_claim_outcome_unknown"
+            ),
+            "recovered_at": recovered_at.isoformat(),
+            "previous_claimed_at": claimed_at.isoformat(),
+            "job_type": job.job_type,
+        }
+        values = {
+            "status": JobStatus.PENDING.value if retry_safe else JobStatus.FAILED.value,
+            "payload": payload,
+            "last_error": (
+                "Stale worker claim recovered for audited retry"
+                if retry_safe
+                else "Stale worker claim quarantined because the side-effect outcome is unknown"
+            ),
+            "run_at": recovered_at if retry_safe else job.run_at,
+            "completed_at": None if retry_safe else recovered_at,
+            "claim_token": None,
+            "claimed_at": None,
+        }
+        updated = db.execute(
+            update(Job)
+            .where(
+                Job.id == job.id,
+                Job.status == JobStatus.RUNNING.value,
+                Job.claim_token == claim_token,
+                Job.claimed_at == claimed_at,
+                Job.claimed_at <= stale_before,
+            )
+            .values(**values)
+            .execution_options(synchronize_session=False)
+        )
+        if (updated.rowcount or 0) == 1:
+            result_counts[action] += 1
+
+    db.commit()
+    db.expire_all()
+    return result_counts
+
+
+def recover_stale_running_job(
+    db: Session,
+    *,
+    job: Job,
+    stale_before: datetime,
+    recovered_at: datetime,
+    error: str,
+    commit: bool = False,
+) -> bool:
+    """Atomically requeue a stale job without overwriting a newer claim."""
+    expected_claim_token = job.claim_token
+    if expected_claim_token is None:
+        claim_filter = Job.claim_token.is_(None)
+        stale_filter = Job.run_at <= stale_before
+    else:
+        claim_filter = Job.claim_token == expected_claim_token
+        stale_filter = Job.claimed_at <= stale_before
+
+    result = db.execute(
+        update(Job)
+        .where(
+            Job.id == job.id,
+            Job.status == JobStatus.RUNNING.value,
+            claim_filter,
+            stale_filter,
+        )
+        .values(
+            status=JobStatus.PENDING.value,
+            last_error=error,
+            run_at=recovered_at,
+            completed_at=None,
+            claim_token=None,
+            claimed_at=None,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    recovered = (result.rowcount or 0) == 1
+    if recovered:
+        if commit:
+            db.commit()
+        else:
+            db.flush()
+    db.expire(job)
+    return recovered
+
+
 def get_job(db: Session, job_id: UUID, org_id: UUID | None = None) -> Job | None:
     """Get a job by ID, optionally scoped to org."""
     query = db.query(Job).filter(Job.id == job_id)
@@ -295,6 +454,41 @@ def mark_job_completed(db: Session, job: Job) -> Job:
     return job
 
 
+def complete_claimed_job(
+    db: Session,
+    *,
+    job_id: UUID,
+    claim_token: UUID | None,
+) -> Job:
+    """Complete only the still-current worker claim."""
+    completed_at = datetime.now(timezone.utc)
+    claim_filter = (
+        Job.claim_token.is_(None) if claim_token is None else Job.claim_token == claim_token
+    )
+    result = db.execute(
+        update(Job)
+        .where(
+            Job.id == job_id,
+            Job.status == JobStatus.RUNNING.value,
+            claim_filter,
+        )
+        .values(
+            status=JobStatus.COMPLETED.value,
+            completed_at=completed_at,
+            last_error=None,
+            claim_token=None,
+            claimed_at=None,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if (result.rowcount or 0) != 1:
+        db.expire_all()
+        raise JobClaimLost("job claim is no longer current")
+    db.commit()
+    db.expire_all()
+    return db.query(Job).filter(Job.id == job_id).one()
+
+
 def mark_job_failed(db: Session, job: Job, error: str) -> Job:
     """
     Mark a job as failed.
@@ -330,53 +524,24 @@ def mark_job_failed(db: Session, job: Job, error: str) -> Job:
     return job
 
 
-def complete_claimed_job(
-    db: Session,
-    *,
-    job_id: UUID,
-    claim_token: UUID,
-) -> Job:
-    """Complete only the still-current worker claim."""
-    completed_at = datetime.now(timezone.utc)
-    result = db.execute(
-        update(Job)
-        .where(
-            Job.id == job_id,
-            Job.status == JobStatus.RUNNING.value,
-            Job.claim_token == claim_token,
-        )
-        .values(
-            status=JobStatus.COMPLETED.value,
-            completed_at=completed_at,
-            last_error=None,
-            claim_token=None,
-            claimed_at=None,
-        )
-        .execution_options(synchronize_session=False)
-    )
-    if (result.rowcount or 0) != 1:
-        db.expire_all()
-        raise JobClaimLost("job claim is no longer current")
-    db.commit()
-    db.expire_all()
-    return db.query(Job).filter(Job.id == job_id).one()
-
-
 def fail_claimed_job(
     db: Session,
     *,
     job_id: UUID,
-    claim_token: UUID,
+    claim_token: UUID | None,
     error: str,
     retry_run_at: datetime | None = None,
 ) -> Job:
     """Fail or requeue only the still-current worker claim."""
+    claim_filter = (
+        Job.claim_token.is_(None) if claim_token is None else Job.claim_token == claim_token
+    )
     job = db.execute(
         select(Job)
         .where(
             Job.id == job_id,
             Job.status == JobStatus.RUNNING.value,
-            Job.claim_token == claim_token,
+            claim_filter,
         )
         .with_for_update()
         .execution_options(populate_existing=True)
@@ -523,6 +688,12 @@ def replay_failed_job(
         and payload.get("email_template_snapshot") is None
     ):
         raise ValueError("Cannot replay workflow email: queued template snapshot is unavailable")
+    reconciliation_meta = payload.get("_reconciliation")
+    if isinstance(reconciliation_meta, dict) and reconciliation_meta.get("non_replayable") is True:
+        raise ValueError("Cannot replay job with non-replayable reconciliation")
+    claim_recovery_meta = payload.get("_claim_recovery")
+    if isinstance(claim_recovery_meta, dict) and claim_recovery_meta.get("non_replayable") is True:
+        raise ValueError("Cannot replay job with non-replayable claim recovery")
     replay_meta = payload.get("_replay")
     if not isinstance(replay_meta, dict):
         replay_meta = {}

@@ -13,6 +13,7 @@ import logging
 import os
 import secrets
 import sys
+import threading
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -41,6 +42,7 @@ from app.services import (
     email_delivery_dispatch,
     email_service,
     job_service,
+    scan_claim_recovery_service,
     scan_dispatch_service,
 )
 
@@ -101,6 +103,83 @@ EMAIL_DELIVERY_LEASE_SECONDS = max(
     email_delivery_dispatch.MIN_DELIVERY_LEASE_SECONDS,
     int(os.getenv("EMAIL_DELIVERY_LEASE_SECONDS", "120")),
 )
+WORKER_CUTOVER_HOLD = _env_flag_enabled(
+    os.getenv("WORKER_CUTOVER_HOLD"),
+    default=False,
+)
+WORKER_CLAIM_LEASE_SECONDS = int(os.getenv("WORKER_CLAIM_LEASE_SECONDS", "900"))
+WORKER_CLAIM_HEARTBEAT_INTERVAL_SECONDS = int(
+    os.getenv("WORKER_CLAIM_HEARTBEAT_INTERVAL_SECONDS", "30")
+)
+WORKER_STALE_CLAIM_REAPER_INTERVAL_SECONDS = int(
+    os.getenv("WORKER_STALE_CLAIM_REAPER_INTERVAL_SECONDS", "60")
+)
+WORKER_STALE_CLAIM_REAPER_BATCH_SIZE = int(os.getenv("WORKER_STALE_CLAIM_REAPER_BATCH_SIZE", "100"))
+if WORKER_CLAIM_LEASE_SECONDS <= 0:
+    raise RuntimeError("WORKER_CLAIM_LEASE_SECONDS must be positive")
+if (
+    WORKER_CLAIM_HEARTBEAT_INTERVAL_SECONDS <= 0
+    or WORKER_CLAIM_HEARTBEAT_INTERVAL_SECONDS * 3 > WORKER_CLAIM_LEASE_SECONDS
+):
+    raise RuntimeError(
+        "WORKER_CLAIM_HEARTBEAT_INTERVAL_SECONDS must be positive and no more than one third "
+        "of WORKER_CLAIM_LEASE_SECONDS"
+    )
+if WORKER_STALE_CLAIM_REAPER_INTERVAL_SECONDS <= 0:
+    raise RuntimeError("WORKER_STALE_CLAIM_REAPER_INTERVAL_SECONDS must be positive")
+if WORKER_STALE_CLAIM_REAPER_BATCH_SIZE <= 0:
+    raise RuntimeError("WORKER_STALE_CLAIM_REAPER_BATCH_SIZE must be positive")
+
+# This local-only sweep is idempotent: task state transitions are guarded, resume
+# jobs are uniquely keyed, and its notification has a stable dedupe key.
+WORKER_STALE_CLAIM_RETRY_SAFE_JOB_TYPES = frozenset({JobType.WORKFLOW_APPROVAL_EXPIRY.value})
+
+
+class _ClaimHeartbeat:
+    def __init__(self, stop_event: threading.Event, thread: threading.Thread) -> None:
+        self._stop_event = stop_event
+        self._thread = thread
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        self._thread.join(timeout=1)
+
+
+def _run_claim_heartbeat(
+    *,
+    job_id: UUID,
+    claim_token: UUID,
+    stop_event: threading.Event,
+) -> None:
+    while not stop_event.wait(WORKER_CLAIM_HEARTBEAT_INTERVAL_SECONDS):
+        with SessionLocal() as heartbeat_db:
+            try:
+                if not job_service.heartbeat_job_claim(
+                    heartbeat_db,
+                    job_id=job_id,
+                    claim_token=claim_token,
+                ):
+                    logger.warning("Stopped heartbeat after claim was lost for job %s", job_id)
+                    return
+            except Exception:
+                heartbeat_db.rollback()
+                logger.exception("Job claim heartbeat failed for job %s", job_id)
+
+
+def _start_claim_heartbeat(*, job_id: UUID, claim_token: UUID) -> _ClaimHeartbeat:
+    stop_event = threading.Event()
+    thread = threading.Thread(
+        target=_run_claim_heartbeat,
+        kwargs={
+            "job_id": job_id,
+            "claim_token": claim_token,
+            "stop_event": stop_event,
+        },
+        name=f"job-claim-heartbeat-{job_id}",
+        daemon=True,
+    )
+    thread.start()
+    return _ClaimHeartbeat(stop_event, thread)
 
 
 def parse_worker_job_types(raw: str | None) -> list[str] | None:
@@ -582,8 +661,17 @@ def _mark_send_email_failed(db, job, error_msg: str) -> None:
         email_service.mark_email_failed(db, email_log, error_msg)
 
 
-async def worker_loop() -> None:
+async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
     """Main worker loop - polls for and processes pending jobs."""
+    if WORKER_CUTOVER_HOLD:
+        logger.warning(
+            "Worker cutover hold is active; scheduling, cleanup, and job claims are disabled"
+        )
+        hold_stop_event = stop_event or asyncio.Event()
+        await hold_stop_event.wait()
+        logger.info("Worker cutover hold stopped")
+        return
+
     claimed_job_types = _claimed_job_types()
     if WORKER_JOB_TYPES is None and claimed_job_types is None:
         job_types_display = "all"
@@ -606,8 +694,9 @@ async def worker_loop() -> None:
     email_delivery_worker_id = (
         f"{os.getenv('HOSTNAME', 'worker')}:{os.getpid()}:{secrets.token_hex(4)}"
     )
+    last_stale_claim_recovery = datetime.min.replace(tzinfo=timezone.utc)
 
-    while True:
+    while stop_event is None or not stop_event.is_set():
         if EMAIL_DELIVERY_DISPATCH_ENABLED:
             try:
                 for _batch_index in range(EMAIL_DELIVERY_MAX_BATCHES_PER_TICK):
@@ -638,6 +727,43 @@ async def worker_loop() -> None:
         with SessionLocal() as db:
             try:
                 now = datetime.now(timezone.utc)
+                if now - last_stale_claim_recovery >= timedelta(
+                    seconds=WORKER_STALE_CLAIM_REAPER_INTERVAL_SECONDS
+                ):
+                    try:
+                        recovery_counts = job_service.recover_stale_worker_claims(
+                            db,
+                            stale_before=now - timedelta(seconds=WORKER_CLAIM_LEASE_SECONDS),
+                            recovered_at=now,
+                            retry_safe_job_types=WORKER_STALE_CLAIM_RETRY_SAFE_JOB_TYPES,
+                            limit=WORKER_STALE_CLAIM_REAPER_BATCH_SIZE,
+                        )
+                        if recovery_counts["requeued"] or recovery_counts["quarantined"]:
+                            logger.warning(
+                                "Recovered stale worker claims (requeued=%s quarantined=%s)",
+                                recovery_counts["requeued"],
+                                recovery_counts["quarantined"],
+                            )
+                        scan_recovery = (
+                            scan_claim_recovery_service.recover_stale_remote_scan_claims(
+                                db,
+                                now=now,
+                                limit=WORKER_STALE_CLAIM_REAPER_BATCH_SIZE,
+                            )
+                        )
+                        if scan_recovery.total:
+                            logger.warning(
+                                "Recovered stale remote scan claims "
+                                "(completed=%s requeued=%s quarantined=%s)",
+                                scan_recovery.completed,
+                                scan_recovery.requeued,
+                                scan_recovery.quarantined,
+                            )
+                    except Exception:
+                        db.rollback()
+                        logger.exception("Stale worker claim recovery failed")
+                    last_stale_claim_recovery = now
+
                 try:
                     last_google_sync_schedule = maybe_schedule_google_calendar_sync_jobs(
                         db,
@@ -685,20 +811,39 @@ async def worker_loop() -> None:
                         stale_reconciliation.resolved,
                     )
 
-                jobs = job_service.claim_pending_jobs(
-                    db,
-                    limit=BATCH_SIZE,
-                    job_types=claimed_job_types,
-                )
+                for _ in range(BATCH_SIZE):
+                    if stop_event is not None and stop_event.is_set():
+                        break
 
-                if jobs:
+                    jobs = job_service.claim_pending_jobs(
+                        db,
+                        limit=1,
+                        job_types=claimed_job_types,
+                    )
+                    if not jobs:
+                        break
+
                     logger.info("Found %s pending jobs", len(jobs))
-
-                for job in jobs:
+                    job = jobs[0]
+                    job_id = job.id
+                    claim_token = job.claim_token
                     try:
-                        should_mark_completed = await process_job(db, job)
+                        heartbeat = (
+                            _start_claim_heartbeat(job_id=job_id, claim_token=claim_token)
+                            if claim_token is not None
+                            else None
+                        )
+                        try:
+                            should_mark_completed = await process_job(db, job)
+                        finally:
+                            if heartbeat is not None:
+                                heartbeat.stop()
                         if should_mark_completed:
-                            job_service.mark_job_completed(db, job)
+                            job = job_service.complete_claimed_job(
+                                db,
+                                job_id=job.id,
+                                claim_token=claim_token,
+                            )
                             logger.info("Job %s completed successfully", job.id)
                         else:
                             logger.info("Job %s delegated for out-of-process completion", job.id)
@@ -709,7 +854,13 @@ async def worker_loop() -> None:
 
                     except Exception as e:
                         error_msg = str(e)
-                        job_service.mark_job_failed(db, job, error_msg)
+                        db.rollback()
+                        job = job_service.fail_claimed_job(
+                            db,
+                            job_id=job_id,
+                            claim_token=claim_token,
+                            error=error_msg,
+                        )
                         _log_job_failure(job, e)
 
                         # Apply rate limit backoff for Meta throttling errors
@@ -745,7 +896,16 @@ async def worker_loop() -> None:
             except Exception as e:
                 logger.error("Error in worker loop: %s", e)
 
-        await asyncio.sleep(POLL_INTERVAL_SECONDS)
+        if stop_event is None:
+            await asyncio.sleep(POLL_INTERVAL_SECONDS)
+        elif not stop_event.is_set():
+            try:
+                await asyncio.wait_for(
+                    stop_event.wait(),
+                    timeout=POLL_INTERVAL_SECONDS,
+                )
+            except TimeoutError:
+                pass
 
 
 def main() -> None:
