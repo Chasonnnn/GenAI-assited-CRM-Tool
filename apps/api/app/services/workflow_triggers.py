@@ -15,6 +15,7 @@ from app.db.models import (
     Task,
 )
 from app.db.enums import WorkflowTriggerType, WorkflowEventSource, OwnerType
+from app.schemas.workflow import is_supported_simple_cron
 from app.services.workflow_engine import engine
 
 
@@ -865,18 +866,18 @@ def _should_run_cron(cron: str, now, tz: str) -> bool:
 
     For full cron support, install croniter.
     """
+    if not is_supported_simple_cron(cron):
+        return False
+
     try:
         from zoneinfo import ZoneInfo
 
         local_tz = ZoneInfo(tz)
         local_now = now.astimezone(local_tz)
     except Exception:
-        local_now = now
-
-    parts = cron.split()
-    if len(parts) != 5:
         return False
 
+    parts = cron.split()
     minute, hour, dom, month, dow = parts
 
     def _cron_dow_to_py(value: int) -> int:

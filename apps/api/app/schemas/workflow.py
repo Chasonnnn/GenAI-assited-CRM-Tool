@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -78,6 +79,41 @@ ALLOWED_EMAIL_VARIABLES = {
 }
 
 
+def is_supported_simple_cron(cron: str) -> bool:
+    """Return whether cron fits the exact subset the workflow runner supports."""
+    parts = cron.split()
+    if len(parts) != 5:
+        return False
+
+    minute, hour, day_of_month, month, day_of_week = parts
+    if day_of_month != "*" or month != "*":
+        return False
+
+    def _valid_number(value: str, *, minimum: int, maximum: int) -> bool:
+        if value == "*":
+            return True
+        try:
+            parsed = int(value)
+        except ValueError:
+            return False
+        return minimum <= parsed <= maximum
+
+    if not _valid_number(minute, minimum=0, maximum=59):
+        return False
+    if not _valid_number(hour, minimum=0, maximum=23):
+        return False
+    if day_of_week == "*":
+        return True
+    if day_of_week.count("-") == 1:
+        start_text, end_text = day_of_week.split("-", maxsplit=1)
+        if not _valid_number(start_text, minimum=0, maximum=7):
+            return False
+        if not _valid_number(end_text, minimum=0, maximum=7):
+            return False
+        return int(start_text) <= int(end_text)
+    return _valid_number(day_of_week, minimum=0, maximum=7)
+
+
 # =============================================================================
 # Condition Schemas
 # =============================================================================
@@ -115,6 +151,22 @@ class ScheduledTriggerConfig(BaseModel):
 
     cron: str = Field(description="Cron expression, e.g., '0 9 * * 1' for Mon 9am")
     timezone: str = Field(default="America/Los_Angeles", description="IANA timezone")
+
+    @field_validator("cron")
+    @classmethod
+    def validate_cron(cls, value: str) -> str:
+        if not is_supported_simple_cron(value):
+            raise ValueError("Cron must use the supported schedule format: minute hour * * weekday")
+        return value
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except Exception as exc:
+            raise ValueError("Timezone must be a valid IANA timezone") from exc
+        return value
 
 
 class TaskDueTriggerConfig(BaseModel):

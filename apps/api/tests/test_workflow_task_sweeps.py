@@ -293,3 +293,24 @@ async def test_workflow_sweep_job_rejects_payload_org_mismatch(db, test_org):
 
     with pytest.raises(ValueError, match="organization"):
         await process_workflow_sweep(db, job)
+
+
+@pytest.mark.asyncio
+async def test_workflow_sweep_job_propagates_failures_for_worker_retry(db, test_org, monkeypatch):
+    from app.jobs.handlers.workflows import process_workflow_sweep
+
+    job = SimpleNamespace(
+        organization_id=test_org.id,
+        payload={
+            "org_id": str(test_org.id),
+            "sweep_type": "inactivity",
+        },
+    )
+
+    def fail_sweep(_db, _org_id):
+        raise RuntimeError("sweep failed")
+
+    monkeypatch.setattr(workflow_triggers, "trigger_inactivity_workflows", fail_sweep)
+
+    with pytest.raises(RuntimeError, match="sweep failed"):
+        await process_workflow_sweep(db, job)

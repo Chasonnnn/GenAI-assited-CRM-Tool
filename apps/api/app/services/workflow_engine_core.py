@@ -246,7 +246,7 @@ class WorkflowEngineCore:
         start_time = time.time()
 
         # Check dedupe for sweep-based triggers
-        dedupe_key = self._get_dedupe_key(workflow, entity_id)
+        dedupe_key = self._get_dedupe_key(workflow, entity_id, event_data=event_data)
         if dedupe_key and bypass_dedupe:
             # Allow manual retries for sweep-based triggers by namespacing the key.
             dedupe_key = f"{dedupe_key}:retry:{event_id}"
@@ -767,6 +767,7 @@ class WorkflowEngineCore:
         self,
         workflow: AutomationWorkflow,
         entity_id: UUID,
+        event_data: dict[str, Any] | None = None,
     ) -> str | None:
         """Generate deterministic dedupe keys for triggers that must run once per entity."""
         trigger_type = workflow.trigger_type
@@ -775,8 +776,26 @@ class WorkflowEngineCore:
             return f"{workflow.id}:{entity_id}:{trigger_type}"
 
         if trigger_type in ["scheduled", "inactivity", "task_due", "task_overdue"]:
-            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            return f"{workflow.id}:{entity_id}:{trigger_type}:{today}"
+            occurrence_date = datetime.now(timezone.utc).date().isoformat()
+            if trigger_type == "scheduled" and event_data:
+                raw_schedule_time = event_data.get("schedule_time")
+                try:
+                    schedule_time = (
+                        raw_schedule_time
+                        if isinstance(raw_schedule_time, datetime)
+                        else datetime.fromisoformat(str(raw_schedule_time))
+                    )
+                except (TypeError, ValueError):
+                    schedule_time = None
+
+                if (
+                    schedule_time is not None
+                    and schedule_time.tzinfo is not None
+                    and schedule_time.utcoffset() is not None
+                ):
+                    occurrence_date = schedule_time.date().isoformat()
+
+            return f"{workflow.id}:{entity_id}:{trigger_type}:{occurrence_date}"
 
         return None
 

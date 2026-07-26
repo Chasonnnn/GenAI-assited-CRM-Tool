@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+import pytest
+
 from app.db.enums import WorkflowConditionOperator
 from app.services import workflow_triggers
 from app.services.workflow_engine import engine
@@ -19,6 +21,27 @@ def test_should_run_cron_sunday_aliases():
 
     assert workflow_triggers._should_run_cron("0 9 * * 0", now, "UTC") is True
     assert workflow_triggers._should_run_cron("0 9 * * 7", now, "UTC") is True
+
+
+@pytest.mark.parametrize(
+    "cron",
+    [
+        "0 9 1 * *",
+        "0 9 * 1 *",
+        "*/5 9 * * *",
+        "0 9 * * 1,2",
+    ],
+)
+def test_should_run_cron_fails_closed_for_unsupported_syntax(cron):
+    now = datetime(2026, 1, 5, 9, 0, tzinfo=timezone.utc)
+
+    assert workflow_triggers._should_run_cron(cron, now, "UTC") is False
+
+
+def test_should_run_cron_fails_closed_for_unknown_timezone():
+    now = datetime(2026, 1, 5, 9, 0, tzinfo=timezone.utc)
+
+    assert workflow_triggers._should_run_cron("0 9 * * *", now, "Not/AZone") is False
 
 
 def test_evaluate_condition_in_handles_csv_values():

@@ -75,6 +75,7 @@ async def process_workflow_sweep(db, job) -> None:
         except Exception as e:
             logger.error("Workflow sweep failed for org %s: %s", org.id, e)
             db.rollback()
+            raise
 
     logger.info("Workflow sweep finished for %s organizations", len(orgs))
 
