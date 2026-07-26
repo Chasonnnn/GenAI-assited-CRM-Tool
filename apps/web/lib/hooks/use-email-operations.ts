@@ -68,7 +68,8 @@ export function useEmailOperationsLiveReadiness({
         staleTime: 30_000,
         refetchInterval: (query) => {
             const status = query.state.data?.check_status
-            return status === "queued" || status === "running" ? 5_000 : false
+            if (status === "queued" || status === "running") return 5_000
+            return status === "stalled" ? 30_000 : false
         },
         refetchIntervalInBackground: false,
     })

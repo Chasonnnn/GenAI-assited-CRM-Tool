@@ -193,14 +193,16 @@ describe("Resend readiness hooks", () => {
         expect(getPlatformEmailReadiness).toHaveBeenCalledTimes(2)
     })
 
-    it("treats stalled organization and platform checks as terminal", async () => {
+    it("polls stalled organization and platform checks every thirty seconds until they become idle", async () => {
         vi.useFakeTimers({ shouldAdvanceTime: true })
-        vi.mocked(getEmailOperationsLiveReadiness).mockResolvedValue(
-            readinessEnvelope("stalled"),
-        )
-        vi.mocked(getPlatformEmailReadiness).mockResolvedValue(
-            readinessEnvelope("stalled"),
-        )
+        vi.mocked(getEmailOperationsLiveReadiness)
+            .mockResolvedValueOnce(readinessEnvelope("stalled"))
+            .mockResolvedValueOnce(readinessEnvelope("stalled"))
+            .mockResolvedValue(readinessEnvelope("idle"))
+        vi.mocked(getPlatformEmailReadiness)
+            .mockResolvedValueOnce(readinessEnvelope("stalled"))
+            .mockResolvedValueOnce(readinessEnvelope("stalled"))
+            .mockResolvedValue(readinessEnvelope("idle"))
         const queryClient = createQueryClient()
         const wrapper = wrapperFor(queryClient)
 
@@ -213,11 +215,34 @@ describe("Resend readiness hooks", () => {
         })
 
         await act(async () => {
-            await vi.advanceTimersByTimeAsync(15_000)
+            await vi.advanceTimersByTimeAsync(29_000)
         })
 
         expect(getEmailOperationsLiveReadiness).toHaveBeenCalledTimes(1)
         expect(getPlatformEmailReadiness).toHaveBeenCalledTimes(1)
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(1_000)
+        })
+        await waitFor(() => {
+            expect(getEmailOperationsLiveReadiness).toHaveBeenCalledTimes(2)
+            expect(getPlatformEmailReadiness).toHaveBeenCalledTimes(2)
+        })
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(30_000)
+        })
+        await waitFor(() => {
+            expect(getEmailOperationsLiveReadiness).toHaveBeenCalledTimes(3)
+            expect(getPlatformEmailReadiness).toHaveBeenCalledTimes(3)
+        })
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(60_000)
+        })
+
+        expect(getEmailOperationsLiveReadiness).toHaveBeenCalledTimes(3)
+        expect(getPlatformEmailReadiness).toHaveBeenCalledTimes(3)
     })
 
     it("reuses fresh platform sender status across remounts", async () => {
