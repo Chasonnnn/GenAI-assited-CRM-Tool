@@ -96,7 +96,7 @@ test = [
     "diff-cover==9.7.1",
     "chardet==5.2.0",
     "pygments==2.20.0",
-    "ruff==0.15.1",
+    "ruff==0.16.0",
 ]
 
 [tool.fastapi]
@@ -105,6 +105,12 @@ entrypoint = "app.main:app"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+# Ruff 0.16 expanded its implicit defaults from 59 to 413 rules. Keep the
+# existing lint contract explicit so additional rule families can be adopted
+# in focused changes without mixing thousands of unrelated findings here.
+select = ["E4", "E7", "E9", "F"]
 
 [tool.coverage.run]
 branch = true
