@@ -398,6 +398,51 @@ async def test_full_access_key_accepts_explicit_nonfirst_verified_domain(
 
 
 @pytest.mark.asyncio
+async def test_signing_secret_is_write_only_and_survives_unrelated_settings_saves(
+    authed_client,
+):
+    signing_secret = "whsec_test_only_not_a_real_secret"
+
+    save_response = await authed_client.patch(
+        "/resend/settings",
+        json={"webhook_signing_secret": signing_secret},
+    )
+
+    assert save_response.status_code == 200
+    saved = save_response.json()
+    assert saved["webhook_signing_secret_configured"] is True
+    assert "webhook_signing_secret" not in saved
+    assert signing_secret not in save_response.text
+
+    get_response = await authed_client.get("/resend/settings")
+
+    assert get_response.status_code == 200
+    fetched = get_response.json()
+    assert fetched["webhook_signing_secret_configured"] is True
+    assert "webhook_signing_secret" not in fetched
+    assert signing_secret not in get_response.text
+
+    unrelated_save_response = await authed_client.patch(
+        "/resend/settings",
+        json={
+            "from_name": "Updated sender name",
+            "expected_version": fetched["current_version"],
+        },
+    )
+
+    assert unrelated_save_response.status_code == 200
+    assert unrelated_save_response.json()["webhook_signing_secret_configured"] is True
+    assert signing_secret not in unrelated_save_response.text
+
+    preserved_response = await authed_client.get("/resend/settings")
+
+    assert preserved_response.status_code == 200
+    assert preserved_response.json()["webhook_signing_secret_configured"] is True
+    assert "webhook_signing_secret" not in preserved_response.json()
+    assert signing_secret not in preserved_response.text
+
+
+@pytest.mark.asyncio
 async def test_new_key_and_rate_limit_group_share_team_admission_during_validation(
     authed_client,
     db,
