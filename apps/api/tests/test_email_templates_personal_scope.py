@@ -8,11 +8,12 @@ from httpx import AsyncClient, ASGITransport
 
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
+from app.core.permissions import PermissionKey
 from app.core.security import create_session_token
 from app.db.enums import Role
-from app.db.models import EmailTemplate, Membership, User
+from app.db.models import EmailTemplate, Membership, User, UserPermissionOverride
 from app.main import app
-from app.services import session_service
+from app.services import email_service, session_service
 
 
 def create_user_with_role(db, org_id, role: Role) -> User:
@@ -440,6 +441,133 @@ async def test_admin_and_developer_can_edit_other_users_personal_templates(
         assert data["subject"] == "Updated By Privileged User"
         assert data["scope"] == "personal"
         assert data["owner_user_id"] == str(owner.id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("privileged_role", [Role.ADMIN, Role.DEVELOPER])
+async def test_admin_and_developer_can_delete_other_users_personal_templates(
+    db, test_org, privileged_role: Role
+):
+    owner = create_user_with_role(db, test_org.id, Role.CASE_MANAGER)
+    privileged_user = create_user_with_role(db, test_org.id, privileged_role)
+
+    personal_template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=owner.id,
+        name="Owner Template",
+        subject="Original Subject",
+        body="<p>Body</p>",
+        scope="personal",
+        owner_user_id=owner.id,
+        is_active=True,
+    )
+    db.add(personal_template)
+    db.commit()
+
+    async with authed_client_for_user(db, test_org.id, privileged_user, privileged_role) as client:
+        draft_response = await client.post(
+            f"/email-template-drafts/from-template/{personal_template.id}"
+        )
+        assert draft_response.status_code == 200
+        draft_id = draft_response.json()["id"]
+
+        delete_response = await client.delete(f"/email-templates/{personal_template.id}")
+        assert delete_response.status_code == 204
+
+        get_response = await client.get(f"/email-templates/{personal_template.id}")
+        assert get_response.status_code == 200
+        data = get_response.json()
+        assert data["is_active"] is False
+        assert data["current_version"] == 2
+        assert data["scope"] == "personal"
+        assert data["owner_user_id"] == str(owner.id)
+
+        repeated_delete_response = await client.delete(
+            f"/email-templates/{personal_template.id}"
+        )
+        assert repeated_delete_response.status_code == 204
+
+        repeated_get_response = await client.get(
+            f"/email-templates/{personal_template.id}"
+        )
+        assert repeated_get_response.status_code == 200
+        assert repeated_get_response.json()["current_version"] == 2
+
+        stale_draft_response = await client.get(f"/email-template-drafts/{draft_id}")
+        assert stale_draft_response.status_code == 200
+        assert stale_draft_response.json()["is_stale"] is True
+
+
+@pytest.mark.asyncio
+async def test_non_owner_cannot_delete_another_users_personal_template(db, test_org):
+    owner = create_user_with_role(db, test_org.id, Role.CASE_MANAGER)
+    other_user = create_user_with_role(db, test_org.id, Role.CASE_MANAGER)
+    personal_template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=owner.id,
+        name="Owner Template",
+        subject="Original Subject",
+        body="<p>Body</p>",
+        scope="personal",
+        owner_user_id=owner.id,
+        is_active=True,
+    )
+    db.add(personal_template)
+    db.commit()
+
+    async with authed_client_for_user(db, test_org.id, other_user, Role.CASE_MANAGER) as client:
+        delete_response = await client.delete(f"/email-templates/{personal_template.id}")
+        assert delete_response.status_code == 403
+
+    async with authed_client_for_user(db, test_org.id, owner, Role.CASE_MANAGER) as client:
+        get_response = await client.get(f"/email-templates/{personal_template.id}")
+        assert get_response.status_code == 200
+        assert get_response.json()["is_active"] is True
+
+
+@pytest.mark.asyncio
+async def test_non_admin_manager_cannot_rollback_another_users_personal_template(
+    db, test_org
+):
+    owner = create_user_with_role(db, test_org.id, Role.CASE_MANAGER)
+    manager = create_user_with_role(db, test_org.id, Role.CASE_MANAGER)
+    db.add(
+        UserPermissionOverride(
+            id=uuid.uuid4(),
+            organization_id=test_org.id,
+            user_id=manager.id,
+            permission=PermissionKey.EMAIL_TEMPLATES_MANAGE.value,
+            override_type="grant",
+        )
+    )
+    personal_template = email_service.create_template(
+        db=db,
+        org_id=test_org.id,
+        user_id=owner.id,
+        name="Owner Template",
+        subject="Original Subject",
+        body="<p>Body</p>",
+        scope="personal",
+    )
+    email_service.update_template(
+        db,
+        personal_template,
+        user_id=owner.id,
+        subject="Owner's Current Subject",
+    )
+
+    async with authed_client_for_user(db, test_org.id, manager, Role.CASE_MANAGER) as client:
+        rollback_response = await client.post(
+            f"/email-templates/{personal_template.id}/rollback",
+            json={"target_version": 1},
+        )
+        assert rollback_response.status_code == 403
+
+    db.refresh(personal_template)
+    assert personal_template.subject == "Owner's Current Subject"
+    assert personal_template.current_version == 2
 
 
 @pytest.mark.asyncio

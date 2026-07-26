@@ -791,10 +791,23 @@ def share_template_with_org(
     return new_template
 
 
-def delete_template(db: Session, template: EmailTemplate) -> None:
-    """Soft delete a template (deactivate)."""
-    template.is_active = False
-    db.commit()
+def delete_template(
+    db: Session,
+    template: EmailTemplate,
+    *,
+    user_id: UUID,
+) -> EmailTemplate:
+    """Soft delete a template through the versioned published-state path."""
+    if not template.is_active:
+        return template
+
+    return update_template(
+        db=db,
+        template=template,
+        user_id=user_id,
+        is_active=False,
+        comment="Deactivated",
+    )
 
 
 def is_email_suppressed(
