@@ -191,13 +191,15 @@ def _process_resend_event(
                     .first()
                 )
                 if run:
+                    # ⚡ Bolt: Use direct scalar count instead of .query().count() subquery
                     run.opened_count = (
-                        db.query(CampaignRecipient)
-                        .filter(
-                            CampaignRecipient.run_id == run.id,
-                            CampaignRecipient.opened_at.isnot(None),
-                        )
-                        .count()
+                        db.scalar(
+                            select(func.count(CampaignRecipient.id))
+                            .where(
+                                CampaignRecipient.run_id == run.id,
+                                CampaignRecipient.opened_at.isnot(None),
+                            )
+                        ) or 0
                     )
             campaign_recipient.open_count = (campaign_recipient.open_count or 0) + 1
             logger.info("Resend: email opened for campaign_recipient=%s", campaign_recipient.id)
@@ -222,13 +224,15 @@ def _process_resend_event(
                     .first()
                 )
                 if run:
+                    # ⚡ Bolt: Use direct scalar count instead of .query().count() subquery
                     run.clicked_count = (
-                        db.query(CampaignRecipient)
-                        .filter(
-                            CampaignRecipient.run_id == run.id,
-                            CampaignRecipient.clicked_at.isnot(None),
-                        )
-                        .count()
+                        db.scalar(
+                            select(func.count(CampaignRecipient.id))
+                            .where(
+                                CampaignRecipient.run_id == run.id,
+                                CampaignRecipient.clicked_at.isnot(None),
+                            )
+                        ) or 0
                     )
             campaign_recipient.click_count = (campaign_recipient.click_count or 0) + 1
             logger.info("Resend: link clicked for campaign_recipient=%s", campaign_recipient.id)

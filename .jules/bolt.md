@@ -1,0 +1,3 @@
+## 2025-02-09 - SQLAlchemy Count Optimizations
+**Learning:** In this codebase, relying on `.count()` (e.g. `query.count()`) in SQLAlchemy often creates inefficient database subqueries like `SELECT count(*) FROM (SELECT ...)` rather than directly computing an aggregate count (`SELECT count(id) FROM ...`). This is particularly pronounced on complex subqueries and relationship joins where ordering overhead compounds the penalty.
+**Action:** Always prefer `db.scalar(select(func.count(Model.id)).where(...))` for absolute count calculations to generate optimal aggregation queries and drop irrelevant operations (like `order_by`). When evaluating paginations or custom subsets, explicitly remove sorting overhead using `.order_by(None)` before calling `.count()`.

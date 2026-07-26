@@ -5,7 +5,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY, SURROGATE_PIPELINE_ENTITY
@@ -739,13 +739,15 @@ def enqueue_campaign_retry_failed(
     if not run:
         raise ValueError("Run not found")
 
+    # ⚡ Bolt: Use direct scalar count instead of .query().count() subquery
     failed_count = (
-        db.query(CampaignRecipient)
-        .filter(
-            CampaignRecipient.run_id == run_id,
-            CampaignRecipient.status == CampaignRecipientStatus.FAILED.value,
-        )
-        .count()
+        db.scalar(
+            select(func.count(CampaignRecipient.id))
+            .where(
+                CampaignRecipient.run_id == run_id,
+                CampaignRecipient.status == CampaignRecipientStatus.FAILED.value,
+            )
+        ) or 0
     )
     if failed_count == 0:
         raise ValueError("No failed recipients to retry")
@@ -1084,8 +1086,9 @@ def execute_campaign_run(
         email_col = IntendedParent.email
         id_col = IntendedParent.id
 
+    # ⚡ Bolt: Count before applying order_by to avoid expensive sorting in subquery
+    run.total_count = recipient_query.order_by(None).count()
     recipient_query = recipient_query.order_by(func.lower(email_col), id_col)
-    run.total_count = recipient_query.count()
     db.commit()
 
     seen_emails: dict[str, str | None] = {}
