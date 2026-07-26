@@ -877,8 +877,9 @@ def iter_tasks_due_in_window(
 
     query = (
         db.query(Task)
-        .join(Surrogate)
+        .join(Surrogate, Task.surrogate_id == Surrogate.id)
         .filter(
+            Task.organization_id == org_id,
             Surrogate.organization_id == org_id,
             Task.due_date.isnot(None),
             Task.due_date >= start_date,
@@ -910,8 +911,9 @@ def iter_overdue_tasks(
 
     query = (
         db.query(Task)
-        .join(Surrogate)
+        .join(Surrogate, Task.surrogate_id == Surrogate.id)
         .filter(
+            Task.organization_id == org_id,
             Surrogate.organization_id == org_id,
             Task.due_date.isnot(None),
             Task.due_date < today,
