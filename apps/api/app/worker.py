@@ -854,12 +854,14 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
 
                     except Exception as e:
                         error_msg = str(e)
+                        retry_run_at = job.run_at
                         db.rollback()
                         job = job_service.fail_claimed_job(
                             db,
                             job_id=job_id,
                             claim_token=claim_token,
                             error=error_msg,
+                            retry_run_at=retry_run_at,
                         )
                         _log_job_failure(job, e)
 
