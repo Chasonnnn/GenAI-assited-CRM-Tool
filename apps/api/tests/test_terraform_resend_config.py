@@ -31,18 +31,9 @@ def test_platform_resend_admission_group_token_is_injected_as_a_service_secret()
 
 def test_cloudbuild_replaces_snapshot_aware_worker_before_api_producers() -> None:
     content = _read("cloudbuild/api.yaml")
-    migration_step = (
-        'args: ["beta", "run", "jobs", "execute", "$_MIGRATE_JOB", '
-        '"--region", "$_REGION", "--wait", "--quiet"]'
-    )
-    worker_step = (
-        'args: ["run", "services", "update", "$_WORKER_SERVICE", '
-        '"--image", "$_IMAGE_WORKER", "--region", "$_REGION", "--quiet"]'
-    )
-    api_step = (
-        'args: ["run", "services", "update", "$_API_SERVICE", '
-        '"--image", "$_IMAGE_API", "--region", "$_REGION", "--quiet"]'
-    )
+    migration_step = 'gcloud beta run jobs execute "$_MIGRATE_JOB"'
+    worker_step = 'gcloud run services update "$_WORKER_SERVICE"'
+    api_step = 'gcloud run services update "$_API_SERVICE"'
 
     assert content.index(migration_step) < content.index(worker_step) < content.index(api_step)
 
