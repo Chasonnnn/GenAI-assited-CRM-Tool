@@ -8,15 +8,14 @@ import uuid
 
 from alembic import command
 from alembic.config import Config
-import pytest
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import NullPool
 
 
 API_ROOT = Path(__file__).resolve().parents[1]
 PRE_EXPANSION_REVISION = "20260701_1025"
 EXPANSION_REVISION = "20260725_1800"
+MIGRATION_PATH = API_ROOT / "alembic" / "versions" / "20260725_1800_expand_job_claim_metadata.py"
 
 ORG_ID = uuid.UUID("71000000-0000-4000-8000-000000000001")
 RUNNING_JOB_ID = uuid.UUID("72000000-0000-4000-8000-000000000001")
@@ -150,7 +149,7 @@ def test_expansion_preserves_legacy_running_claim_and_remains_rolling_compatible
                     )
                 ).scalars()
             )
-            assert "ck_jobs_claim_pair" in constraints
+            assert "ck_jobs_claim_pair" not in constraints
             assert "ck_jobs_running_claimed" not in constraints
 
             indexes = set(
@@ -165,16 +164,33 @@ def test_expansion_preserves_legacy_running_claim_and_remains_rolling_compatible
                     )
                 ).scalars()
             )
-            assert "idx_jobs_stale_claims" in indexes
+            assert "idx_jobs_stale_claims" not in indexes
 
-            with pytest.raises(IntegrityError, match="ck_jobs_claim_pair"):
-                with connection.begin_nested():
-                    connection.execute(
-                        text("UPDATE jobs SET claim_token = :token WHERE id = :id"),
-                        {"id": RUNNING_JOB_ID, "token": uuid.uuid4()},
+            command.downgrade(config, PRE_EXPANSION_REVISION)
+            columns = set(
+                connection.execute(
+                    text(
+                        """
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_schema = current_schema()
+                          AND table_name = 'jobs'
+                        """
                     )
+                ).scalars()
+            )
+            assert "claim_token" not in columns
+            assert "claimed_at" not in columns
     finally:
         isolated_engine.dispose()
         with admin_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
             connection.execute(text(f"DROP DATABASE IF EXISTS {quoted_database}"))
         admin_engine.dispose()
+
+
+def test_expansion_sets_a_short_lock_timeout_before_schema_changes() -> None:
+    source = MIGRATION_PATH.read_text()
+
+    lock_timeout = "op.execute(\"SET LOCAL lock_timeout = '5s'\")"
+    assert lock_timeout in source
+    assert source.index(lock_timeout) < source.index("op.add_column")

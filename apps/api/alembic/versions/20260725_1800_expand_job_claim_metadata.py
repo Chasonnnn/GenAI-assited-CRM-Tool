@@ -17,6 +17,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    op.execute("SET LOCAL lock_timeout = '5s'")
     op.add_column(
         "jobs",
         sa.Column("claim_token", UUID(as_uuid=True), nullable=True),
@@ -25,20 +26,11 @@ def upgrade() -> None:
         "jobs",
         sa.Column("claimed_at", sa.TIMESTAMP(timezone=True), nullable=True),
     )
-    op.create_check_constraint(
-        "ck_jobs_claim_pair",
-        "jobs",
-        "(claim_token IS NULL) = (claimed_at IS NULL)",
-    )
-    op.create_index(
-        "idx_jobs_stale_claims",
-        "jobs",
-        ["claimed_at", "id"],
-        postgresql_where=sa.text("status = 'running' AND claimed_at IS NOT NULL"),
-    )
 
 
 def downgrade() -> None:
+    op.execute("SET LOCAL lock_timeout = '5s'")
+    # Tolerate databases that rehearsed an earlier draft of this revision.
     op.drop_index(
         "idx_jobs_stale_claims",
         table_name="jobs",
