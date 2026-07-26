@@ -590,6 +590,7 @@ def get_readiness(
     sender_configured = bool(settings.from_email)
     domain_verified = bool(settings.verified_domain)
     webhook_secret_configured = bool(settings.webhook_secret_encrypted)
+    tracking_opted_in = webhook_secret_configured
     can_send = all(
         (
             api_key_configured,
@@ -598,60 +599,69 @@ def get_readiness(
             domain_verified,
         )
     )
-    can_track = domain_verified and webhook_secret_configured
+    can_track = domain_verified and tracking_opted_in
 
-    recent_accepted_messages = (
-        db.query(func.count(EmailLog.id))
-        .filter(
-            EmailLog.organization_id == organization_id,
-            EmailLog.provider == "resend",
-            EmailLog.provider_scope == "organization",
-            EmailLog.provider_account_id == organization_provider_account_id,
-            EmailLog.external_id.is_not(None),
-            EmailLog.created_at >= cutoff,
-        )
-        .scalar()
-        or 0
-    )
-    webhook_evidence = (
-        db.query(
-            func.count(ResendWebhookEvent.id).label("event_count"),
-            func.max(ResendWebhookEvent.received_at).label("latest_received_at"),
-        )
-        .filter(
-            ResendWebhookEvent.organization_id == organization_id,
-            ResendWebhookEvent.provider_scope == "organization",
-            ResendWebhookEvent.provider_account_id == organization_provider_account_id,
-            ResendWebhookEvent.received_at >= cutoff,
-        )
-        .one()
-    )
-    latest_webhook_at = webhook_evidence.latest_received_at
-    if int(webhook_evidence.event_count or 0):
+    latest_webhook_at = None
+    if not tracking_opted_in:
         activity_check = EmailOperationsReadinessCheck(
             key="recent_webhook_activity",
-            status="pass",
-            detail="Verified provider webhook activity was received in the last 24 hours.",
-            observed_at=latest_webhook_at,
-        )
-    elif recent_accepted_messages:
-        activity_check = EmailOperationsReadinessCheck(
-            key="recent_webhook_activity",
-            status="fail",
-            detail=(
-                "Provider messages were accepted in the last 24 hours, but no "
-                "verified webhook activity was received."
-            ),
+            status="not_applicable",
+            detail="Webhook activity is only evaluated after tracking is enabled.",
         )
     else:
-        activity_check = EmailOperationsReadinessCheck(
-            key="recent_webhook_activity",
-            status="unknown",
-            detail=(
-                "No recent accepted messages require webhook evidence; activity "
-                "cannot yet be evaluated."
-            ),
+        recent_accepted_messages = (
+            db.query(func.count(EmailLog.id))
+            .filter(
+                EmailLog.organization_id == organization_id,
+                EmailLog.provider == "resend",
+                EmailLog.provider_scope == "organization",
+                EmailLog.provider_account_id == organization_provider_account_id,
+                EmailLog.external_id.is_not(None),
+                EmailLog.created_at >= cutoff,
+            )
+            .scalar()
+            or 0
         )
+        webhook_evidence = (
+            db.query(
+                func.count(ResendWebhookEvent.id).label("event_count"),
+                func.max(ResendWebhookEvent.received_at).label("latest_received_at"),
+            )
+            .filter(
+                ResendWebhookEvent.organization_id == organization_id,
+                ResendWebhookEvent.provider_scope == "organization",
+                ResendWebhookEvent.provider_account_id == organization_provider_account_id,
+                ResendWebhookEvent.received_at >= cutoff,
+            )
+            .one()
+        )
+        latest_webhook_at = webhook_evidence.latest_received_at
+
+        if int(webhook_evidence.event_count or 0):
+            activity_check = EmailOperationsReadinessCheck(
+                key="recent_webhook_activity",
+                status="pass",
+                detail="Verified provider webhook activity was received in the last 24 hours.",
+                observed_at=latest_webhook_at,
+            )
+        elif recent_accepted_messages:
+            activity_check = EmailOperationsReadinessCheck(
+                key="recent_webhook_activity",
+                status="fail",
+                detail=(
+                    "Provider messages were accepted in the last 24 hours, but no "
+                    "verified webhook activity was received."
+                ),
+            )
+        else:
+            activity_check = EmailOperationsReadinessCheck(
+                key="recent_webhook_activity",
+                status="unknown",
+                detail=(
+                    "No recent accepted messages require webhook evidence; activity "
+                    "cannot yet be evaluated."
+                ),
+            )
 
     checks = [
         EmailOperationsReadinessCheck(
@@ -684,16 +694,29 @@ def get_readiness(
             pass_detail="A verified sending domain is persisted.",
             fail_detail="No verified sending domain is persisted.",
         ),
-        _configured_check(
-            key="webhook_signing_secret_configured",
-            configured=webhook_secret_configured,
-            pass_detail="An encrypted webhook signing secret is stored.",
-            fail_detail="No webhook signing secret is configured.",
+        (
+            EmailOperationsReadinessCheck(
+                key="webhook_signing_secret_configured",
+                status="pass",
+                detail="An encrypted webhook signing secret is stored.",
+            )
+            if tracking_opted_in
+            else EmailOperationsReadinessCheck(
+                key="webhook_signing_secret_configured",
+                status="not_applicable",
+                detail="Optional Resend tracking is not configured.",
+            )
         ),
         activity_check,
     ]
     overall = (
-        "ready" if can_send and can_track and activity_check.status != "fail" else "needs_attention"
+        "ready"
+        if can_send
+        and (
+            not tracking_opted_in
+            or (can_track and activity_check.status != "fail")
+        )
+        else "needs_attention"
     )
     return EmailOperationsReadinessResponse(
         overall=overall,
