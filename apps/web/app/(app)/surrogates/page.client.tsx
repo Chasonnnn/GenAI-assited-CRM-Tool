@@ -185,12 +185,12 @@ function FloatingActionBar({
                     )}
 
                     <Button variant="secondary" size="sm" onClick={handleArchive} disabled={isLoading}>
-                        <ArchiveIcon className="size-4 mr-1" />
+                        <ArchiveIcon className="size-4 mr-1" aria-hidden="true" />
                         Archive
                     </Button>
 
                     <Button variant="ghost" size="sm" onClick={onClear} disabled={isLoading}>
-                        <XIcon className="size-4 mr-1" />
+                        <XIcon className="size-4 mr-1" aria-hidden="true" />
                         Clear
                     </Button>
                 </div>
@@ -1416,9 +1416,10 @@ export function SurrogatesPageClient() {
                                     size="sm"
                                     onClick={() => clearActiveFilter(chip.key)}
                                     className="gap-2"
+                                    aria-label={`Remove filter: ${chip.label}`}
                                 >
                                     {chip.label}
-                                    <XIcon className="size-3" />
+                                    <XIcon className="size-3" aria-hidden="true" />
                                 </Button>
                             ))}
                             <Button variant="ghost" size="sm" onClick={resetFilters}>
