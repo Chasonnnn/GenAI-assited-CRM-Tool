@@ -6,7 +6,8 @@ import pytest
 
 from app.db.enums import Role
 from app.db.models import Membership, User
-from app.services import email_service
+from app.schemas.surrogate import SurrogateCreate
+from app.services import email_service, surrogate_service
 
 
 def _create_member(db, org_id, *, role: Role = Role.CASE_MANAGER) -> tuple[User, Membership]:
@@ -81,3 +82,47 @@ async def test_remove_member_deactivates_their_personal_template(
     assert template_id not in {
         uuid.UUID(item["id"]) for item in active_templates_response.json()
     }
+
+
+@pytest.mark.asyncio
+async def test_remove_member_releases_their_leads_to_unassigned_queue(
+    authed_client, db, test_org
+):
+    departing_user, membership = _create_member(db, test_org.id)
+    lead = surrogate_service.create_surrogate(
+        db=db,
+        org_id=test_org.id,
+        user_id=departing_user.id,
+        data=SurrogateCreate(
+            full_name="Departing User Lead",
+            email=f"departing-lead-{uuid.uuid4().hex[:8]}@example.com",
+        ),
+    )
+    lead_id = lead.id
+    db.commit()
+
+    response = await authed_client.delete(
+        f"/settings/permissions/members/{membership.id}"
+    )
+    assert response.status_code == 200, response.text
+
+    lead_response = await authed_client.get(f"/surrogates/{lead_id}")
+    assert lead_response.status_code == 200, lead_response.text
+    lead_data = lead_response.json()
+    assert lead_data["owner_type"] == "queue"
+    assert lead_data["owner_name"] == "Unassigned"
+
+    queue_response = await authed_client.get("/surrogates/unassigned-queue")
+    assert queue_response.status_code == 200, queue_response.text
+    assert lead_id in {uuid.UUID(item["id"]) for item in queue_response.json()["items"]}
+
+    activity_response = await authed_client.get(f"/surrogates/{lead_id}/activity")
+    assert activity_response.status_code == 200, activity_response.text
+    release_events = [
+        item
+        for item in activity_response.json()["items"]
+        if item["activity_type"] == "surrogate_released"
+    ]
+    assert len(release_events) == 1
+    assert release_events[0]["details"]["from_user_id"] == str(departing_user.id)
+    assert release_events[0]["details"]["reason"] == "owner_removed_from_organization"

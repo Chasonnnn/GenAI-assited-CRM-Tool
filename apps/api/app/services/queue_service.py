@@ -2,11 +2,11 @@
 
 from datetime import datetime, timezone
 from uuid import UUID
-from sqlalchemy import select, and_
+from sqlalchemy import and_, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-from app.db.models import Queue, Surrogate, QueueMember, User
+from app.db.models import Queue, QueueMember, Surrogate, SurrogateActivityLog, User
 from app.db.enums import SurrogateActivityType
 from app.db.enums import OwnerType
 from app.services import activity_service
@@ -395,6 +395,73 @@ def release_surrogate(
     )
 
     return surrogate
+
+
+def release_user_surrogates_to_unassigned(
+    db: Session,
+    org_id: UUID,
+    owner_user_id: UUID,
+    actor_user_id: UUID | None,
+) -> int:
+    """Release every surrogate owned by a departing member to Unassigned.
+
+    The caller owns the transaction. Rows are locked and scoped to the
+    organization so concurrent offboarding cannot move another organization's
+    or another user's surrogates.
+    """
+    queue = get_or_create_default_queue(db, org_id)
+    surrogate_ids = list(
+        db.execute(
+            select(Surrogate.id)
+            .where(
+                and_(
+                    Surrogate.organization_id == org_id,
+                    Surrogate.owner_type == OwnerType.USER.value,
+                    Surrogate.owner_id == owner_user_id,
+                )
+            )
+            .with_for_update()
+        )
+        .scalars()
+        .all()
+    )
+
+    if not surrogate_ids:
+        return 0
+
+    db.execute(
+        update(Surrogate)
+        .where(
+            Surrogate.organization_id == org_id,
+            Surrogate.owner_type == OwnerType.USER.value,
+            Surrogate.owner_id == owner_user_id,
+            Surrogate.id.in_(surrogate_ids),
+        )
+        .values(
+            owner_type=OwnerType.QUEUE.value,
+            owner_id=queue.id,
+            assigned_at=None,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    db.add_all(
+        [
+            SurrogateActivityLog(
+                surrogate_id=surrogate_id,
+                organization_id=org_id,
+                activity_type=SurrogateActivityType.SURROGATE_RELEASED.value,
+                actor_user_id=actor_user_id,
+                details={
+                    "from_user_id": str(owner_user_id),
+                    "to_queue_id": str(queue.id),
+                    "reason": "owner_removed_from_organization",
+                },
+            )
+            for surrogate_id in surrogate_ids
+        ]
+    )
+    db.flush()
+    return len(surrogate_ids)
 
 
 def assign_surrogate_to_queue(

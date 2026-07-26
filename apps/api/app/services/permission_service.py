@@ -418,7 +418,12 @@ def deprovision_member(
         UserIntegration,
         UserSession,
     )
-    from app.services import email_service, intake_pool_access_service, session_service
+    from app.services import (
+        email_service,
+        intake_pool_access_service,
+        queue_service,
+        session_service,
+    )
 
     personal_templates = (
         db.query(EmailTemplate)
@@ -440,6 +445,13 @@ def deprovision_member(
             comment="Deactivated when owner was removed from organization",
             commit=False,
         )
+
+    queue_service.release_user_surrogates_to_unassigned(
+        db=db,
+        org_id=org_id,
+        owner_user_id=user.id,
+        actor_user_id=actor_user_id,
+    )
 
     delete_user_overrides(db, org_id, user.id)
     intake_pool_access_service.delete_user_grants(db, org_id, user.id)
