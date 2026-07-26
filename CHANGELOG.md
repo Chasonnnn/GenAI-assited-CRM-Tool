@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.54](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.53...surrogacy-crm-platform-v0.91.54) (2026-07-26)
+
+
+### Features
+
+* add email template status controls ([cef0d30](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cef0d30ca25253219e4f017f772cb05b29a28079))
+* add safe visual editing for email layouts ([ddd39f5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ddd39f5d549615d1ba33d1929951e371d3091368))
+* expose privileged personal template controls ([dbf25e4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dbf25e4dac1f2a8fc7172ddd0d9629e4cb095f64))
+
+
+### Bug Fixes
+
+* allow privileged personal template management ([ee26974](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ee269740e7cbdfd93def5c2590df92b876d93220))
+* deactivate templates when members leave ([de6cde4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/de6cde46db5d025a702d0082b80b70722b7a37d8))
+* enable visual editing for structured templates ([09eb906](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/09eb9068bc82c61971ff98585f2704587f5fa904))
+* enforce inactive email templates ([1acee05](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1acee05c88c3978b66b2b8a0bb62799421f0c7ab))
+* harden email templates and member offboarding ([401860f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/401860fe052c95e3a59af8a391b2551967c7123a))
+* keep background worker capacity in examples ([f60c031](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f60c031f00c316299b498163bbea71579dda7510))
+* keep visual editor compiler-safe ([84c8906](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/84c89064c28db033832b870f17a2d97456c8a8c9))
+* make Resend team limiter optional ([b993c50](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b993c506fa117c2c421a7977927f22416e58d904))
+* recover delayed Resend readiness checks ([b62ae6a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b62ae6ac9b67ccc1f4fdcbd65c4a4595fa3948c0))
+* release leads when members leave ([a72bc95](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a72bc95b1fbb8e1828ba06a74dd2fc80e1fc7b0e))
+* render indented email tables without warnings ([46eb0a8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/46eb0a8082463105ae7bf9efc90ec484321d788b))
+
 ## [0.91.53](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.52...surrogacy-crm-platform-v0.91.53) (2026-07-26)
 
 
