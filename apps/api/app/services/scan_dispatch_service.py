@@ -11,17 +11,31 @@ from google.auth.transport.requests import Request
 import httpx
 
 from app.core.config import settings
-from app.services.http_service import (
-    DEFAULT_RETRY_STATUSES,
-    request_with_retries,
-    request_with_retries_sync,
-)
 
 
 logger = logging.getLogger(__name__)
 
 SCAN_JOB_TIMEOUT_SECONDS = 300.0
+SCAN_EXECUTION_TIMEOUT_SECONDS = 600
+SCAN_STALE_LEASE_MARGIN_SECONDS = 60
 RUN_API_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
+
+
+class ScanDispatchAmbiguousError(RuntimeError):
+    """Cloud Run may have accepted the execution, so the claim must stay fenced."""
+
+
+def _dispatch_outcome_is_ambiguous(status_code: int) -> bool:
+    return status_code in {408, 409, 425, 429} or status_code >= 500
+
+
+def scan_stale_lease_seconds() -> int:
+    """Keep stale recovery beyond the longest accepted Cloud Run execution."""
+    configured = max(0, settings.ATTACHMENT_SCAN_STALE_RUNNING_SECONDS)
+    return max(
+        configured,
+        SCAN_EXECUTION_TIMEOUT_SECONDS + SCAN_STALE_LEASE_MARGIN_SECONDS,
+    )
 
 
 def _scan_job_name() -> str:
@@ -88,7 +102,7 @@ def _run_payload(
                 }
             ],
             "taskCount": 1,
-            "timeout": "600s",
+            "timeout": f"{SCAN_EXECUTION_TIMEOUT_SECONDS}s",
         }
     }
 
@@ -112,18 +126,11 @@ async def _dispatch_scan_job(
         claim_token=claim_token,
     )
 
-    async with httpx.AsyncClient(timeout=SCAN_JOB_TIMEOUT_SECONDS) as client:
-
-        async def request_fn() -> httpx.Response:
-            return await client.post(_run_job_url(), headers=headers, json=payload)
-
-        response = await request_with_retries(
-            request_fn,
-            max_attempts=3,
-            base_delay=0.5,
-            max_delay=4.0,
-            retry_statuses=DEFAULT_RETRY_STATUSES,
-        )
+    try:
+        async with httpx.AsyncClient(timeout=SCAN_JOB_TIMEOUT_SECONDS) as client:
+            response = await client.post(_run_job_url(), headers=headers, json=payload)
+    except httpx.RequestError as exc:
+        raise ScanDispatchAmbiguousError("Dedicated scan job dispatch outcome is unknown") from exc
 
     if 200 <= response.status_code < 300:
         logger.info(
@@ -133,6 +140,11 @@ async def _dispatch_scan_job(
             job_id,
         )
         return
+
+    if _dispatch_outcome_is_ambiguous(response.status_code):
+        raise ScanDispatchAmbiguousError(
+            f"Dedicated scan job dispatch outcome is unknown ({response.status_code})"
+        )
 
     detail = None
     try:
@@ -195,17 +207,15 @@ def _dispatch_scan_job_sync(
         claim_token=claim_token,
     )
 
-    with httpx.Client(timeout=SCAN_JOB_TIMEOUT_SECONDS) as client:
+    try:
+        with httpx.Client(timeout=SCAN_JOB_TIMEOUT_SECONDS) as client:
+            response = client.post(_run_job_url(), headers=headers, json=payload)
+    except httpx.RequestError as exc:
+        raise ScanDispatchAmbiguousError("Dedicated scan job dispatch outcome is unknown") from exc
 
-        def request_fn() -> httpx.Response:
-            return client.post(_run_job_url(), headers=headers, json=payload)
-
-        response = request_with_retries_sync(
-            request_fn,
-            max_attempts=3,
-            base_delay=0.5,
-            max_delay=4.0,
-            retry_statuses=DEFAULT_RETRY_STATUSES,
+    if _dispatch_outcome_is_ambiguous(response.status_code):
+        raise ScanDispatchAmbiguousError(
+            f"Dedicated scan job dispatch outcome is unknown ({response.status_code})"
         )
 
     _raise_for_dispatch_response(

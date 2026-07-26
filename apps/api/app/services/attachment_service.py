@@ -574,9 +574,11 @@ def ensure_attachment_scan_job(
     Returns:
         True when a new job is enqueued; False when a matching job already exists.
     """
+    from app.services import scan_dispatch_service
+
     attachment_id_str = str(attachment_id)
     now = datetime.now(timezone.utc)
-    stale_after_seconds = max(0, settings.ATTACHMENT_SCAN_STALE_RUNNING_SECONDS)
+    stale_after_seconds = scan_dispatch_service.scan_stale_lease_seconds()
     in_flight_jobs = (
         db.query(Job)
         .filter(
@@ -624,7 +626,7 @@ def dispatch_attachment_scan_if_needed(
 
     attachment_id_str = str(attachment_id)
     now = datetime.now(timezone.utc)
-    stale_after_seconds = max(0, settings.ATTACHMENT_SCAN_STALE_RUNNING_SECONDS)
+    stale_after_seconds = scan_dispatch_service.scan_stale_lease_seconds()
 
     job = (
         db.query(Job)
@@ -686,6 +688,12 @@ def dispatch_attachment_scan_if_needed(
             attachment_id=attachment_id,
             claim_token=claimed_job.claim_token,
         )
+    except scan_dispatch_service.ScanDispatchAmbiguousError:
+        logger.warning(
+            "Attachment scan dispatch outcome is unknown; preserving claim job_id=%s",
+            claimed_job.id,
+        )
+        return True
     except Exception as exc:
         job_service.mark_job_failed(db, claimed_job, str(exc))
         logger.exception(

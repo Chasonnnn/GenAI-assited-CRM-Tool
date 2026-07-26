@@ -61,7 +61,7 @@ def test_ensure_attachment_scan_job_reclaims_stale_running_job(db, test_org, mon
     db.flush()
 
     db.query(Job).filter(Job.id == stale_job.id).update(
-        {"run_at": datetime.now(timezone.utc).replace(microsecond=0)}
+        {"run_at": datetime.now(timezone.utc) - timedelta(minutes=20)}
     )
     db.flush()
 
@@ -363,7 +363,7 @@ def test_ensure_form_submission_file_scan_job_reclaims_stale_running_job(db, tes
     db.flush()
 
     db.query(Job).filter(Job.id == stale_job.id).update(
-        {"run_at": datetime.now(timezone.utc).replace(microsecond=0)}
+        {"run_at": datetime.now(timezone.utc) - timedelta(minutes=20)}
     )
     db.flush()
 
@@ -450,7 +450,7 @@ def test_stale_form_submission_claim_is_reclaimed_and_identity_cleared(
         attempts=1,
         max_attempts=3,
         claim_token=uuid.uuid4(),
-        claimed_at=datetime.now(timezone.utc) - timedelta(minutes=10),
+        claimed_at=datetime.now(timezone.utc) - timedelta(minutes=20),
     )
     db.add(job)
     db.commit()
@@ -526,6 +526,48 @@ def test_dispatch_attachment_scan_if_needed_dispatches_pending_remote_scan(
     assert job.attempts == 1
 
 
+def test_direct_scan_ambiguous_dispatch_preserves_current_claim(db, test_org, monkeypatch):
+    attachment_id = uuid.uuid4()
+    job = Job(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        job_type=JobType.ATTACHMENT_SCAN.value,
+        status=JobStatus.PENDING.value,
+        payload={"attachment_id": str(attachment_id)},
+        run_at=datetime.now(timezone.utc),
+        attempts=0,
+        max_attempts=3,
+    )
+    db.add(job)
+    db.commit()
+
+    from app.services import scan_dispatch_service
+
+    monkeypatch.setattr(scan_dispatch_service, "remote_scan_dispatch_configured", lambda: True)
+
+    def _ambiguous_dispatch(**_kwargs):
+        raise scan_dispatch_service.ScanDispatchAmbiguousError("outcome unknown")
+
+    monkeypatch.setattr(
+        scan_dispatch_service,
+        "dispatch_attachment_scan_job_sync",
+        _ambiguous_dispatch,
+    )
+
+    dispatched = attachment_service.dispatch_attachment_scan_if_needed(
+        db=db,
+        org_id=test_org.id,
+        attachment_id=attachment_id,
+    )
+
+    db.refresh(job)
+    assert dispatched is True
+    assert job.status == JobStatus.RUNNING.value
+    assert job.claim_token is not None
+    assert job.claimed_at is not None
+    assert job.last_error is None
+
+
 def test_dispatch_submission_file_scan_if_needed_dispatches_pending_remote_scan(
     db, test_org, monkeypatch
 ):
@@ -574,6 +616,48 @@ def test_dispatch_submission_file_scan_if_needed_dispatches_pending_remote_scan(
     }
     assert job.status == JobStatus.RUNNING.value
     assert job.attempts == 1
+
+
+def test_direct_form_scan_ambiguous_dispatch_preserves_current_claim(db, test_org, monkeypatch):
+    submission_file_id = uuid.uuid4()
+    job = Job(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        job_type=JobType.FORM_SUBMISSION_FILE_SCAN.value,
+        status=JobStatus.PENDING.value,
+        payload={"submission_file_id": str(submission_file_id)},
+        run_at=datetime.now(timezone.utc),
+        attempts=0,
+        max_attempts=3,
+    )
+    db.add(job)
+    db.commit()
+
+    from app.services import scan_dispatch_service
+
+    monkeypatch.setattr(scan_dispatch_service, "remote_scan_dispatch_configured", lambda: True)
+
+    def _ambiguous_dispatch(**_kwargs):
+        raise scan_dispatch_service.ScanDispatchAmbiguousError("outcome unknown")
+
+    monkeypatch.setattr(
+        scan_dispatch_service,
+        "dispatch_form_submission_file_scan_job_sync",
+        _ambiguous_dispatch,
+    )
+
+    dispatched = form_submission_service.dispatch_submission_file_scan_if_needed(
+        db=db,
+        org_id=test_org.id,
+        submission_file_id=submission_file_id,
+    )
+
+    db.refresh(job)
+    assert dispatched is True
+    assert job.status == JobStatus.RUNNING.value
+    assert job.claim_token is not None
+    assert job.claimed_at is not None
+    assert job.last_error is None
 
 
 @pytest.mark.asyncio

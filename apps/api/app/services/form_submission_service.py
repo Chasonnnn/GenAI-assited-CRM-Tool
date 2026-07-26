@@ -411,9 +411,11 @@ def ensure_submission_file_scan_job(
     commit: bool = False,
 ) -> bool:
     """Ensure a pending/running scan job exists for a form submission file."""
+    from app.services import scan_dispatch_service
+
     submission_file_id_str = str(submission_file_id)
     now = datetime.now(timezone.utc)
-    stale_after_seconds = max(0, settings.ATTACHMENT_SCAN_STALE_RUNNING_SECONDS)
+    stale_after_seconds = scan_dispatch_service.scan_stale_lease_seconds()
     in_flight_jobs = (
         db.query(Job)
         .filter(
@@ -461,7 +463,7 @@ def dispatch_submission_file_scan_if_needed(
 
     submission_file_id_str = str(submission_file_id)
     now = datetime.now(timezone.utc)
-    stale_after_seconds = max(0, settings.ATTACHMENT_SCAN_STALE_RUNNING_SECONDS)
+    stale_after_seconds = scan_dispatch_service.scan_stale_lease_seconds()
 
     jobs = (
         db.query(Job)
@@ -524,6 +526,12 @@ def dispatch_submission_file_scan_if_needed(
             submission_file_id=submission_file_id,
             claim_token=claimed_job.claim_token,
         )
+    except scan_dispatch_service.ScanDispatchAmbiguousError:
+        logger.warning(
+            "Form submission scan dispatch outcome is unknown; preserving claim job_id=%s",
+            claimed_job.id,
+        )
+        return True
     except Exception as exc:
         job_service.mark_job_failed(db, claimed_job, str(exc))
         logger.exception(
