@@ -1,14 +1,17 @@
 """CLI tools for Surrogacy Force administration."""
 
-import click
+from collections import Counter
 from datetime import datetime, timezone
+import json
 from uuid import UUID
+
+import click
 from sqlalchemy import func
 
 from app.db.enums import JobType, Role
 from app.db.models import Organization, OrgInvite, User, Membership
 from app.db.session import SessionLocal
-from app.services import job_service, org_service
+from app.services import job_service, legacy_job_reconciliation_service, org_service
 from app.services.pipeline_default_rollout_service import rollout_surrogate_default_pipelines
 
 
@@ -668,6 +671,147 @@ def repair_matched_without_match(org_slug: str | None, apply: bool):
         db.rollback()
         click.echo(f"[ERROR] Error: {e}")
         raise
+    finally:
+        db.close()
+
+
+def _parse_aware_iso_datetime(value: str, *, option_name: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise click.BadParameter(
+            "must be an ISO-8601 datetime",
+            param_hint=option_name,
+        ) from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise click.BadParameter(
+            "must include a timezone offset",
+            param_hint=option_name,
+        )
+    return parsed
+
+
+@cli.command("reconcile-legacy-job-claims")
+@click.option(
+    "--stale-before",
+    required=True,
+    help="Timezone-aware ISO-8601 cutoff for legacy running jobs.",
+)
+@click.option(
+    "--evaluated-at",
+    default=None,
+    help="Timezone-aware ISO-8601 evaluation time. Defaults to the current UTC time.",
+)
+@click.option("--apply", is_flag=True, help="Apply an exactly reviewed reconciliation plan.")
+@click.option("--expected-count", type=click.IntRange(min=0), default=None)
+@click.option("--expected-fingerprint", default=None)
+@click.option("--review-reason", default=None)
+@click.option(
+    "--manifest",
+    is_flag=True,
+    help="Emit a sanitized JSON review manifest (dry-run only).",
+)
+def reconcile_legacy_job_claims_cli(
+    stale_before: str,
+    evaluated_at: str | None,
+    apply: bool,
+    expected_count: int | None,
+    expected_fingerprint: str | None,
+    review_reason: str | None,
+    manifest: bool,
+):
+    """Preview or apply a reviewed legacy running-job reconciliation."""
+    normalized_fingerprint = (
+        expected_fingerprint.strip() if expected_fingerprint is not None else None
+    )
+    normalized_review_reason = review_reason.strip() if review_reason is not None else None
+    if apply and manifest:
+        raise click.UsageError("--manifest is available only for dry runs")
+    if apply:
+        missing_options = []
+        if expected_count is None:
+            missing_options.append("--expected-count")
+        if not normalized_fingerprint:
+            missing_options.append("--expected-fingerprint")
+        if not normalized_review_reason:
+            missing_options.append("--review-reason")
+        if missing_options:
+            raise click.UsageError("--apply requires " + ", ".join(missing_options))
+    else:
+        approval_options = []
+        if expected_count is not None:
+            approval_options.append("--expected-count")
+        if expected_fingerprint is not None:
+            approval_options.append("--expected-fingerprint")
+        if review_reason is not None:
+            approval_options.append("--review-reason")
+        if approval_options:
+            raise click.UsageError(
+                "approval options require --apply: " + ", ".join(approval_options)
+            )
+
+    stale_before_value = _parse_aware_iso_datetime(
+        stale_before,
+        option_name="--stale-before",
+    )
+    evaluated_at_value = (
+        _parse_aware_iso_datetime(evaluated_at, option_name="--evaluated-at")
+        if evaluated_at is not None
+        else datetime.now(timezone.utc)
+    )
+
+    db = SessionLocal()
+    try:
+        report = legacy_job_reconciliation_service.reconcile_legacy_running_jobs(
+            db,
+            stale_before=stale_before_value,
+            apply=apply,
+            evaluated_at=evaluated_at_value,
+            expected_count=expected_count,
+            expected_fingerprint=normalized_fingerprint,
+            review_reason=normalized_review_reason,
+        )
+        if manifest:
+            click.echo(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "mode": report.mode,
+                        "stale_before": stale_before_value.isoformat(),
+                        "evaluated_at": report.evaluated_at.isoformat(),
+                        "count": report.count,
+                        "fingerprint": report.fingerprint,
+                        "decisions": [
+                            {
+                                "job_id": str(decision.job_id),
+                                "organization_id": str(decision.organization_id),
+                                "job_type": decision.job_type,
+                                "run_at": decision.run_at.isoformat(),
+                                "attempts": decision.attempts,
+                                "evidence_flags": decision.evidence_flags,
+                                "target_status": decision.target_status,
+                                "reason_code": decision.reason_code,
+                                "non_replayable": decision.non_replayable,
+                            }
+                            for decision in report.decisions
+                        ],
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )
+        else:
+            click.echo(f"mode={report.mode} count={report.count} fingerprint={report.fingerprint}")
+            job_type_counts = Counter(decision.job_type for decision in report.decisions)
+            reason_code_counts = Counter(decision.reason_code for decision in report.decisions)
+            click.echo("job_type_counts:")
+            for job_type, count in sorted(job_type_counts.items()):
+                click.echo(f"  {job_type}={count}")
+            click.echo("reason_code_counts:")
+            for reason_code, count in sorted(reason_code_counts.items()):
+                click.echo(f"  {reason_code}={count}")
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
     finally:
         db.close()
 
