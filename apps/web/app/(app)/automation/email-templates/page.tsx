@@ -1277,14 +1277,19 @@ export default function EmailTemplatesPage() {
     const previewSubjectTemplate = libraryPreviewId && libraryTemplateDetail?.subject
         ? libraryTemplateDetail.subject
         : editorState.subject
+    const previewOrganizationName =
+        signatureData?.org_signature_company_name ||
+        user?.org_display_name ||
+        user?.org_name ||
+        "Your organization"
     const previewSubject = previewSubjectTemplate
         .replace(/\{\{full_name\}\}/g, "John Smith")
-        .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy")
+        .replace(/\{\{org_name\}\}/g, previewOrganizationName)
     const previewHtml = showPreview
         ? buildEmailTemplatePreviewHtml(
             libraryPreviewId ? libraryTemplateDetail?.body ?? "" : templateBody,
             {
-                orgCompanyName: signatureData?.org_signature_company_name,
+                orgCompanyName: previewOrganizationName,
                 scope: previewScope,
                 personalSignatureHtml: personalSignaturePreview?.html,
                 orgSignatureHtml: orgSignaturePreview?.html,
@@ -2722,7 +2727,7 @@ export default function EmailTemplatesPage() {
                             <div className="flex items-center gap-2 text-sm">
                                 <span className="font-medium text-muted-foreground w-16">From:</span>
                                 <span className="text-foreground">
-                                    {signatureData?.org_signature_company_name || "Your Company"} &lt;you@company.com&gt;
+                                    {previewOrganizationName} &lt;you@company.com&gt;
                                 </span>
                             </div>
                             <div className="flex items-center gap-2 text-sm">

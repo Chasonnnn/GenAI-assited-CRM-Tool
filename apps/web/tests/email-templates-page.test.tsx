@@ -539,6 +539,21 @@ describe("EmailTemplatesPage", () => {
         expect(screen.getByText("Unsubscribe")).toBeInTheDocument()
     })
 
+    it("uses the signed-in organization name in legacy and library subject previews", async () => {
+        libraryTemplateDetailFixture = {
+            ...LIBRARY_TEMPLATE_DETAIL,
+            subject: "Welcome to {{org_name}}",
+        }
+
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "Platform Templates" }))
+        fireEvent.click(screen.getByRole("button", { name: "Preview" }))
+
+        expect(await screen.findByText("Welcome to Test Org")).toBeInTheDocument()
+        expect(screen.queryByText(/ABC Surrogacy/)).not.toBeInTheDocument()
+    })
+
     it("clears library preview state when the preview dialog closes", async () => {
         render(<EmailTemplatesPage />)
 
