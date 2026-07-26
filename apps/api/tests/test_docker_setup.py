@@ -100,3 +100,10 @@ def test_compose_uses_postgres_18_1_with_new_pgdata() -> None:
     content = _read("docker-compose.yml")
     assert "image: postgres:18.1" in content
     assert "- pgdata:/var/lib/postgresql" in content
+
+
+def test_ci_database_services_match_local_postgres_18_1() -> None:
+    content = _read(".github/workflows/ci.yml")
+
+    assert "image: postgres:16" not in content
+    assert content.count("image: postgres:18.1") == 3

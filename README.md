@@ -378,8 +378,7 @@ pnpm lint
 pnpm check             # typecheck + lint + test
 ```
 
-> Note: CI runs backend tests against `postgres:16` while local development uses `postgres:18.1`
-> (see `docker-compose.yml`); this divergence is intentional.
+> Note: CI and local development both use `postgres:18.1` (see `docker-compose.yml`).
 
 ---
 
