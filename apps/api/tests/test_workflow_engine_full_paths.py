@@ -477,7 +477,7 @@ def test_workflow_engine_core_rate_limit_dedupe_and_conditions(db, test_org, tes
     assert engine._evaluate_condition("unknown", "a", "b") is False
 
 
-def test_scheduled_workflow_dedupe_uses_the_captured_occurrence_date(db, test_org, test_user):
+def test_scheduled_workflow_dedupe_uses_the_captured_occurrence_minute(db, test_org, test_user):
     engine = WorkflowEngineCore(adapter=_DummyAdapter())
     workflow = _create_workflow(
         db,
@@ -488,13 +488,25 @@ def test_scheduled_workflow_dedupe_uses_the_captured_occurrence_date(db, test_or
     )
     entity_id = uuid4()
 
-    key = engine._get_dedupe_key(
+    first_key = engine._get_dedupe_key(
         workflow,
         entity_id,
-        event_data={"schedule_time": "2026-07-25T23:59:00+00:00"},
+        event_data={"schedule_time": "2026-07-25T23:59:37+00:00"},
+    )
+    retry_key = engine._get_dedupe_key(
+        workflow,
+        entity_id,
+        event_data={"schedule_time": "2026-07-25T23:59:37+00:00"},
+    )
+    next_occurrence_key = engine._get_dedupe_key(
+        workflow,
+        entity_id,
+        event_data={"schedule_time": "2026-07-26T00:00:04+00:00"},
     )
 
-    assert key == f"{workflow.id}:{entity_id}:scheduled:2026-07-25"
+    assert first_key == f"{workflow.id}:{entity_id}:scheduled:20260725T2359Z"
+    assert retry_key == first_key
+    assert next_occurrence_key == f"{workflow.id}:{entity_id}:scheduled:20260726T0000Z"
 
 
 def test_workflow_engine_continue_execution_denied_and_expired_paths(db, test_org, test_user):

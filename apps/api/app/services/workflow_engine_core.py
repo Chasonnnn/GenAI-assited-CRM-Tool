@@ -776,7 +776,7 @@ class WorkflowEngineCore:
             return f"{workflow.id}:{entity_id}:{trigger_type}"
 
         if trigger_type in ["scheduled", "inactivity", "task_due", "task_overdue"]:
-            occurrence_date = datetime.now(timezone.utc).date().isoformat()
+            occurrence_key = datetime.now(timezone.utc).date().isoformat()
             if trigger_type == "scheduled" and event_data:
                 raw_schedule_time = event_data.get("schedule_time")
                 try:
@@ -793,9 +793,9 @@ class WorkflowEngineCore:
                     and schedule_time.tzinfo is not None
                     and schedule_time.utcoffset() is not None
                 ):
-                    occurrence_date = schedule_time.date().isoformat()
+                    occurrence_key = schedule_time.astimezone(timezone.utc).strftime("%Y%m%dT%H%MZ")
 
-            return f"{workflow.id}:{entity_id}:{trigger_type}:{occurrence_date}"
+            return f"{workflow.id}:{entity_id}:{trigger_type}:{occurrence_key}"
 
         return None
 
