@@ -710,6 +710,222 @@ describe('IntegrationsPage', () => {
         ).toBeInTheDocument()
     })
 
+    it('shows configured webhook tracking without an apparently empty secret field', () => {
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        expect(
+            within(dialog).getByRole('checkbox', {
+                name: /enable resend webhook tracking/i,
+            })
+        ).toBeChecked()
+        expect(within(dialog).getByText('Tracking enabled')).toBeInTheDocument()
+        expect(within(dialog).getByText(/signing secret is stored securely/i)).toBeInTheDocument()
+        expect(
+            within(dialog).getByRole('button', { name: /replace secret/i })
+        ).toBeInTheDocument()
+        expect(
+            within(dialog).queryByLabelText('Webhook Signing Secret')
+        ).not.toBeInTheDocument()
+    })
+
+    it('keeps optional webhook tracking off until an administrator opts in', () => {
+        mockUseResendSettingsQuery.mockImplementation(() => ({
+            data: {
+                ...resendSettingsData,
+                webhook_signing_secret_configured: false,
+            },
+            isLoading: false,
+        }))
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        const trackingCheckbox = within(dialog).getByRole('checkbox', {
+            name: /enable resend webhook tracking/i,
+        })
+        expect(trackingCheckbox).not.toBeChecked()
+        expect(
+            within(dialog).queryByLabelText('Webhook Signing Secret')
+        ).not.toBeInTheDocument()
+        expect(
+            within(dialog).queryByRole('button', { name: /copy webhook url/i })
+        ).not.toBeInTheDocument()
+
+        fireEvent.click(trackingCheckbox)
+
+        expect(trackingCheckbox).toBeChecked()
+        expect(within(dialog).getByText('Setup required')).toBeInTheDocument()
+        expect(within(dialog).getByLabelText('Webhook Signing Secret')).toHaveValue('')
+        expect(
+            within(dialog).getByRole('button', { name: /copy webhook url/i })
+        ).toBeInTheDocument()
+    })
+
+    it('requires and submits a signing secret only after tracking opt-in', async () => {
+        mockUseResendSettingsQuery.mockImplementation(() => ({
+            data: {
+                ...resendSettingsData,
+                webhook_signing_secret_configured: false,
+            },
+            isLoading: false,
+        }))
+        mockUpdateResendSettings.mockResolvedValue({
+            ...resendSettingsData,
+            webhook_signing_secret_configured: true,
+            current_version: 2,
+        })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(
+            within(dialog).getByRole('checkbox', {
+                name: /enable resend webhook tracking/i,
+            })
+        )
+        const saveButton = within(dialog).getByRole('button', {
+            name: /save email configuration/i,
+        })
+        expect(saveButton).toBeDisabled()
+
+        fireEvent.change(within(dialog).getByLabelText('Webhook Signing Secret'), {
+            target: { value: 'whsec_new_tracking_secret' },
+        })
+        expect(saveButton).toBeEnabled()
+
+        await act(async () => {
+            fireEvent.click(saveButton)
+        })
+
+        expect(mockUpdateResendSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                webhook_signing_secret: 'whsec_new_tracking_secret',
+            })
+        )
+    })
+
+    it('replaces a stored signing secret only through the explicit replace action', async () => {
+        mockUpdateResendSettings.mockResolvedValue({
+            ...resendSettingsData,
+            current_version: 2,
+        })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(
+            within(dialog).getByRole('button', { name: /replace secret/i })
+        )
+
+        const secretInput = within(dialog).getByLabelText('Webhook Signing Secret')
+        const saveButton = within(dialog).getByRole('button', {
+            name: /save email configuration/i,
+        })
+        expect(secretInput).toHaveValue('')
+        expect(saveButton).toBeDisabled()
+
+        fireEvent.change(secretInput, {
+            target: { value: 'whsec_rotated_tracking_secret' },
+        })
+        expect(saveButton).toBeEnabled()
+
+        await act(async () => {
+            fireEvent.click(saveButton)
+        })
+
+        expect(mockUpdateResendSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                webhook_signing_secret: 'whsec_rotated_tracking_secret',
+            })
+        )
+    })
+
+    it('clears configured webhook tracking only after explicit confirmation and save', async () => {
+        mockUpdateResendSettings.mockResolvedValue({
+            ...resendSettingsData,
+            webhook_signing_secret_configured: false,
+            current_version: 2,
+        })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        const trackingCheckbox = within(dialog).getByRole('checkbox', {
+            name: /enable resend webhook tracking/i,
+        })
+        fireEvent.click(trackingCheckbox)
+
+        const confirmation = screen.getByRole('alertdialog')
+        expect(
+            within(confirmation).getByText('Disable webhook tracking?')
+        ).toBeInTheDocument()
+        expect(trackingCheckbox).toBeChecked()
+
+        fireEvent.click(
+            within(confirmation).getByRole('button', {
+                name: /disable tracking/i,
+            })
+        )
+
+        expect(trackingCheckbox).not.toBeChecked()
+        expect(
+            within(dialog).getByText(/tracking will be disabled when you save/i)
+        ).toBeInTheDocument()
+
+        await act(async () => {
+            fireEvent.click(
+                within(dialog).getByRole('button', {
+                    name: /save email configuration/i,
+                })
+            )
+        })
+
+        expect(mockUpdateResendSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                webhook_signing_secret: '',
+            })
+        )
+    })
+
+    it('preserves a stored signing secret during unrelated email settings saves', async () => {
+        mockUpdateResendSettings.mockResolvedValue({
+            ...resendSettingsData,
+            from_name: 'Updated sender name',
+            current_version: 2,
+        })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        fireEvent.change(within(dialog).getByLabelText('From Name (optional)'), {
+            target: { value: 'Updated sender name' },
+        })
+
+        await act(async () => {
+            fireEvent.click(
+                within(dialog).getByRole('button', {
+                    name: /save email configuration/i,
+                })
+            )
+        })
+
+        expect(mockUpdateResendSettings).toHaveBeenCalledTimes(1)
+        expect(mockUpdateResendSettings.mock.calls[0]?.[0]).not.toHaveProperty(
+            'webhook_signing_secret'
+        )
+        expect(within(dialog).getByText('Tracking enabled')).toBeInTheDocument()
+        expect(
+            within(dialog).queryByLabelText('Webhook Signing Secret')
+        ).not.toBeInTheDocument()
+    })
+
     it('shows a write-only shared-team rate-limit group without exposing a stored value', () => {
         render(<IntegrationsPage />)
         fireEvent.click(screen.getByRole('button', { name: /configure email/i }))

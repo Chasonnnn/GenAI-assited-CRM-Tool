@@ -474,6 +474,9 @@ type EmailConfigurationFormState = {
     fromEmail: string
     fromName: string
     replyTo: string
+    webhookTrackingEnabled: boolean
+    clearWebhookTracking: boolean
+    replaceWebhookSigningSecret: boolean
     webhookSigningSecret: string
     defaultSender: string
 }
@@ -1546,6 +1549,10 @@ function EmailConfigurationSectionContent({
         fromEmail: settings?.from_email || "",
         fromName: settings?.from_name || "",
         replyTo: settings?.reply_to_email || "",
+        webhookTrackingEnabled:
+            settings?.webhook_signing_secret_configured ?? false,
+        clearWebhookTracking: false,
+        replaceWebhookSigningSecret: false,
         webhookSigningSecret: "",
         defaultSender: settings?.default_sender_user_id || "",
     }))
@@ -1575,6 +1582,10 @@ function EmailConfigurationSectionContent({
             apiKey: value !== "resend" ? "" : current.apiKey,
             rateLimitGroupToken: value !== "resend" ? "" : current.rateLimitGroupToken,
             clearRateLimitGroup: value !== "resend" ? false : current.clearRateLimitGroup,
+            clearWebhookTracking:
+                value !== "resend" ? false : current.clearWebhookTracking,
+            replaceWebhookSigningSecret:
+                value !== "resend" ? false : current.replaceWebhookSigningSecret,
             webhookSigningSecret: value !== "resend" ? "" : current.webhookSigningSecret,
         }))
         setEmailUi((current) => ({
@@ -1630,7 +1641,9 @@ function EmailConfigurationSectionContent({
             update.from_email = emailForm.fromEmail
             update.from_name = emailForm.fromName
             update.reply_to_email = emailForm.replyTo
-            if (emailForm.webhookSigningSecret.trim()) {
+            if (emailForm.clearWebhookTracking) {
+                update.webhook_signing_secret = ""
+            } else if (emailForm.webhookSigningSecret.trim()) {
                 update.webhook_signing_secret = emailForm.webhookSigningSecret.trim()
             }
         } else if (emailForm.provider === "gmail") {
@@ -1638,12 +1651,17 @@ function EmailConfigurationSectionContent({
         }
 
         try {
-            await updateSettings.mutateAsync(update)
+            const savedSettings = await updateSettings.mutateAsync(update)
             setEmailForm((current) => ({
                 ...current,
                 apiKey: "",
                 rateLimitGroupToken: "",
                 clearRateLimitGroup: false,
+                webhookTrackingEnabled:
+                    savedSettings?.webhook_signing_secret_configured ??
+                    current.webhookTrackingEnabled,
+                clearWebhookTracking: false,
+                replaceWebhookSigningSecret: false,
                 webhookSigningSecret: "",
             }))
             setEmailUi((current) => ({
@@ -1710,6 +1728,13 @@ function EmailConfigurationSectionContent({
         !emailUi.keyTested.permission_limited &&
         !testedDomains.includes(normalizedVerifiedDomain),
     )
+    const webhookTrackingReady = Boolean(
+        emailForm.provider !== "resend" ||
+        !emailForm.webhookTrackingEnabled ||
+        (settings?.webhook_signing_secret_configured &&
+            !emailForm.replaceWebhookSigningSecret) ||
+        emailForm.webhookSigningSecret.trim(),
+    )
     const resendReady =
         emailForm.provider !== "resend" ||
         (hasResendKey &&
@@ -1723,7 +1748,8 @@ function EmailConfigurationSectionContent({
         Boolean(emailForm.provider) &&
         resendReady &&
         gmailReady &&
-        !rateLimitGroupTokenInvalid
+        !rateLimitGroupTokenInvalid &&
+        webhookTrackingReady
     const showMaskedKey = Boolean(settings?.api_key_masked) && !emailUi.isEditingKey && !emailForm.apiKey
     const showHeading = variant === "page"
     const containerClass = showHeading ? "border-t pt-6" : "space-y-4"
@@ -2125,36 +2151,204 @@ function ResendConfigurationFields({
                 />
             </div>
 
-            {settings?.webhook_url ? (
-                <ResendWebhookUrlField
-                    webhookUrl={settings.webhook_url}
-                    pending={pendingState.webhookRotate}
-                    onCopyWebhookUrl={onCopyWebhookUrl}
-                    onRotateWebhook={onRotateWebhook}
-                />
+            <ResendWebhookTrackingField
+                form={form}
+                settings={settings}
+                pending={pendingState.webhookRotate}
+                updateEmailForm={updateEmailForm}
+                onCopyWebhookUrl={onCopyWebhookUrl}
+                onRotateWebhook={onRotateWebhook}
+            />
+        </div>
+    )
+}
+
+function ResendWebhookTrackingField({
+    form,
+    settings,
+    pending,
+    updateEmailForm,
+    onCopyWebhookUrl,
+    onRotateWebhook,
+}: {
+    form: EmailConfigurationFormState
+    settings: ResendSettings | undefined
+    pending: boolean
+    updateEmailForm: UpdateEmailConfigurationForm
+    onCopyWebhookUrl: (webhookUrl: string) => void
+    onRotateWebhook: () => void
+}) {
+    const [disableTrackingDialogOpen, setDisableTrackingDialogOpen] =
+        useState(false)
+    const webhookTrackingConfigured =
+        settings?.webhook_signing_secret_configured ?? false
+    const status = form.clearWebhookTracking
+        ? { label: "Pending disable", variant: "secondary" as const }
+        : form.webhookTrackingEnabled && webhookTrackingConfigured
+          ? { label: "Tracking enabled", variant: "default" as const }
+          : form.webhookTrackingEnabled
+            ? { label: "Setup required", variant: "secondary" as const }
+            : { label: "Optional", variant: "outline" as const }
+
+    const handleTrackingChange = (checked: boolean) => {
+        if (!checked && webhookTrackingConfigured && !form.clearWebhookTracking) {
+            setDisableTrackingDialogOpen(true)
+            return
+        }
+
+        updateEmailForm("webhookTrackingEnabled", checked, true)
+        if (checked) {
+            updateEmailForm("clearWebhookTracking", false)
+        } else {
+            updateEmailForm("replaceWebhookSigningSecret", false)
+            updateEmailForm("webhookSigningSecret", "")
+        }
+    }
+
+    const confirmDisableTracking = () => {
+        updateEmailForm("webhookTrackingEnabled", false, true)
+        updateEmailForm("clearWebhookTracking", true)
+        updateEmailForm("replaceWebhookSigningSecret", false)
+        updateEmailForm("webhookSigningSecret", "")
+        setDisableTrackingDialogOpen(false)
+    }
+
+    return (
+        <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                    <Checkbox
+                        id="resend-webhook-tracking"
+                        checked={form.webhookTrackingEnabled}
+                        onCheckedChange={(checked) =>
+                            handleTrackingChange(checked === true)
+                        }
+                    />
+                    <div className="space-y-1">
+                        <Label
+                            htmlFor="resend-webhook-tracking"
+                            className="cursor-pointer"
+                        >
+                            Enable Resend webhook tracking (optional)
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                            Track delivery, opens, and clicks with verified Resend events.
+                        </p>
+                    </div>
+                </div>
+                <Badge variant={status.variant}>{status.label}</Badge>
+            </div>
+
+            {form.webhookTrackingEnabled ? (
+                <div className="space-y-3">
+                    {settings?.webhook_url ? (
+                        <ResendWebhookUrlField
+                            webhookUrl={settings.webhook_url}
+                            pending={pending}
+                            onCopyWebhookUrl={onCopyWebhookUrl}
+                            onRotateWebhook={onRotateWebhook}
+                        />
+                    ) : null}
+
+                    {webhookTrackingConfigured &&
+                    !form.replaceWebhookSigningSecret ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-background p-3">
+                            <p className="text-sm text-muted-foreground">
+                                Signing secret is stored securely.
+                            </p>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                    updateEmailForm(
+                                        "replaceWebhookSigningSecret",
+                                        true,
+                                        true,
+                                    )
+                                }
+                            >
+                                Replace secret
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            <Label htmlFor="resend-webhook-secret">
+                                Webhook Signing Secret
+                            </Label>
+                            <Input
+                                id="resend-webhook-secret"
+                                type="password"
+                                value={form.webhookSigningSecret}
+                                onChange={(event) =>
+                                    updateEmailForm(
+                                        "webhookSigningSecret",
+                                        event.target.value,
+                                        true,
+                                    )
+                                }
+                                placeholder="whsec_…"
+                                name="resend-webhook-signing-secret"
+                                autoComplete="off"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Paste the signing secret from Resend. It is encrypted
+                                and never shown again.
+                            </p>
+                            {webhookTrackingConfigured ? (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => {
+                                        updateEmailForm("webhookSigningSecret", "")
+                                        updateEmailForm(
+                                            "replaceWebhookSigningSecret",
+                                            false,
+                                            true,
+                                        )
+                                    }}
+                                >
+                                    Cancel replacement
+                                </Button>
+                            ) : null}
+                        </div>
+                    )}
+                </div>
+            ) : form.clearWebhookTracking ? (
+                <Alert>
+                    <AlertTriangleIcon aria-hidden="true" />
+                    <AlertTitle>Tracking pending disable</AlertTitle>
+                    <AlertDescription>
+                        Tracking will be disabled when you save. Sending email is
+                        unaffected.
+                    </AlertDescription>
+                </Alert>
             ) : null}
 
-            <div className="space-y-2">
-                <Label htmlFor="resend-webhook-secret">Webhook Signing Secret</Label>
-                <Input
-                    id="resend-webhook-secret"
-                    type="password"
-                    value={form.webhookSigningSecret}
-                    onChange={(event) => updateEmailForm("webhookSigningSecret", event.target.value, true)}
-                    placeholder="whsec_…"
-                    name="resend-webhook-signing-secret"
-                    autoComplete="off"
-                />
-                {settings?.webhook_signing_secret_configured ? (
-                    <p className="text-xs text-muted-foreground">
-                        Signing secret is configured. Paste a new one here only if you rotated it in Resend.
-                    </p>
-                ) : (
-                    <p className="text-xs text-muted-foreground">
-                        Paste the signing secret from Resend to enable signature verification.
-                    </p>
-                )}
-            </div>
+            <AlertDialog
+                open={disableTrackingDialogOpen}
+                onOpenChange={setDisableTrackingDialogOpen}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Disable webhook tracking?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Delivery, open, and click events will stop being verified
+                            after you save. Sending email through Resend will continue.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Keep tracking</AlertDialogCancel>
+                        <AlertDialogAction
+                            variant="destructive"
+                            onClick={confirmDisableTracking}
+                        >
+                            Disable tracking
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }
