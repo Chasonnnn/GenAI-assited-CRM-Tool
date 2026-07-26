@@ -285,6 +285,184 @@ def test_stale_claim_token_cannot_complete_a_newer_claim(db, test_org):
     assert current.completed_at is None
 
 
+def test_claim_heartbeat_extends_only_current_token(db, test_org):
+    current_token = uuid.uuid4()
+    stale_token = uuid.uuid4()
+    original_claimed_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+    heartbeat_at = datetime.now(timezone.utc)
+    job = Job(
+        organization_id=test_org.id,
+        job_type=JobType.NOTIFICATION.value,
+        payload={},
+        run_at=original_claimed_at,
+        status=JobStatus.RUNNING.value,
+        attempts=1,
+        claim_token=current_token,
+        claimed_at=original_claimed_at,
+    )
+    db.add(job)
+    db.commit()
+
+    assert (
+        job_service.heartbeat_job_claim(
+            db,
+            job_id=job.id,
+            claim_token=stale_token,
+            heartbeat_at=heartbeat_at,
+        )
+        is False
+    )
+    db.expire_all()
+    unchanged = db.query(Job).filter(Job.id == job.id).one()
+    assert unchanged.claim_token == current_token
+    assert unchanged.claimed_at == original_claimed_at
+
+    assert (
+        job_service.heartbeat_job_claim(
+            db,
+            job_id=job.id,
+            claim_token=current_token,
+            heartbeat_at=heartbeat_at,
+        )
+        is True
+    )
+    db.expire_all()
+    refreshed = db.query(Job).filter(Job.id == job.id).one()
+    assert refreshed.claim_token == current_token
+    assert refreshed.claimed_at == heartbeat_at
+
+
+def test_stale_claim_reaper_requeues_only_explicitly_retry_safe_types(db, test_org):
+    now = datetime.now(timezone.utc)
+    stale_at = now - timedelta(minutes=10)
+    retry_safe = Job(
+        organization_id=test_org.id,
+        job_type=JobType.WORKFLOW_APPROVAL_EXPIRY.value,
+        payload={"scope": "expired-approvals"},
+        run_at=stale_at,
+        status=JobStatus.RUNNING.value,
+        attempts=1,
+        claim_token=uuid.uuid4(),
+        claimed_at=stale_at,
+    )
+    uncertain = Job(
+        organization_id=test_org.id,
+        job_type=JobType.SEND_EMAIL.value,
+        payload={"email_log_id": str(uuid.uuid4())},
+        run_at=stale_at,
+        status=JobStatus.RUNNING.value,
+        attempts=1,
+        claim_token=uuid.uuid4(),
+        claimed_at=stale_at,
+    )
+    unknown = Job(
+        organization_id=test_org.id,
+        job_type="future_unknown_side_effect",
+        payload={},
+        run_at=stale_at,
+        status=JobStatus.RUNNING.value,
+        attempts=1,
+        claim_token=uuid.uuid4(),
+        claimed_at=stale_at,
+    )
+    db.add_all([retry_safe, uncertain, unknown])
+    db.commit()
+
+    result = job_service.recover_stale_worker_claims(
+        db,
+        stale_before=now - timedelta(minutes=5),
+        recovered_at=now,
+        retry_safe_job_types={JobType.WORKFLOW_APPROVAL_EXPIRY.value},
+        limit=10,
+    )
+
+    assert result == {"requeued": 1, "quarantined": 2}
+    db.expire_all()
+    recovered_safe = db.query(Job).filter(Job.id == retry_safe.id).one()
+    quarantined_uncertain = db.query(Job).filter(Job.id == uncertain.id).one()
+    quarantined_unknown = db.query(Job).filter(Job.id == unknown.id).one()
+    assert recovered_safe.status == JobStatus.PENDING.value
+    assert recovered_safe.claim_token is None
+    assert recovered_safe.claimed_at is None
+    assert recovered_safe.payload["_claim_recovery"]["non_replayable"] is False
+    assert quarantined_uncertain.status == JobStatus.FAILED.value
+    assert quarantined_uncertain.claim_token is None
+    assert quarantined_uncertain.claimed_at is None
+    assert quarantined_uncertain.payload["_claim_recovery"]["non_replayable"] is True
+    assert quarantined_unknown.status == JobStatus.FAILED.value
+    assert quarantined_unknown.payload["_claim_recovery"]["non_replayable"] is True
+
+
+def test_stale_claim_reaper_cannot_touch_fresh_replaced_or_delegated_claims(db, test_org):
+    now = datetime.now(timezone.utc)
+    stale_at = now - timedelta(minutes=10)
+    fresh_token = uuid.uuid4()
+    replaced_token = uuid.uuid4()
+    fresh = Job(
+        organization_id=test_org.id,
+        job_type=JobType.NOTIFICATION.value,
+        payload={},
+        run_at=stale_at,
+        status=JobStatus.RUNNING.value,
+        attempts=1,
+        claim_token=fresh_token,
+        claimed_at=now,
+    )
+    replaced = Job(
+        organization_id=test_org.id,
+        job_type=JobType.SEND_EMAIL.value,
+        payload={},
+        run_at=stale_at,
+        status=JobStatus.RUNNING.value,
+        attempts=1,
+        claim_token=uuid.uuid4(),
+        claimed_at=stale_at,
+    )
+    delegated_scan = Job(
+        organization_id=test_org.id,
+        job_type=JobType.ATTACHMENT_SCAN.value,
+        payload={"attachment_id": str(uuid.uuid4())},
+        run_at=stale_at,
+        status=JobStatus.RUNNING.value,
+        attempts=1,
+        claim_token=uuid.uuid4(),
+        claimed_at=stale_at,
+    )
+    db.add_all([fresh, replaced, delegated_scan])
+    db.commit()
+    replaced_id = replaced.id
+    db.execute(
+        update(Job)
+        .where(Job.id == replaced_id)
+        .values(claim_token=replaced_token, claimed_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    db.commit()
+
+    result = job_service.recover_stale_worker_claims(
+        db,
+        stale_before=now - timedelta(minutes=5),
+        recovered_at=now,
+        retry_safe_job_types={JobType.WORKFLOW_APPROVAL_EXPIRY.value},
+        limit=10,
+    )
+
+    assert result == {"requeued": 0, "quarantined": 0}
+    db.expire_all()
+    current_fresh = db.query(Job).filter(Job.id == fresh.id).one()
+    current_replaced = db.query(Job).filter(Job.id == replaced_id).one()
+    current_scan = db.query(Job).filter(Job.id == delegated_scan.id).one()
+    assert current_fresh.status == JobStatus.RUNNING.value
+    assert current_fresh.claim_token == fresh_token
+    assert current_fresh.claimed_at == now
+    assert current_replaced.status == JobStatus.RUNNING.value
+    assert current_replaced.claim_token == replaced_token
+    assert current_replaced.claimed_at == now
+    assert current_scan.status == JobStatus.RUNNING.value
+    assert current_scan.claim_token is not None
+    assert current_scan.claimed_at == stale_at
+
+
 def test_stale_recovery_does_not_clear_a_newer_claim(db, test_org):
     old_token = uuid.uuid4()
     newer_token = uuid.uuid4()
@@ -349,6 +527,37 @@ def test_operator_quarantined_job_cannot_be_replayed(db, test_org):
     db.commit()
 
     with pytest.raises(ValueError, match="non-replayable reconciliation"):
+        job_service.replay_failed_job(
+            db,
+            org_id=test_org.id,
+            job_id=job.id,
+            reason="operator retry",
+        )
+
+    db.refresh(job)
+    assert job.status == JobStatus.FAILED.value
+
+
+def test_stale_claim_quarantine_cannot_be_replayed(db, test_org):
+    job = Job(
+        organization_id=test_org.id,
+        job_type=JobType.SEND_EMAIL.value,
+        payload={
+            "email_log_id": str(uuid.uuid4()),
+            "_claim_recovery": {
+                "schema_version": 1,
+                "non_replayable": True,
+                "reason_code": "stale_claim_outcome_unknown",
+            },
+        },
+        run_at=datetime.now(timezone.utc),
+        status=JobStatus.FAILED.value,
+        attempts=1,
+    )
+    db.add(job)
+    db.commit()
+
+    with pytest.raises(ValueError, match="non-replayable claim recovery"):
         job_service.replay_failed_job(
             db,
             org_id=test_org.id,

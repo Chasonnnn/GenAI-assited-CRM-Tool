@@ -1,5 +1,6 @@
 """Job service - business logic for background job scheduling and processing."""
 
+from collections.abc import Collection
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -12,6 +13,14 @@ from app.db.enums import JobStatus, JobType
 
 class JobClaimLost(RuntimeError):
     """A stale worker tried to finish a job claimed by a newer generation."""
+
+
+DELEGATED_SCAN_JOB_TYPES = frozenset(
+    {
+        JobType.ATTACHMENT_SCAN.value,
+        JobType.FORM_SUBMISSION_FILE_SCAN.value,
+    }
+)
 
 
 def enqueue_job(
@@ -164,6 +173,109 @@ def claim_job_for_dispatch(db: Session, job_id: UUID) -> Job | None:
     db.commit()
     db.expire_all()
     return db.query(Job).filter(Job.id == job_id).first()
+
+
+def heartbeat_job_claim(
+    db: Session,
+    *,
+    job_id: UUID,
+    claim_token: UUID,
+    heartbeat_at: datetime | None = None,
+) -> bool:
+    """Extend only the still-current running claim lease."""
+    result = db.execute(
+        update(Job)
+        .where(
+            Job.id == job_id,
+            Job.status == JobStatus.RUNNING.value,
+            Job.claim_token == claim_token,
+        )
+        .values(claimed_at=heartbeat_at or datetime.now(timezone.utc))
+        .execution_options(synchronize_session=False)
+    )
+    refreshed = (result.rowcount or 0) == 1
+    db.commit()
+    db.expire_all()
+    return refreshed
+
+
+def recover_stale_worker_claims(
+    db: Session,
+    *,
+    stale_before: datetime,
+    recovered_at: datetime,
+    retry_safe_job_types: Collection[str],
+    limit: int,
+) -> dict[str, int]:
+    """Recover stale tokened worker claims without replaying uncertain side effects."""
+    safe_job_types = set(retry_safe_job_types) - DELEGATED_SCAN_JOB_TYPES
+    query = (
+        select(Job)
+        .where(
+            Job.status == JobStatus.RUNNING.value,
+            Job.claim_token.is_not(None),
+            Job.claimed_at.is_not(None),
+            Job.claimed_at <= stale_before,
+            Job.job_type.notin_(DELEGATED_SCAN_JOB_TYPES),
+        )
+        .order_by(Job.claimed_at, Job.id)
+        .limit(max(1, limit))
+    )
+    if getattr(db.get_bind(), "dialect", None) and db.get_bind().dialect.name == "postgresql":
+        query = query.with_for_update(skip_locked=True)
+
+    candidates = list(db.execute(query).scalars())
+    result_counts = {"requeued": 0, "quarantined": 0}
+    for job in candidates:
+        claim_token = job.claim_token
+        claimed_at = job.claimed_at
+        if claim_token is None or claimed_at is None:
+            continue
+
+        retry_safe = job.job_type in safe_job_types and job.attempts < job.max_attempts
+        action = "requeued" if retry_safe else "quarantined"
+        payload = dict(job.payload or {})
+        payload["_claim_recovery"] = {
+            "schema_version": 1,
+            "non_replayable": not retry_safe,
+            "reason_code": (
+                "stale_claim_retry_safe" if retry_safe else "stale_claim_outcome_unknown"
+            ),
+            "recovered_at": recovered_at.isoformat(),
+            "previous_claimed_at": claimed_at.isoformat(),
+            "job_type": job.job_type,
+        }
+        values = {
+            "status": JobStatus.PENDING.value if retry_safe else JobStatus.FAILED.value,
+            "payload": payload,
+            "last_error": (
+                "Stale worker claim recovered for audited retry"
+                if retry_safe
+                else "Stale worker claim quarantined because the side-effect outcome is unknown"
+            ),
+            "run_at": recovered_at if retry_safe else job.run_at,
+            "completed_at": None if retry_safe else recovered_at,
+            "claim_token": None,
+            "claimed_at": None,
+        }
+        updated = db.execute(
+            update(Job)
+            .where(
+                Job.id == job.id,
+                Job.status == JobStatus.RUNNING.value,
+                Job.claim_token == claim_token,
+                Job.claimed_at == claimed_at,
+                Job.claimed_at <= stale_before,
+            )
+            .values(**values)
+            .execution_options(synchronize_session=False)
+        )
+        if (updated.rowcount or 0) == 1:
+            result_counts[action] += 1
+
+    db.commit()
+    db.expire_all()
+    return result_counts
 
 
 def recover_stale_running_job(
@@ -417,6 +529,9 @@ def replay_failed_job(
     reconciliation_meta = payload.get("_reconciliation")
     if isinstance(reconciliation_meta, dict) and reconciliation_meta.get("non_replayable") is True:
         raise ValueError("Cannot replay job with non-replayable reconciliation")
+    claim_recovery_meta = payload.get("_claim_recovery")
+    if isinstance(claim_recovery_meta, dict) and claim_recovery_meta.get("non_replayable") is True:
+        raise ValueError("Cannot replay job with non-replayable claim recovery")
     replay_meta = payload.get("_replay")
     if not isinstance(replay_meta, dict):
         replay_meta = {}

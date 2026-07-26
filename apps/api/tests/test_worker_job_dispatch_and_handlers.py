@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
 from types import SimpleNamespace
 from uuid import uuid4
@@ -94,7 +94,7 @@ def test_worker_claimed_job_types_exclude_remote_scan_jobs(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_worker_cutover_hold_waits_for_shutdown_without_opening_a_session(monkeypatch):
+async def test_cutover_hold_starts_neither_heartbeat_nor_reaper(monkeypatch):
     stop_event = asyncio.Event()
 
     monkeypatch.setattr(worker, "WORKER_CUTOVER_HOLD", True)
@@ -123,6 +123,21 @@ async def test_worker_cutover_hold_waits_for_shutdown_without_opening_a_session(
         "claim_pending_jobs",
         lambda *_args, **_kwargs: pytest.fail("held worker must not claim jobs"),
     )
+    monkeypatch.setattr(
+        worker.job_service,
+        "recover_stale_worker_claims",
+        lambda *_args, **_kwargs: pytest.fail("held worker must not reap claims"),
+    )
+    monkeypatch.setattr(
+        worker.scan_claim_recovery_service,
+        "recover_stale_remote_scan_claims",
+        lambda *_args, **_kwargs: pytest.fail("held worker must not reap scan claims"),
+    )
+    monkeypatch.setattr(
+        worker,
+        "_start_claim_heartbeat",
+        lambda *_args, **_kwargs: pytest.fail("held worker must not start heartbeats"),
+    )
 
     task = asyncio.create_task(worker.worker_loop(stop_event))
     await asyncio.sleep(0)
@@ -132,6 +147,133 @@ async def test_worker_cutover_hold_waits_for_shutdown_without_opening_a_session(
     await asyncio.wait_for(task, timeout=1)
 
     assert task.done() is True
+
+
+@pytest.mark.asyncio
+async def test_worker_periodically_recovers_stale_claims_before_claiming(monkeypatch, db):
+    stop_event = asyncio.Event()
+    recovered: list[dict] = []
+    scan_recovered: list[dict] = []
+
+    monkeypatch.setattr(worker, "WORKER_CUTOVER_HOLD", False)
+    monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(db))
+    monkeypatch.setattr(worker, "_claimed_job_types", lambda: [JobType.NOTIFICATION.value])
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_google_calendar_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_gmail_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+
+    def _recover(_session, **kwargs):
+        recovered.append(kwargs)
+        return {"requeued": 0, "quarantined": 0}
+
+    def _claim(*_args, **_kwargs):
+        stop_event.set()
+        return []
+
+    monkeypatch.setattr(worker.job_service, "recover_stale_worker_claims", _recover)
+    monkeypatch.setattr(
+        worker.scan_claim_recovery_service,
+        "recover_stale_remote_scan_claims",
+        lambda _session, **kwargs: (
+            scan_recovered.append(kwargs)
+            or SimpleNamespace(total=0, completed=0, requeued=0, quarantined=0)
+        ),
+    )
+    monkeypatch.setattr(worker.job_service, "claim_pending_jobs", _claim)
+
+    await worker.worker_loop(stop_event)
+
+    assert len(recovered) == 1
+    assert recovered[0]["retry_safe_job_types"] == {JobType.WORKFLOW_APPROVAL_EXPIRY.value}
+    assert recovered[0]["limit"] == worker.WORKER_STALE_CLAIM_REAPER_BATCH_SIZE
+    assert scan_recovered == [
+        {
+            "now": recovered[0]["recovered_at"],
+            "limit": worker.WORKER_STALE_CLAIM_REAPER_BATCH_SIZE,
+        }
+    ]
+    stale_before = recovered[0]["stale_before"]
+    recovered_at = recovered[0]["recovered_at"]
+    assert recovered_at - stale_before == timedelta(seconds=worker.WORKER_CLAIM_LEASE_SECONDS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "job_type,payload",
+    [
+        (JobType.SEND_EMAIL.value, {"email_log_id": str(uuid4())}),
+        (JobType.ORG_DELETE.value, {"organization_id": str(uuid4())}),
+    ],
+    ids=["email", "organization-delete"],
+)
+async def test_stale_side_effect_claim_is_quarantined_without_handler_call(
+    monkeypatch,
+    db,
+    test_org,
+    job_type,
+    payload,
+):
+    now = datetime.now(timezone.utc)
+    job = Job(
+        organization_id=test_org.id,
+        job_type=job_type,
+        payload=payload,
+        run_at=now - timedelta(hours=1),
+        status=JobStatus.RUNNING.value,
+        attempts=1,
+        claim_token=uuid4(),
+        claimed_at=now - timedelta(seconds=worker.WORKER_CLAIM_LEASE_SECONDS + 1),
+    )
+    db.add(job)
+    db.commit()
+    job_id = job.id
+    stop_event = asyncio.Event()
+    claim_pending_jobs = worker.job_service.claim_pending_jobs
+
+    monkeypatch.setattr(worker, "WORKER_CUTOVER_HOLD", False)
+    monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(db))
+    monkeypatch.setattr(worker, "_claimed_job_types", lambda: [job_type])
+    monkeypatch.setattr(worker, "SESSION_CLEANUP_INTERVAL_SECONDS", 10**12)
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_google_calendar_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_gmail_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker,
+        "process_job",
+        lambda *_args, **_kwargs: pytest.fail(
+            "quarantined stale side-effect jobs must not invoke their handler"
+        ),
+    )
+
+    def _claim(session, *, limit, job_types):
+        stop_event.set()
+        return claim_pending_jobs(session, limit=limit, job_types=job_types)
+
+    monkeypatch.setattr(worker.job_service, "claim_pending_jobs", _claim)
+
+    await worker.worker_loop(stop_event)
+
+    db.expire_all()
+    quarantined = db.query(Job).filter(Job.id == job_id).one()
+    assert quarantined.status == JobStatus.FAILED.value
+    assert quarantined.claim_token is None
+    assert quarantined.claimed_at is None
+    assert quarantined.payload["_claim_recovery"]["non_replayable"] is True
+    assert quarantined.payload["_claim_recovery"]["reason_code"] == ("stale_claim_outcome_unknown")
 
 
 def test_worker_logs_retryable_job_failures_at_warning(caplog):
@@ -396,6 +538,79 @@ async def test_worker_claims_one_job_at_a_time_within_each_batch(monkeypatch, db
 
     assert claim_limits == [1, 1]
     assert processed == [JobType.CAMPAIGN_SEND.value, JobType.NOTIFICATION.value]
+
+
+@pytest.mark.asyncio
+async def test_worker_heartbeats_current_token_while_handler_runs(monkeypatch, db):
+    claim_token = uuid4()
+    job = _job(
+        job_type=JobType.NOTIFICATION.value,
+        status=JobStatus.RUNNING.value,
+        claim_token=claim_token,
+    )
+    stop_event = asyncio.Event()
+    claimed = False
+    heartbeats: list[tuple] = []
+    stopped: list[bool] = []
+
+    monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(db))
+    monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
+    monkeypatch.setattr(worker, "BATCH_SIZE", 1)
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_google_calendar_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_gmail_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker.job_service,
+        "recover_stale_worker_claims",
+        lambda *_args, **_kwargs: {"requeued": 0, "quarantined": 0},
+    )
+    monkeypatch.setattr(
+        worker.scan_claim_recovery_service,
+        "recover_stale_remote_scan_claims",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            total=0,
+            completed=0,
+            requeued=0,
+            quarantined=0,
+        ),
+    )
+
+    def _claim(*_args, **_kwargs):
+        nonlocal claimed
+        if claimed:
+            return []
+        claimed = True
+        return [job]
+
+    def _start_heartbeat(*, job_id, claim_token):
+        heartbeats.append((job_id, claim_token))
+        return SimpleNamespace(stop=lambda: stopped.append(True))
+
+    async def _process(_session, _job):
+        stop_event.set()
+        return True
+
+    monkeypatch.setattr(worker.job_service, "claim_pending_jobs", _claim)
+    monkeypatch.setattr(worker, "_start_claim_heartbeat", _start_heartbeat)
+    monkeypatch.setattr(worker, "process_job", _process)
+    monkeypatch.setattr(
+        worker.job_service,
+        "complete_claimed_job",
+        lambda *_args, **_kwargs: job,
+    )
+    monkeypatch.setattr(worker, "_record_job_success", lambda *_args, **_kwargs: None)
+
+    await worker.worker_loop(stop_event)
+
+    assert heartbeats == [(job.id, claim_token)]
+    assert stopped == [True]
 
 
 @pytest.mark.asyncio

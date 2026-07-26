@@ -13,6 +13,7 @@ import logging
 import os
 import secrets
 import sys
+import threading
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -37,7 +38,12 @@ from app.jobs.handlers.meta import (  # noqa: F401
     process_meta_spend_sync,
 )
 from app.jobs.registry import resolve_job_handler
-from app.services import email_service, job_service, scan_dispatch_service
+from app.services import (
+    email_service,
+    job_service,
+    scan_claim_recovery_service,
+    scan_dispatch_service,
+)
 
 monitoring = setup_gcp_monitoring(f"{settings.GCP_SERVICE_NAME}-worker")
 
@@ -81,6 +87,79 @@ WORKER_CUTOVER_HOLD = _env_flag_enabled(
     os.getenv("WORKER_CUTOVER_HOLD"),
     default=False,
 )
+WORKER_CLAIM_LEASE_SECONDS = int(os.getenv("WORKER_CLAIM_LEASE_SECONDS", "900"))
+WORKER_CLAIM_HEARTBEAT_INTERVAL_SECONDS = int(
+    os.getenv("WORKER_CLAIM_HEARTBEAT_INTERVAL_SECONDS", "30")
+)
+WORKER_STALE_CLAIM_REAPER_INTERVAL_SECONDS = int(
+    os.getenv("WORKER_STALE_CLAIM_REAPER_INTERVAL_SECONDS", "60")
+)
+WORKER_STALE_CLAIM_REAPER_BATCH_SIZE = int(os.getenv("WORKER_STALE_CLAIM_REAPER_BATCH_SIZE", "100"))
+if WORKER_CLAIM_LEASE_SECONDS <= 0:
+    raise RuntimeError("WORKER_CLAIM_LEASE_SECONDS must be positive")
+if (
+    WORKER_CLAIM_HEARTBEAT_INTERVAL_SECONDS <= 0
+    or WORKER_CLAIM_HEARTBEAT_INTERVAL_SECONDS * 3 > WORKER_CLAIM_LEASE_SECONDS
+):
+    raise RuntimeError(
+        "WORKER_CLAIM_HEARTBEAT_INTERVAL_SECONDS must be positive and no more than one third "
+        "of WORKER_CLAIM_LEASE_SECONDS"
+    )
+if WORKER_STALE_CLAIM_REAPER_INTERVAL_SECONDS <= 0:
+    raise RuntimeError("WORKER_STALE_CLAIM_REAPER_INTERVAL_SECONDS must be positive")
+if WORKER_STALE_CLAIM_REAPER_BATCH_SIZE <= 0:
+    raise RuntimeError("WORKER_STALE_CLAIM_REAPER_BATCH_SIZE must be positive")
+
+# This local-only sweep is idempotent: task state transitions are guarded, resume
+# jobs are uniquely keyed, and its notification has a stable dedupe key.
+WORKER_STALE_CLAIM_RETRY_SAFE_JOB_TYPES = frozenset({JobType.WORKFLOW_APPROVAL_EXPIRY.value})
+
+
+class _ClaimHeartbeat:
+    def __init__(self, stop_event: threading.Event, thread: threading.Thread) -> None:
+        self._stop_event = stop_event
+        self._thread = thread
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        self._thread.join(timeout=1)
+
+
+def _run_claim_heartbeat(
+    *,
+    job_id: UUID,
+    claim_token: UUID,
+    stop_event: threading.Event,
+) -> None:
+    while not stop_event.wait(WORKER_CLAIM_HEARTBEAT_INTERVAL_SECONDS):
+        with SessionLocal() as heartbeat_db:
+            try:
+                if not job_service.heartbeat_job_claim(
+                    heartbeat_db,
+                    job_id=job_id,
+                    claim_token=claim_token,
+                ):
+                    logger.warning("Stopped heartbeat after claim was lost for job %s", job_id)
+                    return
+            except Exception:
+                heartbeat_db.rollback()
+                logger.exception("Job claim heartbeat failed for job %s", job_id)
+
+
+def _start_claim_heartbeat(*, job_id: UUID, claim_token: UUID) -> _ClaimHeartbeat:
+    stop_event = threading.Event()
+    thread = threading.Thread(
+        target=_run_claim_heartbeat,
+        kwargs={
+            "job_id": job_id,
+            "claim_token": claim_token,
+            "stop_event": stop_event,
+        },
+        name=f"job-claim-heartbeat-{job_id}",
+        daemon=True,
+    )
+    thread.start()
+    return _ClaimHeartbeat(stop_event, thread)
 
 
 def parse_worker_job_types(raw: str | None) -> list[str] | None:
@@ -570,11 +649,49 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
     last_session_cleanup = datetime.min.replace(tzinfo=timezone.utc)
     last_google_sync_schedule: datetime | None = None
     last_gmail_sync_schedule: datetime | None = None
+    last_stale_claim_recovery = datetime.min.replace(tzinfo=timezone.utc)
 
     while stop_event is None or not stop_event.is_set():
         with SessionLocal() as db:
             try:
                 now = datetime.now(timezone.utc)
+                if now - last_stale_claim_recovery >= timedelta(
+                    seconds=WORKER_STALE_CLAIM_REAPER_INTERVAL_SECONDS
+                ):
+                    try:
+                        recovery_counts = job_service.recover_stale_worker_claims(
+                            db,
+                            stale_before=now - timedelta(seconds=WORKER_CLAIM_LEASE_SECONDS),
+                            recovered_at=now,
+                            retry_safe_job_types=WORKER_STALE_CLAIM_RETRY_SAFE_JOB_TYPES,
+                            limit=WORKER_STALE_CLAIM_REAPER_BATCH_SIZE,
+                        )
+                        if recovery_counts["requeued"] or recovery_counts["quarantined"]:
+                            logger.warning(
+                                "Recovered stale worker claims (requeued=%s quarantined=%s)",
+                                recovery_counts["requeued"],
+                                recovery_counts["quarantined"],
+                            )
+                        scan_recovery = (
+                            scan_claim_recovery_service.recover_stale_remote_scan_claims(
+                                db,
+                                now=now,
+                                limit=WORKER_STALE_CLAIM_REAPER_BATCH_SIZE,
+                            )
+                        )
+                        if scan_recovery.total:
+                            logger.warning(
+                                "Recovered stale remote scan claims "
+                                "(completed=%s requeued=%s quarantined=%s)",
+                                scan_recovery.completed,
+                                scan_recovery.requeued,
+                                scan_recovery.quarantined,
+                            )
+                    except Exception:
+                        db.rollback()
+                        logger.exception("Stale worker claim recovery failed")
+                    last_stale_claim_recovery = now
+
                 try:
                     last_google_sync_schedule = maybe_schedule_google_calendar_sync_jobs(
                         db,
@@ -623,7 +740,16 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
                     job_id = job.id
                     claim_token = job.claim_token
                     try:
-                        should_mark_completed = await process_job(db, job)
+                        heartbeat = (
+                            _start_claim_heartbeat(job_id=job_id, claim_token=claim_token)
+                            if claim_token is not None
+                            else None
+                        )
+                        try:
+                            should_mark_completed = await process_job(db, job)
+                        finally:
+                            if heartbeat is not None:
+                                heartbeat.stop()
                         if should_mark_completed:
                             job = job_service.complete_claimed_job(
                                 db,
