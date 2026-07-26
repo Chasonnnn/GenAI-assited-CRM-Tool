@@ -985,6 +985,8 @@ export default function EmailTemplatesPage() {
     const [libraryCopyName, setLibraryCopyName] = useState("")
     const [libraryPreviewId, setLibraryPreviewId] = useState<string | null>(null)
     const [draftToDiscard, setDraftToDiscard] = useState<EmailTemplateDraft | null>(null)
+    const [templateToDelete, setTemplateToDelete] = useState<EmailTemplateListItem | null>(null)
+    const [templateDeleteError, setTemplateDeleteError] = useState<string | null>(null)
     const [templateStatusTarget, setTemplateStatusTarget] = useState<EmailTemplateListItem | null>(null)
     const [templateStatusError, setTemplateStatusError] = useState<string | null>(null)
 
@@ -1185,10 +1187,27 @@ export default function EmailTemplatesPage() {
         }
     }
 
-    const handleDelete = (id: string) => {
-        if (confirm("Are you sure you want to delete this template?")) {
-            deleteTemplate.mutate(id)
-        }
+    const handleOpenDeleteDialog = (template: EmailTemplateListItem) => {
+        setTemplateDeleteError(null)
+        setTemplateToDelete(template)
+    }
+
+    const handleDeleteTemplate = () => {
+        if (!templateToDelete) return
+
+        const target = templateToDelete
+        setTemplateDeleteError(null)
+        deleteTemplate.mutate(target.id, {
+            onSuccess: () => {
+                toast.success(`${target.name} deleted`)
+                setTemplateToDelete(null)
+            },
+            onError: (error: Error) => {
+                const message = error.message || `Failed to delete ${target.name}`
+                setTemplateDeleteError(message)
+                toast.error(message)
+            },
+        })
     }
 
     const handleOpenTemplateStatusDialog = (template: EmailTemplateListItem) => {
@@ -1703,12 +1722,13 @@ export default function EmailTemplatesPage() {
                                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                                         {personalTemplates.map((template) => {
                                             const isOwner = template.owner_user_id === user?.user_id
+                                            const canManagePersonalTemplate = isOwner || isAdmin
                                             const canSendPersonalTest = isOwner || canManageEmailTemplates
                                             const actions: TemplateCardActionKind[] = []
                                             if (canSendPersonalTest) {
                                                 actions.push("send_test")
                                             }
-                                            if (!template.is_system_template) {
+                                            if (canManagePersonalTemplate && !template.is_system_template) {
                                                 actions.push("edit")
                                                 if (template.is_active) {
                                                     actions.push("set_inactive")
@@ -1719,7 +1739,7 @@ export default function EmailTemplatesPage() {
                                             if (isOwner) {
                                                 actions.push("share")
                                             }
-                                            if (isOwner && !template.is_system_template) {
+                                            if (canManagePersonalTemplate && !template.is_system_template) {
                                                 actions.push("delete")
                                             }
                                             const controls: TemplateCardControls = !isOwner && !isAdmin
@@ -1745,7 +1765,7 @@ export default function EmailTemplatesPage() {
                                                             return
                                                         }
                                                         if (action === "delete") {
-                                                            handleDelete(template.id)
+                                                            handleOpenDeleteDialog(template)
                                                         }
                                                     },
                                                 }
@@ -1837,7 +1857,7 @@ export default function EmailTemplatesPage() {
                                                             return
                                                         }
                                                         if (action === "delete") {
-                                                            handleDelete(template.id)
+                                                            handleOpenDeleteDialog(template)
                                                         }
                                                     },
                                                 }
@@ -2631,6 +2651,69 @@ export default function EmailTemplatesPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <AlertDialog
+                open={templateToDelete !== null}
+                onOpenChange={(open) => {
+                    if (!open && !deleteTemplate.isPending) {
+                        setTemplateToDelete(null)
+                        setTemplateDeleteError(null)
+                    }
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            Delete {templateToDelete?.name || "this template"}?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {templateToDelete?.scope === "personal" &&
+                            templateToDelete.owner_user_id !== user?.user_id ? (
+                                <>
+                                    This personal template is owned by{" "}
+                                    {templateToDelete.owner_name || "another user"}. It will be set
+                                    inactive and hidden from their template picker. Its content stays
+                                    preserved and can be reactivated later.
+                                </>
+                            ) : templateToDelete?.scope === "org" ? (
+                                <>
+                                    This organization template will be set inactive and hidden from
+                                    template pickers. Its content stays preserved and can be
+                                    reactivated later.
+                                </>
+                            ) : (
+                                <>
+                                    This personal template will be set inactive and hidden from
+                                    template pickers. Its content stays preserved and can be
+                                    reactivated later.
+                                </>
+                            )}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    {templateDeleteError && (
+                        <Alert variant="destructive" role="alert">
+                            <AlertTriangleIcon aria-hidden="true" />
+                            <AlertTitle>Unable to delete template</AlertTitle>
+                            <AlertDescription>{templateDeleteError}</AlertDescription>
+                        </Alert>
+                    )}
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={deleteTemplate.isPending}>
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            variant="destructive"
+                            disabled={deleteTemplate.isPending}
+                            onClick={handleDeleteTemplate}
+                        >
+                            {deleteTemplate.isPending && (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            )}
+                            {deleteTemplate.isPending ? "Deleting…" : "Delete template"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             <AlertDialog
                 open={draftToDiscard !== null}

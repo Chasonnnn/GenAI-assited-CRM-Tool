@@ -17,6 +17,7 @@ const mockRichTextEditorProps = vi.fn()
 const mockUseEmailTemplates = vi.fn()
 const mockCreateEmailTemplate = vi.fn()
 const mockUpdateEmailTemplate = vi.fn()
+const mockDeleteEmailTemplate = vi.fn()
 const mockSendTestEmailTemplate = vi.fn()
 const mockRollbackEmailTemplate = vi.fn()
 const mockDiscardEmailTemplateDraft = vi.fn()
@@ -258,7 +259,7 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
         mutateAsync: mockRollbackEmailTemplate,
         isPending: false,
     }),
-    useDeleteEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
+    useDeleteEmailTemplate: () => ({ mutate: mockDeleteEmailTemplate, isPending: false }),
     useCopyTemplateToPersonal: () => ({ mutate: vi.fn(), isPending: false }),
     useShareTemplateWithOrg: () => ({ mutate: vi.fn(), isPending: false }),
     useCopyTemplateFromLibrary: () => ({ mutate: vi.fn(), isPending: false }),
@@ -305,6 +306,7 @@ describe("EmailTemplatesPage", () => {
         mockUseEmailTemplates.mockClear()
         mockCreateEmailTemplate.mockReset()
         mockUpdateEmailTemplate.mockReset()
+        mockDeleteEmailTemplate.mockReset()
         mockSendTestEmailTemplate.mockReset()
         mockRollbackEmailTemplate.mockReset()
         mockDiscardEmailTemplateDraft.mockReset()
@@ -869,7 +871,7 @@ describe("EmailTemplatesPage", () => {
     })
 
     it.each(["admin", "developer"] as const)(
-        "allows %s to edit non-owned personal templates",
+        "allows %s to edit and delete non-owned personal templates",
         async (role) => {
             mockUseAuth.mockReturnValue({
                 user: {
@@ -891,7 +893,26 @@ describe("EmailTemplatesPage", () => {
             expect(triggers.length).toBeGreaterThan(0)
             fireEvent.click(triggers[0] as HTMLElement)
 
-            expect(await screen.findByText("Edit")).toBeInTheDocument()
+            expect(await screen.findByRole("menuitem", { name: "Edit" })).toBeInTheDocument()
+            fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }))
+
+            expect(
+                await screen.findByRole("heading", {
+                    name: "Delete Other User Personal Template?",
+                }),
+            ).toBeInTheDocument()
+            expect(screen.getByText(/owned by Maegan Fee/i)).toBeInTheDocument()
+            expect(screen.getByText(/can be reactivated later/i)).toBeInTheDocument()
+
+            fireEvent.click(screen.getByRole("button", { name: "Delete template" }))
+
+            expect(mockDeleteEmailTemplate).toHaveBeenCalledWith(
+                "tpl_personal_2",
+                expect.objectContaining({
+                    onSuccess: expect.any(Function),
+                    onError: expect.any(Function),
+                }),
+            )
         }
     )
 
