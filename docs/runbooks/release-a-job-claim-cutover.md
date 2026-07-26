@@ -64,12 +64,18 @@ Use one fixed timezone-aware cutoff and evaluation time for preview and apply:
 cd apps/api
 uv run -m app.cli reconcile-legacy-job-claims \
   --stale-before "${RELEASE_A_STALE_BEFORE}" \
-  --evaluated-at "${RELEASE_A_EVALUATED_AT}"
+  --evaluated-at "${RELEASE_A_EVALUATED_AT}" \
+  --manifest
 ```
 
 - [ ] Review aggregate job-type/reason counts. Resolve every ambiguous workflow
       email and organization deletion; do not replay or purge either.
-- [ ] Record the exact count and fingerprint from the approved dry run.
+- [ ] Retain the dry run's single-line manifest in an IAM-controlled change
+      record or log sink that is encrypted at rest. The manifest is sanitized,
+      but it still contains organization and job identifiers.
+- [ ] Record the exact `--evaluated-at`, count, and fingerprint from the approved
+      manifest. The apply records its actual `applied_at` separately; do not
+      substitute that application time for the reviewed evaluation time.
 - [ ] Apply only that reviewed plan:
 
 ```bash

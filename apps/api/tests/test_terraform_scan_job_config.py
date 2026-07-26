@@ -103,8 +103,12 @@ def test_release_a_runbook_requires_operator_gates_before_resume() -> None:
     assert "does not change `WORKER_JOB_TYPES`" in normalized
     assert "zero active `crm-attachment-scan` executions" in content
     assert "reconcile-legacy-job-claims" in content
+    assert "--manifest" in content
     assert "--expected-count" in content
     assert "--expected-fingerprint" in content
+    assert "IAM-controlled" in content
+    assert "encrypted at rest" in content
+    assert "`applied_at`" in content
     assert "No automatic resume" in content
     assert "--remove-env-vars WORKER_CUTOVER_HOLD" in content
     assert "restore the captured pre-cutover values" in normalized.lower()
