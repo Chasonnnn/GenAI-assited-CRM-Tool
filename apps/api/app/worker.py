@@ -84,6 +84,27 @@ GMAIL_SYNC_FALLBACK_ENABLED = _env_flag_enabled(
     default=True,
 )
 GMAIL_SYNC_FALLBACK_INTERVAL_SECONDS = int(os.getenv("GMAIL_SYNC_FALLBACK_INTERVAL_SECONDS", "60"))
+WORKFLOW_SWEEP_FALLBACK_ENABLED = _env_flag_enabled(
+    os.getenv("WORKFLOW_SWEEP_FALLBACK_ENABLED"),
+    default=True,
+)
+WORKFLOW_SWEEP_FALLBACK_INTERVAL_SECONDS = int(
+    os.getenv("WORKFLOW_SWEEP_FALLBACK_INTERVAL_SECONDS", "60")
+)
+WORKFLOW_MAINTENANCE_FALLBACK_ENABLED = _env_flag_enabled(
+    os.getenv("WORKFLOW_MAINTENANCE_FALLBACK_ENABLED"),
+    default=False,
+)
+WORKFLOW_MAINTENANCE_FALLBACK_INTERVAL_SECONDS = int(
+    os.getenv("WORKFLOW_MAINTENANCE_FALLBACK_INTERVAL_SECONDS", "3600")
+)
+WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED = _env_flag_enabled(
+    os.getenv("WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED"),
+    default=False,
+)
+WORKFLOW_APPROVAL_EXPIRY_FALLBACK_INTERVAL_SECONDS = int(
+    os.getenv("WORKFLOW_APPROVAL_EXPIRY_FALLBACK_INTERVAL_SECONDS", "300")
+)
 EMAIL_DELIVERY_DISPATCH_ENABLED = _env_flag_enabled(
     os.getenv("EMAIL_DELIVERY_DISPATCH_ENABLED"),
     default=True,
@@ -311,6 +332,211 @@ def maybe_schedule_gmail_sync_jobs(
         counts["mailboxes_checked"],
         counts["jobs_created"],
         counts.get("watch_jobs_created", 0),
+    )
+    return now
+
+
+def maybe_schedule_workflow_sweep_jobs(
+    db,
+    *,
+    now: datetime,
+    last_run_at: datetime | None,
+) -> datetime | None:
+    """Best-effort fallback scheduler for time-based workflow triggers."""
+    if not WORKFLOW_SWEEP_FALLBACK_ENABLED:
+        return last_run_at
+
+    interval_seconds = max(1, WORKFLOW_SWEEP_FALLBACK_INTERVAL_SECONDS)
+    if last_run_at and now < (last_run_at + timedelta(seconds=interval_seconds)):
+        return last_run_at
+
+    from sqlalchemy.exc import IntegrityError
+
+    from app.services import org_service, workflow_triggers
+
+    bucket = now.astimezone(timezone.utc).strftime("%Y%m%dT%H%MZ")
+    jobs_created = 0
+    duplicates_skipped = 0
+    orgs = org_service.list_orgs(db)
+    for org in orgs:
+        if not workflow_triggers.has_due_scheduled_workflows(
+            db,
+            org.id,
+            evaluated_at=now,
+        ):
+            continue
+        idempotency_key = f"workflow-sweep:scheduled:{org.id}:{bucket}"
+        try:
+            existing = job_service.get_job_by_idempotency_key(
+                db,
+                org_id=org.id,
+                idempotency_key=idempotency_key,
+            )
+            if existing is not None:
+                duplicates_skipped += 1
+                continue
+            job_service.schedule_job(
+                db=db,
+                org_id=org.id,
+                job_type=JobType.WORKFLOW_SWEEP,
+                payload={
+                    "org_id": str(org.id),
+                    "sweep_type": "scheduled",
+                    "evaluated_at": now.isoformat(),
+                },
+                run_at=now,
+                idempotency_key=idempotency_key,
+            )
+            jobs_created += 1
+        except IntegrityError:
+            db.rollback()
+            duplicates_skipped += 1
+
+    logger.info(
+        "Workflow sweep fallback scheduled (organizations=%s jobs=%s duplicates=%s)",
+        len(orgs),
+        jobs_created,
+        duplicates_skipped,
+    )
+    return now
+
+
+def maybe_schedule_workflow_maintenance_jobs(
+    db,
+    *,
+    now: datetime,
+    last_run_at: datetime | None,
+) -> datetime | None:
+    """Best-effort hourly fallback for inactivity and task workflow triggers."""
+    if not WORKFLOW_MAINTENANCE_FALLBACK_ENABLED:
+        return last_run_at
+
+    interval_seconds = max(1, WORKFLOW_MAINTENANCE_FALLBACK_INTERVAL_SECONDS)
+    if last_run_at and now < (last_run_at + timedelta(seconds=interval_seconds)):
+        return last_run_at
+
+    from sqlalchemy.exc import IntegrityError
+
+    from app.services import org_service, workflow_triggers
+
+    utc_now = now.astimezone(timezone.utc)
+    daily_bucket = utc_now.strftime("%Y%m%d")
+    hourly_bucket = utc_now.strftime("%Y%m%dT%HZ")
+    sweep_types = ("inactivity", "task_due", "task_overdue")
+    jobs_created = 0
+    duplicates_skipped = 0
+    orgs = org_service.list_orgs(db)
+    for org in orgs:
+        enabled_trigger_types = workflow_triggers.get_enabled_workflow_trigger_types(db, org.id)
+        for sweep_type in sweep_types:
+            if sweep_type not in enabled_trigger_types:
+                continue
+            bucket = hourly_bucket if sweep_type == "task_due" else daily_bucket
+            idempotency_key = f"workflow-sweep:{sweep_type}:{org.id}:{bucket}"
+            try:
+                existing = job_service.get_job_by_idempotency_key(
+                    db,
+                    org_id=org.id,
+                    idempotency_key=idempotency_key,
+                )
+                if existing is not None:
+                    duplicates_skipped += 1
+                    continue
+                job_service.schedule_job(
+                    db=db,
+                    org_id=org.id,
+                    job_type=JobType.WORKFLOW_SWEEP,
+                    payload={"org_id": str(org.id), "sweep_type": sweep_type},
+                    run_at=now,
+                    idempotency_key=idempotency_key,
+                )
+                jobs_created += 1
+            except IntegrityError:
+                db.rollback()
+                duplicates_skipped += 1
+
+    logger.info(
+        "Workflow maintenance fallback scheduled (organizations=%s jobs=%s duplicates=%s)",
+        len(orgs),
+        jobs_created,
+        duplicates_skipped,
+    )
+    return now
+
+
+def maybe_schedule_workflow_approval_expiry_jobs(
+    db,
+    *,
+    now: datetime,
+    last_run_at: datetime | None,
+) -> datetime | None:
+    """Best-effort fallback scheduler for expired workflow approvals."""
+    if not WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED:
+        return last_run_at
+
+    interval_seconds = max(1, WORKFLOW_APPROVAL_EXPIRY_FALLBACK_INTERVAL_SECONDS)
+    if last_run_at and now < (last_run_at + timedelta(seconds=interval_seconds)):
+        return last_run_at
+
+    from sqlalchemy.exc import IntegrityError
+
+    from app.db.enums import TaskStatus, TaskType
+    from app.db.models import Task
+    from app.services import org_service
+
+    utc_now = now.astimezone(timezone.utc)
+    bucket_start = utc_now.replace(
+        minute=(utc_now.minute // 5) * 5,
+        second=0,
+        microsecond=0,
+    )
+    bucket = bucket_start.strftime("%Y%m%dT%H%MZ")
+    jobs_created = 0
+    duplicates_skipped = 0
+    orgs = org_service.list_orgs(db)
+    for org in orgs:
+        has_due_approval = (
+            db.query(Task.id)
+            .filter(
+                Task.organization_id == org.id,
+                Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
+                Task.status.in_([TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]),
+                Task.due_at < utc_now,
+            )
+            .first()
+            is not None
+        )
+        if not has_due_approval:
+            continue
+
+        idempotency_key = f"workflow-approval-expiry:{org.id}:{bucket}"
+        try:
+            existing = job_service.get_job_by_idempotency_key(
+                db,
+                org_id=org.id,
+                idempotency_key=idempotency_key,
+            )
+            if existing is not None:
+                duplicates_skipped += 1
+                continue
+            job_service.schedule_job(
+                db=db,
+                org_id=org.id,
+                job_type=JobType.WORKFLOW_APPROVAL_EXPIRY,
+                payload={"org_id": str(org.id)},
+                run_at=now,
+                idempotency_key=idempotency_key,
+            )
+            jobs_created += 1
+        except IntegrityError:
+            db.rollback()
+            duplicates_skipped += 1
+
+    logger.info(
+        "Workflow approval expiry fallback scheduled (organizations=%s jobs=%s duplicates=%s)",
+        len(orgs),
+        jobs_created,
+        duplicates_skipped,
     )
     return now
 
@@ -691,6 +917,9 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
     last_session_cleanup = datetime.min.replace(tzinfo=timezone.utc)
     last_google_sync_schedule: datetime | None = None
     last_gmail_sync_schedule: datetime | None = None
+    last_workflow_sweep_schedule: datetime | None = None
+    last_workflow_maintenance_schedule: datetime | None = None
+    last_workflow_approval_expiry_schedule: datetime | None = None
     email_delivery_worker_id = (
         f"{os.getenv('HOSTNAME', 'worker')}:{os.getpid()}:{secrets.token_hex(4)}"
     )
@@ -782,6 +1011,35 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
                 except Exception:
                     logger.exception("Gmail sync fallback scheduling failed")
 
+                try:
+                    last_workflow_sweep_schedule = maybe_schedule_workflow_sweep_jobs(
+                        db,
+                        now=now,
+                        last_run_at=last_workflow_sweep_schedule,
+                    )
+                except Exception:
+                    logger.exception("Workflow sweep fallback scheduling failed")
+
+                try:
+                    last_workflow_maintenance_schedule = maybe_schedule_workflow_maintenance_jobs(
+                        db,
+                        now=now,
+                        last_run_at=last_workflow_maintenance_schedule,
+                    )
+                except Exception:
+                    logger.exception("Workflow maintenance fallback scheduling failed")
+
+                try:
+                    last_workflow_approval_expiry_schedule = (
+                        maybe_schedule_workflow_approval_expiry_jobs(
+                            db,
+                            now=now,
+                            last_run_at=last_workflow_approval_expiry_schedule,
+                        )
+                    )
+                except Exception:
+                    logger.exception("Workflow approval expiry fallback scheduling failed")
+
                 if now - last_session_cleanup >= timedelta(
                     seconds=SESSION_CLEANUP_INTERVAL_SECONDS
                 ):
@@ -795,11 +1053,9 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
                         logger.warning("Session cleanup failed: %s", exc)
                     last_session_cleanup = now
 
-                stale_reconciliation = (
-                    job_service.recover_stale_resend_reconciliation_jobs(
-                        db,
-                        now=now,
-                    )
+                stale_reconciliation = job_service.recover_stale_resend_reconciliation_jobs(
+                    db,
+                    now=now,
                 )
                 if stale_reconciliation.inspected:
                     logger.warning(
