@@ -758,7 +758,9 @@ def update_submission_answers(
             surrogate_field = mapping_by_key[field_key]
             if surrogate_field in SURROGATE_FIELD_TYPES:
                 try:
-                    coerced = coerce_surrogate_field_value(surrogate_field, value) if value else None
+                    coerced = (
+                        coerce_surrogate_field_value(surrogate_field, value) if value else None
+                    )
                     surrogate_updates[surrogate_field] = coerced
                     updated_surrogate_fields.append(surrogate_field)
                 except ValueError:
