@@ -51,7 +51,7 @@ def test_cloudbuild_updates_attachment_scan_job_image() -> None:
     content = _read("cloudbuild/api.yaml")
     assert "$_ATTACHMENT_SCAN_JOB" in content
     assert 'gcloud run jobs update "$_ATTACHMENT_SCAN_JOB"' in content
-    assert '--image "$${worker_image}"' in content
+    assert '--image "$${worker_image_ref}"' in content
 
 
 def test_cloudbuild_updates_compatible_scan_runner_before_claim_producers() -> None:
@@ -64,15 +64,27 @@ def test_cloudbuild_updates_compatible_scan_runner_before_claim_producers() -> N
     assert migration_execute < scan_job_update < worker_update < api_update
 
 
-def test_cloudbuild_deploys_one_commit_sha_image_set() -> None:
+def test_cloudbuild_resolves_and_deploys_one_digest_image_set() -> None:
     content = _read("cloudbuild/api.yaml")
 
     assert "RELEASE_SHA=$COMMIT_SHA" in content
+    assert "RELEASE_TAG=$COMMIT_SHA-$BUILD_ID" in content
     assert 'test -n "$${RELEASE_SHA}"' in content
-    assert 'api_image="$${IMAGE_API_LATEST%:*}:$${RELEASE_SHA}"' in content
-    assert 'worker_image="$${IMAGE_WORKER_LATEST%:*}:$${RELEASE_SHA}"' in content
-    assert content.count('--image "$${api_image}"') >= 2
-    assert content.count('--image "$${worker_image}"') >= 3
+    assert 'test -n "$${RELEASE_TAG}"' in content
+    assert 'api_image="$${IMAGE_API_LATEST%:*}:$${RELEASE_TAG}"' in content
+    assert 'worker_image="$${IMAGE_WORKER_LATEST%:*}:$${RELEASE_TAG}"' in content
+    assert content.count("gcloud artifacts docker images describe") == 2
+    assert "value(image_summary.digest)" in content
+    assert 'test "$${api_digest#sha256:}" != "$${api_digest}"' in content
+    assert 'test "$${worker_digest#sha256:}" != "$${worker_digest}"' in content
+    assert '[[ "$${api_digest}" =~ ^sha256:[0-9a-f]{64}$$ ]]' in content
+    assert '[[ "$${worker_digest}" =~ ^sha256:[0-9a-f]{64}$$ ]]' in content
+    assert "/workspace/release-api-image-ref" in content
+    assert "/workspace/release-worker-image-ref" in content
+    assert content.count('--image "$${api_image_ref}"') >= 2
+    assert content.count('--image "$${worker_image_ref}"') >= 3
+    assert '--image "$${api_image}"' not in content
+    assert '--image "$${worker_image}"' not in content
     assert '"--image", "$_IMAGE_API"' not in content
     assert '"--image", "$_IMAGE_WORKER"' not in content
 
@@ -110,5 +122,6 @@ def test_release_a_runbook_requires_operator_gates_before_resume() -> None:
     assert "encrypted at rest" in content
     assert "`applied_at`" in content
     assert "No automatic resume" in content
+    assert "deploy the exact `@sha256:` API and worker digest" in normalized
     assert "--remove-env-vars WORKER_CUTOVER_HOLD" in content
     assert "restore the captured pre-cutover values" in normalized.lower()

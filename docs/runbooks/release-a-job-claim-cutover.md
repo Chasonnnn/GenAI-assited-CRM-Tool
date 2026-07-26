@@ -44,8 +44,9 @@ captured job-type allowlist unchanged.
 
 ## Deploy held
 
-- [ ] Run the API Cloud Build for the frozen SHA. It must use the SHA-tagged API
-      and worker images for migration, scan job, worker, API, and ClamAV job.
+- [ ] Run the API Cloud Build for the frozen SHA. It must resolve each pushed
+      build-unique (`COMMIT_SHA-BUILD_ID`) tag once and deploy the exact `@sha256:` API and worker digest
+      references to migration, scan job, worker, API, and ClamAV job.
 - [ ] Confirm migration `20260725_1800` added only nullable `claim_token` and
       `claimed_at` columns.
 - [ ] Confirm the scan job uses the new backward-compatible image before API
