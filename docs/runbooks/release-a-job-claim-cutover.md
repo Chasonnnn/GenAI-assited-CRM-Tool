@@ -3,6 +3,36 @@
 This checklist deploys the additive job-claim release without sending email,
 purging organizations, or replaying legacy work. Stop on any failed gate.
 
+## Production-clone rehearsal evidence
+
+The exact PR head `dfa3b3748f28a74463c76977a47c401682ac2262` passed an
+isolated production-clone rehearsal on 2026-07-25 EDT (2026-07-26 UTC):
+
+- The clone started at Alembic revision `20260701_1025`, upgraded to
+  `20260725_1800`, and a second `upgrade head` was a no-op. Both new job-claim
+  columns were present and nullable.
+- Before/after SHA-256 evidence was identical for 70 organization/personal
+  templates, 9 ops templates, 2 system templates, 114 template versions, and
+  every template target. Resend settings, email/delivery logs, campaign state,
+  workflow executions, organizations, and attachments were also unchanged.
+- The aggregate-only preview classified all 24 historical tokenless running
+  jobs: 15 superseded periodic syncs, 2 organization deletions requiring
+  review, 1 already-clean attachment scan, 5 workflow emails with no local
+  delivery evidence, and 1 workflow email with an unknown outcome.
+- Applying fingerprint
+  `e2caafec4e3eeacf0fba50d4ea647a6ac2c409efb01b3d439dbd0c3c908eb229`
+  on the clone created 24 reconciliation audit records, completed the verified
+  scan, quarantined the other 23 jobs, and left zero running jobs. The final
+  `--require-no-residual` gate passed.
+- Provider credentials were blank, outbound HTTP was blackholed, no API or
+  worker process was started, and all delivery-side-effect evidence remained
+  byte-for-byte unchanged. The localhost proxy and clone were removed after
+  verification; the production source instance remained `RUNNABLE`.
+
+This evidence validates the frozen code and production data shape. It does not
+replace the live preflight, held deployment, reconciliation review, or explicit
+resume gates below.
+
 ## Hold contract
 
 Cloud Build deploys the new worker with:
