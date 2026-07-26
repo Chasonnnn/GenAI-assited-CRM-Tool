@@ -6,6 +6,10 @@ import { useRouter } from "next/navigation"
 import { ArrowLeftIcon, HistoryIcon } from "lucide-react"
 
 import { EmailTemplateHistoryDialog } from "@/components/email/EmailTemplateHistoryDialog"
+import {
+    EmailTemplateVisualEditor,
+    type EmailTemplateVisualEditorHandle,
+} from "@/components/email/email-template-visual-editor"
 import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
 import {
     RichTextEditor,
@@ -58,6 +62,7 @@ import {
     buildEmailTemplatePreviewHtml,
     extractEmailTemplateVariables,
     getEmailTemplateBodyMode,
+    getEmailTemplateVisualEditorSupport,
     hasAdvancedEmailTemplateHtml,
     type EmailTemplateBodyMode,
 } from "@/lib/email-template-preview"
@@ -331,11 +336,22 @@ function OrganizationEmailTemplateEditor({
     })
 
     const initialFields = fieldsFromTemplate(initialDraft ?? publishedTemplate)
+    const initialVisualEditorSupport = getEmailTemplateVisualEditorSupport(
+        initialFields.body,
+    )
     const [fields, setFields] = useState<EditorFields>(initialFields)
     const [savedFields, setSavedFields] = useState<EditorFields>(initialFields)
     const [draft, setDraft] = useState<EmailTemplateDraft | null>(initialDraft)
     const [bodyMode, setBodyMode] = useState<EmailTemplateBodyMode>(() =>
         getEmailTemplateBodyMode(initialFields.body),
+    )
+    const [visualEditorSupport, setVisualEditorSupport] = useState(
+        initialVisualEditorSupport,
+    )
+    const [useStructureEditor, setUseStructureEditor] = useState(
+        () =>
+            initialVisualEditorSupport.supported &&
+            hasAdvancedEmailTemplateHtml(initialFields.body),
     )
     const [isSaving, setIsSaving] = useState(false)
     const [saveError, setSaveError] = useState<string | null>(null)
@@ -360,7 +376,8 @@ function OrganizationEmailTemplateEditor({
     const [queuedTestRevision, setQueuedTestRevision] = useState<number | null>(null)
     const subjectRef = useRef<HTMLInputElement>(null)
     const htmlBodyRef = useRef<HTMLTextAreaElement>(null)
-    const visualBodyRef = useRef<RichTextEditorHandle | null>(null)
+    const richTextBodyRef = useRef<RichTextEditorHandle | null>(null)
+    const advancedBodyRef = useRef<EmailTemplateVisualEditorHandle | null>(null)
     const activeEditorFieldRef = useRef<ActiveEditorField>("body")
     const testOccurrenceIdRef = useRef<string | null>(null)
 
@@ -375,7 +392,6 @@ function OrganizationEmailTemplateEditor({
         orgSignatureHtml: orgSignaturePreview.data?.html,
     })
     const previewSubject = buildPreviewSubject(fields.subject, orgCompanyName)
-    const advancedBody = hasAdvancedEmailTemplateHtml(fields.body)
     const testVariableNames = extractEmailTemplateVariables(
         `${fields.subject}\n${fields.body}`,
     ).filter((name) => name !== "unsubscribe_url")
@@ -430,8 +446,11 @@ function OrganizationEmailTemplateEditor({
             insertIntoTextField("body", htmlBodyRef.current, token)
             return
         }
-        if (visualBodyRef.current) {
-            visualBodyRef.current.insertText(token)
+        const activeVisualEditor = useStructureEditor
+            ? advancedBodyRef.current
+            : richTextBodyRef.current
+        if (activeVisualEditor) {
+            activeVisualEditor.insertText(token)
             return
         }
         setFields((current) => ({ ...current, body: `${current.body}${token}` }))
@@ -439,10 +458,20 @@ function OrganizationEmailTemplateEditor({
 
     const handleSaveDraft = async () => {
         setSaveError(null)
+        const visualBody =
+            bodyMode === "visual" &&
+            useStructureEditor && advancedBodyRef.current
+                ? advancedBodyRef.current.getHtml()
+                : fields.body
+        const currentFields =
+            visualBody === fields.body
+                ? fields
+                : { ...fields, body: visualBody }
+        if (currentFields !== fields) setFields(currentFields)
         if (
-            !fields.name.trim() ||
-            !fields.subject.trim() ||
-            !fields.body.trim()
+            !currentFields.name.trim() ||
+            !currentFields.subject.trim() ||
+            !currentFields.body.trim()
         ) {
             setSaveError("Name, subject, and email body are required.")
             return
@@ -451,7 +480,10 @@ function OrganizationEmailTemplateEditor({
         setIsSaving(true)
         setCopyStatus(null)
         try {
-            const explicitLocalChanges = buildChangedFields(fields, savedFields)
+            const explicitLocalChanges = buildChangedFields(
+                currentFields,
+                savedFields,
+            )
             let activeDraft = draft
             let shouldUpdateDraft = true
             if (!activeDraft && publishedTemplate && routeTemplateId) {
@@ -471,10 +503,10 @@ function OrganizationEmailTemplateEditor({
                 }
             } else if (!activeDraft) {
                 activeDraft = await createDraft.mutateAsync({
-                    name: fields.name,
-                    subject: fields.subject,
-                    from_email: fields.from_email,
-                    body: fields.body,
+                    name: currentFields.name,
+                    subject: currentFields.subject,
+                    from_email: currentFields.from_email,
+                    body: currentFields.body,
                     scope,
                 })
                 const createdFields = fieldsFromTemplate(activeDraft)
@@ -602,7 +634,17 @@ function OrganizationEmailTemplateEditor({
             setDraft(restoredDraft)
             setFields(restoredFields)
             setSavedFields(restoredFields)
-            setBodyMode(getEmailTemplateBodyMode(restoredFields.body))
+            const restoredSupport = getEmailTemplateVisualEditorSupport(
+                restoredFields.body,
+            )
+            setBodyMode(
+                restoredSupport.supported ? "visual" : "html",
+            )
+            setVisualEditorSupport(restoredSupport)
+            setUseStructureEditor(
+                restoredSupport.supported &&
+                    hasAdvancedEmailTemplateHtml(restoredFields.body),
+            )
             setHistoryOpen(false)
         } catch (error) {
             setHistoryOpen(false)
@@ -945,10 +987,13 @@ function OrganizationEmailTemplateEditor({
                         <div className="flex items-center justify-between gap-3">
                             <div className="space-y-1">
                                 <Label id="template-body-label">Email body</Label>
-                                {bodyMode === "html" ? (
+                                {!visualEditorSupport.supported ? (
                                     <p className="text-xs text-muted-foreground">
-                                        Source mode protects tables, images, and email-client
-                                        layout.
+                                        {visualEditorSupport.reason}
+                                    </p>
+                                ) : bodyMode === "html" ? (
+                                    <p className="text-xs text-muted-foreground">
+                                        Edit the stored HTML source directly.
                                     </p>
                                 ) : null}
                             </div>
@@ -966,12 +1011,19 @@ function OrganizationEmailTemplateEditor({
                                 const nextMode = value[0] as
                                     | EmailTemplateBodyMode
                                     | undefined
-                                if (nextMode) setBodyMode(nextMode)
+                                if (!nextMode) return
+                                if (nextMode === "visual") {
+                                    if (!visualEditorSupport.supported) return
+                                    setUseStructureEditor(
+                                        hasAdvancedEmailTemplateHtml(fields.body),
+                                    )
+                                }
+                                setBodyMode(nextMode)
                             }}
                         >
                             <ToggleGroupItem
                                 value="visual"
-                                disabled={advancedBody}
+                                disabled={!visualEditorSupport.supported}
                                 className="h-9 min-w-32 rounded-md px-4 text-muted-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm aria-pressed:ring-1 aria-pressed:ring-border"
                             >
                                 Visual editor
@@ -992,16 +1044,36 @@ function OrganizationEmailTemplateEditor({
                                 onFocus={() => {
                                     activeEditorFieldRef.current = "body"
                                 }}
-                                onChange={(event) =>
+                                onChange={(event) => {
+                                    const body = event.target.value
                                     setFields((current) => ({
                                         ...current,
-                                        body: event.target.value,
+                                        body,
                                     }))
+                                    setVisualEditorSupport(
+                                        getEmailTemplateVisualEditorSupport(body),
+                                    )
+                                }}
+                            />
+                        ) : useStructureEditor ? (
+                            <EmailTemplateVisualEditor
+                                key={`${draft?.id ?? publishedTemplate?.id ?? "new"}:${draft?.revision ?? 0}`}
+                                ref={advancedBodyRef}
+                                content={fields.body}
+                                onFocus={() => {
+                                    activeEditorFieldRef.current = "body"
+                                }}
+                                onChange={(body) =>
+                                    setFields((current) => ({ ...current, body }))
                                 }
+                                ariaLabelledBy="template-body-label"
+                                ariaLabel="Email body"
+                                minHeight="320px"
+                                maxHeight="560px"
                             />
                         ) : (
                             <RichTextEditor
-                                ref={visualBodyRef}
+                                ref={richTextBodyRef}
                                 content={prepareTemplateHtmlForVisualEditor(
                                     fields.body,
                                 )}
