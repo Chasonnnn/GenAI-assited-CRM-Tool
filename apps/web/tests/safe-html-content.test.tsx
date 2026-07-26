@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import { SafeHtmlContent, TrustedSanitizedHtmlContent } from "@/components/safe-html-content"
 
@@ -24,5 +24,25 @@ describe("safe HTML rendering", () => {
         const preview = await screen.findByText("Styled preview")
         expect(preview).toHaveStyle({ color: "rgb(255, 0, 0)" })
         expect(preview).toHaveAttribute("data-preview-id", "sample")
+    })
+
+    it("maps legacy email table attributes to React DOM property names", async () => {
+        const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined)
+
+        try {
+            render(
+                <TrustedSanitizedHtmlContent
+                    html={'<table cellpadding="8" cellspacing="2"><tbody><tr><td colspan="2">Email preview</td></tr></tbody></table>'}
+                />,
+            )
+
+            const cell = await screen.findByText("Email preview")
+            expect(errorSpy).not.toHaveBeenCalled()
+            expect(cell).toHaveAttribute("colspan", "2")
+            expect(cell.closest("table")).toHaveAttribute("cellpadding", "8")
+            expect(cell.closest("table")).toHaveAttribute("cellspacing", "2")
+        } finally {
+            errorSpy.mockRestore()
+        }
     })
 })

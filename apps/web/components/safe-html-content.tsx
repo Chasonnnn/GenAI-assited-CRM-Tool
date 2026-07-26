@@ -20,6 +20,13 @@ const NUMERIC_ATTRIBUTES = new Set([
     "height",
 ])
 
+const LEGACY_EMAIL_TABLE_PROP_NAMES: Record<string, string> = {
+    cellpadding: "cellPadding",
+    cellspacing: "cellSpacing",
+    colspan: "colSpan",
+    rowspan: "rowSpan",
+}
+
 function stripHtml(html: string) {
     return html
         .replace(/<br\s*\/?>/gi, "\n")
@@ -57,6 +64,9 @@ function buildElementProps(element: HTMLElement, key: string): Record<string, un
     const props: Record<string, unknown> = { key }
 
     for (const attribute of Array.from(element.attributes)) {
+        const propName = LEGACY_EMAIL_TABLE_PROP_NAMES[attribute.name]
+            ?? toCamelCase(attribute.name)
+
         if (attribute.name.startsWith("aria-") || attribute.name.startsWith("data-")) {
             props[attribute.name] = attribute.value
             continue
@@ -83,10 +93,10 @@ function buildElementProps(element: HTMLElement, key: string): Record<string, un
         }
         if (NUMERIC_ATTRIBUTES.has(attribute.name)) {
             const nextValue = Number(attribute.value)
-            props[toCamelCase(attribute.name)] = Number.isNaN(nextValue) ? attribute.value : nextValue
+            props[propName] = Number.isNaN(nextValue) ? attribute.value : nextValue
             continue
         }
-        props[toCamelCase(attribute.name)] = attribute.value
+        props[propName] = attribute.value
     }
 
     return props
