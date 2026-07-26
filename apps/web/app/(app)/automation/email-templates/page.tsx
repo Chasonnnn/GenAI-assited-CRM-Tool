@@ -71,6 +71,8 @@ import {
     AlertTriangleIcon,
     SendIcon,
     HistoryIcon,
+    CircleOffIcon,
+    CircleCheckIcon,
 } from "lucide-react"
 import {
     useEmailTemplates,
@@ -661,8 +663,15 @@ interface TemplateCardProps {
     controls: TemplateCardControls
 }
 
-type TemplateCardActionKind = "send_test" | "edit" | "copy" | "share" | "delete"
-type TemplateCardActionGroup = "test" | "edit" | "share" | "danger"
+type TemplateCardActionKind =
+    | "send_test"
+    | "edit"
+    | "set_active"
+    | "set_inactive"
+    | "copy"
+    | "share"
+    | "delete"
+type TemplateCardActionGroup = "test" | "edit" | "status" | "share" | "danger"
 
 type TemplateCardActionConfig = {
     group: TemplateCardActionGroup
@@ -698,6 +707,10 @@ function getTemplateCardActionConfig(kind: TemplateCardActionKind): TemplateCard
             return { group: "test", label: "Send test email" }
         case "edit":
             return { group: "edit", label: "Edit" }
+        case "set_inactive":
+            return { group: "status", label: "Set inactive" }
+        case "set_active":
+            return { group: "status", label: "Set active" }
         case "copy":
             return { group: "share", label: "Copy to My Templates" }
         case "share":
@@ -713,6 +726,10 @@ function getTemplateCardActionIcon(kind: TemplateCardActionKind) {
             return <SendIcon className="mr-2 size-4" />
         case "edit":
             return <EditIcon className="mr-2 size-4" />
+        case "set_inactive":
+            return <CircleOffIcon className="mr-2 size-4" />
+        case "set_active":
+            return <CircleCheckIcon className="mr-2 size-4" />
         case "copy":
             return <CopyIcon className="mr-2 size-4" />
         case "share":
@@ -968,6 +985,8 @@ export default function EmailTemplatesPage() {
     const [libraryCopyName, setLibraryCopyName] = useState("")
     const [libraryPreviewId, setLibraryPreviewId] = useState<string | null>(null)
     const [draftToDiscard, setDraftToDiscard] = useState<EmailTemplateDraft | null>(null)
+    const [templateStatusTarget, setTemplateStatusTarget] = useState<EmailTemplateListItem | null>(null)
+    const [templateStatusError, setTemplateStatusError] = useState<string | null>(null)
 
     const [signatureDraftOverrides, dispatchSignatureDraft] = useReducer(
         signatureDraftReducer,
@@ -1003,6 +1022,11 @@ export default function EmailTemplatesPage() {
         canManageEmailTemplates,
     )
     const orgDrafts = canManageEmailTemplates ? loadedOrgDrafts : []
+    const templateStatusDraft = templateStatusTarget
+        ? (templateStatusTarget.scope === "personal" ? personalDrafts : orgDrafts).find(
+            (draft) => draft.template_id === templateStatusTarget.id,
+        ) ?? null
+        : null
     const { data: libraryTemplates, isLoading: loadingLibrary } = useEmailTemplateLibrary()
     const discardDraft = useDiscardEmailTemplateDraft()
 
@@ -1165,6 +1189,50 @@ export default function EmailTemplatesPage() {
         if (confirm("Are you sure you want to delete this template?")) {
             deleteTemplate.mutate(id)
         }
+    }
+
+    const handleOpenTemplateStatusDialog = (template: EmailTemplateListItem) => {
+        setTemplateStatusError(null)
+        setTemplateStatusTarget(template)
+    }
+
+    const handleChangeTemplateStatus = () => {
+        if (!templateStatusTarget) return
+
+        const nextIsActive = !templateStatusTarget.is_active
+        const nextStatusLabel = nextIsActive ? "active" : "inactive"
+
+        setTemplateStatusError(null)
+        updateTemplate.mutate(
+            {
+                id: templateStatusTarget.id,
+                data: { is_active: nextIsActive },
+            },
+            {
+                onSuccess: () => {
+                    toast.success(`${templateStatusTarget.name} is now ${nextStatusLabel}`)
+                    setTemplateStatusTarget(null)
+                },
+                onError: (error: Error) => {
+                    const message = error.message || `Failed to set template ${nextStatusLabel}`
+                    setTemplateStatusError(message)
+                    toast.error(message)
+                },
+            },
+        )
+    }
+
+    const handleTemplateStatusPrimaryAction = () => {
+        if (!templateStatusTarget) return
+
+        if (templateStatusDraft) {
+            router.push(getTemplateStudioHref(templateStatusTarget))
+            setTemplateStatusTarget(null)
+            setTemplateStatusError(null)
+            return
+        }
+
+        handleChangeTemplateStatus()
     }
 
     const handleOpenCopyDialog = (template: EmailTemplateListItem) => {
@@ -1642,6 +1710,11 @@ export default function EmailTemplatesPage() {
                                             }
                                             if (!template.is_system_template) {
                                                 actions.push("edit")
+                                                if (template.is_active) {
+                                                    actions.push("set_inactive")
+                                                } else {
+                                                    actions.push("set_active")
+                                                }
                                             }
                                             if (isOwner) {
                                                 actions.push("share")
@@ -1661,6 +1734,10 @@ export default function EmailTemplatesPage() {
                                                         }
                                                         if (action === "edit") {
                                                             router.push(getTemplateStudioHref(template))
+                                                            return
+                                                        }
+                                                        if (action === "set_inactive" || action === "set_active") {
+                                                            handleOpenTemplateStatusDialog(template)
                                                             return
                                                         }
                                                         if (action === "share") {
@@ -1727,6 +1804,11 @@ export default function EmailTemplatesPage() {
                                             }
                                             if (canManageEmailTemplates && !template.is_system_template) {
                                                 actions.push("edit")
+                                                if (template.is_active) {
+                                                    actions.push("set_inactive")
+                                                } else {
+                                                    actions.push("set_active")
+                                                }
                                             }
                                             actions.push("copy")
                                             if (canManageEmailTemplates && !template.is_system_template) {
@@ -1744,6 +1826,10 @@ export default function EmailTemplatesPage() {
                                                         }
                                                         if (action === "edit") {
                                                             router.push(getTemplateStudioHref(template))
+                                                            return
+                                                        }
+                                                        if (action === "set_inactive" || action === "set_active") {
+                                                            handleOpenTemplateStatusDialog(template)
                                                             return
                                                         }
                                                         if (action === "copy") {
@@ -2575,6 +2661,85 @@ export default function EmailTemplatesPage() {
                                 <Loader2Icon className="mr-2 size-4 animate-spin" />
                             )}
                             Discard draft
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog
+                open={templateStatusTarget !== null}
+                onOpenChange={(open) => {
+                    if (!open && !updateTemplate.isPending) {
+                        setTemplateStatusTarget(null)
+                        setTemplateStatusError(null)
+                    }
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            {templateStatusDraft ? (
+                                "Update status in Studio"
+                            ) : (
+                                <>
+                                    Set {templateStatusTarget?.name || "this template"}{" "}
+                                    {templateStatusTarget?.is_active ? "inactive" : "active"}?
+                                </>
+                            )}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {templateStatusDraft ? (
+                                <>
+                                    This template has a saved draft. Changing status here would make
+                                    that draft stale. Open the draft in Studio to update and publish
+                                    the status together.
+                                </>
+                            ) : templateStatusTarget?.is_active ? (
+                                <>
+                                    This preserves the template, its content, and its version history.
+                                    It will be hidden from template pickers. New manual sends and future
+                                    automated workflow sends using it will stop, while existing queued
+                                    or scheduled emails will still send.
+                                </>
+                            ) : (
+                                <>
+                                    This preserves the template, its content, and its version
+                                    history. It will be available for future email actions, and future
+                                    automated workflow sends using it may resume.
+                                </>
+                            )}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    {templateStatusError && (
+                        <Alert variant="destructive" role="alert">
+                            <AlertTriangleIcon aria-hidden="true" />
+                            <AlertTitle>Unable to update template</AlertTitle>
+                            <AlertDescription>{templateStatusError}</AlertDescription>
+                        </Alert>
+                    )}
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={updateTemplate.isPending}>
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            variant={
+                                !templateStatusDraft && templateStatusTarget?.is_active
+                                    ? "destructive"
+                                    : "default"
+                            }
+                            disabled={updateTemplate.isPending}
+                            onClick={handleTemplateStatusPrimaryAction}
+                        >
+                            {updateTemplate.isPending && !templateStatusDraft && (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            )}
+                            {templateStatusDraft
+                                ? "Open draft"
+                                : updateTemplate.isPending
+                                ? "Updating…"
+                                : templateStatusTarget?.is_active
+                                  ? "Set inactive"
+                                  : "Set active"}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
