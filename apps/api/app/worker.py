@@ -77,6 +77,10 @@ GMAIL_SYNC_FALLBACK_ENABLED = _env_flag_enabled(
     default=True,
 )
 GMAIL_SYNC_FALLBACK_INTERVAL_SECONDS = int(os.getenv("GMAIL_SYNC_FALLBACK_INTERVAL_SECONDS", "60"))
+WORKER_CUTOVER_HOLD = _env_flag_enabled(
+    os.getenv("WORKER_CUTOVER_HOLD"),
+    default=False,
+)
 
 
 def parse_worker_job_types(raw: str | None) -> list[str] | None:
@@ -538,6 +542,15 @@ def _rate_limit_backoff_seconds(attempts: int) -> int:
 
 async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
     """Main worker loop - polls for and processes pending jobs."""
+    if WORKER_CUTOVER_HOLD:
+        logger.warning(
+            "Worker cutover hold is active; scheduling, cleanup, and job claims are disabled"
+        )
+        hold_stop_event = stop_event or asyncio.Event()
+        await hold_stop_event.wait()
+        logger.info("Worker cutover hold stopped")
+        return
+
     claimed_job_types = _claimed_job_types()
     if WORKER_JOB_TYPES is None and claimed_job_types is None:
         job_types_display = "all"

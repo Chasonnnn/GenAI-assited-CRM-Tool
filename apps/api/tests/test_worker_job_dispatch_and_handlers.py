@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 import logging
 from types import SimpleNamespace
@@ -75,6 +76,47 @@ def test_worker_claimed_job_types_exclude_remote_scan_jobs(monkeypatch):
     assert JobType.ATTACHMENT_SCAN.value not in claimed
     assert JobType.FORM_SUBMISSION_FILE_SCAN.value not in claimed
     assert JobType.SEND_EMAIL.value in claimed
+
+
+@pytest.mark.asyncio
+async def test_worker_cutover_hold_waits_for_shutdown_without_opening_a_session(monkeypatch):
+    stop_event = asyncio.Event()
+
+    monkeypatch.setattr(worker, "WORKER_CUTOVER_HOLD", True)
+    monkeypatch.setattr(
+        worker,
+        "SessionLocal",
+        lambda: pytest.fail("held worker must not open a database session"),
+    )
+    monkeypatch.setattr(
+        worker,
+        "_claimed_job_types",
+        lambda: pytest.fail("held worker must not resolve claimable job types"),
+    )
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_google_calendar_sync_jobs",
+        lambda *_args, **_kwargs: pytest.fail("held worker must not run schedulers"),
+    )
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_gmail_sync_jobs",
+        lambda *_args, **_kwargs: pytest.fail("held worker must not run schedulers"),
+    )
+    monkeypatch.setattr(
+        worker.job_service,
+        "claim_pending_jobs",
+        lambda *_args, **_kwargs: pytest.fail("held worker must not claim jobs"),
+    )
+
+    task = asyncio.create_task(worker.worker_loop(stop_event))
+    await asyncio.sleep(0)
+
+    assert task.done() is False
+    stop_event.set()
+    await asyncio.wait_for(task, timeout=1)
+
+    assert task.done() is True
 
 
 def test_worker_logs_retryable_job_failures_at_warning(caplog):
