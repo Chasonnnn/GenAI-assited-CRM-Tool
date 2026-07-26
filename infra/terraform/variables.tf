@@ -233,7 +233,7 @@ variable "database_tier" {
 variable "database_version" {
   description = "Cloud SQL PostgreSQL version."
   type        = string
-  default     = "POSTGRES_15"
+  default     = "POSTGRES_18"
 }
 
 variable "database_deletion_protection" {

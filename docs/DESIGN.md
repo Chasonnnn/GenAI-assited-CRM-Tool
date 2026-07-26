@@ -29,7 +29,7 @@ This document describes the design decisions, patterns, and features implemented
 ### Tech Stack
 - **Framework**: FastAPI with Pydantic v2
 - **ORM**: SQLAlchemy 2.0 with async support
-- **Database**: PostgreSQL 16 with CITEXT extension
+- **Database**: PostgreSQL 18 with CITEXT extension
 - **Migrations**: Alembic
 
 ### Project Structure
