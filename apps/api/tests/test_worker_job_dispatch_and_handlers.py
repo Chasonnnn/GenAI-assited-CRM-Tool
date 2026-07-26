@@ -7,10 +7,11 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import text, update
+from sqlalchemy.orm import Session
 
 from app.db.enums import JobStatus, JobType
-from app.db.models import Job
+from app.db.models import Job, Organization
 from app import worker
 
 
@@ -23,6 +24,20 @@ class _CtxSession:
 
     def __exit__(self, exc_type, exc, tb):
         return False
+
+
+@pytest.fixture
+def worker_db(db_engine):
+    connection = db_engine.connect()
+    outer_transaction = connection.begin()
+    session = Session(bind=connection, join_transaction_mode="create_savepoint")
+    try:
+        yield session
+    finally:
+        session.close()
+        if outer_transaction.is_active:
+            outer_transaction.rollback()
+        connection.close()
 
 
 def _job(
@@ -438,14 +453,18 @@ async def test_worker_finishes_active_job_without_claiming_another_after_stop(mo
 @pytest.mark.asyncio
 async def test_worker_cannot_adopt_a_newer_claim_after_handler_expires_job(
     monkeypatch,
-    db,
-    test_org,
+    worker_db,
 ):
+    organization = Organization(
+        id=uuid4(),
+        name="Worker completion claim replacement test",
+        slug=f"worker-completion-claim-replacement-{uuid4().hex}",
+    )
     original_token = uuid4()
     newer_token = uuid4()
     job = Job(
         id=uuid4(),
-        organization_id=test_org.id,
+        organization_id=organization.id,
         job_type=JobType.NOTIFICATION.value,
         status=JobStatus.RUNNING.value,
         payload={},
@@ -455,12 +474,13 @@ async def test_worker_cannot_adopt_a_newer_claim_after_handler_expires_job(
         claim_token=original_token,
         claimed_at=datetime.now(timezone.utc),
     )
-    db.add(job)
-    db.commit()
+    worker_db.add_all([organization, job])
+    worker_db.commit()
+    job_id = job.id
     stop_event = worker.asyncio.Event()
     claimed = False
 
-    monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(db))
+    monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(worker_db))
     monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
     monkeypatch.setattr(worker, "BATCH_SIZE", 1)
     monkeypatch.setattr(
@@ -503,11 +523,170 @@ async def test_worker_cannot_adopt_a_newer_claim_after_handler_expires_job(
 
     await worker.worker_loop(stop_event)
 
-    db.expire_all()
-    current = db.query(Job).filter(Job.id == job.id).one()
+    worker_db.expire_all()
+    current = worker_db.query(Job).filter(Job.id == job_id).one()
     assert current.status == JobStatus.RUNNING.value
     assert current.claim_token == newer_token
     assert current.completed_at is None
+
+
+@pytest.mark.asyncio
+async def test_worker_rolls_back_aborted_session_before_failing_current_claim(
+    monkeypatch,
+    worker_db,
+):
+    organization = Organization(
+        id=uuid4(),
+        name="Worker rollback test",
+        slug=f"worker-rollback-{uuid4().hex}",
+    )
+    claim_token = uuid4()
+    job = Job(
+        id=uuid4(),
+        organization_id=organization.id,
+        job_type=JobType.NOTIFICATION.value,
+        status=JobStatus.RUNNING.value,
+        payload={},
+        run_at=datetime.now(timezone.utc),
+        attempts=1,
+        max_attempts=1,
+        claim_token=claim_token,
+        claimed_at=datetime.now(timezone.utc),
+    )
+    worker_db.add_all([organization, job])
+    worker_db.commit()
+    job_id = job.id
+    stop_event = worker.asyncio.Event()
+    claimed = False
+
+    monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(worker_db))
+    monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
+    monkeypatch.setattr(worker, "BATCH_SIZE", 1)
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_google_calendar_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_gmail_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+
+    def _claim(*_args, **_kwargs):
+        nonlocal claimed
+        if claimed:
+            return []
+        claimed = True
+        return [job]
+
+    async def _process(session, _claimed_job):
+        stop_event.set()
+        session.execute(text("SELECT 1 / 0"))
+        pytest.fail("division by zero must abort the database transaction")
+
+    monkeypatch.setattr(worker.job_service, "claim_pending_jobs", _claim)
+    monkeypatch.setattr(worker, "process_job", _process)
+    monkeypatch.setattr(worker, "_record_job_failure", lambda *args, **kwargs: None)
+
+    await worker.worker_loop(stop_event)
+
+    worker_db.expire_all()
+    current = worker_db.query(Job).filter(Job.id == job_id).one()
+    assert current.status == JobStatus.FAILED.value
+    assert current.claim_token is None
+    assert current.claimed_at is None
+    assert "division by zero" in current.last_error
+
+
+@pytest.mark.asyncio
+async def test_worker_failure_cas_cannot_overwrite_newer_claim_after_session_rollback(
+    monkeypatch,
+    worker_db,
+):
+    organization = Organization(
+        id=uuid4(),
+        name="Worker claim replacement test",
+        slug=f"worker-claim-replacement-{uuid4().hex}",
+    )
+    original_token = uuid4()
+    newer_token = uuid4()
+    job = Job(
+        id=uuid4(),
+        organization_id=organization.id,
+        job_type=JobType.NOTIFICATION.value,
+        status=JobStatus.RUNNING.value,
+        payload={},
+        run_at=datetime.now(timezone.utc),
+        attempts=1,
+        max_attempts=1,
+        claim_token=original_token,
+        claimed_at=datetime.now(timezone.utc),
+    )
+    worker_db.add_all([organization, job])
+    worker_db.commit()
+    job_id = job.id
+    stop_event = worker.asyncio.Event()
+    claimed = False
+    fail_claimed_job = worker.job_service.fail_claimed_job
+
+    monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(worker_db))
+    monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
+    monkeypatch.setattr(worker, "BATCH_SIZE", 1)
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_google_calendar_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_gmail_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+
+    def _claim(*_args, **_kwargs):
+        nonlocal claimed
+        if claimed:
+            return []
+        claimed = True
+        return [job]
+
+    async def _process(session, _claimed_job):
+        stop_event.set()
+        session.execute(text("SELECT 1 / 0"))
+        pytest.fail("division by zero must abort the database transaction")
+
+    def _replace_claim_then_fail(session, *, job_id, claim_token, error):
+        assert claim_token == original_token
+        session.execute(
+            update(Job)
+            .where(Job.id == job_id)
+            .values(
+                claim_token=newer_token,
+                claimed_at=datetime.now(timezone.utc),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        session.commit()
+        return fail_claimed_job(
+            session,
+            job_id=job_id,
+            claim_token=claim_token,
+            error=error,
+        )
+
+    monkeypatch.setattr(worker.job_service, "claim_pending_jobs", _claim)
+    monkeypatch.setattr(worker.job_service, "fail_claimed_job", _replace_claim_then_fail)
+    monkeypatch.setattr(worker, "process_job", _process)
+
+    await worker.worker_loop(stop_event)
+
+    worker_db.expire_all()
+    current = worker_db.query(Job).filter(Job.id == job_id).one()
+    assert current.status == JobStatus.RUNNING.value
+    assert current.claim_token == newer_token
+    assert current.completed_at is None
+    assert current.last_error is None
 
 
 @pytest.mark.asyncio

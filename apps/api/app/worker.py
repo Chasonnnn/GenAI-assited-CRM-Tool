@@ -620,6 +620,7 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
 
                     logger.info("Found %s pending jobs", len(jobs))
                     job = jobs[0]
+                    job_id = job.id
                     claim_token = job.claim_token
                     try:
                         should_mark_completed = await process_job(db, job)
@@ -639,9 +640,10 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
 
                     except Exception as e:
                         error_msg = str(e)
+                        db.rollback()
                         job = job_service.fail_claimed_job(
                             db,
-                            job_id=job.id,
+                            job_id=job_id,
                             claim_token=claim_token,
                             error=error_msg,
                         )
