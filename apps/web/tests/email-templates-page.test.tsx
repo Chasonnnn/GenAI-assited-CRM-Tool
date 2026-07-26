@@ -593,6 +593,18 @@ describe("EmailTemplatesPage", () => {
         expect(screen.queryByRole("heading", { name: "Edit Template" })).not.toBeInTheDocument()
     })
 
+    it("opens an editable organization template from its title", () => {
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        expect(
+            screen.getByRole("link", { name: "Edit Org Template" }),
+        ).toHaveAttribute(
+            "href",
+            "/automation/email-templates/org/tpl_org_1",
+        )
+    })
+
     it("routes personal template creation to the draft-first Studio", () => {
         render(<EmailTemplatesPage />)
 
@@ -794,7 +806,7 @@ describe("EmailTemplatesPage", () => {
         expect(screen.getByText("You don't have any personal templates yet")).toBeInTheDocument()
     })
 
-    it("lets users recover inactive personal templates in the Studio", async () => {
+    it("hides inactive personal templates by default and lets users reveal them", async () => {
         personalTemplatesFixture = [{
             ...PERSONAL_TEMPLATE,
             id: "tpl_personal_inactive",
@@ -804,10 +816,14 @@ describe("EmailTemplatesPage", () => {
 
         render(<EmailTemplatesPage />)
 
+        const hideInactive = screen.getByRole("checkbox", {
+            name: "Hide Inactive",
+        })
+        expect(hideInactive).toBeChecked()
+        expect(screen.queryByText("Inactive Personal Template")).not.toBeInTheDocument()
+
         fireEvent.click(
-            screen.getByRole("checkbox", {
-                name: "Show inactive personal templates",
-            }),
+            hideInactive,
         )
         expect(
             await screen.findByText("Inactive Personal Template"),
@@ -821,6 +837,44 @@ describe("EmailTemplatesPage", () => {
         fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
         expect(mockRouterPush).toHaveBeenCalledWith(
             "/automation/email-templates/personal/tpl_personal_inactive",
+        )
+    })
+
+    it("opens an editable personal template from its title", () => {
+        render(<EmailTemplatesPage />)
+
+        expect(
+            screen.getByRole("link", { name: "Edit Personal Template" }),
+        ).toHaveAttribute(
+            "href",
+            "/automation/email-templates/personal/tpl_personal_1",
+        )
+    })
+
+    it("lets administrators reveal and reopen inactive organization templates", async () => {
+        orgTemplatesFixture = [{
+            ...ORG_TEMPLATE,
+            id: "tpl_org_inactive",
+            name: "Inactive Org Template",
+            is_active: false,
+        }]
+
+        render(<EmailTemplatesPage />)
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+
+        const hideInactive = screen.getByRole("checkbox", {
+            name: "Hide Inactive",
+        })
+        expect(hideInactive).toBeChecked()
+        expect(screen.queryByText("Inactive Org Template")).not.toBeInTheDocument()
+
+        fireEvent.click(hideInactive)
+        expect(await screen.findByText("Inactive Org Template")).toBeInTheDocument()
+        expect(
+            screen.getByRole("link", { name: "Edit Inactive Org Template" }),
+        ).toHaveAttribute(
+            "href",
+            "/automation/email-templates/org/tpl_org_inactive",
         )
     })
 

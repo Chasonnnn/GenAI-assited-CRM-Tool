@@ -54,6 +54,8 @@ vi.mock("@/lib/auth-context", () => ({
     useAuth: () => ({
         user: {
             email: "owner@example.com",
+            org_name: "EWI Family Global",
+            org_display_name: "EWI Family Global",
         },
     }),
 }))
@@ -592,6 +594,22 @@ describe("OrganizationEmailTemplateStudio", () => {
         expect(container.querySelector("script")).toBeNull()
     })
 
+    it("uses the signed-in organization name in subject and body previews", () => {
+        mocks.state.draft = {
+            ...draftFromPublished,
+            subject: "Welcome to {{org_name}}",
+            body: "<p>Thank you for choosing {{org_name}}.</p>",
+        }
+
+        render(<OrganizationEmailTemplateStudio templateId="template-1" />)
+
+        expect(screen.getByText("Welcome to EWI Family Global")).toBeInTheDocument()
+        expect(
+            screen.getByText("Thank you for choosing EWI Family Global."),
+        ).toBeInTheDocument()
+        expect(screen.queryByText(/ABC Surrogacy/)).not.toBeInTheDocument()
+    })
+
     it("shows the personal signature for a personal template preview", () => {
         mocks.state.publishedTemplate = {
             ...publishedTemplate,
@@ -737,6 +755,34 @@ describe("OrganizationEmailTemplateStudio", () => {
         expect(screen.getByLabelText("Email HTML")).toHaveValue(
             "<p>Simple visual content</p>",
         )
+    })
+
+    it("saves an active template as inactive through the Studio status control", async () => {
+        mocks.state.draft = draftFromPublished
+        mocks.updateDraft.mockResolvedValue({
+            ...draftFromPublished,
+            is_active: false,
+            revision: 2,
+        })
+
+        render(<OrganizationEmailTemplateStudio templateId="template-1" />)
+
+        const activeSwitch = screen.getByRole("switch", {
+            name: "Template is active",
+        })
+        expect(activeSwitch).toBeChecked()
+        fireEvent.click(activeSwitch)
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+
+        await waitFor(() => {
+            expect(mocks.updateDraft).toHaveBeenCalledWith({
+                id: "draft-1",
+                data: {
+                    expected_revision: 1,
+                    is_active: false,
+                },
+            })
+        })
     })
 
     it("inserts a variable into the field being edited", () => {

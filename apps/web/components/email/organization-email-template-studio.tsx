@@ -45,6 +45,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { Switch } from "@/components/ui/switch"
 import { useAuth } from "@/lib/auth-context"
 import type {
     EmailTemplateDraft,
@@ -140,15 +141,16 @@ function hasOverlappingServerChanges(
 const SUBJECT_PREVIEW_VALUES: Record<string, string> = {
     first_name: "John",
     full_name: "John Smith",
-    org_name: "ABC Surrogacy",
     owner_name: "Sara Manager",
 }
 
-function buildPreviewSubject(subject: string) {
+function buildPreviewSubject(subject: string, orgName: string) {
     return subject.replace(
         /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
-        (token, variableName: string) =>
-            SUBJECT_PREVIEW_VALUES[variableName] ?? token,
+        (token, variableName: string) => {
+            if (variableName === "org_name") return orgName
+            return SUBJECT_PREVIEW_VALUES[variableName] ?? token
+        },
     )
 }
 
@@ -364,13 +366,15 @@ function OrganizationEmailTemplateEditor({
 
     const isDirty = Object.keys(buildChangedFields(fields, savedFields)).length > 0
     useUnsavedChangesWarning(isDirty, setPendingNavigation)
+    const orgCompanyName =
+        user?.org_display_name || user?.org_name || "Your organization"
     const previewHtml = buildEmailTemplatePreviewHtml(fields.body, {
         scope,
-        orgCompanyName: null,
+        orgCompanyName,
         personalSignatureHtml: personalSignaturePreview.data?.html,
         orgSignatureHtml: orgSignaturePreview.data?.html,
     })
-    const previewSubject = buildPreviewSubject(fields.subject)
+    const previewSubject = buildPreviewSubject(fields.subject, orgCompanyName)
     const advancedBody = hasAdvancedEmailTemplateHtml(fields.body)
     const testVariableNames = extractEmailTemplateVariables(
         `${fields.subject}\n${fields.body}`,
@@ -918,6 +922,26 @@ function OrganizationEmailTemplateEditor({
                                 />
                             </div>
                         ) : null}
+                        <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+                            <div className="space-y-1">
+                                <Label htmlFor="template-active">
+                                    Template is active
+                                </Label>
+                                <p className="text-xs text-muted-foreground">
+                                    Inactive templates stay available for editing but are hidden from send menus.
+                                </p>
+                            </div>
+                            <Switch
+                                id="template-active"
+                                checked={fields.is_active}
+                                onCheckedChange={(isActive) =>
+                                    setFields((current) => ({
+                                        ...current,
+                                        is_active: isActive,
+                                    }))
+                                }
+                            />
+                        </div>
                         <div className="flex items-center justify-between gap-3">
                             <div className="space-y-1">
                                 <Label id="template-body-label">Email body</Label>

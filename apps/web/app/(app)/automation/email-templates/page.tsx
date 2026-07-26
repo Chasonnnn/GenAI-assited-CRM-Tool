@@ -680,6 +680,10 @@ function getPersonalTemplateVisibilityLabel(value: string | null) {
         : personalTemplateVisibilityLabels.mine
 }
 
+function getTemplateStudioHref(template: EmailTemplateListItem): Route {
+    return `/automation/email-templates/${template.scope}/${template.id}` as Route
+}
+
 type TemplateCardControls =
     | {
         kind: "actions"
@@ -719,14 +723,29 @@ function getTemplateCardActionIcon(kind: TemplateCardActionKind) {
 }
 
 function TemplateCard({ template, controls }: TemplateCardProps) {
+    const canEdit =
+        controls.kind === "actions" && controls.actions.includes("edit")
+
     return (
         <Card className="group relative min-w-0">
             <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                         <div className="flex items-start gap-2">
-                            <CardTitle className="text-base leading-6 line-clamp-2 min-h-12 break-words">
-                                {template.name}
+                            <CardTitle className="min-h-12 text-base leading-6 break-words">
+                                {canEdit ? (
+                                    <Link
+                                        href={getTemplateStudioHref(template)}
+                                        aria-label={`Edit ${template.name}`}
+                                        className="line-clamp-2 rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    >
+                                        {template.name}
+                                    </Link>
+                                ) : (
+                                    <span className="line-clamp-2">
+                                        {template.name}
+                                    </span>
+                                )}
                             </CardTitle>
                             {template.is_system_template && (
                                 <Badge variant="secondary" className="text-xs shrink-0">
@@ -909,7 +928,8 @@ export default function EmailTemplatesPage() {
 
     const [activeTab, setActiveTab] = useState("personal")
     const [showAllPersonal, setShowAllPersonal] = useState(false)
-    const [showInactivePersonal, setShowInactivePersonal] = useState(false)
+    const [hideInactivePersonal, setHideInactivePersonal] = useState(true)
+    const [hideInactiveOrg, setHideInactiveOrg] = useState(true)
     const [editorState, dispatchEditor] = useReducer(
         emailTemplateEditorReducer,
         initialEmailTemplateEditorState,
@@ -955,12 +975,12 @@ export default function EmailTemplatesPage() {
 
     // API hooks for templates
     const { data: personalTemplates, isLoading: loadingPersonal } = useEmailTemplates({
-        activeOnly: !showInactivePersonal,
+        activeOnly: hideInactivePersonal,
         scope: "personal",
         showAllPersonal: isAdmin && showAllPersonal,
     })
     const { data: orgTemplates, isLoading: loadingOrg } = useEmailTemplates({
-        activeOnly: true,
+        activeOnly: canManageEmailTemplates ? hideInactiveOrg : true,
         scope: "org",
     })
     const {
@@ -1487,24 +1507,33 @@ export default function EmailTemplatesPage() {
                             <TabsTrigger value="signature">My Signature</TabsTrigger>
                         </TabsList>
 
-                        {activeTab === "personal" && (
+                        {(activeTab === "personal" ||
+                            (activeTab === "org" && canManageEmailTemplates)) && (
                             <div className="flex items-center gap-4">
                                 <div className="flex items-center gap-2">
                                     <Checkbox
-                                        id="show-inactive-personal-templates"
-                                        checked={showInactivePersonal}
-                                        onCheckedChange={(checked) =>
-                                            setShowInactivePersonal(checked === true)
+                                        id={`hide-inactive-${activeTab}-templates`}
+                                        checked={
+                                            activeTab === "personal"
+                                                ? hideInactivePersonal
+                                                : hideInactiveOrg
                                         }
+                                        onCheckedChange={(checked) => {
+                                            if (activeTab === "personal") {
+                                                setHideInactivePersonal(checked === true)
+                                            } else {
+                                                setHideInactiveOrg(checked === true)
+                                            }
+                                        }}
                                     />
                                     <Label
-                                        htmlFor="show-inactive-personal-templates"
+                                        htmlFor={`hide-inactive-${activeTab}-templates`}
                                         className="cursor-pointer text-sm font-normal"
                                     >
-                                        Show inactive personal templates
+                                        Hide Inactive
                                     </Label>
                                 </div>
-                                {isAdmin && (
+                                {activeTab === "personal" && isAdmin && (
                                     <Select
                                         value={showAllPersonal ? "all" : "mine"}
                                         onValueChange={(v) => setShowAllPersonal(v === "all")}
@@ -1623,9 +1652,7 @@ export default function EmailTemplatesPage() {
                                                             return
                                                         }
                                                         if (action === "edit") {
-                                                            router.push(
-                                                                `/automation/email-templates/personal/${template.id}` as Route,
-                                                            )
+                                                            router.push(getTemplateStudioHref(template))
                                                             return
                                                         }
                                                         if (action === "share") {
@@ -1708,7 +1735,7 @@ export default function EmailTemplatesPage() {
                                                             return
                                                         }
                                                         if (action === "edit") {
-                                                            router.push(`/automation/email-templates/org/${template.id}`)
+                                                            router.push(getTemplateStudioHref(template))
                                                             return
                                                         }
                                                         if (action === "copy") {

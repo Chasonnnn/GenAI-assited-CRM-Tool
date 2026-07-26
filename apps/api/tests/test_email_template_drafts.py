@@ -89,6 +89,7 @@ async def test_existing_template_draft_is_isolated_until_explicit_publish(
         json={
             "subject": "Draft subject",
             "body": "<p>Draft body</p>",
+            "is_active": False,
             "expected_revision": 1,
         },
     )
@@ -96,12 +97,14 @@ async def test_existing_template_draft_is_isolated_until_explicit_publish(
     updated_draft = update_response.json()
     assert updated_draft["revision"] == 2
     assert updated_draft["subject"] == "Draft subject"
+    assert updated_draft["is_active"] is False
 
     db.expire_all()
     still_published = db.get(EmailTemplate, template_id)
     assert still_published is not None
     assert still_published.subject == "Original subject"
     assert still_published.body == "<p>Original body</p>"
+    assert still_published.is_active is True
     assert still_published.current_version == 1
 
     publish_response = await authed_client.post(
@@ -116,6 +119,7 @@ async def test_existing_template_draft_is_isolated_until_explicit_publish(
     assert published["id"] == str(template_id)
     assert published["subject"] == "Draft subject"
     assert published["body"] == "<p>Draft body</p>"
+    assert published["is_active"] is False
     assert published["current_version"] == 2
     assert published["scope"] == "org"
     assert published["created_at"] == original_created_at.isoformat().replace("+00:00", "Z")
