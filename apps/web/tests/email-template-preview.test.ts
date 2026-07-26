@@ -4,18 +4,36 @@ import {
     buildEmailTemplatePreviewHtml,
     extractEmailTemplateVariables,
     getEmailTemplateBodyMode,
+    getEmailTemplateVisualEditorSupport,
     hasAdvancedEmailTemplateHtml,
 } from "@/lib/email-template-preview"
 
 describe("email template preview", () => {
-    it("detects advanced legacy markup without rewriting it", () => {
+    it("routes supported advanced fragments to the visual editor", () => {
+        const appointmentFragment =
+            '<div style="padding:20px"><table width="100%"><tbody><tr><td>{{appointment_type}}</td></tr></tbody></table></div>'
+
         expect(
-            hasAdvancedEmailTemplateHtml(
-                '<table style="mso-table-lspace:0"><tr><td>Hello</td></tr></table>',
-            ),
+            hasAdvancedEmailTemplateHtml(appointmentFragment),
         ).toBe(true)
         expect(getEmailTemplateBodyMode("<p>Hello</p>")).toBe("visual")
-        expect(getEmailTemplateBodyMode("<div>Hello</div>")).toBe("html")
+        expect(getEmailTemplateBodyMode(appointmentFragment)).toBe("visual")
+        expect(getEmailTemplateVisualEditorSupport(appointmentFragment)).toEqual({
+            supported: true,
+            reason: null,
+        })
+    })
+
+    it.each([
+        ["full email documents", "<!doctype html><html><body><p>Hello</p></body></html>"],
+        ["unsupported elements", "<section><p>Hello</p></section>"],
+        ["unsupported attributes", '<div data-layout="legacy">Hello</div>'],
+        ["unsupported styles", '<div style="background:linear-gradient(red, blue)">Hello</div>'],
+        ["embedded styles", "<style>p{color:red}</style><p>Hello</p>"],
+        ["conditional comments", "<!--[if mso]><table><tr><td>Hello</td></tr></table><![endif]-->"],
+    ])("keeps %s in source mode", (_label, body) => {
+        expect(getEmailTemplateBodyMode(body)).toBe("html")
+        expect(getEmailTemplateVisualEditorSupport(body).supported).toBe(false)
     })
 
     it("extracts unique variables with optional whitespace", () => {
