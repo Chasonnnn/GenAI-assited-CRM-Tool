@@ -129,6 +129,24 @@ variable "worker_cpu_idle" {
   default     = false
 }
 
+variable "workflow_sweep_fallback_enabled" {
+  description = "Enable exact-time scheduled workflow checks in the worker."
+  type        = bool
+  default     = true
+}
+
+variable "workflow_maintenance_fallback_enabled" {
+  description = "Enable inactivity and task workflow sweeps after a candidate-count canary."
+  type        = bool
+  default     = false
+}
+
+variable "workflow_approval_expiry_fallback_enabled" {
+  description = "Enable workflow approval expiry sweeps after a candidate-count canary."
+  type        = bool
+  default     = false
+}
+
 variable "worker_schedule_enabled" {
   description = "Enable legacy worker scale schedules. Keep disabled for 24/7 automation."
   type        = bool

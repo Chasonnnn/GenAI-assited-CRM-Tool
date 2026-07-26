@@ -66,6 +66,12 @@ locals {
     RATE_LIMIT_PUBLIC_READ = tostring(var.rate_limit_public_read)
   })
 
+  worker_env = merge(local.common_env, {
+    WORKFLOW_SWEEP_FALLBACK_ENABLED           = tostring(var.workflow_sweep_fallback_enabled)
+    WORKFLOW_MAINTENANCE_FALLBACK_ENABLED     = tostring(var.workflow_maintenance_fallback_enabled)
+    WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED = tostring(var.workflow_approval_expiry_fallback_enabled)
+  })
+
   common_secret_keys = [
     "DATABASE_URL",
     "REDIS_URL",

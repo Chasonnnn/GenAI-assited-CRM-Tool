@@ -65,6 +65,30 @@ def test_worker_capacity_remains_available_for_background_automation() -> None:
     assert "template[0].scaling[0].min_instance_count" not in cloudrun
 
 
+def test_worker_workflow_fallbacks_have_explicit_safe_terraform_controls() -> None:
+    variables = _read("infra/terraform/variables.tf")
+    locals = _read("infra/terraform/locals.tf")
+    cloudrun = _read("infra/terraform/cloudrun.tf")
+
+    scheduled = variables.split('variable "workflow_sweep_fallback_enabled"', 1)[1].split(
+        "}", 1
+    )[0]
+    maintenance = variables.split(
+        'variable "workflow_maintenance_fallback_enabled"', 1
+    )[1].split("}", 1)[0]
+    approvals = variables.split(
+        'variable "workflow_approval_expiry_fallback_enabled"', 1
+    )[1].split("}", 1)[0]
+
+    assert "default     = true" in scheduled
+    assert "default     = false" in maintenance
+    assert "default     = false" in approvals
+    assert "WORKFLOW_SWEEP_FALLBACK_ENABLED" in locals
+    assert "WORKFLOW_MAINTENANCE_FALLBACK_ENABLED" in locals
+    assert "WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED" in locals
+    assert "for_each = local.worker_env" in cloudrun
+
+
 def test_cloudbuild_updates_attachment_scan_job_image() -> None:
     content = _read("cloudbuild/api.yaml")
     assert "$_ATTACHMENT_SCAN_JOB" in content
