@@ -50,6 +50,7 @@ def test_worker_scale_scheduler_uses_dedicated_scaler_identity() -> None:
 def test_worker_capacity_remains_available_for_background_automation() -> None:
     variables = _read("infra/terraform/variables.tf")
     cloudrun = _read("infra/terraform/cloudrun.tf")
+    tfvars_example = _read("infra/terraform/terraform.tfvars.example")
 
     worker_min = variables.split('variable "worker_min_instances"', 1)[1].split("}", 1)[0]
     schedule_enabled = variables.split('variable "worker_schedule_enabled"', 1)[1].split(
@@ -63,6 +64,9 @@ def test_worker_capacity_remains_available_for_background_automation() -> None:
     assert "default     = false" in schedule_enabled
     assert "default     = 1" in night_min
     assert "template[0].scaling[0].min_instance_count" not in cloudrun
+    assert "# worker_min_instances = 1" in tfvars_example
+    assert "# worker_schedule_enabled = false" in tfvars_example
+    assert "# worker_min_instances_night = 1" in tfvars_example
 
 
 def test_worker_workflow_fallbacks_have_explicit_safe_terraform_controls() -> None:
