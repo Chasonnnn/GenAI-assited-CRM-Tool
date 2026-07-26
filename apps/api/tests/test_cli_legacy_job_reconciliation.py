@@ -19,6 +19,7 @@ def test_reconciliation_command_defaults_to_aggregate_only_dry_run(monkeypatch):
         mode="dry_run",
         fingerprint="a" * 64,
         count=1,
+        residual_count=1,
         decisions=(
             SimpleNamespace(
                 job_id=job_id,
@@ -78,11 +79,56 @@ def test_reconciliation_command_defaults_to_aggregate_only_dry_run(monkeypatch):
     ]
     assert "mode=dry_run" in result.output
     assert "count=1" in result.output
+    assert "residual_count=1" in result.output
     assert f"fingerprint={'a' * 64}" in result.output
     assert "workflow_email=1" in result.output
     assert "workflow_email_no_local_delivery_evidence=1" in result.output
     assert str(job_id) not in result.output
     assert str(org_id) not in result.output
+    assert db.closed is True
+
+
+def test_reconciliation_dry_run_gate_exits_nonzero_for_residual_running_work(monkeypatch):
+    evaluated_at = datetime(2026, 7, 25, 22, 44, tzinfo=timezone.utc)
+    fingerprint = "e" * 64
+    report = SimpleNamespace(
+        mode="dry_run",
+        fingerprint=fingerprint,
+        count=0,
+        residual_count=1,
+        decisions=(),
+        evaluated_at=evaluated_at,
+    )
+
+    class _Session:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    db = _Session()
+    monkeypatch.setattr(cli_module, "SessionLocal", lambda: db)
+    monkeypatch.setattr(
+        cli_module,
+        "legacy_job_reconciliation_service",
+        SimpleNamespace(reconcile_legacy_running_jobs=lambda _db, **_kwargs: report),
+        raising=False,
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "reconcile-legacy-job-claims",
+            "--stale-before",
+            "2026-07-24T00:00:00+00:00",
+            "--evaluated-at",
+            evaluated_at.isoformat(),
+            "--require-no-residual",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert f"mode=dry_run count=0 residual_count=1 fingerprint={fingerprint}" in result.output
     assert db.closed is True
 
 
@@ -97,6 +143,7 @@ def test_reconciliation_manifest_is_explicit_sanitized_dry_run_json(monkeypatch)
         mode="dry_run",
         fingerprint=fingerprint,
         count=1,
+        residual_count=1,
         decisions=(
             SimpleNamespace(
                 job_id=job_id,
@@ -154,6 +201,7 @@ def test_reconciliation_manifest_is_explicit_sanitized_dry_run_json(monkeypatch)
         "stale_before": stale_before.isoformat(),
         "evaluated_at": evaluated_at.isoformat(),
         "count": 1,
+        "residual_count": 1,
         "fingerprint": fingerprint,
         "decisions": [
             {
@@ -243,6 +291,7 @@ def test_reconciliation_apply_passes_the_exact_review_contract(monkeypatch):
         mode="apply",
         fingerprint=fingerprint,
         count=0,
+        residual_count=0,
         decisions=(),
         evaluated_at=evaluated_at,
     )
@@ -298,5 +347,5 @@ def test_reconciliation_apply_passes_the_exact_review_contract(monkeypatch):
             "review_reason": "Approved production cutover",
         }
     ]
-    assert f"mode=apply count=0 fingerprint={fingerprint}" in result.output
+    assert f"mode=apply count=0 residual_count=0 fingerprint={fingerprint}" in result.output
     assert db.closed is True

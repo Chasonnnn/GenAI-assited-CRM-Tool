@@ -147,6 +147,32 @@ def test_dry_run_classifies_only_unclaimed_legacy_work_and_leaves_tokened_work_i
     assert "_reconciliation" not in tokened_job.payload
 
 
+def test_dry_run_reports_recent_unclassified_tokenless_running_work(db, test_org):
+    from app.services import legacy_job_reconciliation_service
+
+    _mark_preexisting_running_jobs_as_actively_claimed(db)
+    recent_job = _legacy_job(
+        job_id=uuid4(),
+        org_id=test_org.id,
+        job_type=JobType.SEND_EMAIL.value,
+        payload={"recipient_email": "must-not-send@example.test"},
+    )
+    recent_job.run_at = EVALUATED_AT
+    db.add(recent_job)
+    db.commit()
+
+    report = legacy_job_reconciliation_service.reconcile_legacy_running_jobs(
+        db,
+        stale_before=STALE_BEFORE,
+        apply=False,
+        evaluated_at=EVALUATED_AT,
+    )
+
+    assert report.count == 0
+    assert report.decisions == ()
+    assert report.residual_count == 1
+
+
 def test_apply_requires_exact_review_and_quarantines_without_replaying(db, test_org):
     from app.services import legacy_job_reconciliation_service
 

@@ -37,6 +37,7 @@ class LegacyJobReconciliationReport:
     mode: str
     fingerprint: str
     count: int
+    residual_count: int
     decisions: tuple[LegacyJobReconciliationDecision, ...]
     evaluated_at: datetime
     applied_at: datetime | None
@@ -82,6 +83,19 @@ def _lockable_statement(sql: str, *, lock: bool):
     if lock:
         sql = f"{sql}\nFOR UPDATE OF job"
     return text(sql)
+
+
+def _count_tokenless_running_jobs(db: Session) -> int:
+    return db.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM jobs
+            WHERE status = 'running'
+              AND (claim_token IS NULL OR claimed_at IS NULL)
+            """
+        )
+    ).scalar_one()
 
 
 def _classify_legacy_running_jobs(
@@ -404,16 +418,7 @@ def reconcile_legacy_running_jobs(
                     },
                 )
                 db.flush()
-            residual_count = db.execute(
-                text(
-                    """
-                    SELECT COUNT(*)
-                    FROM jobs
-                    WHERE status = 'running'
-                      AND (claim_token IS NULL OR claimed_at IS NULL)
-                    """
-                )
-            ).scalar_one()
+            residual_count = _count_tokenless_running_jobs(db)
             if residual_count:
                 raise ValueError(
                     f"Legacy job reconciliation blocked: {residual_count} "
@@ -422,6 +427,8 @@ def reconcile_legacy_running_jobs(
             if apply_savepoint is not None:
                 apply_savepoint.commit()
             db.commit()
+        else:
+            residual_count = _count_tokenless_running_jobs(db)
     except Exception:
         if apply:
             if apply_savepoint is not None and apply_savepoint.is_active:
@@ -434,6 +441,7 @@ def reconcile_legacy_running_jobs(
         mode="apply" if apply else "dry_run",
         fingerprint=fingerprint,
         count=len(ordered_decisions),
+        residual_count=residual_count,
         decisions=ordered_decisions,
         evaluated_at=evaluated_at,
         applied_at=applied_at,

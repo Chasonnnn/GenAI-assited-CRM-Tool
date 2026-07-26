@@ -711,6 +711,11 @@ def _parse_aware_iso_datetime(value: str, *, option_name: str) -> datetime:
     is_flag=True,
     help="Emit a sanitized JSON review manifest (dry-run only).",
 )
+@click.option(
+    "--require-no-residual",
+    is_flag=True,
+    help="Exit nonzero unless every tokenless running job has drained or been reconciled.",
+)
 def reconcile_legacy_job_claims_cli(
     stale_before: str,
     evaluated_at: str | None,
@@ -719,6 +724,7 @@ def reconcile_legacy_job_claims_cli(
     expected_fingerprint: str | None,
     review_reason: str | None,
     manifest: bool,
+    require_no_residual: bool,
 ):
     """Preview or apply a reviewed legacy running-job reconciliation."""
     normalized_fingerprint = (
@@ -780,6 +786,7 @@ def reconcile_legacy_job_claims_cli(
                         "stale_before": stale_before_value.isoformat(),
                         "evaluated_at": report.evaluated_at.isoformat(),
                         "count": report.count,
+                        "residual_count": report.residual_count,
                         "fingerprint": report.fingerprint,
                         "decisions": [
                             {
@@ -801,7 +808,10 @@ def reconcile_legacy_job_claims_cli(
                 )
             )
         else:
-            click.echo(f"mode={report.mode} count={report.count} fingerprint={report.fingerprint}")
+            click.echo(
+                f"mode={report.mode} count={report.count} "
+                f"residual_count={report.residual_count} fingerprint={report.fingerprint}"
+            )
             job_type_counts = Counter(decision.job_type for decision in report.decisions)
             reason_code_counts = Counter(decision.reason_code for decision in report.decisions)
             click.echo("job_type_counts:")
@@ -810,6 +820,8 @@ def reconcile_legacy_job_claims_cli(
             click.echo("reason_code_counts:")
             for reason_code, count in sorted(reason_code_counts.items()):
                 click.echo(f"  {reason_code}={count}")
+        if require_no_residual and report.residual_count:
+            click.get_current_context().exit(1)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
     finally:

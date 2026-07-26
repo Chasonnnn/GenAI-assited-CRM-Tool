@@ -77,6 +77,9 @@ uv run -m app.cli reconcile-legacy-job-claims \
 - [ ] Record the exact `--evaluated-at`, count, and fingerprint from the approved
       manifest. The apply records its actual `applied_at` separately; do not
       substitute that application time for the reviewed evaluation time.
+- [ ] Treat `residual_count` as the global tokenless-running-job count. It may be
+      nonzero during review because it includes the classified plan plus recent
+      or unclassified work; `count=0` alone is not a resume gate.
 - [ ] Apply only that reviewed plan:
 
 ```bash
@@ -89,7 +92,18 @@ uv run -m app.cli reconcile-legacy-job-claims \
   --review-reason "${RELEASE_A_REVIEW_REASON}"
 ```
 
-- [ ] Repeat the dry run and require count `0`.
+- [ ] After the old worker revisions have drained and every legacy attachment
+      scan execution has finished, repeat the dry run as a fail-closed gate:
+
+```bash
+uv run -m app.cli reconcile-legacy-job-claims \
+  --stale-before "${RELEASE_A_STALE_BEFORE}" \
+  --evaluated-at "${RELEASE_A_EVALUATED_AT}" \
+  --require-no-residual
+```
+
+- [ ] Require exit code `0`, `count=0`, and `residual_count=0`. Investigate any
+      residual row before resume; do not move the cutoff forward to hide it.
 - [ ] Require baseline email, organization, and template evidence to be
       unchanged except for the reviewed job dispositions and audit records.
 
