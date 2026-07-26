@@ -95,9 +95,9 @@ variable "worker_job_name" {
 }
 
 variable "worker_min_instances" {
-  description = "Base min instances for the worker service (overridden by scheduler)."
+  description = "Minimum worker instances kept available for background automation."
   type        = number
-  default     = 0
+  default     = 1
 }
 
 variable "worker_max_instances" {
@@ -129,10 +129,28 @@ variable "worker_cpu_idle" {
   default     = false
 }
 
-variable "worker_schedule_enabled" {
-  description = "Enable Cloud Scheduler jobs to scale the worker service."
+variable "workflow_sweep_fallback_enabled" {
+  description = "Enable exact-time scheduled workflow checks in the worker."
   type        = bool
   default     = true
+}
+
+variable "workflow_maintenance_fallback_enabled" {
+  description = "Enable inactivity and task workflow sweeps after a candidate-count canary."
+  type        = bool
+  default     = false
+}
+
+variable "workflow_approval_expiry_fallback_enabled" {
+  description = "Enable workflow approval expiry sweeps after a candidate-count canary."
+  type        = bool
+  default     = false
+}
+
+variable "worker_schedule_enabled" {
+  description = "Enable legacy worker scale schedules. Keep disabled for 24/7 automation."
+  type        = bool
+  default     = false
 }
 
 variable "worker_schedule_timezone" {
@@ -160,9 +178,9 @@ variable "worker_min_instances_day" {
 }
 
 variable "worker_min_instances_night" {
-  description = "Min instances outside business hours."
+  description = "Min instances outside business hours when legacy scale schedules are enabled."
   type        = number
-  default     = 0
+  default     = 1
 }
 
 variable "clamav_update_job_name" {

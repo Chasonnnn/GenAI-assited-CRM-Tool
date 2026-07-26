@@ -151,6 +151,19 @@ def test_workflow_action_normalization_and_trigger_config_validation():
     with pytest.raises(Exception):
         workflow_service._validate_trigger_config(WorkflowTriggerType.SCHEDULED, {})
 
+    for unsupported_cron in ("0 9 1 * *", "0 9 * 1 *", "*/5 9 * * *", "0 9 * * 1,2"):
+        with pytest.raises(Exception, match="supported schedule format"):
+            workflow_service._validate_trigger_config(
+                WorkflowTriggerType.SCHEDULED,
+                {"cron": unsupported_cron},
+            )
+
+    with pytest.raises(Exception, match="valid IANA timezone"):
+        workflow_service._validate_trigger_config(
+            WorkflowTriggerType.SCHEDULED,
+            {"cron": "0 9 * * *", "timezone": "Not/AZone"},
+        )
+
 
 def test_workflow_action_config_validation_branches(db, test_org, test_user):
     template = EmailTemplate(
@@ -462,6 +475,38 @@ def test_workflow_engine_core_rate_limit_dedupe_and_conditions(db, test_org, tes
     )
     assert engine._evaluate_condition(WorkflowConditionOperator.LESS_THAN.value, "2", "3") is True
     assert engine._evaluate_condition("unknown", "a", "b") is False
+
+
+def test_scheduled_workflow_dedupe_uses_the_captured_occurrence_minute(db, test_org, test_user):
+    engine = WorkflowEngineCore(adapter=_DummyAdapter())
+    workflow = _create_workflow(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        name=f"Scheduled-{uuid4().hex[:6]}",
+        trigger_type=WorkflowTriggerType.SCHEDULED,
+    )
+    entity_id = uuid4()
+
+    first_key = engine._get_dedupe_key(
+        workflow,
+        entity_id,
+        event_data={"schedule_time": "2026-07-25T23:59:37+00:00"},
+    )
+    retry_key = engine._get_dedupe_key(
+        workflow,
+        entity_id,
+        event_data={"schedule_time": "2026-07-25T23:59:37+00:00"},
+    )
+    next_occurrence_key = engine._get_dedupe_key(
+        workflow,
+        entity_id,
+        event_data={"schedule_time": "2026-07-26T00:00:04+00:00"},
+    )
+
+    assert first_key == f"{workflow.id}:{entity_id}:scheduled:20260725T2359Z"
+    assert retry_key == first_key
+    assert next_occurrence_key == f"{workflow.id}:{entity_id}:scheduled:20260726T0000Z"
 
 
 def test_workflow_engine_continue_execution_denied_and_expired_paths(db, test_org, test_user):

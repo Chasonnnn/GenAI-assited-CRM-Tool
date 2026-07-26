@@ -236,7 +236,7 @@ resource "google_cloud_run_v2_service" "worker" {
       }
 
       dynamic "env" {
-        for_each = local.common_env
+        for_each = local.worker_env
         content {
           name  = env.key
           value = env.value
@@ -275,7 +275,6 @@ resource "google_cloud_run_v2_service" "worker" {
       client,
       client_version,
       template[0].containers[0].image,
-      template[0].scaling[0].min_instance_count,
     ]
   }
 }

@@ -14,27 +14,52 @@ async def process_workflow_sweep(db, job) -> None:
     Process a WORKFLOW_SWEEP job - daily sweep for scheduled and inactivity workflows.
 
     Payload:
-        - org_id: Organization to sweep (optional, sweeps all if not provided)
+        - org_id: Optional organization copy, validated against the job claim
         - sweep_type: 'scheduled', 'inactivity', 'task_due', 'task_overdue', or 'all'
+        - evaluated_at: Timezone-aware ISO timestamp captured when the sweep was queued
     """
     from app.services import workflow_triggers
     from app.db.models import Organization
 
-    sweep_type = job.payload.get("sweep_type", "all")
-    org_id = job.payload.get("org_id")
+    payload = job.payload or {}
+    sweep_type = payload.get("sweep_type", "all")
+    claimed_org_id = getattr(job, "organization_id", None)
+    if claimed_org_id is None:
+        raise ValueError("workflow sweep organization claim is required")
+    try:
+        org_id = UUID(str(claimed_org_id))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("workflow sweep organization claim is invalid") from exc
 
-    if org_id:
-        orgs = [db.query(Organization).filter(Organization.id == UUID(org_id)).first()]
-        orgs = [o for o in orgs if o]
-    else:
-        orgs = db.query(Organization).all()
+    payload_org_id = payload.get("org_id")
+    if payload_org_id is not None:
+        try:
+            parsed_payload_org_id = UUID(str(payload_org_id))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("workflow sweep payload organization is invalid") from exc
+        if parsed_payload_org_id != org_id:
+            raise ValueError("workflow sweep payload organization does not match job claim")
+
+    evaluated_at_raw = payload.get("evaluated_at")
+    evaluated_at = None
+    if evaluated_at_raw is not None:
+        evaluated_at = datetime.fromisoformat(evaluated_at_raw)
+        if evaluated_at.tzinfo is None or evaluated_at.utcoffset() is None:
+            raise ValueError("evaluated_at must be timezone-aware")
+
+    orgs = [db.query(Organization).filter(Organization.id == org_id).first()]
+    orgs = [org for org in orgs if org]
 
     logger.info("Starting workflow sweep: type=%s, orgs=%s", sweep_type, len(orgs))
 
     for org in orgs:
         try:
             if sweep_type in ("all", "scheduled"):
-                workflow_triggers.trigger_scheduled_workflows(db, org.id)
+                workflow_triggers.trigger_scheduled_workflows(
+                    db,
+                    org.id,
+                    evaluated_at=evaluated_at,
+                )
 
             if sweep_type in ("all", "inactivity"):
                 workflow_triggers.trigger_inactivity_workflows(db, org.id)
@@ -50,6 +75,7 @@ async def process_workflow_sweep(db, job) -> None:
         except Exception as e:
             logger.error("Workflow sweep failed for org %s: %s", org.id, e)
             db.rollback()
+            raise
 
     logger.info("Workflow sweep finished for %s organizations", len(orgs))
 

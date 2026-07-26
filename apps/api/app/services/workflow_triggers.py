@@ -15,6 +15,7 @@ from app.db.models import (
     Task,
 )
 from app.db.enums import WorkflowTriggerType, WorkflowEventSource, OwnerType
+from app.schemas.workflow import is_supported_simple_cron
 from app.services.workflow_engine import engine
 
 
@@ -23,6 +24,18 @@ def _get_entity_owner_id(surrogate: Surrogate) -> UUID | None:
     if surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id:
         return surrogate.owner_id
     return None
+
+
+def _workflow_applies_to_owner(workflow, entity_owner_id: UUID | None) -> bool:
+    """Return whether one org or personal workflow applies to an entity owner."""
+    if workflow.scope == "org":
+        return True
+    return workflow.scope == "personal" and workflow.owner_user_id == entity_owner_id
+
+
+def _workflow_applies_to_surrogate(workflow, surrogate: Surrogate) -> bool:
+    """Return whether one org or personal workflow applies to this surrogate."""
+    return _workflow_applies_to_owner(workflow, _get_entity_owner_id(surrogate))
 
 
 def _get_owner_id_for_surrogate_id(
@@ -338,12 +351,66 @@ def trigger_task_overdue(db: Session, task: Task) -> None:
 # =============================================================================
 
 
-def trigger_scheduled_workflows(db: Session, org_id: UUID) -> None:
-    """Trigger scheduled workflows for an org (called by daily sweep)."""
-    from datetime import datetime, timezone
+def get_enabled_workflow_trigger_types(db: Session, org_id: UUID) -> set[str]:
+    """Return the configured trigger types for enabled workflows in one org."""
     from app.db.models import AutomationWorkflow
 
-    now = datetime.now(timezone.utc)
+    rows = (
+        db.query(AutomationWorkflow.trigger_type)
+        .filter(
+            AutomationWorkflow.organization_id == org_id,
+            AutomationWorkflow.is_enabled.is_(True),
+        )
+        .distinct()
+        .all()
+    )
+    return {trigger_type for (trigger_type,) in rows}
+
+
+def has_due_scheduled_workflows(
+    db: Session,
+    org_id: UUID,
+    *,
+    evaluated_at: datetime,
+) -> bool:
+    """Return whether an org has an enabled scheduled workflow due now."""
+    if evaluated_at.tzinfo is None or evaluated_at.utcoffset() is None:
+        raise ValueError("evaluated_at must be timezone-aware")
+
+    from app.db.models import AutomationWorkflow
+
+    workflows = (
+        db.query(AutomationWorkflow)
+        .filter(
+            AutomationWorkflow.organization_id == org_id,
+            AutomationWorkflow.trigger_type == WorkflowTriggerType.SCHEDULED.value,
+            AutomationWorkflow.is_enabled.is_(True),
+        )
+        .all()
+    )
+    return any(
+        _should_run_cron(
+            (workflow.trigger_config or {}).get("cron", ""),
+            evaluated_at,
+            (workflow.trigger_config or {}).get("timezone", "America/Los_Angeles"),
+        )
+        for workflow in workflows
+    )
+
+
+def trigger_scheduled_workflows(
+    db: Session,
+    org_id: UUID,
+    *,
+    evaluated_at: datetime | None = None,
+) -> None:
+    """Trigger scheduled workflows for an org (called by daily sweep)."""
+    from datetime import timezone
+    from app.db.models import AutomationWorkflow
+
+    now = evaluated_at or datetime.now(timezone.utc)
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("evaluated_at must be timezone-aware")
 
     workflows = (
         db.query(AutomationWorkflow)
@@ -364,18 +431,18 @@ def trigger_scheduled_workflows(db: Session, org_id: UUID) -> None:
         # Full cron parsing would require croniter library
         if _should_run_cron(cron, now, tz):
             for surrogate in _iter_surrogates(db, org_id):
-                engine.trigger(
+                if not _workflow_applies_to_surrogate(workflow, surrogate):
+                    continue
+                engine.execute_workflow(
                     db=db,
-                    trigger_type=WorkflowTriggerType.SCHEDULED,
+                    workflow=workflow,
                     entity_type="surrogate",
                     entity_id=surrogate.id,
                     event_data={
                         "schedule_time": now.isoformat(),
                         "cron": cron,
                     },
-                    org_id=org_id,
                     source=WorkflowEventSource.SYSTEM,
-                    entity_owner_id=_get_entity_owner_id(surrogate),
                 )
 
 
@@ -403,9 +470,11 @@ def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
         # Find surrogates with no activity since threshold
         # Using updated_at as proxy for activity
         for surrogate in _iter_surrogates(db, org_id, updated_before=threshold):
-            engine.trigger(
+            if not _workflow_applies_to_surrogate(workflow, surrogate):
+                continue
+            engine.execute_workflow(
                 db=db,
-                trigger_type=WorkflowTriggerType.INACTIVITY,
+                workflow=workflow,
                 entity_type="surrogate",
                 entity_id=surrogate.id,
                 event_data={
@@ -414,9 +483,7 @@ def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
                     if surrogate.updated_at
                     else None,
                 },
-                org_id=org_id,
                 source=WorkflowEventSource.SYSTEM,
-                entity_owner_id=_get_entity_owner_id(surrogate),
             )
 
 
@@ -483,7 +550,31 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
             window_start,
             window_end,
         ):
-            trigger_task_due(db, task)
+            surrogate = task.surrogate if hasattr(task, "surrogate") else None
+            entity_owner_id = (
+                _get_entity_owner_id(surrogate)
+                if surrogate
+                else _get_owner_id_for_surrogate_id(
+                    db,
+                    org_id,
+                    getattr(task, "surrogate_id", None),
+                )
+            )
+            if not _workflow_applies_to_owner(workflow, entity_owner_id):
+                continue
+            engine.execute_workflow(
+                db=db,
+                workflow=workflow,
+                entity_type="task",
+                entity_id=task.id,
+                event_data={
+                    "task_id": str(task.id),
+                    "task_title": task.title,
+                    "due_date": str(task.due_date) if task.due_date else None,
+                    "surrogate_id": str(task.surrogate_id) if task.surrogate_id else None,
+                },
+                source=WorkflowEventSource.SYSTEM,
+            )
 
 
 def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
@@ -775,18 +866,18 @@ def _should_run_cron(cron: str, now, tz: str) -> bool:
 
     For full cron support, install croniter.
     """
+    if not is_supported_simple_cron(cron):
+        return False
+
     try:
         from zoneinfo import ZoneInfo
 
         local_tz = ZoneInfo(tz)
         local_now = now.astimezone(local_tz)
     except Exception:
-        local_now = now
-
-    parts = cron.split()
-    if len(parts) != 5:
         return False
 
+    parts = cron.split()
     minute, hour, dom, month, dow = parts
 
     def _cron_dow_to_py(value: int) -> int:
