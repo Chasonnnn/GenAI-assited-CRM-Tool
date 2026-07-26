@@ -47,6 +47,24 @@ def test_worker_scale_scheduler_uses_dedicated_scaler_identity() -> None:
     assert "(var.clamav_update_enabled || var.worker_schedule_enabled)" not in clamav_iam
 
 
+def test_worker_capacity_remains_available_for_background_automation() -> None:
+    variables = _read("infra/terraform/variables.tf")
+    cloudrun = _read("infra/terraform/cloudrun.tf")
+
+    worker_min = variables.split('variable "worker_min_instances"', 1)[1].split("}", 1)[0]
+    schedule_enabled = variables.split('variable "worker_schedule_enabled"', 1)[1].split(
+        "}", 1
+    )[0]
+    night_min = variables.split('variable "worker_min_instances_night"', 1)[1].split(
+        "}", 1
+    )[0]
+
+    assert "default     = 1" in worker_min
+    assert "default     = false" in schedule_enabled
+    assert "default     = 1" in night_min
+    assert "template[0].scaling[0].min_instance_count" not in cloudrun
+
+
 def test_cloudbuild_updates_attachment_scan_job_image() -> None:
     content = _read("cloudbuild/api.yaml")
     assert "$_ATTACHMENT_SCAN_JOB" in content
