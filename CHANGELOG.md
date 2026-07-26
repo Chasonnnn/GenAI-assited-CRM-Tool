@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.52](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.51...surrogacy-crm-platform-v0.91.52) (2026-07-26)
+
+
+### Bug Fixes
+
+* align template title navigation ([43e07ed](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/43e07edf2e2685518266f151a24cd7c7e0969192))
+* align template title navigation ([d491fa8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d491fa8fdc6e3dee7e60c18ef24267a3729b3068))
+
 ## [0.91.51](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.50...surrogacy-crm-platform-v0.91.51) (2026-07-26)
 
 
