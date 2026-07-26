@@ -6,7 +6,11 @@ export type ResendReadinessCapabilityStatus =
     | "limited"
     | "unknown"
     | "not_configured"
-export type ResendReadinessCheckStatus = "idle" | "queued" | "running"
+export type ResendReadinessCheckStatus =
+    | "idle"
+    | "queued"
+    | "running"
+    | "stalled"
 export type ResendReadinessIssueCode =
     | "admission_unavailable"
     | "credential_rejected"
@@ -41,5 +45,6 @@ export interface ResendReadinessSnapshot {
 
 export interface ResendReadinessEnvelope {
     check_status: ResendReadinessCheckStatus
+    queued_at: string | null
     last_snapshot: ResendReadinessSnapshot
 }

@@ -960,8 +960,16 @@ async def test_worker_loop_single_iteration_success_and_failure(monkeypatch, db)
         job.status = JobStatus.COMPLETED.value
         return job
 
-    def _fail_claimed_job(session, *, job_id, claim_token, error):
+    def _fail_claimed_job(
+        session,
+        *,
+        job_id,
+        claim_token,
+        error,
+        retry_run_at=None,
+    ):
         job = next(item for item in jobs if item.id == job_id)
+        assert retry_run_at == job.run_at
         job.status = JobStatus.FAILED.value
         job.attempts += 1
         return job
@@ -995,6 +1003,82 @@ async def test_worker_loop_single_iteration_success_and_failure(monkeypatch, db)
     assert stale_recovery_calls["count"] == 1
     assert jobs[0].status == JobStatus.COMPLETED.value
     assert jobs[1].status == JobStatus.FAILED.value
+
+
+@pytest.mark.asyncio
+async def test_worker_preserves_handler_retry_schedule_across_rollback(monkeypatch, db):
+    job = _job(
+        job_type=JobType.RESEND_EVENT_RECONCILE.value,
+        status=JobStatus.RUNNING.value,
+        attempts=1,
+        max_attempts=8,
+    )
+    pending_jobs = [job]
+    retry_run_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+    captured_retry_run_at = []
+
+    monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(db))
+    monkeypatch.setattr(worker, "WORKER_CUTOVER_HOLD", False)
+    monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
+    monkeypatch.setattr(worker, "EMAIL_DELIVERY_DISPATCH_ENABLED", False)
+    monkeypatch.setattr(worker, "POLL_INTERVAL_SECONDS", 0)
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_google_calendar_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_gmail_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker.job_service,
+        "recover_stale_resend_reconciliation_jobs",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            inspected=0,
+            requeued=0,
+            failed=0,
+            resolved=0,
+        ),
+    )
+
+    def _claim(_session, *, limit, job_types):
+        claimed = pending_jobs[:limit]
+        del pending_jobs[:limit]
+        return claimed
+
+    async def _process(_session, claimed_job):
+        claimed_job.run_at = retry_run_at
+        raise RuntimeError("Resend event correlation pending")
+
+    def _fail_claimed_job(
+        _session,
+        *,
+        job_id,
+        claim_token,
+        error,
+        retry_run_at=None,
+    ):
+        captured_retry_run_at.append(retry_run_at)
+        job.status = JobStatus.PENDING.value
+        return job
+
+    monkeypatch.setattr(worker.job_service, "claim_pending_jobs", _claim)
+    monkeypatch.setattr(worker, "process_job", _process)
+    monkeypatch.setattr(worker.job_service, "fail_claimed_job", _fail_claimed_job)
+    monkeypatch.setattr(worker, "_record_job_failure", lambda *args, **kwargs: None)
+    monkeypatch.setattr(worker, "_is_meta_rate_limit_error", lambda *args, **kwargs: False)
+
+    async def _sleep(_seconds):
+        raise RuntimeError("stop-loop")
+
+    monkeypatch.setattr(worker.asyncio, "sleep", _sleep)
+
+    with pytest.raises(RuntimeError, match="stop-loop"):
+        await worker.worker_loop()
+
+    assert captured_retry_run_at == [retry_run_at]
 
 
 @pytest.mark.asyncio
@@ -1387,7 +1471,14 @@ async def test_worker_failure_cas_cannot_overwrite_newer_claim_after_session_rol
         session.execute(text("SELECT 1 / 0"))
         pytest.fail("division by zero must abort the database transaction")
 
-    def _replace_claim_then_fail(session, *, job_id, claim_token, error):
+    def _replace_claim_then_fail(
+        session,
+        *,
+        job_id,
+        claim_token,
+        error,
+        retry_run_at=None,
+    ):
         assert claim_token == original_token
         session.execute(
             update(Job)
@@ -1404,6 +1495,7 @@ async def test_worker_failure_cas_cannot_overwrite_newer_claim_after_session_rol
             job_id=job_id,
             claim_token=claim_token,
             error=error,
+            retry_run_at=retry_run_at,
         )
 
     monkeypatch.setattr(worker.job_service, "claim_pending_jobs", _claim)

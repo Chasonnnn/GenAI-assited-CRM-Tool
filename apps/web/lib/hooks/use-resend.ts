@@ -31,7 +31,8 @@ export function useUpdateResendSettings() {
 
     return useMutation({
         mutationFn: (update: ResendSettingsUpdate) => resendApi.updateResendSettings(update),
-        onSuccess: () => {
+        onSuccess: (savedSettings) => {
+            queryClient.setQueryData(resendKeys.settings(), savedSettings);
             void queryClient.invalidateQueries({ queryKey: resendKeys.settings() });
         },
     });

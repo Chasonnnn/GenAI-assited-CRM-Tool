@@ -36,6 +36,8 @@ function readinessEnvelope(
 ): ResendReadinessEnvelope {
     return {
         check_status: checkStatus,
+        queued_at:
+            checkStatus === "idle" ? null : "2026-07-26T16:00:00Z",
         last_snapshot: {
             freshness: "fresh",
             probe_status: "succeeded",

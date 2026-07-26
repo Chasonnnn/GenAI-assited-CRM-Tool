@@ -203,6 +203,102 @@ async def test_verified_org_route_persists_ready_capabilities(
 
 
 @pytest.mark.asyncio
+async def test_send_ready_org_skips_optional_webhook_probe_when_tracking_not_configured(
+    db,
+    test_org,
+    monkeypatch,
+):
+    from app.core.config import settings
+    from app.services import resend_readiness_service
+
+    monkeypatch.setattr(settings, "API_BASE_URL", "https://api.surrogacyforce.test")
+    configured = _configure_org_resend(db, test_org.id)
+    configured.webhook_secret_encrypted = None
+    db.flush()
+    listed_domain, domain_detail = _domain(name="mail.example.com")
+    client = _FakeControlPlaneClient(
+        domain_list_result=resend_control_plane.ResendControlPlaneResult(
+            status=resend_control_plane.ResendControlPlaneStatus.OK,
+            value=(listed_domain,),
+        ),
+        domain_results={
+            listed_domain.id: resend_control_plane.ResendControlPlaneResult(
+                status=resend_control_plane.ResendControlPlaneStatus.OK,
+                value=domain_detail,
+            )
+        },
+        webhook_result=resend_control_plane.ResendControlPlaneResult(
+            status=resend_control_plane.ResendControlPlaneStatus.FAIL,
+        ),
+    )
+
+    refresh = await resend_readiness_service.refresh_organization_readiness(
+        db,
+        organization_id=test_org.id,
+        control_plane_client_factory=_client_factory(client),
+    )
+
+    assert refresh.persisted is True
+    assert refresh.probe.overall_status == "ready"
+    assert refresh.probe.domain_status == "ready"
+    assert refresh.probe.sending_status == "ready"
+    assert refresh.probe.webhook_status == "not_configured"
+    assert refresh.probe.delivery_tracking_status == "not_configured"
+    assert refresh.probe.engagement_tracking_status == "not_configured"
+    assert refresh.probe.enabled_webhook_count == 0
+    assert refresh.probe.issue_codes == ()
+    assert client.expected_webhook_endpoints == []
+
+
+@pytest.mark.asyncio
+async def test_stored_but_unusable_tracking_secret_remains_actionable(
+    db,
+    test_org,
+    monkeypatch,
+):
+    from app.core.config import settings
+    from app.services import resend_readiness_service
+
+    monkeypatch.setattr(settings, "API_BASE_URL", "https://api.surrogacyforce.test")
+    configured = _configure_org_resend(db, test_org.id)
+    configured.webhook_secret_encrypted = "invalid-ciphertext"
+    db.flush()
+    listed_domain, domain_detail = _domain(name="mail.example.com")
+    client = _FakeControlPlaneClient(
+        domain_list_result=resend_control_plane.ResendControlPlaneResult(
+            status=resend_control_plane.ResendControlPlaneStatus.OK,
+            value=(listed_domain,),
+        ),
+        domain_results={
+            listed_domain.id: resend_control_plane.ResendControlPlaneResult(
+                status=resend_control_plane.ResendControlPlaneStatus.OK,
+                value=domain_detail,
+            )
+        },
+        webhook_result=resend_control_plane.ResendControlPlaneResult(
+            status=resend_control_plane.ResendControlPlaneStatus.OK,
+            value=(_webhook(),),
+        ),
+    )
+
+    refresh = await resend_readiness_service.refresh_organization_readiness(
+        db,
+        organization_id=test_org.id,
+        control_plane_client_factory=_client_factory(client),
+    )
+
+    assert refresh.probe.overall_status == "needs_attention"
+    assert refresh.probe.sending_status == "ready"
+    assert refresh.probe.webhook_status == "ready"
+    assert refresh.probe.delivery_tracking_status == "needs_attention"
+    assert refresh.probe.engagement_tracking_status == "needs_attention"
+    assert refresh.probe.issue_codes == ("webhook_missing",)
+    assert client.expected_webhook_endpoints == [
+        f"https://api.surrogacyforce.test/webhooks/resend/{configured.webhook_id}"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_partial_receiving_state_does_not_block_valid_sending(
     db,
     test_org,
@@ -531,49 +627,6 @@ async def test_domain_engagement_tracking_must_enable_open_and_click(
 
 
 @pytest.mark.asyncio
-async def test_tracking_needs_a_local_signing_secret_even_when_remote_webhook_is_ready(
-    db,
-    test_org,
-    monkeypatch,
-):
-    from app.core.config import settings
-    from app.services import resend_readiness_service
-
-    monkeypatch.setattr(settings, "API_BASE_URL", "https://api.surrogacyforce.test")
-    configured = _configure_org_resend(db, test_org.id)
-    configured.webhook_secret_encrypted = None
-    db.flush()
-    listed_domain, domain_detail = _domain(name="mail.example.com")
-    client = _FakeControlPlaneClient(
-        domain_list_result=resend_control_plane.ResendControlPlaneResult(
-            status=resend_control_plane.ResendControlPlaneStatus.OK,
-            value=(listed_domain,),
-        ),
-        domain_results={
-            listed_domain.id: resend_control_plane.ResendControlPlaneResult(
-                status=resend_control_plane.ResendControlPlaneStatus.OK,
-                value=domain_detail,
-            )
-        },
-        webhook_result=resend_control_plane.ResendControlPlaneResult(
-            status=resend_control_plane.ResendControlPlaneStatus.OK,
-            value=(_webhook(),),
-        ),
-    )
-
-    refresh = await resend_readiness_service.refresh_organization_readiness(
-        db,
-        organization_id=test_org.id,
-        control_plane_client_factory=_client_factory(client),
-    )
-
-    assert refresh.probe.webhook_status == "ready"
-    assert refresh.probe.delivery_tracking_status == "needs_attention"
-    assert refresh.probe.engagement_tracking_status == "needs_attention"
-    assert refresh.probe.issue_codes == ("webhook_missing",)
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     (
         "provider_result",
@@ -812,6 +865,54 @@ async def test_platform_probe_checks_every_distinct_effective_template_domain(
         .one()
     )
     assert stored_snapshot.provider_account_id == "platform:default"
+
+
+@pytest.mark.asyncio
+async def test_platform_probe_keeps_tracking_required_when_signing_secret_is_missing(
+    db,
+    monkeypatch,
+):
+    from pydantic import SecretStr
+
+    from app.core.config import settings
+    from app.services import resend_readiness_service
+
+    monkeypatch.setattr(settings, "API_BASE_URL", "https://api.surrogacyforce.test")
+    monkeypatch.setattr(settings, "PLATFORM_RESEND_API_KEY", SecretStr("re_platform"))
+    monkeypatch.setattr(settings, "PLATFORM_RESEND_WEBHOOK_SECRET", SecretStr(""))
+    monkeypatch.setattr(settings, "PLATFORM_EMAIL_FROM", "ops@mail.example.com")
+    listed_domain, domain_detail = _domain(name="mail.example.com")
+    client = _FakeControlPlaneClient(
+        domain_list_result=resend_control_plane.ResendControlPlaneResult(
+            status=resend_control_plane.ResendControlPlaneStatus.OK,
+            value=(listed_domain,),
+        ),
+        domain_results={
+            listed_domain.id: resend_control_plane.ResendControlPlaneResult(
+                status=resend_control_plane.ResendControlPlaneStatus.OK,
+                value=domain_detail,
+            )
+        },
+        webhook_result=resend_control_plane.ResendControlPlaneResult(
+            status=resend_control_plane.ResendControlPlaneStatus.OK,
+            value=(_webhook(),),
+        ),
+    )
+
+    refresh = await resend_readiness_service.refresh_platform_readiness(
+        db,
+        control_plane_client_factory=_client_factory(client),
+    )
+
+    assert refresh.probe.overall_status == "needs_attention"
+    assert refresh.probe.sending_status == "ready"
+    assert refresh.probe.webhook_status == "ready"
+    assert refresh.probe.delivery_tracking_status == "needs_attention"
+    assert refresh.probe.engagement_tracking_status == "needs_attention"
+    assert refresh.probe.issue_codes == ("webhook_missing",)
+    assert client.expected_webhook_endpoints == [
+        "https://api.surrogacyforce.test/webhooks/resend/platform"
+    ]
 
 
 @pytest.mark.asyncio

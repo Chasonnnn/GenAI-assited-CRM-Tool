@@ -124,7 +124,7 @@ function substitutePreviewVariables(
         /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
         (token, variableName: string) => {
             if (variableName === "org_name") {
-                return orgCompanyName || "ABC Surrogacy"
+                return orgCompanyName || "Your organization"
             }
             return PREVIEW_VARIABLES[variableName] ?? token
         },

@@ -2,6 +2,7 @@
 
 import {
     AlertCircleIcon,
+    Clock3Icon,
     RadarIcon,
     RefreshCwIcon,
     ShieldAlertIcon,
@@ -88,6 +89,7 @@ function getCheckLabel(
     if (checkState === "pending") return "Starting check…"
     if (envelope.check_status === "queued") return "Check queued"
     if (envelope.check_status === "running") return "Checking Resend…"
+    if (envelope.check_status === "stalled") return "Check delayed"
     return "Check Resend now"
 }
 
@@ -127,10 +129,12 @@ export function EmailOperationsReadinessSummary({
 
     const snapshot = envelope.last_snapshot
     const stateTitle = getStateTitle(snapshot)
-    const isCheckActive =
+    const isCheckInProgress =
         envelope.check_status === "queued" ||
         envelope.check_status === "running" ||
         state.check === "pending"
+    const isCheckBlocked =
+        isCheckInProgress || envelope.check_status === "stalled"
     const capabilities = [
         { label: "Domain", status: snapshot.domain_status },
         { label: "Sending", status: snapshot.sending_status },
@@ -154,7 +158,9 @@ export function EmailOperationsReadinessSummary({
                         </Badge>
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">
-                        Live provider status with locally saved evidence.
+                        {envelope.check_status === "stalled"
+                            ? "Saved provider status; the queued refresh is delayed."
+                            : "Live provider status with locally saved evidence."}
                     </p>
                 </div>
                 {onCheck ? (
@@ -162,14 +168,16 @@ export function EmailOperationsReadinessSummary({
                         type="button"
                         variant="outline"
                         size="sm"
-                        disabled={isCheckActive}
+                        disabled={isCheckBlocked}
                         onClick={onCheck}
                     >
-                        {isCheckActive ? (
+                        {isCheckInProgress ? (
                             <RefreshCwIcon
                                 className="animate-spin motion-reduce:animate-none"
                                 aria-hidden="true"
                             />
+                        ) : envelope.check_status === "stalled" ? (
+                            <Clock3Icon aria-hidden="true" />
                         ) : (
                             <RadarIcon aria-hidden="true" />
                         )}
@@ -199,6 +207,31 @@ export function EmailOperationsReadinessSummary({
                 </p>
                 <p>The check is read-only and sends no email.</p>
             </div>
+
+            {envelope.check_status === "stalled" ? (
+                <Alert className="mt-4">
+                    <Clock3Icon aria-hidden="true" />
+                    <AlertTitle>Email readiness check delayed</AlertTitle>
+                    <AlertDescription className="space-y-1">
+                        <p>
+                            The queued check has not produced a new provider result. The
+                            saved readiness above is unchanged.
+                        </p>
+                        <p>
+                            {envelope.queued_at ? (
+                                <>
+                                    Queued{" "}
+                                    <time dateTime={envelope.queued_at}>
+                                        {formatDateTime(envelope.queued_at, "Unknown")}
+                                    </time>
+                                    .{" "}
+                                </>
+                            ) : null}
+                            Background processing may be delayed or paused for maintenance.
+                        </p>
+                    </AlertDescription>
+                </Alert>
+            ) : null}
 
             {stateTitle ? (
                 <Alert

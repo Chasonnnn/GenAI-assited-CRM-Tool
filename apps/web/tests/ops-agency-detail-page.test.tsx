@@ -192,6 +192,7 @@ describe("AgencyDetailPage", () => {
         })
         mockGetPlatformEmailReadiness.mockResolvedValue({
             check_status: "idle",
+            queued_at: null,
             last_snapshot: {
                 freshness: "fresh",
                 probe_status: "succeeded",
@@ -210,6 +211,7 @@ describe("AgencyDetailPage", () => {
         })
         mockRequestPlatformEmailReadinessCheck.mockResolvedValue({
             check_status: "queued",
+            queued_at: "2026-07-26T16:00:00Z",
             last_snapshot: {
                 freshness: "fresh",
                 probe_status: "succeeded",

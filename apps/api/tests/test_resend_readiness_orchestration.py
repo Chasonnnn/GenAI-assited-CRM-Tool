@@ -113,6 +113,7 @@ async def test_organization_live_readiness_get_is_cache_only(
     assert response.status_code == 200
     assert response.json() == {
         "check_status": "idle",
+        "queued_at": None,
         "last_snapshot": {
             "freshness": "never_checked",
             "probe_status": None,
@@ -314,6 +315,58 @@ async def test_live_readiness_get_projects_queued_running_and_idle(
     assert queued.json()["check_status"] == "queued"
     assert running.json()["check_status"] == "running"
     assert idle.json()["check_status"] == "idle"
+
+
+@pytest.mark.parametrize(
+    ("scope", "endpoint"),
+    [
+        ("organization", "/email-operations/readiness/live"),
+        ("platform", "/platform/email/readiness"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_live_readiness_get_projects_old_pending_checks_as_stalled_without_provider_io(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+    monkeypatch,
+    scope,
+    endpoint,
+):
+    from app.services import resend_control_plane
+
+    monkeypatch.setattr(
+        resend_control_plane,
+        "ResendControlPlaneClient",
+        lambda **_kwargs: pytest.fail("cache-only GET attempted provider I/O"),
+    )
+    if scope == "platform":
+        test_user.is_platform_admin = True
+        db.commit()
+        job = job_service.enqueue_platform_job(
+            db,
+            job_type=JobType.RESEND_READINESS_CHECK,
+            payload={"provider_scope": "platform"},
+        )
+    else:
+        job = job_service.enqueue_job(
+            db,
+            org_id=test_org.id,
+            job_type=JobType.RESEND_READINESS_CHECK,
+            payload={"provider_scope": "organization"},
+        )
+
+    queued_at = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(minutes=6)
+    job.created_at = queued_at
+    db.commit()
+
+    response = await authed_client.get(endpoint)
+
+    assert response.status_code == 200
+    assert response.json()["check_status"] == "stalled"
+    assert datetime.fromisoformat(response.json()["queued_at"].replace("Z", "+00:00")) == queued_at
+    assert response.json()["last_snapshot"]["probe_status"] is None
 
 
 @pytest.mark.asyncio

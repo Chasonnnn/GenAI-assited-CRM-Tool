@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 
-ReadinessCheckStatus = Literal["idle", "queued", "running"]
+ReadinessCheckStatus = Literal["idle", "queued", "running", "stalled"]
 ReadinessFreshness = Literal["fresh", "stale", "never_checked"]
 ReadinessProbeStatus = Literal["succeeded", "limited", "failed"]
 ReadinessCapabilityStatus = Literal[
@@ -46,4 +46,5 @@ class ResendReadinessEnvelope(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     check_status: ReadinessCheckStatus
+    queued_at: datetime | None
     last_snapshot: ResendReadinessSnapshotResponse

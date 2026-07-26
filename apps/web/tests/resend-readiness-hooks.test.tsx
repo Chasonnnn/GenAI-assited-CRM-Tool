@@ -54,6 +54,8 @@ function readinessEnvelope(
 ): ResendReadinessEnvelope {
     return {
         check_status: checkStatus,
+        queued_at:
+            checkStatus === "idle" ? null : "2026-07-26T16:00:00Z",
         last_snapshot: {
             freshness: "fresh",
             probe_status: "succeeded",
@@ -124,12 +126,16 @@ describe("Resend readiness hooks", () => {
             })?.options.refetchIntervalInBackground,
         ).toBe(false)
 
-        await vi.advanceTimersByTimeAsync(5_000)
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(5_000)
+        })
         await waitFor(() => {
             expect(getEmailOperationsLiveReadiness).toHaveBeenCalledTimes(2)
         })
 
-        await vi.advanceTimersByTimeAsync(10_000)
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(10_000)
+        })
         expect(getEmailOperationsLiveReadiness).toHaveBeenCalledTimes(2)
     })
 
@@ -174,13 +180,44 @@ describe("Resend readiness hooks", () => {
             })?.options.refetchIntervalInBackground,
         ).toBe(false)
 
-        await vi.advanceTimersByTimeAsync(5_000)
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(5_000)
+        })
         await waitFor(() => {
             expect(getPlatformEmailReadiness).toHaveBeenCalledTimes(2)
         })
-        await vi.advanceTimersByTimeAsync(10_000)
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(10_000)
+        })
 
         expect(getPlatformEmailReadiness).toHaveBeenCalledTimes(2)
+    })
+
+    it("treats stalled organization and platform checks as terminal", async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true })
+        vi.mocked(getEmailOperationsLiveReadiness).mockResolvedValue(
+            readinessEnvelope("stalled"),
+        )
+        vi.mocked(getPlatformEmailReadiness).mockResolvedValue(
+            readinessEnvelope("stalled"),
+        )
+        const queryClient = createQueryClient()
+        const wrapper = wrapperFor(queryClient)
+
+        renderHook(() => useEmailOperationsLiveReadiness(), { wrapper })
+        renderHook(() => usePlatformEmailReadiness(), { wrapper })
+
+        await waitFor(() => {
+            expect(getEmailOperationsLiveReadiness).toHaveBeenCalledTimes(1)
+            expect(getPlatformEmailReadiness).toHaveBeenCalledTimes(1)
+        })
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(15_000)
+        })
+
+        expect(getEmailOperationsLiveReadiness).toHaveBeenCalledTimes(1)
+        expect(getPlatformEmailReadiness).toHaveBeenCalledTimes(1)
     })
 
     it("reuses fresh platform sender status across remounts", async () => {

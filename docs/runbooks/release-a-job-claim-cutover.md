@@ -156,6 +156,15 @@ gcloud run services update crm-worker \
       burst, organization deletion, or claim that remains running.
 - [ ] Resume the scaler schedules only after the observation gate passes.
 
+## Post-cutover steady state
+
+After reconciliation, the zero-residual gate, worker canary, and explicit
+resume have completed, this runbook becomes a historical cutover record.
+Subsequent Cloud Build releases update the worker image without rewriting
+`WORKER_CUTOVER_HOLD`, `EMAIL_DELIVERY_DISPATCH_ENABLED`, or
+`WORKER_JOB_TYPES`, preserving the verified runtime configuration instead of
+re-entering the one-time hold.
+
 ## Rollback
 
 Keep the worker held. Roll the API back to its recorded revision if necessary,

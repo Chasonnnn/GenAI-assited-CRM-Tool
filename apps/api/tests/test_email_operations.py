@@ -388,6 +388,61 @@ async def test_readiness_keeps_send_and_tracking_independent_and_new_activity_un
 
 
 @pytest.mark.asyncio
+async def test_readiness_treats_unconfigured_tracking_as_optional_for_send_ready_org(
+    authed_client,
+    db,
+    test_org,
+):
+    now = datetime.now(timezone.utc)
+    db.add(
+        ResendSettings(
+            id=uuid4(),
+            organization_id=test_org.id,
+            email_provider="resend",
+            api_key_encrypted="persisted-ciphertext",
+            from_email="operations@example.com",
+            verified_domain="example.com",
+            last_key_validated_at=now,
+            webhook_id=str(uuid4()),
+            webhook_secret_encrypted=None,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db.add(
+        _email_log(
+            organization_id=test_org.id,
+            created_at=now,
+            provider_account_id=f"organization:{test_org.id}",
+            external_id="accepted-without-tracking",
+        )
+    )
+    db.commit()
+
+    response = await authed_client.get("/email-operations/readiness")
+
+    assert response.status_code == 200
+    payload = response.json()
+    checks = {check["key"]: check for check in payload["checks"]}
+    assert payload["overall"] == "ready"
+    assert payload["can_send"] is True
+    assert payload["can_track"] is False
+    assert payload["recent_webhook_activity"] == "not_applicable"
+    assert checks["webhook_signing_secret_configured"] == {
+        "key": "webhook_signing_secret_configured",
+        "status": "not_applicable",
+        "detail": "Optional Resend tracking is not configured.",
+        "observed_at": None,
+    }
+    assert checks["recent_webhook_activity"] == {
+        "key": "recent_webhook_activity",
+        "status": "not_applicable",
+        "detail": "Webhook activity is only evaluated after tracking is enabled.",
+        "observed_at": None,
+    }
+
+
+@pytest.mark.asyncio
 async def test_readiness_ignores_a_newer_platform_message_when_selecting_org_route(
     authed_client,
     db,

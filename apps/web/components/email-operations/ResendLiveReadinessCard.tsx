@@ -156,6 +156,33 @@ function ReadinessStateAlert({
 }) {
     const snapshot = envelope.last_snapshot
 
+    if (envelope.check_status === "stalled") {
+        return (
+            <Alert>
+                <Clock3Icon aria-hidden="true" />
+                <AlertTitle>Readiness check delayed</AlertTitle>
+                <AlertDescription className="space-y-1">
+                    <p>
+                        The queued check has not produced a new provider result. The
+                        saved result below is unchanged.
+                    </p>
+                    <p>
+                        {envelope.queued_at ? (
+                            <>
+                                Queued{" "}
+                                <time dateTime={envelope.queued_at}>
+                                    {formatDateTime(envelope.queued_at, "Unknown")}
+                                </time>
+                                .{" "}
+                            </>
+                        ) : null}
+                        Background processing may be delayed or paused for maintenance.
+                    </p>
+                </AlertDescription>
+            </Alert>
+        )
+    }
+
     if (envelope.check_status === "queued") {
         return (
             <Alert>
@@ -247,6 +274,7 @@ function CheckButtonLabel({
     if (isPending) return "Starting check…"
     if (envelope.check_status === "queued") return "Check queued"
     if (envelope.check_status === "running") return "Checking Resend…"
+    if (envelope.check_status === "stalled") return "Check delayed"
     return "Check Resend now"
 }
 
@@ -338,10 +366,12 @@ export function ResendLiveReadinessCard({
     }
 
     const snapshot = envelope.last_snapshot
-    const isCheckActive =
+    const isCheckInProgress =
         envelope.check_status === "queued" ||
         envelope.check_status === "running" ||
         isCheckPending
+    const isCheckBlocked =
+        isCheckInProgress || envelope.check_status === "stalled"
     const issueLabels = Array.from(
         new Set(snapshot.issue_codes.map((code) => getIssueLabel(code))),
     )
@@ -374,14 +404,16 @@ export function ResendLiveReadinessCard({
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                disabled={isCheckActive}
+                                disabled={isCheckBlocked}
                                 onClick={onCheck}
                             >
-                                {isCheckActive ? (
+                                {isCheckInProgress ? (
                                     <RefreshCwIcon
                                         className="animate-spin motion-reduce:animate-none"
                                         aria-hidden="true"
                                     />
+                                ) : envelope.check_status === "stalled" ? (
+                                    <Clock3Icon aria-hidden="true" />
                                 ) : (
                                     <RadarIcon aria-hidden="true" />
                                 )}
@@ -543,10 +575,12 @@ export function ResendCompactReadinessSummary({
 
     const snapshot = envelope.last_snapshot
     const stateTitle = getCompactStateTitle(snapshot)
-    const isCheckActive =
+    const isCheckInProgress =
         envelope.check_status === "queued" ||
         envelope.check_status === "running" ||
         isCheckPending
+    const isCheckBlocked =
+        isCheckInProgress || envelope.check_status === "stalled"
     const issueLabels = Array.from(
         new Set(snapshot.issue_codes.map((code) => getIssueLabel(code))),
     )
@@ -573,14 +607,16 @@ export function ResendCompactReadinessSummary({
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={isCheckActive}
+                    disabled={isCheckBlocked}
                     onClick={onCheck}
                 >
-                    {isCheckActive ? (
+                    {isCheckInProgress ? (
                         <RefreshCwIcon
                             className="animate-spin motion-reduce:animate-none"
                             aria-hidden="true"
                         />
+                    ) : envelope.check_status === "stalled" ? (
+                        <Clock3Icon aria-hidden="true" />
                     ) : (
                         <RadarIcon aria-hidden="true" />
                     )}
@@ -602,6 +638,31 @@ export function ResendCompactReadinessSummary({
                     {getCompactCapabilityLabel("Webhook", snapshot.webhook_status)}
                 </Badge>
             </div>
+
+            {envelope.check_status === "stalled" ? (
+                <Alert>
+                    <Clock3Icon aria-hidden="true" />
+                    <AlertTitle>Shared sender check delayed</AlertTitle>
+                    <AlertDescription className="space-y-1">
+                        <p>
+                            The queued check has not produced a new provider result. The
+                            saved sender status above is unchanged.
+                        </p>
+                        <p>
+                            {envelope.queued_at ? (
+                                <>
+                                    Queued{" "}
+                                    <time dateTime={envelope.queued_at}>
+                                        {formatDateTime(envelope.queued_at, "Unknown")}
+                                    </time>
+                                    .{" "}
+                                </>
+                            ) : null}
+                            Background processing may be delayed or paused for maintenance.
+                        </p>
+                    </AlertDescription>
+                </Alert>
+            ) : null}
 
             {stateTitle ? (
                 <Alert

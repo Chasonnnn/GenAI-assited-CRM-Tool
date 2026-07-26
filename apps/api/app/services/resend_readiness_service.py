@@ -47,6 +47,7 @@ class _RouteConfiguration:
     sender_domains: tuple[str, ...]
     missing_sender_count: int
     expected_webhook_endpoint: str
+    tracking_opted_in: bool
     has_local_signing_secret: bool
     fingerprint: str
 
@@ -98,6 +99,7 @@ def _resolve_organization_configuration(
             sender_domains=(),
             missing_sender_count=1,
             expected_webhook_endpoint="",
+            tracking_opted_in=False,
             has_local_signing_secret=False,
             fingerprint=fingerprint,
         )
@@ -149,6 +151,7 @@ def _resolve_organization_configuration(
         sender_domains=tuple(domain for domain in (from_domain,) if domain),
         missing_sender_count=0 if from_domain else 1,
         expected_webhook_endpoint=endpoint,
+        tracking_opted_in=bool(row.webhook_secret_encrypted),
         has_local_signing_secret=has_local_signing_secret,
         fingerprint=fingerprint,
     )
@@ -233,6 +236,7 @@ def _resolve_platform_configuration(db: Session) -> _RouteConfiguration:
         sender_domains=sender_domains,
         missing_sender_count=missing_sender_count,
         expected_webhook_endpoint=endpoint,
+        tracking_opted_in=True,
         has_local_signing_secret=bool(webhook_secret),
         fingerprint=fingerprint,
     )
@@ -267,6 +271,9 @@ def _provider_failure_probe(
             issue_code = "invalid_provider_response"
         else:
             issue_code = "provider_unavailable"
+    tracking_status = (
+        capability_status if configuration.tracking_opted_in else "not_configured"
+    )
     return resend_readiness_snapshot_service.ReadinessProbeResult(
         config_fingerprint=configuration.fingerprint,
         probe_started_at=started_at,
@@ -274,10 +281,10 @@ def _provider_failure_probe(
         probe_status=probe_status,
         overall_status=overall_status,
         domain_status=capability_status,
-        webhook_status=capability_status,
+        webhook_status=tracking_status,
         sending_status=capability_status,
-        delivery_tracking_status=capability_status,
-        engagement_tracking_status=capability_status,
+        delivery_tracking_status=tracking_status,
+        engagement_tracking_status=tracking_status,
         verified_domain_count=0,
         enabled_webhook_count=0,
         issue_codes=(issue_code,),
@@ -291,6 +298,7 @@ def _local_configuration_probe(
 ) -> resend_readiness_snapshot_service.ReadinessProbeResult:
     checked_at = datetime.now(timezone.utc)
     status = "unknown" if configured else "not_configured"
+    tracking_status = status if configuration.tracking_opted_in else "not_configured"
     return resend_readiness_snapshot_service.ReadinessProbeResult(
         config_fingerprint=configuration.fingerprint,
         probe_started_at=checked_at,
@@ -298,10 +306,10 @@ def _local_configuration_probe(
         probe_status="failed" if configured else "succeeded",
         overall_status="needs_attention" if configured else "not_configured",
         domain_status=status,
-        webhook_status=status,
+        webhook_status=tracking_status,
         sending_status=status,
-        delivery_tracking_status=status,
-        engagement_tracking_status=status,
+        delivery_tracking_status=tracking_status,
+        engagement_tracking_status=tracking_status,
         verified_domain_count=0,
         enabled_webhook_count=0,
         issue_codes=("credential_unavailable",) if configured else (),
@@ -357,7 +365,7 @@ async def _probe_configuration(
             )
         details.append(detail_result.value)
 
-    if configuration.expected_webhook_endpoint:
+    if configuration.tracking_opted_in and configuration.expected_webhook_endpoint:
         webhook_result = await client.list_webhooks(
             expected_endpoint=configuration.expected_webhook_endpoint
         )
@@ -410,30 +418,36 @@ async def _probe_configuration(
         )
     )
     statuses = (
-        domain_ready,
-        webhook_ready,
-        sending_ready,
-        delivery_ready,
-        engagement_ready,
+        (domain_ready, webhook_ready, sending_ready, delivery_ready, engagement_ready)
+        if configuration.tracking_opted_in
+        else (domain_ready, sending_ready)
     )
     issue_codes: list[str] = []
     if not domain_ready:
         issue_codes.append("domain_not_verified")
     elif not sending_ready:
         issue_codes.append("sending_disabled")
-    if not webhook_ready:
-        issue_codes.append(
-            "webhook_disabled"
-            if any(webhook.status == "disabled" for webhook in endpoint_webhooks)
-            else "webhook_missing"
-        )
-    elif not configuration.has_local_signing_secret:
-        issue_codes.append("webhook_missing")
-    elif tracking_base_ready:
-        if not delivery_ready:
-            issue_codes.append("delivery_events_missing")
-        if not engagement_ready:
-            issue_codes.append("engagement_events_missing")
+    if configuration.tracking_opted_in:
+        if not webhook_ready:
+            issue_codes.append(
+                "webhook_disabled"
+                if any(webhook.status == "disabled" for webhook in endpoint_webhooks)
+                else "webhook_missing"
+            )
+        elif not configuration.has_local_signing_secret:
+            issue_codes.append("webhook_missing")
+        elif tracking_base_ready:
+            if not delivery_ready:
+                issue_codes.append("delivery_events_missing")
+            if not engagement_ready:
+                issue_codes.append("engagement_events_missing")
+        webhook_status = "ready" if webhook_ready else "needs_attention"
+        delivery_tracking_status = "ready" if delivery_ready else "needs_attention"
+        engagement_tracking_status = "ready" if engagement_ready else "needs_attention"
+    else:
+        webhook_status = "not_configured"
+        delivery_tracking_status = "not_configured"
+        engagement_tracking_status = "not_configured"
     checked_at = datetime.now(timezone.utc)
     probe = resend_readiness_snapshot_service.ReadinessProbeResult(
         config_fingerprint=configuration.fingerprint,
@@ -442,10 +456,10 @@ async def _probe_configuration(
         probe_status="succeeded",
         overall_status="ready" if all(statuses) else "needs_attention",
         domain_status="ready" if domain_ready else "needs_attention",
-        webhook_status="ready" if webhook_ready else "needs_attention",
+        webhook_status=webhook_status,
         sending_status="ready" if sending_ready else "needs_attention",
-        delivery_tracking_status="ready" if delivery_ready else "needs_attention",
-        engagement_tracking_status="ready" if engagement_ready else "needs_attention",
+        delivery_tracking_status=delivery_tracking_status,
+        engagement_tracking_status=engagement_tracking_status,
         verified_domain_count=sum(
             detail.spf_status == "verified" and detail.dkim_status == "verified"
             for detail in details
