@@ -19,7 +19,7 @@ import json
 from uuid import UUID
 
 from cryptography.fernet import Fernet
-from sqlalchemy import select, func
+from sqlalchemy import BigInteger, bindparam, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -82,6 +82,24 @@ def verify_checksum(encrypted: bytes, expected_checksum: str) -> bool:
 # =============================================================================
 
 GENESIS_HASH = "0" * 64  # All zeros for first entry
+_AUDIT_CHAIN_LOCK_PERSON = b"audit-chain-v1"
+
+
+def acquire_audit_chain_lock(db: Session, org_id: UUID) -> None:
+    """Serialize audit-chain appends for one organization until transaction end."""
+    lock_key = int.from_bytes(
+        hashlib.blake2b(
+            org_id.bytes,
+            digest_size=8,
+            person=_AUDIT_CHAIN_LOCK_PERSON,
+        ).digest(),
+        byteorder="big",
+        signed=True,
+    )
+    db.execute(
+        select(func.pg_advisory_xact_lock(bindparam("audit_chain_lock_key", type_=BigInteger))),
+        {"audit_chain_lock_key": lock_key},
+    )
 
 
 def compute_audit_hash(
