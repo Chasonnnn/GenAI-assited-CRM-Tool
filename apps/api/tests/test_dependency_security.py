@@ -34,7 +34,7 @@ def test_dependency_pins_match_security_fixes():
         "idna": "3.15",
         "pillow": "12.3.0",
         "pydantic-settings": "2.14.2",
-        "pypdf": "6.13.3",
+        "pypdf": "6.14.2",
         "python-multipart": "0.0.31",
         "starlette": "1.3.1",
     }
