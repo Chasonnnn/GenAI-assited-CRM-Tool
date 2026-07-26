@@ -808,6 +808,59 @@ describe('IntegrationsPage', () => {
         )
     })
 
+    it('shows a saved signing secret as configured after closing and reopening', async () => {
+        let currentSettings: ResendSettings = {
+            ...resendSettingsData,
+            webhook_signing_secret_configured: false,
+        }
+        mockUseResendSettingsQuery.mockImplementation(() => ({
+            data: currentSettings,
+            isLoading: false,
+        }))
+        mockUpdateResendSettings.mockImplementation(async () => {
+            currentSettings = {
+                ...currentSettings,
+                webhook_signing_secret_configured: true,
+                current_version: 2,
+            }
+            return currentSettings
+        })
+
+        const { unmount } = render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(
+            within(dialog).getByRole('checkbox', {
+                name: /enable resend webhook tracking/i,
+            })
+        )
+        fireEvent.change(within(dialog).getByLabelText('Webhook Signing Secret'), {
+            target: { value: 'whsec_new_tracking_secret' },
+        })
+
+        await act(async () => {
+            fireEvent.click(
+                within(dialog).getByRole('button', {
+                    name: /save email configuration/i,
+                })
+            )
+        })
+
+        unmount()
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        const reopenedDialog = screen.getByRole('dialog')
+        expect(within(reopenedDialog).getByText('Tracking enabled')).toBeInTheDocument()
+        expect(
+            within(reopenedDialog).getByText(/signing secret is stored securely/i)
+        ).toBeInTheDocument()
+        expect(
+            within(reopenedDialog).queryByLabelText('Webhook Signing Secret')
+        ).not.toBeInTheDocument()
+    })
+
     it('replaces a stored signing secret only through the explicit replace action', async () => {
         mockUpdateResendSettings.mockResolvedValue({
             ...resendSettingsData,
