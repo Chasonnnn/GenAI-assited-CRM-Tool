@@ -625,7 +625,13 @@ def remove_member(
         reason="removed_from_org",
         request=request,
     )
-    permission_service.deprovision_member(db, session.org_id, membership, user)
+    permission_service.deprovision_member(
+        db,
+        session.org_id,
+        membership,
+        user,
+        actor_user_id=session.user_id,
+    )
     db.commit()
 
     return {"removed": True, "user_id": str(user.id)}

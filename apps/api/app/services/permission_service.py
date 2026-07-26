@@ -399,16 +399,47 @@ def deprovision_member(
     org_id: uuid.UUID,
     membership,
     user,
+    *,
+    actor_user_id: uuid.UUID | None = None,
 ) -> None:
     """
     Remove a member's organization access and login bindings.
 
-    User rows are retained for audit references, but membership, provider identity,
+    User rows and personal email-template history are retained for audit references,
+    but personal templates are deactivated and organization access, provider identity,
     active sessions, OAuth integrations, queue memberships, and permission overrides
     are removed.
     """
-    from app.db.models import AuthIdentity, Queue, QueueMember, UserIntegration, UserSession
-    from app.services import intake_pool_access_service, session_service
+    from app.db.models import (
+        AuthIdentity,
+        EmailTemplate,
+        Queue,
+        QueueMember,
+        UserIntegration,
+        UserSession,
+    )
+    from app.services import email_service, intake_pool_access_service, session_service
+
+    personal_templates = (
+        db.query(EmailTemplate)
+        .filter(
+            EmailTemplate.organization_id == org_id,
+            EmailTemplate.scope == "personal",
+            EmailTemplate.owner_user_id == user.id,
+            EmailTemplate.is_active.is_(True),
+        )
+        .with_for_update()
+        .all()
+    )
+    for template in personal_templates:
+        email_service.update_template(
+            db=db,
+            template=template,
+            user_id=actor_user_id,
+            is_active=False,
+            comment="Deactivated when owner was removed from organization",
+            commit=False,
+        )
 
     delete_user_overrides(db, org_id, user.id)
     intake_pool_access_service.delete_user_grants(db, org_id, user.id)
