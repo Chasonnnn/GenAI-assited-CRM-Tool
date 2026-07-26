@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.51](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.50...surrogacy-crm-platform-v0.91.51) (2026-07-26)
+
+
+### Features
+
+* improve template studio controls ([e678f3a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e678f3ab053406fc9e0443b0288ce952f5e4631a))
+
+
+### Bug Fixes
+
+* add safe template spacing recovery ([c20df33](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c20df33c5c6378dc89bf546b1ed504866aa38d3a))
+* clarify optional Resend tracking ([2cdc00c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2cdc00ce688071ae52b5b4621e404c7d369e9f73))
+* complete production-safe Resend follow-up ([f83baeb](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f83baeb187ed4266d6cd955ad8b8c76dc6dde748))
+* keep optional tracking out of send readiness ([849b889](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/849b88970b0c529bdc7f83d70fd567d0cbb13a1f))
+* normalize email preview table attributes ([cd81216](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cd81216ba4e1db1e847f0c0aa90256286f762e03))
+* preserve resumed worker deployment state ([6c5a8ae](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6c5a8aeb6bd4fafe7ad8c51fc21bd4be71dad3d8))
+* preserve template blank lines ([452ac27](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/452ac2774bb22a97012bcae561670f6a992ae30e))
+* preserve worker retry backoff ([a7d9818](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a7d9818281199fa1f4c2942d0d3ac02a11f59be2))
+* surface delayed Resend readiness ([2c50f65](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2c50f6557adcf0349c0e034be901c56809fd3467))
+* use organization name in template previews ([fef1cdc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fef1cdcc7bfc9789d8d7ac4e2c7a5c0600cbffa4))
+
 ## [0.91.50](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.49...surrogacy-crm-platform-v0.91.50) (2026-07-26)
 
 
