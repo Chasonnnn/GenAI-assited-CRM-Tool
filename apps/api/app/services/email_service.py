@@ -1610,10 +1610,10 @@ def send_from_template(
     Queue an email using a template.
 
     Renders the template with variables and queues for sending.
-    Returns (email_log, job) or None if template not found.
+    Returns (email_log, job) or None if the template is missing or inactive.
     """
     template = get_template(db, template_id, org_id)
-    if not template:
+    if not template or not template.is_active:
         return None
 
     from app.services import system_email_template_service

@@ -203,3 +203,49 @@ def test_send_from_template_reuses_the_client_email_occurrence(
         == 1
     )
     assert db.query(EmailDelivery).filter(EmailDelivery.email_log_id == first[0].id).count() == 1
+
+
+def test_send_from_template_refuses_an_inactive_template(
+    db,
+    test_org,
+    test_user,
+):
+    from uuid import uuid4
+
+    from app.db.models import EmailDelivery, EmailLog, ResendSettings
+    from app.services import email_service, resend_settings_service
+
+    db.add(
+        ResendSettings(
+            organization_id=test_org.id,
+            email_provider="resend",
+            api_key_encrypted=resend_settings_service.encrypt_api_key("re_test_key"),
+            from_email="care@example.com",
+            verified_domain="example.com",
+        )
+    )
+    template = email_service.create_template(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        name=f"Inactive template {uuid4().hex[:8]}",
+        subject="Do not send",
+        body="<p>This template is inactive.</p>",
+    )
+    template.is_active = False
+    db.flush()
+
+    result = email_service.send_from_template(
+        db=db,
+        org_id=test_org.id,
+        template_id=template.id,
+        recipient_email="recipient@example.com",
+        variables={},
+        sender_user_id=test_user.id,
+        idempotency_key=f"inactive-template-send/{uuid4()}",
+        commit=False,
+    )
+
+    assert result is None
+    assert db.query(EmailLog).filter(EmailLog.template_id == template.id).count() == 0
+    assert db.query(EmailDelivery).count() == 0
