@@ -612,11 +612,17 @@ describe("EmailTemplatesPage", () => {
         render(<EmailTemplatesPage />)
 
         fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
-        expect(
-            screen.getByRole("link", { name: "Edit Org Template" }),
-        ).toHaveAttribute(
+        const titleLink = screen.getByRole("link", { name: "Edit Org Template" })
+        expect(titleLink).toHaveAttribute(
             "href",
             "/automation/email-templates/org/tpl_org_1",
+        )
+
+        fireEvent.click(titleLink)
+
+        expect(mockRouterPush).toHaveBeenCalledWith(
+            "/automation/email-templates/org/tpl_org_1",
+            undefined,
         )
     })
 
@@ -858,11 +864,17 @@ describe("EmailTemplatesPage", () => {
     it("opens an editable personal template from its title", () => {
         render(<EmailTemplatesPage />)
 
-        expect(
-            screen.getByRole("link", { name: "Edit Personal Template" }),
-        ).toHaveAttribute(
+        const titleLink = screen.getByRole("link", { name: "Edit Personal Template" })
+        expect(titleLink).toHaveAttribute(
             "href",
             "/automation/email-templates/personal/tpl_personal_1",
+        )
+
+        fireEvent.click(titleLink)
+
+        expect(mockRouterPush).toHaveBeenCalledWith(
+            "/automation/email-templates/personal/tpl_personal_1",
+            undefined,
         )
     })
 

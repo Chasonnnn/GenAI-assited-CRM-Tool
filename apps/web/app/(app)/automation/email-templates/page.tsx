@@ -736,10 +736,13 @@ function TemplateCard({ template, controls }: TemplateCardProps) {
                                 {canEdit ? (
                                     <Link
                                         href={getTemplateStudioHref(template)}
+                                        fallbackMode="router"
                                         aria-label={`Edit ${template.name}`}
-                                        className="line-clamp-2 rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                        className="block w-full cursor-pointer rounded-sm text-left transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                     >
-                                        {template.name}
+                                        <span className="line-clamp-2">
+                                            {template.name}
+                                        </span>
                                     </Link>
                                 ) : (
                                     <span className="line-clamp-2">
