@@ -414,6 +414,9 @@ def replay_failed_job(
 
     now = datetime.now(timezone.utc)
     payload = dict(job.payload or {})
+    reconciliation_meta = payload.get("_reconciliation")
+    if isinstance(reconciliation_meta, dict) and reconciliation_meta.get("non_replayable") is True:
+        raise ValueError("Cannot replay job with non-replayable reconciliation")
     replay_meta = payload.get("_replay")
     if not isinstance(replay_meta, dict):
         replay_meta = {}

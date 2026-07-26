@@ -327,3 +327,34 @@ def test_stale_recovery_does_not_clear_a_newer_claim(db, test_org):
     assert current.status == JobStatus.RUNNING.value
     assert current.claim_token == newer_token
     assert current.claimed_at == now
+
+
+def test_operator_quarantined_job_cannot_be_replayed(db, test_org):
+    job = Job(
+        organization_id=test_org.id,
+        job_type=JobType.WORKFLOW_EMAIL.value,
+        payload={
+            "email_template_snapshot": {"subject": "Legacy", "body": "Do not resend"},
+            "_reconciliation": {
+                "schema_version": 1,
+                "non_replayable": True,
+                "reason_code": "workflow_email_outcome_unknown",
+            },
+        },
+        run_at=datetime.now(timezone.utc),
+        status=JobStatus.FAILED.value,
+        attempts=1,
+    )
+    db.add(job)
+    db.commit()
+
+    with pytest.raises(ValueError, match="non-replayable reconciliation"):
+        job_service.replay_failed_job(
+            db,
+            org_id=test_org.id,
+            job_id=job.id,
+            reason="operator retry",
+        )
+
+    db.refresh(job)
+    assert job.status == JobStatus.FAILED.value
