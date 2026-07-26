@@ -113,6 +113,7 @@ const readiness = {
 
 const liveReadiness = {
     check_status: "idle",
+    queued_at: null,
     last_snapshot: {
         freshness: "fresh",
         probe_status: "succeeded",

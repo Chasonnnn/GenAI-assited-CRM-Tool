@@ -63,6 +63,7 @@ describe("agency time rendering", () => {
                 platformEmailStatusLoading={false}
                 platformEmailReadiness={{
                     check_status: "idle",
+                    queued_at: null,
                     last_snapshot: {
                         freshness: "fresh",
                         probe_status: "succeeded",

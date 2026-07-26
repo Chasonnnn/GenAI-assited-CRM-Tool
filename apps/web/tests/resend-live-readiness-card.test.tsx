@@ -1,7 +1,11 @@
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
-import { ResendLiveReadinessCard } from "@/components/email-operations/ResendLiveReadinessCard"
+import {
+    ResendCompactReadinessSummary,
+    ResendLiveReadinessCard,
+} from "@/components/email-operations/ResendLiveReadinessCard"
+import { EmailOperationsReadinessSummary } from "@/components/email-operations/EmailOperationsReadinessSummary"
 import type {
     ResendReadinessCapabilityStatus,
     ResendReadinessEnvelope,
@@ -13,6 +17,8 @@ function readinessEnvelope(
 ): ResendReadinessEnvelope {
     return {
         check_status: checkStatus,
+        queued_at:
+            checkStatus === "idle" ? null : "2026-07-26T16:00:00Z",
         last_snapshot: {
             freshness: "fresh",
             probe_status: "succeeded",
@@ -190,6 +196,29 @@ describe("ResendLiveReadinessCard", () => {
         expect(screen.getByRole("button", { name: label })).toBeDisabled()
     })
 
+    it("shows a terminal delayed state without claiming the queued check reached Resend", () => {
+        render(
+            <ResendLiveReadinessCard
+                envelope={readinessEnvelope({}, "stalled")}
+                canCheck
+                onCheck={vi.fn()}
+            />,
+        )
+
+        expect(screen.getByText("Readiness check delayed")).toBeInTheDocument()
+        expect(
+            screen.getByText(/has not produced a new provider result/i),
+        ).toBeInTheDocument()
+        expect(
+            document.querySelector('time[datetime="2026-07-26T16:00:00Z"]'),
+        ).toBeInTheDocument()
+        expect(screen.getByText("2 verified domains")).toBeInTheDocument()
+        expect(
+            screen.getByRole("button", { name: "Check delayed" }),
+        ).toBeDisabled()
+        expect(screen.queryByText("Checking Resend")).not.toBeInTheDocument()
+    })
+
     it("disables duplicate checks while the request is starting and contains errors", () => {
         const { rerender } = render(
             <ResendLiveReadinessCard
@@ -262,5 +291,55 @@ describe("ResendLiveReadinessCard", () => {
         expect(
             screen.getByText(/refresh the saved operations data and try again/i),
         ).toBeInTheDocument()
+    })
+})
+
+describe("ResendCompactReadinessSummary", () => {
+    it("shows a delayed platform check as terminal while preserving the saved status", () => {
+        render(
+            <ResendCompactReadinessSummary
+                envelope={readinessEnvelope({}, "stalled")}
+                isLoading={false}
+                isError={false}
+                isCheckPending={false}
+                isCheckError={false}
+                onCheck={vi.fn()}
+            />,
+        )
+
+        expect(screen.getByText("Shared sender check delayed")).toBeInTheDocument()
+        expect(
+            screen.getByText(/has not produced a new provider result/i),
+        ).toBeInTheDocument()
+        expect(screen.getByText("Domain ready")).toBeInTheDocument()
+        expect(
+            screen.getByRole("button", { name: "Check delayed" }),
+        ).toBeDisabled()
+        expect(screen.queryByText("Checking Resend…")).not.toBeInTheDocument()
+    })
+})
+
+describe("EmailOperationsReadinessSummary", () => {
+    it("shows a delayed organization check without replacing the saved readiness", () => {
+        render(
+            <EmailOperationsReadinessSummary
+                envelope={readinessEnvelope({}, "stalled")}
+                state={{ load: "ready", check: "idle" }}
+                onCheck={vi.fn()}
+            />,
+        )
+
+        expect(screen.getByText("Email readiness check delayed")).toBeInTheDocument()
+        expect(
+            screen.getByText(/has not produced a new provider result/i),
+        ).toBeInTheDocument()
+        expect(screen.getByText("Domain ready")).toBeInTheDocument()
+        expect(
+            document.querySelector('time[datetime="2026-07-26T16:00:00Z"]'),
+        ).toBeInTheDocument()
+        expect(
+            screen.getByRole("button", { name: "Check delayed" }),
+        ).toBeDisabled()
+        expect(screen.queryByText("Checking Resend…")).not.toBeInTheDocument()
     })
 })
