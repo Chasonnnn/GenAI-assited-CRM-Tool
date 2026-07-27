@@ -9,3 +9,4 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+## 2024-05-18 - Added ARIA alert role to Offline Banner\n**Learning:** Dynamically appearing global status banners (like offline warnings) must include `role="alert"` or `role="status"` so that screen readers proactively announce their presence when they mount to the DOM.\n**Action:** Always check dynamically mounting notification/banner components for proper ARIA roles.
