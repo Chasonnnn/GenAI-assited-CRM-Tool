@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.55](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.54...surrogacy-crm-platform-v0.91.55) (2026-07-27)
+
+
+### Bug Fixes
+
+* allow safe links in template visual editor ([f6f226b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f6f226bbc68e85e85a22677407c232e81451b195))
+
+
+### Maintenance
+
+* upgrade Ruff to 0.16.0 ([176fa4a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/176fa4a1489f61a05973b6a6ba9a10a1041db5f6))
+* upgrade Tailwind and Ruff with template editor fix ([ff7328e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ff7328e775f0432c45dfabf3810eca1eb9062bea))
+* upgrade Tailwind CSS to 4.3.3 ([92c2136](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/92c21361417cfe71c80aee593a30350fef3a56d5))
+
 ## [0.91.54](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.53...surrogacy-crm-platform-v0.91.54) (2026-07-26)
 
 
