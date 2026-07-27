@@ -659,6 +659,33 @@ describe("OrganizationEmailTemplateStudio", () => {
         )
     })
 
+    it("opens safe legacy personal links in the visual editor without rewriting them", () => {
+        const body =
+            '<p>Application link: <a target="_blank" class="text-primary underline cursor-pointer" href="https://form.jotform.com/example" rel="noopener noreferrer"><u>Surrogate Full Application Form</u></a></p>'
+        mocks.state.publishedTemplate = {
+            ...publishedTemplate,
+            body,
+            scope: "personal",
+            owner_user_id: "employee-1",
+        }
+
+        render(
+            <OrganizationEmailTemplateStudio
+                templateId="template-1"
+                scope="personal"
+            />,
+        )
+
+        expect(screen.getByRole("button", { name: "Visual editor" })).toBeEnabled()
+        expect(screen.getByRole("button", { name: "Visual editor" })).toHaveAttribute(
+            "aria-pressed",
+            "true",
+        )
+        expect(mocks.richTextEditor).toHaveBeenCalledWith(
+            expect.objectContaining({ content: body }),
+        )
+    })
+
     it("opens advanced legacy HTML in the visual editor without changing the stored body", () => {
         mocks.state.draft = draftFromPublished
 

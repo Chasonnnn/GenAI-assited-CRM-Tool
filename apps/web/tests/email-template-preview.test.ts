@@ -24,6 +24,16 @@ describe("email template preview", () => {
         })
     })
 
+    it("keeps safe external links available to the visual editor", () => {
+        const personalTemplateBody =
+            '<p>Application link: <a target="_blank" class="text-primary underline cursor-pointer" href="https://form.jotform.com/example" rel="noopener noreferrer"><u>Surrogate Full Application Form</u></a></p>'
+
+        expect(getEmailTemplateVisualEditorSupport(personalTemplateBody)).toEqual({
+            supported: true,
+            reason: null,
+        })
+    })
+
     it.each([
         ["full email documents", "<!doctype html><html><body><p>Hello</p></body></html>"],
         ["unsupported elements", "<section><p>Hello</p></section>"],

@@ -91,7 +91,7 @@ const VISUAL_EDITOR_FRAGMENT_TAGS = new Set([
 
 const visualAttributes = (value: string) => new Set(value.split(" ").filter(Boolean))
 const VISUAL_EDITOR_FRAGMENT_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
-    a: visualAttributes("href target style class title"),
+    a: visualAttributes("href target rel style class title"),
     blockquote: visualAttributes("style class"),
     center: visualAttributes("style class"),
     code: visualAttributes("style class"),
