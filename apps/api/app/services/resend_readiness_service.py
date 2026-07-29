@@ -271,9 +271,7 @@ def _provider_failure_probe(
             issue_code = "invalid_provider_response"
         else:
             issue_code = "provider_unavailable"
-    tracking_status = (
-        capability_status if configuration.tracking_opted_in else "not_configured"
-    )
+    tracking_status = capability_status if configuration.tracking_opted_in else "not_configured"
     return resend_readiness_snapshot_service.ReadinessProbeResult(
         config_fingerprint=configuration.fingerprint,
         probe_started_at=started_at,

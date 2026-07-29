@@ -322,7 +322,9 @@ class AIStudioDraft(Base):
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    status: Mapped[str] = mapped_column(String(20), default="preview", server_default=text("'preview'"))
+    status: Mapped[str] = mapped_column(
+        String(20), default="preview", server_default=text("'preview'")
+    )
     platform: Mapped[str] = mapped_column(String(30), nullable=False)
     format: Mapped[str] = mapped_column(String(30), nullable=False)
     tone: Mapped[str] = mapped_column(String(30), nullable=False)

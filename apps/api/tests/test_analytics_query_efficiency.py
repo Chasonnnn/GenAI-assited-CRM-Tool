@@ -277,7 +277,13 @@ def test_get_pdf_export_data_batches_surrogate_and_task_counts(
     db.flush()
 
     surrogate_rows = [
-        ("pdf-total@example.com", now - timedelta(days=14), default_stage.id, default_stage.label, False),
+        (
+            "pdf-total@example.com",
+            now - timedelta(days=14),
+            default_stage.id,
+            default_stage.label,
+            False,
+        ),
         (
             "pdf-new@example.com",
             now - timedelta(days=2),
@@ -293,7 +299,9 @@ def test_get_pdf_export_data_batches_surrogate_and_task_counts(
             True,
         ),
     ]
-    for index, (email, created_at, stage_id, status_label, is_archived) in enumerate(surrogate_rows):
+    for index, (email, created_at, stage_id, status_label, is_archived) in enumerate(
+        surrogate_rows
+    ):
         db.add(
             Surrogate(
                 id=uuid.uuid4(),
@@ -339,14 +347,18 @@ def test_get_pdf_export_data_batches_surrogate_and_task_counts(
         )
     db.flush()
 
-    monkeypatch.setattr(analytics_service._surrogate, "get_surrogates_by_status", lambda *_, **__: [])
+    monkeypatch.setattr(
+        analytics_service._surrogate, "get_surrogates_by_status", lambda *_, **__: []
+    )
     monkeypatch.setattr(
         analytics_service._surrogate,
         "get_surrogates_by_assignee",
         lambda *_, **__: [],
     )
     monkeypatch.setattr(analytics_service._surrogate, "get_surrogates_trend", lambda *_, **__: [])
-    monkeypatch.setattr(analytics_service._surrogate, "get_performance_by_user", lambda *_, **__: {})
+    monkeypatch.setattr(
+        analytics_service._surrogate, "get_performance_by_user", lambda *_, **__: {}
+    )
     monkeypatch.setattr(analytics_service._meta, "get_meta_performance", lambda *_, **__: {})
     monkeypatch.setattr(analytics_service._meta, "get_funnel_with_filter", lambda *_, **__: [])
     monkeypatch.setattr(

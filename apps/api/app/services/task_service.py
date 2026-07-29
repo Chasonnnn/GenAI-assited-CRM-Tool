@@ -591,18 +591,15 @@ def list_tasks(
     # filter out tasks linked to surrogates they can't access.
     if user_role == Role.INTAKE_SPECIALIST.value or user_role == Role.INTAKE_SPECIALIST:
         if user_id:
-            accessible_surrogate_ids = (
-                select(Surrogate.id)
-                .where(
-                    Surrogate.organization_id == org_id,
-                    build_surrogate_visibility_filter(
-                        db,
-                        org_id,
-                        user_role,
-                        user_id,
-                        surrogate_model=Surrogate,
-                    ),
-                )
+            accessible_surrogate_ids = select(Surrogate.id).where(
+                Surrogate.organization_id == org_id,
+                build_surrogate_visibility_filter(
+                    db,
+                    org_id,
+                    user_role,
+                    user_id,
+                    surrogate_model=Surrogate,
+                ),
             )
 
             query = query.filter(

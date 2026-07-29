@@ -62,9 +62,7 @@ class Job(Base):
             "idx_jobs_stale_resend_reconciliation",
             "claimed_at",
             "id",
-            postgresql_where=text(
-                "status = 'running' AND job_type = 'resend_event_reconcile'"
-            ),
+            postgresql_where=text("status = 'running' AND job_type = 'resend_event_reconcile'"),
         ),
     )
 

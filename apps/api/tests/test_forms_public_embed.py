@@ -356,10 +356,7 @@ async def test_embed_session_submit_stores_submission_attribution_consent_and_tr
     assert submission.phone_hash
 
     assert (
-        db.query(IntakeLead)
-        .filter(IntakeLead.form_submission_id == submission_id)
-        .first()
-        is None
+        db.query(IntakeLead).filter(IntakeLead.form_submission_id == submission_id).first() is None
     )
 
     attribution = (
@@ -538,9 +535,7 @@ async def test_embed_submit_enabled_workflow_creates_one_lead(
     assert visible_leads["items"][0]["full_name"] == "Workflow Embed Lead"
     assert visible_leads["items"][0]["source"] == "website"
     surrogate = (
-        db.query(Surrogate)
-        .filter(Surrogate.id == uuid.UUID(visible_leads["items"][0]["id"]))
-        .one()
+        db.query(Surrogate).filter(Surrogate.id == uuid.UUID(visible_leads["items"][0]["id"])).one()
     )
     assert surrogate.state == "CA"
     assert surrogate.height_ft == Decimal("5.58")

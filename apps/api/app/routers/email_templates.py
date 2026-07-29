@@ -653,11 +653,7 @@ def get_template_versions(
             raise HTTPException(status_code=404, detail="Template not found")
     else:
         manage_perm = POLICIES["email_templates"].actions["manage"]
-        perm_key = (
-            manage_perm.value
-            if hasattr(manage_perm, "value")
-            else str(manage_perm)
-        )
+        perm_key = manage_perm.value if hasattr(manage_perm, "value") else str(manage_perm)
         if not permission_service.check_permission(
             db,
             session.org_id,

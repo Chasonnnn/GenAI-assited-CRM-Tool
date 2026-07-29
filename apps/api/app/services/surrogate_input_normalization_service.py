@@ -96,9 +96,7 @@ def coerce_surrogate_field_value(surrogate_field: str, value: Any) -> Any:
         transformed = transform_value(transformer_name, str(value))
         if transformed.success:
             return transformed.value
-        raise ValueError(
-            transformed.error or f"Invalid value for {surrogate_field}: {value}"
-        )
+        raise ValueError(transformed.error or f"Invalid value for {surrogate_field}: {value}")
 
     field_type = SURROGATE_FIELD_TYPES.get(surrogate_field)
     if field_type == "str":
@@ -214,9 +212,7 @@ def build_surrogate_create_from_payload(
         for field in invalid_fields:
             sanitized.pop(field, None)
 
-        return SurrogateCreate(**sanitized), sorted(
-            {*coercion_dropped_fields, *invalid_fields}
-        )
+        return SurrogateCreate(**sanitized), sorted({*coercion_dropped_fields, *invalid_fields})
 
 
 def _parse_bool(value: Any) -> bool:

@@ -282,9 +282,7 @@ def test_enqueue_website_lead_event_skips_without_match_keys(db, test_org):
     assert monitor_event.reason == "missing_user_data"
 
 
-def test_enqueue_website_lead_event_is_submission_owned_and_can_attach_lead_later(
-    db, test_org
-):
+def test_enqueue_website_lead_event_is_submission_owned_and_can_attach_lead_later(db, test_org):
     from app.db.enums import JobType
     from app.db.models import Job, MetaCrmDatasetEvent
     from app.services import (

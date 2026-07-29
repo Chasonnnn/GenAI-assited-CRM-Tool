@@ -284,9 +284,7 @@ async def test_send_email_auto_uses_connected_gmail_even_with_org_resend(
 
 
 @pytest.mark.asyncio
-async def test_intake_assignee_can_send_email_at_interview_scheduled(
-    db, test_org, monkeypatch
-):
+async def test_intake_assignee_can_send_email_at_interview_scheduled(db, test_org, monkeypatch):
     """Intake owner can send a manual Gmail email from Interview Scheduled."""
     from httpx import ASGITransport
 
@@ -330,9 +328,7 @@ async def test_intake_assignee_can_send_email_at_interview_scheduled(
         ),
     )
     pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id, intake_user.id)
-    interview_stage = pipeline_service.get_stage_by_key(
-        db, pipeline.id, "interview_scheduled"
-    )
+    interview_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "interview_scheduled")
     assert interview_stage is not None
     case.stage_id = interview_stage.id
     case.status_label = interview_stage.label
@@ -441,8 +437,7 @@ async def test_send_email_rejects_resend_provider_for_surrogate_manual_send(
     assert data["provider_used"] is None
     assert data["email_log_id"] is None
     assert (
-        data["error"]
-        == "Manual case email sends use personal Gmail only. Connect Gmail in "
+        data["error"] == "Manual case email sends use personal Gmail only. Connect Gmail in "
         "Settings > Integrations."
     )
 

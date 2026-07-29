@@ -102,9 +102,7 @@ async def test_remove_member_deactivates_their_personal_template(
     other_template_id = other_template.id
     db.commit()
 
-    response = await authed_client.delete(
-        f"/settings/permissions/members/{membership.id}"
-    )
+    response = await authed_client.delete(f"/settings/permissions/members/{membership.id}")
     assert response.status_code == 200, response.text
 
     template_response = await authed_client.get(f"/email-templates/{template_id}")
@@ -125,28 +123,20 @@ async def test_remove_member_deactivates_their_personal_template(
     assert draft_data["body"] == "<p>Preserve this body</p>"
     assert draft_data["is_stale"] is True
 
-    inactive_response = await authed_client.get(
-        f"/email-templates/{inactive_template_id}"
-    )
+    inactive_response = await authed_client.get(f"/email-templates/{inactive_template_id}")
     assert inactive_response.status_code == 200, inactive_response.text
     assert inactive_response.json()["is_active"] is False
     assert inactive_response.json()["current_version"] == inactive_template_version
 
-    organization_response = await authed_client.get(
-        f"/email-templates/{organization_template_id}"
-    )
+    organization_response = await authed_client.get(f"/email-templates/{organization_template_id}")
     assert organization_response.status_code == 200, organization_response.text
     assert organization_response.json()["is_active"] is True
 
-    other_template_response = await authed_client.get(
-        f"/email-templates/{other_template_id}"
-    )
+    other_template_response = await authed_client.get(f"/email-templates/{other_template_id}")
     assert other_template_response.status_code == 200, other_template_response.text
     assert other_template_response.json()["is_active"] is True
 
-    version_response = await authed_client.get(
-        f"/email-templates/{template_id}/versions"
-    )
+    version_response = await authed_client.get(f"/email-templates/{template_id}/versions")
     assert version_response.status_code == 200, version_response.text
     versions = version_response.json()
     assert versions[0]["version"] == 2
@@ -156,15 +146,11 @@ async def test_remove_member_deactivates_their_personal_template(
         "/email-templates?scope=personal&show_all_personal=true"
     )
     assert active_templates_response.status_code == 200
-    assert template_id not in {
-        uuid.UUID(item["id"]) for item in active_templates_response.json()
-    }
+    assert template_id not in {uuid.UUID(item["id"]) for item in active_templates_response.json()}
 
 
 @pytest.mark.asyncio
-async def test_remove_member_releases_their_leads_to_unassigned_queue(
-    authed_client, db, test_org
-):
+async def test_remove_member_releases_their_leads_to_unassigned_queue(authed_client, db, test_org):
     departing_user, membership = _create_member(db, test_org.id)
     other_user, _ = _create_member(db, test_org.id)
     lead = surrogate_service.create_surrogate(
@@ -215,9 +201,7 @@ async def test_remove_member_releases_their_leads_to_unassigned_queue(
     original_queue_id = queue_owned_lead.owner_id
     db.commit()
 
-    response = await authed_client.delete(
-        f"/settings/permissions/members/{membership.id}"
-    )
+    response = await authed_client.delete(f"/settings/permissions/members/{membership.id}")
     assert response.status_code == 200, response.text
 
     lead_response = await authed_client.get(f"/surrogates/{lead_id}")

@@ -248,9 +248,7 @@ async def test_surrogate_activity_route_derives_missing_interview_scheduled_acti
     assert activity_res.status_code == 200, activity_res.text
     items = activity_res.json()["items"]
 
-    interview_entries = [
-        item for item in items if item["activity_type"] == "interview_scheduled"
-    ]
+    interview_entries = [item for item in items if item["activity_type"] == "interview_scheduled"]
     assert len(interview_entries) == 1
     assert interview_entries[0]["id"] == str(appointment.id)
     assert interview_entries[0]["actor_user_id"] == str(test_auth.user.id)

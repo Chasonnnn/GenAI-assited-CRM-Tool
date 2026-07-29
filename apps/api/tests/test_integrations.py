@@ -79,7 +79,11 @@ def _stub_oauth_callback(monkeypatch: pytest.MonkeyPatch, path: str) -> dict[str
         monkeypatch.setattr(oauth_service, "exchange_gmail_code", exchange_code)
         monkeypatch.setattr(oauth_service, "get_gmail_user_info", get_user_info)
     elif path == "/integrations/google-calendar/callback":
-        from app.services import appointment_integrations, calendar_service, google_tasks_sync_service
+        from app.services import (
+            appointment_integrations,
+            calendar_service,
+            google_tasks_sync_service,
+        )
 
         async def ensure_google_calendar_watch(*_args, **_kwargs):
             return True

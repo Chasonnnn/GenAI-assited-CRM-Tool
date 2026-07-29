@@ -38,7 +38,9 @@ def require_analytics_access(
     session = get_current_session(request, db)
     path = request.scope.get("path") or request.url.path
     if session.role == Role.INTAKE_SPECIALIST and path not in DASHBOARD_ANALYTICS_PATHS:
-        raise HTTPException(status_code=403, detail="Intake users can only view assigned-case analytics")
+        raise HTTPException(
+            status_code=403, detail="Intake users can only view assigned-case analytics"
+        )
 
     required_permissions = [POLICIES["reports"].default.value]
     if path in DASHBOARD_ANALYTICS_PATHS:
@@ -57,7 +59,9 @@ def require_analytics_access(
         return session
 
     if len(required_permissions) == 1:
-        raise HTTPException(status_code=403, detail=f"Missing permission: {required_permissions[0]}")
+        raise HTTPException(
+            status_code=403, detail=f"Missing permission: {required_permissions[0]}"
+        )
     raise HTTPException(
         status_code=403,
         detail=f"Missing one of permissions: {', '.join(required_permissions)}",

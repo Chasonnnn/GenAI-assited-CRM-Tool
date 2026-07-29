@@ -383,8 +383,8 @@ async def send_template_content_test(
         org_service,
     )
 
-    cleaned_body_template = (
-        email_composition_service.strip_legacy_unsubscribe_placeholders(body_template)
+    cleaned_body_template = email_composition_service.strip_legacy_unsubscribe_placeholders(
+        body_template
     )
     variables_used = extract_variables(subject_template, cleaned_body_template)
     base_vars = build_sample_variables(

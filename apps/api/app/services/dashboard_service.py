@@ -380,9 +380,7 @@ def get_attention_items(
         user_role is not None and not _is_admin_role(user_role)
     )
     if needs_task_surrogate_join:
-        overdue_tasks_query = overdue_tasks_query.join(
-            Surrogate, Task.surrogate_id == Surrogate.id
-        )
+        overdue_tasks_query = overdue_tasks_query.join(Surrogate, Task.surrogate_id == Surrogate.id)
         task_filters.extend(
             [
                 Surrogate.organization_id == org_id,

@@ -222,8 +222,7 @@ async def test_send_email_resend_provider_is_rejected_for_manual_attachment_send
     assert data["success"] is False, data
     assert data["email_log_id"] is None
     assert (
-        data["error"]
-        == "Manual case email sends use personal Gmail only. Connect Gmail in "
+        data["error"] == "Manual case email sends use personal Gmail only. Connect Gmail in "
         "Settings > Integrations."
     )
 

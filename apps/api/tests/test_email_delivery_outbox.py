@@ -486,9 +486,7 @@ def test_retry_after_idempotency_expiry_requires_reconciliation(db, test_org):
     assert delivery.email_log.status == EmailStatus.PENDING.value
     assert "reconciliation" in (delivery.email_log.error or "").lower()
     attempt = (
-        db.query(EmailDeliveryAttempt)
-        .filter(EmailDeliveryAttempt.delivery_id == delivery.id)
-        .one()
+        db.query(EmailDeliveryAttempt).filter(EmailDeliveryAttempt.delivery_id == delivery.id).one()
     )
     assert attempt.outcome == EmailDeliveryAttemptOutcome.TERMINAL_ERROR.value
     assert attempt.retry_after_seconds is None

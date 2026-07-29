@@ -64,9 +64,7 @@ def get_pdf_export_data(
 
     metrics = (
         db.query(
-            func.coalesce(func.sum(case((date_filter, 1), else_=0)), 0).label(
-                "total_surrogates"
-            ),
+            func.coalesce(func.sum(case((date_filter, 1), else_=0)), 0).label("total_surrogates"),
             func.coalesce(
                 func.sum(
                     case(

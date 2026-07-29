@@ -102,9 +102,7 @@ def test_ip_status_regression_creates_pending_request(db, test_org, test_user):
 
 
 @pytest.mark.parametrize("role", [Role.ADMIN, Role.DEVELOPER])
-def test_ip_status_regression_self_approves_for_admin_or_developer(
-    db, test_org, test_user, role
-):
+def test_ip_status_regression_self_approves_for_admin_or_developer(db, test_org, test_user, role):
     ip = _create_ip(db, test_org.id, test_user.id)
     ready_stage = _get_ip_stage(db, test_org.id, IntendedParentStatus.READY_TO_MATCH.value)
     new_stage = _get_ip_stage(db, test_org.id, IntendedParentStatus.NEW.value)

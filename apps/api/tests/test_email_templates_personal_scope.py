@@ -158,9 +158,7 @@ async def test_personal_template_owner_can_view_history_without_org_manage_permi
         owner,
         Role.CASE_MANAGER,
     ) as client:
-        owner_response = await client.get(
-            f"/email-templates/{template.id}/versions"
-        )
+        owner_response = await client.get(f"/email-templates/{template.id}/versions")
         assert owner_response.status_code == 200
 
     async with authed_client_for_user(
@@ -169,9 +167,7 @@ async def test_personal_template_owner_can_view_history_without_org_manage_permi
         other,
         Role.CASE_MANAGER,
     ) as client:
-        other_response = await client.get(
-            f"/email-templates/{template.id}/versions"
-        )
+        other_response = await client.get(f"/email-templates/{template.id}/versions")
         assert other_response.status_code == 404
 
 
@@ -483,14 +479,10 @@ async def test_admin_and_developer_can_delete_other_users_personal_templates(
         assert data["scope"] == "personal"
         assert data["owner_user_id"] == str(owner.id)
 
-        repeated_delete_response = await client.delete(
-            f"/email-templates/{personal_template.id}"
-        )
+        repeated_delete_response = await client.delete(f"/email-templates/{personal_template.id}")
         assert repeated_delete_response.status_code == 204
 
-        repeated_get_response = await client.get(
-            f"/email-templates/{personal_template.id}"
-        )
+        repeated_get_response = await client.get(f"/email-templates/{personal_template.id}")
         assert repeated_get_response.status_code == 200
         assert repeated_get_response.json()["current_version"] == 2
 
@@ -528,9 +520,7 @@ async def test_non_owner_cannot_delete_another_users_personal_template(db, test_
 
 
 @pytest.mark.asyncio
-async def test_non_admin_manager_cannot_rollback_another_users_personal_template(
-    db, test_org
-):
+async def test_non_admin_manager_cannot_rollback_another_users_personal_template(db, test_org):
     owner = create_user_with_role(db, test_org.id, Role.CASE_MANAGER)
     manager = create_user_with_role(db, test_org.id, Role.CASE_MANAGER)
     db.add(

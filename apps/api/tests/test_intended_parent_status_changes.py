@@ -90,7 +90,9 @@ async def _create_intended_parent(client: AsyncClient) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_intended_parent_status_regression_creates_pending_request_for_non_admin(db, test_org):
+async def test_intended_parent_status_regression_creates_pending_request_for_non_admin(
+    db, test_org
+):
     ready_stage = _get_stage(db, test_org.id, "ready_to_match")
     new_stage = _get_stage(db, test_org.id, "new")
 

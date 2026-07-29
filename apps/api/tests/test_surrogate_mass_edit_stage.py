@@ -346,7 +346,9 @@ async def test_mass_edit_stage_bmi_filter_uses_rounded_inches(authed_client, db,
 
 
 @pytest.mark.asyncio
-async def test_mass_edit_stage_bmi_filter_matches_legacy_height_rounding(authed_client, db, test_auth):
+async def test_mass_edit_stage_bmi_filter_matches_legacy_height_rounding(
+    authed_client, db, test_auth
+):
     disqualified_stage = _get_stage(db, test_auth.org.id, "disqualified")
 
     legacy_height_match = await _create_surrogate(

@@ -204,9 +204,7 @@ class EmailTemplateDraft(Base):
     base_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
     last_tested_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    last_tested_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    last_tested_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False

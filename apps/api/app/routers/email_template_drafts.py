@@ -46,9 +46,7 @@ router = APIRouter(
 def _has_manage_permission(db: Session, session) -> bool:
     manage_permission = POLICIES["email_templates"].actions["manage"]
     permission_key = (
-        manage_permission.value
-        if hasattr(manage_permission, "value")
-        else str(manage_permission)
+        manage_permission.value if hasattr(manage_permission, "value") else str(manage_permission)
     )
     return permission_service.check_permission(
         db,
@@ -113,9 +111,7 @@ def _build_draft_response(draft: Any) -> EmailTemplateDraftRead:
         base_version=draft.base_version,
         revision=draft.revision,
         published_version=published_version,
-        is_stale=(
-            published_version is not None and published_version != draft.base_version
-        ),
+        is_stale=(published_version is not None and published_version != draft.base_version),
         last_tested_revision=draft.last_tested_revision,
         last_tested_at=draft.last_tested_at,
         created_at=draft.created_at,

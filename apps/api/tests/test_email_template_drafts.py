@@ -124,9 +124,7 @@ async def test_existing_template_draft_is_isolated_until_explicit_publish(
     assert published["scope"] == "org"
     assert published["created_at"] == original_created_at.isoformat().replace("+00:00", "Z")
 
-    discarded_after_publish = await authed_client.get(
-        f"/email-template-drafts/{draft['id']}"
-    )
+    discarded_after_publish = await authed_client.get(f"/email-template-drafts/{draft['id']}")
     assert discarded_after_publish.status_code == 404
 
 
@@ -163,9 +161,7 @@ async def test_existing_personal_template_draft_preserves_identity_content_and_t
     assert original_response.status_code == 200
     original = original_response.json()
 
-    draft_response = await authed_client.post(
-        f"/email-template-drafts/from-template/{template.id}"
-    )
+    draft_response = await authed_client.post(f"/email-template-drafts/from-template/{template.id}")
     assert draft_response.status_code == 200
     draft = draft_response.json()
     assert {
@@ -271,9 +267,7 @@ async def test_existing_personal_template_draft_preserves_identity_content_and_t
     owner_get_response = await authed_client.get(f"/email-templates/{template.id}")
     assert owner_get_response.status_code == 200
     assert owner_get_response.json()["id"] == original["id"]
-    discarded_draft_response = await authed_client.get(
-        f"/email-template-drafts/{draft['id']}"
-    )
+    discarded_draft_response = await authed_client.get(f"/email-template-drafts/{draft['id']}")
     assert discarded_draft_response.status_code == 404
 
     other_user = User(
@@ -321,9 +315,7 @@ async def test_existing_personal_template_draft_preserves_identity_content_and_t
         org_id=test_org.id,
         role=Role.CASE_MANAGER,
     ) as non_owner_client:
-        non_owner_response = await non_owner_client.get(
-            f"/email-templates/{template.id}"
-        )
+        non_owner_response = await non_owner_client.get(f"/email-templates/{template.id}")
         assert non_owner_response.status_code == 404
 
     async with authed_client_for_user(
@@ -332,9 +324,7 @@ async def test_existing_personal_template_draft_preserves_identity_content_and_t
         org_id=other_org.id,
         role=Role.DEVELOPER,
     ) as other_org_client:
-        other_org_response = await other_org_client.get(
-            f"/email-templates/{template.id}"
-        )
+        other_org_response = await other_org_client.get(f"/email-templates/{template.id}")
         assert other_org_response.status_code == 404
 
 
@@ -427,9 +417,7 @@ async def test_publish_is_unavailable_with_unusable_version_history_encryption(
     )
 
     assert publish_response.status_code == 503
-    assert publish_response.json() == {
-        "detail": "Template publishing is temporarily unavailable"
-    }
+    assert publish_response.json() == {"detail": "Template publishing is temporarily unavailable"}
     assert (
         db.query(EmailTemplate)
         .filter(
@@ -458,9 +446,7 @@ async def test_stale_draft_cannot_overwrite_a_newer_published_template(
         body="<p>Original body</p>",
         scope="org",
     )
-    draft_response = await authed_client.post(
-        f"/email-template-drafts/from-template/{template.id}"
-    )
+    draft_response = await authed_client.post(f"/email-template-drafts/from-template/{template.id}")
     assert draft_response.status_code == 200
     draft = draft_response.json()
 
@@ -608,9 +594,7 @@ async def test_subject_only_publish_preserves_legacy_body_and_from_bytes(
     db.add(template)
     db.commit()
 
-    draft_response = await authed_client.post(
-        f"/email-template-drafts/from-template/{template.id}"
-    )
+    draft_response = await authed_client.post(f"/email-template-drafts/from-template/{template.id}")
     assert draft_response.status_code == 200
     draft = draft_response.json()
     assert draft["body"] == legacy_body
@@ -703,9 +687,7 @@ async def test_draft_conflicts_and_discard_never_create_or_overwrite_templates(
         f"/email-template-drafts/{draft['id']}?expected_revision=999"
     )
     assert stale_discard.status_code == 409
-    assert (
-        await authed_client.get(f"/email-template-drafts/{draft['id']}")
-    ).status_code == 200
+    assert (await authed_client.get(f"/email-template-drafts/{draft['id']}")).status_code == 200
 
     discard = await authed_client.delete(
         f"/email-template-drafts/{draft['id']}?expected_revision=1"

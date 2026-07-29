@@ -118,13 +118,17 @@ def _merge_validation_defaults(
         current_min = _coerce_number(merged.get("min_value"))
         default_min = _coerce_number(defaults.get("min_value"))
         if default_min is not None:
-            merged["min_value"] = default_min if current_min is None else max(current_min, default_min)
+            merged["min_value"] = (
+                default_min if current_min is None else max(current_min, default_min)
+            )
 
     if defaults.get("max_value") is not None:
         current_max = _coerce_number(merged.get("max_value"))
         default_max = _coerce_number(defaults.get("max_value"))
         if default_max is not None:
-            merged["max_value"] = default_max if current_max is None else min(current_max, default_max)
+            merged["max_value"] = (
+                default_max if current_max is None else min(current_max, default_max)
+            )
 
     return merged or None
 

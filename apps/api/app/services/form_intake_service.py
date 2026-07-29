@@ -1910,9 +1910,7 @@ def create_intake_lead_for_submission(
     submission.intake_lead_id = lead.id
     submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
     submission.match_reason = (
-        "workflow_website_lead_creation"
-        if auto_promote_website_lead
-        else "workflow_lead_creation"
+        "workflow_website_lead_creation" if auto_promote_website_lead else "workflow_lead_creation"
     )
     submission.matched_at = None
     db.query(FormSubmissionMatchCandidate).filter(

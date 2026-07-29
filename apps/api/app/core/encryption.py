@@ -137,6 +137,5 @@ def is_encryption_configured() -> bool:
 def is_pii_encryption_configured() -> bool:
     """Check if PII encryption is properly configured."""
     return bool(
-        settings.DATA_ENCRYPTION_KEY.get_secret_value()
-        and settings.PII_HASH_KEY.get_secret_value()
+        settings.DATA_ENCRYPTION_KEY.get_secret_value() and settings.PII_HASH_KEY.get_secret_value()
     )

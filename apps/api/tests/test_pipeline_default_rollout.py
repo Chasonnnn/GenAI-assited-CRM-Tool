@@ -137,7 +137,10 @@ def test_rollout_dry_run_reports_missing_platform_stages_for_legacy_default_pipe
     assert item["blockers"] == []
     assert item["applied"] is False
     assert _active_stage_keys(pipeline) == _legacy_surrogate_stage_keys()
-    assert [(entry["stage_key"], entry["after_stage_key"], entry["before_stage_key"]) for entry in item["target_insertions"]] == [
+    assert [
+        (entry["stage_key"], entry["after_stage_key"], entry["before_stage_key"])
+        for entry in item["target_insertions"]
+    ] == [
         ("pending_docusign", "interview_scheduled", "under_review"),
         ("life_insurance_application_started", "heartbeat_confirmed", "ob_care_established"),
         ("pbo_process_started", "ob_care_established", "anatomy_scanned"),
@@ -269,7 +272,10 @@ def test_rollout_reorders_existing_screenshot_stage_without_creating_duplicates(
         "disqualified",
     ]
     assert [stage.stage_key for stage in active_stages].count("cold_leads") == 1
-    assert next(stage for stage in active_stages if stage.stage_key == "cold_leads").id == cold_leads_stage.id
+    assert (
+        next(stage for stage in active_stages if stage.stage_key == "cold_leads").id
+        == cold_leads_stage.id
+    )
 
 
 def test_rollout_flags_slug_collisions_for_manual_review_without_mutating_pipeline(db, test_org):

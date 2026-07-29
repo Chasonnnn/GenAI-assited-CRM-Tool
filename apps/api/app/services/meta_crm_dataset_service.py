@@ -798,9 +798,13 @@ async def process_job(db: Session, job) -> None:
         provider_payload = response.json()
     except Exception:
         provider_payload = {"raw": response.text[:1000]}
-    provider_body = provider_payload if isinstance(provider_payload, dict) else {"body": provider_payload}
+    provider_body = (
+        provider_payload if isinstance(provider_payload, dict) else {"body": provider_payload}
+    )
     provider_response_id = (
-        str(provider_body.get("fbtrace_id")) if provider_body.get("fbtrace_id") is not None else None
+        str(provider_body.get("fbtrace_id"))
+        if provider_body.get("fbtrace_id") is not None
+        else None
     )
     provider_metadata = {
         "status_code": response.status_code,

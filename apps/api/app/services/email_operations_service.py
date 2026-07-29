@@ -711,11 +711,7 @@ def get_readiness(
     ]
     overall = (
         "ready"
-        if can_send
-        and (
-            not tracking_opted_in
-            or (can_track and activity_check.status != "fail")
-        )
+        if can_send and (not tracking_opted_in or (can_track and activity_check.status != "fail"))
         else "needs_attention"
     )
     return EmailOperationsReadinessResponse(

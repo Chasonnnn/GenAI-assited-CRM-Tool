@@ -462,9 +462,7 @@ def test_stale_claim_reaper_cannot_touch_fresh_replaced_or_specialized_claims(db
     current_fresh = db.query(Job).filter(Job.id == fresh.id).one()
     current_replaced = db.query(Job).filter(Job.id == replaced_id).one()
     current_scan = db.query(Job).filter(Job.id == delegated_scan.id).one()
-    current_reconciliation = (
-        db.query(Job).filter(Job.id == resend_reconciliation.id).one()
-    )
+    current_reconciliation = db.query(Job).filter(Job.id == resend_reconciliation.id).one()
     assert current_fresh.status == JobStatus.RUNNING.value
     assert current_fresh.claim_token == fresh_token
     assert current_fresh.claimed_at == now
