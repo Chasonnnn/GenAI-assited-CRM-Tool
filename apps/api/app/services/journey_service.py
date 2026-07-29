@@ -7,9 +7,9 @@ and does not contain any milestone definitions.
 Version 1 - Initial milestone mapping
 """
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
-import re
 from typing import Literal
 from uuid import UUID
 
@@ -24,7 +24,6 @@ from app.db.models import (
     SurrogateStatusHistory,
 )
 from app.services import attachment_service, pipeline_semantics_service
-
 
 # Journey version for audit trails and export stability
 JOURNEY_VERSION = 1

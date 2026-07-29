@@ -1,11 +1,11 @@
-from datetime import datetime, timezone
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 
 from app.db.enums import Role
 from app.db.models import AISettings, Membership, User
-from app.services import ai_settings_service, ai_chat_service
+from app.services import ai_chat_service, ai_settings_service
 from app.services.ai_provider import ChatResponse
 
 
@@ -36,7 +36,7 @@ async def test_global_chat_performance_requires_view_reports(db, test_org, test_
         provider="gemini",
         model="gemini-3-flash-preview",
         current_version=1,
-        consent_accepted_at=datetime.now(timezone.utc),
+        consent_accepted_at=datetime.now(UTC),
         consent_accepted_by=test_user.id,
         api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
     )

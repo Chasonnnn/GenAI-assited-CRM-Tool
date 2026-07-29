@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -9,7 +9,7 @@ from app.services.workflow_engine import engine
 
 def test_should_run_cron_weekday_mapping():
     # 2026-01-05 is a Monday
-    now = datetime(2026, 1, 5, 9, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 5, 9, 0, tzinfo=UTC)
 
     assert workflow_triggers._should_run_cron("0 9 * * 1", now, "UTC") is True
     assert workflow_triggers._should_run_cron("0 9 * * 2", now, "UTC") is False
@@ -17,7 +17,7 @@ def test_should_run_cron_weekday_mapping():
 
 def test_should_run_cron_sunday_aliases():
     # 2026-01-04 is a Sunday
-    now = datetime(2026, 1, 4, 9, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 4, 9, 0, tzinfo=UTC)
 
     assert workflow_triggers._should_run_cron("0 9 * * 0", now, "UTC") is True
     assert workflow_triggers._should_run_cron("0 9 * * 7", now, "UTC") is True
@@ -33,13 +33,13 @@ def test_should_run_cron_sunday_aliases():
     ],
 )
 def test_should_run_cron_fails_closed_for_unsupported_syntax(cron):
-    now = datetime(2026, 1, 5, 9, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 5, 9, 0, tzinfo=UTC)
 
     assert workflow_triggers._should_run_cron(cron, now, "UTC") is False
 
 
 def test_should_run_cron_fails_closed_for_unknown_timezone():
-    now = datetime(2026, 1, 5, 9, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 5, 9, 0, tzinfo=UTC)
 
     assert workflow_triggers._should_run_cron("0 9 * * *", now, "Not/AZone") is False
 

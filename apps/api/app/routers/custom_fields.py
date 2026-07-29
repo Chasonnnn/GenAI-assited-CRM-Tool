@@ -1,11 +1,9 @@
 """Custom field endpoints for org-scoped field definitions."""
 
 from typing import Annotated
-
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
@@ -13,7 +11,6 @@ from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.schemas.custom_field import CustomFieldCreate, CustomFieldRead, CustomFieldUpdate
 from app.services import custom_field_service
-
 
 router = APIRouter(
     prefix="/custom-fields",

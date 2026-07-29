@@ -19,13 +19,13 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.enums import EmailStatus
 from app.db.models import EmailLog
+from app.services.email_content import html_to_text
 from app.services.email_delivery_service import (
     DeliveryRoute,
     EmailSource,
     RenderedEmail,
     queue_rendered_email,
 )
-from app.services.email_content import html_to_text
 from app.types import JsonObject
 
 logger = logging.getLogger(__name__)

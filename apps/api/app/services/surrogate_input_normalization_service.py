@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date
 from decimal import Decimal
 from types import UnionType
-from typing import Any, Mapping, Union, get_args, get_origin
+from typing import Any, Union, get_args, get_origin
 
 from pydantic import EmailStr, ValidationError
 
@@ -13,7 +14,6 @@ from app.schemas.surrogate import SurrogateCreate, SurrogateUpdate
 from app.services.import_transformers import get_suggested_transformer, transform_value
 from app.utils.journey_timing import normalize_journey_timing_preference
 from app.utils.normalization import normalize_email, normalize_name
-
 
 REQUIRED_SURROGATE_CREATE_FIELDS = frozenset({"full_name", "email"})
 

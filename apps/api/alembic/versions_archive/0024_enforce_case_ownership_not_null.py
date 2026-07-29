@@ -12,9 +12,10 @@ Backfills any legacy rows where owner_type/owner_id are null by assigning them t
 org's default "Unassigned" queue, then makes columns NOT NULL.
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "0024_enforce_case_ownership_not_null"

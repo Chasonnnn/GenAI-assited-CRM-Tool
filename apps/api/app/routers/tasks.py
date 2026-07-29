@@ -1,11 +1,9 @@
 """Tasks router - API endpoints for task management."""
 
 from typing import Annotated
-
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-
 from sqlalchemy.orm import Session
 
 from app.core.deps import (

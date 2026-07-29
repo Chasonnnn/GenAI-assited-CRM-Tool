@@ -3,8 +3,8 @@ from http.cookies import SimpleCookie
 
 import pytest
 
-from app.core.deps import COOKIE_NAME
 from app.core.csrf import CSRF_COOKIE_NAME, generate_csrf_token
+from app.core.deps import COOKIE_NAME
 from app.core.security import create_session_token
 from app.services import session_service
 
@@ -97,8 +97,8 @@ async def test_platform_me_allows_admin_flag(authed_client, db, test_user):
 
 @pytest.mark.asyncio
 async def test_platform_me_allows_admin_without_membership(client, db, test_org):
-    from app.db.models import User
     from app.db.enums import Role
+    from app.db.models import User
 
     user = User(
         email="platform.admin@test.com",

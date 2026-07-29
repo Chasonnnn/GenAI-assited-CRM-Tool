@@ -6,6 +6,8 @@ Tests upload, preview, execution, validation, deduplication, and history.
 
 import io
 import uuid
+from datetime import UTC
+
 import pytest
 from httpx import AsyncClient
 
@@ -64,7 +66,7 @@ async def test_preview_import_success(authed_client: AsyncClient):
 async def test_preview_import_ai_available_requires_consent(
     authed_client: AsyncClient, db, test_org, test_user
 ):
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from app.db.models import AISettings
     from app.services import ai_settings_service
@@ -78,7 +80,7 @@ async def test_preview_import_ai_available_requires_consent(
         consent_accepted_at=None,
         consent_accepted_by=None,
         api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
-        updated_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(UTC),
     )
     db.add(settings)
     db.flush()
@@ -100,9 +102,9 @@ async def test_preview_import_detects_duplicates_in_db(
     authed_client: AsyncClient, db, test_org, test_user
 ):
     """Test preview detects existing cases in database."""
-    from app.services import surrogate_service
-    from app.schemas.surrogate import SurrogateCreate
     from app.db.enums import SurrogateSource
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import surrogate_service
 
     # Create existing case using service
     case_data = SurrogateCreate(
@@ -282,8 +284,8 @@ async def test_submit_import_updates_status_and_snapshot(authed_client: AsyncCli
 @pytest.mark.asyncio
 async def test_approve_import_queues_job(authed_client: AsyncClient, db, test_org):
     """Test approving import queues a background job."""
-    from app.db.models import Job
     from app.db.enums import JobType
+    from app.db.models import Job
 
     csv_data = create_csv_content(
         [
@@ -474,9 +476,9 @@ async def test_preview_import_reports_validation_errors(authed_client: AsyncClie
 
 def test_execute_import_warns_on_unmapped_columns(db, test_org, test_user):
     """Test unknown_column_behavior=warn stores warnings without error_count."""
+    from app.db.models import SurrogateImport
     from app.services import import_service
     from app.services.import_service import ColumnMapping
-    from app.db.models import SurrogateImport
 
     csv_data = create_csv_content(
         [
@@ -595,7 +597,7 @@ def test_execute_import_uses_default_source(db, test_org, test_user):
 
 def test_execute_import_backdates_created_at(db, test_org, test_user):
     """Backdate created_at from submission time using org timezone."""
-    from datetime import datetime, timezone
+    from datetime import datetime
     from zoneinfo import ZoneInfo
 
     from app.db.models import Surrogate, SurrogateImport
@@ -667,12 +669,10 @@ def test_execute_import_backdates_created_at(db, test_org, test_user):
     )
     assert surrogate is not None
 
-    expected = datetime(2026, 1, 2, 9, 30, tzinfo=ZoneInfo("America/New_York")).astimezone(
-        timezone.utc
-    )
+    expected = datetime(2026, 1, 2, 9, 30, tzinfo=ZoneInfo("America/New_York")).astimezone(UTC)
     stored_created_at = surrogate.created_at
     if stored_created_at.tzinfo is None:
-        stored_created_at = stored_created_at.replace(tzinfo=timezone.utc)
+        stored_created_at = stored_created_at.replace(tzinfo=UTC)
     assert stored_created_at == expected
 
     stored_import = db.query(SurrogateImport).filter(SurrogateImport.id == import_record.id).first()
@@ -828,10 +828,12 @@ async def test_import_skips_duplicate_email_on_unique_violation(
 ):
     """Duplicate email unique violations should be counted as skipped, not errors."""
     from types import SimpleNamespace
+
+    from sqlalchemy.exc import IntegrityError
+
     from app.core.encryption import hash_email
     from app.db.models import Surrogate, SurrogateImport
     from app.services import import_service
-    from sqlalchemy.exc import IntegrityError
 
     csv_data = create_csv_content(
         [
@@ -1039,9 +1041,10 @@ async def test_submit_import_requires_csrf(authed_client: AsyncClient, db):
     import_id = preview.json()["import_id"]
 
     # Remove CSRF header (create new client without it)
-    from httpx import AsyncClient, ASGITransport
-    from app.main import app
+    from httpx import ASGITransport, AsyncClient
+
     from app.core.deps import get_db
+    from app.main import app
 
     def override_get_db():
         yield db

@@ -1,8 +1,9 @@
 """Workflow engine adapters for domain-specific behavior."""
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Callable, Protocol
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any, Protocol
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -172,7 +173,7 @@ class DefaultWorkflowDomainAdapter:
         payload = render_action_payload(action, entity)
 
         # Calculate due date (48 business hours)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         due_at = calculate_approval_due_date(
             start_utc=now,
             owner=owner,
@@ -360,8 +361,8 @@ class DefaultWorkflowDomainAdapter:
 
         except Exception as e:
             logger.exception(f"Action {action_type} failed: {e}")
-            from app.services import alert_service
             from app.db.enums import AlertSeverity, AlertType
+            from app.services import alert_service
 
             org_id = getattr(entity, "organization_id", None)
             if org_id:
@@ -409,8 +410,8 @@ class DefaultWorkflowDomainAdapter:
                 if creator and creator.email:
                     recipient_emails = [creator.email]
         elif recipients == "all_admins":
-            from app.db.models import Membership
             from app.db.enums import Role
+            from app.db.models import Membership
 
             rows = (
                 db.query(User.email)
@@ -578,7 +579,7 @@ class DefaultWorkflowDomainAdapter:
             owner_type = OwnerType.USER.value
             owner_id = UUID(assignee) if assignee else None
 
-        due_date = datetime.now(timezone.utc) + timedelta(days=due_days)
+        due_date = datetime.now(UTC) + timedelta(days=due_days)
 
         actor_user_id = entity.created_by_user_id
         if not actor_user_id and entity.owner_type == OwnerType.USER.value:
@@ -629,7 +630,7 @@ class DefaultWorkflowDomainAdapter:
 
         entity.owner_type = owner_type
         entity.owner_id = UUID(owner_id) if isinstance(owner_id, str) else owner_id
-        entity.updated_at = datetime.now(timezone.utc)
+        entity.updated_at = datetime.now(UTC)
 
         db.commit()
 
@@ -664,9 +665,8 @@ class DefaultWorkflowDomainAdapter:
         entity: Any,
     ) -> dict:
         """Send in-app notification."""
-        from app.db.enums import NotificationType
+        from app.db.enums import NotificationType, Role
         from app.db.models import Membership
-        from app.db.enums import Role
 
         title = action.get("title", "Workflow Notification")
         body = action.get("body", "")
@@ -756,7 +756,7 @@ class DefaultWorkflowDomainAdapter:
                 "description": "Skipped conversion event: stage not found.",
             }
 
-        effective_at = datetime.now(timezone.utc)
+        effective_at = datetime.now(UTC)
         transport_results = {
             "zapier": zapier_outbound_service.enqueue_stage_event(
                 db=db,
@@ -980,7 +980,7 @@ class DefaultWorkflowDomainAdapter:
             old_stage_key = old_stage.stage_key if old_stage else None
             entity.stage_id = stage.id
             entity.status_label = stage.label
-            entity.updated_at = datetime.now(timezone.utc)
+            entity.updated_at = datetime.now(UTC)
 
             history = SurrogateStatusHistory(
                 surrogate_id=entity.id,
@@ -1018,7 +1018,7 @@ class DefaultWorkflowDomainAdapter:
                 )
         else:
             setattr(entity, field, value)
-            entity.updated_at = datetime.now(timezone.utc)
+            entity.updated_at = datetime.now(UTC)
             db.commit()
 
         # Trigger surrogate_updated workflow

@@ -1,7 +1,7 @@
 """Operator CLI contracts for legacy job-claim reconciliation."""
 
-from datetime import datetime, timezone
 import json
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -14,7 +14,7 @@ from app.cli import cli
 def test_reconciliation_command_defaults_to_aggregate_only_dry_run(monkeypatch):
     job_id = UUID("91000000-0000-4000-8000-000000000001")
     org_id = UUID("92000000-0000-4000-8000-000000000001")
-    evaluated_at = datetime(2026, 7, 25, 22, 44, tzinfo=timezone.utc)
+    evaluated_at = datetime(2026, 7, 25, 22, 44, tzinfo=UTC)
     report = SimpleNamespace(
         mode="dry_run",
         fingerprint="a" * 64,
@@ -69,7 +69,7 @@ def test_reconciliation_command_defaults_to_aggregate_only_dry_run(monkeypatch):
     assert result.exit_code == 0, result.output
     assert calls == [
         {
-            "stale_before": datetime(2026, 7, 24, tzinfo=timezone.utc),
+            "stale_before": datetime(2026, 7, 24, tzinfo=UTC),
             "apply": False,
             "evaluated_at": evaluated_at,
             "expected_count": None,
@@ -89,7 +89,7 @@ def test_reconciliation_command_defaults_to_aggregate_only_dry_run(monkeypatch):
 
 
 def test_reconciliation_dry_run_gate_exits_nonzero_for_residual_running_work(monkeypatch):
-    evaluated_at = datetime(2026, 7, 25, 22, 44, tzinfo=timezone.utc)
+    evaluated_at = datetime(2026, 7, 25, 22, 44, tzinfo=UTC)
     fingerprint = "e" * 64
     report = SimpleNamespace(
         mode="dry_run",
@@ -135,9 +135,9 @@ def test_reconciliation_dry_run_gate_exits_nonzero_for_residual_running_work(mon
 def test_reconciliation_manifest_is_explicit_sanitized_dry_run_json(monkeypatch):
     job_id = UUID("91000000-0000-4000-8000-000000000001")
     org_id = UUID("92000000-0000-4000-8000-000000000001")
-    stale_before = datetime(2026, 7, 24, tzinfo=timezone.utc)
-    evaluated_at = datetime(2026, 7, 25, 22, 44, tzinfo=timezone.utc)
-    run_at = datetime(2026, 5, 20, 5, 4, tzinfo=timezone.utc)
+    stale_before = datetime(2026, 7, 24, tzinfo=UTC)
+    evaluated_at = datetime(2026, 7, 25, 22, 44, tzinfo=UTC)
+    run_at = datetime(2026, 5, 20, 5, 4, tzinfo=UTC)
     fingerprint = "c" * 64
     report = SimpleNamespace(
         mode="dry_run",
@@ -285,7 +285,7 @@ def test_reconciliation_apply_is_rejected_before_db_access_without_review_contra
 
 
 def test_reconciliation_apply_passes_the_exact_review_contract(monkeypatch):
-    evaluated_at = datetime(2026, 7, 25, 22, 44, tzinfo=timezone.utc)
+    evaluated_at = datetime(2026, 7, 25, 22, 44, tzinfo=UTC)
     fingerprint = "b" * 64
     report = SimpleNamespace(
         mode="apply",
@@ -339,7 +339,7 @@ def test_reconciliation_apply_passes_the_exact_review_contract(monkeypatch):
     assert result.exit_code == 0, result.output
     assert calls == [
         {
-            "stale_before": datetime(2026, 7, 24, tzinfo=timezone.utc),
+            "stale_before": datetime(2026, 7, 24, tzinfo=UTC),
             "apply": True,
             "evaluated_at": evaluated_at,
             "expected_count": 0,

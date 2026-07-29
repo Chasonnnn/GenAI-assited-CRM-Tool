@@ -6,10 +6,9 @@ template surfaces (org templates, platform template studio, platform system temp
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Literal
-import re
-
 
 VariableValueType = Literal["text", "url", "html"]
 

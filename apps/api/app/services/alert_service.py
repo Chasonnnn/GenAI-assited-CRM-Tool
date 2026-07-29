@@ -6,18 +6,17 @@ Manages deduplicated, actionable alerts with fingerprinting.
 
 import hashlib
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import case, func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app.db.enums import AlertSeverity, AlertStatus, AlertType
 from app.db.models import SystemAlert
-from app.db.enums import AlertType, AlertSeverity, AlertStatus
 from app.db.session import SessionLocal
 from app.utils.pagination import paginate_query_by_offset
-
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +57,7 @@ def create_or_update_alert(
     Transaction-bound: caller controls commit/rollback.
     """
     dedupe_key = fingerprint(alert_type, integration_key, error_class, http_status)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     reopen_condition = (SystemAlert.status == AlertStatus.RESOLVED.value) | (
         (SystemAlert.status == AlertStatus.SNOOZED.value)
@@ -247,7 +246,7 @@ def resolve_alert(
         return None
 
     alert.status = AlertStatus.RESOLVED.value
-    alert.resolved_at = datetime.now(timezone.utc)
+    alert.resolved_at = datetime.now(UTC)
     alert.resolved_by_user_id = user_id
     db.commit()
     db.refresh(alert)
@@ -296,7 +295,7 @@ def snooze_alert(
         return None
 
     alert.status = AlertStatus.SNOOZED.value
-    alert.snoozed_until = datetime.now(timezone.utc) + timedelta(hours=hours)
+    alert.snoozed_until = datetime.now(UTC) + timedelta(hours=hours)
     db.commit()
     db.refresh(alert)
     return alert

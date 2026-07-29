@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DEFAULT_TIMEZONE = "America/Los_Angeles"
@@ -52,7 +52,7 @@ def parse_datetime_with_timezone(raw_value: str, org_timezone: str | None) -> Pa
         if len(value) == 13:
             ts = ts / 1000
         return ParsedDatetime(
-            value=datetime.fromtimestamp(ts, tz=timezone.utc),
+            value=datetime.fromtimestamp(ts, tz=UTC),
             warnings=warnings,
             used_fallback_timezone=used_fallback,
         )
@@ -63,7 +63,7 @@ def parse_datetime_with_timezone(raw_value: str, org_timezone: str | None) -> Pa
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=tz)
         return ParsedDatetime(
-            value=dt.astimezone(timezone.utc),
+            value=dt.astimezone(UTC),
             warnings=warnings,
             used_fallback_timezone=used_fallback,
         )
@@ -79,7 +79,7 @@ def parse_datetime_with_timezone(raw_value: str, org_timezone: str | None) -> Pa
                 dt = dt.replace(hour=12, minute=0, second=0)
             dt = dt.replace(tzinfo=tz)
             return ParsedDatetime(
-                value=dt.astimezone(timezone.utc),
+                value=dt.astimezone(UTC),
                 warnings=warnings,
                 date_only=date_only,
                 used_fallback_timezone=used_fallback,

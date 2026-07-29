@@ -1,11 +1,12 @@
 """AI job payload tests."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 import pytest
 from httpx import AsyncClient
 
 from app.db.models import AISettings
-from app.services import ai_settings_service, ai_chat_service
+from app.services import ai_chat_service, ai_settings_service
 from app.services.ai_provider import ChatResponse
 
 
@@ -19,7 +20,7 @@ async def test_ai_chat_sync_returns_response(
         provider="gemini",
         model="gemini-3-flash-preview",
         current_version=1,
-        consent_accepted_at=datetime.now(timezone.utc),
+        consent_accepted_at=datetime.now(UTC),
         consent_accepted_by=test_user.id,
         api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
     )

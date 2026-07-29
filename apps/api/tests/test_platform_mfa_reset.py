@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -27,11 +27,11 @@ async def test_platform_reset_mfa_requires_admin(authed_client, db, test_user, t
 async def test_platform_reset_mfa_clears_fields_and_revokes_sessions(
     authed_client, db, test_user, test_org
 ):
-    from app.db.models import Membership, UserSession, AdminActionLog
+    from app.db.models import AdminActionLog, Membership, UserSession
     from app.services import mfa_service
 
     test_user.is_platform_admin = True
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     test_user.mfa_enabled = True
     test_user.totp_secret = "JBSWY3DPEHPK3PXP"
     test_user.totp_enabled_at = now
@@ -97,7 +97,7 @@ async def test_platform_reset_mfa_returns_502_when_duo_reset_fails(
     from app.services import duo_admin_service
 
     test_user.is_platform_admin = True
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     test_user.mfa_enabled = True
     test_user.duo_user_id = "duo-test-user"
     test_user.duo_enrolled_at = now
@@ -141,7 +141,7 @@ async def test_platform_reset_mfa_returns_503_when_duo_admin_not_configured(
     from app.services import duo_admin_service
 
     test_user.is_platform_admin = True
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     test_user.mfa_enabled = True
     test_user.duo_user_id = "duo-test-user"
     test_user.duo_enrolled_at = now

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
-from uuid import UUID
 import uuid
+from datetime import UTC, date, datetime
+from uuid import UUID
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
@@ -441,7 +441,7 @@ async def test_mass_edit_stage_rejects_effective_at_field(authed_client, db, tes
             "filters": {"states": ["CA"]},
             "stage_id": str(disqualified_stage.id),
             "expected_total": 1,
-            "effective_at": datetime.now(timezone.utc).isoformat(),
+            "effective_at": datetime.now(UTC).isoformat(),
         },
     )
     assert apply_res.status_code == 422
@@ -476,9 +476,9 @@ async def test_mass_edit_preview_total_matches_surrogates_list_for_same_created_
         in_range_1_row is not None and in_range_2_row is not None and out_of_range_row is not None
     )
 
-    in_range_1_row.created_at = datetime(2025, 1, 10, 8, 0, tzinfo=timezone.utc)
-    in_range_2_row.created_at = datetime(2025, 1, 10, 23, 59, tzinfo=timezone.utc)
-    out_of_range_row.created_at = datetime(2025, 1, 11, 0, 0, tzinfo=timezone.utc)
+    in_range_1_row.created_at = datetime(2025, 1, 10, 8, 0, tzinfo=UTC)
+    in_range_2_row.created_at = datetime(2025, 1, 10, 23, 59, tzinfo=UTC)
+    out_of_range_row.created_at = datetime(2025, 1, 11, 0, 0, tzinfo=UTC)
     db.commit()
 
     created_range = {"created_from": "2025-01-10", "created_to": "2025-01-10"}

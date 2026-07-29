@@ -5,9 +5,9 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_unsubscribe_endpoint_adds_suppression(client, db, test_org):
-    from app.services import unsubscribe_service, campaign_service
     from app.db.enums import SuppressionReason
     from app.db.models import EmailSuppression
+    from app.services import campaign_service, unsubscribe_service
 
     token = unsubscribe_service.generate_unsubscribe_token(
         org_id=test_org.id,
@@ -75,7 +75,7 @@ async def test_unsubscribe_endpoint_handles_invalid_token(client, db, test_org):
 
 
 def test_build_list_unsubscribe_headers_use_one_click_and_portal_domain(db, test_org):
-    from app.services import unsubscribe_service, org_service
+    from app.services import org_service, unsubscribe_service
 
     org = org_service.get_org_by_id(db, test_org.id)
     base = org_service.get_org_portal_base_url(org)

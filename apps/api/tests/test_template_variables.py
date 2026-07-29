@@ -1,18 +1,19 @@
 """Tests for template variable builders."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from app.db.enums import AppointmentStatus, MeetingMode, SurrogateSource
 from app.db.models import Appointment, AppointmentType, BookingLink, FormIntakeLink
-from app.db.enums import AppointmentStatus, MeetingMode
-from app.services import form_service
-from app.services import form_intake_service
-from app.services import org_service
-from app.services import email_service
-from app.services import appointment_service
 from app.schemas.surrogate import SurrogateCreate
-from app.services import surrogate_service
-from app.db.enums import SurrogateSource
+from app.services import (
+    appointment_service,
+    email_service,
+    form_intake_service,
+    form_service,
+    org_service,
+    surrogate_service,
+)
 
 
 def _create_published_form(db, org_id, user_id):
@@ -291,7 +292,7 @@ def test_build_surrogate_template_variables_includes_appointment_self_service_ur
     db.add(appt_type)
     db.flush()
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     appt = Appointment(
         id=uuid4(),
         organization_id=test_org.id,

@@ -10,7 +10,7 @@ Provides:
 import asyncio
 import os
 import uuid
-from typing import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Generator
 from dataclasses import dataclass
 
 import pytest
@@ -80,6 +80,7 @@ def db(db_engine) -> Generator:
     Creates a database session for tests.
     """
     from sqlalchemy import event
+
     from app.db.session import SessionLocal
 
     connection = db_engine.connect()
@@ -181,8 +182,8 @@ def default_stage(db, test_org):
 @pytest.fixture(scope="function")
 def test_user(db, test_org):
     """Create a test user with membership in test_org."""
-    from app.db.models import User, Membership
     from app.db.enums import Role
+    from app.db.models import Membership, User
 
     user = User(
         id=uuid.uuid4(),
@@ -224,8 +225,8 @@ class TestAuth:
 @pytest.fixture(scope="function")
 def test_auth(db, test_user, test_org):
     """Create JWT token for test user."""
-    from app.core.security import create_session_token
     from app.core.deps import COOKIE_NAME
+    from app.core.security import create_session_token
     from app.db.enums import Role
     from app.services import session_service
 
@@ -262,9 +263,10 @@ async def client(db) -> AsyncGenerator:
     """
     Create unauthenticated AsyncClient for testing public endpoints.
     """
-    from httpx import AsyncClient, ASGITransport
-    from app.main import app
+    from httpx import ASGITransport, AsyncClient
+
     from app.core.deps import get_db
+    from app.main import app
 
     def override_get_db():
         yield db
@@ -282,10 +284,11 @@ async def authed_client(db, test_auth) -> AsyncGenerator:
     """
     Create authenticated AsyncClient with JWT cookie and CSRF header.
     """
-    from httpx import AsyncClient, ASGITransport
-    from app.main import app
-    from app.core.deps import get_db
+    from httpx import ASGITransport, AsyncClient
+
     from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
+    from app.core.deps import get_db
+    from app.main import app
 
     def override_get_db():
         yield db

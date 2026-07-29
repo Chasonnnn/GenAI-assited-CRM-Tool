@@ -5,14 +5,13 @@ from __future__ import annotations
 import hashlib
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import EmbedSession, FormIntakeLink
-
 
 EMBED_SESSION_TTL_MINUTES = 60
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
@@ -111,7 +110,7 @@ def create_embed_session(
         raise PermissionError("Origin is not allowed")
 
     token = secrets.token_urlsafe(32)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     session = EmbedSession(
         organization_id=link.organization_id,
         intake_link_id=link.id,
@@ -148,10 +147,10 @@ def validate_embed_session(
     )
     if not session:
         raise PermissionError("Embed session is invalid")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = session.expires_at
     if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
+        expires_at = expires_at.replace(tzinfo=UTC)
     if expires_at <= now:
         raise PermissionError("Embed session expired")
     if session.consumed_at is not None:

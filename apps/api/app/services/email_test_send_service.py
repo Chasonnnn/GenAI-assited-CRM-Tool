@@ -17,7 +17,6 @@ from app.db.enums import EmailStatus
 from app.db.models import EmailLog, Organization
 from app.services import gmail_service, media_service
 
-
 VARIABLE_PATTERN = re.compile(r"{{\s*([a-zA-Z0-9_]+)\s*}}")
 
 
@@ -47,7 +46,7 @@ def build_sample_variables(
     appointment_reschedule_url = ""
     appointment_cancel_url = ""
     if (to_email or "").strip():
-        from app.services import unsubscribe_service, org_service
+        from app.services import org_service, unsubscribe_service
 
         portal_base_url = org_service.get_org_portal_base_url(org)
 
@@ -167,7 +166,8 @@ async def send_resend_logged(
     idempotency_key: str | None,
     ignore_opt_out: bool = False,
 ) -> dict:
-    from app.services import unsubscribe_service, org_service
+    from app.db.enums import EmailSuppressionPolicy
+    from app.services import org_service, unsubscribe_service
     from app.services.email_content import html_to_text
     from app.services.email_delivery_service import (
         DeliveryRoute,
@@ -175,7 +175,6 @@ async def send_resend_logged(
         RenderedEmail,
         queue_rendered_email,
     )
-    from app.db.enums import EmailSuppressionPolicy
 
     org = org_service.get_org_by_id(db, org_id)
     headers = unsubscribe_service.build_list_unsubscribe_headers(

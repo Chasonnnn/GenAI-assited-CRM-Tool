@@ -8,8 +8,7 @@ Provides a single endpoint to view version history for any versioned entity:
 Developer-only access.
 """
 
-from typing import Any, Annotated
-
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query

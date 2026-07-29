@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -98,20 +98,20 @@ async def test_internal_scheduled_endpoints(client, db, monkeypatch, test_org):
     # token-check endpoint
     mapping_expired = SimpleNamespace(
         organization_id=test_org.id,
-        token_expires_at=datetime.now(timezone.utc) - timedelta(days=1),
+        token_expires_at=datetime.now(UTC) - timedelta(days=1),
         page_id="page-expired",
         page_name="Expired Page",
     )
     mapping_soon = SimpleNamespace(
         organization_id=test_org.id,
-        token_expires_at=datetime.now(timezone.utc) + timedelta(days=2),
+        token_expires_at=datetime.now(UTC) + timedelta(days=2),
         page_id="page-soon",
         page_name="Soon Page",
     )
     oauth_conn = SimpleNamespace(
         id=uuid4(),
         organization_id=test_org.id,
-        token_expires_at=datetime.now(timezone.utc) + timedelta(days=2),
+        token_expires_at=datetime.now(UTC) + timedelta(days=2),
         meta_user_name="Meta User",
         meta_user_id="meta-1",
     )

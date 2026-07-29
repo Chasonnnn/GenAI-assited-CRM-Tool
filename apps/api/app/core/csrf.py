@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import secrets
-from typing import Optional
 
 from fastapi import Request, Response
 
@@ -18,12 +17,12 @@ def generate_csrf_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def get_csrf_cookie(request: Request) -> Optional[str]:
+def get_csrf_cookie(request: Request) -> str | None:
     """Fetch CSRF token from cookie."""
     return request.cookies.get(CSRF_COOKIE_NAME)
 
 
-def set_csrf_cookie(response: Response, token: Optional[str] = None) -> str:
+def set_csrf_cookie(response: Response, token: str | None = None) -> str:
     """Set CSRF cookie and return the token used."""
     csrf_token = token or generate_csrf_token()
     response.set_cookie(

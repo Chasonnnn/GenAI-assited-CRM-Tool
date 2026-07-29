@@ -28,7 +28,6 @@ from app.services.form_submission_service import (
     parse_schema,
 )
 
-
 FORM_LOGO_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024
 FORM_LOGO_ALLOWED_MIME_TYPES = {"image/png", "image/jpeg", "image/jpg"}
 FORM_LOGO_ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}

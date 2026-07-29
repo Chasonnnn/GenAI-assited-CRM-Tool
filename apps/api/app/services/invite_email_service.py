@@ -5,6 +5,7 @@ Invites are always sent via the platform/system sender (Resend).
 
 import logging
 import re
+from datetime import UTC
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -96,9 +97,9 @@ async def send_invite_email(
     # Format expiry
     expires_at = None
     if invite.expires_at:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        days_remaining = (invite.expires_at - datetime.now(timezone.utc)).days
+        days_remaining = (invite.expires_at - datetime.now(UTC)).days
         if days_remaining > 0:
             expires_at = f"in {days_remaining} day{'s' if days_remaining != 1 else ''}"
         else:

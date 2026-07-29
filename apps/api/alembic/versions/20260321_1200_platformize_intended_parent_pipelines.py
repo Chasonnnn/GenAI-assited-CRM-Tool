@@ -10,10 +10,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from uuid import UUID, uuid4
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 from app.core.stage_definitions import (
     INTENDED_PARENT_PIPELINE_ENTITY,
     SURROGATE_PIPELINE_ENTITY,
@@ -23,7 +23,6 @@ from app.schemas.pipeline_semantics import (
     default_pipeline_feature_config,
     default_stage_semantics,
 )
-
 
 # revision identifiers, used by Alembic.
 revision: str = "20260321_1200"

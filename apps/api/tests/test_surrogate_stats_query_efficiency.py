@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import event
 
@@ -10,7 +10,7 @@ from app.services import surrogate_service
 
 
 def test_get_surrogate_stats_uses_at_most_two_selects(db, test_org, default_stage, test_user):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Seed some surrogates.
     for i, created_at in enumerate(

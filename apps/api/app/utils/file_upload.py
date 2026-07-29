@@ -7,7 +7,6 @@ from os import SEEK_END
 from fastapi import UploadFile
 from starlette.concurrency import run_in_threadpool
 
-
 MULTIPART_OVERHEAD_BYTES = 64 * 1024
 
 

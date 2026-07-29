@@ -10,7 +10,6 @@ with 'default' in rollup tables.
 
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
 revision = "0009_backfill_integration_key"
 down_revision = "0008_integration_health"

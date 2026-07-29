@@ -1,11 +1,11 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from io import BytesIO
 
 import pytest
 from sqlalchemy import event
-from starlette.datastructures import UploadFile, Headers
+from starlette.datastructures import Headers, UploadFile
 
 from app.core.encryption import hash_email
 from app.db.enums import FormSubmissionMatchStatus
@@ -529,7 +529,7 @@ def _create_shared_submission(
         intake_lead_id=None,
         match_status=FormSubmissionMatchStatus.LINKED.value,
         match_reason="manual_match",
-        matched_at=datetime.now(timezone.utc),
+        matched_at=datetime.now(UTC),
     )
     db.commit()
     db.refresh(submission)

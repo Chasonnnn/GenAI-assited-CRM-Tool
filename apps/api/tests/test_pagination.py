@@ -11,11 +11,11 @@ class MockQuery:
         self.count_calls = 0
         self.order_by_calls: list[tuple[object, ...]] = []
 
-    def offset(self, offset: int) -> "MockQuery":
+    def offset(self, offset: int) -> MockQuery:
         self._offset = offset
         return self
 
-    def limit(self, limit: int) -> "MockQuery":
+    def limit(self, limit: int) -> MockQuery:
         self._limit = limit
         return self
 
@@ -27,7 +27,7 @@ class MockQuery:
         self.count_calls += 1
         return len(self._items)
 
-    def order_by(self, *entities: object) -> "MockQuery":
+    def order_by(self, *entities: object) -> MockQuery:
         self.order_by_calls.append(entities)
         return self
 

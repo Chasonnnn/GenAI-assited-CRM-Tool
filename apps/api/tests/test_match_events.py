@@ -8,7 +8,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.core.encryption import hash_email
-from app.db.models import Surrogate, IntendedParent, Match
+from app.db.models import IntendedParent, Match, Surrogate
 from app.services import pipeline_service
 from app.utils.normalization import normalize_email
 

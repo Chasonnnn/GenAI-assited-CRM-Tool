@@ -5,9 +5,9 @@ Revises: 0042_appointments
 Create Date: 2025-12-20
 """
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "0043_appointment_token_expiry"
 down_revision = "0042_appointments"

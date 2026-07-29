@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from sqlalchemy.orm import Query
 
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Query
 async def test_zapier_outbound_events_summary_excludes_test_events(authed_client, db, test_org):
     from app.db.models import ZapierOutboundEvent
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     db.add_all(
         [
             ZapierOutboundEvent(
@@ -126,7 +127,7 @@ async def test_retry_failed_zapier_outbound_event_replays_job(authed_client, db,
         stage_label="Pre Qualified",
         attempts=3,
         last_error="Webhook timeout",
-        last_attempt_at=datetime.now(timezone.utc),
+        last_attempt_at=datetime.now(UTC),
     )
     db.add(event)
     db.commit()
@@ -244,8 +245,8 @@ def test_list_events_skips_count_for_short_first_page(db, test_org, monkeypatch)
         lead_id="lead-short-page",
         stage_key="new_unread",
         stage_label="New Unread",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db.add(event)
     db.commit()

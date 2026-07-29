@@ -1,19 +1,19 @@
 """Service for handling status change requests (admin approval workflow)."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.db.enums import MatchStatus, Role, SurrogateActivityType
 from app.db.models import (
+    IntendedParent,
+    Match,
+    Pipeline,
+    PipelineStage,
     StatusChangeRequest,
     Surrogate,
     User,
-    PipelineStage,
-    Pipeline,
-    IntendedParent,
-    Match,
 )
 from app.utils.pagination import PaginationParams, paginate_query
 from app.utils.presentation import humanize_identifier
@@ -92,11 +92,11 @@ def approve_request(
         ValueError: If request not found, not pending, or user not authorized
     """
     from app.services import (
-        surrogate_status_service,
-        pipeline_service,
+        activity_service,
         intended_parent_status_service,
         match_service,
-        activity_service,
+        pipeline_service,
+        surrogate_status_service,
     )
 
     request = get_request(db, request_id, org_id)
@@ -111,7 +111,7 @@ def approve_request(
     if role_str not in [Role.ADMIN.value, Role.DEVELOPER.value]:
         raise ValueError("Only admins can approve status change requests")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     if request.entity_type == "surrogate":
         # Get surrogate
@@ -371,7 +371,7 @@ def reject_request(
     if role_str not in [Role.ADMIN.value, Role.DEVELOPER.value]:
         raise ValueError("Only admins can reject status change requests")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     request.status = "rejected"
     request.rejected_by_user_id = admin_user_id
@@ -496,7 +496,7 @@ def cancel_request(
     if request.requested_by_user_id != user_id:
         raise ValueError("Only the requester can cancel their request")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     request.status = "cancelled"
     request.cancelled_by_user_id = user_id

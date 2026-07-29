@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -33,7 +33,7 @@ def _create_appointment_type(db, org_id, user_id) -> AppointmentType:
 def _create_appointment(
     db, org_id, user_id, appt_type_id=None, *, status=AppointmentStatus.CONFIRMED.value
 ):
-    start = datetime.now(timezone.utc) + timedelta(days=1)
+    start = datetime.now(UTC) + timedelta(days=1)
     appt = Appointment(
         id=uuid4(),
         organization_id=org_id,
@@ -82,7 +82,7 @@ def test_appointment_service_helper_paths():
         datetime(2026, 1, 1, 10, 0, 0),
         "America/New_York",
     )
-    assert normalized.tzinfo == timezone.utc
+    assert normalized.tzinfo == UTC
 
 
 def test_appointment_type_create_update_and_invalid_mode(db, test_org, test_user):
@@ -246,7 +246,7 @@ async def test_sync_manual_google_events_async_reconcile_paths(
         return ["primary"]
 
     async def _calendar_events(**_kwargs):
-        start = datetime.now(timezone.utc) + timedelta(hours=2)
+        start = datetime.now(UTC) + timedelta(hours=2)
         return {
             "connected": True,
             "events": [
@@ -376,8 +376,8 @@ def test_zoom_and_google_meet_creation_failure_paths(monkeypatch):
         client_name="Client",
         client_email="client@example.com",
         client_timezone="UTC",
-        scheduled_start=datetime.now(timezone.utc),
-        scheduled_end=datetime.now(timezone.utc) + timedelta(minutes=30),
+        scheduled_start=datetime.now(UTC),
+        scheduled_end=datetime.now(UTC) + timedelta(minutes=30),
         duration_minutes=30,
         zoom_meeting_id=None,
         zoom_join_url=None,
@@ -431,6 +431,6 @@ def test_zoom_and_google_meet_creation_failure_paths(monkeypatch):
     monkeypatch.setattr(appointment_integrations, "_run_async", _run_raise)
     # These should not raise.
     appointment_integrations.regenerate_zoom_meeting_on_reschedule(
-        SimpleNamespace(), appointment, "Consult", datetime.now(timezone.utc) + timedelta(days=1)
+        SimpleNamespace(), appointment, "Consult", datetime.now(UTC) + timedelta(days=1)
     )
     appointment_integrations.delete_zoom_meeting(SimpleNamespace(), appointment)

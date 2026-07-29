@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    TIMESTAMP,
     Boolean,
     CheckConstraint,
     ForeignKey,
@@ -15,7 +15,6 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
-    TIMESTAMP,
     Text,
     UniqueConstraint,
     text,
@@ -128,9 +127,9 @@ class EmailTemplate(Base):
     )
 
     # Relationships
-    created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
-    owner: Mapped["User | None"] = relationship(foreign_keys=[owner_user_id])
-    source_template: Mapped["EmailTemplate | None"] = relationship(remote_side=[id])
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_user_id])
+    owner: Mapped[User | None] = relationship(foreign_keys=[owner_user_id])
+    source_template: Mapped[EmailTemplate | None] = relationship(remote_side=[id])
 
 
 class EmailTemplateDraft(Base):
@@ -216,8 +215,8 @@ class EmailTemplateDraft(Base):
         nullable=False,
     )
 
-    template: Mapped["EmailTemplate | None"] = relationship()
-    owner: Mapped["User | None"] = relationship(foreign_keys=[owner_user_id])
+    template: Mapped[EmailTemplate | None] = relationship()
+    owner: Mapped[User | None] = relationship(foreign_keys=[owner_user_id])
 
 
 class EmailLog(Base):
@@ -346,18 +345,18 @@ class EmailLog(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    job: Mapped["Job | None"] = relationship()
-    template: Mapped["EmailTemplate | None"] = relationship()
-    surrogate: Mapped["Surrogate | None"] = relationship()
-    attachment_links: Mapped[list["EmailLogAttachment"]] = relationship(
+    job: Mapped[Job | None] = relationship()
+    template: Mapped[EmailTemplate | None] = relationship()
+    surrogate: Mapped[Surrogate | None] = relationship()
+    attachment_links: Mapped[list[EmailLogAttachment]] = relationship(
         back_populates="email_log",
         cascade="all, delete-orphan",
     )
-    resend_webhook_events: Mapped[list["ResendWebhookEvent"]] = relationship(
+    resend_webhook_events: Mapped[list[ResendWebhookEvent]] = relationship(
         back_populates="email_log",
         cascade="all, delete-orphan",
     )
-    delivery: Mapped["EmailDelivery | None"] = relationship(
+    delivery: Mapped[EmailDelivery | None] = relationship(
         back_populates="email_log",
         cascade="all, delete-orphan",
         uselist=False,
@@ -486,12 +485,12 @@ class EmailDelivery(Base):
         nullable=False,
     )
 
-    organization: Mapped["Organization"] = relationship(overlaps="delivery,email_log")
-    email_log: Mapped["EmailLog"] = relationship(
+    organization: Mapped[Organization] = relationship(overlaps="delivery,email_log")
+    email_log: Mapped[EmailLog] = relationship(
         back_populates="delivery",
         overlaps="organization",
     )
-    attempts: Mapped[list["EmailDeliveryAttempt"]] = relationship(
+    attempts: Mapped[list[EmailDeliveryAttempt]] = relationship(
         back_populates="delivery",
         cascade="all, delete-orphan",
         order_by="EmailDeliveryAttempt.attempt_number",
@@ -560,8 +559,8 @@ class EmailDeliveryAttempt(Base):
     provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     retry_after_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    organization: Mapped["Organization"] = relationship(overlaps="attempts,delivery")
-    delivery: Mapped["EmailDelivery"] = relationship(
+    organization: Mapped[Organization] = relationship(overlaps="attempts,delivery")
+    delivery: Mapped[EmailDelivery] = relationship(
         back_populates="attempts",
         overlaps="organization",
     )
@@ -667,8 +666,8 @@ class ResendWebhookEvent(Base):
     )
     processed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
-    organization: Mapped["Organization"] = relationship()
-    email_log: Mapped["EmailLog | None"] = relationship(back_populates="resend_webhook_events")
+    organization: Mapped[Organization] = relationship()
+    email_log: Mapped[EmailLog | None] = relationship(back_populates="resend_webhook_events")
 
 
 class EmailReconciliationCase(Base):
@@ -790,16 +789,16 @@ class EmailReconciliationCase(Base):
     )
     resolution_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
-    organization: Mapped["Organization"] = relationship(
+    organization: Mapped[Organization] = relationship(
         overlaps="email_delivery,resend_webhook_event"
     )
-    resend_webhook_event: Mapped["ResendWebhookEvent | None"] = relationship(
+    resend_webhook_event: Mapped[ResendWebhookEvent | None] = relationship(
         overlaps="email_delivery,organization"
     )
-    email_delivery: Mapped["EmailDelivery | None"] = relationship(
+    email_delivery: Mapped[EmailDelivery | None] = relationship(
         overlaps="organization,resend_webhook_event"
     )
-    resolved_by: Mapped["User | None"] = relationship()
+    resolved_by: Mapped[User | None] = relationship()
 
 
 class EmailLogAttachment(Base):
@@ -836,9 +835,9 @@ class EmailLogAttachment(Base):
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
-    organization: Mapped["Organization"] = relationship()
-    email_log: Mapped["EmailLog"] = relationship(back_populates="attachment_links")
-    attachment: Mapped["Attachment"] = relationship(back_populates="email_log_links")
+    organization: Mapped[Organization] = relationship()
+    email_log: Mapped[EmailLog] = relationship(back_populates="attachment_links")
+    attachment: Mapped[Attachment] = relationship(back_populates="email_log_links")
 
 
 # =============================================================================
@@ -884,4 +883,4 @@ class EmailSuppression(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped[Organization] = relationship()

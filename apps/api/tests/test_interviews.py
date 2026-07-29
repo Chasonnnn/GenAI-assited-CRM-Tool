@@ -2,18 +2,18 @@
 Tests for interview endpoints and background transcription.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
 
-from app.db.models import Attachment, Surrogate, InterviewAttachment, AISettings
+from app.db.models import AISettings, Attachment, InterviewAttachment, Surrogate
 from app.schemas.interview import InterviewCreate, InterviewNoteCreate
 from app.services import (
+    ai_settings_service,
     interview_note_service,
     interview_service,
-    ai_settings_service,
     transcription_service,
 )
 from app.services.ai_provider import ChatResponse
@@ -57,7 +57,7 @@ def _create_interview(db, org_id, surrogate_id, user_id, transcript_json=_DEFAUL
 
     data = InterviewCreate(
         interview_type="phone",
-        conducted_at=datetime.now(timezone.utc),
+        conducted_at=datetime.now(UTC),
         duration_minutes=30,
         transcript_json=transcript_json,
         status="completed",
@@ -135,7 +135,7 @@ async def test_request_transcription_enqueues_job(
         provider="gemini",
         model="gemini-3-flash-preview",
         current_version=1,
-        consent_accepted_at=datetime.now(timezone.utc),
+        consent_accepted_at=datetime.now(UTC),
         consent_accepted_by=test_user.id,
         api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
     )
@@ -229,7 +229,7 @@ async def test_interview_summary_anonymizes_transcript(
         model="gemini-3-flash-preview",
         current_version=1,
         anonymize_pii=True,
-        consent_accepted_at=datetime.now(timezone.utc),
+        consent_accepted_at=datetime.now(UTC),
         consent_accepted_by=test_user.id,
         api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
     )

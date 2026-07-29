@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -82,10 +82,10 @@ def _make_task(**overrides) -> Task:
 
 def test_google_task_helper_conversions():
     naive = datetime(2026, 1, 2, 3, 4, 5)
-    aware = datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+    aware = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
 
     assert google_tasks_sync_service._to_utc(None) is None
-    assert google_tasks_sync_service._to_utc(naive).tzinfo == timezone.utc
+    assert google_tasks_sync_service._to_utc(naive).tzinfo == UTC
     assert google_tasks_sync_service._to_utc(aware) == aware
     assert google_tasks_sync_service._parse_google_datetime("2026-01-02T03:04:05Z") is not None
     assert google_tasks_sync_service._parse_google_datetime("bad-date") is None
@@ -106,9 +106,7 @@ def test_google_task_helper_conversions():
 
 
 def test_google_task_payload_and_sync_predicates():
-    task = _make_task(
-        is_completed=True, completed_at=datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
-    )
+    task = _make_task(is_completed=True, completed_at=datetime(2026, 1, 2, 10, 0, tzinfo=UTC))
     payload = google_tasks_sync_service._build_google_task_payload(task)
     assert payload["status"] == "completed"
     assert "due" in payload
@@ -350,7 +348,7 @@ async def test_google_upsert_delete_and_access_paths(monkeypatch, db):
 
 def test_sync_platform_task_wrappers(monkeypatch, db):
     task = _make_task(owner_id=uuid4())
-    task.google_task_updated_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    task.google_task_updated_at = datetime(2026, 1, 1, tzinfo=UTC)
 
     monkeypatch.setattr(
         google_tasks_sync_service.oauth_service,
@@ -361,7 +359,7 @@ def test_sync_platform_task_wrappers(monkeypatch, db):
     def _run_async_success(coro, timeout=30):
         del timeout
         coro.close()
-        return ("new-remote", "default", datetime(2026, 1, 2, tzinfo=timezone.utc))
+        return ("new-remote", "default", datetime(2026, 1, 2, tzinfo=UTC))
 
     monkeypatch.setattr(google_tasks_sync_service, "run_async", _run_async_success)
     google_tasks_sync_service.sync_platform_task_to_google(db, task)
@@ -379,7 +377,7 @@ def test_sync_platform_task_wrappers(monkeypatch, db):
     google_tasks_sync_service.delete_platform_task_from_google(db, task)
 
     remote_newer = google_tasks_sync_service._is_google_task_newer(
-        task, datetime(2026, 1, 3, tzinfo=timezone.utc)
+        task, datetime(2026, 1, 3, tzinfo=UTC)
     )
     assert remote_newer is True
 
@@ -437,7 +435,7 @@ def test_calendar_watch_helper_functions(monkeypatch):
     assert exp is not None
     assert calendar_service._parse_google_watch_expiration("bad") is None
     assert calendar_service._watch_is_fresh(
-        datetime.now(timezone.utc) + timedelta(days=1), renew_before=timedelta(hours=1)
+        datetime.now(UTC) + timedelta(days=1), renew_before=timedelta(hours=1)
     )
     assert calendar_service._watch_is_fresh(None, renew_before=timedelta(hours=1)) is False
 
@@ -492,8 +490,8 @@ async def test_get_google_events_retries_timeout_then_success(monkeypatch):
     events = await calendar_service.get_google_events(
         access_token="token",
         calendar_id="primary",
-        time_min=datetime(2026, 2, 1, tzinfo=timezone.utc),
-        time_max=datetime(2026, 2, 2, tzinfo=timezone.utc),
+        time_min=datetime(2026, 2, 1, tzinfo=UTC),
+        time_max=datetime(2026, 2, 2, tzinfo=UTC),
     )
 
     assert calls["count"] == 2
@@ -603,8 +601,8 @@ async def test_get_google_events_returns_empty_after_retry_exhaustion(monkeypatc
     events = await calendar_service.get_google_events(
         access_token="token",
         calendar_id="person@example.com",
-        time_min=datetime(2026, 2, 1, tzinfo=timezone.utc),
-        time_max=datetime(2026, 2, 2, tzinfo=timezone.utc),
+        time_min=datetime(2026, 2, 1, tzinfo=UTC),
+        time_max=datetime(2026, 2, 2, tzinfo=UTC),
     )
 
     assert calls["count"] == 3
@@ -651,8 +649,8 @@ async def test_get_user_calendar_events_marks_retry_exhaustion_incomplete(monkey
     result = await calendar_service.get_user_calendar_events(
         db=SimpleNamespace(),
         user_id=uuid4(),
-        time_min=datetime(2026, 2, 1, tzinfo=timezone.utc),
-        time_max=datetime(2026, 2, 2, tzinfo=timezone.utc),
+        time_min=datetime(2026, 2, 1, tzinfo=UTC),
+        time_max=datetime(2026, 2, 2, tzinfo=UTC),
     )
 
     assert calls["count"] == 3
@@ -702,8 +700,8 @@ async def test_google_event_snapshot_marks_later_page_failure_incomplete(monkeyp
     snapshot = await calendar_service._fetch_google_events_snapshot(
         access_token="token",
         calendar_id="primary",
-        time_min=datetime(2026, 2, 1, tzinfo=timezone.utc),
-        time_max=datetime(2026, 2, 2, tzinfo=timezone.utc),
+        time_min=datetime(2026, 2, 1, tzinfo=UTC),
+        time_max=datetime(2026, 2, 2, tzinfo=UTC),
     )
 
     assert calls["count"] == 4
@@ -738,8 +736,8 @@ async def test_google_event_snapshot_marks_result_cap_incomplete(monkeypatch):
     snapshot = await calendar_service._fetch_google_events_snapshot(
         access_token="token",
         calendar_id="primary",
-        time_min=datetime(2026, 2, 1, tzinfo=timezone.utc),
-        time_max=datetime(2026, 2, 2, tzinfo=timezone.utc),
+        time_min=datetime(2026, 2, 1, tzinfo=UTC),
+        time_max=datetime(2026, 2, 2, tzinfo=UTC),
         max_total_results=1,
     )
 
@@ -789,7 +787,7 @@ async def test_calendar_watch_stateful_flows(monkeypatch, db):
         google_calendar_channel_id="old-channel",
         google_calendar_resource_id="old-resource",
         google_calendar_channel_token_encrypted="enc-token",
-        google_calendar_watch_expires_at=datetime.now(timezone.utc) + timedelta(hours=12),
+        google_calendar_watch_expires_at=datetime.now(UTC) + timedelta(hours=12),
         updated_at=None,
     )
     monkeypatch.setattr(
@@ -823,7 +821,7 @@ async def test_calendar_watch_stateful_flows(monkeypatch, db):
         return {
             "channel_id": "new",
             "resource_id": "res",
-            "expires_at": datetime.now(timezone.utc) + timedelta(days=1),
+            "expires_at": datetime.now(UTC) + timedelta(days=1),
         }
 
     monkeypatch.setattr(calendar_service, "_post_google_events_watch", _start_watch)
@@ -842,8 +840,8 @@ async def test_calendar_watch_stateful_flows(monkeypatch, db):
 
 @pytest.mark.asyncio
 async def test_calendar_event_crud_and_meet(monkeypatch):
-    start = datetime(2026, 1, 2, 9, 0, tzinfo=timezone.utc)
-    end = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
+    start = datetime(2026, 1, 2, 9, 0, tzinfo=UTC)
+    end = datetime(2026, 1, 2, 10, 0, tzinfo=UTC)
     state = {"stored_event": None}
 
     async def _handler(**kwargs):

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -27,15 +27,15 @@ FBC_CANDIDATE_KEYS = ("fbc", "meta_fbc", "click_id", "meta_click_id")
 
 
 def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _coerce_utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _resolve_meta_lead_timestamp(meta_lead: MetaLead) -> datetime | None:
@@ -165,7 +165,7 @@ def build_stage_event_payload(
         "event_name": event_name,
         "lifecycle_stage_name": event_name,
         "stage_in_sales_process": event_name,
-        "event_time": event_time.astimezone(timezone.utc).isoformat(),
+        "event_time": event_time.astimezone(UTC).isoformat(),
         "lead_id": lead_id,
         "facebook_lead_id": lead_id,
         "stage_key": stage_key,

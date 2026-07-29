@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from uuid import UUID
 import uuid
+from uuid import UUID
 
 import pytest
 from httpx import ASGITransport, AsyncClient

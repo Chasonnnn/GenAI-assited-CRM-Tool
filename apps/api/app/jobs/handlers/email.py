@@ -128,11 +128,11 @@ async def process_workflow_email(db, job) -> None:
         - workflow_scope: 'org' or 'personal'
         - workflow_owner_id: Owner user ID (for personal workflows)
     """
-    from app.db.models import EmailTemplate, EmailLog
+    from app.db.models import EmailLog, EmailTemplate
     from app.services import gmail_service
     from app.services.workflow_email_provider import (
-        resolve_workflow_email_provider,
         EmailProviderError,
+        resolve_workflow_email_provider,
     )
 
     template_id = job.payload.get("template_id")

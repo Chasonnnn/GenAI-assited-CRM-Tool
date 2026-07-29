@@ -1,14 +1,13 @@
 """Interview attachment service - link existing attachments to interviews."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import Attachment, SurrogateInterview, InterviewAttachment
+from app.db.models import Attachment, InterviewAttachment, SurrogateInterview
 from app.services import attachment_service
-
 
 # Audio/video MIME types that support transcription
 AUDIO_VIDEO_MIME_TYPES = {
@@ -181,7 +180,7 @@ def update_transcription_status(
     link.transcription_error = error[:500] if error else None
 
     if status == "completed":
-        link.transcription_completed_at = datetime.now(timezone.utc)
+        link.transcription_completed_at = datetime.now(UTC)
 
     db.flush()
     return link

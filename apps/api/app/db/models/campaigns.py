@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    TIMESTAMP,
     Boolean,
     CheckConstraint,
     ForeignKey,
     Index,
     Integer,
     String,
-    TIMESTAMP,
     Text,
     UniqueConstraint,
     text,
@@ -99,10 +98,10 @@ class Campaign(Base):
     )
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    email_template: Mapped["EmailTemplate"] = relationship()
-    created_by: Mapped["User | None"] = relationship()
-    runs: Mapped[list["CampaignRun"]] = relationship(
+    organization: Mapped[Organization] = relationship()
+    email_template: Mapped[EmailTemplate] = relationship()
+    created_by: Mapped[User | None] = relationship()
+    runs: Mapped[list[CampaignRun]] = relationship(
         back_populates="campaign",
         cascade="all, delete-orphan",
         order_by="CampaignRun.started_at.desc()",
@@ -165,9 +164,9 @@ class CampaignRun(Base):
     clicked_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    campaign: Mapped["Campaign"] = relationship(back_populates="runs")
-    recipients: Mapped[list["CampaignRecipient"]] = relationship(
+    organization: Mapped[Organization] = relationship()
+    campaign: Mapped[Campaign] = relationship(back_populates="runs")
+    recipients: Mapped[list[CampaignRecipient]] = relationship(
         back_populates="run", cascade="all, delete-orphan"
     )
 
@@ -246,9 +245,9 @@ class CampaignRecipient(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    run: Mapped["CampaignRun"] = relationship(back_populates="recipients")
-    email_log: Mapped["EmailLog | None"] = relationship(foreign_keys=[email_log_id])
-    tracking_events: Mapped[list["CampaignTrackingEvent"]] = relationship(
+    run: Mapped[CampaignRun] = relationship(back_populates="recipients")
+    email_log: Mapped[EmailLog | None] = relationship(foreign_keys=[email_log_id])
+    tracking_events: Mapped[list[CampaignTrackingEvent]] = relationship(
         back_populates="recipient", cascade="all, delete-orphan"
     )
 
@@ -289,7 +288,7 @@ class CampaignTrackingEvent(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    recipient: Mapped["CampaignRecipient"] = relationship(back_populates="tracking_events")
+    recipient: Mapped[CampaignRecipient] = relationship(back_populates="tracking_events")
 
 
 # =============================================================================

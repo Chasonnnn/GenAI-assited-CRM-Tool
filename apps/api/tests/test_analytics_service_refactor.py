@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 
@@ -22,8 +22,8 @@ def test_analytics_service_delegates_surrogate_summary(monkeypatch):
     result = analytics_service.get_cached_analytics_summary(
         db=object(),
         organization_id=uuid4(),
-        start=datetime.now(timezone.utc),
-        end=datetime.now(timezone.utc),
+        start=datetime.now(UTC),
+        end=datetime.now(UTC),
     )
 
     assert result is sentinel

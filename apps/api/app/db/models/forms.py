@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    TIMESTAMP,
     Boolean,
     ForeignKey,
     Index,
     Integer,
     String,
-    TIMESTAMP,
     Text,
     UniqueConstraint,
     text,
@@ -103,7 +102,7 @@ class Form(Base):
         nullable=False,
     )
 
-    organization: Mapped["Organization"] = relationship(foreign_keys=[organization_id])
+    organization: Mapped[Organization] = relationship(foreign_keys=[organization_id])
 
 
 class FormLogo(Base):
@@ -131,8 +130,8 @@ class FormLogo(Base):
         TIMESTAMP(), server_default=text("now()"), nullable=False
     )
 
-    organization: Mapped["Organization"] = relationship()
-    created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
+    organization: Mapped[Organization] = relationship()
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_user_id])
 
 
 class FormFieldMapping(Base):
@@ -282,8 +281,8 @@ class FormSubmission(Base):
         TIMESTAMP(), server_default=text("now()"), nullable=False
     )
 
-    form: Mapped["Form"] = relationship()
-    surrogate: Mapped["Surrogate | None"] = relationship()
+    form: Mapped[Form] = relationship()
+    surrogate: Mapped[Surrogate | None] = relationship()
 
 
 class FormSubmissionDraft(Base):
@@ -329,8 +328,8 @@ class FormSubmissionDraft(Base):
         nullable=False,
     )
 
-    form: Mapped["Form"] = relationship()
-    surrogate: Mapped["Surrogate"] = relationship()
+    form: Mapped[Form] = relationship()
+    surrogate: Mapped[Surrogate] = relationship()
 
 
 class FormSubmissionFile(Base):
@@ -373,4 +372,4 @@ class FormSubmissionFile(Base):
         TIMESTAMP(), server_default=text("now()"), nullable=False
     )
 
-    submission: Mapped["FormSubmission"] = relationship()
+    submission: Mapped[FormSubmission] = relationship()

@@ -4,15 +4,14 @@ Tests for Campaigns Module.
 Tests the campaign model creation and service logic.
 """
 
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
-from datetime import datetime, timezone, timedelta
 
 import pytest
 from sqlalchemy.orm import Query
 
 from app.core.encryption import hash_email
 from app.utils.normalization import normalize_email
-
 
 # =============================================================================
 # Test Fixtures
@@ -81,8 +80,9 @@ def _configure_resend_provider(db, org_id):
 
 def test_campaign_model_creation(db, test_org, test_user, test_template):
     """Test Campaign model can be created with all fields."""
+    from datetime import datetime
+
     from app.db.models import Campaign
-    from datetime import datetime, timezone
 
     campaign = Campaign(
         id=uuid4(),
@@ -92,7 +92,7 @@ def test_campaign_model_creation(db, test_org, test_user, test_template):
         email_template_id=test_template.id,
         recipient_type="intended_parent",
         filter_criteria={"state": "TX", "tags": ["vip"]},
-        scheduled_at=datetime.now(timezone.utc),
+        scheduled_at=datetime.now(UTC),
         status="scheduled",
         created_by_user_id=test_user.id,
     )
@@ -106,15 +106,16 @@ def test_campaign_model_creation(db, test_org, test_user, test_template):
 
 def test_campaign_run_model(db, test_org, test_campaign):
     """Test CampaignRun model creation."""
+    from datetime import datetime
+
     from app.db.models import CampaignRun
-    from datetime import datetime, timezone
 
     run = CampaignRun(
         id=uuid4(),
         organization_id=test_org.id,  # Required field
         campaign_id=test_campaign.id,
         status="running",
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
         total_count=100,
         sent_count=0,
         failed_count=0,
@@ -129,15 +130,16 @@ def test_campaign_run_model(db, test_org, test_campaign):
 
 def test_campaign_recipient_model(db, test_org, test_campaign):
     """Test CampaignRecipient model creation."""
-    from app.db.models import CampaignRun, CampaignRecipient
-    from datetime import datetime, timezone
+    from datetime import datetime
+
+    from app.db.models import CampaignRecipient, CampaignRun
 
     run = CampaignRun(
         id=uuid4(),
         organization_id=test_org.id,  # Required field
         campaign_id=test_campaign.id,
         status="running",
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
         total_count=1,
         sent_count=0,
         failed_count=0,
@@ -206,8 +208,8 @@ def test_campaign_service_get(db, test_org, test_campaign):
 
 def test_campaign_service_create(db, test_org, test_user, test_template):
     """Test campaign service create function."""
-    from app.services import campaign_service
     from app.schemas.campaign import CampaignCreate
+    from app.services import campaign_service
 
     create_data = CampaignCreate(
         name="New Service Campaign",
@@ -225,10 +227,10 @@ def test_campaign_service_create(db, test_org, test_user, test_template):
 
 def test_campaign_service_create_rejects_past_scheduled_at(db, test_org, test_user, test_template):
     """Campaign create should reject scheduled_at in the past."""
-    from app.services import campaign_service
     from app.schemas.campaign import CampaignCreate
+    from app.services import campaign_service
 
-    past_time = datetime.now(timezone.utc) - timedelta(minutes=5)
+    past_time = datetime.now(UTC) - timedelta(minutes=5)
     create_data = CampaignCreate(
         name="Past Scheduled Campaign",
         email_template_id=test_template.id,
@@ -243,10 +245,10 @@ def test_campaign_service_create_rejects_past_scheduled_at(db, test_org, test_us
 
 def test_campaign_service_update_rejects_past_scheduled_at(db, test_org, test_user, test_campaign):
     """Campaign update should reject scheduled_at in the past."""
-    from app.services import campaign_service
     from app.schemas.campaign import CampaignUpdate
+    from app.services import campaign_service
 
-    past_time = datetime.now(timezone.utc) - timedelta(minutes=5)
+    past_time = datetime.now(UTC) - timedelta(minutes=5)
     update_data = CampaignUpdate(scheduled_at=past_time)
 
     with pytest.raises(ValueError, match="scheduled_at must be in the future"):
@@ -393,8 +395,8 @@ def test_list_suppressions_skips_count_for_short_first_page(db, test_org, monkey
 
 def test_is_email_suppressed(db, test_org):
     """Test suppression checking function."""
-    from app.services import campaign_service
     from app.db.models import EmailSuppression
+    from app.services import campaign_service
 
     # Not suppressed yet
     assert campaign_service.is_email_suppressed(db, test_org.id, "test@example.com") is False
@@ -541,8 +543,8 @@ def test_concurrent_suppression_upserts_preserve_the_strongest_evidence(db_engin
 
 def test_is_email_suppressed_can_ignore_opt_out(db, test_org):
     """Suppression checks should support ignoring opt-outs when explicitly configured."""
-    from app.services import campaign_service
     from app.db.models import EmailSuppression
+    from app.services import campaign_service
 
     db.add(
         EmailSuppression(
@@ -581,9 +583,9 @@ def test_campaign_send_job_type_exists():
 
 def test_campaign_send_job_creation(db, test_org, test_user, test_campaign):
     """Enqueuing campaign send should create a job with correct type."""
-    from app.services import campaign_service
-    from app.db.models import Job
     from app.db.enums import JobType
+    from app.db.models import Job
+    from app.services import campaign_service
 
     _configure_resend_provider(db, test_org.id)
 
@@ -616,14 +618,15 @@ def test_campaign_send_job_creation(db, test_org, test_user, test_campaign):
 
 def test_campaign_send_job_scheduled_run_at(db, test_org, test_user, test_campaign):
     """Scheduled campaigns should create a job with run_at set to scheduled_at."""
-    from datetime import datetime, timezone, timedelta
-    from app.services import campaign_service
-    from app.db.models import Job
+    from datetime import datetime, timedelta
+
     from app.db.enums import JobType
+    from app.db.models import Job
+    from app.services import campaign_service
 
     _configure_resend_provider(db, test_org.id)
 
-    scheduled_at = datetime.now(timezone.utc) + timedelta(hours=2)
+    scheduled_at = datetime.now(UTC) + timedelta(hours=2)
     test_campaign.scheduled_at = scheduled_at
     db.flush()
 
@@ -678,7 +681,7 @@ def test_campaign_send_rejects_past_scheduled_at(db, test_org, test_user, test_c
 
     _configure_resend_provider(db, test_org.id)
 
-    past_time = datetime.now(timezone.utc) - timedelta(minutes=5)
+    past_time = datetime.now(UTC) - timedelta(minutes=5)
     test_campaign.scheduled_at = past_time
     db.commit()
 
@@ -707,10 +710,11 @@ def test_execute_campaign_run_function_exists():
 
 def test_execute_campaign_run_with_no_recipients(db, test_org, test_user, test_template):
     """Executing campaign with no matching recipients should complete without errors."""
-    from app.services import campaign_service
-    from app.schemas.campaign import CampaignCreate
-    from app.db.models import CampaignRun
     from uuid import uuid4
+
+    from app.db.models import CampaignRun
+    from app.schemas.campaign import CampaignCreate
+    from app.services import campaign_service
 
     # Create campaign with filter that matches nothing
     create_data = CampaignCreate(
@@ -839,7 +843,7 @@ def test_execute_campaign_run_skips_opt_out_by_default(
     db, test_org, test_user, test_template, default_stage
 ):
     """Opt-outs should be excluded from campaign sends by default."""
-    from app.db.models import Surrogate, Campaign, CampaignRun, CampaignRecipient, EmailSuppression
+    from app.db.models import Campaign, CampaignRecipient, CampaignRun, EmailSuppression, Surrogate
     from app.services import campaign_service
 
     email = normalize_email("optout-default@example.com")
@@ -913,16 +917,16 @@ def test_execute_campaign_run_can_include_opt_out_when_configured(
     db, test_org, test_user, test_template, default_stage
 ):
     """Campaigns can optionally include opt-outs (still excluding bounces/complaints)."""
+    from app.db.enums import EmailStatus
     from app.db.models import (
-        Surrogate,
         Campaign,
-        CampaignRun,
         CampaignRecipient,
-        EmailSuppression,
+        CampaignRun,
         EmailLog,
+        EmailSuppression,
+        Surrogate,
     )
     from app.services import campaign_service
-    from app.db.enums import EmailStatus
 
     _configure_resend_provider(db, test_org.id)
     email = normalize_email("optout-include@example.com")
@@ -1001,7 +1005,7 @@ def test_campaign_run_skips_existing_recipient(
     db, test_org, test_user, test_template, default_stage
 ):
     """Runs should be idempotent when a recipient already exists."""
-    from app.db.models import Surrogate, CampaignRun, CampaignRecipient
+    from app.db.models import CampaignRecipient, CampaignRun, Surrogate
     from app.schemas.campaign import CampaignCreate
     from app.services import campaign_service
 
@@ -1069,7 +1073,7 @@ def test_campaign_run_skips_existing_recipient_on_retry(
     db, test_org, test_user, test_template, default_stage, monkeypatch, status
 ):
     """Retry should not requeue pending/failed recipients without explicit retry action."""
-    from app.db.models import Surrogate, CampaignRun, CampaignRecipient
+    from app.db.models import CampaignRecipient, CampaignRun, Surrogate
     from app.schemas.campaign import CampaignCreate
     from app.services import campaign_service, email_service
 
@@ -1178,8 +1182,8 @@ async def test_retry_failed_campaign_run_enqueues_job(
     authed_client, db, test_org, test_user, test_template, default_stage
 ):
     """Explicit retry should enqueue a job for failed recipients only."""
-    from app.db.models import Surrogate, CampaignRun, CampaignRecipient, Job
-    from app.db.enums import JobType, JobStatus
+    from app.db.enums import JobStatus, JobType
+    from app.db.models import CampaignRecipient, CampaignRun, Job, Surrogate
     from app.schemas.campaign import CampaignCreate
     from app.services import campaign_service
 

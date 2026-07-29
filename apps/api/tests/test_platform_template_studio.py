@@ -1,17 +1,19 @@
 import uuid
+
 import pytest
 
-from app.core.security import create_session_token
-from app.core.csrf import generate_csrf_token, CSRF_COOKIE_NAME, CSRF_HEADER
+from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME
+from app.core.security import create_session_token
 from app.db.enums import Role
 from app.services import session_service
 
 
 async def _make_authed_client(db, user_id, org_id):
-    from httpx import AsyncClient, ASGITransport
-    from app.main import app
+    from httpx import ASGITransport, AsyncClient
+
     from app.core.deps import get_db
+    from app.main import app
 
     def override_get_db():
         yield db
@@ -45,7 +47,7 @@ async def _make_authed_client(db, user_id, org_id):
 
 @pytest.mark.asyncio
 async def test_platform_email_templates_publish_targets(authed_client, db, test_user, test_org):
-    from app.db.models import Organization, User, Membership
+    from app.db.models import Membership, Organization, User
 
     test_user.is_platform_admin = True
     db.commit()

@@ -6,8 +6,7 @@ import logging
 from uuid import UUID
 
 from app.db.enums import NotificationType
-from app.services import email_service
-from app.services import notification_service
+from app.services import email_service, notification_service
 
 logger = logging.getLogger(__name__)
 

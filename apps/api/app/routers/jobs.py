@@ -1,7 +1,6 @@
 """Jobs router - view background jobs (developer only)."""
 
 from typing import Annotated
-
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException

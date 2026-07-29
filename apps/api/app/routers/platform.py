@@ -9,8 +9,7 @@ import logging
 import mimetypes
 import os
 import uuid as uuid_lib
-from typing import Literal, Annotated
-
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import (
@@ -28,16 +27,41 @@ from PIL import Image
 from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy.orm import Session
 
-from app.core.deps import (
-    get_db,
-    require_platform_admin,
-    require_csrf_header,
-    PlatformUserSession,
-    COOKIE_NAME,
-)
-from app.core.csrf import set_csrf_cookie, CSRF_COOKIE_NAME, get_csrf_cookie
 from app.core.config import settings
+from app.core.csrf import CSRF_COOKIE_NAME, get_csrf_cookie, set_csrf_cookie
+from app.core.deps import (
+    COOKIE_NAME,
+    PlatformUserSession,
+    get_db,
+    require_csrf_header,
+    require_platform_admin,
+)
 from app.core.rate_limit import limiter
+from app.db.enums import Role
+from app.schemas.email import (
+    EmailTemplateTestSendResponse,
+    PlatformEmailTemplateTestSendRequest,
+    TemplateVariableRead,
+)
+from app.schemas.platform_templates import (
+    PlatformEmailTemplateCreate,
+    PlatformEmailTemplateDraft,
+    PlatformEmailTemplateListItem,
+    PlatformEmailTemplateRead,
+    PlatformEmailTemplateUpdate,
+    PlatformFormTemplateCreate,
+    PlatformFormTemplateDraft,
+    PlatformFormTemplateListItem,
+    PlatformFormTemplateRead,
+    PlatformFormTemplateUpdate,
+    PlatformWorkflowTemplateCreate,
+    PlatformWorkflowTemplateDraft,
+    PlatformWorkflowTemplateListItem,
+    PlatformWorkflowTemplateRead,
+    PlatformWorkflowTemplateUpdate,
+    TemplatePublishRequest,
+)
+from app.schemas.resend_readiness import ResendReadinessEnvelope
 from app.services import (
     duo_admin_service,
     platform_service,
@@ -46,31 +70,6 @@ from app.services import (
     storage_url_service,
 )
 from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
-from app.db.enums import Role
-from app.schemas.platform_templates import (
-    PlatformEmailTemplateCreate,
-    PlatformEmailTemplateUpdate,
-    PlatformEmailTemplateRead,
-    PlatformEmailTemplateListItem,
-    PlatformFormTemplateCreate,
-    PlatformFormTemplateUpdate,
-    PlatformFormTemplateRead,
-    PlatformFormTemplateListItem,
-    PlatformWorkflowTemplateCreate,
-    PlatformWorkflowTemplateUpdate,
-    PlatformWorkflowTemplateRead,
-    PlatformWorkflowTemplateListItem,
-    TemplatePublishRequest,
-    PlatformEmailTemplateDraft,
-    PlatformFormTemplateDraft,
-    PlatformWorkflowTemplateDraft,
-)
-from app.schemas.email import (
-    EmailTemplateTestSendResponse,
-    PlatformEmailTemplateTestSendRequest,
-    TemplateVariableRead,
-)
-from app.schemas.resend_readiness import ResendReadinessEnvelope
 
 router = APIRouter(prefix="/platform", tags=["platform"])
 logger = logging.getLogger(__name__)
@@ -1010,6 +1009,7 @@ def get_platform_logo_local(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> object:
     from fastapi.responses import FileResponse
+
     from app.services import platform_branding_service
 
     if "\\" in storage_key:

@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
@@ -10,10 +10,10 @@ from zoneinfo import ZoneInfo
 import pytest
 from httpx import AsyncClient
 
-from app.db.enums import AuditEventType
-from app.db.models import AuditLog
 from app.core.encryption import hash_email
 from app.core.security import create_oauth_state_payload, generate_oauth_nonce
+from app.db.enums import AuditEventType
+from app.db.models import AuditLog
 from app.utils.normalization import normalize_email
 
 
@@ -589,7 +589,7 @@ async def test_appointments_list_imports_manual_google_calendar_event(
     from app.db.models import Appointment
     from app.services import calendar_service
 
-    start = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=2)
+    start = datetime.now(UTC).replace(microsecond=0) + timedelta(days=2)
     end = start + timedelta(minutes=45)
 
     async def fake_get_user_calendar_events(
@@ -652,7 +652,7 @@ async def test_appointments_list_imports_google_event_from_non_primary_calendar(
     from app.db.models import Appointment
     from app.services import calendar_service
 
-    start = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=5)
+    start = datetime.now(UTC).replace(microsecond=0) + timedelta(days=5)
     end = start + timedelta(minutes=30)
     calendar_calls: list[str] = []
 
@@ -741,7 +741,7 @@ async def test_appointments_list_backfills_missing_google_event_for_confirmed_pl
     db.add(appt_type)
     db.flush()
 
-    scheduled_start = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=3)
+    scheduled_start = datetime.now(UTC).replace(microsecond=0) + timedelta(days=3)
     appointment = Appointment(
         organization_id=test_auth.org.id,
         user_id=test_auth.user.id,
@@ -833,9 +833,7 @@ async def test_staff_reschedule_slots_endpoint_returns_slots_for_owned_appointme
 
     client_tz = ZoneInfo(timezone_name)
     target_date = _next_weekday_local(datetime.now(client_tz).date(), 0)  # Next Monday
-    scheduled_start = datetime.combine(target_date, time(12, 0), tzinfo=client_tz).astimezone(
-        timezone.utc
-    )
+    scheduled_start = datetime.combine(target_date, time(12, 0), tzinfo=client_tz).astimezone(UTC)
     appointment = Appointment(
         organization_id=test_auth.org.id,
         user_id=test_auth.user.id,
@@ -912,9 +910,7 @@ async def test_staff_reschedule_endpoint_accepts_valid_available_slot(
 
     client_tz = ZoneInfo(timezone_name)
     target_date = _next_weekday_local(datetime.now(client_tz).date(), 0)  # Next Monday
-    scheduled_start = datetime.combine(target_date, time(12, 0), tzinfo=client_tz).astimezone(
-        timezone.utc
-    )
+    scheduled_start = datetime.combine(target_date, time(12, 0), tzinfo=client_tz).astimezone(UTC)
     appointment = Appointment(
         organization_id=test_auth.org.id,
         user_id=test_auth.user.id,
@@ -948,9 +944,7 @@ async def test_staff_reschedule_endpoint_accepts_valid_available_slot(
         lambda db, appt, old_start, base_url: None,
     )
 
-    requested_start = datetime.combine(target_date, time(10, 0), tzinfo=client_tz).astimezone(
-        timezone.utc
-    )
+    requested_start = datetime.combine(target_date, time(10, 0), tzinfo=client_tz).astimezone(UTC)
     response = await authed_client.post(
         f"/appointments/{appointment.id}/reschedule",
         json={"scheduled_start": requested_start.isoformat()},
@@ -975,7 +969,7 @@ async def test_google_calendar_events_endpoint_fetches_across_calendars(
 ):
     from app.services import calendar_service
 
-    start = datetime(2026, 2, 19, 18, 30, tzinfo=timezone.utc)
+    start = datetime(2026, 2, 19, 18, 30, tzinfo=UTC)
     end = start + timedelta(minutes=30)
     called: dict[str, object] = {}
 
@@ -1062,8 +1056,8 @@ async def test_get_google_events_encodes_calendar_id_in_request(monkeypatch):
     await calendar_service.get_google_events(
         access_token="token",
         calendar_id="en.usa#holiday@group.v.calendar.google.com",
-        time_min=datetime(2026, 2, 1, tzinfo=timezone.utc),
-        time_max=datetime(2026, 2, 2, tzinfo=timezone.utc),
+        time_min=datetime(2026, 2, 1, tzinfo=UTC),
+        time_max=datetime(2026, 2, 2, tzinfo=UTC),
     )
 
     assert requested_urls
@@ -1110,8 +1104,8 @@ async def test_get_google_events_defaults_blank_summary_to_no_title(monkeypatch)
     events = await calendar_service.get_google_events(
         access_token="token",
         calendar_id="primary",
-        time_min=datetime(2026, 2, 1, tzinfo=timezone.utc),
-        time_max=datetime(2026, 2, 2, tzinfo=timezone.utc),
+        time_min=datetime(2026, 2, 1, tzinfo=UTC),
+        time_max=datetime(2026, 2, 2, tzinfo=UTC),
     )
 
     assert len(events) == 1
@@ -1129,7 +1123,7 @@ async def test_appointments_list_cancels_removed_imported_google_event(
     from app.db.models import Appointment
     from app.services import calendar_service
 
-    start = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=3)
+    start = datetime.now(UTC).replace(microsecond=0) + timedelta(days=3)
     appt = Appointment(
         organization_id=test_auth.org.id,
         user_id=test_auth.user.id,
@@ -1187,7 +1181,6 @@ async def test_appointments_list_cancels_removed_app_created_google_event(
 ):
     from app.db.enums import AppointmentStatus, MeetingMode
     from app.db.models import Appointment, AppointmentType
-
     from app.services import calendar_service
 
     appt_type = AppointmentType(
@@ -1204,7 +1197,7 @@ async def test_appointments_list_cancels_removed_app_created_google_event(
     db.add(appt_type)
     db.flush()
 
-    start = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=4)
+    start = datetime.now(UTC).replace(microsecond=0) + timedelta(days=4)
     appt = Appointment(
         organization_id=test_auth.org.id,
         user_id=test_auth.user.id,

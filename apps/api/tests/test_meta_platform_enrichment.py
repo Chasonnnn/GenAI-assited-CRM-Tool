@@ -1,11 +1,12 @@
+from datetime import UTC, date, datetime
+
 import pytest
-from datetime import date, datetime, timezone
 
 
 @pytest.mark.asyncio
 async def test_sync_ad_platform_breakdown_backfills_leads(db, test_auth, monkeypatch):
-    from app.db.models import MetaAdAccount, MetaLead, MetaAdPlatformDaily
-    from app.services import meta_sync_service, meta_token_service, meta_api
+    from app.db.models import MetaAdAccount, MetaAdPlatformDaily, MetaLead
+    from app.services import meta_api, meta_sync_service, meta_token_service
 
     # Ensure new table exists in test database
     MetaAdPlatformDaily.__table__.create(db.get_bind(), checkfirst=True)
@@ -25,7 +26,7 @@ async def test_sync_ad_platform_breakdown_backfills_leads(db, test_auth, monkeyp
         meta_lead_id="lead_1",
         field_data_raw={"meta_ad_id": "ad_123"},
         field_data={"meta_ad_id": "ad_123"},
-        meta_created_time=datetime(2026, 1, 10, 12, 0, tzinfo=timezone.utc),
+        meta_created_time=datetime(2026, 1, 10, 12, 0, tzinfo=UTC),
     )
     db.add(lead)
     db.commit()

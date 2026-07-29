@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 import re
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 from uuid import UUID
 
@@ -89,7 +89,7 @@ class ReadinessSnapshotView:
 def _as_utc(value: datetime, *, field_name: str) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"{field_name} must be timezone-aware")
-    return value.astimezone(timezone.utc)
+    return value.astimezone(UTC)
 
 
 def _validate_fingerprint(value: str) -> None:
@@ -331,7 +331,7 @@ def get_organization_snapshot(
     return _project_snapshot(
         snapshot,
         current_config_fingerprint=current_config_fingerprint,
-        now=now or datetime.now(timezone.utc),
+        now=now or datetime.now(UTC),
         fresh_for=fresh_for,
     )
 
@@ -356,6 +356,6 @@ def get_platform_snapshot(
     return _project_snapshot(
         snapshot,
         current_config_fingerprint=current_config_fingerprint,
-        now=now or datetime.now(timezone.utc),
+        now=now or datetime.now(UTC),
         fresh_for=fresh_for,
     )

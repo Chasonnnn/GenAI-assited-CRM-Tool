@@ -1,8 +1,8 @@
-from datetime import datetime, timedelta, timezone
-from uuid import uuid4
 import csv
 import json
 import os
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 
@@ -10,17 +10,17 @@ from app.core.config import settings
 from app.core.encryption import hash_email
 from app.db.enums import AuditEventType, TaskType
 from app.db.models import (
+    AIActionApproval,
+    AIConversation,
+    AIEntitySummary,
+    AIMessage,
+    AIUsageLog,
     AuditLog,
     Task,
-    AIConversation,
-    AIMessage,
-    AIActionApproval,
-    AIUsageLog,
-    AIEntitySummary,
 )
 from app.services import compliance_service
-from app.utils.pagination import PaginationParams
 from app.utils.normalization import normalize_email
+from app.utils.pagination import PaginationParams
 
 
 def _pending_audit_logs(db) -> list[AuditLog]:
@@ -38,7 +38,7 @@ def _create_audit_log(db, org_id, user_id, **overrides):
         ip_address=overrides.get("ip_address"),
         prev_hash="0" * 64,
         entry_hash="1" * 64,
-        created_at=overrides.get("created_at") or datetime.now(timezone.utc),
+        created_at=overrides.get("created_at") or datetime.now(UTC),
     )
     db.add(log)
     db.commit()
@@ -74,11 +74,11 @@ def test_export_job_redacts_phi(db, test_org, test_user, export_settings):
             "note": "Call me at 415-555-1234",
         },
         ip_address="10.20.30.40",
-        created_at=datetime.now(timezone.utc) - timedelta(seconds=5),  # Earlier to ensure first
+        created_at=datetime.now(UTC) - timedelta(seconds=5),  # Earlier to ensure first
     )
 
-    start_date = datetime.now(timezone.utc) - timedelta(days=1)
-    end_date = datetime.now(timezone.utc) + timedelta(days=1)
+    start_date = datetime.now(UTC) - timedelta(days=1)
+    end_date = datetime.now(UTC) + timedelta(days=1)
 
     job = compliance_service.create_export_job(
         db=db,
@@ -117,11 +117,11 @@ def test_export_job_full_mode_keeps_values(db, test_org, test_user, export_setti
         test_user.id,
         target_type="surrogate",
         details={"email": "full@example.com"},
-        created_at=datetime.now(timezone.utc) - timedelta(seconds=5),  # Earlier to ensure first
+        created_at=datetime.now(UTC) - timedelta(seconds=5),  # Earlier to ensure first
     )
 
-    start_date = datetime.now(timezone.utc) - timedelta(days=1)
-    end_date = datetime.now(timezone.utc) + timedelta(days=1)
+    start_date = datetime.now(UTC) - timedelta(days=1)
+    end_date = datetime.now(UTC) + timedelta(days=1)
 
     job = compliance_service.create_export_job(
         db=db,
@@ -165,7 +165,7 @@ def test_legal_hold_blocks_purge_preview(db, test_org, test_user):
         title="Old Task",
         task_type=TaskType.OTHER.value,
         is_completed=True,
-        completed_at=datetime.now(timezone.utc) - timedelta(days=10),
+        completed_at=datetime.now(UTC) - timedelta(days=10),
     )
     db.add(old_task)
     db.commit()
@@ -220,7 +220,7 @@ def test_resolve_local_export_path_rejects_traversal(export_settings):
 
 
 def test_retention_preview_includes_ai_tables(db, test_org, test_user):
-    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    cutoff = datetime.now(UTC) - timedelta(days=30)
 
     conversation = AIConversation(
         organization_id=test_org.id,
@@ -305,8 +305,9 @@ def test_retention_preview_includes_ai_tables(db, test_org, test_user):
 
 def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
     """Legal hold on specific surrogate blocks purge for that surrogate only."""
-    from app.db.models import Surrogate, Pipeline, PipelineStage
     import uuid
+
+    from app.db.models import Pipeline, PipelineStage, Surrogate
 
     # Create retention policy for archived surrogates
     compliance_service.upsert_retention_policy(
@@ -356,7 +357,7 @@ def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
         created_by_user_id=test_user.id,
         owner_type="user",
         owner_id=test_user.id,
-        archived_at=datetime.now(timezone.utc) - timedelta(days=30),
+        archived_at=datetime.now(UTC) - timedelta(days=30),
     )
     surrogate2_email = normalize_email("surrogate2@test.com")
     surrogate2 = Surrogate(
@@ -371,7 +372,7 @@ def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
         created_by_user_id=test_user.id,
         owner_type="user",
         owner_id=test_user.id,
-        archived_at=datetime.now(timezone.utc) - timedelta(days=30),
+        archived_at=datetime.now(UTC) - timedelta(days=30),
     )
     db.add_all([surrogate1, surrogate2])
     db.commit()
@@ -435,8 +436,8 @@ def test_list_legal_holds_paginates(db, test_org, test_user):
 def test_rate_limit_exceeded(db, test_org, test_user, export_settings):
     """Export rate limit returns error when exceeded."""
     settings.EXPORT_RATE_LIMIT_PER_HOUR = 1
-    start_date = datetime.now(timezone.utc) - timedelta(days=1)
-    end_date = datetime.now(timezone.utc) + timedelta(days=1)
+    start_date = datetime.now(UTC) - timedelta(days=1)
+    end_date = datetime.now(UTC) + timedelta(days=1)
 
     # First export should succeed
     job1 = compliance_service.create_export_job(
@@ -489,8 +490,8 @@ def test_create_export_job_uses_direct_count_queries(
         org_id=test_org.id,
         user_id=test_user.id,
         export_type="audit",
-        start_date=datetime.now(timezone.utc) - timedelta(days=1),
-        end_date=datetime.now(timezone.utc) + timedelta(days=1),
+        start_date=datetime.now(UTC) - timedelta(days=1),
+        end_date=datetime.now(UTC) + timedelta(days=1),
         file_format="csv",
         redact_mode="redacted",
         acknowledgment=None,
@@ -498,8 +499,8 @@ def test_create_export_job_uses_direct_count_queries(
 
 
 def test_create_export_job_commits_audit_log(db, test_org, test_user, export_settings):
-    start_date = datetime.now(timezone.utc) - timedelta(days=1)
-    end_date = datetime.now(timezone.utc) + timedelta(days=1)
+    start_date = datetime.now(UTC) - timedelta(days=1)
+    end_date = datetime.now(UTC) + timedelta(days=1)
 
     compliance_service.create_export_job(
         db=db,

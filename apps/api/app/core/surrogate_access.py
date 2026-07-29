@@ -1,6 +1,7 @@
 """Surrogate access control - centralized permission checks for surrogate operations."""
 
 from uuid import UUID
+
 from fastapi import HTTPException, status
 from sqlalchemy import and_, false, func, literal, select, true
 from sqlalchemy.orm import Session

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from email.utils import parseaddr
 import hashlib
 import json
-from typing import Callable
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from email.utils import parseaddr
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -248,7 +248,7 @@ def _provider_failure_probe(
     started_at: datetime,
     result: resend_control_plane.ResendControlPlaneResult,
 ) -> resend_readiness_snapshot_service.ReadinessProbeResult:
-    checked_at = datetime.now(timezone.utc)
+    checked_at = datetime.now(UTC)
     if result.status is resend_control_plane.ResendControlPlaneStatus.LIMITED:
         probe_status = "limited"
         overall_status = "limited"
@@ -294,7 +294,7 @@ def _local_configuration_probe(
     configuration: _RouteConfiguration,
     configured: bool,
 ) -> resend_readiness_snapshot_service.ReadinessProbeResult:
-    checked_at = datetime.now(timezone.utc)
+    checked_at = datetime.now(UTC)
     status = "unknown" if configured else "not_configured"
     tracking_status = status if configuration.tracking_opted_in else "not_configured"
     return resend_readiness_snapshot_service.ReadinessProbeResult(
@@ -322,7 +322,7 @@ async def _probe_configuration(
         resend_control_plane.ResendControlPlaneClient
     ),
 ) -> tuple[resend_readiness_snapshot_service.ReadinessProbeResult, int | None]:
-    started_at = datetime.now(timezone.utc)
+    started_at = datetime.now(UTC)
     client = control_plane_client_factory(
         db=db,
         api_key=configuration.api_key,
@@ -446,7 +446,7 @@ async def _probe_configuration(
         webhook_status = "not_configured"
         delivery_tracking_status = "not_configured"
         engagement_tracking_status = "not_configured"
-    checked_at = datetime.now(timezone.utc)
+    checked_at = datetime.now(UTC)
     probe = resend_readiness_snapshot_service.ReadinessProbeResult(
         config_fingerprint=configuration.fingerprint,
         probe_started_at=started_at,

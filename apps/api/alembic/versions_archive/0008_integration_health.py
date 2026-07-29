@@ -11,10 +11,10 @@ Tables:
 - request_metrics_rollup: Aggregated API metrics
 """
 
-from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "0008_integration_health"

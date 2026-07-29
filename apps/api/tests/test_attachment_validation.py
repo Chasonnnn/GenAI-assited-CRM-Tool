@@ -1,7 +1,7 @@
-from io import BytesIO
 import os
-from unittest.mock import Mock
 import uuid
+from io import BytesIO
+from unittest.mock import Mock
 
 import pytest
 from botocore.exceptions import ClientError

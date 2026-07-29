@@ -5,9 +5,9 @@ Public endpoints for recording email opens and link clicks.
 These endpoints must be unauthenticated since they're called from email clients.
 """
 
+import logging
 from typing import Annotated
 
-import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
@@ -16,7 +16,6 @@ from app.core.client_ip import get_client_ip
 from app.core.deps import get_db
 from app.core.rate_limit import limiter
 from app.services import tracking_service
-
 
 logger = logging.getLogger(__name__)
 

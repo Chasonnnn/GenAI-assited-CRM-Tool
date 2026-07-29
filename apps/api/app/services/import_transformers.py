@@ -14,14 +14,14 @@ Features:
 """
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from typing import Any, Callable, TypeAlias
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from typing import Any, TypeAlias
 
 from app.utils.height import canonicalize_height_ft
 from app.utils.normalization import normalize_phone, normalize_state
-
 
 # =============================================================================
 # Types

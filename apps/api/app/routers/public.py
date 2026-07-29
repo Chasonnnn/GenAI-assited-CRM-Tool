@@ -13,7 +13,6 @@ from app.core.deps import get_db
 from app.core.rate_limit import limiter
 from app.services import org_service
 
-
 router = APIRouter(prefix="/public", tags=["public"])
 
 

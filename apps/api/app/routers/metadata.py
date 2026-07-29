@@ -5,13 +5,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.core.pipeline_stage_colors import resolve_stage_color
-from app.core.match_status_definitions import MATCH_STATUS_DEFINITIONS
-from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 from app.core.deps import get_current_session, get_db
-from app.db.enums import SurrogateSource, TaskType, Role
-from app.services import pipeline_service
+from app.core.match_status_definitions import MATCH_STATUS_DEFINITIONS
+from app.core.pipeline_stage_colors import resolve_stage_color
+from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
+from app.db.enums import Role, SurrogateSource, TaskType
 from app.schemas.auth import UserSession
+from app.services import pipeline_service
 
 router = APIRouter(prefix="/metadata", tags=["metadata"])
 

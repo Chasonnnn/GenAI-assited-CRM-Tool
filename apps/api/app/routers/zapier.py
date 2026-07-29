@@ -7,7 +7,6 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -17,8 +16,8 @@ from app.schemas.auth import UserSession
 from app.services import (
     meta_form_mapping_service,
     zapier_monitor_service,
-    zapier_settings_service,
     zapier_outbound_service,
+    zapier_settings_service,
 )
 from app.services.webhooks import zapier as zapier_webhook_service
 
@@ -45,7 +44,7 @@ class ZapierSettingsResponse(BaseModel):
     outbound_enabled: bool
     outbound_secret_configured: bool
     send_hashed_pii: bool
-    event_mapping: list["ZapierEventMappingItem"]
+    event_mapping: list[ZapierEventMappingItem]
 
 
 class RotateSecretResponse(BaseModel):

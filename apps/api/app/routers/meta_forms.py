@@ -1,29 +1,28 @@
 """Meta lead form mapping endpoints."""
 
 from __future__ import annotations
-from typing import Annotated
 
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
 from app.core.policies import POLICIES
 from app.db.enums import JobType
 from app.schemas.auth import UserSession
+from app.schemas.import_template import ColumnMappingItem, ColumnSuggestionResponse
 from app.schemas.meta_forms import (
     MetaFormMappingPreviewResponse,
-    MetaFormReconvertResponse,
     MetaFormMappingUpdateRequest,
     MetaFormMappingUpdateResponse,
+    MetaFormReconvertResponse,
     MetaFormSummary,
+    MetaFormSyncRequest,
     MetaFormUnconvertedLeadItem,
     MetaFormUnconvertedLeadListResponse,
-    MetaFormSyncRequest,
 )
-from app.schemas.import_template import ColumnSuggestionResponse, ColumnMappingItem
 from app.services import (
     job_service,
     meta_form_mapping_service,

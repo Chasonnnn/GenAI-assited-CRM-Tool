@@ -1,9 +1,9 @@
 """Enum definitions for application constants."""
 
 from app.db.enums.appointments import (
+    DEFAULT_APPOINTMENT_STATUS,
     AppointmentEmailType,
     AppointmentStatus,
-    DEFAULT_APPOINTMENT_STATUS,
     MeetingMode,
 )
 from app.db.enums.audit import AuditEventType
@@ -22,18 +22,18 @@ from app.db.enums.email import (
     EmailDeliveryStatus,
     EmailProvider,
     EmailProviderScope,
-    EmailSuppressionPolicy,
     EmailStatus,
+    EmailSuppressionPolicy,
     SuppressionReason,
 )
 from app.db.enums.entities import EntityType
 from app.db.enums.forms import (
     FieldSensitivity,
+    FormLinkMode,
     FormPurpose,
     FormStatus,
-    FormSubmissionStatus,
-    FormLinkMode,
     FormSubmissionMatchStatus,
+    FormSubmissionStatus,
     IntakeLeadStatus,
     TrackingMode,
 )

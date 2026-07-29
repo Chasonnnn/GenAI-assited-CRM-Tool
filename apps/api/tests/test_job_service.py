@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta, timezone
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import update
@@ -35,14 +35,14 @@ def test_claim_pending_jobs_marks_running(db_engine):
             organization_id=org.id,
             job_type=claim_test_job_type,
             payload={"message": "job-1"},
-            run_at=datetime.now(timezone.utc),
+            run_at=datetime.now(UTC),
             status=JobStatus.PENDING.value,
         )
         job_2 = Job(
             organization_id=org.id,
             job_type=claim_test_job_type,
             payload={"message": "job-2"},
-            run_at=datetime.now(timezone.utc),
+            run_at=datetime.now(UTC),
             status=JobStatus.PENDING.value,
         )
         session.add_all([job_1, job_2])
@@ -60,7 +60,7 @@ def test_claim_pending_jobs_marks_running(db_engine):
         assert claimed_job.attempts == 1
         assert claimed_job.claim_token is not None
         assert claimed_job.claimed_at is not None
-        assert claimed_job.claimed_at <= datetime.now(timezone.utc)
+        assert claimed_job.claimed_at <= datetime.now(UTC)
 
         pending = (
             verification_session.query(Job)
@@ -121,7 +121,7 @@ def test_claim_pending_jobs_skip_locked(db_engine):
             organization_id=org.id,
             job_type=lock_test_job_type,
             payload={"message": "locked-job"},
-            run_at=datetime.now(timezone.utc),
+            run_at=datetime.now(UTC),
             status=JobStatus.PENDING.value,
         )
         session1.add(job)
@@ -158,14 +158,14 @@ def test_claim_pending_jobs_filters_by_type(db, test_org):
         org_id=test_org.id,
         job_type=JobType.NOTIFICATION,
         payload={"message": "job-1"},
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
     )
     job_service.schedule_job(
         db=db,
         org_id=test_org.id,
         job_type=JobType.CAMPAIGN_SEND,
         payload={"message": "job-2"},
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
     )
 
     claimed = job_service.claim_pending_jobs(db, limit=10, job_types=[JobType.NOTIFICATION])
@@ -179,7 +179,7 @@ def test_claim_job_for_dispatch_writes_claim_identity(db, test_org):
         org_id=test_org.id,
         job_type=JobType.ATTACHMENT_SCAN,
         payload={"attachment_id": str(uuid.uuid4())},
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
     )
 
     claimed = job_service.claim_job_for_dispatch(db, job.id)
@@ -197,7 +197,7 @@ def test_mark_job_completed_clears_current_claim_identity(db, test_org):
         organization_id=test_org.id,
         job_type=claim_test_job_type,
         payload={},
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
         status=JobStatus.PENDING.value,
     )
     db.add(job)
@@ -221,7 +221,7 @@ def test_mark_job_failed_clears_current_claim_before_retry(db, test_org):
         organization_id=test_org.id,
         job_type=claim_test_job_type,
         payload={},
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
         status=JobStatus.PENDING.value,
         max_attempts=3,
     )
@@ -247,7 +247,7 @@ def test_stale_claim_token_cannot_complete_a_newer_claim(db, test_org):
         organization_id=test_org.id,
         job_type=claim_test_job_type,
         payload={},
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
         status=JobStatus.PENDING.value,
     )
     db.add(job)
@@ -265,7 +265,7 @@ def test_stale_claim_token_cannot_complete_a_newer_claim(db, test_org):
         .where(Job.id == claimed.id)
         .values(
             claim_token=newer_token,
-            claimed_at=datetime.now(timezone.utc),
+            claimed_at=datetime.now(UTC),
         )
         .execution_options(synchronize_session=False)
     )
@@ -288,8 +288,8 @@ def test_stale_claim_token_cannot_complete_a_newer_claim(db, test_org):
 def test_claim_heartbeat_extends_only_current_token(db, test_org):
     current_token = uuid.uuid4()
     stale_token = uuid.uuid4()
-    original_claimed_at = datetime.now(timezone.utc) - timedelta(minutes=5)
-    heartbeat_at = datetime.now(timezone.utc)
+    original_claimed_at = datetime.now(UTC) - timedelta(minutes=5)
+    heartbeat_at = datetime.now(UTC)
     job = Job(
         organization_id=test_org.id,
         job_type=JobType.NOTIFICATION.value,
@@ -333,7 +333,7 @@ def test_claim_heartbeat_extends_only_current_token(db, test_org):
 
 
 def test_stale_claim_reaper_requeues_only_explicitly_retry_safe_types(db, test_org):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stale_at = now - timedelta(minutes=10)
     retry_safe = Job(
         organization_id=test_org.id,
@@ -394,7 +394,7 @@ def test_stale_claim_reaper_requeues_only_explicitly_retry_safe_types(db, test_o
 
 
 def test_stale_claim_reaper_cannot_touch_fresh_replaced_or_specialized_claims(db, test_org):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stale_at = now - timedelta(minutes=10)
     fresh_token = uuid.uuid4()
     replaced_token = uuid.uuid4()
@@ -480,7 +480,7 @@ def test_stale_claim_reaper_cannot_touch_fresh_replaced_or_specialized_claims(db
 def test_stale_recovery_does_not_clear_a_newer_claim(db, test_org):
     old_token = uuid.uuid4()
     newer_token = uuid.uuid4()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     job = Job(
         organization_id=test_org.id,
         job_type=JobType.ATTACHMENT_SCAN.value,
@@ -533,7 +533,7 @@ def test_operator_quarantined_job_cannot_be_replayed(db, test_org):
                 "reason_code": "workflow_email_outcome_unknown",
             },
         },
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
         status=JobStatus.FAILED.value,
         attempts=1,
     )
@@ -564,7 +564,7 @@ def test_stale_claim_quarantine_cannot_be_replayed(db, test_org):
                 "reason_code": "stale_claim_outcome_unknown",
             },
         },
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
         status=JobStatus.FAILED.value,
         attempts=1,
     )

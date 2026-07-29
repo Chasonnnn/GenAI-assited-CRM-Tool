@@ -1,15 +1,15 @@
 """CLI tools for Surrogacy Force administration."""
 
-from collections import Counter
-from datetime import datetime, timezone
 import json
+from collections import Counter
+from datetime import UTC, datetime
 from uuid import UUID
 
 import click
 from sqlalchemy import func
 
 from app.db.enums import JobType, Role
-from app.db.models import Organization, OrgInvite, User, Membership
+from app.db.models import Membership, Organization, OrgInvite, User
 from app.db.session import SessionLocal
 from app.services import (
     job_service,
@@ -289,9 +289,10 @@ def update_meta_page_token(
             --page-name "Acme Agency" \\
             --expires-days 60
     """
-    from datetime import datetime, timedelta, timezone
-    from app.db.models import MetaPageMapping
+    from datetime import datetime, timedelta
+
     from app.core.encryption import encrypt_token, is_encryption_configured
+    from app.db.models import MetaPageMapping
 
     if not is_encryption_configured():
         click.echo("[ERROR] META_ENCRYPTION_KEY not configured in .env")
@@ -310,7 +311,7 @@ def update_meta_page_token(
 
         # Encrypt token
         encrypted = encrypt_token(access_token)
-        expires_at = datetime.now(timezone.utc) + timedelta(days=expires_days)
+        expires_at = datetime.now(UTC) + timedelta(days=expires_days)
 
         # Check for existing mapping
         existing = db.query(MetaPageMapping).filter(MetaPageMapping.page_id == page_id).first()
@@ -398,8 +399,8 @@ def backfill_permissions(dry_run: bool):
         python -m app.cli backfill-permissions
         python -m app.cli backfill-permissions --dry-run
     """
-    from app.services import permission_service
     from app.core.permissions import PERMISSION_REGISTRY, ROLE_DEFAULTS
+    from app.services import permission_service
 
     db = SessionLocal()
     try:
@@ -581,7 +582,7 @@ def repair_matched_without_match(org_slug: str | None, apply: bool):
             click.echo("[OK] Dry run complete (no records changed)")
             return
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         repaired_surrogates = 0
         repaired_intended_parents = 0
         skipped_surrogates = 0
@@ -768,7 +769,7 @@ def reconcile_legacy_job_claims_cli(
     evaluated_at_value = (
         _parse_aware_iso_datetime(evaluated_at, option_name="--evaluated-at")
         if evaluated_at is not None
-        else datetime.now(timezone.utc)
+        else datetime.now(UTC)
     )
 
     db = SessionLocal()

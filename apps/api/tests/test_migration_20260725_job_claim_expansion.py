@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from pathlib import Path
 import uuid
+from datetime import UTC, datetime
+from pathlib import Path
 
-from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
+from alembic import command
 
 API_ROOT = Path(__file__).resolve().parents[1]
 PRE_EXPANSION_REVISION = "20260701_1025"
@@ -19,7 +19,7 @@ MIGRATION_PATH = API_ROOT / "alembic" / "versions" / "20260725_1800_expand_job_c
 
 ORG_ID = uuid.UUID("71000000-0000-4000-8000-000000000001")
 RUNNING_JOB_ID = uuid.UUID("72000000-0000-4000-8000-000000000001")
-ORIGINAL_RUN_AT = datetime(2026, 5, 20, 5, 4, tzinfo=timezone.utc)
+ORIGINAL_RUN_AT = datetime(2026, 5, 20, 5, 4, tzinfo=UTC)
 
 
 def _alembic_config(connection) -> Config:

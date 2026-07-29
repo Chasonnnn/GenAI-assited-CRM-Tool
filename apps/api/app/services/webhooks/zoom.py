@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -27,7 +27,7 @@ def _is_timestamp_within_window(timestamp: str) -> bool:
     except (TypeError, ValueError):
         return False
 
-    now = int(datetime.now(timezone.utc).timestamp())
+    now = int(datetime.now(UTC).timestamp())
     return abs(now - timestamp_int) <= MAX_TIMESTAMP_SKEW_SECONDS
 
 
@@ -141,7 +141,7 @@ class ZoomWebhookHandler:
         # Extract event info
         event_type = data.get("event", "")
         payload = data.get("payload", {})
-        event_id = data.get("event_ts", str(datetime.now(timezone.utc).timestamp()))
+        event_id = data.get("event_ts", str(datetime.now(UTC).timestamp()))
 
         # Meeting object from payload
         meeting_obj = payload.get("object", {})
@@ -180,7 +180,7 @@ class ZoomWebhookHandler:
             return {"status": "ok", "message": "No matching appointment"}
 
         # Handle event types
-        event_timestamp = datetime.now(timezone.utc)
+        event_timestamp = datetime.now(UTC)
         if event_type == "meeting.started":
             appointment.meeting_started_at = event_timestamp
             logger.info("Zoom meeting started: %s, appointment %s", zoom_meeting_id, appointment.id)

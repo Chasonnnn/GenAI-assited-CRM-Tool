@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import and_, case, false, func
@@ -35,7 +35,7 @@ def get_pdf_export_data(
     org = org_service.get_org_by_id(db, organization_id)
     org_name = org.name if org else "Organization"
 
-    period_start = (end_dt or datetime.now(timezone.utc)) - timedelta(days=7)
+    period_start = (end_dt or datetime.now(UTC)) - timedelta(days=7)
 
     analytics_config = _shared.get_analytics_stage_configuration(db, organization_id)
     snapshot = analytics_config["snapshot"]
@@ -96,7 +96,7 @@ def get_pdf_export_data(
     if qualification_stage and total_surrogates > 0:
         qualification_rate = (qualified_count / total_surrogates) * 100
 
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     task_counts = (
         db.query(
             func.count(Task.id).label("pending_tasks"),
@@ -126,17 +126,17 @@ def get_pdf_export_data(
         db, organization_id, label="display_name"
     )
 
-    trend_start = datetime.now(timezone.utc) - timedelta(days=30)
+    trend_start = datetime.now(UTC) - timedelta(days=30)
     trend_data = _surrogate.get_surrogates_trend(
         db,
         organization_id,
         start=trend_start,
-        end=datetime.now(timezone.utc),
+        end=datetime.now(UTC),
         group_by="day",
     )
 
-    meta_start = start_dt or datetime(1970, 1, 1, tzinfo=timezone.utc)
-    meta_end = end_dt or datetime.now(timezone.utc)
+    meta_start = start_dt or datetime(1970, 1, 1, tzinfo=UTC)
+    meta_end = end_dt or datetime.now(UTC)
     meta_performance = _meta.get_meta_performance(db, organization_id, meta_start, meta_end)
 
     start_date = start_dt.date() if start_dt else None

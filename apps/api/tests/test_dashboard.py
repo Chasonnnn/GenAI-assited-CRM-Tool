@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.orm import Query
 
-from app.core.encryption import hash_email
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
+from app.core.encryption import hash_email
 from app.core.security import create_session_token
 from app.db.enums import OwnerType, Role, SurrogateSource
 from app.db.models import (
@@ -92,7 +92,7 @@ async def test_attention_scoped_to_owner_when_owned(db, test_org, default_stage)
         db.add(other_user)
         db.flush()
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         owned = Surrogate(
             id=uuid.uuid4(),
             surrogate_number="S20001",
@@ -148,7 +148,7 @@ async def test_attention_case_manager_orgwide_when_no_owned(db, test_org, defaul
         db.add(other_user)
         db.flush()
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         other = Surrogate(
             id=uuid.uuid4(),
             surrogate_number="S20003",
@@ -188,7 +188,7 @@ async def test_attention_admin_sees_orgwide(db, test_org, default_stage):
         db.add(other_user)
         db.flush()
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         other = Surrogate(
             id=uuid.uuid4(),
             surrogate_number="S20004",
@@ -218,7 +218,7 @@ async def test_attention_admin_sees_orgwide(db, test_org, default_stage):
 @pytest.mark.asyncio
 async def test_attention_unreached_excludes_recent_updates(db, test_org, default_stage):
     async with role_client(db, test_org, Role.ADMIN) as (client, user):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         stale = Surrogate(
             id=uuid.uuid4(),
             surrogate_number="S20007",
@@ -280,7 +280,7 @@ async def test_attention_unreached_excludes_recent_updates(db, test_org, default
 @pytest.mark.asyncio
 async def test_attention_unreached_excludes_recent_activity_logs(db, test_org, default_stage):
     async with role_client(db, test_org, Role.ADMIN) as (client, user):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         stale = Surrogate(
             id=uuid.uuid4(),
             surrogate_number="S20010",
@@ -372,7 +372,7 @@ async def test_attention_assignee_filter_admin(db, test_org, default_stage):
         )
         db.add(membership)
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         other = Surrogate(
             id=uuid.uuid4(),
             surrogate_number="S20006",
@@ -402,7 +402,7 @@ async def test_attention_assignee_filter_admin(db, test_org, default_stage):
 @pytest.mark.asyncio
 async def test_attention_stuck_includes_no_history(db, test_org, default_stage):
     async with role_client(db, test_org, Role.ADMIN) as (client, user):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         stuck = Surrogate(
             id=uuid.uuid4(),
             surrogate_number="S20005",
@@ -435,7 +435,7 @@ async def test_attention_stuck_excludes_on_hold(db, test_org):
         on_hold_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "on_hold")
         assert on_hold_stage is not None
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         paused = Surrogate(
             id=uuid.uuid4(),
             surrogate_number="S20006",
@@ -472,7 +472,7 @@ async def test_attention_stuck_excludes_post_approval_stages_but_keeps_approved(
         assert approved_stage is not None
         assert ready_to_match_stage is not None
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         approved_stuck = Surrogate(
             id=uuid.uuid4(),
             surrogate_number="S20007",
@@ -547,7 +547,7 @@ async def test_attention_stuck_excludes_terminal_and_paused_stage_keys_even_with
         db.add_all(legacy_excluded_stages)
         db.flush()
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         active_stuck = Surrogate(
             id=uuid.uuid4(),
             surrogate_number="S20009",
@@ -605,7 +605,7 @@ async def test_attention_invalid_pipeline_id_returns_422(authed_client):
 @pytest.mark.asyncio
 async def test_attention_stuck_uses_latest_stage_history(db, test_org, default_stage):
     async with role_client(db, test_org, Role.CASE_MANAGER) as (client, user):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         surrogate = Surrogate(
             id=uuid.uuid4(),
             surrogate_number="S20999",
@@ -654,7 +654,7 @@ async def test_attention_stuck_uses_latest_stage_history(db, test_org, default_s
 def test_attention_items_skip_count_queries_when_results_are_below_limit(
     db, test_org, default_stage, test_user, monkeypatch
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     db.add(
         Surrogate(
             id=uuid.uuid4(),
@@ -696,7 +696,7 @@ def test_attention_items_skip_count_queries_when_results_are_below_limit(
 def test_attention_items_still_count_when_results_hit_limit(
     db, test_org, default_stage, test_user, monkeypatch
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for index in range(2):
         email = f"hit-limit-{index}@example.com"
         db.add(

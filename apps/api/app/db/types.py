@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy.types import TypeDecorator, Text
+from sqlalchemy.types import Text, TypeDecorator
 
 from app.core.encryption import decrypt_value, encrypt_value
 

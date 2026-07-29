@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta, timezone
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -115,7 +115,7 @@ async def test_support_session_create_sets_role_and_org_override(
     expires_at = data.get("expires_at")
     assert expires_at
     expires_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     assert now + timedelta(minutes=59) <= expires_dt <= now + timedelta(minutes=61)
 
     token = response.cookies.get(COOKIE_NAME) or authed_client.cookies.get(COOKIE_NAME)
@@ -131,7 +131,7 @@ async def test_support_session_create_sets_role_and_org_override(
 @pytest.mark.asyncio
 async def test_support_session_create_rejects_deleted_org(authed_client, db, test_user, test_org):
     test_user.is_platform_admin = True
-    test_org.deleted_at = datetime.now(timezone.utc)
+    test_org.deleted_at = datetime.now(UTC)
     db.commit()
 
     response = await authed_client.post(

@@ -3,10 +3,10 @@
 Endpoints for managing org-level email provider settings (Resend or Gmail).
 """
 
-from typing import Annotated
-
 import logging
 import uuid
+from datetime import UTC
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
@@ -345,9 +345,9 @@ async def update_settings(
 
     # Update last_key_validated_at if key was tested
     if new_api_key:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        settings.last_key_validated_at = datetime.now(timezone.utc)
+        settings.last_key_validated_at = datetime.now(UTC)
         db.commit()
         db.refresh(settings)
 

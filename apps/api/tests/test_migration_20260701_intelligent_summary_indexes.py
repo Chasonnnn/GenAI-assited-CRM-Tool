@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 import importlib.util
+from contextlib import contextmanager
 from pathlib import Path
-
 
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[1]

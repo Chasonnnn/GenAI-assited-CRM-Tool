@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    TIMESTAMP,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -15,7 +15,6 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
-    TIMESTAMP,
     Text,
     UniqueConstraint,
     text,
@@ -88,8 +87,8 @@ class ResendSettings(Base):
     )
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    default_sender: Mapped["User | None"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    default_sender: Mapped[User | None] = relationship()
 
     __table_args__ = (
         CheckConstraint(
@@ -144,7 +143,7 @@ class ZapierWebhookSettings(Base):
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped[Organization] = relationship()
 
     __table_args__ = (Index("idx_zapier_webhook_settings_webhook_id", "webhook_id", unique=True),)
 
@@ -181,7 +180,7 @@ class ZapierInboundWebhook(Base):
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped[Organization] = relationship()
 
     __table_args__ = (
         Index("idx_zapier_inbound_webhooks_webhook_id", "webhook_id", unique=True),
@@ -236,7 +235,7 @@ class ZapierOutboundEvent(Base):
         TIMESTAMP(timezone=True), nullable=True
     )
 
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped[Organization] = relationship()
 
     __table_args__ = (
         Index("idx_zapier_outbound_events_org_created", "organization_id", "created_at"),
@@ -287,7 +286,7 @@ class MetaCrmDatasetSettings(Base):
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped[Organization] = relationship()
 
 
 class MetaCrmDatasetEvent(Base):
@@ -343,7 +342,7 @@ class MetaCrmDatasetEvent(Base):
         TIMESTAMP(timezone=True), nullable=True
     )
 
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped[Organization] = relationship()
 
     __table_args__ = (
         Index("idx_meta_crm_dataset_events_org_created", "organization_id", "created_at"),
@@ -420,7 +419,7 @@ class UserIntegration(Base):
     )
 
     # Relationships
-    user: Mapped["User"] = relationship()
+    user: Mapped[User] = relationship()
 
     __table_args__ = (
         UniqueConstraint("user_id", "integration_type"),

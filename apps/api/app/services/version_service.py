@@ -27,7 +27,6 @@ from app.core.config import settings
 from app.db.models import AuditLog, EntityVersion
 from app.types import JsonObject
 
-
 # =============================================================================
 # Encryption (Fernet)
 # =============================================================================

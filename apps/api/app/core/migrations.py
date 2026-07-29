@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
+from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
-from alembic import command
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Connection, Engine
 
+from alembic import command
 from app.core.config import settings
 
 ALEMBIC_VERSION_TABLE = "alembic_version"

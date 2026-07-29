@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 
 from app.db.enums import JobType
 from app.jobs.handlers import (
@@ -20,8 +20,8 @@ from app.jobs.handlers import (
     meta,
     notifications,
     orgs,
-    resend,
     reminders,
+    resend,
     ticketing,
     webhooks,
     workflows,

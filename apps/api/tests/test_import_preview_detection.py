@@ -1,6 +1,7 @@
 """Contract tests for CSV import preview detection + suggestions."""
 
 import io
+
 import pytest
 from httpx import AsyncClient
 

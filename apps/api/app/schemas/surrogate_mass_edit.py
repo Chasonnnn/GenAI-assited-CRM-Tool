@@ -88,7 +88,7 @@ class SurrogateMassEditStageFilters(BaseModel):
         return normalized or None
 
     @model_validator(mode="after")
-    def validate_ranges(self) -> "SurrogateMassEditStageFilters":
+    def validate_ranges(self) -> SurrogateMassEditStageFilters:
         if self.age_min is not None and self.age_max is not None and self.age_min > self.age_max:
             raise ValueError("age_min must be <= age_max")
         if (

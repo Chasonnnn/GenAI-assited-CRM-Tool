@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC
 from types import SimpleNamespace
 
 import pytest
@@ -12,9 +13,8 @@ async def test_workflow_email_appends_org_signature_for_org_scope(
 ):
     from app.db.enums import JobType
     from app.db.models import EmailLog, EmailTemplate, Job
-    from app.services import workflow_email_provider
+    from app.services import resend_transport, workflow_email_provider
     from app.worker import process_workflow_email
-    from app.services import resend_transport
 
     test_org.signature_company_name = "Org Signature Co"
     test_org.signature_template = "classic"
@@ -84,9 +84,8 @@ async def test_workflow_email_appends_personal_signature_for_personal_scope(
 ):
     from app.db.enums import JobType
     from app.db.models import EmailLog, EmailTemplate, Job
-    from app.services import workflow_email_provider
+    from app.services import resend_transport, workflow_email_provider
     from app.worker import process_workflow_email
-    from app.services import resend_transport
 
     test_org.signature_company_name = "Org Signature Co"
     test_org.signature_template = "classic"
@@ -155,14 +154,13 @@ async def test_workflow_email_appends_personal_signature_for_personal_scope(
 async def test_workflow_email_logs_surrogate_activity_and_audit_after_success_with_system_actor_fallback(
     db, test_org, test_user, monkeypatch
 ):
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from app.core.constants import SYSTEM_USER_ID
-    from app.db.enums import AuditEventType, JobType, SurrogateSource, SurrogateActivityType
+    from app.db.enums import AuditEventType, JobType, SurrogateActivityType, SurrogateSource
     from app.db.models import AuditLog, EmailTemplate, Job, SurrogateActivityLog
     from app.schemas.surrogate import SurrogateCreate
-    from app.services import workflow_email_provider
-    from app.services import surrogate_service
+    from app.services import surrogate_service, workflow_email_provider
     from app.services.email_delivery_service import (
         claim_due_deliveries,
         record_delivery_success,
@@ -221,7 +219,7 @@ async def test_workflow_email_logs_surrogate_activity_and_audit_after_success_wi
     claim = claim_due_deliveries(
         db,
         worker_id="workflow-test",
-        now=datetime.now(timezone.utc),
+        now=datetime.now(UTC),
         lease_for=timedelta(minutes=2),
         limit=1,
     )[0]

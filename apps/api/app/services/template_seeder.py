@@ -6,10 +6,10 @@ that are pre-configured for common surrogacy agency use cases.
 """
 
 from uuid import UUID
+
 from sqlalchemy.orm import Session
 
-from app.db.models import EmailTemplate, AutomationWorkflow
-
+from app.db.models import AutomationWorkflow, EmailTemplate
 
 # =============================================================================
 # System Email Templates

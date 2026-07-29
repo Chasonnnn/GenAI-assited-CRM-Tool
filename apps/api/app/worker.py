@@ -14,7 +14,7 @@ import os
 import secrets
 import sys
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 # Add the app directory to the path
@@ -354,7 +354,7 @@ def maybe_schedule_workflow_sweep_jobs(
 
     from app.services import org_service, workflow_triggers
 
-    bucket = now.astimezone(timezone.utc).strftime("%Y%m%dT%H%MZ")
+    bucket = now.astimezone(UTC).strftime("%Y%m%dT%H%MZ")
     jobs_created = 0
     duplicates_skipped = 0
     orgs = org_service.list_orgs(db)
@@ -419,7 +419,7 @@ def maybe_schedule_workflow_maintenance_jobs(
 
     from app.services import org_service, workflow_triggers
 
-    utc_now = now.astimezone(timezone.utc)
+    utc_now = now.astimezone(UTC)
     daily_bucket = utc_now.strftime("%Y%m%d")
     hourly_bucket = utc_now.strftime("%Y%m%dT%HZ")
     sweep_types = ("inactivity", "task_due", "task_overdue")
@@ -484,7 +484,7 @@ def maybe_schedule_workflow_approval_expiry_jobs(
     from app.db.models import Task
     from app.services import org_service
 
-    utc_now = now.astimezone(timezone.utc)
+    utc_now = now.astimezone(UTC)
     bucket_start = utc_now.replace(
         minute=(utc_now.minute // 5) * 5,
         second=0,
@@ -651,8 +651,8 @@ def _resolve_integration_keys(db, job, integration_type) -> list[str]:
 
 def _record_job_success(db, job) -> None:
     """Record successful job for integration health."""
-    from app.services import ops_service
     from app.db.enums import IntegrationType
+    from app.services import ops_service
 
     if job.job_type == JobType.ZAPIER_STAGE_EVENT.value:
         try:
@@ -722,8 +722,8 @@ def _record_job_success(db, job) -> None:
 
 def _record_job_failure(db, job, error_msg: str, exception: Exception | None = None) -> None:
     """Record failed job for integration health and create alert if final failure."""
-    from app.services import ops_service, alert_service
-    from app.db.enums import IntegrationType, AlertType, AlertSeverity
+    from app.db.enums import AlertSeverity, AlertType, IntegrationType
+    from app.services import alert_service, ops_service
 
     if job.job_type == JobType.ZAPIER_STAGE_EVENT.value:
         try:
@@ -842,8 +842,8 @@ def _record_job_failure(db, job, error_msg: str, exception: Exception | None = N
 
 
 def _is_meta_rate_limit_error(job, error_msg: str) -> bool:
-    from app.services import meta_token_service
     from app.db.enums import JobType
+    from app.services import meta_token_service
 
     if job.job_type not in (
         JobType.META_SPEND_SYNC.value,
@@ -914,7 +914,7 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
         job_types_display,
     )
 
-    last_session_cleanup = datetime.min.replace(tzinfo=timezone.utc)
+    last_session_cleanup = datetime.min.replace(tzinfo=UTC)
     last_google_sync_schedule: datetime | None = None
     last_gmail_sync_schedule: datetime | None = None
     last_workflow_sweep_schedule: datetime | None = None
@@ -923,7 +923,7 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
     email_delivery_worker_id = (
         f"{os.getenv('HOSTNAME', 'worker')}:{os.getpid()}:{secrets.token_hex(4)}"
     )
-    last_stale_claim_recovery = datetime.min.replace(tzinfo=timezone.utc)
+    last_stale_claim_recovery = datetime.min.replace(tzinfo=UTC)
 
     while stop_event is None or not stop_event.is_set():
         if EMAIL_DELIVERY_DISPATCH_ENABLED:
@@ -955,7 +955,7 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
 
         with SessionLocal() as db:
             try:
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
                 if now - last_stale_claim_recovery >= timedelta(
                     seconds=WORKER_STALE_CLAIM_REAPER_INTERVAL_SECONDS
                 ):
@@ -1126,7 +1126,7 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
                             job, error_msg
                         ):
                             delay = _rate_limit_backoff_seconds(job.attempts)
-                            job.run_at = datetime.now(timezone.utc) + timedelta(seconds=delay)
+                            job.run_at = datetime.now(UTC) + timedelta(seconds=delay)
                             db.commit()
                             logger.warning(
                                 "Rate limit backoff applied for job %s: retrying in %ss",

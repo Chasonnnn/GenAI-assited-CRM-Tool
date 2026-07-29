@@ -30,6 +30,7 @@ from app.schemas.surrogate_mass_edit import (
     SurrogateMassEditStagePreviewItem,
     SurrogateMassEditStagePreviewResponse,
 )
+from app.utils.height import height_ft_to_total_inches_expr
 from app.utils.normalization import (
     MASS_EDIT_RACE_FILTER_KEYS,
     RACE_KEY_ALIASES,
@@ -38,8 +39,6 @@ from app.utils.normalization import (
     normalize_phone,
     normalize_search_text,
 )
-from app.utils.height import height_ft_to_total_inches_expr
-
 
 MAX_APPLY = 2000
 MAX_DERIVED_SCAN = 5000  # Age requires decrypting DOB; force narrowing to avoid scanning huge sets

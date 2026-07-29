@@ -4,11 +4,9 @@ Uses unified EntityNote model with entity_type='surrogate'.
 """
 
 from typing import Annotated
-
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
@@ -20,10 +18,10 @@ from app.core.deps import (
 )
 from app.core.policies import POLICIES
 from app.core.surrogate_access import check_surrogate_access
-from app.schemas.auth import UserSession
 from app.db.enums import AuditEventType
+from app.schemas.auth import UserSession
 from app.schemas.note import NoteCreate, NoteRead
-from app.services import surrogate_service, note_service
+from app.services import note_service, surrogate_service
 
 router = APIRouter(
     dependencies=[Depends(require_permission(POLICIES["surrogates"].actions["notes_view"]))],

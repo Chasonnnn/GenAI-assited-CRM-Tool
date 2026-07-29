@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from threading import Barrier
 from uuid import uuid4
 
@@ -280,7 +280,7 @@ async def test_worker_keeps_provider_retry_after_internal_and_schedules_retry(
         payload={"provider_scope": "organization"},
     )
     job_service.mark_job_running(db, job)
-    before = datetime.now(timezone.utc)
+    before = datetime.now(UTC)
 
     with pytest.raises(RuntimeError, match="Resend readiness retry requested") as exc_info:
         await worker.process_job(db, job)
@@ -357,7 +357,7 @@ async def test_live_readiness_get_projects_old_pending_checks_as_stalled_without
             payload={"provider_scope": "organization"},
         )
 
-    queued_at = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(minutes=6)
+    queued_at = datetime.now(UTC).replace(microsecond=0) - timedelta(minutes=6)
     job.created_at = queued_at
     db.commit()
 

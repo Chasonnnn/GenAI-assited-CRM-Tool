@@ -5,12 +5,12 @@ Supports Google Gemini and Vertex AI with a unified interface.
 
 import asyncio
 import logging
+import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from datetime import datetime, timezone, timedelta
-import uuid
 
 import httpx
 from google import genai
@@ -343,7 +343,7 @@ class VertexWIFCredentials(Credentials):
         return f"//iam.googleapis.com/{audience}"
 
     def refresh(self, request: Request) -> None:  # noqa: ARG002
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if self.token and self.expiry and self.expiry > now + timedelta(minutes=2):
             return
 

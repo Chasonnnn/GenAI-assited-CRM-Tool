@@ -1,25 +1,37 @@
 """Workflow API router - REST endpoints for automation workflows."""
 
-from typing import Literal, Annotated
-
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.db.enums import WorkflowExecutionStatus, WorkflowEventSource
 from app.core.deps import (
-    get_db,
     get_current_session,
+    get_db,
     require_csrf_header,
 )
+from app.db.enums import WorkflowEventSource, WorkflowExecutionStatus, WorkflowTriggerType
 from app.schemas.auth import UserSession
-from app.db.enums import WorkflowTriggerType
+from app.schemas.workflow import (
+    ExecutionListResponse,
+    ExecutionRead,
+    UserWorkflowPreferenceRead,
+    UserWorkflowPreferenceUpdate,
+    WorkflowCreate,
+    WorkflowListItem,
+    WorkflowOptions,
+    WorkflowRead,
+    WorkflowStats,
+    WorkflowTestRequest,
+    WorkflowTestResponse,
+    WorkflowUpdate,
+)
 from app.services import (
     appointment_service,
     attachment_service,
-    form_submission_service,
     form_intake_service,
+    form_submission_service,
     match_service,
     note_service,
     surrogate_service,
@@ -28,21 +40,6 @@ from app.services import (
     workflow_service,
 )
 from app.services.workflow_engine import engine
-from app.schemas.workflow import (
-    WorkflowCreate,
-    WorkflowUpdate,
-    WorkflowRead,
-    WorkflowListItem,
-    WorkflowStats,
-    WorkflowOptions,
-    ExecutionRead,
-    ExecutionListResponse,
-    UserWorkflowPreferenceRead,
-    UserWorkflowPreferenceUpdate,
-    WorkflowTestRequest,
-    WorkflowTestResponse,
-)
-
 
 router = APIRouter(
     prefix="/workflows",

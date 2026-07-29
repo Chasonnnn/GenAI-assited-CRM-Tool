@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 import holidays
 
-from app.core.constants import BUSINESS_HOURS_START, BUSINESS_HOURS_END
+from app.core.constants import BUSINESS_HOURS_END, BUSINESS_HOURS_START
 
 
 @lru_cache(maxsize=10)

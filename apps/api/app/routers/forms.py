@@ -1,31 +1,24 @@
 """Form builder and submission review endpoints."""
 
+from datetime import UTC, datetime
 from typing import Annotated
-
-from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import (
     APIRouter,
     Depends,
+    File,
+    Form,
     HTTPException,
     Query,
     Request,
-    File,
-    Form,
     UploadFile,
 )
-
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.enums import FormPurpose
-from app.core.surrogate_access import (
-    check_surrogate_access,
-    ensure_can_manage_surrogate_priority,
-)
 from app.core.deps import (
     get_current_session,
     get_db,
@@ -33,44 +26,49 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
+from app.core.surrogate_access import (
+    check_surrogate_access,
+    ensure_can_manage_surrogate_priority,
+)
+from app.db.enums import FormPurpose
 from app.schemas.auth import UserSession
 from app.schemas.forms import (
     FormCreate,
     FormDeliverySettings,
     FormDeliverySettingsUpdate,
     FormDraftStatusRead,
-    FormFieldMappingsUpdate,
     FormEmbedHealthRead,
+    FormFieldMappingItem,
+    FormFieldMappingsUpdate,
     FormIntakeLinkCreate,
     FormIntakeLinkRead,
     FormIntakeLinkSendRequest,
     FormIntakeLinkSendResponse,
     FormIntakeLinkUpdate,
-    FormSubmissionMatchRetryRequest,
-    FormSubmissionMatchResolveRequest,
-    FormSubmissionMatchResolveResponse,
+    FormLogoRead,
+    FormMappingOption,
     FormPublishResponse,
     FormRead,
-    FormMappingOption,
+    FormSchema,
+    FormSubmissionAnswersUpdate,
+    FormSubmissionAnswersUpdateResponse,
+    FormSubmissionFileDownloadResponse,
+    FormSubmissionFileRead,
+    FormSubmissionMatchResolveRequest,
+    FormSubmissionMatchResolveResponse,
+    FormSubmissionMatchRetryRequest,
     FormSubmissionRead,
     FormSubmissionStatusUpdate,
     FormSummary,
+    FormUpdate,
     IntakeLeadPromoteRequest,
     IntakeLeadPromoteResponse,
     IntakeLeadRead,
     MatchCandidateRead,
-    FormUpdate,
-    FormFieldMappingItem,
-    FormSchema,
-    FormSubmissionFileRead,
-    FormSubmissionFileDownloadResponse,
-    FormLogoRead,
-    FormSubmissionAnswersUpdate,
-    FormSubmissionAnswersUpdateResponse,
 )
 from app.schemas.platform_templates import (
-    FormTemplateLibraryItem,
     FormTemplateLibraryDetail,
+    FormTemplateLibraryItem,
 )
 from app.services import (
     audit_service,
@@ -970,7 +968,7 @@ def send_form_intake_link(
         intake_link_id=link.id,
         template_id=template.id,
         email_log_id=email_log.id,
-        queued_at=email_log.created_at or datetime.now(timezone.utc),
+        queued_at=email_log.created_at or datetime.now(UTC),
         intake_url=intake_url,
     )
 

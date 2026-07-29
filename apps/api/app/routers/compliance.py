@@ -1,7 +1,6 @@
 """Compliance router - retention policies and legal holds."""
 
 from typing import Annotated
-
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,21 +8,20 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_csrf_header, require_permission
 from app.core.permissions import PermissionKey as P
+from app.db.enums import JobType
 from app.schemas.auth import UserSession
 from app.schemas.compliance import (
     LegalHoldCreate,
-    LegalHoldRead,
     LegalHoldListResponse,
+    LegalHoldRead,
+    PurgeExecuteResponse,
     PurgePreviewItem,
     PurgePreviewResponse,
-    PurgeExecuteResponse,
     RetentionPolicyRead,
     RetentionPolicyUpsert,
 )
 from app.services import audit_service, compliance_service, job_service
 from app.utils.pagination import PaginationParams, get_pagination
-from app.db.enums import JobType
-
 
 router = APIRouter(prefix="/compliance", tags=["Compliance"])
 

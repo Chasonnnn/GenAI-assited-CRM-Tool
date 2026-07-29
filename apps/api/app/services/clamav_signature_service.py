@@ -8,13 +8,12 @@ import shutil
 import subprocess  # nosec B404
 import tarfile
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from botocore.exceptions import ClientError
 
 from app.core.config import settings
 from app.services import storage_client
-
 
 logger = logging.getLogger(__name__)
 
@@ -220,9 +219,7 @@ def ensure_signatures(max_age_hours: int | None = None) -> None:
     )
 
     local_mtime = _local_latest_mtime(sig_dir)
-    local_dt = (
-        datetime.fromtimestamp(local_mtime, tz=timezone.utc) if local_mtime is not None else None
-    )
+    local_dt = datetime.fromtimestamp(local_mtime, tz=UTC) if local_mtime is not None else None
 
     if bucket:
         client = storage_client.get_s3_client()
@@ -240,7 +237,7 @@ def ensure_signatures(max_age_hours: int | None = None) -> None:
 
     age_hours: float | None = None
     if local_dt is not None and max_age > 0:
-        age_hours = (datetime.now(timezone.utc) - local_dt).total_seconds() / 3600
+        age_hours = (datetime.now(UTC) - local_dt).total_seconds() / 3600
         if age_hours <= max_age:
             return
 

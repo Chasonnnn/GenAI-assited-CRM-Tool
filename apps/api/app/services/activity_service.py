@@ -2,11 +2,11 @@
 
 import re
 from uuid import UUID
+
 from sqlalchemy.orm import Session
 
 from app.db.enums import SurrogateActivityType
 from app.db.models import SurrogateActivityLog
-
 
 REDACTED_VALUE = "[redacted]"
 ACTION_UPDATED = {"action": "updated"}

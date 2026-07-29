@@ -1,16 +1,15 @@
 """Invitation management service with rate limiting."""
 
-from datetime import datetime, timedelta, timezone
-from typing import Literal
 import uuid
+from datetime import UTC, datetime, timedelta
+from typing import Literal
 
-from sqlalchemy import or_, func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.db.enums import Role
-from app.db.models import OrgInvite, Membership, User, Organization
+from app.db.models import Membership, Organization, OrgInvite, User
 from app.services import org_service
-
 
 # Rate limit configuration
 INVITE_RESEND_COOLDOWN_MINUTES = 5
@@ -41,7 +40,7 @@ def get_invite_status(
         return "revoked"
     if invite.accepted_at:
         return "accepted"
-    if invite.expires_at and invite.expires_at < datetime.now(timezone.utc):
+    if invite.expires_at and invite.expires_at < datetime.now(UTC):
         return "expired"
     return "pending"
 
@@ -100,7 +99,7 @@ def create_invite(
         raise ValueError("Organization not found")
     email = email.lower().strip()
     role_value = validate_invite_role(role)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Check org limit
     pending_count = count_pending_invites(db, org_id)
@@ -175,8 +174,8 @@ def can_resend(invite: OrgInvite) -> tuple[bool, str | None]:
     # Check cooldown
     if invite.last_resent_at:
         cooldown_end = invite.last_resent_at + timedelta(minutes=INVITE_RESEND_COOLDOWN_MINUTES)
-        if datetime.now(timezone.utc) < cooldown_end:
-            remaining = int((cooldown_end - datetime.now(timezone.utc)).total_seconds())
+        if datetime.now(UTC) < cooldown_end:
+            remaining = int((cooldown_end - datetime.now(UTC)).total_seconds())
             return False, f"Wait {remaining} seconds before resending"
 
     # Check daily limit
@@ -194,9 +193,9 @@ def resend_invite(db: Session, invite: OrgInvite) -> None:
 
     invite.resend_count += 1
     invite.send_revision += 1
-    invite.last_resent_at = datetime.now(timezone.utc)
+    invite.last_resent_at = datetime.now(UTC)
     # Extend expiry on resend
-    invite.expires_at = datetime.now(timezone.utc) + timedelta(days=INVITE_EXPIRY_DAYS)
+    invite.expires_at = datetime.now(UTC) + timedelta(days=INVITE_EXPIRY_DAYS)
 
     db.flush()
 
@@ -212,7 +211,7 @@ def revoke_invite(
     if invite.revoked_at:
         raise ValueError("Invite already revoked")
 
-    invite.revoked_at = datetime.now(timezone.utc)
+    invite.revoked_at = datetime.now(UTC)
     invite.revoked_by_user_id = revoked_by_user_id
 
     db.flush()
@@ -319,7 +318,7 @@ def accept_invite(
             raise ValueError("Already a member of this organization")
         existing.role = role_value
         existing.is_active = True
-        invite.accepted_at = datetime.now(timezone.utc)
+        invite.accepted_at = datetime.now(UTC)
         db.commit()
         org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
         org_name = org_service.get_org_display_name(org)
@@ -336,7 +335,7 @@ def accept_invite(
     )
     db.add(membership)
 
-    invite.accepted_at = datetime.now(timezone.utc)
+    invite.accepted_at = datetime.now(UTC)
 
     db.commit()
 

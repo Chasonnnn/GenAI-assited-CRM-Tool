@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from types import SimpleNamespace
 import uuid
-
+from datetime import UTC, datetime
+from types import SimpleNamespace
 
 from app.db.enums import JobType, Role, SurrogateSource
-from app.db.models import MetaLead, Job
+from app.db.models import Job, MetaLead
 from app.schemas.surrogate import SurrogateCreate
 from app.services import (
     pipeline_service,
@@ -51,7 +50,7 @@ def _create_meta_lead(db, org_id) -> MetaLead:
 
 
 def _event_kwargs(surrogate, new_stage, old_stage=None, user_id=None):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return dict(
         db=None,
         surrogate=surrogate,

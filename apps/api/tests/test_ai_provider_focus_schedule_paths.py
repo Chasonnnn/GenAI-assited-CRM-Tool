@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -185,7 +185,7 @@ async def test_vertex_provider_and_factory(monkeypatch):
     )
     provider = ai_provider.VertexWIFProvider(cfg)
     provider._credentials.token = "tok"
-    provider._credentials.expiry = datetime.now(timezone.utc) + timedelta(hours=1)
+    provider._credentials.expiry = datetime.now(UTC) + timedelta(hours=1)
     monkeypatch.setattr(
         VertexWIFCredentials,
         "expired",

@@ -1,9 +1,11 @@
-from datetime import datetime, timedelta, timezone
-from io import BytesIO
 import uuid
+from datetime import UTC, datetime, timedelta
+from io import BytesIO
 
 import pytest
 from fastapi import UploadFile
+from sqlalchemy.orm import sessionmaker
+
 from app.core.config import settings
 from app.core.encryption import hash_email
 from app.db.enums import JobStatus, JobType
@@ -11,7 +13,6 @@ from app.db.models import Attachment, Form, FormSubmission, Job, Surrogate
 from app.jobs import scan_attachment
 from app.services import attachment_service, form_submission_service
 from app.utils.normalization import normalize_email
-from sqlalchemy.orm import sessionmaker
 
 
 def test_ensure_attachment_scan_job_deduplicates_inflight_jobs(db, test_org):
@@ -53,19 +54,19 @@ def test_ensure_attachment_scan_job_reclaims_stale_running_job(db, test_org, mon
         job_type=JobType.ATTACHMENT_SCAN.value,
         status=JobStatus.RUNNING.value,
         payload={"attachment_id": str(attachment_id)},
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
         attempts=1,
         max_attempts=3,
         claim_token=uuid.uuid4(),
-        claimed_at=datetime.now(timezone.utc),
+        claimed_at=datetime.now(UTC),
     )
     db.add(stale_job)
     db.flush()
 
     db.query(Job).filter(Job.id == stale_job.id).update(
         {
-            "run_at": datetime.now(timezone.utc) - timedelta(minutes=20),
-            "claimed_at": datetime.now(timezone.utc) - timedelta(minutes=20),
+            "run_at": datetime.now(UTC) - timedelta(minutes=20),
+            "claimed_at": datetime.now(UTC) - timedelta(minutes=20),
         }
     )
     db.flush()
@@ -116,11 +117,11 @@ def test_recent_attachment_claim_is_not_reclaimed_when_run_at_is_old(
         job_type=JobType.ATTACHMENT_SCAN.value,
         status=JobStatus.RUNNING.value,
         payload={"attachment_id": str(attachment_id)},
-        run_at=datetime.now(timezone.utc) - timedelta(days=30),
+        run_at=datetime.now(UTC) - timedelta(days=30),
         attempts=1,
         max_attempts=3,
         claim_token=claim_token,
-        claimed_at=datetime.now(timezone.utc),
+        claimed_at=datetime.now(UTC),
     )
     db.add(job)
     db.commit()
@@ -323,7 +324,7 @@ def test_form_submission_file_enqueues_scan_job(
         status="pending_review",
         answers_json={},
         schema_snapshot=schema,
-        submitted_at=datetime.now(timezone.utc),
+        submitted_at=datetime.now(UTC),
     )
     db.add(submission)
     db.flush()
@@ -362,19 +363,19 @@ def test_ensure_form_submission_file_scan_job_reclaims_stale_running_job(db, tes
         job_type=JobType.FORM_SUBMISSION_FILE_SCAN.value,
         status=JobStatus.RUNNING.value,
         payload={"submission_file_id": str(submission_file_id)},
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
         attempts=1,
         max_attempts=3,
         claim_token=uuid.uuid4(),
-        claimed_at=datetime.now(timezone.utc),
+        claimed_at=datetime.now(UTC),
     )
     db.add(stale_job)
     db.flush()
 
     db.query(Job).filter(Job.id == stale_job.id).update(
         {
-            "run_at": datetime.now(timezone.utc) - timedelta(minutes=20),
-            "claimed_at": datetime.now(timezone.utc) - timedelta(minutes=20),
+            "run_at": datetime.now(UTC) - timedelta(minutes=20),
+            "claimed_at": datetime.now(UTC) - timedelta(minutes=20),
         }
     )
     db.flush()
@@ -420,11 +421,11 @@ def test_recent_form_submission_claim_is_not_reclaimed_when_run_at_is_old(
         job_type=JobType.FORM_SUBMISSION_FILE_SCAN.value,
         status=JobStatus.RUNNING.value,
         payload={"submission_file_id": str(submission_file_id)},
-        run_at=datetime.now(timezone.utc) - timedelta(days=30),
+        run_at=datetime.now(UTC) - timedelta(days=30),
         attempts=1,
         max_attempts=3,
         claim_token=claim_token,
-        claimed_at=datetime.now(timezone.utc),
+        claimed_at=datetime.now(UTC),
     )
     db.add(job)
     db.commit()
@@ -460,11 +461,11 @@ def test_stale_form_submission_claim_is_reclaimed_and_identity_cleared(
         job_type=JobType.FORM_SUBMISSION_FILE_SCAN.value,
         status=JobStatus.RUNNING.value,
         payload={"submission_file_id": str(submission_file_id)},
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
         attempts=1,
         max_attempts=3,
         claim_token=uuid.uuid4(),
-        claimed_at=datetime.now(timezone.utc) - timedelta(minutes=20),
+        claimed_at=datetime.now(UTC) - timedelta(minutes=20),
     )
     db.add(job)
     db.commit()
@@ -500,7 +501,7 @@ def test_dispatch_attachment_scan_if_needed_dispatches_pending_remote_scan(
         job_type=JobType.ATTACHMENT_SCAN.value,
         status=JobStatus.PENDING.value,
         payload={"attachment_id": str(attachment_id)},
-        run_at=datetime.now(timezone.utc) + timedelta(seconds=1),
+        run_at=datetime.now(UTC) + timedelta(seconds=1),
         attempts=0,
         max_attempts=3,
     )
@@ -548,7 +549,7 @@ def test_direct_scan_ambiguous_dispatch_preserves_current_claim(db, test_org, mo
         job_type=JobType.ATTACHMENT_SCAN.value,
         status=JobStatus.PENDING.value,
         payload={"attachment_id": str(attachment_id)},
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
         attempts=0,
         max_attempts=3,
     )
@@ -592,7 +593,7 @@ def test_dispatch_submission_file_scan_if_needed_dispatches_pending_remote_scan(
         job_type=JobType.FORM_SUBMISSION_FILE_SCAN.value,
         status=JobStatus.PENDING.value,
         payload={"submission_file_id": str(submission_file_id)},
-        run_at=datetime.now(timezone.utc) + timedelta(seconds=1),
+        run_at=datetime.now(UTC) + timedelta(seconds=1),
         attempts=0,
         max_attempts=3,
     )
@@ -640,7 +641,7 @@ def test_direct_form_scan_ambiguous_dispatch_preserves_current_claim(db, test_or
         job_type=JobType.FORM_SUBMISSION_FILE_SCAN.value,
         status=JobStatus.PENDING.value,
         payload={"submission_file_id": str(submission_file_id)},
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
         attempts=0,
         max_attempts=3,
     )

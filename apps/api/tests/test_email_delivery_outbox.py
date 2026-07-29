@@ -1,6 +1,6 @@
 """Public-contract tests for the transactional email delivery outbox."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from threading import Barrier, Thread
 from uuid import uuid4
 
@@ -10,8 +10,8 @@ from sqlalchemy import event
 from app.db.enums import (
     EmailDeliveryAttemptOutcome,
     EmailDeliveryStatus,
-    EmailSuppressionPolicy,
     EmailStatus,
+    EmailSuppressionPolicy,
     SuppressionReason,
 )
 from app.db.models import (
@@ -26,8 +26,8 @@ from app.db.models import (
 )
 from app.db.session import SessionLocal
 from app.services.email_delivery_service import (
-    DeliveryRoute,
     DeliveryLeaseLost,
+    DeliveryRoute,
     EmailDeliveryConflict,
     EmailSource,
     RenderedEmail,
@@ -351,7 +351,7 @@ def test_allow_opt_out_policy_never_bypasses_provider_safety_suppressions(
 
 
 def test_claim_due_deliveries_creates_a_durable_fenced_lease(db, test_org):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     queued = queue_rendered_email(
         db,
         organization_id=test_org.id,
@@ -404,7 +404,7 @@ def test_claim_due_deliveries_prioritizes_transactional_mail_over_older_bulk_mai
     db,
     test_org,
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     marketing = queue_rendered_email(
         db,
         organization_id=test_org.id,
@@ -449,7 +449,7 @@ def test_claim_due_deliveries_prioritizes_transactional_mail_over_older_bulk_mai
 
 
 def test_retry_after_idempotency_expiry_requires_reconciliation(db, test_org):
-    claimed_at = datetime.now(timezone.utc)
+    claimed_at = datetime.now(UTC)
     queue_rendered_email(
         db,
         organization_id=test_org.id,
@@ -505,7 +505,7 @@ def test_retry_after_idempotency_expiry_requires_reconciliation(db, test_org):
 
 
 def test_due_retry_past_idempotency_expiry_is_not_sent_again(db, test_org):
-    due_at = datetime.now(timezone.utc)
+    due_at = datetime.now(UTC)
     queued = queue_rendered_email(
         db,
         organization_id=test_org.id,
@@ -538,7 +538,7 @@ def test_due_retry_past_idempotency_expiry_is_not_sent_again(db, test_org):
 
 
 def test_stale_lease_cannot_complete_a_reclaimed_delivery(db, test_org):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     queued = queue_rendered_email(
         db,
         organization_id=test_org.id,
@@ -584,7 +584,7 @@ def test_stale_lease_cannot_complete_a_reclaimed_delivery(db, test_org):
 
 
 def test_retryable_failure_schedules_bounded_retry_and_keeps_message_pending(db, test_org):
-    claimed_at = datetime.now(timezone.utc)
+    claimed_at = datetime.now(UTC)
     queued = queue_rendered_email(
         db,
         organization_id=test_org.id,
@@ -639,7 +639,7 @@ def test_expired_final_lease_requires_reconciliation_instead_of_reclaiming_forev
     db,
     test_org,
 ):
-    claimed_at = datetime.now(timezone.utc)
+    claimed_at = datetime.now(UTC)
     queued = queue_rendered_email(
         db,
         organization_id=test_org.id,
@@ -735,7 +735,7 @@ def test_claim_due_deliveries_skips_a_row_locked_by_another_worker(
     setup = SessionLocal(bind=db_engine)
     locker = SessionLocal(bind=db_engine)
     worker = SessionLocal(bind=db_engine)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     delivery_id = None
     try:
         queued = queue_rendered_email(
@@ -865,7 +865,7 @@ def test_concurrent_exact_queue_calls_converge_on_one_message(
 
 
 def test_renewed_lease_is_not_reclaimed_at_its_original_expiry(db, test_org):
-    claimed_at = datetime.now(timezone.utc)
+    claimed_at = datetime.now(UTC)
     queued = queue_rendered_email(
         db,
         organization_id=test_org.id,
@@ -911,7 +911,7 @@ def test_renewed_lease_is_not_reclaimed_at_its_original_expiry(db, test_org):
 
 
 def test_provider_acceptance_updates_delivery_attempt_and_message_atomically(db, test_org):
-    claimed_at = datetime.now(timezone.utc)
+    claimed_at = datetime.now(UTC)
     queued = queue_rendered_email(
         db,
         organization_id=test_org.id,
@@ -960,7 +960,7 @@ def test_provider_acceptance_updates_delivery_attempt_and_message_atomically(db,
 
 
 def test_provider_failure_diagnostics_do_not_persist_contact_pii(db, test_org):
-    claimed_at = datetime.now(timezone.utc)
+    claimed_at = datetime.now(UTC)
     queued = queue_rendered_email(
         db,
         organization_id=test_org.id,

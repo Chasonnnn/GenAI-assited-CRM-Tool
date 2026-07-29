@@ -4,8 +4,7 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
-from typing import Any, Annotated
-
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -13,14 +12,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import get_db, require_ai_enabled, require_permission, require_csrf_header
+from app.core.deps import get_db, require_ai_enabled, require_csrf_header, require_permission
 from app.core.permissions import PermissionKey as P
 from app.core.rate_limit import limiter
 from app.schemas.auth import UserSession
+from app.services.ai_prompt_registry import get_prompt
 from app.services.ai_provider import ChatMessage
 from app.services.ai_response_validation import parse_json_object, validate_model
-from app.services.ai_prompt_registry import get_prompt
-from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
+from app.utils.sse import STREAM_HEADERS, format_sse, sse_preamble
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -131,7 +130,7 @@ async def generate_workflow_stream(
     session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
 ) -> StreamingResponse:
     """Stream workflow generation via SSE."""
-    from app.services import ai_workflow_service, ai_settings_service
+    from app.services import ai_settings_service, ai_workflow_service
     from app.services.ai_workflow_service import GeneratedWorkflow
 
     if body.scope == "org":

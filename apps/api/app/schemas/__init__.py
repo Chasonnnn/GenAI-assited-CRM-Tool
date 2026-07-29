@@ -2,8 +2,8 @@
 
 from app.schemas.auth import MeResponse, TokenPayload, UserSession
 from app.schemas.invite import InviteCreate, InviteRead
+from app.schemas.note import NoteCreate, NoteRead
 from app.schemas.org import OrgCreate, OrgRead
-from app.schemas.user import UserRead, UserUpdate
 from app.schemas.surrogate import (
     SurrogateAssign,
     SurrogateCreate,
@@ -14,7 +14,6 @@ from app.schemas.surrogate import (
     SurrogateStatusHistoryRead,
     SurrogateUpdate,
 )
-from app.schemas.note import NoteCreate, NoteRead
 from app.schemas.task import (
     TaskCreate,
     TaskListItem,
@@ -22,6 +21,7 @@ from app.schemas.task import (
     TaskRead,
     TaskUpdate,
 )
+from app.schemas.user import UserRead, UserUpdate
 
 __all__ = [
     # Auth

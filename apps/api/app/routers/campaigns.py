@@ -1,36 +1,34 @@
 """Campaigns router - CRUD and send operations for bulk email campaigns."""
 
 from typing import Annotated
-
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
-
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
-    get_db,
     get_current_session,
-    require_permission,
+    get_db,
     require_csrf_header,
+    require_permission,
 )
 from app.core.policies import POLICIES
-from app.services import campaign_service
 from app.schemas.campaign import (
     CampaignCreate,
-    CampaignUpdate,
-    CampaignResponse,
     CampaignListItem,
-    CampaignRunResponse,
-    CampaignRecipientResponse,
     CampaignPreviewResponse,
-    PreviewFiltersRequest,
+    CampaignRecipientResponse,
+    CampaignResponse,
+    CampaignRetryResponse,
+    CampaignRunResponse,
     CampaignSendRequest,
     CampaignSendResponse,
-    CampaignRetryResponse,
+    CampaignUpdate,
+    PreviewFiltersRequest,
     SuppressionCreate,
     SuppressionResponse,
 )
+from app.services import campaign_service
 
 csrf_header_dependency = require_csrf_header
 

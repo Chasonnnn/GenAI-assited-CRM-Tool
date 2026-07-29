@@ -1,6 +1,6 @@
+import uuid
 from datetime import date, datetime
 from uuid import UUID
-import uuid
 from zoneinfo import ZoneInfo
 
 import pytest

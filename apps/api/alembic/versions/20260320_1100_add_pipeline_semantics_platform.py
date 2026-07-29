@@ -10,16 +10,15 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 from app.core.stage_definitions import canonicalize_stage_key
 from app.schemas.pipeline_semantics import (
     default_pipeline_feature_config,
     default_stage_semantics,
 )
-
 
 # revision identifiers, used by Alembic.
 revision: str = "20260320_1100"

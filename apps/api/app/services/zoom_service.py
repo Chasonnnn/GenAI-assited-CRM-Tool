@@ -6,7 +6,7 @@ Uses OAuth tokens stored per-user in UserIntegration table.
 
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -15,8 +15,9 @@ from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.enums import EntityType, TaskType, OwnerType
-from app.db.models import EntityNote, Task, ZoomMeeting as ZoomMeetingModel
+from app.db.enums import EntityType, OwnerType, TaskType
+from app.db.models import EntityNote, Task
+from app.db.models import ZoomMeeting as ZoomMeetingModel
 from app.services import oauth_service
 from app.services.http_service import request_with_retries
 
@@ -137,7 +138,7 @@ async def create_zoom_meeting(
         try:
             tz = ZoneInfo(timezone_name)
         except Exception:
-            tz = timezone.utc
+            tz = UTC
 
         if start_time.tzinfo is None:
             local_dt = start_time.replace(tzinfo=tz)
@@ -307,6 +308,7 @@ async def schedule_zoom_meeting(
 
     # Build note content
     from html import escape
+
     from app.services import note_service
 
     display_dt: datetime
@@ -315,17 +317,17 @@ async def schedule_zoom_meeting(
             try:
                 display_dt = start_time.replace(tzinfo=ZoneInfo(timezone_name))
             except Exception:
-                display_dt = start_time.replace(tzinfo=timezone.utc)
+                display_dt = start_time.replace(tzinfo=UTC)
         else:
             try:
                 display_dt = start_time.astimezone(ZoneInfo(timezone_name))
             except Exception:
-                display_dt = start_time.astimezone(timezone.utc)
+                display_dt = start_time.astimezone(UTC)
     else:
         try:
             display_dt = datetime.now(ZoneInfo(timezone_name))
         except Exception:
-            display_dt = datetime.now(timezone.utc)
+            display_dt = datetime.now(UTC)
 
     end_dt = display_dt + timedelta(minutes=duration)
     time_str = f"{display_dt.strftime('%B %d, %Y %I:%M %p %Z')} – {end_dt.strftime('%I:%M %p %Z')} ({duration} min)"

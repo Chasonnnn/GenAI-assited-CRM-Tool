@@ -1,10 +1,11 @@
 """Workflow triggers - hooks into core services to trigger workflows."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.db.enums import OwnerType, WorkflowEventSource, WorkflowTriggerType
 from app.db.models import (
     Appointment,
     Attachment,
@@ -14,7 +15,6 @@ from app.db.models import (
     Surrogate,
     Task,
 )
-from app.db.enums import WorkflowTriggerType, WorkflowEventSource, OwnerType
 from app.schemas.workflow import is_supported_simple_cron
 from app.services.workflow_engine import engine
 
@@ -405,10 +405,10 @@ def trigger_scheduled_workflows(
     evaluated_at: datetime | None = None,
 ) -> None:
     """Trigger scheduled workflows for an org (called by daily sweep)."""
-    from datetime import timezone
+
     from app.db.models import AutomationWorkflow
 
-    now = evaluated_at or datetime.now(timezone.utc)
+    now = evaluated_at or datetime.now(UTC)
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("evaluated_at must be timezone-aware")
 
@@ -448,10 +448,11 @@ def trigger_scheduled_workflows(
 
 def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
     """Trigger inactivity workflows for surrogates with no recent activity."""
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timedelta
+
     from app.db.models import AutomationWorkflow
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     workflows = (
         db.query(AutomationWorkflow)
@@ -509,8 +510,7 @@ def _iter_surrogates(
         batch = query.order_by(Surrogate.id).limit(batch_size).all()
         if not batch:
             break
-        for surrogate in batch:
-            yield surrogate
+        yield from batch
         last_id = batch[-1].id
 
 
@@ -518,6 +518,7 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
     """Find and trigger task_due workflows for tasks due soon."""
     from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo
+
     from app.db.models import AutomationWorkflow, Organization
     from app.services import task_service
 
@@ -581,6 +582,7 @@ def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
     """Find and trigger task_overdue workflows for overdue tasks."""
     from datetime import datetime
     from zoneinfo import ZoneInfo
+
     from app.db.models import Organization
     from app.services import task_service
 

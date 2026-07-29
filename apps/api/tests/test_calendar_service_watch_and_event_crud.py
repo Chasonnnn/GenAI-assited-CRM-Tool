@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -65,8 +65,8 @@ async def test_calendar_busy_slots_success_failure_and_exception(monkeypatch):
     busy = await calendar_service.get_google_busy_slots(
         access_token="tok",
         calendar_id="primary",
-        time_min=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        time_max=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        time_min=datetime(2026, 1, 1, tzinfo=UTC),
+        time_max=datetime(2026, 1, 2, tzinfo=UTC),
     )
     assert len(busy) == 2
 
@@ -82,8 +82,8 @@ async def test_calendar_busy_slots_success_failure_and_exception(monkeypatch):
     busy = await calendar_service.get_google_busy_slots(
         access_token="tok",
         calendar_id="primary",
-        time_min=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        time_max=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        time_min=datetime(2026, 1, 1, tzinfo=UTC),
+        time_max=datetime(2026, 1, 2, tzinfo=UTC),
     )
     assert busy == []
 
@@ -100,8 +100,8 @@ async def test_calendar_busy_slots_success_failure_and_exception(monkeypatch):
     busy = await calendar_service.get_google_busy_slots(
         access_token="tok",
         calendar_id="primary",
-        time_min=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        time_max=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        time_min=datetime(2026, 1, 1, tzinfo=UTC),
+        time_max=datetime(2026, 1, 2, tzinfo=UTC),
     )
     assert busy == []
 
@@ -166,8 +166,8 @@ async def test_calendar_get_events_and_calendar_ids_pagination(monkeypatch):
     events = await calendar_service.get_google_events(
         access_token="tok",
         calendar_id="primary",
-        time_min=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        time_max=datetime(2026, 1, 3, tzinfo=timezone.utc),
+        time_min=datetime(2026, 1, 1, tzinfo=UTC),
+        time_max=datetime(2026, 1, 3, tzinfo=UTC),
     )
     assert {event["id"] for event in events} == {"evt1", "evt2"}
     assert any(event["is_all_day"] for event in events)
@@ -191,7 +191,7 @@ async def test_calendar_get_events_and_calendar_ids_pagination(monkeypatch):
 @pytest.mark.asyncio
 async def test_calendar_user_wrappers_and_appointment_helpers(monkeypatch, db):
     user_id = uuid4()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Not connected/token-expired wrappers.
     monkeypatch.setattr(

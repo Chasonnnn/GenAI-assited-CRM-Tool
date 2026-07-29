@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import logging
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -355,5 +355,5 @@ def handle_surrogate_created(*, db: Session, surrogate: Surrogate) -> None:
         new_stage_slug=stage.slug,
         new_stage_id=str(stage.id),
         new_stage_label=stage.label,
-        effective_at=surrogate.created_at or datetime.now(timezone.utc),
+        effective_at=surrogate.created_at or datetime.now(UTC),
     )

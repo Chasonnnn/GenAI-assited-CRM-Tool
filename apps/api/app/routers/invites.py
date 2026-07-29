@@ -1,23 +1,19 @@
 """Invitation management endpoints for settings."""
 
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
-
 from uuid import UUID
-from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import get_current_session, get_db, require_permission, require_csrf_header
+from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
 from app.core.policies import POLICIES
 from app.core.rate_limit import limiter
-
 from app.schemas.auth import UserSession
-from app.services import invite_service
-from app.services import invite_email_service
-
+from app.services import invite_email_service, invite_service
 
 router = APIRouter(
     prefix="/settings/invites",
@@ -68,7 +64,7 @@ def _invite_to_read(invite) -> InviteRead:
         cooldown_end = invite.last_resent_at + timedelta(
             minutes=invite_service.INVITE_RESEND_COOLDOWN_MINUTES
         )
-        cooldown_seconds = max(0, int((cooldown_end - datetime.now(timezone.utc)).total_seconds()))
+        cooldown_seconds = max(0, int((cooldown_end - datetime.now(UTC)).total_seconds()))
 
     return InviteRead(
         id=str(invite.id),

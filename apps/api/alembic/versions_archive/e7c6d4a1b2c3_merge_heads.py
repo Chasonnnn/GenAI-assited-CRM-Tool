@@ -6,12 +6,11 @@ Create Date: 2025-12-27 00:00:00.000000
 
 """
 
-from typing import Sequence, Union
-
+from collections.abc import Sequence
 
 # revision identifiers, used by Alembic.
 revision: str = "e7c6d4a1b2c3"
-down_revision: Union[str, Sequence[str], None] = (
+down_revision: str | Sequence[str] | None = (
     "c3e9f2a1b8d4",
     "07e0a3628b1b",
     "ab9ee2996572",
@@ -19,8 +18,8 @@ down_revision: Union[str, Sequence[str], None] = (
     "201ff7c41d70",
     "f3bc6a65a816",
 )
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

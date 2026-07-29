@@ -3,19 +3,19 @@ import io
 import json
 import uuid
 import zipfile
-from datetime import date, datetime, time, timezone
+from datetime import UTC, date, datetime, time
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
-from app.core.deps import COOKIE_NAME, get_db
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
+from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token
 from app.db.enums import Role
 from app.db.models import (
+    AppointmentType,
     AvailabilityOverride,
     AvailabilityRule,
-    AppointmentType,
     BookingLink,
     DataRetentionPolicy,
     Form,
@@ -164,7 +164,7 @@ class TestAdminImports:
         workflow_template_id = uuid.uuid4()
         retention_policy_id = uuid.uuid4()
         legal_hold_id = uuid.uuid4()
-        counter_updated_at = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        counter_updated_at = datetime(2025, 1, 1, tzinfo=UTC)
         config_payload = {
             "organization.json": {
                 "id": str(test_org.id),

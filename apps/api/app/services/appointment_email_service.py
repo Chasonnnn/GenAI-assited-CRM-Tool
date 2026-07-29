@@ -6,7 +6,7 @@ Provides:
 - Functions to send appointment notifications via the email queue
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
@@ -31,7 +31,6 @@ from app.db.models import (
 )
 from app.services import email_service, org_service
 from app.services.appointment_service import log_appointment_email
-
 
 # =============================================================================
 # Email Template Definitions
@@ -421,8 +420,8 @@ def _utc_occurrence_marker(value: datetime | None) -> str:
     if value is None:
         return "unspecified"
     if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc).isoformat(timespec="microseconds")
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC).isoformat(timespec="microseconds")
 
 
 def _appointment_email_occurrence_key(
@@ -642,7 +641,7 @@ def schedule_reminder_email(
     remind_at = appointment.scheduled_start - timedelta(hours=hours_before)
 
     # Don't schedule if reminder time is in the past
-    if remind_at <= datetime.now(timezone.utc):
+    if remind_at <= datetime.now(UTC):
         return None
 
     return send_appointment_email(
@@ -666,7 +665,7 @@ def cancel_queued_appointment_emails(
     commit: bool = True,
 ) -> int:
     """Cancel selected unleased appointment notifications."""
-    cancelled_at = now or datetime.now(timezone.utc)
+    cancelled_at = now or datetime.now(UTC)
     query = (
         select(AppointmentEmailLog, EmailLog, EmailDelivery)
         .join(EmailLog, AppointmentEmailLog.email_log_id == EmailLog.id)

@@ -1,5 +1,5 @@
-from google.protobuf import json_format, struct_pb2
 import pytest
+from google.protobuf import json_format, struct_pb2
 
 from app.core.protobuf_guard import apply_protobuf_json_depth_guard
 

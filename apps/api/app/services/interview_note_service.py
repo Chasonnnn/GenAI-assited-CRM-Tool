@@ -1,13 +1,13 @@
 """Interview note service - CRUD for interview notes with anchoring support."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import nh3
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import SurrogateInterview, InterviewNote
+from app.db.models import InterviewNote, SurrogateInterview
 from app.schemas.interview import InterviewNoteCreate, InterviewNoteUpdate
 
 # Allowed HTML tags for note content (same as note_service)
@@ -149,7 +149,7 @@ def update_note(
     """
     # Sanitize content
     note.content = sanitize_html(data.content)
-    note.updated_at = datetime.now(timezone.utc)
+    note.updated_at = datetime.now(UTC)
     db.flush()
     return note
 
@@ -186,7 +186,7 @@ def resolve_note(
 ) -> InterviewNote:
     """Mark a note thread as resolved."""
     root = _load_thread_root(db, note)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for item in [root, *(root.replies or [])]:
         item.resolved_at = now
         item.resolved_by_user_id = user_id
@@ -201,7 +201,7 @@ def unresolve_note(
 ) -> InterviewNote:
     """Re-open a resolved note thread."""
     root = _load_thread_root(db, note)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for item in [root, *(root.replies or [])]:
         item.resolved_at = None
         item.resolved_by_user_id = None

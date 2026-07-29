@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -84,7 +84,7 @@ def _create_mapped_meta_form(
     ]
     form.mapping_status = "mapped"
     form.mapping_version_id = version.id
-    form.mapping_updated_at = datetime.now(timezone.utc)
+    form.mapping_updated_at = datetime.now(UTC)
     form.mapping_updated_by_user_id = user_id
     db.commit()
     return form
@@ -324,8 +324,8 @@ async def test_zapier_webhook_creates_surrogate(client, db, test_org):
     assert surrogate.meta_form_id == "form_1"
     assert surrogate.import_metadata.get("zapier_lead_id") == "lead_123"
 
-    expected = datetime(2026, 1, 15, 18, 30, tzinfo=timezone.utc)
-    assert surrogate.created_at.replace(tzinfo=timezone.utc) == expected
+    expected = datetime(2026, 1, 15, 18, 30, tzinfo=UTC)
+    assert surrogate.created_at.replace(tzinfo=UTC) == expected
 
 
 @pytest.mark.asyncio

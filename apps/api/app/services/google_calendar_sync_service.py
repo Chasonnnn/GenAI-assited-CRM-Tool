@@ -6,7 +6,7 @@ Keeps router layers thin by moving model access + job enqueue logic into service
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import TypedDict
 from uuid import UUID
 
@@ -15,8 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.db.enums import JobType
 from app.db.models import Job, Membership, Organization, UserIntegration
-from app.services import calendar_service, job_service
-from app.services import google_tasks_sync_service
+from app.services import calendar_service, google_tasks_sync_service, job_service
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +36,7 @@ def schedule_google_calendar_sync_jobs(
     now: datetime | None = None,
 ) -> GoogleCalendarSyncScheduleCounts:
     """Schedule reconciliation + watch-refresh jobs for connected users."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     sync_bucket_seconds = 5 * 60
     sync_bucket = int(now.timestamp()) // sync_bucket_seconds
     watch_bucket_seconds = 60 * 60
@@ -245,7 +244,7 @@ def process_google_calendar_push_notification(
                 "source": "google_push",
                 "resource_state": resource_state,
             },
-            run_at=now or datetime.now(timezone.utc),
+            run_at=now or datetime.now(UTC),
             idempotency_key=idempotency_key,
             commit=True,
         )

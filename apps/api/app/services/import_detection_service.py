@@ -48,7 +48,7 @@ class ConfidenceLevel(str, Enum):
     NONE = "none"  # < 0.2
 
     @classmethod
-    def from_score(cls, score: float) -> "ConfidenceLevel":
+    def from_score(cls, score: float) -> ConfidenceLevel:
         if score >= 0.8:
             return cls.HIGH
         elif score >= 0.5:

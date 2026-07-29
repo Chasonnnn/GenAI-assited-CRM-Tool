@@ -5,14 +5,14 @@ Tests for AI bulk task creation endpoint.
 import uuid
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
-from app.core.deps import COOKIE_NAME, get_db
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
+from app.core.deps import COOKIE_NAME, get_db
 from app.core.encryption import hash_email
 from app.core.security import create_session_token
 from app.db.enums import Role
-from app.db.models import PipelineStage, Surrogate, IntendedParent, Match, Membership, Task, User
+from app.db.models import IntendedParent, Match, Membership, PipelineStage, Surrogate, Task, User
 from app.main import app
 from app.routers.ai_schedule import ParseScheduleRequest
 from app.schemas.ai_tasks import BulkTaskCreateRequest

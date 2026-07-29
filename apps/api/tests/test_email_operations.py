@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -102,7 +102,7 @@ async def test_message_list_is_org_scoped_and_uses_stable_created_at_id_cursor(
     db,
     test_org,
 ):
-    created_at = datetime(2026, 7, 23, 12, 0, tzinfo=timezone.utc)
+    created_at = datetime(2026, 7, 23, 12, 0, tzinfo=UTC)
     messages = [
         _email_log(
             organization_id=test_org.id,
@@ -168,7 +168,7 @@ async def test_message_detail_is_sanitized_and_orders_attempts_and_provider_even
     db,
     test_org,
 ):
-    created_at = datetime(2026, 7, 23, 12, 0, tzinfo=timezone.utc)
+    created_at = datetime(2026, 7, 23, 12, 0, tzinfo=UTC)
     email_log = _email_log(
         organization_id=test_org.id,
         created_at=created_at,
@@ -303,7 +303,7 @@ async def test_message_detail_returns_404_for_another_organization(
     db.flush()
     other_message = _email_log(
         organization_id=other_org.id,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(other_message)
     db.commit()
@@ -345,7 +345,7 @@ async def test_readiness_keeps_send_and_tracking_independent_and_new_activity_un
     db,
     test_org,
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     settings = ResendSettings(
         id=uuid4(),
         organization_id=test_org.id,
@@ -393,7 +393,7 @@ async def test_readiness_treats_unconfigured_tracking_as_optional_for_send_ready
     db,
     test_org,
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     db.add(
         ResendSettings(
             id=uuid4(),
@@ -448,7 +448,7 @@ async def test_readiness_ignores_a_newer_platform_message_when_selecting_org_rou
     db,
     test_org,
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     organization_account_id = f"organization:{test_org.id}"
     db.add(
         ResendSettings(
@@ -497,7 +497,7 @@ async def test_platform_message_cannot_create_missing_webhook_failure_for_org_ro
     db,
     test_org,
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     db.add(
         ResendSettings(
             id=uuid4(),
@@ -538,7 +538,7 @@ async def test_platform_webhook_cannot_satisfy_organization_readiness(
     db,
     test_org,
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     organization_account_id = f"organization:{test_org.id}"
     db.add(
         ResendSettings(
@@ -603,7 +603,7 @@ async def test_readiness_uses_org_scoped_webhook_evidence_and_24h_summary(
     db,
     test_org,
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     organization_account_id = f"organization:{test_org.id}"
     db.add(
         ResendSettings(

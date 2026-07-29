@@ -8,7 +8,7 @@ import json
 import os
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import BytesIO
 from typing import Literal
 
@@ -25,7 +25,6 @@ from app.services import (
     storage_client,
     storage_url_service,
 )
-
 
 AI_STUDIO_REASONING_MODEL = "gpt-5.5"
 AI_STUDIO_IMAGE_MODEL = "gpt-image-2"
@@ -97,7 +96,7 @@ class AIStudioReferenceImage(BaseModel):
         return clean
 
     @model_validator(mode="after")
-    def validate_decoded_size(self) -> "AIStudioReferenceImage":
+    def validate_decoded_size(self) -> AIStudioReferenceImage:
         size_bytes = self.size_bytes
         if size_bytes > MAX_REFERENCE_IMAGE_BYTES:
             raise ValueError("Reference images must be 8 MB or smaller")
@@ -194,7 +193,7 @@ def update_settings(
         studio_settings.agents_md = agents_md
     if skills_md is not None:
         studio_settings.skills_md = skills_md
-    studio_settings.updated_at = datetime.now(timezone.utc)
+    studio_settings.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(studio_settings)
     return studio_settings
@@ -562,7 +561,7 @@ def save_draft(db: Session, organization_id: uuid.UUID, draft_id: uuid.UUID) -> 
     if not draft:
         raise AIStudioDraftNotFoundError("AI Studio draft not found")
     draft.status = "saved"
-    draft.updated_at = datetime.now(timezone.utc)
+    draft.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(draft)
     return draft

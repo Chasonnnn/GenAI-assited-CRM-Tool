@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -36,9 +36,9 @@ async def test_surrogates_list_cursor_pagination(authed_client, db, test_org, te
             email=f"cursor-three-{uuid4().hex[:8]}@example.com",
         ),
     )
-    s1.created_at = datetime(2025, 1, 1, tzinfo=timezone.utc)
-    s2.created_at = datetime(2025, 1, 2, tzinfo=timezone.utc)
-    s3.created_at = datetime(2025, 1, 3, tzinfo=timezone.utc)
+    s1.created_at = datetime(2025, 1, 1, tzinfo=UTC)
+    s2.created_at = datetime(2025, 1, 2, tzinfo=UTC)
+    s3.created_at = datetime(2025, 1, 3, tzinfo=UTC)
     db.commit()
 
     first_page = await authed_client.get("/surrogates?per_page=2")

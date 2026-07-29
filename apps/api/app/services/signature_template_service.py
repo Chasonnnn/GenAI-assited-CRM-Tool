@@ -7,14 +7,13 @@ All templates use table layouts with inline styles for maximum email client comp
 import html
 import re
 import uuid
-from urllib.parse import urlparse
 from typing import Literal
+from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
 from app.db.models import Organization, User
 from app.services import media_service, org_service, user_service
-
 
 # Template types
 TemplateType = Literal["classic", "modern", "minimal", "professional", "creative"]

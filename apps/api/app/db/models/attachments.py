@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, text
 from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-
 
 if TYPE_CHECKING:
     from app.db.models import EmailLogAttachment, Organization, Surrogate, User
@@ -93,8 +91,8 @@ class Attachment(Base):
     search_vector = mapped_column(TSVECTOR, nullable=True)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    surrogate: Mapped["Surrogate"] = relationship()
-    uploaded_by: Mapped["User | None"] = relationship(foreign_keys=[uploaded_by_user_id])
-    deleted_by: Mapped["User | None"] = relationship(foreign_keys=[deleted_by_user_id])
-    email_log_links: Mapped[list["EmailLogAttachment"]] = relationship(back_populates="attachment")
+    organization: Mapped[Organization] = relationship()
+    surrogate: Mapped[Surrogate] = relationship()
+    uploaded_by: Mapped[User | None] = relationship(foreign_keys=[uploaded_by_user_id])
+    deleted_by: Mapped[User | None] = relationship(foreign_keys=[deleted_by_user_id])
+    email_log_links: Mapped[list[EmailLogAttachment]] = relationship(back_populates="attachment")

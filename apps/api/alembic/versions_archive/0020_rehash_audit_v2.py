@@ -12,19 +12,19 @@ Note: This is a breaking change for hash verification of old entries.
 Old hashes used v1 (details only), new hashes use v2 (all columns).
 """
 
-from typing import Sequence, Union
 import hashlib
 import json
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0020_rehash_audit_v2"
-down_revision: Union[str, Sequence[str], None] = "0019_ai_settings_versioning"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "0019_ai_settings_versioning"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 # Genesis hash for hash chain
 GENESIS_HASH = "0" * 64

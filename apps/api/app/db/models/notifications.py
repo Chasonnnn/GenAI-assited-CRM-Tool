@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     ForeignKey,
@@ -69,8 +68,8 @@ class Notification(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    user: Mapped["User"] = relationship()
-    organization: Mapped["Organization"] = relationship()
+    user: Mapped[User] = relationship()
+    organization: Mapped[Organization] = relationship()
 
 
 class UserNotificationSettings(Base):
@@ -128,8 +127,8 @@ class UserNotificationSettings(Base):
     )
 
     # Relationships
-    user: Mapped["User"] = relationship()
-    organization: Mapped["Organization"] = relationship()
+    user: Mapped[User] = relationship()
+    organization: Mapped[Organization] = relationship()
 
 
 # =============================================================================

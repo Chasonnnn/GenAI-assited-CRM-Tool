@@ -11,7 +11,6 @@ from collections.abc import Sequence
 
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
 revision: str = "20260615_0945"
 down_revision: str | Sequence[str] | None = "20260615_0900"

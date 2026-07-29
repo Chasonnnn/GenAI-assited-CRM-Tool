@@ -5,12 +5,12 @@ Records API request metrics using DB upserts for multi-replica safety.
 """
 
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
 
 from app.db.models import RequestMetricsRollup
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def get_minute_bucket(dt: datetime | None = None) -> datetime:
     """Get the start of the minute for a given datetime."""
     if dt is None:
-        dt = datetime.now(timezone.utc)
+        dt = datetime.now(UTC)
     return dt.replace(second=0, microsecond=0)
 
 
@@ -38,7 +38,7 @@ def record_request(
     Uses ON CONFLICT DO UPDATE for multi-replica safety.
     Multiple workers can safely increment the same bucket.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     minute_bucket = get_minute_bucket(now)
 
     # Determine status bucket
@@ -104,9 +104,9 @@ def get_request_metrics(
     from sqlalchemy import text
 
     if from_time is None:
-        from_time = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        from_time = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     if to_time is None:
-        to_time = datetime.now(timezone.utc)
+        to_time = datetime.now(UTC)
 
     if group_by_route:
         query = text("""
@@ -188,7 +188,7 @@ def get_sli_rollup(
     window_minutes: int,
 ) -> dict[str, int | float]:
     """Aggregate SLI metrics for a set of route prefixes."""
-    from_time = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+    from_time = datetime.now(UTC) - timedelta(minutes=window_minutes)
     prefix_filters = [RequestMetricsRollup.route.like(f"{prefix}%") for prefix in prefixes]
     if not prefix_filters:
         return {

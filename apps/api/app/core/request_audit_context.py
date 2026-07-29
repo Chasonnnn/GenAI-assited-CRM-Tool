@@ -2,7 +2,6 @@
 
 from contextvars import ContextVar, Token
 
-
 _REQUEST_AUDIT_CONTEXT: ContextVar[dict[str, bool] | None] = ContextVar(
     "request_audit_context",
     default=None,

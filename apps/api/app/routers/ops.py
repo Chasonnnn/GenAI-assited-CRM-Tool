@@ -5,8 +5,7 @@ Manager+ access for viewing integration status and managing alerts.
 """
 
 from datetime import datetime
-from typing import Optional, Literal, Annotated
-
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -17,14 +16,13 @@ from app.core.config import settings
 from app.core.deps import (
     get_current_session,
     get_db,
-    require_permission,
     require_csrf_header,
+    require_permission,
 )
 from app.core.policies import POLICIES
-from app.db.enums import AlertStatus, AlertSeverity
+from app.db.enums import AlertSeverity, AlertStatus
 from app.schemas.auth import UserSession
-from app.services import ops_service, alert_service, metrics_service
-
+from app.services import alert_service, metrics_service, ops_service
 
 router = APIRouter(
     prefix="/ops",
@@ -41,12 +39,12 @@ router = APIRouter(
 class IntegrationHealthResponse(BaseModel):
     id: str
     integration_type: str
-    integration_key: Optional[str]
+    integration_key: str | None
     status: str
     config_status: str
-    last_success_at: Optional[str]
-    last_error_at: Optional[str]
-    last_error: Optional[str]
+    last_success_at: str | None
+    last_error_at: str | None
+    last_error: str | None
     error_count_24h: int
 
 
@@ -56,12 +54,12 @@ class AlertResponse(BaseModel):
     severity: str
     status: str
     title: str
-    message: Optional[str]
-    integration_key: Optional[str]
+    message: str | None
+    integration_key: str | None
     occurrence_count: int
     first_seen_at: datetime
     last_seen_at: datetime
-    resolved_at: Optional[datetime]
+    resolved_at: datetime | None
 
 
 class AlertSummaryResponse(BaseModel):
@@ -119,10 +117,10 @@ def get_alerts_summary(
 
 @router.get("/alerts", response_model=AlertsListResponse)
 def list_alerts(
-    status: Annotated[Optional[AlertStatusParam], "fastapi_param"] = Query(
+    status: Annotated[AlertStatusParam | None, "fastapi_param"] = Query(
         None, description="Filter by status"
     ),
-    severity: Annotated[Optional[AlertSeverityParam], "fastapi_param"] = Query(
+    severity: Annotated[AlertSeverityParam | None, "fastapi_param"] = Query(
         None, description="Filter by severity"
     ),
     limit: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=100),

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -154,7 +154,7 @@ def test_platform_update_member_not_found_raises(db, test_org, test_user):
 
 
 def test_platform_admin_action_log_pagination_keeps_exact_total(db, test_org, test_user):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for index in range(3):
         db.add(
             AdminActionLog(
@@ -179,7 +179,7 @@ def test_platform_admin_action_log_pagination_keeps_exact_total(db, test_org, te
 
 
 def test_platform_alert_pagination_keeps_exact_total_on_full_page(db, test_org):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for index in range(3):
         db.add(
             SystemAlert(

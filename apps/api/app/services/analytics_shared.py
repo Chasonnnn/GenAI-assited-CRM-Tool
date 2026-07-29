@@ -5,21 +5,21 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from datetime import datetime, timedelta, date, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import AnalyticsSnapshot
-from app.services import pipeline_semantics_service, pipeline_service
 from app.schemas.pipeline_semantics import (
     DEFAULT_ANALYTICS_CONVERSION_STAGE_KEY,
     DEFAULT_ANALYTICS_PERFORMANCE_STAGE_KEYS,
     DEFAULT_ANALYTICS_QUALIFICATION_STAGE_KEY,
 )
-
+from app.services import pipeline_semantics_service, pipeline_service
 
 DEFAULT_FUNNEL_STAGE_KEYS = [
     "new_unread",
@@ -113,7 +113,7 @@ def _get_cached_snapshot(
 ) -> Any | None:
     if settings.ANALYTICS_CACHE_TTL_SECONDS <= 0:
         return None
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     snapshot = (
         db.query(AnalyticsSnapshot)
         .filter(
@@ -141,7 +141,7 @@ def _store_snapshot(
 ) -> None:
     if settings.ANALYTICS_CACHE_TTL_SECONDS <= 0:
         return
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = now + timedelta(seconds=settings.ANALYTICS_CACHE_TTL_SECONDS)
     snapshot = (
         db.query(AnalyticsSnapshot)
@@ -254,12 +254,12 @@ def parse_date_range(
     timezone_name: str | None = None,
 ) -> tuple[datetime, datetime]:
     """Parse ISO date strings to a datetime range with defaults."""
-    requested_tz = timezone.utc
+    requested_tz = UTC
     if timezone_name:
         try:
             requested_tz = ZoneInfo(timezone_name)
         except ZoneInfoNotFoundError:
-            requested_tz = timezone.utc
+            requested_tz = UTC
 
     def _parse_bound(value: str, *, is_end: bool) -> datetime:
         raw = value.strip().replace("Z", "+00:00")
@@ -273,18 +273,18 @@ def parse_date_range(
             )
             if is_end and inclusive_date_end:
                 parsed_local += timedelta(days=1)
-            return parsed_local.astimezone(timezone.utc)
+            return parsed_local.astimezone(UTC)
 
         parsed = datetime.fromisoformat(raw)
 
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=requested_tz)
-        return parsed.astimezone(timezone.utc)
+        return parsed.astimezone(UTC)
 
     if to_date:
         end = _parse_bound(to_date, is_end=True)
     else:
-        end = datetime.now(timezone.utc)
+        end = datetime.now(UTC)
 
     if from_date:
         start = _parse_bound(from_date, is_end=False)
@@ -300,13 +300,9 @@ def _normalize_date_bounds(
 ) -> tuple[datetime | None, datetime | None]:
     if not start_date and not end_date:
         return None, None
-    start_dt = (
-        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
-        if start_date
-        else None
-    )
+    start_dt = datetime.combine(start_date, datetime.min.time(), tzinfo=UTC) if start_date else None
     end_dt = (
-        datetime.combine(end_date + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+        datetime.combine(end_date + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
         if end_date
         else None
     )

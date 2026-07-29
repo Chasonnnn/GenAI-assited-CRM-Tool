@@ -19,11 +19,11 @@ def rate_limiter_reset():
 
 
 def test_auth_error_response_sets_masked_account_hint_cookie():
+    from app.services.audit_service import hash_email
     from app.services.auth_callback_service import (
         AUTH_ERROR_ACCOUNT_HINT_COOKIE,
         _error_response,
     )
-    from app.services.audit_service import hash_email
 
     response = _error_response(
         "no_membership",
@@ -50,9 +50,9 @@ def test_auth_error_response_clears_account_hint_without_selected_email():
 
 
 def test_session_revocation_routes_are_rate_limit_exempt():
+    from app.core.rate_limit import limiter
     from app.routers import auth as _auth  # noqa: F401
     from app.routers import platform as _platform  # noqa: F401
-    from app.core.rate_limit import limiter
 
     exempt_routes = getattr(limiter, "_exempt_routes", set())
 

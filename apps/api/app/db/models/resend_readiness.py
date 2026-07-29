@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
-import uuid
 
 from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import ARRAY, TIMESTAMP, UUID
@@ -156,4 +156,4 @@ class ResendReadinessSnapshot(Base):
         nullable=False,
     )
 
-    organization: Mapped["Organization | None"] = relationship()
+    organization: Mapped[Organization | None] = relationship()

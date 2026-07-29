@@ -1,5 +1,5 @@
-from io import BytesIO
 import uuid
+from io import BytesIO
 
 import pytest
 from starlette.datastructures import Headers, UploadFile

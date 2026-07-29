@@ -24,18 +24,17 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.services.ai_provider import AIProvider, ChatMessage
-from app.services.ai_settings_service import get_ai_provider_for_org
 from app.services.ai_prompt_registry import get_prompt
 from app.services.ai_prompt_schemas import AIImportMappingSuggestion
+from app.services.ai_provider import AIProvider, ChatMessage
 from app.services.ai_response_validation import parse_json_array, validate_model_list
+from app.services.ai_settings_service import get_ai_provider_for_org
 from app.services.import_detection_service import (
     AVAILABLE_SURROGATE_FIELDS,
     ColumnSuggestion,
     ConfidenceLevel,
 )
 from app.services.import_transformers import get_suggested_transformer
-
 
 logger = logging.getLogger(__name__)
 

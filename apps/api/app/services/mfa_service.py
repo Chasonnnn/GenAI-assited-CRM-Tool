@@ -9,14 +9,12 @@ Provides:
 import hashlib
 import hmac
 import secrets
-from datetime import datetime, timezone
-from typing import Tuple
+from datetime import UTC, datetime
 
 import pyotp
 from sqlalchemy.orm import Session
 
 from app.db.models import User
-
 
 # =============================================================================
 # Configuration
@@ -97,7 +95,7 @@ def hash_recovery_codes(codes: list[str]) -> list[str]:
     return [hash_recovery_code(code) for code in codes]
 
 
-def verify_recovery_code(code: str, hashed_codes: list[str]) -> Tuple[bool, int]:
+def verify_recovery_code(code: str, hashed_codes: list[str]) -> tuple[bool, int]:
     """
     Check if a recovery code matches any stored hash.
 
@@ -116,7 +114,7 @@ def verify_recovery_code(code: str, hashed_codes: list[str]) -> Tuple[bool, int]
 # =============================================================================
 
 
-def setup_totp_for_user(db: Session, user: User) -> Tuple[str, str]:
+def setup_totp_for_user(db: Session, user: User) -> tuple[str, str]:
     """
     Start TOTP setup for a user.
 
@@ -133,7 +131,7 @@ def setup_totp_for_user(db: Session, user: User) -> Tuple[str, str]:
     return secret, uri
 
 
-def complete_totp_setup(db: Session, user: User, code: str) -> Tuple[bool, list[str] | None]:
+def complete_totp_setup(db: Session, user: User, code: str) -> tuple[bool, list[str] | None]:
     """
     Complete TOTP setup by verifying the initial code.
 
@@ -155,7 +153,7 @@ def complete_totp_setup(db: Session, user: User, code: str) -> Tuple[bool, list[
     hashed_codes = hash_recovery_codes(plaintext_codes)
 
     # Enable MFA
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     user.mfa_enabled = True
     user.totp_enabled_at = now
     user.mfa_recovery_codes = hashed_codes
@@ -183,7 +181,7 @@ def disable_mfa(db: Session, user: User, *, commit: bool = True) -> None:
 # =============================================================================
 
 
-def verify_mfa_code(user: User, code: str) -> Tuple[bool, str]:
+def verify_mfa_code(user: User, code: str) -> tuple[bool, str]:
     """
     Verify an MFA code (TOTP or recovery).
 

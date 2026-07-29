@@ -7,11 +7,10 @@ import os
 from uuid import UUID
 
 import google.auth
-from google.auth.transport.requests import Request
 import httpx
+from google.auth.transport.requests import Request
 
 from app.core.config import settings
-
 
 logger = logging.getLogger(__name__)
 

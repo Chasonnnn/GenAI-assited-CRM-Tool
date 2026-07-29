@@ -7,9 +7,9 @@ Handles:
 - Test mode with mock data
 """
 
-import hmac
 import hashlib
-from datetime import datetime, timezone
+import hmac
+from datetime import UTC, datetime
 
 import httpx
 
@@ -210,7 +210,7 @@ def _mock_lead_data(leadgen_id: str) -> JsonObject:
     """Return mock data for test mode."""
     return {
         "id": leadgen_id,
-        "created_time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+0000"),
+        "created_time": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+0000"),
         "field_data": [
             {"name": "full_name", "values": [f"Test User {leadgen_id[:8]}"]},
             {"name": "email", "values": [f"test_{leadgen_id[:8]}@example.com"]},

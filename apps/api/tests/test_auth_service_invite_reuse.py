@@ -1,7 +1,7 @@
 """Tests for reusing invites when a user already exists."""
 
-from datetime import datetime, timedelta, timezone
 import uuid
+from datetime import UTC, datetime, timedelta
 
 
 def test_existing_user_can_accept_invite_when_membership_inactive(db, test_org):
@@ -42,7 +42,7 @@ def test_existing_user_can_accept_invite_when_membership_inactive(db, test_org):
         email=user.email,
         role=Role.ADMIN.value,
         invited_by_user_id=None,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
     )
     db.add(invite)
     db.commit()
@@ -68,9 +68,9 @@ def test_existing_user_can_accept_invite_when_membership_inactive(db, test_org):
 
 def test_deprovisioned_same_email_identity_can_accept_new_invite(db, test_org):
     """A prior account binding for the same email should not block a fresh invite."""
+    from app.core.security import decode_session_token
     from app.db.enums import AuthProvider, Role
     from app.db.models import AuthIdentity, Membership, OrgInvite, User
-    from app.core.security import decode_session_token
     from app.services.auth_service import resolve_user_and_create_session
     from app.services.google_oauth import GoogleUserInfo
 
@@ -105,7 +105,7 @@ def test_deprovisioned_same_email_identity_can_accept_new_invite(db, test_org):
         email=user.email,
         role=Role.ADMIN.value,
         invited_by_user_id=None,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
     )
     db.add(invite)
     db.commit()
@@ -135,9 +135,9 @@ def test_deprovisioned_same_email_identity_can_accept_new_invite(db, test_org):
 
 def test_reused_google_identity_invite_creates_invited_user_not_removed_member(db, test_org):
     """Reused Google accounts must not reactivate a removed different-email member."""
+    from app.core.security import decode_session_token
     from app.db.enums import AuthProvider, Role
     from app.db.models import AuthIdentity, Membership, OrgInvite, User
-    from app.core.security import decode_session_token
     from app.services.auth_service import resolve_user_and_create_session
     from app.services.google_oauth import GoogleUserInfo
 
@@ -172,7 +172,7 @@ def test_reused_google_identity_invite_creates_invited_user_not_removed_member(d
         email="serenaguillen@ewifamilyglobal.com",
         role=Role.CASE_MANAGER.value,
         invited_by_user_id=None,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
     )
     db.add(invite)
     db.commit()
@@ -266,9 +266,9 @@ def test_reused_google_identity_without_invite_cannot_login_as_existing_member(d
 
 def test_reused_google_identity_invite_deactivates_existing_different_email_member(db, test_org):
     """Invite-based identity transfer should not leave the old account active."""
+    from app.core.security import decode_session_token
     from app.db.enums import AuthProvider, Role
     from app.db.models import AuthIdentity, Membership, OrgInvite, User
-    from app.core.security import decode_session_token
     from app.services.auth_service import resolve_user_and_create_session
     from app.services.google_oauth import GoogleUserInfo
 
@@ -303,7 +303,7 @@ def test_reused_google_identity_invite_deactivates_existing_different_email_memb
         email="serenaguillen@ewifamilyglobal.com",
         role=Role.ADMIN.value,
         invited_by_user_id=None,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
     )
     db.add(invite)
     db.commit()
@@ -343,9 +343,9 @@ def test_reused_google_identity_invite_deactivates_existing_different_email_memb
 
 def test_existing_active_member_without_identity_can_bind_google_login(db, test_org):
     """An active member record should not need an invite for first Google login."""
+    from app.core.security import decode_session_token
     from app.db.enums import AuthProvider, Role
     from app.db.models import AuthIdentity, Membership, User
-    from app.core.security import decode_session_token
     from app.services.auth_service import resolve_user_and_create_session
     from app.services.google_oauth import GoogleUserInfo
 

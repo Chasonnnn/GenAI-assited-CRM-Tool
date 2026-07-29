@@ -1,5 +1,5 @@
-from pathlib import Path
 import tomllib
+from pathlib import Path
 
 from packaging.requirements import Requirement
 from packaging.version import Version

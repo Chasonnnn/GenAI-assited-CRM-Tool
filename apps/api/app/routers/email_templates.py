@@ -1,39 +1,36 @@
 """Email templates router - CRUD for org email templates with personal scope support."""
 
-from typing import Literal, Annotated
-
+from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
-
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
-    get_db,
     get_current_session,
-    require_permission,
+    get_db,
     require_csrf_header,
+    require_permission,
 )
 from app.core.policies import POLICIES
-
 from app.db.enums import Role
 from app.schemas.email import (
-    EmailTemplateCreate,
-    EmailTemplateUpdate,
-    EmailTemplateRead,
-    EmailTemplateListItem,
-    EmailSendRequest,
     EmailLogRead,
+    EmailSendRequest,
     EmailTemplateCopyRequest,
+    EmailTemplateCreate,
+    EmailTemplateListItem,
+    EmailTemplateRead,
     EmailTemplateShareRequest,
-    TemplateVariableRead,
     EmailTemplateTestSendRequest,
     EmailTemplateTestSendResponse,
+    EmailTemplateUpdate,
+    TemplateVariableRead,
 )
 from app.schemas.platform_templates import (
-    EmailTemplateLibraryItem,
     EmailTemplateLibraryDetail,
+    EmailTemplateLibraryItem,
 )
 from app.services import email_delivery_service, email_service, user_service
 

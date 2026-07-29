@@ -1,11 +1,11 @@
 """Access control tests for AI endpoints."""
 
-from contextlib import asynccontextmanager
-from datetime import datetime, timezone
 import uuid
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
@@ -60,7 +60,7 @@ def _create_ai_settings(db, org_id, user_id, *, consent_accepted=True) -> AISett
         provider="gemini",
         model="gemini-3-flash-preview",
         current_version=1,
-        consent_accepted_at=datetime.now(timezone.utc) if consent_accepted else None,
+        consent_accepted_at=datetime.now(UTC) if consent_accepted else None,
         consent_accepted_by=user_id if consent_accepted else None,
         api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
     )
@@ -238,7 +238,7 @@ async def test_ai_focus_supports_vertex_wif_without_api_key(
         vertex_location="us-central1",
         vertex_audience="projects/123/locations/global/workloadIdentityPools/pool/providers/provider",
         vertex_service_account_email="vertex-sa@demo-project.iam.gserviceaccount.com",
-        consent_accepted_at=datetime.now(timezone.utc),
+        consent_accepted_at=datetime.now(UTC),
         consent_accepted_by=test_user.id,
     )
     db.add(settings)

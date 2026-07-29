@@ -5,9 +5,9 @@ Revises: 0044_fix_appointment_types
 Create Date: 2025-01-06
 """
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "0045_add_org_timezone_and_matched_stage"
 down_revision = "0044_fix_appointment_types"

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import date, datetime, time
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -177,10 +176,10 @@ class Task(Base):
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
-    surrogate: Mapped["Surrogate | None"] = relationship(foreign_keys=[surrogate_id])
-    created_by: Mapped["User"] = relationship(foreign_keys=[created_by_user_id])
-    completed_by: Mapped["User | None"] = relationship(foreign_keys=[completed_by_user_id])
-    workflow_triggered_by: Mapped["User | None"] = relationship(
+    surrogate: Mapped[Surrogate | None] = relationship(foreign_keys=[surrogate_id])
+    created_by: Mapped[User] = relationship(foreign_keys=[created_by_user_id])
+    completed_by: Mapped[User | None] = relationship(foreign_keys=[completed_by_user_id])
+    workflow_triggered_by: Mapped[User | None] = relationship(
         foreign_keys=[workflow_triggered_by_user_id]
     )
 
@@ -236,7 +235,7 @@ class EntityNote(Base):
     # Full-text search vector (managed by trigger)
     search_vector = mapped_column(TSVECTOR, nullable=True)
 
-    author: Mapped["User"] = relationship()
+    author: Mapped[User] = relationship()
 
 
 # =============================================================================

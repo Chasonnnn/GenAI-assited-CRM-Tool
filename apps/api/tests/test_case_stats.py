@@ -7,16 +7,15 @@ Tests the /surrogates/stats endpoint including:
 """
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from app.core.encryption import hash_email
 from app.db.enums import ContactStatus
-from app.db.models import Surrogate, PipelineStage, Pipeline
+from app.db.models import Pipeline, PipelineStage, Surrogate
 from app.services import surrogate_service
 from app.utils.normalization import normalize_email
-
 
 # =============================================================================
 # Fixtures
@@ -75,7 +74,7 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
     """Create cases at different time periods for stats testing."""
     pipeline, stage = stats_pipeline
     cases = []
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # New leads in last 24h (2 unreached, 1 reached)
     for i in range(2):
@@ -325,7 +324,7 @@ class TestCaseStatsEndpoint:
     @pytest.mark.asyncio
     async def test_stats_endpoint_respects_date_range_filters(self, authed_client, cases_for_stats):
         """Stats endpoint should apply date range filters when provided."""
-        target_day = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+        target_day = (datetime.now(UTC) + timedelta(days=30)).date().isoformat()
         response = await authed_client.get(
             f"/surrogates/stats?from_date={target_day}&to_date={target_day}"
         )

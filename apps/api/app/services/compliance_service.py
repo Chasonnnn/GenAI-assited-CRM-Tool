@@ -8,7 +8,7 @@ import os
 import re
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from importlib.util import find_spec
 from typing import Any
 from uuid import UUID
@@ -19,31 +19,30 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.enums import JobType
 from app.db.models import (
+    AIActionApproval,
+    AIConversation,
+    AIEntitySummary,
+    AIMessage,
+    AIUsageLog,
     AuditLog,
-    Surrogate,
-    SurrogateActivityLog,
     DataRetentionPolicy,
+    EmailMessage,
+    EmailMessageContent,
+    EmailMessageOccurrence,
     EntityNote,
     ExportJob,
     LegalHold,
     Match,
+    Surrogate,
+    SurrogateActivityLog,
     Task,
-    User,
-    AIConversation,
-    AIMessage,
-    AIActionApproval,
-    AIUsageLog,
-    AIEntitySummary,
     Ticket,
     TicketEvent,
     TicketNote,
-    EmailMessage,
-    EmailMessageContent,
-    EmailMessageOccurrence,
+    User,
 )
 from app.services import audit_service, job_service
 from app.utils.pagination import PaginationParams, paginate_query
-
 
 EXPORT_STATUS_PENDING = "pending"
 EXPORT_STATUS_PROCESSING = "processing"
@@ -373,7 +372,7 @@ def create_export_job(
     if start_date >= end_date:
         raise ValueError("start_date must be before end_date")
 
-    one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+    one_hour_ago = datetime.now(UTC) - timedelta(hours=1)
     recent_exports = (
         db.scalar(
             select(func.count(ExportJob.id)).where(
@@ -516,7 +515,7 @@ def process_export_job(db: Session, export_job_id: UUID) -> ExportJob:
         redacted = job.redact_mode == REDACT_MODE_REDACTED
         metadata = {
             "export_id": str(job.id),
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "redacted": redacted,
             "date_redaction": "year_month" if redacted else "none",
             "chain_verifiable": False if redacted else chain_metadata["chain_contiguous"],
@@ -559,7 +558,7 @@ def process_export_job(db: Session, export_job_id: UUID) -> ExportJob:
 
         job.record_count = len(rows)
         job.status = EXPORT_STATUS_COMPLETED
-        job.completed_at = datetime.now(timezone.utc)
+        job.completed_at = datetime.now(UTC)
         db.commit()
         db.refresh(job)
         return job
@@ -744,7 +743,7 @@ def release_legal_hold(
     )
     if not hold:
         return None
-    hold.released_at = datetime.now(timezone.utc)
+    hold.released_at = datetime.now(UTC)
     hold.released_by_user_id = user_id
     db.commit()
     db.refresh(hold)
@@ -1062,7 +1061,7 @@ def preview_purge(db: Session, org_id: UUID) -> list[PurgeResult]:
     for policy in policies:
         if not policy.is_active or policy.retention_days == 0:
             continue
-        cutoff = datetime.now(timezone.utc) - timedelta(days=policy.retention_days)
+        cutoff = datetime.now(UTC) - timedelta(days=policy.retention_days)
         query = _build_retention_query(
             db, org_id, policy.entity_type, cutoff, surrogate_hold_ids, entity_hold_ids
         )
@@ -1079,7 +1078,7 @@ def execute_purge(db: Session, org_id: UUID, user_id: UUID | None) -> list[Purge
     for policy in policies:
         if not policy.is_active or policy.retention_days == 0:
             continue
-        cutoff = datetime.now(timezone.utc) - timedelta(days=policy.retention_days)
+        cutoff = datetime.now(UTC) - timedelta(days=policy.retention_days)
         query = _build_retention_query(
             db, org_id, policy.entity_type, cutoff, surrogate_hold_ids, entity_hold_ids
         )

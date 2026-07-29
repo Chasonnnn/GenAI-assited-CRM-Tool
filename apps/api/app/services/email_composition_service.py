@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 
 from app.services import signature_template_service, unsubscribe_service
 
-
 TemplateScope = Literal["org", "personal"]
 EMAIL_FONT_STACK = (
     '-apple-system, BlinkMacSystemFont, "Segoe UI", "Apple Color Emoji", '

@@ -16,7 +16,7 @@ import csv
 import hashlib
 import io
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -456,7 +456,7 @@ def execute_import(
             import_record.skipped_count = 0
             import_record.error_count = 1
             import_record.errors = [{"row": 0, "errors": ["Empty CSV file"]}]
-            import_record.completed_at = datetime.now(timezone.utc)
+            import_record.completed_at = datetime.now(UTC)
             db.commit()
         return result
 
@@ -576,7 +576,7 @@ def execute_import(
         import_record.skipped_count = result.skipped
         import_record.error_count = len(result.errors)
         import_record.errors = result.errors if result.errors else None
-        import_record.completed_at = datetime.now(timezone.utc)
+        import_record.completed_at = datetime.now(UTC)
 
     db.commit()
 
@@ -807,7 +807,7 @@ async def preview_import_enhanced(
                             column_suggestions[idx] = ai_suggestion
                             ai_mapped_columns.append(ai_suggestion.csv_column)
                             break
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("AI auto-mapping timed out (non-blocking)")
         except Exception as e:
             logger.warning(f"AI auto-mapping failed (non-blocking): {e}")
@@ -1106,7 +1106,7 @@ def execute_import_with_mappings(
     if org:
         org_timezone = org.timezone
 
-    now_utc = datetime.now(timezone.utc)
+    now_utc = datetime.now(UTC)
     created_at_backdated = 0
     created_at_future = 0
     created_at_invalid = 0
@@ -1406,7 +1406,7 @@ def _mark_import_failed(
         import_record.skipped_count = 0
         import_record.error_count = 1
         import_record.errors = [{"row": 0, "errors": [error_message]}]
-        import_record.completed_at = datetime.now(timezone.utc)
+        import_record.completed_at = datetime.now(UTC)
         db.commit()
 
 
@@ -1429,7 +1429,7 @@ def _update_import_completed(
         if result.warnings:
             combined_entries.extend(result.warnings)
         import_record.errors = combined_entries if combined_entries else None
-        import_record.completed_at = datetime.now(timezone.utc)
+        import_record.completed_at = datetime.now(UTC)
         db.commit()
 
 
@@ -1614,7 +1614,7 @@ def approve_import(
 
     import_record.status = "approved"
     import_record.approved_by_user_id = approved_by_user_id
-    import_record.approved_at = datetime.now(timezone.utc)
+    import_record.approved_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(import_record)
@@ -1809,7 +1809,7 @@ def reject_import(
     import_record.status = "rejected"
     import_record.approved_by_user_id = rejected_by_user_id  # Reuse field for rejector
     import_record.rejection_reason = reason
-    import_record.completed_at = datetime.now(timezone.utc)
+    import_record.completed_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(import_record)
@@ -1831,7 +1831,7 @@ def cancel_import(
 
     import_record.status = "cancelled"
     import_record.file_content = None
-    import_record.completed_at = datetime.now(timezone.utc)
+    import_record.completed_at = datetime.now(UTC)
     db.commit()
     db.refresh(import_record)
     return import_record

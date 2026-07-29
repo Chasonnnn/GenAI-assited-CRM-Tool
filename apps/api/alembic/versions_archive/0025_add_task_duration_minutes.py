@@ -8,9 +8,9 @@ Adds an optional duration_minutes column to support meeting-style tasks
 with a start time (due_date/due_time) and a derived end time.
 """
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "0025_add_task_duration_minutes"

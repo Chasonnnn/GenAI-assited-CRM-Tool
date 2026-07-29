@@ -3,6 +3,7 @@
 import logging
 import os
 import tempfile
+from datetime import UTC
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -12,12 +13,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.db.enums import AlertSeverity, AlertType
 from app.db.models import (
     Attachment,
-    SurrogateInterview,
     InterviewAttachment,
+    SurrogateInterview,
 )
-from app.db.enums import AlertSeverity, AlertType
 from app.services import interview_service, storage_client
 from app.services.ai_settings_service import (
     get_ai_settings,
@@ -388,9 +389,9 @@ async def request_transcription(
 
         # Mark transcription as completed
         interview_attachment.transcription_status = "completed"
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        interview_attachment.transcription_completed_at = datetime.now(timezone.utc)
+        interview_attachment.transcription_completed_at = datetime.now(UTC)
         db.flush()
 
         return {

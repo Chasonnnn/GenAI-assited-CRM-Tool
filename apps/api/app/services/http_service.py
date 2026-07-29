@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 import time
-from typing import Awaitable, Callable
-
-import asyncio
+from collections.abc import Awaitable, Callable
 
 import httpx
 

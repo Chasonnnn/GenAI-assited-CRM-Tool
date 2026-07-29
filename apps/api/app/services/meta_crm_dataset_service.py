@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from urllib.parse import quote
 from uuid import UUID
 
@@ -19,8 +19,8 @@ from app.services import (
     job_service,
     meta_capi,
     meta_crm_dataset_monitor_service,
-    meta_outbound_service,
     meta_crm_dataset_settings_service,
+    meta_outbound_service,
     zapier_settings_service,
 )
 from app.utils.presentation import humanize_identifier
@@ -35,15 +35,15 @@ DEFAULT_WEBSITE_EVENT_SOURCE_URL = "https://ewi-surrogacy.com"
 
 
 def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _coerce_utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _resolve_meta_lead_timestamp(meta_lead: MetaLead) -> datetime | None:
@@ -219,7 +219,7 @@ def build_stage_event_payload(
 
     event_payload = {
         "event_name": event_name,
-        "event_time": int(event_time.astimezone(timezone.utc).timestamp()),
+        "event_time": int(event_time.astimezone(UTC).timestamp()),
         "action_source": "system_generated",
         "custom_data": {
             "event_source": "crm",
@@ -278,7 +278,7 @@ def build_website_lead_event_payload(
 
     event_payload = {
         "event_name": "Lead",
-        "event_time": int(event_time.astimezone(timezone.utc).timestamp()),
+        "event_time": int(event_time.astimezone(UTC).timestamp()),
         "action_source": "website",
         "event_source_url": source_url[:1000],
         "custom_data": custom_data,

@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta, timezone
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -24,7 +24,7 @@ async def test_google_calendar_sync_job_handler_imports_event_in_async_context(
     )
     db.commit()
 
-    start = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=2)
+    start = datetime.now(UTC).replace(microsecond=0) + timedelta(days=2)
     end = start + timedelta(minutes=30)
 
     async def fake_list_user_google_calendar_ids(db, user_id):
@@ -129,7 +129,7 @@ async def test_google_tasks_sync_job_handler_imports_task_in_async_context(
                 "title": "Async handler task",
                 "notes": "from google",
                 "status": "needsAction",
-                "updated": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "updated": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             }
         ]
 

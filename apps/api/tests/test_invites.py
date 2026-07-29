@@ -1,6 +1,6 @@
 """Tests for invite service and email sending."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -17,7 +17,7 @@ def rate_limiter_reset():
 
 def test_accept_invite_creates_membership(db, test_org):
     """Accepting an invite should not access missing user fields."""
-    from app.db.models import User, OrgInvite, Membership
+    from app.db.models import Membership, OrgInvite, User
     from app.services import invite_service
 
     user = User(
@@ -35,7 +35,7 @@ def test_accept_invite_creates_membership(db, test_org):
         organization_id=test_org.id,
         email=user.email,
         role="intake_specialist",
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
     )
     db.add(invite)
     db.flush()
@@ -58,8 +58,8 @@ def test_accept_invite_creates_membership(db, test_org):
 
 def test_accept_invite_reuses_deprovisioned_user_with_same_email(db, test_org):
     """A removed user's old account row must not block a fresh invite for that email."""
-    from app.db.models import User, OrgInvite, Membership, AuthIdentity
     from app.db.enums import AuthProvider, Role
+    from app.db.models import AuthIdentity, Membership, OrgInvite, User
     from app.services import auth_service
     from app.services.google_oauth import GoogleUserInfo
 
@@ -78,7 +78,7 @@ def test_accept_invite_reuses_deprovisioned_user_with_same_email(db, test_org):
         organization_id=test_org.id,
         email=user.email,
         role=Role.CASE_MANAGER.value,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
     )
     db.add(invite)
     db.commit()
@@ -138,7 +138,7 @@ async def test_send_invite_email_includes_inviter_name(db, test_org, test_user, 
         email="new-user@example.com",
         role="case_manager",
         invited_by_user_id=test_user.id,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
     )
     db.add(invite)
     db.flush()
@@ -196,7 +196,7 @@ async def test_send_invite_email_uses_platform_sender_when_configured(db, test_o
         email="new-user@example.com",
         role="case_manager",
         invited_by_user_id=None,  # No inviter -> must not require Gmail
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
     )
     db.add(invite)
     db.flush()
@@ -247,7 +247,7 @@ async def test_send_invite_email_uses_template_from_email_when_platform_sender(
         email="new-user@example.com",
         role="case_manager",
         invited_by_user_id=None,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
     )
     db.add(invite)
     db.flush()
@@ -368,7 +368,7 @@ async def test_resend_invite_rate_limited(
         organization_id=test_auth.org.id,
         email="limited-resend@example.com",
         role="case_manager",
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
     )
     db.add(invite)
     db.commit()
@@ -391,7 +391,7 @@ async def test_revoke_invite_rate_limited(authed_client, db, test_auth, rate_lim
         organization_id=test_auth.org.id,
         email="limited-revoke@example.com",
         role="case_manager",
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
     )
     db.add(invite)
     db.commit()
@@ -418,7 +418,7 @@ async def test_create_invite_reuses_expired_pending_invite(
         email="expired-user@example.com",
         role=Role.CASE_MANAGER.value,
         invited_by_user_id=test_user.id,
-        expires_at=datetime.now(timezone.utc) - timedelta(hours=2),
+        expires_at=datetime.now(UTC) - timedelta(hours=2),
         resend_count=0,
     )
     db.add(existing)
@@ -443,7 +443,7 @@ async def test_create_invite_reuses_expired_pending_invite(
 
     db.refresh(existing)
     assert existing.expires_at is not None
-    assert existing.expires_at > datetime.now(timezone.utc)
+    assert existing.expires_at > datetime.now(UTC)
 
 
 def test_reactivating_expired_invite_advances_monotonic_send_revision(
@@ -460,7 +460,7 @@ def test_reactivating_expired_invite_advances_monotonic_send_revision(
         email="reactivated-revision@example.com",
         role=Role.CASE_MANAGER.value,
         invited_by_user_id=test_user.id,
-        expires_at=datetime.now(timezone.utc) - timedelta(hours=2),
+        expires_at=datetime.now(UTC) - timedelta(hours=2),
         resend_count=2,
         send_revision=7,
     )
@@ -489,7 +489,7 @@ async def test_invite_accept_details_rate_limited(client, db, test_org, rate_lim
         organization_id=test_org.id,
         email="limited-get@example.com",
         role="case_manager",
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
     )
     db.add(invite)
     db.commit()
@@ -516,7 +516,7 @@ async def test_invite_accept_post_rate_limited(
         organization_id=test_auth.org.id,
         email=test_auth.user.email,
         role="case_manager",
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
     )
     db.add(invite)
     db.commit()

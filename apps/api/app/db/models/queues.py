@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -55,8 +54,8 @@ class Queue(Base):
     )
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    members: Mapped[list["QueueMember"]] = relationship(
+    organization: Mapped[Organization] = relationship()
+    members: Mapped[list[QueueMember]] = relationship(
         back_populates="queue",
         cascade="all, delete-orphan",
     )
@@ -88,8 +87,8 @@ class QueueMember(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    queue: Mapped["Queue"] = relationship(back_populates="members")
-    user: Mapped["User"] = relationship()
+    queue: Mapped[Queue] = relationship(back_populates="members")
+    user: Mapped[User] = relationship()
 
 
 # =============================================================================

@@ -4,15 +4,15 @@ Integration health and error tracking service.
 Manages integration health status and hourly error rollups.
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import text
-from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
 
-from app.db.models import IntegrationHealth, IntegrationErrorRollup
-from app.db.enums import IntegrationType, IntegrationStatus, ConfigStatus
+from app.db.enums import ConfigStatus, IntegrationStatus, IntegrationType
+from app.db.models import IntegrationErrorRollup, IntegrationHealth
 
 # Use 'default' instead of NULL for integration_key to ensure proper upsert deduplication
 DEFAULT_INTEGRATION_KEY = "default"
@@ -21,7 +21,7 @@ DEFAULT_INTEGRATION_KEY = "default"
 def get_hour_bucket(dt: datetime | None = None) -> datetime:
     """Get the start of the hour for a given datetime."""
     if dt is None:
-        dt = datetime.now(timezone.utc)
+        dt = datetime.now(UTC)
     return dt.replace(minute=0, second=0, microsecond=0)
 
 
@@ -67,7 +67,7 @@ def record_success(
     """Record a successful integration operation."""
     health = get_or_create_health(db, org_id, integration_type, integration_key)
 
-    health.last_success_at = datetime.now(timezone.utc)
+    health.last_success_at = datetime.now(UTC)
     health.status = IntegrationStatus.HEALTHY.value
     health.last_error = None  # Clear last error on success
     db.commit()
@@ -87,7 +87,7 @@ def record_error(
 
     Updates IntegrationHealth and increments the hourly error rollup.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     hour_bucket = get_hour_bucket(now)
 
     # Update health status
@@ -129,7 +129,7 @@ def get_error_count_24h(
     integration_key: str | None = None,
 ) -> int:
     """Get error count for last 24 hours from rollups."""
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    cutoff = datetime.now(UTC) - timedelta(hours=24)
     key = integration_key or DEFAULT_INTEGRATION_KEY
 
     result = db.execute(

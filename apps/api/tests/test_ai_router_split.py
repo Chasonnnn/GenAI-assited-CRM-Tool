@@ -1,15 +1,15 @@
 def test_ai_router_modules_exist():
     from app.routers import (
-        ai_settings,
-        ai_consent,
-        ai_chat,
-        ai_conversations,
         ai_actions,
-        ai_usage,
+        ai_chat,
+        ai_consent,
+        ai_conversations,
         ai_focus,
-        ai_workflows,
         ai_schedule,
+        ai_settings,
         ai_tasks,
+        ai_usage,
+        ai_workflows,
     )
 
     modules = [

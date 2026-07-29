@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 
-from app.db.enums import AuditEventType, SurrogateSource, SurrogateActivityType
+from app.db.enums import AuditEventType, SurrogateActivityType, SurrogateSource
 from app.db.models import AuditLog, EmailLogAttachment, SurrogateActivityLog
 from app.schemas.surrogate import SurrogateCreate
 from app.services import attachment_service, email_service, surrogate_service

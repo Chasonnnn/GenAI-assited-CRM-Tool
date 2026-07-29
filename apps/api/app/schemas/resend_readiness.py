@@ -7,7 +7,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-
 ReadinessCheckStatus = Literal["idle", "queued", "running", "stalled"]
 ReadinessFreshness = Literal["fresh", "stale", "never_checked"]
 ReadinessProbeStatus = Literal["succeeded", "limited", "failed"]

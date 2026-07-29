@@ -7,25 +7,15 @@ Provides REST interface for bulk surrogate imports via CSV upload.
 import asyncio
 import os
 from collections.abc import AsyncIterator
+from typing import Annotated, Literal
 from uuid import UUID
-
-from typing import Literal, Annotated
-
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.schemas.import_template import (
-    ColumnMappingItem,
-    ColumnSuggestionResponse,
-    EnhancedImportPreviewResponse,
-    ImportApprovalItem,
-    ImportRejectRequest,
-    MatchingTemplate,
-)
-
+from app.core.config import settings
 from app.core.deps import (
     get_current_session,
     get_db,
@@ -34,12 +24,18 @@ from app.core.deps import (
 )
 from app.core.permissions import PermissionKey as P
 from app.core.policies import POLICIES
-from app.core.config import settings
 from app.db.enums import SurrogateSource
 from app.schemas.auth import UserSession
+from app.schemas.import_template import (
+    ColumnMappingItem,
+    ColumnSuggestionResponse,
+    EnhancedImportPreviewResponse,
+    ImportApprovalItem,
+    ImportRejectRequest,
+    MatchingTemplate,
+)
 from app.services import import_service
-from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
-
+from app.utils.sse import STREAM_HEADERS, format_sse, sse_preamble
 
 router = APIRouter(
     prefix="/surrogates/import",
@@ -578,6 +574,9 @@ async def get_ai_mapping_suggestions_stream(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> StreamingResponse:
     """Stream AI-powered column mapping suggestions via SSE."""
+    from app.services.ai_prompt_registry import get_prompt
+    from app.services.ai_provider import ChatMessage
+    from app.services.ai_settings_service import get_ai_provider_for_org
     from app.services.import_ai_mapper_service import (
         ai_suggestion_to_column_suggestion,
         build_mapping_prompt,
@@ -585,9 +584,6 @@ async def get_ai_mapping_suggestions_stream(
         mask_samples,
         parse_ai_response,
     )
-    from app.services.ai_settings_service import get_ai_provider_for_org
-    from app.services.ai_provider import ChatMessage
-    from app.services.ai_prompt_registry import get_prompt
     from app.services.import_detection_service import (
         AVAILABLE_SURROGATE_FIELDS,
         ColumnSuggestion,

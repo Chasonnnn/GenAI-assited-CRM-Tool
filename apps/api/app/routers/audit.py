@@ -1,10 +1,8 @@
 """Audit router - API endpoints for viewing audit logs."""
 
 import os
-
 from datetime import datetime
-from typing import Any, Annotated
-
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -13,12 +11,12 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import get_current_session, get_db, require_permission, require_csrf_header
+from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
 from app.core.policies import POLICIES
 from app.db.enums import AuditEventType, Role
+from app.schemas.auth import UserSession
 from app.schemas.compliance import ExportJobCreate, ExportJobListResponse, ExportJobRead
 from app.services import audit_service, compliance_service
-from app.schemas.auth import UserSession
 
 router = APIRouter(
     prefix="/audit",

@@ -1,14 +1,14 @@
 """Template service for workflow template marketplace."""
 
+from datetime import UTC, datetime
 from uuid import UUID
-from datetime import datetime, timezone
 
-from sqlalchemy import or_, and_
+from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.enums import FormStatus
-from app.db.models import WorkflowTemplate, WorkflowTemplateTarget, AutomationWorkflow, Form
+from app.db.models import AutomationWorkflow, Form, WorkflowTemplate, WorkflowTemplateTarget
 
 FORM_TRIGGER_TYPES = {"form_started", "form_submitted", "intake_lead_created"}
 
@@ -268,8 +268,8 @@ def use_template(
         if action_type == "send_email" and not action.get("template_id"):
             raise ValueError(f"Action {i + 1} (send_email) missing email template")
 
-    from app.services import workflow_service
     from app.db.enums import WorkflowTriggerType
+    from app.services import workflow_service
 
     workflow_service._validate_trigger_config(
         WorkflowTriggerType(template.trigger_type),
@@ -443,7 +443,7 @@ def seed_global_templates(db: Session) -> int:
             status="published",
             published_version=1,
             is_published_globally=True,
-            published_at=datetime.now(timezone.utc),
+            published_at=datetime.now(UTC),
             **data,
         )
         db.add(template)

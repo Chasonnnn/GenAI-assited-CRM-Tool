@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    TIMESTAMP,
     Boolean,
     CheckConstraint,
     ForeignKey,
@@ -15,7 +15,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    TIMESTAMP,
     UniqueConstraint,
     text,
 )
@@ -145,14 +144,14 @@ class AutomationWorkflow(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    owner: Mapped["User | None"] = relationship(foreign_keys=[owner_user_id])
-    created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
-    updated_by: Mapped["User | None"] = relationship(foreign_keys=[updated_by_user_id])
-    executions: Mapped[list["WorkflowExecution"]] = relationship(
+    organization: Mapped[Organization] = relationship()
+    owner: Mapped[User | None] = relationship(foreign_keys=[owner_user_id])
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_user_id])
+    updated_by: Mapped[User | None] = relationship(foreign_keys=[updated_by_user_id])
+    executions: Mapped[list[WorkflowExecution]] = relationship(
         back_populates="workflow", cascade="all, delete-orphan"
     )
-    user_preferences: Mapped[list["UserWorkflowPreference"]] = relationship(
+    user_preferences: Mapped[list[UserWorkflowPreference]] = relationship(
         back_populates="workflow", cascade="all, delete-orphan"
     )
 
@@ -238,8 +237,8 @@ class WorkflowExecution(Base):
     )
 
     # Relationships
-    workflow: Mapped["AutomationWorkflow"] = relationship(back_populates="executions")
-    paused_task: Mapped["Task | None"] = relationship(foreign_keys=[paused_task_id])
+    workflow: Mapped[AutomationWorkflow] = relationship(back_populates="executions")
+    paused_task: Mapped[Task | None] = relationship(foreign_keys=[paused_task_id])
 
 
 class UserWorkflowPreference(Base):
@@ -266,8 +265,8 @@ class UserWorkflowPreference(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    user: Mapped["User"] = relationship()
-    workflow: Mapped["AutomationWorkflow"] = relationship(back_populates="user_preferences")
+    user: Mapped[User] = relationship()
+    workflow: Mapped[AutomationWorkflow] = relationship(back_populates="user_preferences")
 
 
 class WorkflowResumeJob(Base):
@@ -310,8 +309,8 @@ class WorkflowResumeJob(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
-    execution: Mapped["WorkflowExecution"] = relationship()
-    task: Mapped["Task"] = relationship()
+    execution: Mapped[WorkflowExecution] = relationship()
+    task: Mapped[Task] = relationship()
 
 
 # =============================================================================
@@ -387,8 +386,8 @@ class WorkflowTemplate(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization | None"] = relationship()
-    created_by: Mapped["User | None"] = relationship()
+    organization: Mapped[Organization | None] = relationship()
+    created_by: Mapped[User | None] = relationship()
 
 
 class WorkflowTemplateTarget(Base):
@@ -409,7 +408,7 @@ class WorkflowTemplateTarget(Base):
     )
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=text("now()"))
 
-    template: Mapped["WorkflowTemplate"] = relationship()
+    template: Mapped[WorkflowTemplate] = relationship()
 
 
 # =============================================================================

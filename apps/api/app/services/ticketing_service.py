@@ -9,7 +9,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from email import policy
 from email.parser import BytesParser
 from email.utils import getaddresses, parsedate_to_datetime
@@ -28,14 +28,14 @@ from app.db.enums import (
     EmailDirection,
     EmailOccurrenceState,
     JobStatus,
+    JobType,
     LinkConfidence,
     MailboxKind,
     RecipientSource,
+    SurrogateEmailContactSource,
     TicketLinkStatus,
     TicketPriority,
     TicketStatus,
-    SurrogateEmailContactSource,
-    JobType,
 )
 from app.db.models import (
     Attachment,
@@ -113,7 +113,7 @@ class MailboxSyncStatus:
 
 
 def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _normalize_email(value: str) -> str | None:
@@ -161,7 +161,7 @@ def _decode_cursor(cursor: str) -> tuple[datetime, UUID]:
         sort_ts = datetime.fromisoformat(payload["sort_ts"])
         row_id = UUID(payload["id"])
         if sort_ts.tzinfo is None:
-            sort_ts = sort_ts.replace(tzinfo=timezone.utc)
+            sort_ts = sort_ts.replace(tzinfo=UTC)
         return sort_ts, row_id
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid cursor") from exc
@@ -384,7 +384,7 @@ def _parse_gmail_watch_expiration(value: object | None) -> datetime | None:
     except Exception:
         return None
     try:
-        return datetime.fromtimestamp(millis / 1000, tz=timezone.utc)
+        return datetime.fromtimestamp(millis / 1000, tz=UTC)
     except Exception:
         return None
 
@@ -2699,7 +2699,7 @@ def _parse_gmail_internal_date(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromtimestamp(int(value) / 1000, tz=timezone.utc)
+        return datetime.fromtimestamp(int(value) / 1000, tz=UTC)
     except Exception:
         return None
 
@@ -3080,7 +3080,7 @@ def _parse_mime_bytes(raw_bytes: bytes) -> dict:
         if message.get("Date"):
             date_header = parsedate_to_datetime(str(message.get("Date")))
             if date_header and date_header.tzinfo is None:
-                date_header = date_header.replace(tzinfo=timezone.utc)
+                date_header = date_header.replace(tzinfo=UTC)
     except Exception:
         date_header = None
 

@@ -1,8 +1,8 @@
 """Public-contract tests for distributed email-provider admission."""
 
-from datetime import datetime, timedelta, timezone
-from threading import Barrier, Event, Lock, Thread
 import time
+from datetime import UTC, datetime, timedelta
+from threading import Barrier, Event, Lock, Thread
 from uuid import uuid4
 
 import pytest
@@ -33,7 +33,7 @@ def test_concurrent_workers_reserve_ten_strictly_spaced_slots_per_second(
         pytest.skip("Concurrent provider admission requires PostgreSQL row locks")
 
     provider_account_id = f"organization:{uuid4()}"
-    fixed_now = datetime.now(timezone.utc).replace(microsecond=0)
+    fixed_now = datetime.now(UTC).replace(microsecond=0)
     worker_count = 12
     barrier = Barrier(worker_count)
     result_lock = Lock()
@@ -144,7 +144,7 @@ def test_reservation_uses_current_database_time_after_waiting_for_account_lock(
         thread.start()
         assert contender_started.wait(timeout=2)
         time.sleep(0.25)
-        released_at = datetime.now(timezone.utc)
+        released_at = datetime.now(UTC)
         locker.commit()
         thread.join(timeout=5)
 
@@ -165,7 +165,7 @@ def test_reservation_uses_current_database_time_after_waiting_for_account_lock(
 
 def test_retry_deferral_is_bounded_monotonic_and_committed(db_engine):
     provider_account_id = f"credential:{uuid4().hex}"
-    fixed_now = datetime.now(timezone.utc).replace(microsecond=0)
+    fixed_now = datetime.now(UTC).replace(microsecond=0)
     expected_next_slot = fixed_now + timedelta(seconds=30)
     seed = SessionLocal(bind=db_engine)
     verification = SessionLocal(bind=db_engine)
@@ -223,7 +223,7 @@ def test_concurrent_retry_deferrals_preserve_latest_eligible_slot(db_engine):
         pytest.skip("Concurrent provider admission requires PostgreSQL row locks")
 
     provider_account_id = f"credential:{uuid4().hex}"
-    fixed_now = datetime.now(timezone.utc).replace(microsecond=0)
+    fixed_now = datetime.now(UTC).replace(microsecond=0)
     expected_next_slot = fixed_now + timedelta(seconds=30)
     seed = SessionLocal(bind=db_engine)
     locker = SessionLocal(bind=db_engine)
@@ -352,5 +352,5 @@ def test_retry_deferral_rejects_nonpositive_durations(
             provider_account_id=f"credential:{uuid4().hex}",
             retry_after=retry_after,
             max_delay=max_delay,
-            now=datetime.now(timezone.utc),
+            now=datetime.now(UTC),
         )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -881,7 +881,7 @@ async def test_restore_published_version_updates_only_the_existing_draft(
     draft_model = db.get(EmailTemplateDraft, uuid.UUID(draft["id"]))
     assert draft_model is not None
     draft_model.last_tested_revision = 2
-    draft_model.last_tested_at = datetime.now(timezone.utc)
+    draft_model.last_tested_at = datetime.now(UTC)
     db.commit()
 
     db.refresh(template)

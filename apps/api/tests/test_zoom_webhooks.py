@@ -1,16 +1,15 @@
-import hmac
 import hashlib
+import hmac
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
 
-from app.db.models import Appointment
-from app.db.enums import AppointmentStatus, EntityType
 from app.core.config import settings
-from app.db.models import ZoomMeeting
+from app.db.enums import AppointmentStatus, EntityType
+from app.db.models import Appointment, ZoomMeeting
 from app.services import zoom_service
 from app.services.webhooks.zoom import MAX_PAYLOAD_BYTES
 
@@ -137,8 +136,8 @@ async def test_zoom_webhook_meeting_started_sets_timestamp(
         client_email="client@example.com",
         client_phone="555-111-2222",
         client_timezone="America/New_York",
-        scheduled_start=datetime.now(timezone.utc),
-        scheduled_end=datetime.now(timezone.utc),
+        scheduled_start=datetime.now(UTC),
+        scheduled_end=datetime.now(UTC),
         duration_minutes=30,
         meeting_mode="zoom",
         status=AppointmentStatus.CONFIRMED.value,
@@ -188,8 +187,8 @@ async def test_zoom_webhook_meeting_ended_sets_timestamp(
         client_email="client@example.com",
         client_phone="555-111-2222",
         client_timezone="America/New_York",
-        scheduled_start=datetime.now(timezone.utc),
-        scheduled_end=datetime.now(timezone.utc),
+        scheduled_start=datetime.now(UTC),
+        scheduled_end=datetime.now(UTC),
         duration_minutes=30,
         meeting_mode="zoom",
         status=AppointmentStatus.CONFIRMED.value,
@@ -237,8 +236,8 @@ async def test_zoom_webhook_dedupes_event_id(client, db, test_org, test_user, mo
         client_email="client@example.com",
         client_phone="555-111-2222",
         client_timezone="America/New_York",
-        scheduled_start=datetime.now(timezone.utc),
-        scheduled_end=datetime.now(timezone.utc),
+        scheduled_start=datetime.now(UTC),
+        scheduled_end=datetime.now(UTC),
         duration_minutes=30,
         meeting_mode="zoom",
         status=AppointmentStatus.CONFIRMED.value,
@@ -296,8 +295,8 @@ async def test_zoom_webhook_duplicate_does_not_rollback_session(
         client_email="client@example.com",
         client_phone="555-111-2222",
         client_timezone="America/New_York",
-        scheduled_start=datetime.now(timezone.utc),
-        scheduled_end=datetime.now(timezone.utc),
+        scheduled_start=datetime.now(UTC),
+        scheduled_end=datetime.now(UTC),
         duration_minutes=30,
         meeting_mode="zoom",
         status=AppointmentStatus.CONFIRMED.value,

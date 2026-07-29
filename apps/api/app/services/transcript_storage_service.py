@@ -3,7 +3,7 @@
 import json
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from botocore.client import BaseClient
@@ -92,7 +92,7 @@ def store_transcript(
         "html": html_content,
         "text": text_content,
         "version": version,
-        "stored_at": datetime.now(timezone.utc).isoformat(),
+        "stored_at": datetime.now(UTC).isoformat(),
     }
 
     _upload_file(storage_key, json.dumps(content).encode("utf-8"))

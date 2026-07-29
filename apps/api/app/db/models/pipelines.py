@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    TIMESTAMP,
     Boolean,
     ForeignKey,
     Index,
     Integer,
     LargeBinary,
     String,
-    TIMESTAMP,
     UniqueConstraint,
     text,
 )
@@ -93,8 +92,8 @@ class Pipeline(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    stages: Mapped[list["PipelineStage"]] = relationship(
+    organization: Mapped[Organization] = relationship()
+    stages: Mapped[list[PipelineStage]] = relationship(
         back_populates="pipeline",
         cascade="all, delete-orphan",
         order_by="PipelineStage.order",
@@ -174,7 +173,7 @@ class PipelineStage(Base):
     )
 
     # Relationships
-    pipeline: Mapped["Pipeline"] = relationship(back_populates="stages")
+    pipeline: Mapped[Pipeline] = relationship(back_populates="stages")
 
     @property
     def category(self) -> str:
@@ -286,8 +285,8 @@ class EntityVersion(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    created_by: Mapped["User | None"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    created_by: Mapped[User | None] = relationship()
 
 
 # =============================================================================

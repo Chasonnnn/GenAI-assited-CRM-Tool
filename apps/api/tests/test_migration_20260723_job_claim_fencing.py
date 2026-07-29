@@ -1,14 +1,14 @@
 """Deployment-safety rehearsal for introducing fenced background-job claims."""
 
-from datetime import datetime, timezone
-from pathlib import Path
 import uuid
+from datetime import UTC, datetime
+from pathlib import Path
 
-from alembic import command
-from alembic.config import Config
 import pytest
+from alembic.config import Config
 from sqlalchemy import text
 
+from alembic import command
 
 API_ROOT = Path(__file__).resolve().parents[1]
 PRE_FENCING_REVISION = "20260723_0220"
@@ -22,7 +22,7 @@ FENCING_MIGRATION_PATH = (
 
 ORG_ID = uuid.UUID("71000000-0000-4000-8000-000000000001")
 RUNNING_JOB_ID = uuid.UUID("72000000-0000-4000-8000-000000000001")
-ORIGINAL_RUN_AT = datetime(2026, 7, 23, 17, 30, tzinfo=timezone.utc)
+ORIGINAL_RUN_AT = datetime(2026, 7, 23, 17, 30, tzinfo=UTC)
 ORIGINAL_ERROR = "old worker still owns this non-Resend job"
 
 

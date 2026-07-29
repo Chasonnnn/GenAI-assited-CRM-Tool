@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    TIMESTAMP,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -15,7 +15,6 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
-    TIMESTAMP,
     Text,
     UniqueConstraint,
     text,
@@ -105,16 +104,16 @@ class Organization(Base):
     )
 
     # Relationships
-    memberships: Mapped[list["Membership"]] = relationship(
+    memberships: Mapped[list[Membership]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"
     )
-    invites: Mapped[list["OrgInvite"]] = relationship(
+    invites: Mapped[list[OrgInvite]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"
     )
-    surrogates: Mapped[list["Surrogate"]] = relationship(
+    surrogates: Mapped[list[Surrogate]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"
     )
-    default_surrogate_application_form: Mapped["Form | None"] = relationship(
+    default_surrogate_application_form: Mapped[Form | None] = relationship(
         foreign_keys=[default_surrogate_application_form_id]
     )
 
@@ -194,10 +193,10 @@ class User(Base):
     )
 
     # Relationships
-    membership: Mapped["Membership | None"] = relationship(
+    membership: Mapped[Membership | None] = relationship(
         back_populates="user", cascade="all, delete-orphan", uselist=False
     )
-    auth_identities: Mapped[list["AuthIdentity"]] = relationship(
+    auth_identities: Mapped[list[AuthIdentity]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
 
@@ -231,8 +230,8 @@ class Membership(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    user: Mapped["User"] = relationship(back_populates="membership")
-    organization: Mapped["Organization"] = relationship(back_populates="memberships")
+    user: Mapped[User] = relationship(back_populates="membership")
+    organization: Mapped[Organization] = relationship(back_populates="memberships")
 
 
 class RolePermission(Base):
@@ -369,7 +368,7 @@ class AuthIdentity(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    user: Mapped["User"] = relationship(back_populates="auth_identities")
+    user: Mapped[User] = relationship(back_populates="auth_identities")
 
 
 class UserSession(Base):
@@ -426,8 +425,8 @@ class UserSession(Base):
     expires_at: Mapped[datetime] = mapped_column(nullable=False)
 
     # Relationships
-    user: Mapped["User"] = relationship()
-    organization: Mapped["Organization"] = relationship()
+    user: Mapped[User] = relationship()
+    organization: Mapped[Organization] = relationship()
 
 
 class OrgInvite(Base):
@@ -487,9 +486,9 @@ class OrgInvite(Base):
     )
 
     # Relationships
-    organization: Mapped["Organization"] = relationship(back_populates="invites")
-    invited_by: Mapped["User | None"] = relationship(foreign_keys=[invited_by_user_id])
-    revoked_by: Mapped["User | None"] = relationship(foreign_keys=[revoked_by_user_id])
+    organization: Mapped[Organization] = relationship(back_populates="invites")
+    invited_by: Mapped[User | None] = relationship(foreign_keys=[invited_by_user_id])
+    revoked_by: Mapped[User | None] = relationship(foreign_keys=[revoked_by_user_id])
 
 
 class OrganizationSubscription(Base):
@@ -541,7 +540,7 @@ class OrganizationSubscription(Base):
     )
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped[Organization] = relationship()
 
 
 class AdminActionLog(Base):
@@ -590,11 +589,11 @@ class AdminActionLog(Base):
     )
 
     # Relationships
-    actor: Mapped["User | None"] = relationship(foreign_keys=[actor_user_id])
-    target_organization: Mapped["Organization | None"] = relationship(
+    actor: Mapped[User | None] = relationship(foreign_keys=[actor_user_id])
+    target_organization: Mapped[Organization | None] = relationship(
         foreign_keys=[target_organization_id]
     )
-    target_user: Mapped["User | None"] = relationship(foreign_keys=[target_user_id])
+    target_user: Mapped[User | None] = relationship(foreign_keys=[target_user_id])
 
 
 class SupportSession(Base):
@@ -641,8 +640,8 @@ class SupportSession(Base):
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
-    actor: Mapped["User"] = relationship(foreign_keys=[actor_user_id])
-    organization: Mapped["Organization"] = relationship(foreign_keys=[organization_id])
+    actor: Mapped[User] = relationship(foreign_keys=[actor_user_id])
+    organization: Mapped[Organization] = relationship(foreign_keys=[organization_id])
 
 
 # =============================================================================

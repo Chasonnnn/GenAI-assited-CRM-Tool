@@ -6,7 +6,6 @@ from typing import Generic, TypeVar
 from fastapi import Query
 from sqlalchemy.orm import Query as SQLAlchemyQuery
 
-
 T = TypeVar("T")
 
 # Pagination limits

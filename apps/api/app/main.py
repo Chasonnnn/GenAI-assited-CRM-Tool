@@ -10,17 +10,19 @@ from uuid import UUID
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from app.core.config import settings
-from app.core.deps import COOKIE_NAME
-from app.core.csrf import CSRF_HEADER, CSRF_COOKIE_NAME, set_csrf_cookie, validate_csrf
-from app.core.gcp_monitoring import report_exception, setup_gcp_monitoring
 from app.core import migrations as db_migrations
+from app.core.config import settings
+from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, set_csrf_cookie, validate_csrf
+from app.core.deps import COOKIE_NAME
+from app.core.gcp_monitoring import report_exception, setup_gcp_monitoring
 from app.core.protobuf_guard import apply_protobuf_json_depth_guard
+from app.core.rate_limit import limiter
+from app.core.redis_client import get_redis_url, get_sync_redis_client
 from app.core.request_audit_context import (
     explicit_event_emitted,
     reset_request_audit_context,
@@ -33,11 +35,9 @@ from app.core.structured_logging import (
     extract_trace_id,
     log_structured_event,
 )
-from app.core.rate_limit import limiter
-from app.core.redis_client import get_redis_url, get_sync_redis_client
 from app.core.telemetry import configure_telemetry
-from app.db.session import SessionLocal, engine
 from app.db.enums import AlertSeverity, AlertType, AuditEventType
+from app.db.session import SessionLocal, engine
 from app.routers import (
     admin_exports,
     admin_imports,
@@ -51,11 +51,8 @@ from app.routers import (
     auth,
     booking,
     campaigns,
-    custom_fields,
-    surrogates,
-    surrogates_read,
-    surrogates_import,
     compliance,
+    custom_fields,
     dashboard,
     dev,
     email_operations,
@@ -64,10 +61,10 @@ from app.routers import (
     email_templates,
     forms,
     forms_public,
-    integrations,
-    internal,
     import_templates,
+    integrations,
     intended_parents,
+    internal,
     interviews,
     invites,
     jobs,
@@ -75,8 +72,8 @@ from app.routers import (
     mailboxes,
     matches,
     meta_crm_dataset,
-    meta_oauth,
     meta_forms,
+    meta_oauth,
     metadata,
     mfa,
     monitoring,
@@ -92,18 +89,25 @@ from app.routers import (
     queues,
     resend,
     search,
-    settings as settings_router,
     status_change_requests,
-    tickets,
+    surrogates,
+    surrogates_import,
+    surrogates_read,
     tasks,
     templates,
+    tickets,
     tracking,
     unsubscribe,
-    zapier,
     webhooks,
-    websocket as ws_router,
-    workflows,
     workflow_metrics,
+    workflows,
+    zapier,
+)
+from app.routers import (
+    settings as settings_router,
+)
+from app.routers import (
+    websocket as ws_router,
 )
 from app.services import alert_service, metrics_service
 

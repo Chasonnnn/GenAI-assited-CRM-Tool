@@ -11,7 +11,7 @@ Tests the analytics router endpoints including:
 
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone, date, time
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 
 import pytest
@@ -22,12 +22,18 @@ from app.core.deps import COOKIE_NAME, get_db
 from app.core.encryption import hash_email, hash_phone
 from app.core.security import create_session_token
 from app.db.enums import Role
-from app.db.models import Membership, User
-from app.db.models import Surrogate, PipelineStage, MetaLead, MetaAdAccount, MetaDailySpend
+from app.db.models import (
+    Membership,
+    MetaAdAccount,
+    MetaDailySpend,
+    MetaLead,
+    PipelineStage,
+    Surrogate,
+    User,
+)
 from app.main import app
 from app.services import session_service
 from app.utils.normalization import normalize_email
-
 
 # =============================================================================
 # Fixtures
@@ -187,7 +193,7 @@ def sample_cases(db, test_org, test_user, analytics_pipeline_stages):
                 created_by_user_id=test_user.id,
                 owner_type="user",
                 owner_id=test_user.id,
-                created_at=datetime.now(timezone.utc) - timedelta(days=j),
+                created_at=datetime.now(UTC) - timedelta(days=j),
             )
             db.add(case)
             cases.append(case)
@@ -221,8 +227,8 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
         organization_id=test_org.id,
         meta_page_id="test-page",
         meta_lead_id=f"lead-{uuid.uuid4().hex[:8]}",
-        meta_created_time=datetime.now(timezone.utc) - timedelta(days=5),
-        received_at=datetime.now(timezone.utc) - timedelta(days=5),
+        meta_created_time=datetime.now(UTC) - timedelta(days=5),
+        received_at=datetime.now(UTC) - timedelta(days=5),
         is_converted=False,
         status="processed",
     )
@@ -236,11 +242,11 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
             organization_id=test_org.id,
             meta_page_id="test-page",
             meta_lead_id=f"lead-{uuid.uuid4().hex[:8]}",
-            meta_created_time=datetime.now(timezone.utc) - timedelta(days=3),
-            received_at=datetime.now(timezone.utc) - timedelta(days=3),
+            meta_created_time=datetime.now(UTC) - timedelta(days=3),
+            received_at=datetime.now(UTC) - timedelta(days=3),
             is_converted=True,
             converted_surrogate_id=pre_qualified_case.id,
-            converted_at=datetime.now(timezone.utc) - timedelta(days=2),
+            converted_at=datetime.now(UTC) - timedelta(days=2),
             status="converted",
         )
         db.add(lead2)
@@ -253,11 +259,11 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
             organization_id=test_org.id,
             meta_page_id="test-page",
             meta_lead_id=f"lead-{uuid.uuid4().hex[:8]}",
-            meta_created_time=datetime.now(timezone.utc) - timedelta(days=4),
-            received_at=datetime.now(timezone.utc) - timedelta(days=4),
+            meta_created_time=datetime.now(UTC) - timedelta(days=4),
+            received_at=datetime.now(UTC) - timedelta(days=4),
             is_converted=True,
             converted_surrogate_id=converted_case.id,
-            converted_at=datetime.now(timezone.utc) - timedelta(days=1),
+            converted_at=datetime.now(UTC) - timedelta(days=1),
             status="converted",
         )
         db.add(lead3)
@@ -270,11 +276,11 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
             organization_id=test_org.id,
             meta_page_id="test-page",
             meta_lead_id=f"lead-{uuid.uuid4().hex[:8]}",
-            meta_created_time=datetime.now(timezone.utc) - timedelta(days=7),
-            received_at=datetime.now(timezone.utc) - timedelta(days=7),
+            meta_created_time=datetime.now(UTC) - timedelta(days=7),
+            received_at=datetime.now(UTC) - timedelta(days=7),
             is_converted=True,
             converted_surrogate_id=approved_case.id,
-            converted_at=datetime.now(timezone.utc) - timedelta(days=1),
+            converted_at=datetime.now(UTC) - timedelta(days=1),
             status="converted",
         )
         db.add(lead4)
@@ -308,8 +314,8 @@ class TestAnalyticsSummary:
     @pytest.mark.asyncio
     async def test_summary_with_date_range(self, authed_client, sample_cases):
         """Summary respects date range filters."""
-        from_date = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
-        to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        from_date = (datetime.now(UTC) - timedelta(days=7)).strftime("%Y-%m-%d")
+        to_date = datetime.now(UTC).strftime("%Y-%m-%d")
 
         response = await authed_client.get(
             f"/analytics/summary?from_date={from_date}&to_date={to_date}"
@@ -426,8 +432,8 @@ class TestCasesTrend:
     ):
         """Date-only to_date should include the entire day."""
         stage = analytics_pipeline_stages["new_unread"]
-        target_day = (datetime.now(timezone.utc) - timedelta(days=1)).date()
-        start_of_day = datetime.combine(target_day, time(0, 0), tzinfo=timezone.utc)
+        target_day = (datetime.now(UTC) - timedelta(days=1)).date()
+        start_of_day = datetime.combine(target_day, time(0, 0), tzinfo=UTC)
 
         for idx, hour in enumerate((3, 22), start=1):
             email = f"trend-date-only-{idx}@example.com"
@@ -473,7 +479,7 @@ class TestCasesTrend:
         """Date-only ranges should be interpreted in the provided timezone."""
         stage = analytics_pipeline_stages["new_unread"]
         local_day = date(2026, 1, 15)
-        created_at = datetime(2026, 1, 16, 2, 0, tzinfo=timezone.utc)
+        created_at = datetime(2026, 1, 16, 2, 0, tzinfo=UTC)
         email = "trend-timezone@example.com"
         normalized_email = normalize_email(email)
         phone = "555-1200"
@@ -541,8 +547,8 @@ class TestMetaPerformance:
     @pytest.mark.asyncio
     async def test_meta_performance_with_date_range(self, authed_client, sample_meta_leads):
         """Meta performance respects date range."""
-        from_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
-        to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        from_date = (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%d")
+        to_date = datetime.now(UTC).strftime("%Y-%m-%d")
 
         response = await authed_client.get(
             f"/analytics/meta/performance?from_date={from_date}&to_date={to_date}"
@@ -561,8 +567,8 @@ class TestMetaPerformance:
         sample_meta_leads,
     ):
         """Meta performance filters by meta_created_time when available."""
-        from_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
-        to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        from_date = (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%d")
+        to_date = datetime.now(UTC).strftime("%Y-%m-%d")
         response = await authed_client.get(
             f"/analytics/meta/performance?from_date={from_date}&to_date={to_date}"
         )
@@ -574,8 +580,8 @@ class TestMetaPerformance:
             organization_id=test_org.id,
             meta_page_id="test-page",
             meta_lead_id=f"lead-{uuid.uuid4().hex[:8]}",
-            meta_created_time=datetime.now(timezone.utc) - timedelta(days=90),
-            received_at=datetime.now(timezone.utc) - timedelta(days=1),
+            meta_created_time=datetime.now(UTC) - timedelta(days=90),
+            received_at=datetime.now(UTC) - timedelta(days=1),
             is_converted=False,
             status="processed",
         )
@@ -601,7 +607,7 @@ class TestMetaSpend:
             ad_account_external_id="act_test_123",
             ad_account_name="Test Ad Account",
             is_active=True,
-            spend_synced_at=datetime.now(timezone.utc),
+            spend_synced_at=datetime.now(UTC),
         )
         db.add(ad_account)
         db.flush()
@@ -747,8 +753,8 @@ def performance_pipeline_stages(db, test_org):
 @pytest.fixture
 def second_test_user(db, test_org):
     """Create a second test user for performance comparison."""
-    from app.db.models import User, Membership
     from app.db.enums import Role
+    from app.db.models import Membership, User
 
     user = User(
         id=uuid.uuid4(),
@@ -775,8 +781,8 @@ def second_test_user(db, test_org):
 @pytest.fixture
 def performance_cases(db, test_org, test_user, second_test_user, performance_pipeline_stages):
     """Create sample cases with status history for performance testing."""
-    from app.db.models import Surrogate, SurrogateStatusHistory, Queue
     from app.core.encryption import hash_email, hash_phone
+    from app.db.models import Queue, Surrogate, SurrogateStatusHistory
     from app.utils.normalization import normalize_email
 
     stages = performance_pipeline_stages["stages"]
@@ -817,7 +823,7 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
             created_by_user_id=test_user.id,
             owner_type="user",
             owner_id=test_user.id,
-            created_at=datetime.now(timezone.utc) - timedelta(days=30),
+            created_at=datetime.now(UTC) - timedelta(days=30),
         )
         db.add(case)
         db.flush()
@@ -838,7 +844,7 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
                     organization_id=test_org.id,
                     to_stage_id=stages[stage_slug].id,
                     changed_by_user_id=test_user.id,
-                    changed_at=datetime.now(timezone.utc)
+                    changed_at=datetime.now(UTC)
                     - timedelta(days=25 - list(stages.keys()).index(stage_slug)),
                 )
                 db.add(history)
@@ -850,7 +856,7 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
                     organization_id=test_org.id,
                     to_stage_id=stages[stage_slug].id,
                     changed_by_user_id=test_user.id,
-                    changed_at=datetime.now(timezone.utc)
+                    changed_at=datetime.now(UTC)
                     - timedelta(days=25 - list(stages.keys()).index(stage_slug)),
                 )
                 db.add(history)
@@ -862,7 +868,7 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
                     organization_id=test_org.id,
                     to_stage_id=stages[stage_slug].id,
                     changed_by_user_id=test_user.id,
-                    changed_at=datetime.now(timezone.utc)
+                    changed_at=datetime.now(UTC)
                     - timedelta(days=25 - list(stages.keys()).index(stage_slug)),
                 )
                 db.add(history)
@@ -886,7 +892,7 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
             created_by_user_id=second_test_user.id,
             owner_type="user",
             owner_id=second_test_user.id,
-            created_at=datetime.now(timezone.utc) - timedelta(days=30),
+            created_at=datetime.now(UTC) - timedelta(days=30),
         )
         db.add(case)
         db.flush()
@@ -900,7 +906,7 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
                     organization_id=test_org.id,
                     to_stage_id=stages[stage_slug].id,
                     changed_by_user_id=second_test_user.id,
-                    changed_at=datetime.now(timezone.utc)
+                    changed_at=datetime.now(UTC)
                     - timedelta(days=25 - list(stages.keys()).index(stage_slug)),
                 )
                 db.add(history)
@@ -919,7 +925,7 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
                     organization_id=test_org.id,
                     to_stage_id=stages[stage_slug].id,
                     changed_by_user_id=second_test_user.id,
-                    changed_at=datetime.now(timezone.utc)
+                    changed_at=datetime.now(UTC)
                     - timedelta(days=25 - list(stages.keys()).index(stage_slug)),
                 )
                 db.add(history)
@@ -942,7 +948,7 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
         created_by_user_id=test_user.id,
         owner_type="queue",  # Queue-owned = unassigned
         owner_id=test_queue.id,  # Reference the queue
-        created_at=datetime.now(timezone.utc) - timedelta(days=30),
+        created_at=datetime.now(UTC) - timedelta(days=30),
     )
     db.add(unassigned_case)
     db.flush()
@@ -1061,8 +1067,8 @@ class TestPerformanceByUser:
     async def test_date_range_filter(self, authed_client, performance_cases):
         """Date range filters cases correctly."""
         # Cases were created 30 days ago, filter to last 7 days should return fewer
-        from_date = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
-        to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        from_date = (datetime.now(UTC) - timedelta(days=7)).strftime("%Y-%m-%d")
+        to_date = datetime.now(UTC).strftime("%Y-%m-%d")
 
         response = await authed_client.get(
             f"/analytics/performance/by-user?from_date={from_date}&to_date={to_date}"
@@ -1085,8 +1091,8 @@ class TestPerformanceByUser:
         self, authed_client, db, test_org, performance_pipeline_stages
     ):
         """Users with zero cases still appear in results."""
-        from app.db.models import User, Membership
         from app.db.enums import Role
+        from app.db.models import Membership, User
 
         # Create a user with no cases
         inactive_user = User(

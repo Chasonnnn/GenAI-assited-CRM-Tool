@@ -7,19 +7,19 @@ Create Date: 2025-02-20 12:00:00.000000
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date, datetime
-from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import CITEXT
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "c6d2e3f4a5b6"
-down_revision: Union[str, Sequence[str], None] = "b1c3d5e7f9a1"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "b1c3d5e7f9a1"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def _safe_str(value: object | None) -> str:

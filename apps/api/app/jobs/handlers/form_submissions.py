@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-
 logger = logging.getLogger(__name__)
 
 

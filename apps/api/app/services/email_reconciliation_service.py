@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import Request
 from sqlalchemy import select
-
 from sqlalchemy.orm import Session
 
 from app.db.enums import AuditEventType, JobStatus, JobType
@@ -21,7 +20,6 @@ from app.db.models import (
 from app.services.resend_event_contract import (
     RESEND_RECONCILABLE_EVENT_TYPES as RECONCILABLE_DELIVERY_EVENT_TYPES,
 )
-
 
 _DELIVERY_REASON_CODES = {
     "idempotency_window_expired": "idempotency_window_expired",
@@ -63,7 +61,7 @@ def ensure_orphan_webhook_case(
             status=status,
             reason_code=reason_code,
             resend_webhook_event_id=event.id,
-            detected_at=event.received_at or datetime.now(timezone.utc),
+            detected_at=event.received_at or datetime.now(UTC),
         )
         db.add(case)
         db.flush()
@@ -74,13 +72,13 @@ def ensure_orphan_webhook_case(
     if case.status != status or case.reason_code != reason_code:
         case.status = status
         case.reason_code = reason_code
-        case.updated_at = datetime.now(timezone.utc)
+        case.updated_at = datetime.now(UTC)
         case.resolved_at = None
         case.resolved_by_user_id = None
         case.resolution_code = None
         case.version += 1
     elif visible_transition:
-        case.updated_at = datetime.now(timezone.utc)
+        case.updated_at = datetime.now(UTC)
         case.version += 1
     return case
 
@@ -103,7 +101,7 @@ def resolve_orphan_webhook_case(
     if case is None or case.status == "resolved":
         return case
 
-    resolved_at = datetime.now(timezone.utc)
+    resolved_at = datetime.now(UTC)
     case.status = "resolved"
     case.reason_code = "correlation_succeeded"
     case.resolved_at = resolved_at
@@ -173,7 +171,7 @@ def resolve_unknown_delivery_case(
     if case.status == "resolved" and case.resolution_code == resolution_code:
         return case
 
-    resolved_at = datetime.now(timezone.utc)
+    resolved_at = datetime.now(UTC)
     case.status = "resolved"
     case.reason_code = "provider_acceptance_verified"
     case.resolved_at = resolved_at
@@ -246,7 +244,7 @@ def retry_orphan_correlation(
         .with_for_update()
         .one_or_none()
     )
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if job is None:
         job = Job(
             organization_id=organization_id,
@@ -420,7 +418,7 @@ def link_orphan_event(
     )
     if job is not None:
         job.status = JobStatus.COMPLETED.value
-        job.completed_at = datetime.now(timezone.utc)
+        job.completed_at = datetime.now(UTC)
         job.last_error = None
         job.claim_token = None
         job.claimed_at = None
@@ -502,7 +500,7 @@ def dismiss_orphan_event(
         raise ReconciliationCaseConflict
 
     previous_version = case.version
-    resolved_at = datetime.now(timezone.utc)
+    resolved_at = datetime.now(UTC)
     case.status = "dismissed"
     case.reason_code = "operator_dismissed"
     case.resolved_at = resolved_at
@@ -603,7 +601,7 @@ def resolve_unknown_delivery_by_operator(
     if case.case_type != "unknown_delivery" or case.status != "action_required":
         raise ReconciliationCaseConflict
 
-    resolved_at = datetime.now(timezone.utc)
+    resolved_at = datetime.now(UTC)
     from app.services import email_delivery_service
 
     try:
@@ -684,7 +682,7 @@ def mark_orphan_case_exhausted_for_job(
     if case.status != "action_required" or case.reason_code != "automatic_correlation_exhausted":
         case.status = "action_required"
         case.reason_code = "automatic_correlation_exhausted"
-        case.updated_at = datetime.now(timezone.utc)
+        case.updated_at = datetime.now(UTC)
         case.version += 1
     return case
 
@@ -716,6 +714,6 @@ def mark_orphan_case_claim_expired(
     if case.status != "pending" or case.reason_code != "worker_claim_expired":
         case.status = "pending"
         case.reason_code = "worker_claim_expired"
-        case.updated_at = datetime.now(timezone.utc)
+        case.updated_at = datetime.now(UTC)
         case.version += 1
     return case

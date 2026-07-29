@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 import json
-from datetime import datetime, timedelta, timezone
+import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -26,7 +26,7 @@ NON_ACTIONABLE_SKIP_REASONS = {"duplicate"}
 
 
 def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _persist_isolated(create_fn) -> None:

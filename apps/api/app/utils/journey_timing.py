@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-
 JOURNEY_TIMING_PREFERENCE_LABELS: dict[str, str] = {
     "months_0_3": "0–3 months",
     "months_3_6": "3–6 months",

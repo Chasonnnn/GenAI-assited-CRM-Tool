@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     ForeignKey,
@@ -108,7 +107,7 @@ class AnalyticsSnapshot(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped[Organization] = relationship()
 
 
 # =============================================================================

@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import httpx
@@ -151,7 +151,7 @@ async def test_attachment_handler_dispatches_remote_scan_when_configured(monkeyp
         attempts=1,
         max_attempts=3,
         claim_token=claim_token,
-        claimed_at=datetime.now(timezone.utc),
+        claimed_at=datetime.now(UTC),
     )
     captured: dict[str, object] = {}
 
@@ -193,7 +193,7 @@ async def test_attachment_handler_keeps_claim_on_ambiguous_dispatch(monkeypatch)
         attempts=1,
         max_attempts=3,
         claim_token=uuid4(),
-        claimed_at=datetime.now(timezone.utc),
+        claimed_at=datetime.now(UTC),
     )
     monkeypatch.setattr(scan_dispatch_service, "remote_scan_dispatch_configured", lambda: True)
 
@@ -222,7 +222,7 @@ async def test_form_submission_handler_dispatches_remote_scan_when_configured(mo
         attempts=1,
         max_attempts=3,
         claim_token=claim_token,
-        claimed_at=datetime.now(timezone.utc),
+        claimed_at=datetime.now(UTC),
     )
     captured: dict[str, object] = {}
 
@@ -264,7 +264,7 @@ async def test_form_submission_handler_keeps_claim_on_ambiguous_dispatch(monkeyp
         attempts=1,
         max_attempts=3,
         claim_token=uuid4(),
-        claimed_at=datetime.now(timezone.utc),
+        claimed_at=datetime.now(UTC),
     )
     monkeypatch.setattr(scan_dispatch_service, "remote_scan_dispatch_configured", lambda: True)
 
@@ -301,7 +301,7 @@ def test_scan_job_runner_marks_job_completed(db, test_org, monkeypatch):
         job_type=JobType.ATTACHMENT_SCAN.value,
         status=JobStatus.RUNNING.value,
         claim_token=uuid4(),
-        claimed_at=datetime.now(timezone.utc),
+        claimed_at=datetime.now(UTC),
         payload={"attachment_id": str(attachment_id)},
         attempts=1,
         max_attempts=3,
@@ -350,7 +350,7 @@ def test_terminal_scan_resource_completes_job_without_rescan(db, test_org, monke
         attempts=1,
         max_attempts=3,
         claim_token=uuid4(),
-        claimed_at=datetime.now(timezone.utc),
+        claimed_at=datetime.now(UTC),
     )
     db.add_all([attachment, job])
     db.commit()
@@ -409,7 +409,7 @@ def test_scan_runner_rejects_resource_owned_by_another_organization(db, test_org
         attempts=1,
         max_attempts=1,
         claim_token=uuid4(),
-        claimed_at=datetime.now(timezone.utc),
+        claimed_at=datetime.now(UTC),
     )
     db.add_all([other_org, attachment, job])
     db.commit()
@@ -471,7 +471,7 @@ def test_two_scan_executions_with_same_token_invoke_scanner_once(db_engine, monk
             attempts=1,
             max_attempts=3,
             claim_token=claim_token,
-            claimed_at=datetime.now(timezone.utc),
+            claimed_at=datetime.now(UTC),
         )
     )
     setup.commit()
@@ -555,7 +555,7 @@ def test_two_scan_jobs_for_same_resource_invoke_scanner_once(db_engine, monkeypa
                 attempts=1,
                 max_attempts=3,
                 claim_token=claim_token,
-                claimed_at=datetime.now(timezone.utc),
+                claimed_at=datetime.now(UTC),
             )
             for job_id, claim_token in zip(job_ids, claim_tokens, strict=True)
         ]
@@ -631,7 +631,7 @@ def test_scan_runner_rejects_stale_claim_before_invoking_scanner(db, test_org, m
         attempts=1,
         max_attempts=3,
         claim_token=current_token,
-        claimed_at=datetime.now(timezone.utc),
+        claimed_at=datetime.now(UTC),
     )
     db.add(job)
     db.commit()
@@ -700,7 +700,7 @@ def test_legacy_scan_cannot_complete_after_claim_generation_changes(db, test_org
             .where(Job.id == job.id)
             .values(
                 claim_token=newer_token,
-                claimed_at=datetime.now(timezone.utc),
+                claimed_at=datetime.now(UTC),
             )
             .execution_options(synchronize_session=False)
         )

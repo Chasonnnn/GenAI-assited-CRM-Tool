@@ -1,7 +1,7 @@
 """Privacy tests for AI endpoints."""
 
-from datetime import datetime, timezone
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
@@ -21,7 +21,7 @@ def _create_ai_settings(db, org_id, user_id, *, anonymize_pii=True) -> AISetting
         model="gemini-3-flash-preview",
         current_version=1,
         anonymize_pii=anonymize_pii,
-        consent_accepted_at=datetime.now(timezone.utc),
+        consent_accepted_at=datetime.now(UTC),
         consent_accepted_by=user_id,
         api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
     )
@@ -204,8 +204,8 @@ async def test_parse_schedule_anonymizes_prompt_and_rehydrates(
 async def test_task_chat_anonymizes_context_and_message(
     db, test_org, test_user, default_stage, monkeypatch
 ):
+    from app.db.enums import OwnerType, TaskType
     from app.db.models import Task
-    from app.db.enums import TaskType, OwnerType
     from app.services import ai_chat_service
 
     surrogate = _create_surrogate(

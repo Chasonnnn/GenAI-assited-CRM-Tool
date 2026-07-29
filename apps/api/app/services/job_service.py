@@ -2,14 +2,14 @@
 
 from collections.abc import Collection
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
-from app.db.models import Job
 from app.db.enums import JobScope, JobStatus, JobType
+from app.db.models import Job
 
 
 class JobClaimLost(RuntimeError):
@@ -56,7 +56,7 @@ def enqueue_job(
         organization_id=org_id,
         job_type=job_type.value,
         payload=payload,
-        run_at=run_at or datetime.now(timezone.utc),
+        run_at=run_at or datetime.now(UTC),
         status=JobStatus.PENDING.value,
         idempotency_key=idempotency_key,
     )
@@ -83,7 +83,7 @@ def enqueue_platform_job(
         organization_id=None,
         job_type=job_type.value,
         payload=payload,
-        run_at=run_at or datetime.now(timezone.utc),
+        run_at=run_at or datetime.now(UTC),
         status=JobStatus.PENDING.value,
         idempotency_key=idempotency_key,
     )
@@ -122,7 +122,7 @@ def get_pending_jobs(db: Session, limit: int = 10) -> list[Job]:
 
     Returns jobs where status='pending' and run_at <= now, ordered by run_at.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return (
         db.query(Job)
         .filter(
@@ -145,7 +145,7 @@ def claim_pending_jobs(
 
     Uses row locking on Postgres to avoid duplicate claims across workers.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     type_values: list[str] | None = None
     if job_types is not None:
         type_values = [jt.value if isinstance(jt, JobType) else str(jt) for jt in job_types if jt]
@@ -187,7 +187,7 @@ def claim_pending_jobs(
 
 def claim_job_for_dispatch(db: Session, job_id: UUID) -> Job | None:
     """Atomically transition a pending job to running for direct dispatch."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     result = db.execute(
         update(Job)
         .where(
@@ -230,7 +230,7 @@ def heartbeat_job_claim(
             Job.status == JobStatus.RUNNING.value,
             Job.claim_token == claim_token,
         )
-        .values(claimed_at=heartbeat_at or datetime.now(timezone.utc))
+        .values(claimed_at=heartbeat_at or datetime.now(UTC))
         .execution_options(synchronize_session=False)
     )
     refreshed = (result.rowcount or 0) == 1
@@ -430,7 +430,7 @@ def mark_job_running(db: Session, job: Job) -> Job:
     job.status = JobStatus.RUNNING.value
     job.attempts += 1
     job.claim_token = uuid4()
-    job.claimed_at = datetime.now(timezone.utc)
+    job.claimed_at = datetime.now(UTC)
     db.commit()
     db.refresh(job)
     return job
@@ -445,7 +445,7 @@ def mark_job_completed(db: Session, job: Job) -> Job:
             claim_token=job.claim_token,
         )
     job.status = JobStatus.COMPLETED.value
-    job.completed_at = datetime.now(timezone.utc)
+    job.completed_at = datetime.now(UTC)
     job.last_error = None
     job.claim_token = None
     job.claimed_at = None
@@ -461,7 +461,7 @@ def complete_claimed_job(
     claim_token: UUID | None,
 ) -> Job:
     """Complete only the still-current worker claim."""
-    completed_at = datetime.now(timezone.utc)
+    completed_at = datetime.now(UTC)
     claim_filter = (
         Job.claim_token.is_(None) if claim_token is None else Job.claim_token == claim_token
     )
@@ -579,7 +579,7 @@ def recover_stale_resend_reconciliation_jobs(
     limit: int = 100,
 ) -> StaleReconciliationRecovery:
     """Recover crashed Resend correlation workers without reviving stale claims."""
-    evaluated_at = now or datetime.now(timezone.utc)
+    evaluated_at = now or datetime.now(UTC)
     cutoff = evaluated_at - stale_after
     query = (
         select(Job)
@@ -681,7 +681,7 @@ def replay_failed_job(
     if job.status != JobStatus.FAILED.value:
         raise ValueError("Only failed jobs can be replayed")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = dict(job.payload or {})
     if (
         job.job_type == JobType.WORKFLOW_EMAIL.value

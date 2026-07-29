@@ -5,21 +5,20 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.encryption import hash_email
 from app.core.constants import SYSTEM_USER_ID
+from app.core.encryption import hash_email
 from app.db.enums import OwnerType, Role, TaskType
 from app.db.models import Membership, MetaAd, MetaForm, MetaFormVersion, MetaLead, Surrogate, Task
 from app.schemas.task import TaskCreate
 from app.services import import_detection_service, queue_service, task_service
 from app.utils.normalization import normalize_email
 from app.utils.pagination import paginate_query_by_offset
-
 
 META_SYSTEM_COLUMNS: list[tuple[str, str]] = [
     ("meta_ad_id", "Ad ID"),
@@ -215,7 +214,7 @@ def upsert_form_from_payload(
             else:
                 form.mapping_status = "outdated"
 
-    form.updated_at = datetime.now(timezone.utc)
+    form.updated_at = datetime.now(UTC)
     return form
 
 
@@ -454,7 +453,7 @@ def build_mapping_preview(
                     continue
                 row[key] = _generate_dummy_value(question, idx)
             if "created_time" in keys:
-                row["created_time"] = (datetime.now(timezone.utc) - timedelta(days=idx)).isoformat()
+                row["created_time"] = (datetime.now(UTC) - timedelta(days=idx)).isoformat()
             if "meta_ad_id" in keys:
                 row["meta_ad_id"] = f"ad_{1000 + idx}"
             if "meta_ad_name" in keys:
@@ -562,9 +561,9 @@ def save_mapping(
     form.unknown_column_behavior = unknown_column_behavior
     form.mapping_status = "mapped"
     form.mapping_version_id = form.current_version_id
-    form.mapping_updated_at = datetime.now(timezone.utc)
+    form.mapping_updated_at = datetime.now(UTC)
     form.mapping_updated_by_user_id = user_id
-    form.updated_at = datetime.now(timezone.utc)
+    form.updated_at = datetime.now(UTC)
 
     db.commit()
 
@@ -592,7 +591,7 @@ def ensure_mapping_review_task(
         return
 
     owner_type, owner_id, created_by = _resolve_task_owner(db, form.organization_id)
-    due_date = (datetime.now(timezone.utc) + timedelta(days=2)).date()
+    due_date = (datetime.now(UTC) + timedelta(days=2)).date()
 
     task_data = TaskCreate(
         title=title,

@@ -9,8 +9,8 @@ from app.core.stage_definitions import (
     SURROGATE_PIPELINE_ENTITY,
     canonicalize_stage_key,
     get_default_stage_defs,
-    get_stage_protection,
     get_required_semantic_stage_keys,
+    get_stage_protection,
     normalize_pipeline_entity_type,
 )
 from app.schemas.pipeline_semantics import (

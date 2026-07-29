@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -102,7 +102,7 @@ def test_build_stage_event_payload_exposes_zapier_matching_fields():
     payload = zapier_outbound_service.build_stage_event_payload(
         lead_id="1559954882011881",
         event_name="Qualified",
-        event_time=datetime(2026, 3, 8, 6, 56, 36, tzinfo=timezone.utc),
+        event_time=datetime(2026, 3, 8, 6, 56, 36, tzinfo=UTC),
         stage_key="pre_qualified",
         stage_slug="pre_qualified",
         stage_id=None,
@@ -143,7 +143,7 @@ def test_enqueue_stage_event_skips_meta_leads_older_than_90_days(db, test_org, t
         meta_page_id="page_1",
         field_data={"email": "stale@example.com"},
         field_data_raw={"email": "stale@example.com"},
-        received_at=datetime.now(timezone.utc) - timedelta(days=91),
+        received_at=datetime.now(UTC) - timedelta(days=91),
     )
     db.add(meta_lead)
     db.commit()
@@ -212,7 +212,7 @@ def test_enqueue_stage_event_includes_click_id_and_customer_fields(db, test_org,
             "email": "lead@example.com",
             "fbc": "fb.1.1772942400.persisted-click-id",
         },
-        received_at=datetime.now(timezone.utc),
+        received_at=datetime.now(UTC),
     )
     db.add(meta_lead)
     db.commit()

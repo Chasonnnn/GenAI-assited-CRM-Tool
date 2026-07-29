@@ -1,6 +1,6 @@
 """Durable delivery contract for appointment notifications."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -37,7 +37,7 @@ def _create_confirmed_appointment(db, test_org, test_user):
         meeting_mode=MeetingMode.ZOOM.value,
         is_active=True,
     )
-    approved_at = datetime(2026, 7, 23, 14, 0, tzinfo=timezone.utc)
+    approved_at = datetime(2026, 7, 23, 14, 0, tzinfo=UTC)
     scheduled_start = approved_at + timedelta(days=2)
     appointment = Appointment(
         id=uuid4(),
@@ -76,8 +76,8 @@ def _prepare_future_reminder_schedule(db, appointment):
         days_until_monday = 7
     old_date = local_today + timedelta(days=days_until_monday + 7)
     new_date = old_date + timedelta(days=7)
-    old_start = datetime.combine(old_date, time(10, 0), tzinfo=client_tz).astimezone(timezone.utc)
-    new_start = datetime.combine(new_date, time(10, 0), tzinfo=client_tz).astimezone(timezone.utc)
+    old_start = datetime.combine(old_date, time(10, 0), tzinfo=client_tz).astimezone(UTC)
+    new_start = datetime.combine(new_date, time(10, 0), tzinfo=client_tz).astimezone(UTC)
 
     appointment.scheduled_start = old_start
     appointment.scheduled_end = old_start + timedelta(minutes=appointment.duration_minutes)
@@ -225,11 +225,11 @@ def test_provider_acceptance_marks_appointment_email_sent_with_resend_id(
     claims = email_delivery_service.claim_due_deliveries(
         db,
         worker_id="appointment-test-worker",
-        now=datetime.now(timezone.utc) + timedelta(seconds=1),
+        now=datetime.now(UTC) + timedelta(seconds=1),
         lease_for=timedelta(minutes=1),
     )
     claim = next(claim for claim in claims if claim.email_log_id == appointment_log.email_log_id)
-    accepted_at = datetime(2026, 7, 23, 15, 0, tzinfo=timezone.utc)
+    accepted_at = datetime(2026, 7, 23, 15, 0, tzinfo=UTC)
 
     email_delivery_service.record_delivery_success(
         db,
@@ -266,7 +266,7 @@ def test_terminal_delivery_failure_marks_appointment_email_failed(
     claims = email_delivery_service.claim_due_deliveries(
         db,
         worker_id="appointment-test-worker",
-        now=datetime.now(timezone.utc) + timedelta(seconds=1),
+        now=datetime.now(UTC) + timedelta(seconds=1),
         lease_for=timedelta(minutes=1),
     )
     claim = next(claim for claim in claims if claim.email_log_id == appointment_log.email_log_id)
@@ -278,7 +278,7 @@ def test_terminal_delivery_failure_marks_appointment_email_failed(
         error_type="validation_error",
         error_message="Provider rejected the sender",
         provider_http_status=422,
-        now=datetime(2026, 7, 23, 15, 5, tzinfo=timezone.utc),
+        now=datetime(2026, 7, 23, 15, 5, tzinfo=UTC),
     )
 
     db.refresh(appointment_log)
@@ -317,7 +317,7 @@ def test_final_expired_lease_marks_appointment_email_for_reconciliation(
     delivery.max_attempts = 1
     db.commit()
 
-    claimed_at = datetime.now(timezone.utc) + timedelta(seconds=1)
+    claimed_at = datetime.now(UTC) + timedelta(seconds=1)
     claims = email_delivery_service.claim_due_deliveries(
         db,
         worker_id="appointment-test-worker",
@@ -417,7 +417,7 @@ def test_dispatch_time_suppression_marks_appointment_email_skipped(
     claims = email_delivery_service.claim_due_deliveries(
         db,
         worker_id="appointment-test-worker",
-        now=datetime.now(timezone.utc) + timedelta(seconds=1),
+        now=datetime.now(UTC) + timedelta(seconds=1),
         lease_for=timedelta(minutes=1),
     )
     claim = next(claim for claim in claims if claim.email_log_id == appointment_log.email_log_id)
@@ -425,7 +425,7 @@ def test_dispatch_time_suppression_marks_appointment_email_skipped(
     email_delivery_service.record_delivery_suppressed(
         db,
         claim=claim,
-        now=datetime(2026, 7, 23, 15, 10, tzinfo=timezone.utc),
+        now=datetime(2026, 7, 23, 15, 10, tzinfo=UTC),
     )
 
     db.refresh(appointment_log)
@@ -455,7 +455,7 @@ def test_cancelled_delivery_projects_the_canonical_reason_message(
     claims = email_delivery_service.claim_due_deliveries(
         db,
         worker_id="appointment-test-worker",
-        now=datetime.now(timezone.utc) + timedelta(seconds=1),
+        now=datetime.now(UTC) + timedelta(seconds=1),
         lease_for=timedelta(minutes=1),
     )
     claim = next(claim for claim in claims if claim.email_log_id == appointment_log.email_log_id)
@@ -465,7 +465,7 @@ def test_cancelled_delivery_projects_the_canonical_reason_message(
         claim=claim,
         reason_type="credential_revoked",
         reason_message="The configured Resend credential was revoked",
-        now=datetime(2026, 7, 23, 15, 15, tzinfo=timezone.utc),
+        now=datetime(2026, 7, 23, 15, 15, tzinfo=UTC),
     )
 
     db.refresh(appointment_log)
@@ -493,7 +493,7 @@ def test_reconciliation_required_projects_operator_diagnostic(
     claims = email_delivery_service.claim_due_deliveries(
         db,
         worker_id="appointment-test-worker",
-        now=datetime.now(timezone.utc) + timedelta(seconds=1),
+        now=datetime.now(UTC) + timedelta(seconds=1),
         lease_for=timedelta(minutes=1),
     )
     claim = next(claim for claim in claims if claim.email_log_id == appointment_log.email_log_id)
@@ -504,7 +504,7 @@ def test_reconciliation_required_projects_operator_diagnostic(
         error_type="ambiguous_provider_response",
         error_message="Provider acceptance could not be confirmed; reconcile before retrying",
         provider_http_status=202,
-        now=datetime(2026, 7, 23, 15, 20, tzinfo=timezone.utc),
+        now=datetime(2026, 7, 23, 15, 20, tzinfo=UTC),
     )
 
     db.refresh(appointment_log)
@@ -900,9 +900,7 @@ async def test_dispatcher_rechecks_appointment_reminder_after_provider_admission
     monkeypatch.setattr(
         email_delivery_dispatch.email_provider_admission_service,
         "reserve_provider_request_slot",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            send_at=datetime.now(timezone.utc) + timedelta(seconds=1)
-        ),
+        lambda *_args, **_kwargs: SimpleNamespace(send_at=datetime.now(UTC) + timedelta(seconds=1)),
     )
 
     async def cancel_during_wait(_delay_seconds: float) -> None:
@@ -987,9 +985,7 @@ async def test_dispatcher_rejects_delayed_confirmation_after_appointment_cancell
     monkeypatch.setattr(
         email_delivery_dispatch.email_provider_admission_service,
         "reserve_provider_request_slot",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            send_at=datetime.now(timezone.utc) + timedelta(seconds=1)
-        ),
+        lambda *_args, **_kwargs: SimpleNamespace(send_at=datetime.now(UTC) + timedelta(seconds=1)),
     )
 
     async def cancel_during_wait(_delay_seconds: float) -> None:
@@ -1071,9 +1067,7 @@ async def test_dispatcher_rejects_confirmation_after_appointment_reschedule(
     monkeypatch.setattr(
         email_delivery_dispatch.email_provider_admission_service,
         "reserve_provider_request_slot",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            send_at=datetime.now(timezone.utc) + timedelta(seconds=1)
-        ),
+        lambda *_args, **_kwargs: SimpleNamespace(send_at=datetime.now(UTC) + timedelta(seconds=1)),
     )
 
     async def reschedule_during_wait(_delay_seconds: float) -> None:
@@ -1161,9 +1155,7 @@ async def test_dispatcher_rejects_reschedule_notice_after_newer_reschedule(
     monkeypatch.setattr(
         email_delivery_dispatch.email_provider_admission_service,
         "reserve_provider_request_slot",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            send_at=datetime.now(timezone.utc) + timedelta(seconds=1)
-        ),
+        lambda *_args, **_kwargs: SimpleNamespace(send_at=datetime.now(UTC) + timedelta(seconds=1)),
     )
 
     async def reschedule_again_during_wait(_delay_seconds: float) -> None:

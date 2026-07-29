@@ -1,17 +1,17 @@
 """Intended Parent service - business logic for IP CRUD and status management."""
 
-from datetime import date, datetime, time, timedelta, timezone
+import logging
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import TypedDict
 from uuid import UUID
-import logging
 
 from fastapi import Request
 from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 from app.core.encryption import hash_email, hash_phone
+from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 from app.db.enums import IntendedParentStatus, Role
 from app.db.models import IntendedParent, IntendedParentStatusHistory
 from app.schemas.auth import UserSession
@@ -419,7 +419,7 @@ def create_intended_parent(
     """Create a new intended parent and record initial status."""
     from app.services import pipeline_service
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     normalized_email = normalize_email(email)
     normalized_phone = normalize_phone(phone) if phone else None
     email_domain = extract_email_domain(normalized_email)
@@ -640,8 +640,8 @@ def update_intended_parent(
     if "ip_clinic_email" in updates:
         ip.ip_clinic_email = updates["ip_clinic_email"]
 
-    ip.last_activity = datetime.now(timezone.utc)
-    ip.updated_at = datetime.now(timezone.utc)
+    ip.last_activity = datetime.now(UTC)
+    ip.updated_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(ip)
@@ -705,7 +705,7 @@ def archive_intended_parent(
     """Soft delete (archive) an intended parent without mutating its live pipeline stage."""
     from app.services import intended_parent_status_service
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     current_stage = intended_parent_status_service.get_current_stage(db, ip)
     ip.is_archived = True
     ip.archived_at = now
@@ -737,7 +737,7 @@ def restore_intended_parent(
     """Restore an archived intended parent without changing its live pipeline stage."""
     from app.services import intended_parent_status_service
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     current_stage = intended_parent_status_service.get_current_stage(db, ip)
 
     ip.is_archived = False

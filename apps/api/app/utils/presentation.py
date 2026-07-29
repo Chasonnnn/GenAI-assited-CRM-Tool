@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import re
 
-
 _SEPARATORS_RE = re.compile(r"[_-]+")
 _WHITESPACE_RE = re.compile(r"\s+")
 _SMALL_WORDS = {

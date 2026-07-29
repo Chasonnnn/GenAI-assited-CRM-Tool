@@ -8,7 +8,6 @@ import re
 
 from app.types import JsonObject, JsonValue
 
-
 # Allowed TipTap node types (XSS prevention)
 ALLOWED_NODES = {
     "doc",

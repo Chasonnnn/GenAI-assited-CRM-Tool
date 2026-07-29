@@ -10,19 +10,19 @@ Coverage:
 - Booking validation
 """
 
-import pytest
-from datetime import date, datetime, timedelta, timezone, time
-from zoneinfo import ZoneInfo
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
+import pytest
+
+from app.db.enums import AppointmentStatus, MeetingMode
 from app.db.models import (
     Appointment,
     AppointmentType,
     AvailabilityRule,
     BookingLink,
 )
-from app.db.enums import AppointmentStatus, MeetingMode
-
 
 # =============================================================================
 # Fixtures
@@ -88,7 +88,7 @@ def booking_link(db, test_org, test_user):
 @pytest.fixture
 def confirmed_appointment(db, test_org, test_user, appointment_type):
     """Create a confirmed appointment for conflict testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     scheduled_start = now.replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
 
     appt = Appointment(
@@ -126,9 +126,9 @@ class TestAvailabilitySlots:
     ):
         """Default availability should be created when no rules exist."""
         from app.services.appointment_service import (
-            get_available_slots,
-            get_availability_rules,
             SlotQuery,
+            get_availability_rules,
+            get_available_slots,
         )
 
         target_date = _next_weekday(0)
@@ -158,10 +158,10 @@ class TestAvailabilitySlots:
         availability_rules,
     ):
         """With availability rules, should return slots."""
-        from app.services.appointment_service import get_available_slots, SlotQuery
+        from app.services.appointment_service import SlotQuery, get_available_slots
 
         # Get a weekday date (Monday-Friday)
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         days_until_monday = (7 - today.weekday()) % 7
         if days_until_monday == 0:
             days_until_monday = 7  # Next week's Monday
@@ -263,9 +263,9 @@ class TestConflictDetection:
 
     def test_existing_buffers_block_nearby_slots(self, db, test_org, test_user, availability_rules):
         """Existing appointment buffers should block adjacent slots."""
-        from app.db.models import AppointmentType, Appointment
         from app.db.enums import MeetingMode
-        from app.services.appointment_service import get_available_slots, SlotQuery
+        from app.db.models import Appointment, AppointmentType
+        from app.services.appointment_service import SlotQuery, get_available_slots
 
         appt_type = AppointmentType(
             id=uuid4(),
@@ -284,7 +284,7 @@ class TestConflictDetection:
         db.add(appt_type)
         db.flush()
 
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         days_until_monday = (7 - today.weekday()) % 7
         if days_until_monday == 0:
             days_until_monday = 7
@@ -292,7 +292,7 @@ class TestConflictDetection:
 
         user_tz = ZoneInfo("America/New_York")
         existing_start_local = datetime.combine(target_date, time(10, 0), tzinfo=user_tz)
-        existing_start = existing_start_local.astimezone(timezone.utc)
+        existing_start = existing_start_local.astimezone(UTC)
         existing_end = existing_start + timedelta(minutes=30)
 
         existing = Appointment(
@@ -353,13 +353,13 @@ class TestTokens:
     ):
         """Booking should generate reschedule and cancel tokens."""
         from app.services.appointment_service import (
+            SlotQuery,
             create_booking,
             get_available_slots,
-            SlotQuery,
         )
 
         # Find an available slot
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         days_until_monday = (7 - today.weekday()) % 7
         if days_until_monday == 0:
             days_until_monday = 7
@@ -430,9 +430,9 @@ class TestMeetingModeSelection:
         availability_rules,
     ):
         """Selected meeting mode should be stored on the appointment."""
-        from app.db.models import AppointmentType
         from app.db.enums import MeetingMode
-        from app.services.appointment_service import create_booking, get_available_slots, SlotQuery
+        from app.db.models import AppointmentType
+        from app.services.appointment_service import SlotQuery, create_booking, get_available_slots
 
         appt_type = AppointmentType(
             id=uuid4(),
@@ -487,9 +487,9 @@ class TestMeetingModeSelection:
         availability_rules,
     ):
         """Booking should reject meeting modes not enabled on the type."""
-        from app.db.models import AppointmentType
         from app.db.enums import MeetingMode
-        from app.services.appointment_service import create_booking, get_available_slots, SlotQuery
+        from app.db.models import AppointmentType
+        from app.services.appointment_service import SlotQuery, create_booking, get_available_slots
 
         appt_type = AppointmentType(
             id=uuid4(),
@@ -550,7 +550,7 @@ async def test_reschedule_slots_use_appointment_duration(
 
     target_date = _next_weekday(0)
     local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
-    scheduled_start = local_start.astimezone(timezone.utc)
+    scheduled_start = local_start.astimezone(UTC)
 
     appt = Appointment(
         id=uuid4(),
@@ -603,7 +603,7 @@ async def test_manage_endpoint_returns_public_appointment_view(
     local_start = datetime.combine(
         _next_weekday(0), time(10, 0), tzinfo=ZoneInfo("America/New_York")
     )
-    scheduled_start = local_start.astimezone(timezone.utc)
+    scheduled_start = local_start.astimezone(UTC)
 
     appt = Appointment(
         id=uuid4(),
@@ -709,7 +709,7 @@ async def test_manage_cancel_by_token(
     local_start = datetime.combine(
         _next_weekday(0), time(10, 0), tzinfo=ZoneInfo("America/New_York")
     )
-    scheduled_start = local_start.astimezone(timezone.utc)
+    scheduled_start = local_start.astimezone(UTC)
 
     appt = Appointment(
         id=uuid4(),
@@ -764,7 +764,7 @@ async def test_manage_endpoint_rejects_expired_token(
     local_start = datetime.combine(
         _next_weekday(0), time(10, 0), tzinfo=ZoneInfo("America/New_York")
     )
-    scheduled_start = local_start.astimezone(timezone.utc)
+    scheduled_start = local_start.astimezone(UTC)
 
     appt = Appointment(
         id=uuid4(),
@@ -784,8 +784,8 @@ async def test_manage_endpoint_rejects_expired_token(
         status=AppointmentStatus.CONFIRMED.value,
         reschedule_token=f"reschedule-{uuid4().hex}",
         cancel_token=f"cancel-{uuid4().hex}",
-        reschedule_token_expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
-        cancel_token_expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+        reschedule_token_expires_at=datetime.now(UTC) - timedelta(minutes=1),
+        cancel_token_expires_at=datetime.now(UTC) - timedelta(minutes=1),
     )
     db.add(appt)
     db.flush()
@@ -806,7 +806,7 @@ async def test_manage_endpoint_scoped_to_org(
     local_start = datetime.combine(
         _next_weekday(0), time(10, 0), tzinfo=ZoneInfo("America/New_York")
     )
-    scheduled_start = local_start.astimezone(timezone.utc)
+    scheduled_start = local_start.astimezone(UTC)
 
     appt = Appointment(
         id=uuid4(),
@@ -847,7 +847,7 @@ async def test_public_booking_accepts_long_idempotency_key(
     availability_rules,
 ):
     """Public booking should accept idempotency keys longer than 64 chars."""
-    from app.services.appointment_service import get_available_slots, SlotQuery
+    from app.services.appointment_service import SlotQuery, get_available_slots
 
     target_date = _next_weekday(0)
     query = SlotQuery(
@@ -899,12 +899,12 @@ class TestBookingStatus:
     ):
         """New bookings should have pending status."""
         from app.services.appointment_service import (
+            SlotQuery,
             create_booking,
             get_available_slots,
-            SlotQuery,
         )
 
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         days_until_monday = (7 - today.weekday()) % 7
         if days_until_monday == 0:
             days_until_monday = 7
@@ -951,9 +951,9 @@ class TestBookingStatus:
     ):
         """Auto-approved appointment types should confirm immediately."""
         from app.services.appointment_service import (
+            SlotQuery,
             create_booking,
             get_available_slots,
-            SlotQuery,
         )
 
         appointment_type.meeting_mode = "phone"
@@ -1002,13 +1002,13 @@ class TestBookingStatus:
     ):
         """Approving a booking should change status to confirmed."""
         from app.services.appointment_service import (
-            create_booking,
-            approve_booking,
-            get_available_slots,
             SlotQuery,
+            approve_booking,
+            create_booking,
+            get_available_slots,
         )
 
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         days_until_monday = (7 - today.weekday()) % 7
         if days_until_monday == 0:
             days_until_monday = 7
@@ -1064,9 +1064,9 @@ class TestTimezoneHandling:
         availability_rules,
     ):
         """Slots should respect client timezone."""
-        from app.services.appointment_service import get_available_slots, SlotQuery
+        from app.services.appointment_service import SlotQuery, get_available_slots
 
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         days_until_monday = (7 - today.weekday()) % 7
         if days_until_monday == 0:
             days_until_monday = 7
@@ -1111,9 +1111,9 @@ class TestTimezoneHandling:
     ):
         """Client timezone must be a valid IANA timezone."""
         from app.services.appointment_service import (
+            SlotQuery,
             create_booking,
             get_available_slots,
-            SlotQuery,
         )
 
         target_date = _next_weekday(0)
@@ -1154,8 +1154,8 @@ class TestEmailTemplates:
 
     def test_default_templates_exist(self):
         """All default email templates should be defined."""
-        from app.services.appointment_email_service import DEFAULT_TEMPLATES
         from app.db.enums import AppointmentEmailType
+        from app.services.appointment_email_service import DEFAULT_TEMPLATES
 
         for email_type in AppointmentEmailType:
             assert email_type in DEFAULT_TEMPLATES, f"Missing template for {email_type.value}"
@@ -1166,8 +1166,9 @@ class TestEmailTemplates:
 
     def test_template_variables_complete(self):
         """Templates should use valid variables."""
-        from app.services.appointment_email_service import DEFAULT_TEMPLATES
         import re
+
+        from app.services.appointment_email_service import DEFAULT_TEMPLATES
 
         # Variables that should be available
         valid_vars = {
@@ -1235,12 +1236,12 @@ class TestApprovalConflictCheck:
     ):
         """Approving should fail if a confirmed appointment exists in that slot."""
         from app.services.appointment_service import (
+            SlotQuery,
             approve_booking,
             get_available_slots,
-            SlotQuery,
         )
 
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         days_until_monday = (7 - today.weekday()) % 7
         if days_until_monday == 0:
             days_until_monday = 7
@@ -1293,7 +1294,7 @@ class TestApprovalConflictCheck:
             duration_minutes=appointment_type.duration_minutes,
             meeting_mode=appointment_type.meeting_mode,
             status=AppointmentStatus.PENDING.value,
-            pending_expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            pending_expires_at=datetime.now(UTC) + timedelta(hours=1),
         )
         db.add(pending_appt)
         db.flush()
@@ -1321,11 +1322,11 @@ class TestTaskTimezoneConflict:
         availability_rules,
     ):
         """Task conflicts should interpret task time in user's timezone, not UTC."""
-        from app.services.appointment_service import get_available_slots, SlotQuery
-        from app.db.models import Task
         from app.db.enums import OwnerType
+        from app.db.models import Task
+        from app.services.appointment_service import SlotQuery, get_available_slots
 
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         days_until_monday = (7 - today.weekday()) % 7
         if days_until_monday == 0:
             days_until_monday = 7
@@ -1377,7 +1378,7 @@ class TestTaskTimezoneConflict:
 
 def _next_weekday(target_weekday: int) -> date:
     """Get next occurrence of weekday (0=Monday)."""
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     days_ahead = (target_weekday - today.weekday()) % 7
     if days_ahead == 0:
         days_ahead = 7
@@ -1401,7 +1402,7 @@ def _make_pending_appointment(db, test_org, test_user, appointment_type, schedul
         buffer_after_minutes=appointment_type.buffer_after_minutes,
         meeting_mode=appointment_type.meeting_mode,
         status=AppointmentStatus.PENDING.value,
-        pending_expires_at=datetime.now(timezone.utc) + timedelta(minutes=60),
+        pending_expires_at=datetime.now(UTC) + timedelta(minutes=60),
         reschedule_token=f"reschedule-{uuid4().hex}",
         cancel_token=f"cancel-{uuid4().hex}",
     )
@@ -1415,10 +1416,10 @@ def test_approve_booking_creates_zoom_meeting_and_schedules_reminder(
 ):
     """Approval should create Zoom meeting link and schedule reminder."""
     from app.services import (
-        appointment_service,
         appointment_email_service,
-        zoom_service,
         appointment_integrations,
+        appointment_service,
+        zoom_service,
     )
 
     appointment_type.meeting_mode = MeetingMode.ZOOM.value
@@ -1426,7 +1427,7 @@ def test_approve_booking_creates_zoom_meeting_and_schedules_reminder(
 
     target_date = _next_weekday(0)  # Monday
     local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
-    scheduled_start = local_start.astimezone(timezone.utc)
+    scheduled_start = local_start.astimezone(UTC)
 
     appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
 
@@ -1489,7 +1490,7 @@ def test_approve_booking_fails_when_zoom_not_connected(
 
     target_date = _next_weekday(0)
     local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
-    scheduled_start = local_start.astimezone(timezone.utc)
+    scheduled_start = local_start.astimezone(UTC)
 
     appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
 
@@ -1506,14 +1507,14 @@ def test_approve_booking_creates_google_meet_link(
     db, test_org, test_user, appointment_type, availability_rules, monkeypatch
 ):
     """Google Meet mode should create a Meet link on approval."""
-    from app.services import appointment_service, calendar_service, appointment_integrations
+    from app.services import appointment_integrations, appointment_service, calendar_service
 
     appointment_type.meeting_mode = "google_meet"
     db.flush()
 
     target_date = _next_weekday(0)
     local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
-    scheduled_start = local_start.astimezone(timezone.utc)
+    scheduled_start = local_start.astimezone(UTC)
 
     appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
 
@@ -1540,14 +1541,14 @@ def test_reschedule_booking_regenerates_zoom_link(
     db, test_org, test_user, appointment_type, availability_rules, monkeypatch
 ):
     """Reschedule should regenerate the Zoom meeting link."""
-    from app.services import appointment_service, zoom_service, appointment_integrations
+    from app.services import appointment_integrations, appointment_service, zoom_service
 
     appointment_type.meeting_mode = MeetingMode.ZOOM.value
     db.flush()
 
     target_date = _next_weekday(0)
     local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
-    scheduled_start = local_start.astimezone(timezone.utc)
+    scheduled_start = local_start.astimezone(UTC)
 
     appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
     appt.status = AppointmentStatus.CONFIRMED.value
@@ -1593,14 +1594,14 @@ def test_reschedule_booking_creates_zoom_link_when_missing(
     db, test_org, test_user, appointment_type, availability_rules, monkeypatch
 ):
     """Reschedule should create a Zoom link if one is missing."""
-    from app.services import appointment_service, zoom_service, appointment_integrations
+    from app.services import appointment_integrations, appointment_service, zoom_service
 
     appointment_type.meeting_mode = MeetingMode.ZOOM.value
     db.flush()
 
     target_date = _next_weekday(0)
     local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
-    scheduled_start = local_start.astimezone(timezone.utc)
+    scheduled_start = local_start.astimezone(UTC)
 
     appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
     appt.status = AppointmentStatus.CONFIRMED.value
@@ -1646,14 +1647,14 @@ def test_reschedule_booking_creates_google_meet_link_when_missing(
     db, test_org, test_user, appointment_type, availability_rules, monkeypatch
 ):
     """Reschedule should create a Google Meet link if one is missing."""
-    from app.services import appointment_service, appointment_integrations
+    from app.services import appointment_integrations, appointment_service
 
     appointment_type.meeting_mode = MeetingMode.GOOGLE_MEET.value
     db.flush()
 
     target_date = _next_weekday(0)
     local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
-    scheduled_start = local_start.astimezone(timezone.utc)
+    scheduled_start = local_start.astimezone(UTC)
 
     appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
     appt.status = AppointmentStatus.CONFIRMED.value
@@ -1685,14 +1686,14 @@ def test_reschedule_booking_google_meet_link_failure_raises(
     db, test_org, test_user, appointment_type, availability_rules, monkeypatch
 ):
     """Reschedule should fail hard if Google Meet link creation fails."""
-    from app.services import appointment_service, appointment_integrations
+    from app.services import appointment_integrations, appointment_service
 
     appointment_type.meeting_mode = MeetingMode.GOOGLE_MEET.value
     db.flush()
 
     target_date = _next_weekday(0)
     local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
-    scheduled_start = local_start.astimezone(timezone.utc)
+    scheduled_start = local_start.astimezone(UTC)
 
     appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
     appt.status = AppointmentStatus.CONFIRMED.value
@@ -1721,14 +1722,14 @@ def test_reschedule_booking_google_meet_link_failure_includes_owner_context(
     db, test_org, test_user, appointment_type, availability_rules, monkeypatch
 ):
     """Reschedule failure should identify the appointment owner's integration context."""
-    from app.services import appointment_service, appointment_integrations
+    from app.services import appointment_integrations, appointment_service
 
     appointment_type.meeting_mode = MeetingMode.GOOGLE_MEET.value
     db.flush()
 
     target_date = _next_weekday(0)
     local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
-    scheduled_start = local_start.astimezone(timezone.utc)
+    scheduled_start = local_start.astimezone(UTC)
 
     appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
     appt.status = AppointmentStatus.CONFIRMED.value
@@ -1767,7 +1768,7 @@ def test_approve_booking_fails_when_google_calendar_not_connected(
 
     target_date = _next_weekday(0)
     local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
-    scheduled_start = local_start.astimezone(timezone.utc)
+    scheduled_start = local_start.astimezone(UTC)
 
     appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
 
@@ -1793,7 +1794,7 @@ def test_cancel_booking_deletes_zoom_meeting(
 
     target_date = _next_weekday(0)
     local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
-    scheduled_start = local_start.astimezone(timezone.utc)
+    scheduled_start = local_start.astimezone(UTC)
 
     appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
     appt.status = AppointmentStatus.CONFIRMED.value

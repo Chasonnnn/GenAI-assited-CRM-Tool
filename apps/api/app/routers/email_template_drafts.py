@@ -35,7 +35,6 @@ from app.services import (
     version_service,
 )
 
-
 router = APIRouter(
     prefix="/email-template-drafts",
     tags=["Email Template Drafts"],

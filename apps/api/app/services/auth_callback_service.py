@@ -18,8 +18,8 @@ from app.core.security import (
     verify_oauth_state,
 )
 from app.services import org_service
-from app.services.auth_service import resolve_user_and_create_session
 from app.services.audit_service import hash_email
+from app.services.auth_service import resolve_user_and_create_session
 from app.services.google_oauth import (
     exchange_code_for_tokens,
     validate_email_domain,

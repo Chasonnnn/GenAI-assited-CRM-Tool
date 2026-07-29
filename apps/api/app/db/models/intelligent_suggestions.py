@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, Integer, String, text
 from sqlalchemy.dialects.postgresql import UUID
@@ -85,7 +84,7 @@ class OrgIntelligentSuggestionSettings(Base):
         nullable=False,
     )
 
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped[Organization] = relationship()
 
 
 class OrgIntelligentSuggestionRule(Base):
@@ -145,4 +144,4 @@ class OrgIntelligentSuggestionRule(Base):
         nullable=False,
     )
 
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped[Organization] = relationship()

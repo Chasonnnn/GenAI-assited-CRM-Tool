@@ -6,9 +6,9 @@ import pytest
 def test_send_email_skips_suppressed(db, test_org):
     from uuid import uuid4
 
-    from app.services import campaign_service, email_service, resend_settings_service
     from app.db.enums import EmailStatus
     from app.db.models import Job, ResendSettings
+    from app.services import campaign_service, email_service, resend_settings_service
 
     db.add(
         ResendSettings(
@@ -66,11 +66,11 @@ def test_send_email_skips_suppressed(db, test_org):
 @pytest.mark.asyncio
 async def test_workflow_email_skips_suppressed(db, test_org, test_user, monkeypatch):
     from uuid import uuid4
-    from app.db.models import Job
+
     from app.db.enums import JobType
-    from app.services import email_service, campaign_service
+    from app.db.models import Job
+    from app.services import campaign_service, email_service, workflow_email_provider
     from app.worker import process_workflow_email
-    from app.services import workflow_email_provider
 
     template = email_service.create_template(
         db=db,

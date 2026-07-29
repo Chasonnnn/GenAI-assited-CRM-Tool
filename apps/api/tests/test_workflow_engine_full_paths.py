@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -26,8 +26,8 @@ from app.db.models import (
     WorkflowExecution,
 )
 from app.services import workflow_service
-from app.services.workflow_engine_core import MAX_DEPTH, WorkflowEngineCore
 from app.services.workflow_engine_adapters import DefaultWorkflowDomainAdapter
+from app.services.workflow_engine_core import MAX_DEPTH, WorkflowEngineCore
 
 
 class _DummyAdapter:
@@ -439,7 +439,7 @@ def test_workflow_engine_core_rate_limit_dedupe_and_conditions(db, test_org, tes
         matched_conditions=True,
         actions_executed=[],
         status=WorkflowExecutionStatus.SUCCESS.value,
-        executed_at=datetime.now(timezone.utc),
+        executed_at=datetime.now(UTC),
     )
     db.add(execution)
     db.commit()
@@ -853,7 +853,7 @@ def test_workflow_service_stats_options_and_preferences(db, test_org, test_user)
         actions_executed=[{"success": True}],
         status=WorkflowExecutionStatus.SUCCESS.value,
         duration_ms=120,
-        executed_at=datetime.now(timezone.utc),
+        executed_at=datetime.now(UTC),
     )
     db.add(execution)
 
@@ -869,7 +869,7 @@ def test_workflow_service_stats_options_and_preferences(db, test_org, test_user)
         description=None,
         task_type=TaskType.WORKFLOW_APPROVAL.value,
         status=TaskStatus.PENDING.value,
-        due_at=datetime.now(timezone.utc) + timedelta(hours=2),
+        due_at=datetime.now(UTC) + timedelta(hours=2),
     )
     db.add(approval_task)
     db.commit()

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import date, datetime, time
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    TIMESTAMP,
     Boolean,
     CheckConstraint,
     Date,
@@ -15,7 +15,6 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
-    TIMESTAMP,
     Text,
     Time,
     UniqueConstraint,
@@ -26,8 +25,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.enums import (
-    MeetingMode,
     AppointmentStatus,
+    MeetingMode,
 )
 
 if TYPE_CHECKING:
@@ -96,8 +95,8 @@ class AppointmentType(Base):
     )
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    user: Mapped["User"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    user: Mapped[User] = relationship()
 
 
 class AvailabilityRule(Base):
@@ -143,8 +142,8 @@ class AvailabilityRule(Base):
     )
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    user: Mapped["User"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    user: Mapped[User] = relationship()
 
 
 class AvailabilityOverride(Base):
@@ -189,8 +188,8 @@ class AvailabilityOverride(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    user: Mapped["User"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    user: Mapped[User] = relationship()
 
 
 class BookingLink(Base):
@@ -232,8 +231,8 @@ class BookingLink(Base):
     )
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    user: Mapped["User"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    user: Mapped[User] = relationship()
 
 
 class Appointment(Base):
@@ -373,11 +372,11 @@ class Appointment(Base):
     )
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    user: Mapped["User"] = relationship(foreign_keys=[user_id])
-    appointment_type: Mapped["AppointmentType | None"] = relationship()
-    approved_by: Mapped["User | None"] = relationship(foreign_keys=[approved_by_user_id])
-    email_logs: Mapped[list["AppointmentEmailLog"]] = relationship(
+    organization: Mapped[Organization] = relationship()
+    user: Mapped[User] = relationship(foreign_keys=[user_id])
+    appointment_type: Mapped[AppointmentType | None] = relationship()
+    approved_by: Mapped[User | None] = relationship(foreign_keys=[approved_by_user_id])
+    email_logs: Mapped[list[AppointmentEmailLog]] = relationship(
         back_populates="appointment", cascade="all, delete-orphan"
     )
 
@@ -442,9 +441,9 @@ class AppointmentEmailLog(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    appointment: Mapped["Appointment"] = relationship(back_populates="email_logs")
-    email_log: Mapped["EmailLog | None"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    appointment: Mapped[Appointment] = relationship(back_populates="email_logs")
+    email_log: Mapped[EmailLog | None] = relationship()
 
 
 # =============================================================================
@@ -510,10 +509,10 @@ class ZoomMeeting(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    user: Mapped["User"] = relationship()
-    surrogate: Mapped["Surrogate"] = relationship()
-    intended_parent: Mapped["IntendedParent"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    user: Mapped[User] = relationship()
+    surrogate: Mapped[Surrogate] = relationship()
+    intended_parent: Mapped[IntendedParent] = relationship()
 
 
 class ZoomWebhookEvent(Base):

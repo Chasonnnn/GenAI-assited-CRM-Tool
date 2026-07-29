@@ -12,13 +12,12 @@ from sqlalchemy import select, text
 from app.db.enums import JobStatus, JobType
 from app.db.models import Attachment, FormSubmissionFile, Job
 from app.db.session import SessionLocal
-from app.services import clamav_signature_service, job_service
 from app.jobs.scan_attachment import (
     get_available_scanner,
     scan_attachment_job,
     scan_form_submission_file_job,
 )
-
+from app.services import clamav_signature_service, job_service
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

@@ -12,17 +12,17 @@ from app.core.deps import get_current_session, get_db, require_csrf_header, requ
 from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.schemas.ticketing import (
+    TicketComposeRequest,
     TicketDetailResponse,
+    TicketLinkSurrogateRequest,
     TicketListItem,
     TicketListResponse,
-    TicketPatchRequest,
-    TicketReplyRequest,
-    TicketComposeRequest,
-    TicketSendResult,
     TicketNoteCreateRequest,
     TicketNoteRead,
-    TicketLinkSurrogateRequest,
+    TicketPatchRequest,
+    TicketReplyRequest,
     TicketSendIdentityResponse,
+    TicketSendResult,
 )
 from app.services import ticketing_service
 

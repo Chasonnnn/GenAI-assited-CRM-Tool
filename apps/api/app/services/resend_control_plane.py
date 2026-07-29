@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from enum import StrEnum
 import logging
 import re
+import uuid
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from typing import Generic, TypeVar
 from urllib.parse import urlsplit
-import uuid
 
 import httpx
 from sqlalchemy.orm import Session
@@ -153,7 +153,7 @@ class ResendControlPlaneClient:
                 reason=ResendControlPlaneReason.ADMISSION_UNAVAILABLE,
             )
 
-        admitted_at = datetime.now(timezone.utc)
+        admitted_at = datetime.now(UTC)
         wait_seconds = max(0.0, (reservation.send_at - admitted_at).total_seconds())
         if wait_seconds:
             await asyncio.sleep(wait_seconds)

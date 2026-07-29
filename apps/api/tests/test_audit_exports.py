@@ -1,12 +1,13 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
-from datetime import datetime, timedelta, timezone
 
 
 @pytest.mark.asyncio
 async def test_create_audit_export_requires_csrf(authed_client, db):
     """Audit export creation should require CSRF header."""
-    start_date = datetime.now(timezone.utc) - timedelta(days=1)
-    end_date = datetime.now(timezone.utc)
+    start_date = datetime.now(UTC) - timedelta(days=1)
+    end_date = datetime.now(UTC)
     payload = {
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
@@ -15,9 +16,10 @@ async def test_create_audit_export_requires_csrf(authed_client, db):
     }
 
     # Create a client without CSRF header but with auth cookie
-    from httpx import AsyncClient, ASGITransport
-    from app.main import app
+    from httpx import ASGITransport, AsyncClient
+
     from app.core.deps import get_db
+    from app.main import app
 
     def override_get_db():
         yield db
@@ -53,8 +55,8 @@ async def test_download_audit_export_commits_audit_log(authed_client, db, test_a
             export_type="audit",
             format="csv",
             redact_mode="redacted",
-            date_range_start=datetime.now(timezone.utc) - timedelta(days=1),
-            date_range_end=datetime.now(timezone.utc),
+            date_range_start=datetime.now(UTC) - timedelta(days=1),
+            date_range_end=datetime.now(UTC),
             file_path="org/test.csv",
         )
         db.add(job)
@@ -104,8 +106,8 @@ async def test_download_audit_export_rejects_traversal_path(authed_client, db, t
             export_type="audit",
             format="csv",
             redact_mode="redacted",
-            date_range_start=datetime.now(timezone.utc) - timedelta(days=1),
-            date_range_end=datetime.now(timezone.utc),
+            date_range_start=datetime.now(UTC) - timedelta(days=1),
+            date_range_end=datetime.now(UTC),
             file_path="../escape.csv",
         )
         db.add(job)

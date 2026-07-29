@@ -11,8 +11,7 @@ import hmac
 import logging
 import re
 import secrets
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 from urllib.parse import quote, unquote, urlsplit
 from uuid import UUID
 
@@ -20,7 +19,6 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import CampaignRecipient, CampaignTrackingEvent
-
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +60,7 @@ def _get_signing_secrets() -> list[str]:
 
 
 def _sign_tracked_url(token: str, original_url: str, secret: str) -> str:
-    payload = f"{TRACKING_SIGNATURE_VERSION}:{token}:{original_url}".encode("utf-8")
+    payload = f"{TRACKING_SIGNATURE_VERSION}:{token}:{original_url}".encode()
     digest = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).digest()
     return base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")
 
@@ -185,8 +183,8 @@ def prepare_email_for_tracking(html_body: str, token: str) -> str:
 def record_open(
     db: Session,
     token: str,
-    ip_address: Optional[str] = None,
-    user_agent: Optional[str] = None,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
 ) -> bool:
     """
     Record an email open event.
@@ -212,7 +210,7 @@ def record_open(
     # Update recipient counters
     recipient.open_count += 1
     if not recipient.opened_at:
-        recipient.opened_at = datetime.now(timezone.utc)
+        recipient.opened_at = datetime.now(UTC)
 
         # Update run opened_count (first open only)
         run = recipient.run
@@ -228,9 +226,9 @@ def record_click(
     token: str,
     url: str,
     signature: str,
-    ip_address: Optional[str] = None,
-    user_agent: Optional[str] = None,
-) -> Optional[str]:
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+) -> str | None:
     """
     Record a link click event.
 
@@ -263,7 +261,7 @@ def record_click(
     # Update recipient counters
     recipient.click_count += 1
     if not recipient.clicked_at:
-        recipient.clicked_at = datetime.now(timezone.utc)
+        recipient.clicked_at = datetime.now(UTC)
 
         # Update run clicked_count (first click only)
         run = recipient.run
@@ -297,7 +295,7 @@ def get_recipient_events(
 def get_run_events(
     db: Session,
     run_id: UUID,
-    event_type: Optional[str] = None,
+    event_type: str | None = None,
     limit: int = 1000,
 ) -> list[CampaignTrackingEvent]:
     """Get all tracking events for a campaign run."""

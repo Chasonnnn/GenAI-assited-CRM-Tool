@@ -1,11 +1,9 @@
 """Surrogates write routes."""
 
 from typing import Annotated
-
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -514,8 +512,8 @@ def bulk_change_surrogates_stage(
 ) -> BulkStageChangeResult:
     """Bulk change stage for explicitly selected surrogates."""
     from app.services import (
-        pipeline_service,
         pipeline_semantics_service,
+        pipeline_service,
         surrogate_stage_context,
         surrogate_status_service,
     )

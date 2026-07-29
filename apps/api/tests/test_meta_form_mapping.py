@@ -1,6 +1,6 @@
 """Tests for Meta lead form mapping workflow."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
@@ -101,7 +101,7 @@ async def test_meta_form_mapping_save_enqueues_reprocess_job(
     authed_client: AsyncClient, db, test_org, test_user
 ):
     from app.db.enums import JobType
-    from app.db.models import MetaForm, MetaFormVersion, MetaLead, Job
+    from app.db.models import Job, MetaForm, MetaFormVersion, MetaLead
 
     form = MetaForm(
         organization_id=test_org.id,
@@ -133,7 +133,7 @@ async def test_meta_form_mapping_save_enqueues_reprocess_job(
         meta_page_id="page_456",
         field_data={"full_name": "Test User", "email": "test@example.com"},
         field_data_raw={"full_name": "Test User", "email": "test@example.com"},
-        meta_created_time=datetime.now(timezone.utc),
+        meta_created_time=datetime.now(UTC),
     )
     db.add(lead)
     db.commit()
@@ -212,7 +212,7 @@ async def test_meta_form_mapping_unconverted_leads_endpoint_returns_failure_deta
         meta_page_id="page_failed",
         field_data={"full_name": "Failed Lead", "email": "failed@example.com"},
         field_data_raw={"full_name": "Failed Lead", "email": "failed@example.com"},
-        meta_created_time=datetime(2026, 2, 1, 14, 30, tzinfo=timezone.utc),
+        meta_created_time=datetime(2026, 2, 1, 14, 30, tzinfo=UTC),
         status="convert_failed",
         conversion_error="Missing required fields: phone_number",
     )
@@ -223,7 +223,7 @@ async def test_meta_form_mapping_unconverted_leads_endpoint_returns_failure_deta
         meta_page_id="page_failed",
         field_data={"full_name": "Duplicate Lead", "email": "dupe@example.com"},
         field_data_raw={"full_name": "Duplicate Lead", "email": "dupe@example.com"},
-        meta_created_time=datetime(2026, 2, 1, 14, 45, tzinfo=timezone.utc),
+        meta_created_time=datetime(2026, 2, 1, 14, 45, tzinfo=UTC),
         status="convert_failed",
         conversion_error="duplicate key value violates unique constraint",
     )
@@ -240,7 +240,7 @@ async def test_meta_form_mapping_unconverted_leads_endpoint_returns_failure_deta
             "full_name": "test lead: dummy data for full_name",
             "email": "test@fb.com",
         },
-        meta_created_time=datetime(2026, 2, 1, 14, 50, tzinfo=timezone.utc),
+        meta_created_time=datetime(2026, 2, 1, 14, 50, tzinfo=UTC),
         status="convert_failed",
         conversion_error="Validation failed",
     )
@@ -251,7 +251,7 @@ async def test_meta_form_mapping_unconverted_leads_endpoint_returns_failure_deta
         meta_page_id="page_failed",
         field_data={"full_name": "Converted Lead", "email": "done@example.com"},
         field_data_raw={"full_name": "Converted Lead", "email": "done@example.com"},
-        meta_created_time=datetime(2026, 2, 1, 15, 30, tzinfo=timezone.utc),
+        meta_created_time=datetime(2026, 2, 1, 15, 30, tzinfo=UTC),
         status="converted",
         is_converted=True,
     )
@@ -344,7 +344,7 @@ async def test_meta_form_reconvert_endpoint_queues_only_eligible_leads(
         meta_page_id="page_reconvert",
         field_data={"full_name": "Eligible", "email": "eligible@example.com"},
         field_data_raw={"full_name": "Eligible", "email": "eligible@example.com"},
-        meta_created_time=datetime(2026, 2, 1, 10, 0, tzinfo=timezone.utc),
+        meta_created_time=datetime(2026, 2, 1, 10, 0, tzinfo=UTC),
         status="convert_failed",
         conversion_error="old parser error",
     )
@@ -355,7 +355,7 @@ async def test_meta_form_reconvert_endpoint_queues_only_eligible_leads(
         meta_page_id="page_reconvert",
         field_data={"full_name": "Dup", "email": "dupe@example.com"},
         field_data_raw={"full_name": "Dup", "email": "dupe@example.com"},
-        meta_created_time=datetime(2026, 2, 1, 11, 0, tzinfo=timezone.utc),
+        meta_created_time=datetime(2026, 2, 1, 11, 0, tzinfo=UTC),
         status="convert_failed",
         conversion_error="duplicate",
     )
@@ -366,7 +366,7 @@ async def test_meta_form_reconvert_endpoint_queues_only_eligible_leads(
         meta_page_id="page_reconvert",
         field_data={"full_name": "test lead: dummy data for full_name", "email": "test@fb.com"},
         field_data_raw={"full_name": "test lead: dummy data for full_name", "email": "test@fb.com"},
-        meta_created_time=datetime(2026, 2, 1, 12, 0, tzinfo=timezone.utc),
+        meta_created_time=datetime(2026, 2, 1, 12, 0, tzinfo=UTC),
         status="convert_failed",
         conversion_error="validation",
     )
@@ -429,7 +429,7 @@ def test_meta_lead_mapping_persists_unmapped_fields_without_review_task_on_succe
     db.flush()
     form.current_version_id = version.id
 
-    created_time = datetime(2026, 1, 15, 14, 30, tzinfo=timezone.utc)
+    created_time = datetime(2026, 1, 15, 14, 30, tzinfo=UTC)
     lead = MetaLead(
         organization_id=test_org.id,
         meta_lead_id="lead_789",
@@ -480,7 +480,7 @@ def test_meta_lead_mapping_persists_unmapped_fields_without_review_task_on_succe
 
     assert error is None
     assert surrogate is not None
-    assert surrogate.created_at.replace(tzinfo=timezone.utc) == created_time
+    assert surrogate.created_at.replace(tzinfo=UTC) == created_time
     db.refresh(lead)
     assert lead.unmapped_fields is not None
     assert lead.unmapped_fields.get("extra_field") == "Extra value"
@@ -532,7 +532,7 @@ def test_process_stored_meta_lead_creates_review_task_when_mapping_is_awaiting_r
         meta_page_id=form.page_id,
         field_data={"full_name": "Awaiting Review", "email": "awaiting@example.com"},
         field_data_raw={"full_name": "Awaiting Review", "email": "awaiting@example.com"},
-        meta_created_time=datetime.now(timezone.utc),
+        meta_created_time=datetime.now(UTC),
     )
     db.add(lead)
     db.commit()
@@ -613,7 +613,7 @@ def test_meta_lead_mapping_creates_review_task_on_mapping_related_conversion_fai
         meta_page_id=form.page_id,
         field_data={"full_name": "Mapping Failure", "email": "failure@example.com"},
         field_data_raw={"full_name": "Mapping Failure", "email": "failure@example.com"},
-        meta_created_time=datetime.now(timezone.utc),
+        meta_created_time=datetime.now(UTC),
     )
     db.add(lead)
     db.commit()
@@ -768,7 +768,7 @@ def test_meta_lead_mapping_applies_default_transformers_when_mapping_has_none(
             "phone": "(555) 222-3333",
             "state": "California",
         },
-        meta_created_time=datetime.now(timezone.utc),
+        meta_created_time=datetime.now(UTC),
     )
     db.add(lead)
     db.commit()
@@ -848,8 +848,7 @@ def test_meta_lead_conversion_failure_records_system_alert(monkeypatch, db, test
     from app.db.enums import TaskType
     from app.db.models import MetaForm, MetaFormVersion, MetaLead, Task
     from app.schemas.surrogate import SurrogateCreate
-    from app.services import meta_lead_service
-    from app.services import surrogate_service
+    from app.services import meta_lead_service, surrogate_service
 
     captured: list[tuple[str, str]] = []
     org_id = test_org.id
@@ -903,7 +902,7 @@ def test_meta_lead_conversion_failure_records_system_alert(monkeypatch, db, test
             "full_name": "Alert Failure",
             "email": "alert@example.com",
         },
-        meta_created_time=datetime.now(timezone.utc),
+        meta_created_time=datetime.now(UTC),
     )
     db.add(lead)
     db.commit()
@@ -1002,7 +1001,7 @@ def test_meta_lead_mapping_handles_additional_height_formats(
             "height": height_value,
             "num_csections": num_csections_value,
         },
-        meta_created_time=datetime.now(timezone.utc),
+        meta_created_time=datetime.now(UTC),
     )
     db.add(lead)
     db.commit()
@@ -1072,7 +1071,7 @@ def test_meta_lead_mapping_converts_num_csections_word_none(db, test_org, test_u
             "email": "0569cali@gmail.com",
             "num_csections": "No",
         },
-        meta_created_time=datetime.now(timezone.utc),
+        meta_created_time=datetime.now(UTC),
     )
     db.add(lead)
     db.commit()
@@ -1133,7 +1132,7 @@ def test_meta_lead_mapping_drops_invalid_optional_phone(db, test_org, test_user)
             "email": "ginas89@hotmail.com",
             "phone": "+659566490211",
         },
-        meta_created_time=datetime.now(timezone.utc),
+        meta_created_time=datetime.now(UTC),
     )
     db.add(lead)
     db.commit()

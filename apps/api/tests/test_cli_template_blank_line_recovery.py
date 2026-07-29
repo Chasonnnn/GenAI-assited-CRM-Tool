@@ -9,7 +9,6 @@ from click.testing import CliRunner
 import app.cli as cli_module
 from app.cli import cli
 
-
 TEMPLATE_ID = UUID("392d2938-69a0-4840-8e4e-acd84e6064d1")
 ORGANIZATION_ID = UUID("92000000-0000-4000-8000-000000000001")
 

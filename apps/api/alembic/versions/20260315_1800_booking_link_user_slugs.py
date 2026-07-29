@@ -7,13 +7,13 @@ Create Date: 2026-03-15 18:00:00.000000
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from collections.abc import Sequence
-import re
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "20260315_1800"

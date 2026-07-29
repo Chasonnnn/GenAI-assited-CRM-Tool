@@ -10,7 +10,7 @@ Security guidelines:
 """
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi import Request
@@ -106,7 +106,7 @@ def log_event(
         details = {**(details or {}), **support_details}
 
     entry_id = uuid4()
-    created_at = datetime.now(timezone.utc)
+    created_at = datetime.now(UTC)
     ip_address = get_client_ip(request)
     user_agent = get_user_agent(request)
 
@@ -269,7 +269,7 @@ def get_ai_activity(
     limit: int,
 ) -> tuple[dict[str, int], list[AuditLog], dict[UUID, str | None]]:
     """Get recent AI activity counts and logs."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     ai_event_types = [
         AuditEventType.AI_ACTION_APPROVED.value,
@@ -278,7 +278,7 @@ def get_ai_activity(
         AuditEventType.AI_ACTION_DENIED.value,
     ]
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    cutoff = datetime.now(UTC) - timedelta(hours=hours)
     counts = {event_type: 0 for event_type in ai_event_types}
     rows = (
         db.query(AuditLog.event_type, func.count(AuditLog.id))

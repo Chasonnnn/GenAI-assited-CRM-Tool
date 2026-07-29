@@ -9,7 +9,6 @@ from cryptography.fernet import Fernet, InvalidToken
 from app.core.config import settings
 from app.utils.normalization import normalize_email, normalize_phone
 
-
 _fernet: Fernet | None = None
 _data_fernet: Fernet | None = None
 _ENCRYPTED_PREFIX = "enc:"

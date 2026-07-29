@@ -8,7 +8,6 @@ import pytest
 
 from app.services.resend_tags import merge_resend_correlation_tags, validate_resend_tags
 
-
 ORG_ID = UUID("11111111-1111-4111-8111-111111111111")
 EMAIL_LOG_ID = UUID("22222222-2222-4222-8222-222222222222")
 

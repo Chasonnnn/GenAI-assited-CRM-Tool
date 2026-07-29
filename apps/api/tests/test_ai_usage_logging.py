@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
@@ -18,7 +18,7 @@ def _create_ai_settings(db, org_id, user_id) -> AISettings:
         provider="gemini",
         model="gemini-3-flash-preview",
         current_version=1,
-        consent_accepted_at=datetime.now(timezone.utc),
+        consent_accepted_at=datetime.now(UTC),
         consent_accepted_by=user_id,
         api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
     )

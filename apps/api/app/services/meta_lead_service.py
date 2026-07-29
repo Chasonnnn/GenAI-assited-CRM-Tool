@@ -1,28 +1,31 @@
 """Meta Lead service - ingestion and conversion to surrogates."""
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import UUID
 
 from pydantic import ValidationError
+from sqlalchemy import func, select
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import func, inspect as sa_inspect, select
 from sqlalchemy.orm import Session
 
 from app.db.enums import AlertSeverity, AlertType, SurrogateSource
 from app.db.models import MetaAd, MetaAdPlatformDaily, MetaForm, MetaLead, Organization, Surrogate
 from app.db.session import SessionLocal
 from app.schemas.surrogate import SurrogateCreate
-from app.services import surrogate_service
-from app.services import custom_field_service
+from app.services import (
+    custom_field_service,
+    surrogate_input_normalization_service,
+    surrogate_service,
+)
 from app.services.import_transformers import (
     get_suggested_transformer,
     transform_height_flexible,
     transform_int_flexible,
     transform_value,
 )
-from app.services import surrogate_input_normalization_service
 from app.utils.datetime_parsing import parse_datetime_with_timezone
 from app.utils.journey_timing import normalize_journey_timing_preference
 from app.utils.normalization import normalize_phone, normalize_state
@@ -276,8 +279,8 @@ def backfill_platform_for_date_range(
         .filter(
             MetaLead.organization_id == org_id,
             func.coalesce(MetaLead.meta_created_time, MetaLead.received_at).between(
-                datetime.combine(date_start, datetime.min.time(), tzinfo=timezone.utc),
-                datetime.combine(date_end, datetime.max.time(), tzinfo=timezone.utc),
+                datetime.combine(date_start, datetime.min.time(), tzinfo=UTC),
+                datetime.combine(date_end, datetime.max.time(), tzinfo=UTC),
             ),
             func.nullif(platform_expr, "").is_(None),
         )
@@ -440,7 +443,7 @@ def convert_to_surrogate(
         # Update meta lead
         meta_lead.is_converted = True
         meta_lead.converted_surrogate_id = surrogate.id
-        meta_lead.converted_at = datetime.now(timezone.utc)
+        meta_lead.converted_at = datetime.now(UTC)
         meta_lead.conversion_error = None
 
         db.commit()
@@ -506,7 +509,7 @@ def convert_to_surrogate_with_mapping(
 
         if isinstance(raw_created_at, datetime):
             created_at_override = (
-                raw_created_at.astimezone(timezone.utc)
+                raw_created_at.astimezone(UTC)
                 if raw_created_at.tzinfo
                 else parse_datetime_with_timezone(
                     raw_created_at.isoformat(sep=" "), org_timezone
@@ -575,7 +578,7 @@ def convert_to_surrogate_with_mapping(
         # Update meta lead
         meta_lead.is_converted = True
         meta_lead.converted_surrogate_id = surrogate.id
-        meta_lead.converted_at = datetime.now(timezone.utc)
+        meta_lead.converted_at = datetime.now(UTC)
         meta_lead.conversion_error = None
         meta_lead.unmapped_fields = unmapped_fields or None
 

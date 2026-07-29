@@ -10,10 +10,10 @@ Adds:
 - anonymize_pii: Whether to strip PII before sending to AI provider
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
+from alembic import op
 
 revision = "0011_ai_privacy_settings"
 down_revision = "0010_ai_assistant"

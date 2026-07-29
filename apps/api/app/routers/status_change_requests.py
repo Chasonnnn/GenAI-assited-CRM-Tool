@@ -1,7 +1,6 @@
 """Router for status change request approval workflow."""
 
 from typing import Annotated
-
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,7 +11,6 @@ from app.core.deps import get_db, require_csrf_header, require_permission
 from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.services import status_change_request_service
-
 
 router = APIRouter(prefix="/status-change-requests", tags=["Status Change Requests"])
 

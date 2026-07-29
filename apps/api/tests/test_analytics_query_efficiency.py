@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import event
 
@@ -44,13 +44,13 @@ def test_get_analytics_summary_uses_single_surrogates_count_query(
         created_by_user_id=test_user.id,
         owner_type="user",
         owner_id=test_user.id,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(s)
     db.flush()
 
-    start = datetime.now(timezone.utc) - timedelta(days=7)
-    end = datetime.now(timezone.utc) + timedelta(days=1)
+    start = datetime.now(UTC) - timedelta(days=7)
+    end = datetime.now(UTC) + timedelta(days=1)
 
     statements, listener = _collect_sql_statements(db)
     try:
@@ -78,8 +78,8 @@ def test_get_summary_kpis_uses_single_surrogates_count_query(
     today = date.today()
     start_date = today - timedelta(days=7)
     end_date = today
-    old_contact = datetime.now(timezone.utc) - timedelta(days=10)
-    fresh_contact = datetime.now(timezone.utc)
+    old_contact = datetime.now(UTC) - timedelta(days=10)
+    fresh_contact = datetime.now(UTC)
 
     rows = [
         ("current-stale@example.com", start_date + timedelta(days=1), old_contact, False),
@@ -107,7 +107,7 @@ def test_get_summary_kpis_uses_single_surrogates_count_query(
                 created_at=datetime.combine(
                     created_date,
                     datetime.min.time(),
-                    tzinfo=timezone.utc,
+                    tzinfo=UTC,
                 ),
                 last_contacted_at=last_contacted_at,
                 is_archived=is_archived,
@@ -145,7 +145,7 @@ def test_get_summary_kpis_uses_single_surrogates_count_query(
 
 
 def test_get_meta_performance_uses_single_meta_leads_count_query(db, test_org, test_user):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     pipeline = Pipeline(
         id=uuid.uuid4(),
         organization_id=test_org.id,
@@ -259,7 +259,7 @@ def test_get_pdf_export_data_batches_surrogate_and_task_counts(
     db, test_org, default_stage, test_user, monkeypatch
 ):
     today = date.today()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     qualified_stage = PipelineStage(
         id=uuid.uuid4(),

@@ -1,7 +1,6 @@
 """Template API router - REST endpoints for workflow templates."""
 
 from typing import Annotated
-
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,22 +9,21 @@ from sqlalchemy.orm import Session
 from app.core.deps import (
     get_current_session,
     get_db,
-    require_permission,
     require_csrf_header,
+    require_permission,
 )
 from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
-from app.services import template_service
 from app.schemas.template import (
+    TEMPLATE_CATEGORIES,
     TemplateCreate,
     TemplateFromWorkflow,
-    TemplateRead,
     TemplateListItem,
+    TemplateRead,
     UseTemplateRequest,
-    TEMPLATE_CATEGORIES,
 )
 from app.schemas.workflow import WorkflowRead
-
+from app.services import template_service
 
 router = APIRouter(
     prefix="/templates",

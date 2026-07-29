@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 
 def test_normalize_date_bounds_inclusive_end():
@@ -9,8 +9,8 @@ def test_normalize_date_bounds_inclusive_end():
         date(2024, 1, 31),
     )
 
-    assert start_dt == datetime(2024, 1, 1, tzinfo=timezone.utc)
-    assert end_dt == datetime(2024, 2, 1, tzinfo=timezone.utc)
+    assert start_dt == datetime(2024, 1, 1, tzinfo=UTC)
+    assert end_dt == datetime(2024, 2, 1, tzinfo=UTC)
 
 
 def test_normalize_date_bounds_none_returns_none():

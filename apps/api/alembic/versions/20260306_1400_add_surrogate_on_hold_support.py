@@ -8,19 +8,19 @@ Create Date: 2026-03-06 14:00:00.000000
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Sequence, Union
 import uuid
+from collections.abc import Sequence
+from datetime import datetime
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "20260306_1400"
-down_revision: Union[str, Sequence[str], None] = "20260303_1000"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "20260303_1000"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 ON_HOLD_STAGE_KEY = "on_hold"

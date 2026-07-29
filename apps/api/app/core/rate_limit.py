@@ -6,8 +6,8 @@ import logging
 import os
 import time
 
-from slowapi import Limiter
 import slowapi.extension as slowapi_extension
+from slowapi import Limiter
 
 from app.core.client_ip import get_client_ip
 from app.core.config import settings
@@ -27,8 +27,8 @@ DEFAULT_LIMITS = (
 FALLBACK_SECONDS = int(os.getenv("RATE_LIMIT_REDIS_FALLBACK_SECONDS", "30"))
 
 try:  # Optional for tests without redis installed
-    from redis.exceptions import RedisError as _RedisError
     from redis.exceptions import ConnectionError as _RedisConnectionError
+    from redis.exceptions import RedisError as _RedisError
 
     REDIS_ERROR_TYPES = (_RedisError, _RedisConnectionError)
 except Exception:  # pragma: no cover - redis not installed in some envs

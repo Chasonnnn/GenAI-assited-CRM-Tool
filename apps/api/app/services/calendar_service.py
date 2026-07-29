@@ -8,9 +8,9 @@ Handles:
 Note: Requires calendar.readonly and calendar.events scopes.
 """
 
-from datetime import datetime, timedelta, timezone
 import logging
 import secrets
+from datetime import UTC, datetime, timedelta
 from typing import NotRequired, TypedDict
 from urllib.parse import quote, unquote
 from uuid import UUID, uuid4
@@ -138,15 +138,15 @@ def _parse_google_watch_expiration(value: object | None) -> datetime | None:
         return None
     if expiration_ms <= 0:
         return None
-    return datetime.fromtimestamp(expiration_ms / 1000, tz=timezone.utc)
+    return datetime.fromtimestamp(expiration_ms / 1000, tz=UTC)
 
 
 def _watch_is_fresh(expires_at: datetime | None, *, renew_before: timedelta) -> bool:
     if not expires_at:
         return False
     if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    return expires_at > (datetime.now(timezone.utc) + renew_before)
+        expires_at = expires_at.replace(tzinfo=UTC)
+    return expires_at > (datetime.now(UTC) + renew_before)
 
 
 def verify_watch_channel_token(
@@ -268,7 +268,7 @@ async def stop_google_calendar_watch(
     integration.google_calendar_resource_id = None
     integration.google_calendar_channel_token_encrypted = None
     integration.google_calendar_watch_expires_at = None
-    integration.updated_at = datetime.now(timezone.utc)
+    integration.updated_at = datetime.now(UTC)
     db.commit()
     return True
 
@@ -338,7 +338,7 @@ async def ensure_google_calendar_watch(
     integration.google_calendar_resource_id = watch_result["resource_id"]
     integration.google_calendar_channel_token_encrypted = oauth_service.encrypt_token(channel_token)
     integration.google_calendar_watch_expires_at = watch_result["expires_at"]
-    integration.updated_at = datetime.now(timezone.utc)
+    integration.updated_at = datetime.now(UTC)
     db.commit()
     return True
 
@@ -473,10 +473,8 @@ async def _fetch_google_events_snapshot(
                         start_str = start_data.get("date", "")
                         end_str = end_data.get("date", "")
                         try:
-                            start_dt = datetime.fromisoformat(start_str).replace(
-                                tzinfo=timezone.utc
-                            )
-                            end_dt = datetime.fromisoformat(end_str).replace(tzinfo=timezone.utc)
+                            start_dt = datetime.fromisoformat(start_str).replace(tzinfo=UTC)
+                            end_dt = datetime.fromisoformat(end_str).replace(tzinfo=UTC)
                         except ValueError:
                             continue
                     else:

@@ -2,7 +2,7 @@
 
 import os
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import and_, case, func, or_, select
@@ -10,36 +10,35 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY, SURROGATE_PIPELINE_ENTITY
+from app.db.enums import CampaignRecipientStatus, CampaignStatus, EmailStatus, JobStatus, JobType
 from app.db.models import (
     Campaign,
-    CampaignRun,
     CampaignRecipient,
+    CampaignRun,
     EmailSuppression,
     EmailTemplate,
-    Surrogate,
     IntendedParent,
     Job,
-    PipelineStage,
     Pipeline,
+    PipelineStage,
+    Surrogate,
 )
-from app.db.enums import CampaignStatus, CampaignRecipientStatus, JobType, JobStatus, EmailStatus
 from app.schemas.campaign import (
     CampaignCreate,
-    CampaignUpdate,
     CampaignListItem,
-    CampaignRunResponse,
     CampaignPreviewResponse,
-    RecipientPreview,
+    CampaignRunResponse,
+    CampaignUpdate,
     FilterCriteria,
+    RecipientPreview,
 )
-from app.utils.pagination import paginate_query_by_offset
 from app.services.email_template_snapshot import (
     EmailTemplateSnapshot,
     build_snapshot,
     format_from_address,
     parse_snapshot,
 )
-
+from app.utils.pagination import paginate_query_by_offset
 
 CAMPAIGN_SEND_BATCH_SIZE = int(os.getenv("CAMPAIGN_SEND_BATCH_SIZE", "200"))
 
@@ -95,8 +94,8 @@ def _ensure_future_datetime(value: datetime | None, field_name: str) -> None:
     """Ensure a datetime is in the future (UTC)."""
     if not value:
         return
-    now = datetime.now(timezone.utc)
-    candidate = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    now = datetime.now(UTC)
+    candidate = value if value.tzinfo else value.replace(tzinfo=UTC)
     if candidate <= now:
         raise ValueError(f"{field_name} must be in the future")
 
@@ -907,7 +906,7 @@ def cancel_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> bool:
     campaign.status = CampaignStatus.CANCELLED.value
     campaign.scheduled_at = None
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if latest_run and latest_run.status != "completed":
         latest_run.status = "failed"
         latest_run.error_message = "cancelled"
@@ -1153,7 +1152,7 @@ def recompute_campaign_run_aggregates(
     run.opened_count = engagement_counts.opened_count
     run.clicked_count = engagement_counts.clicked_count
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     was_terminal = run.status in {"completed", "failed"} and run.completed_at is not None
     if campaign.status == CampaignStatus.CANCELLED.value:
         run.status = "failed"
@@ -1244,7 +1243,7 @@ def project_campaign_recipient_delivery(
             CampaignRecipientStatus.SENT.value,
             CampaignRecipientStatus.DELIVERED.value,
         }:
-            projected_at = occurred_at or datetime.now(timezone.utc)
+            projected_at = occurred_at or datetime.now(UTC)
             if recipient.sent_at is None or projected_at < recipient.sent_at:
                 recipient.sent_at = projected_at
             if recipient.external_message_id is None:
@@ -1526,7 +1525,7 @@ def execute_campaign_run(
     # Mark campaign as sending
     campaign.status = CampaignStatus.SENDING.value
     run.status = "running"
-    run.started_at = datetime.now(timezone.utc)
+    run.started_at = datetime.now(UTC)
     db.commit()
 
     recipient_query = _build_recipient_query(

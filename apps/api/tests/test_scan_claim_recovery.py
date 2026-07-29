@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -44,7 +44,7 @@ def _attachment(*, org_id, resource_id, status="pending"):
 def test_stale_ambiguous_scan_claim_requeues_without_user_request(db, test_org):
     from app.services import scan_claim_recovery_service
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     resource_id = uuid4()
     job = _stale_scan_job(org_id=test_org.id, resource_id=resource_id, now=now)
     db.add_all([_attachment(org_id=test_org.id, resource_id=resource_id), job])
@@ -65,7 +65,7 @@ def test_stale_ambiguous_scan_claim_requeues_without_user_request(db, test_org):
 def test_terminal_resource_completes_stale_scan_claim(db, test_org):
     from app.services import scan_claim_recovery_service
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     resource_id = uuid4()
     job = _stale_scan_job(org_id=test_org.id, resource_id=resource_id, now=now)
     db.add_all(
@@ -89,7 +89,7 @@ def test_terminal_resource_completes_stale_scan_claim(db, test_org):
 def test_missing_scan_resource_is_quarantined_without_handler_call(db, test_org):
     from app.services import scan_claim_recovery_service
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     job = _stale_scan_job(org_id=test_org.id, resource_id=uuid4(), now=now)
     db.add(job)
     db.commit()
@@ -105,7 +105,7 @@ def test_missing_scan_resource_is_quarantined_without_handler_call(db, test_org)
 def test_active_locked_scan_claim_is_not_recovered(db_engine):
     from app.services import scan_claim_recovery_service
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     org_id = uuid4()
     resource_id = uuid4()
     setup = SessionLocal()
