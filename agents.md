@@ -57,6 +57,14 @@ pnpm test --run
 pnpm lint
 ```
 
+### Dev-server cleanup (required)
+- Start local backend and frontend servers only for the active verification step; do not leave them running after the task or test pass is complete.
+- Record the process ID when starting a server, then stop that exact process gracefully when verification finishes (for example, `kill -TERM <pid>`), and confirm it exited.
+- If a server was inherited from another session, identify its project and owner before stopping it. Do not stop a server that may still be serving active work without confirmation.
+- Before handoff, report whether any local services remain running and why. If none are needed, state that the test servers were stopped.
+- After all work is complete, end every local server, browser session, monitoring process, and helper agent started or used for the task, and verify that each has ended.
+- Remove all temporary QA artifacts created for the task before handoff.
+
 ### Database
 ```bash
 # Start Postgres (Docker)
