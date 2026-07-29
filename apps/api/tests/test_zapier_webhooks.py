@@ -224,6 +224,29 @@ async def test_zapier_delete_inbound_webhook(authed_client, db, test_org):
     assert remaining[0].webhook_id != created.webhook_id
 
 
+def test_zapier_inbound_webhook_limits_use_direct_count_queries(db, test_org, monkeypatch):
+    from sqlalchemy.orm import Query
+
+    from app.db.models import ZapierInboundWebhook
+    from app.services import zapier_settings_service
+
+    zapier_settings_service.get_or_create_settings(db, test_org.id)
+    original_count = Query.count
+
+    def _count_should_not_be_called(self, *args, **kwargs):
+        entity = self.column_descriptions[0].get("entity") if self.column_descriptions else None
+        if entity is ZapierInboundWebhook:
+            raise AssertionError("inbound webhook limits should use direct aggregate counts")
+        return original_count(self, *args, **kwargs)
+
+    monkeypatch.setattr(Query, "count", _count_should_not_be_called)
+
+    created, _ = zapier_settings_service.create_inbound_webhook(
+        db, test_org.id, label="Direct count"
+    )
+    zapier_settings_service.delete_inbound_webhook(db, test_org.id, created.webhook_id)
+
+
 @pytest.mark.asyncio
 async def test_zapier_cannot_delete_last_webhook(authed_client, db, test_org):
     from app.services import zapier_settings_service

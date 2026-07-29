@@ -1310,11 +1310,14 @@ def test_execute_campaign_run_streams_recipients(
     class FakeQuery:
         def __init__(self, recipients):
             self._recipients = recipients
+            self._ordered = False
 
         def count(self):
+            assert not self._ordered, "recipient count should run before ordering"
             return len(self._recipients)
 
         def order_by(self, *args, **kwargs):
+            self._ordered = not (len(args) == 1 and args[0] is None)
             return self
 
         def yield_per(self, *args, **kwargs):

@@ -5,7 +5,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import and_, case, func, or_
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, joinedload
 
@@ -816,12 +816,13 @@ def enqueue_campaign_retry_failed(
         raise ValueError("Run not found")
 
     failed_count = (
-        db.query(CampaignRecipient)
-        .filter(
-            CampaignRecipient.run_id == run_id,
-            CampaignRecipient.status == CampaignRecipientStatus.FAILED.value,
+        db.scalar(
+            select(func.count(CampaignRecipient.id)).where(
+                CampaignRecipient.run_id == run_id,
+                CampaignRecipient.status == CampaignRecipientStatus.FAILED.value,
+            )
         )
-        .count()
+        or 0
     )
     if failed_count == 0:
         raise ValueError("No failed recipients to retry")
@@ -1538,8 +1539,8 @@ def execute_campaign_run(
         email_col = IntendedParent.email
         id_col = IntendedParent.id
 
+    run.total_count = recipient_query.order_by(None).count()
     recipient_query = recipient_query.order_by(func.lower(email_col), id_col)
-    run.total_count = recipient_query.count()
     db.commit()
 
     seen_emails: dict[str, str | None] = {}

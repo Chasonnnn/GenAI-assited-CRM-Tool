@@ -7,6 +7,7 @@ import secrets
 import uuid
 from datetime import datetime, timezone
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -310,9 +311,12 @@ def create_inbound_webhook(
     label: str | None = None,
 ) -> tuple[ZapierInboundWebhook, str]:
     count = (
-        db.query(ZapierInboundWebhook)
-        .filter(ZapierInboundWebhook.organization_id == organization_id)
-        .count()
+        db.scalar(
+            select(func.count(ZapierInboundWebhook.id)).where(
+                ZapierInboundWebhook.organization_id == organization_id
+            )
+        )
+        or 0
     )
     secret = _generate_webhook_secret()
     inbound = ZapierInboundWebhook(
@@ -334,9 +338,12 @@ def delete_inbound_webhook(db: Session, organization_id: uuid.UUID, webhook_id: 
         raise LookupError("Webhook not found.")
 
     count = (
-        db.query(ZapierInboundWebhook)
-        .filter(ZapierInboundWebhook.organization_id == organization_id)
-        .count()
+        db.scalar(
+            select(func.count(ZapierInboundWebhook.id)).where(
+                ZapierInboundWebhook.organization_id == organization_id
+            )
+        )
+        or 0
     )
     if count <= 1:
         raise ValueError("At least one inbound webhook is required.")

@@ -399,6 +399,18 @@ def test_campaign_retry_queue_and_cancel(monkeypatch, db, test_org, test_user):
     db.add(recipient)
     db.flush()
 
+    from sqlalchemy.orm import Query
+
+    original_count = Query.count
+
+    def _count_should_not_be_called(self, *args, **kwargs):
+        entity = self.column_descriptions[0].get("entity") if self.column_descriptions else None
+        if entity is CampaignRecipient:
+            raise AssertionError("campaign retry should use a direct aggregate count")
+        return original_count(self, *args, **kwargs)
+
+    monkeypatch.setattr(Query, "count", _count_should_not_be_called)
+
     msg, run_id, job_id, failed_count = campaign_service.enqueue_campaign_retry_failed(
         db,
         org_id=test_org.id,

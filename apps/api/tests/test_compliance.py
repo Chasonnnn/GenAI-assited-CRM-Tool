@@ -467,6 +467,36 @@ def test_rate_limit_exceeded(db, test_org, test_user, export_settings):
         )
 
 
+def test_create_export_job_uses_direct_count_queries(
+    db, test_org, test_user, export_settings, monkeypatch
+):
+    from sqlalchemy.orm import Query
+
+    from app.db.models import AuditLog, ExportJob
+
+    original_count = Query.count
+
+    def _count_should_not_be_called(self, *args, **kwargs):
+        entity = self.column_descriptions[0].get("entity") if self.column_descriptions else None
+        if entity in {AuditLog, ExportJob}:
+            raise AssertionError("create_export_job should use direct aggregate count queries")
+        return original_count(self, *args, **kwargs)
+
+    monkeypatch.setattr(Query, "count", _count_should_not_be_called)
+
+    compliance_service.create_export_job(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        export_type="audit",
+        start_date=datetime.now(timezone.utc) - timedelta(days=1),
+        end_date=datetime.now(timezone.utc) + timedelta(days=1),
+        file_format="csv",
+        redact_mode="redacted",
+        acknowledgment=None,
+    )
+
+
 def test_create_export_job_commits_audit_log(db, test_org, test_user, export_settings):
     start_date = datetime.now(timezone.utc) - timedelta(days=1)
     end_date = datetime.now(timezone.utc) + timedelta(days=1)

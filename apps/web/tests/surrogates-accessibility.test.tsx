@@ -181,6 +181,16 @@ describe('SurrogatesPage Accessibility', () => {
         // Check for Assign button aria-label
         expect(screen.getByLabelText('Assign to user')).toBeInTheDocument()
     })
+
+    it('gives active filter chips an action-oriented accessible name', () => {
+        mockSearchParams.set('stage', 's1')
+
+        render(<SurrogatesPage />)
+
+        expect(
+            screen.getByRole('button', { name: 'Remove filter: Stage: New Unread' })
+        ).toBeInTheDocument()
+    })
 })
 
 describe('SurrogateOverviewTab Accessibility', () => {
