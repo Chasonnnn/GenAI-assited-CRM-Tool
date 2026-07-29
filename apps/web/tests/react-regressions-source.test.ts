@@ -121,7 +121,7 @@ function readTsxSourcesUnder(pathFromWebRoot: string): Array<{ path: string; sou
 }
 
 describe("React regression guards (source)", () => {
-    it("reserves side-sheet overlays for the calendar agenda", () => {
+    it("reserves side-sheet overlays for reviewed consumers", () => {
         const sheetConsumers = [
             ...readTsxSourcesUnder("app"),
             ...readTsxSourcesUnder("components"),
@@ -131,6 +131,7 @@ describe("React regression guards (source)", () => {
             .map(({ path }) => path)
 
         expect(sheetConsumers).toEqual([
+            "components/ai/AIChatDrawer.tsx",
             "components/appointments/UnifiedCalendar.tsx",
         ])
     })
