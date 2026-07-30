@@ -23,6 +23,7 @@ from app.db.models import (
 
 logger = logging.getLogger(__name__)
 
+ATTENTION_STUCK_DAYS = 90
 ATTENTION_STUCK_EXCLUDED_STAGE_TYPES = ("post_approval", "paused", "terminal")
 ATTENTION_STUCK_EXCLUDED_STAGE_KEYS = ("on_hold", "lost", "disqualified")
 
@@ -219,7 +220,7 @@ def get_attention_items(
     user_id: UUID,
     user_role: Role | str | None = None,
     days_unreached: int = 7,
-    days_stuck: int = 14,
+    days_stuck: int = ATTENTION_STUCK_DAYS,
     pipeline_id: UUID | None = None,
     assignee_id: UUID | None = None,
     limit: int = 5,

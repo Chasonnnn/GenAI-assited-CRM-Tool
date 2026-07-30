@@ -321,8 +321,8 @@ async def test_surrogates_dynamic_filter_attention_stuck_excludes_post_approval_
         full_name="Attention Stuck Approved",
         email="attention-stuck-approved@example.com",
         email_hash=hash_email("attention-stuck-approved@example.com"),
-        created_at=now - timedelta(days=35),
-        updated_at=now - timedelta(days=35),
+        created_at=now - timedelta(days=100),
+        updated_at=now - timedelta(days=100),
         last_contacted_at=now,
     )
     post_approval_stuck = Surrogate(
@@ -337,8 +337,8 @@ async def test_surrogates_dynamic_filter_attention_stuck_excludes_post_approval_
         full_name="Attention Stuck Post Approval",
         email="attention-stuck-post-approval@example.com",
         email_hash=hash_email("attention-stuck-post-approval@example.com"),
-        created_at=now - timedelta(days=35),
-        updated_at=now - timedelta(days=35),
+        created_at=now - timedelta(days=100),
+        updated_at=now - timedelta(days=100),
         last_contacted_at=now,
     )
     db.add_all([approved_stuck, post_approval_stuck])
@@ -353,6 +353,61 @@ async def test_surrogates_dynamic_filter_attention_stuck_excludes_post_approval_
     ids = {item["id"] for item in data["items"]}
     assert str(approved_stuck.id) in ids
     assert str(post_approval_stuck.id) not in ids
+
+
+@pytest.mark.asyncio
+async def test_surrogates_dynamic_filter_attention_stuck_uses_90_day_cutoff(
+    authed_client,
+    db,
+    test_org,
+    default_stage,
+    test_user,
+):
+    now = datetime.now(UTC)
+    sixty_day = Surrogate(
+        id=uuid.uuid4(),
+        surrogate_number="S91015",
+        organization_id=test_org.id,
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
+        source=SurrogateSource.MANUAL.value,
+        owner_type=OwnerType.USER.value,
+        owner_id=test_user.id,
+        full_name="Sixty Day Attention Candidate",
+        email="sixty-day-attention@example.com",
+        email_hash=hash_email("sixty-day-attention@example.com"),
+        created_at=now - timedelta(days=60),
+        updated_at=now - timedelta(days=60),
+        last_contacted_at=now,
+    )
+    hundred_day = Surrogate(
+        id=uuid.uuid4(),
+        surrogate_number="S91016",
+        organization_id=test_org.id,
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
+        source=SurrogateSource.MANUAL.value,
+        owner_type=OwnerType.USER.value,
+        owner_id=test_user.id,
+        full_name="Hundred Day Attention Candidate",
+        email="hundred-day-attention@example.com",
+        email_hash=hash_email("hundred-day-attention@example.com"),
+        created_at=now - timedelta(days=100),
+        updated_at=now - timedelta(days=100),
+        last_contacted_at=now,
+    )
+    db.add_all([sixty_day, hundred_day])
+    db.flush()
+
+    response = await authed_client.get(
+        "/surrogates",
+        params={"dynamic_filter": "attention_stuck"},
+    )
+
+    assert response.status_code == 200, response.text
+    ids = {item["id"] for item in response.json()["items"]}
+    assert str(hundred_day.id) in ids
+    assert str(sixty_day.id) not in ids
 
 
 @pytest.mark.asyncio
@@ -409,8 +464,8 @@ async def test_surrogates_dynamic_filter_attention_stuck_excludes_terminal_and_p
         full_name="Active Attention Stuck",
         email="active-attention-stuck@example.com",
         email_hash=hash_email("active-attention-stuck@example.com"),
-        created_at=now - timedelta(days=35),
-        updated_at=now - timedelta(days=35),
+        created_at=now - timedelta(days=100),
+        updated_at=now - timedelta(days=100),
         last_contacted_at=now,
     )
     excluded_surrogates = [
@@ -426,8 +481,8 @@ async def test_surrogates_dynamic_filter_attention_stuck_excludes_terminal_and_p
             full_name=f"Excluded {stage.label}",
             email=f"excluded-dynamic-{stage.stage_key}@example.com",
             email_hash=hash_email(f"excluded-dynamic-{stage.stage_key}@example.com"),
-            created_at=now - timedelta(days=35),
-            updated_at=now - timedelta(days=35),
+            created_at=now - timedelta(days=100),
+            updated_at=now - timedelta(days=100),
             last_contacted_at=now,
         )
         for index, stage in enumerate(legacy_excluded_stages, start=1)

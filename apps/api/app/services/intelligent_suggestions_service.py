@@ -871,7 +871,7 @@ def _attention_stuck_ids(
         user_id,
         surrogate_model=Surrogate,
     )
-    cutoff = now_utc - timedelta(days=30)
+    cutoff = now_utc - timedelta(days=dashboard_service.ATTENTION_STUCK_DAYS)
 
     latest_stage_change_subquery = (
         db.query(

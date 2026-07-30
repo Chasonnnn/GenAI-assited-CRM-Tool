@@ -429,6 +429,59 @@ async def test_attention_stuck_includes_no_history(db, test_org, default_stage):
 
 
 @pytest.mark.asyncio
+async def test_attention_defaults_stuck_cutoff_to_90_days(db, test_org, default_stage):
+    async with role_client(db, test_org, Role.ADMIN) as (client, user):
+        now = datetime.now(UTC)
+        sixty_day = Surrogate(
+            id=uuid.uuid4(),
+            surrogate_number="S20007",
+            organization_id=test_org.id,
+            stage_id=default_stage.id,
+            status_label=default_stage.label,
+            source=SurrogateSource.MANUAL.value,
+            owner_type=OwnerType.USER.value,
+            owner_id=user.id,
+            full_name="Sixty Day Surrogate",
+            email="sixty-day@example.com",
+            email_hash=hash_email("sixty-day@example.com"),
+            created_at=now - timedelta(days=60),
+            updated_at=now - timedelta(days=60),
+            last_contacted_at=now,
+        )
+        hundred_day = Surrogate(
+            id=uuid.uuid4(),
+            surrogate_number="S20008",
+            organization_id=test_org.id,
+            stage_id=default_stage.id,
+            status_label=default_stage.label,
+            source=SurrogateSource.MANUAL.value,
+            owner_type=OwnerType.USER.value,
+            owner_id=user.id,
+            full_name="Hundred Day Surrogate",
+            email="hundred-day@example.com",
+            email_hash=hash_email("hundred-day@example.com"),
+            created_at=now - timedelta(days=100),
+            updated_at=now - timedelta(days=100),
+            last_contacted_at=now,
+        )
+        db.add_all([sixty_day, hundred_day])
+        db.flush()
+
+        response = await client.get("/dashboard/attention")
+
+        assert response.status_code == 200
+        stuck_ids = {item["id"] for item in response.json()["stuck_surrogates"]}
+        assert stuck_ids == {str(hundred_day.id)}
+
+
+@pytest.mark.asyncio
+async def test_attention_accepts_90_day_stuck_cutoff(authed_client):
+    response = await authed_client.get("/dashboard/attention?days_stuck=90")
+
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_attention_stuck_excludes_on_hold(db, test_org):
     async with role_client(db, test_org, Role.CASE_MANAGER) as (client, user):
         pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id)
@@ -668,9 +721,9 @@ def test_attention_items_skip_count_queries_when_results_are_below_limit(
             full_name="Below Limit Surrogate",
             email="below-limit@example.com",
             email_hash=hash_email("below-limit@example.com"),
-            created_at=now - timedelta(days=20),
-            updated_at=now - timedelta(days=20),
-            last_contacted_at=now - timedelta(days=20),
+            created_at=now - timedelta(days=100),
+            updated_at=now - timedelta(days=100),
+            last_contacted_at=now - timedelta(days=100),
         )
     )
     db.flush()
@@ -712,9 +765,9 @@ def test_attention_items_still_count_when_results_hit_limit(
                 full_name=f"Hit Limit {index + 1}",
                 email=email,
                 email_hash=hash_email(email),
-                created_at=now - timedelta(days=20),
-                updated_at=now - timedelta(days=20),
-                last_contacted_at=now - timedelta(days=20),
+                created_at=now - timedelta(days=100),
+                updated_at=now - timedelta(days=100),
+                last_contacted_at=now - timedelta(days=100),
             )
         )
     db.flush()
