@@ -754,13 +754,13 @@ The backend is fully on Pydantic v2 with no v1 leftovers (no class Config, no @v
 
 ### Python runtime / Alembic / async / packaging modernization (apps/api)
 
-The backend is on current tooling (Python 3.11 floor, SQLAlchemy 2.0 typed ORM fully adopted, Alembic 1.18.3, uv with lockfile v1/rev3) but is leaving a meaningful set of post-3.11 features on the table — almost entirely because the runtime target is frozen at 3.11 even though the codebase already ships Python 3.14 forward-compat shims (slowapi/asyncio patch, protobuf pin). The highest-leverage wins are: (1) raise the runtime to 3.13 to unlock free-threading, JIT, faster startup/imports, and far better tracebacks for production debugging; (2) adopt asyncio.TaskGroup to supervise the worker's fan-out and the fire-and-forget websocket tasks that are currently un-tracked footguns; (3) parallelize the strictly-sequential job batch; (4) wake the worker via Postgres LISTEN/NOTIFY instead of fixed 10s polling to cut job latency. Packaging hygiene (PEP 735 dependency-groups, [tool.uv], .python-version, uv lock --locked in CI) and Alembic ergonomics (enable the new ruff module post-write hook, modernize script.py.mako typing) are genuine quick wins. PEP 695 generics/type aliases and typing.Self are real cleanups but are gated on first raising the floor to 3.12+. None of these compromise org-scoping, thin routers, or the human-review-before-send AI policy.
+The backend now targets Python 3.14 consistently across Mise, project metadata, Ruff, mypy, Docker, and CI. SQLAlchemy 2.0 typed ORM, Alembic 1.18.3, and uv's native lockfile remain in place. The remaining high-leverage opportunities are: (1) adopt asyncio.TaskGroup to supervise the worker's fan-out and fire-and-forget websocket tasks; (2) parallelize the strictly sequential job batch; and (3) wake the worker via Postgres LISTEN/NOTIFY instead of fixed 10s polling. Packaging hygiene (PEP 735 dependency-groups, [tool.uv], and an explicit `uv lock --check` CI gate) and Alembic ergonomics remain useful follow-ups. None of these compromise org-scoping, thin routers, or the human-review-before-send AI policy.
 
-#### 1. Raise the runtime floor to Python 3.13 across pyproject/ruff/mypy/Docker/CI  
+#### 1. Raise the runtime floor across pyproject/ruff/mypy/Docker/CI — completed at Python 3.14
 `[performance]` · impact=high · effort=medium · risk=medium · breaking=yes
 
-- **Current:** Everything is pinned to 3.11: requires-python '>=3.11' (apps/api/pyproject.toml:5), ruff target-version='py311' (pyproject.toml:106), mypy python_version=3.11 (apps/api/mypy.ini:2), both Dockerfiles FROM python:3.11.14-slim-bookworm, and all 5 CI jobs python-version '3.11' (.github/workflows/ci.yml:45,100,156,226,316). Yet the code already carries 3.14 forward-compat shims (apps/api/app/core/rate_limit.py:16-17 patches the 3.14-deprecated asyncio.iscoroutinefunction; protobuf==6.33.5 is pinned 'to avoid deprecated PyType_Spec usage warnings in Python 3.14+', pyproject.toml:59-60) and uv.lock already resolves markers for 3.13/3.14 — so the intent to move forward exists but the target was never raised.
-- **Proposed:** Move the floor to 3.13: requires-python '>=3.13', ruff target-version='py313', mypy python_version=3.13, Dockerfiles to python:3.13-slim-bookworm, CI matrix to '3.13'. This unlocks (vs 3.11): ~33% faster typing import + faster enum/functools/threading imports for quicker container cold-starts (relevant for Cloud Run scale-to-zero), much-improved colorized tracebacks and 'Did you mean' suggestions that show up directly in Cloud Logging for faster incident triage, the optional copy-and-patch JIT (PYTHON_JIT=1), and the free-threaded build (python3.13t) as a future option for the CPU-bound worker. It also makes PEP 695 generics/type aliases and typing.Self (separate items below) available. Do it as one floor bump rather than stair-stepping through 3.12.
+- **Current:** The supported interpreter line is Python 3.14: `requires-python` is constrained to `>=3.14,<3.15`, Ruff targets `py314`, mypy targets 3.14, and Mise, Docker, and all five Python CI jobs pin patch 3.14.6. Existing forward-compatibility work for asyncio and protobuf is retained.
+- **Resolution:** The repository moved directly from 3.11 to 3.14.6 and validates that version in development, CI, and production images. Future patch upgrades should update the shared Mise baseline and these repository declarations together.
 - **Doc:** https://docs.python.org/3/whatsnew/3.13.html (import-time reductions, colorized tracebacks, PEP 744 JIT, PEP 703 free-threading); https://docs.python.org/3.12/whatsnew/3.12.html (per-interpreter GIL, comprehension inlining PEP 709, sys.monitoring PEP 669)
 - **Where:** /Users/chason/GenAI-assited-CRM-Tool/apps/api/pyproject.toml, /Users/chason/GenAI-assited-CRM-Tool/apps/api/mypy.ini, /Users/chason/GenAI-assited-CRM-Tool/apps/api/Dockerfile, /Users/chason/GenAI-assited-CRM-Tool/apps/api/Dockerfile.worker, /Users/chason/GenAI-assited-CRM-Tool/.github/workflows/ci.yml
 
@@ -804,13 +804,13 @@ The backend is on current tooling (Python 3.11 floor, SQLAlchemy 2.0 typed ORM f
 - **Doc:** https://docs.astral.sh/uv/reference/cli/#uv-lock (--locked / --check); https://docs.astral.sh/uv/concepts/projects/sync/
 - **Where:** /Users/chason/GenAI-assited-CRM-Tool/.github/workflows/ci.yml
 
-#### 7. Add a pinned .python-version for reproducible local + CI interpreter selection  
+#### 7. Pin the local interpreter for reproducible selection — completed with Mise
 `[dx]` · impact=low · effort=low · risk=low · breaking=no
 
-- **Current:** There is no .python-version at the repo root or in apps/api (verified absent). requires-python is a floor ('>=3.11'), so `uv run` / `uv python install` can pick any satisfying interpreter locally, which can diverge from the 3.11.14 used in Docker/CI.
-- **Proposed:** Add apps/api/.python-version pinning the exact interpreter (matching whatever floor you land on — e.g. 3.13.x if you take the runtime-bump item, otherwise 3.11.14 to lock the current state). uv reads .python-version to auto-select and auto-install the interpreter, eliminating 'works on my machine' drift between contributors, Docker, and CI.
-- **Doc:** https://docs.astral.sh/uv/concepts/python-versions/#project-python-versions (.python-version)
-- **Where:** /Users/chason/GenAI-assited-CRM-Tool/apps/api/.python-version
+- **Current:** The root `mise.toml` and `mise.lock` pin Python 3.14.6 for local shells and temporary environments; `pyproject.toml` constrains uv to the 3.14 line. Docker and CI pin the same patch, so a separate `.python-version` would duplicate the repository's source of truth.
+- **Resolution:** Keep Mise as the exact local interpreter selector and native manifests/lockfiles as compatibility and dependency contracts. Update all runtime surfaces together whenever the shared baseline changes.
+- **Doc:** https://mise.jdx.dev/configuration.html; https://mise.jdx.dev/dev-tools/mise-lock.html
+- **Where:** /Users/chason/GenAI-assited-CRM-Tool/mise.toml, /Users/chason/GenAI-assited-CRM-Tool/mise.lock
 
 #### 8. Enable the Alembic ruff post-write hook and modernize script.py.mako typing  
 `[dx]` · impact=medium · effort=low · risk=low · breaking=no

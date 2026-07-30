@@ -4,9 +4,9 @@
 # ============================================================================
 # Stage 1: Build dependencies
 # ============================================================================
-FROM ghcr.io/astral-sh/uv:0.9.24 AS uv
+FROM ghcr.io/astral-sh/uv:0.12.0 AS uv
 
-FROM python:3.11.14-slim-bookworm AS builder
+FROM python:3.14.6-slim-bookworm AS builder
 
 WORKDIR /app
 ARG CACHE_BUST=0
@@ -33,7 +33,7 @@ RUN uv sync --frozen --no-install-project
 # ============================================================================
 # Stage 2: Production image
 # ============================================================================
-FROM python:3.11.14-slim-bookworm
+FROM python:3.14.6-slim-bookworm
 
 WORKDIR /app
 ARG CACHE_BUST=0

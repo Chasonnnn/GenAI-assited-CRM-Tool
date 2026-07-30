@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -41,6 +42,23 @@ def test_ci_uses_the_repository_pnpm_release() -> None:
     prepared_versions = set(re.findall(r"corepack prepare pnpm@([^ ]+) --activate", workflow))
 
     assert prepared_versions == {expected_version}
+
+
+def test_ci_uses_the_repository_mise_runtime_versions() -> None:
+    workflow = CI_WORKFLOW.read_text()
+    tools = tomllib.loads((ROOT / "mise.toml").read_text())["tools"]
+
+    python_versions = re.findall(r"python-version: '([^']+)'", workflow)
+    node_versions = re.findall(r"node-version: '([^']+)'", workflow)
+    uv_versions = re.findall(
+        r"uses: astral-sh/setup-uv@v7\s+with:\s+version: '([^']+)'",
+        workflow,
+    )
+
+    assert python_versions and set(python_versions) == {tools["python"]}
+    assert node_versions and set(node_versions) == {tools["node"]}
+    assert len(uv_versions) == workflow.count("uses: astral-sh/setup-uv@v7")
+    assert set(uv_versions) == {tools["uv"]}
 
 
 def test_release_automation_uses_the_node_24_action() -> None:
