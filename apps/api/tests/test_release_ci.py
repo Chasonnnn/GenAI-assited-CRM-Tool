@@ -44,6 +44,28 @@ def test_ci_uses_the_repository_pnpm_release() -> None:
     assert prepared_versions == {expected_version}
 
 
+def test_package_manager_is_corepack_compatible_and_mise_checksum_pinned() -> None:
+    package = json.loads((ROOT / "apps/web/package.json").read_text())
+    mise_config = tomllib.loads((ROOT / "mise.toml").read_text())
+    mise_lock = tomllib.loads((ROOT / "mise.lock").read_text())
+    pnpm_version = mise_config["tools"]["pnpm"]
+
+    assert package["packageManager"] == f"pnpm@{pnpm_version}"
+
+    locked_pnpm = mise_lock["tools"]["pnpm"]
+    assert len(locked_pnpm) == 1
+    assert locked_pnpm[0]["version"] == pnpm_version
+
+    locked_platforms = {
+        key.removeprefix("platforms."): value
+        for key, value in locked_pnpm[0].items()
+        if key.startswith("platforms.")
+    }
+    assert set(locked_platforms) == set(mise_config["settings"]["lockfile_platforms"])
+    for platform in locked_platforms.values():
+        assert re.fullmatch(r"sha256:[0-9a-f]{64}", platform["checksum"])
+
+
 def test_ci_uses_the_repository_mise_runtime_versions() -> None:
     workflow = CI_WORKFLOW.read_text()
     tools = tomllib.loads((ROOT / "mise.toml").read_text())["tools"]

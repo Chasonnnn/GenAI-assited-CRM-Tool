@@ -1,7 +1,7 @@
 {
   "name": "my-v0-project",
   "version": "0.3.0",
-  "packageManager": "pnpm@11.18.0+sha512-M9g8d9qC9J+6g2klxvG4QRgewxMrZwY5vQEvcHX1x89jTF+HAUfBmq50ePrAHfCdiJLogEVIlu3SPumzN1dWPA==",
+  "packageManager": "pnpm@11.18.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
