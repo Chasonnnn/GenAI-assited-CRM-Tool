@@ -38,6 +38,7 @@ import {
     UserRoundIcon,
 } from "lucide-react"
 import { useConversation, useStreamChatMessage, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
+import { usePipelines } from "@/lib/hooks/use-pipelines"
 import type { ProposedAction } from "@/lib/api/ai"
 import type { ScheduleParserDialogProps } from "@/components/ai/ScheduleParserDialog"
 import { AssistantRichText } from "@/components/ai/AssistantRichText"
@@ -324,9 +325,11 @@ function AIChatMessageBubble({ message }: { message: PanelMessage }) {
 function AIChatActionCards({
     message,
     actionControls,
+    stageLabelsById,
 }: {
     message: PanelMessage
     actionControls: AIChatActionControls
+    stageLabelsById: ReadonlyMap<string, string>
 }) {
     if (message.role !== "assistant" || !message.proposed_actions?.length) return null
 
@@ -354,6 +357,7 @@ function AIChatActionCards({
                         isApproving={approvalId ? actionControls.isApproving(approvalId) : false}
                         isRejecting={approvalId ? actionControls.isRejecting(approvalId) : false}
                         errorMessage={approvalId ? actionControls.getErrorMessage(approvalId) : null}
+                        stageLabelsById={stageLabelsById}
                     />
                 )
             })}
@@ -364,16 +368,22 @@ function AIChatActionCards({
 function AIChatMessageList({
     messages,
     actionControls,
+    stageLabelsById,
 }: {
     messages: PanelMessage[]
     actionControls: AIChatActionControls
+    stageLabelsById: ReadonlyMap<string, string>
 }) {
     return (
         <div className="space-y-3">
             {messages.map((message) => (
                 <div key={message.id}>
                     <AIChatMessageBubble message={message} />
-                    <AIChatActionCards message={message} actionControls={actionControls} />
+                    <AIChatActionCards
+                        message={message}
+                        actionControls={actionControls}
+                        stageLabelsById={stageLabelsById}
+                    />
                 </div>
             ))}
         </div>
@@ -387,6 +397,7 @@ function AIChatMessages({
     conversationError,
     entityType,
     actionControls,
+    stageLabelsById,
     onScroll,
     onRetry,
 }: {
@@ -396,6 +407,7 @@ function AIChatMessages({
     conversationError: boolean
     entityType: AIChatPanelProps["entityType"]
     actionControls: AIChatActionControls
+    stageLabelsById: ReadonlyMap<string, string>
     onScroll: () => void
     onRetry: () => void
 }) {
@@ -446,7 +458,11 @@ function AIChatMessages({
                 ) : messages.length === 0 ? (
                     <AIChatEmptyState entityType={entityType} />
                 ) : (
-                    <AIChatMessageList messages={messages} actionControls={actionControls} />
+                    <AIChatMessageList
+                        messages={messages}
+                        actionControls={actionControls}
+                        stageLabelsById={stageLabelsById}
+                    />
                 )}
             </div>
         </div>
@@ -654,10 +670,16 @@ function AIChatPanelContent({
         isError: conversationError,
         refetch: refetchConversation,
     } = useConversation(entityType, entityId)
+    const { data: pipelines } = usePipelines("surrogate", entityType === "surrogate")
     const streamMessage = useStreamChatMessage()
     const approveAction = useApproveAction()
     const rejectAction = useRejectAction()
     const conversationMessages = conversation?.messages
+    const stageLabelsById = new Map(
+        pipelines?.flatMap((pipeline) =>
+            pipeline.stages.map((stage) => [stage.id, stage.label] as const)
+        ) ?? []
+    )
     const conversationKey = createConversationKey(currentContext, conversation?.conversation_id, conversationMessages)
     const [messageState, setMessageState] = useState<PanelMessageState>(() =>
         createPanelMessageState(conversationKey, conversationMessages)
@@ -867,6 +889,7 @@ function AIChatPanelContent({
                 conversationError={conversationError}
                 entityType={entityType}
                 actionControls={actionControls}
+                stageLabelsById={stageLabelsById}
                 onScroll={handleScroll}
                 onRetry={() => void refetchConversation()}
             />
@@ -916,6 +939,7 @@ interface ActionCardProps {
     isApproving: boolean
     isRejecting: boolean
     errorMessage: string | null
+    stageLabelsById: ReadonlyMap<string, string>
 }
 
 const ACTION_STATUS_LABELS: Record<string, string> = {
@@ -970,6 +994,7 @@ function ActionCard({
     isApproving,
     isRejecting,
     errorMessage,
+    stageLabelsById,
 }: ActionCardProps) {
     const [expanded, setExpanded] = useState(false)
     const titleId = React.useId()
@@ -1015,7 +1040,11 @@ function ActionCard({
             </div>
 
             <div className="mx-3 mt-2 rounded-lg border bg-background/40 px-2.5 py-2">
-                <ActionPreview type={action.action_type} data={action.action_data} />
+                <ActionPreview
+                    type={action.action_type}
+                    data={action.action_data}
+                    stageLabelsById={stageLabelsById}
+                />
             </div>
 
             {expanded ? (
@@ -1023,7 +1052,11 @@ function ActionCard({
                     id={detailsId}
                     className="mx-3 mt-2 rounded-lg border bg-background/70 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground"
                 >
-                    <ActionDetails type={action.action_type} data={action.action_data} />
+                    <ActionDetails
+                        type={action.action_type}
+                        data={action.action_data}
+                        stageLabelsById={stageLabelsById}
+                    />
                 </div>
             ) : null}
 
@@ -1089,7 +1122,15 @@ function ActionCard({
 }
 
 // Action preview component
-function ActionPreview({ type, data }: { type: string; data: Record<string, unknown> }) {
+function ActionPreview({
+    type,
+    data,
+    stageLabelsById,
+}: {
+    type: string
+    data: Record<string, unknown>
+    stageLabelsById: ReadonlyMap<string, string>
+}) {
     switch (type) {
         case "send_email": {
             const recipient = getActionText(data, ["to", "recipient_email", "recipient"]) ?? "Recipient not provided"
@@ -1127,9 +1168,10 @@ function ActionPreview({ type, data }: { type: string; data: Record<string, unkn
         }
         case "update_status": {
             const rawStage = getActionText(data, ["stage_label", "target_stage_label", "status_label", "status"])
+            const stageId = getActionText(data, ["stage_id"])
             const stageLabel = rawStage
                 ? humanizeActionValue(rawStage)
-                : "Selected pipeline stage"
+                : (stageId ? stageLabelsById.get(stageId) : null) ?? "Selected pipeline stage"
             return (
                 <p className="text-xs text-muted-foreground">
                     Change to <strong className="font-medium text-foreground">{stageLabel}</strong>
@@ -1141,7 +1183,15 @@ function ActionPreview({ type, data }: { type: string; data: Record<string, unkn
     }
 }
 
-function ActionDetails({ type, data }: { type: string; data: Record<string, unknown> }) {
+function ActionDetails({
+    type,
+    data,
+    stageLabelsById,
+}: {
+    type: string
+    data: Record<string, unknown>
+    stageLabelsById: ReadonlyMap<string, string>
+}) {
     switch (type) {
         case "send_email":
             return (
@@ -1162,7 +1212,7 @@ function ActionDetails({ type, data }: { type: string; data: Record<string, unkn
                 </p>
             )
         case "update_status":
-            return <ActionPreview type={type} data={data} />
+            return <ActionPreview type={type} data={data} stageLabelsById={stageLabelsById} />
         default:
             return <p>Review this action carefully before approving it.</p>
     }
