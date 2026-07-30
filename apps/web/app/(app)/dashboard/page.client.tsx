@@ -8,6 +8,7 @@ import { useDashboardSocket } from "@/lib/hooks/use-dashboard-socket"
 import { useSurrogateStats } from "@/lib/hooks/use-surrogates"
 import { useSurrogatesTrend, useSurrogatesByStatus } from "@/lib/hooks/use-analytics"
 import { useAttention, useUpcoming } from "@/lib/hooks/use-dashboard"
+import { ATTENTION_STUCK_DAYS } from "@/lib/api/dashboard"
 import { useTasks, taskKeys } from "@/lib/hooks/use-tasks"
 import { useQueryClient } from "@tanstack/react-query"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -66,7 +67,7 @@ function DashboardContent() {
     const attentionParams = {
         ...(filters.assigneeId ? { assignee_id: filters.assigneeId } : {}),
         days_unreached: 7,
-        days_stuck: 30,
+        days_stuck: ATTENTION_STUCK_DAYS,
     }
     const tasksParams = {
         is_completed: false,
