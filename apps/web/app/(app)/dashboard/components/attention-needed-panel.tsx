@@ -31,6 +31,7 @@ import {
     type UpcomingMeeting,
 } from "@/lib/hooks/use-dashboard"
 import type { DynamicSurrogateFilter } from "@/lib/api/surrogates"
+import { ATTENTION_STUCK_DAYS } from "@/lib/api/dashboard"
 import { useDashboardFilters } from "../context/dashboard-filters"
 import { formatLocalDate } from "@/lib/utils/date"
 
@@ -47,7 +48,7 @@ export function AttentionNeededPanel() {
     const { data, isLoading, isError, refetch } = useAttention({
         assignee_id: filters.assigneeId,
         days_unreached: 7,
-        days_stuck: 30,
+        days_stuck: ATTENTION_STUCK_DAYS,
     })
     const { data: upcomingData, isLoading: upcomingLoading, isError: upcomingError } = useUpcoming({
         days: 7,
@@ -459,8 +460,8 @@ function AttentionItemsContent({
                     icon={<PauseCircleIcon className="size-4" />}
                     iconBg="bg-orange-500/10"
                     iconColor="text-orange-600"
-                    title="Stuck surrogates (30+ days)"
-                    description="In stage for 30+ days"
+                    title={`Stuck surrogates (${ATTENTION_STUCK_DAYS}+ days)`}
+                    description={`In stage for ${ATTENTION_STUCK_DAYS}+ days`}
                     count={stuckCount}
                     href={stuckHref}
                     countBadgeClass={COUNT_BADGE_CLASS}

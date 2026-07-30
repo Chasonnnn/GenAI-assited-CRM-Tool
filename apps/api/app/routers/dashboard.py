@@ -182,7 +182,10 @@ def get_attention(
         7, ge=1, le=30, description="Days without contact or updates for unreached leads"
     ),
     days_stuck: Annotated[int, "fastapi_param"] = Query(
-        14, ge=1, le=60, description="Days in same stage for stuck surrogates"
+        dashboard_service.ATTENTION_STUCK_DAYS,
+        ge=1,
+        le=dashboard_service.ATTENTION_STUCK_DAYS,
+        description="Days in same stage for stuck surrogates",
     ),
     pipeline_id: Annotated[UUID | None, "fastapi_param"] = Query(
         None, description="Filter by pipeline UUID"

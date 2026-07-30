@@ -70,6 +70,8 @@ export async function getUpcoming(params: GetUpcomingParams = {}): Promise<Upcom
 // Attention Items
 // =============================================================================
 
+export const ATTENTION_STUCK_DAYS = 90
+
 export interface UnreachedLead {
     id: string
     surrogate_number: string

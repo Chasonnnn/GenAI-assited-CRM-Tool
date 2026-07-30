@@ -229,7 +229,7 @@ describe('DashboardPage', () => {
                 unreached_count: 1,
                 overdue_tasks: [],
                 overdue_count: 0,
-                stuck_surrogates: [{ id: 's2', surrogate_number: 'S10002', stage_label: 'Contacted', days_in_stage: 35, last_stage_change: new Date().toISOString() }],
+                stuck_surrogates: [{ id: 's2', surrogate_number: 'S10002', stage_label: 'Contacted', days_in_stage: 100, last_stage_change: new Date().toISOString() }],
                 stuck_count: 1,
                 total_count: 2,
             },
@@ -242,8 +242,15 @@ describe('DashboardPage', () => {
         const unreachedLink = await screen.findByText('Unreached leads (7+ days)')
         expect(unreachedLink.closest('a')).toHaveAttribute('href', '/surrogates?dynamic_filter=attention_unreached')
 
-        const stuckLink = await screen.findByText('Stuck surrogates (30+ days)')
+        const stuckLink = await screen.findByText('Stuck surrogates (90+ days)')
         expect(stuckLink.closest('a')).toHaveAttribute('href', '/surrogates?dynamic_filter=attention_stuck')
+        expect(screen.getByText('In stage for 90+ days')).toBeInTheDocument()
+
+        const attentionCalls = mockUseAttention.mock.calls.map((call) => call[0] as Record<string, unknown>)
+        expect(attentionCalls.length).toBeGreaterThan(0)
+        for (const params of attentionCalls) {
+            expect(params.days_stuck).toBe(90)
+        }
     })
 
     it('shows filter-empty state for pipeline distribution when range filters exclude all', async () => {
