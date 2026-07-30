@@ -1,12 +1,9 @@
 """Pagination utilities for list endpoints."""
 
 from dataclasses import dataclass
-from typing import Generic, TypeVar
 
 from fastapi import Query
 from sqlalchemy.orm import Query as SQLAlchemyQuery
-
-T = TypeVar("T")
 
 # Pagination limits
 DEFAULT_PAGE = 1
@@ -47,7 +44,7 @@ def get_pagination(
 
 
 @dataclass
-class PaginatedResponse(Generic[T]):
+class PaginatedResponse[T]:
     """Standard paginated response structure."""
 
     items: list[T]
@@ -59,7 +56,7 @@ class PaginatedResponse(Generic[T]):
     @classmethod
     def create(
         cls, items: list[T], total: int, pagination: PaginationParams
-    ) -> "PaginatedResponse[T]":
+    ) -> PaginatedResponse[T]:
         pages = (
             (total + pagination.per_page - 1) // pagination.per_page
             if pagination.per_page > 0

@@ -28,7 +28,7 @@ def _coerce_uuid(raw_id: str | None) -> UUID | None:
         return None
     try:
         return UUID(str(raw_id))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         logger.warning("Invalid UUID value '%s' in reminder payload", raw_id)
         return None
 

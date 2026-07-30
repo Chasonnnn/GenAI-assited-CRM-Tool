@@ -947,8 +947,8 @@ def _build_day_slots(
     buffer_before: int,
     buffer_after: int,
     interval_minutes: int,
-    appointments: list["Appointment"],
-    tasks: list["Task"],
+    appointments: list[Appointment],
+    tasks: list[Task],
     user_tz: ZoneInfo,
 ) -> list[TimeSlot]:
     """Build available slots for a single day."""
@@ -1028,7 +1028,7 @@ def _get_conflicting_appointments(
     date_start: date,
     date_end: date,
     exclude_appointment_id: UUID | None = None,
-) -> list["Appointment"]:
+) -> list[Appointment]:
     """Get appointments that could conflict with new bookings."""
     start_dt = datetime.combine(date_start, time.min, tzinfo=UTC)
     end_dt = datetime.combine(date_end, time.max, tzinfo=UTC)
@@ -1061,7 +1061,7 @@ def _get_conflicting_tasks(
     org_id: UUID,
     date_start: date,
     date_end: date,
-) -> list["Task"]:
+) -> list[Task]:
     """Get tasks with scheduled times that could conflict."""
     from app.db.enums import OwnerType
 

@@ -97,7 +97,7 @@ def _map_integration_bucket_to_meta_status(bucket: str | None) -> str | None:
 
 
 def map_stage_key_to_meta_status_for_org(
-    db: "Session",
+    db: Session,
     organization_id,
     stage_key: str | None,
 ) -> str | None:
@@ -109,7 +109,7 @@ def map_stage_key_to_meta_status_for_org(
 
 
 def should_send_capi_event_for_org(
-    db: "Session",
+    db: Session,
     organization_id,
     from_status: str,
     to_status: str,
@@ -147,8 +147,8 @@ def should_send_capi_event(from_status: str, to_status: str) -> bool:
 
 async def send_lead_event_for_account(
     lead_id: str,
-    ad_account: "MetaAdAccount",
-    db: "Session | None" = None,
+    ad_account: MetaAdAccount,
+    db: Session | None = None,
     event_name: str = "Lead",
     user_data: JsonObject | None = None,
     custom_data: JsonObject | None = None,
@@ -264,10 +264,10 @@ async def send_lead_event_for_account(
 
 async def send_status_event_for_account(
     meta_lead_id: str,
-    ad_account: "MetaAdAccount",
+    ad_account: MetaAdAccount,
     surrogate_status: str,
     meta_status: str,
-    db: "Session | None" = None,
+    db: Session | None = None,
     email: str | None = None,
     phone: str | None = None,
 ) -> tuple[bool, str | None]:

@@ -229,7 +229,7 @@ class InterviewNoteRead(BaseModel):
 
     # Thread support
     parent_id: UUID | None
-    replies: list["InterviewNoteRead"] = []  # Nested replies (eagerly loaded)
+    replies: list[InterviewNoteRead] = []  # Nested replies (eagerly loaded)
 
     # Resolve support
     resolved_at: datetime | None

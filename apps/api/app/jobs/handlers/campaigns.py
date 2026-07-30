@@ -28,7 +28,7 @@ async def process_campaign_send(db, job) -> None:
     if user_id:
         try:
             actor_user_id = UUID(str(user_id))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             actor_user_id = None
 
     if not campaign_id or not run_id:

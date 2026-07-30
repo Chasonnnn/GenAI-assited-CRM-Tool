@@ -666,7 +666,7 @@ def mark_orphan_case_exhausted_for_job(
     payload = job.payload if isinstance(job.payload, dict) else {}
     try:
         event_id = UUID(str(payload.get("event_id")))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
     case = (
@@ -698,7 +698,7 @@ def mark_orphan_case_claim_expired(
     payload = job.payload if isinstance(job.payload, dict) else {}
     try:
         event_id = UUID(str(payload.get("event_id")))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
     case = (

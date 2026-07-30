@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import TypeAlias
-
-JsonValue: TypeAlias = object
-JsonObject: TypeAlias = dict[str, JsonValue]
-JsonArray: TypeAlias = list[JsonValue]
+type JsonValue = object
+type JsonObject = dict[str, JsonValue]
+type JsonArray = list[JsonValue]

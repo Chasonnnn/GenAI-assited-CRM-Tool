@@ -64,13 +64,13 @@ def _extract_hashes(query: str) -> tuple[str | None, str | None]:
     if "@" in query:
         try:
             email_hash = hash_email(query)
-        except (RuntimeError, ValueError):
+        except RuntimeError, ValueError:
             email_hash = None
     digit_count = sum(1 for ch in query if ch.isdigit())
     if digit_count >= 7:
         try:
             phone_hash = hash_phone(query) or None
-        except (RuntimeError, ValueError):
+        except RuntimeError, ValueError:
             phone_hash = None
     return email_hash, phone_hash
 

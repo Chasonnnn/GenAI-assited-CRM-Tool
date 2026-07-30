@@ -257,7 +257,7 @@ def get_or_create_surrogate_pool_queue(db: Session, org_id: UUID) -> Queue:
         for membership in memberships:
             try:
                 add_queue_member(db, org_id, queue.id, membership.user_id)
-            except (QueueMemberExistsError, QueueMemberUserNotFoundError):
+            except QueueMemberExistsError, QueueMemberUserNotFoundError:
                 pass
 
         return queue

@@ -42,11 +42,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: '3.14.6'
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
+          version: '0.12.0'
           cache-suffix: ${{ github.job }}
       
       - name: Install dependencies
@@ -97,11 +98,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: '3.14.6'
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
+          version: '0.12.0'
           cache-suffix: ${{ github.job }}
 
       - name: Install dependencies
@@ -153,11 +155,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: '3.14.6'
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
+          version: '0.12.0'
           cache-suffix: ${{ github.job }}
 
       - name: Install dependencies
@@ -188,14 +191,14 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
-          node-version: '24'
+          node-version: '24.18.0'
           package-manager-cache: false
 
       - name: Enable pnpm via corepack
         working-directory: apps/web
         run: |
           corepack enable
-          corepack prepare pnpm@11.9.0 --activate
+          corepack prepare pnpm@11.18.0 --activate
       
       - name: Install dependencies
         working-directory: apps/web
@@ -223,7 +226,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: '3.14.6'
       
       - name: Check Python syntax
         working-directory: apps/api
@@ -232,14 +235,14 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
-          node-version: '24'
+          node-version: '24.18.0'
           package-manager-cache: false
 
       - name: Enable pnpm via corepack
         working-directory: apps/web
         run: |
           corepack enable
-          corepack prepare pnpm@11.9.0 --activate
+          corepack prepare pnpm@11.18.0 --activate
       
       - name: TypeScript check
         working-directory: apps/web
@@ -313,11 +316,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: '3.14.6'
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
+          version: '0.12.0'
           cache-suffix: ${{ github.job }}
 
       - name: Install Python dependencies
@@ -335,14 +339,14 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
-          node-version: '24'
+          node-version: '24.18.0'
           package-manager-cache: false
 
       - name: Enable pnpm via corepack
         working-directory: apps/web
         run: |
           corepack enable
-          corepack prepare pnpm@11.9.0 --activate
+          corepack prepare pnpm@11.18.0 --activate
 
       - name: Install frontend dependencies
         working-directory: apps/web

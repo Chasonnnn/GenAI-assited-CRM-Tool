@@ -124,7 +124,7 @@ def _build_intended_parent_query(
         try:
             after_date = datetime.fromisoformat(created_after.replace("Z", "+00:00"))
             query = query.filter(IntendedParent.created_at >= after_date)
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             logger.debug("ip_filter_invalid_created_after")
     if created_before:
         try:
@@ -133,7 +133,7 @@ def _build_intended_parent_query(
                 query = query.filter(IntendedParent.created_at < before_date)
             else:
                 query = query.filter(IntendedParent.created_at <= before_date)
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             logger.debug("ip_filter_invalid_created_before")
 
     return query

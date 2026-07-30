@@ -38,15 +38,17 @@ def test_api_dockerignore_exists_and_excludes_local_artifacts() -> None:
         assert pattern in content, f"Missing {pattern} in apps/api/.dockerignore"
 
 
-def test_api_dockerfile_pins_python_patch_version() -> None:
-    content = _read("apps/api/Dockerfile")
-    expected = "FROM python:3.11.14-slim-bookworm"
-    assert content.count(expected) == 2, "Python base image must be pinned in both stages"
+def test_api_images_pin_python_and_uv_versions() -> None:
+    expected = "FROM python:3.14.6-slim-bookworm"
+    for dockerfile in ["apps/api/Dockerfile", "apps/api/Dockerfile.worker"]:
+        content = _read(dockerfile)
+        assert content.count(expected) == 2, f"Python base image must be pinned in {dockerfile}"
+        assert "FROM ghcr.io/astral-sh/uv:0.12.0 AS uv" in content
 
 
 def test_web_dockerfile_pins_node_and_optimizes_cache() -> None:
     content = _read("apps/web/Dockerfile")
-    expected = "FROM node:24.14.0-bullseye-slim"
+    expected = "FROM node:24.18.0-bullseye-slim"
     assert f"{expected} AS builder" in content
     assert f"{expected} AS runner" in content
 

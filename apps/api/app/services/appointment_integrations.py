@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from collections.abc import Coroutine
 from datetime import UTC, date, datetime, time, timedelta
-from typing import TypeVar
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -15,14 +14,13 @@ from app.db.enums import AppointmentStatus, MeetingMode
 from app.db.models import Appointment, AppointmentType
 
 logger = logging.getLogger(__name__)
-T = TypeVar("T")
 
 
 class CalendarSyncIncompleteError(RuntimeError):
     """Raised when strict reconciliation lacks a complete calendar snapshot."""
 
 
-def _run_async(coro: Coroutine[object, object, T]) -> T | None:
+def _run_async[T](coro: Coroutine[object, object, T]) -> T | None:
     """
     Run an async coroutine from sync code.
 
@@ -40,7 +38,7 @@ def _run_async(coro: Coroutine[object, object, T]) -> T | None:
         return None
 
 
-async def _await_async(coro: Coroutine[object, object, T]) -> T | None:
+async def _await_async[T](coro: Coroutine[object, object, T]) -> T | None:
     """Await an async coroutine and swallow/log failures for best-effort workflows."""
     try:
         return await coro

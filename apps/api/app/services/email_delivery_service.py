@@ -516,7 +516,7 @@ def stored_request_fingerprint_matches(delivery: EmailDelivery) -> bool:
             ),
             attachment_manifest=email_log.attachment_manifest,
         )
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return False
     return _fingerprint(payload) == delivery.request_fingerprint
 

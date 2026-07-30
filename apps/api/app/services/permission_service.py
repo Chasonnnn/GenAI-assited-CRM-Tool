@@ -360,7 +360,7 @@ def get_user_overrides(
     db: Session,
     org_id: uuid.UUID,
     user_id: uuid.UUID,
-) -> list["UserPermissionOverride"]:
+) -> list[UserPermissionOverride]:
     """Get all permission overrides for a user."""
     from app.db.models import UserPermissionOverride
 

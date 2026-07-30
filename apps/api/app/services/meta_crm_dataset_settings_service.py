@@ -63,7 +63,7 @@ def get_settings(db: Session, organization_id: uuid.UUID) -> MetaCrmDatasetSetti
 def get_settings_by_id(db: Session, settings_id: uuid.UUID | str) -> MetaCrmDatasetSettings | None:
     try:
         parsed = settings_id if isinstance(settings_id, uuid.UUID) else uuid.UUID(str(settings_id))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     return db.query(MetaCrmDatasetSettings).filter(MetaCrmDatasetSettings.id == parsed).first()
 

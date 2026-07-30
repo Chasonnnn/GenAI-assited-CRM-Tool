@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:24.14.0-bullseye-slim AS builder
+FROM node:24.18.0-bullseye-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
@@ -11,7 +11,7 @@ WORKDIR /app
 ARG CACHE_BUST=0
 RUN echo "cache_bust=${CACHE_BUST}" > /dev/null
 
-RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
+RUN corepack enable && corepack prepare pnpm@11.18.0 --activate
 
 # Copy package files first for better cache utilization
 COPY apps/web/package.json apps/web/pnpm-lock.yaml ./apps/web/
@@ -43,7 +43,7 @@ RUN pnpm build
 RUN pnpm prune --prod
 
 
-FROM node:24.14.0-bullseye-slim AS runner
+FROM node:24.18.0-bullseye-slim AS runner
 
 WORKDIR /app/apps/web
 

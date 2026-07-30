@@ -5,13 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger(__name__)
-
-ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
 def _strip_code_fences(text: str) -> str:
@@ -60,7 +57,7 @@ def parse_json_array(text: str) -> list | None:
     return data if isinstance(data, list) else None
 
 
-def validate_model(model_cls: type[ModelT], data: dict | None) -> ModelT | None:
+def validate_model[ModelT: BaseModel](model_cls: type[ModelT], data: dict | None) -> ModelT | None:
     if data is None:
         return None
     try:
@@ -70,7 +67,9 @@ def validate_model(model_cls: type[ModelT], data: dict | None) -> ModelT | None:
         return None
 
 
-def validate_model_list(model_cls: type[ModelT], items: list | None) -> list[ModelT]:
+def validate_model_list[ModelT: BaseModel](
+    model_cls: type[ModelT], items: list | None
+) -> list[ModelT]:
     if not items:
         return []
     validated: list[ModelT] = []

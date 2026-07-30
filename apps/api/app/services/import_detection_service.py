@@ -609,7 +609,7 @@ def infer_data_type(samples: list[str]) -> dict[str, object]:
             continue
         try:
             Decimal(cleaned)
-        except (InvalidOperation, ValueError):
+        except InvalidOperation, ValueError:
             continue
         num_matches += 1
     if num_matches >= len(samples) * 0.8:

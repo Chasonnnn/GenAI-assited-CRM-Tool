@@ -45,12 +45,17 @@ const mockRejectAction = vi.fn()
 const mockUseConversation = vi.fn()
 const mockUseApproveAction = vi.fn()
 const mockUseRejectAction = vi.fn()
+const mockUsePipelines = vi.fn()
 
 vi.mock('@/lib/hooks/use-ai', () => ({
     useConversation: () => mockUseConversation(),
     useStreamChatMessage: () => mockStreamMessage,
     useApproveAction: () => mockUseApproveAction(),
     useRejectAction: () => mockUseRejectAction(),
+}))
+
+vi.mock('@/lib/hooks/use-pipelines', () => ({
+    usePipelines: (...args: unknown[]) => mockUsePipelines(...args),
 }))
 
 // Mock ScheduleParserDialog to avoid deep rendering issues
@@ -115,6 +120,7 @@ describe('AIChatPanel', () => {
             variables: undefined,
             error: null,
         })
+        mockUsePipelines.mockReturnValue({ data: [] })
     })
 
     afterEach(() => {
@@ -308,6 +314,49 @@ describe('AIChatPanel', () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Dismiss" }))
         expect(mockRejectAction).toHaveBeenCalledWith("action1")
+    })
+
+    it("shows the target stage label before approving a status change", () => {
+        mockUsePipelines.mockReturnValue({
+            data: [
+                {
+                    id: "pipeline-1",
+                    stages: [
+                        {
+                            id: "stage-qualified",
+                            label: "Qualified for matching",
+                        },
+                    ],
+                },
+            ],
+        })
+        mockUseConversation.mockReturnValue({
+            data: {
+                messages: [
+                    {
+                        id: "msg-stage",
+                        role: "assistant",
+                        content: "I can update this surrogate.",
+                        status: "done",
+                        proposed_actions: [
+                            {
+                                approval_id: "action-stage",
+                                action_type: "update_status",
+                                action_data: { stage_id: "stage-qualified" },
+                            },
+                        ],
+                    },
+                ],
+            },
+            isLoading: false,
+        })
+
+        render(<AIChatPanel entityType="surrogate" entityId="sur-1" />)
+
+        const proposal = screen.getByRole("article", { name: "Update stage" })
+        expect(proposal).toHaveTextContent("Change to Qualified for matching")
+        expect(proposal).not.toHaveTextContent("Selected pipeline stage")
+        expect(screen.queryByRole("button", { name: "Approve and update" })).not.toBeInTheDocument()
     })
 
     it("shows a friendly inline error for an action that could not execute", () => {

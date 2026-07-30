@@ -2,14 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine
-from typing import TypeVar
 
 import anyio
 
-T = TypeVar("T")
 
-
-def run_async(coro: Coroutine[object, object, T], *, timeout: float | None = None) -> T:
+def run_async[T](coro: Coroutine[object, object, T], *, timeout: float | None = None) -> T:
     """
     Run an async coroutine from sync code without asyncio.run in request threads.
 

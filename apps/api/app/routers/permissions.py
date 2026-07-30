@@ -68,7 +68,7 @@ class MemberDetail(BaseModel):
     last_login_at: str | None
     created_at: str
     effective_permissions: list[str]
-    overrides: list["OverrideRead"]
+    overrides: list[OverrideRead]
 
 
 class OverrideRead(BaseModel):
@@ -84,7 +84,7 @@ class MemberUpdate(BaseModel):
     """Update member role or overrides."""
 
     role: str | None = None
-    add_overrides: list["OverrideCreate"] | None = None
+    add_overrides: list[OverrideCreate] | None = None
     remove_overrides: list[str] | None = None  # permission keys to remove
 
 
@@ -109,7 +109,7 @@ class RoleDetail(BaseModel):
 
     role: str
     label: str
-    permissions_by_category: dict[str, list["RolePermissionRead"]]
+    permissions_by_category: dict[str, list[RolePermissionRead]]
 
 
 class RolePermissionRead(BaseModel):
