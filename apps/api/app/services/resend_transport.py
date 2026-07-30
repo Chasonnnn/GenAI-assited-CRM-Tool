@@ -40,7 +40,7 @@ class ResendSendResult:
 def _response_data(response: httpx.Response) -> dict[str, Any]:
     try:
         data = response.json()
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -69,7 +69,7 @@ def _seconds_from_retry_after(value: str) -> float | None:
 
     try:
         retry_at = parsedate_to_datetime(value)
-    except (TypeError, ValueError, OverflowError):
+    except TypeError, ValueError, OverflowError:
         return None
 
     if retry_at.tzinfo is None:

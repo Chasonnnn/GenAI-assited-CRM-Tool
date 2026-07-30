@@ -111,7 +111,7 @@ def _build_transcription_parts(
 
 
 async def _transcribe_with_provider(
-    provider_instance: "GoogleGenAIProvider",
+    provider_instance: GoogleGenAIProvider,
     file_bytes: bytes,
     content_type: str,
     language: str,

@@ -1629,7 +1629,7 @@ def queue_import_job(
     dedupe_action: str = "skip",
     use_mappings: bool = True,
     unknown_column_behavior: str | None = None,
-) -> tuple["Job", bool]:
+) -> tuple[Job, bool]:
     """
     Queue a CSV import job for an approved/failed import.
 

@@ -254,7 +254,7 @@ def use_template(
         for idx_str, overrides in action_overrides.items():
             try:
                 idx = int(idx_str)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 raise ValueError(f"Invalid action override index: {idx_str}")
             if idx < 0 or idx >= len(actions):
                 raise ValueError(f"Action override index out of range: {idx}")

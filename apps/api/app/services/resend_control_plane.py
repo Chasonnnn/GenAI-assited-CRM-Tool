@@ -9,7 +9,6 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import Generic, TypeVar
 from urllib.parse import urlsplit
 
 import httpx
@@ -103,11 +102,8 @@ class ResendWebhookState:
     endpoint_matches: bool
 
 
-T = TypeVar("T")
-
-
 @dataclass(frozen=True, slots=True)
-class ResendControlPlaneResult(Generic[T]):
+class ResendControlPlaneResult[T]:
     """Sanitized result returned by one provider GET."""
 
     status: ResendControlPlaneStatus
@@ -179,7 +175,7 @@ class ResendControlPlaneClient:
             if response.status_code == 401:
                 try:
                     error_payload = response.json()
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     error_payload = {}
                 if (
                     isinstance(error_payload, dict)
@@ -220,7 +216,7 @@ class ResendControlPlaneClient:
             return _RawGetResult(status=ResendControlPlaneStatus.FAIL)
         try:
             value = response.json()
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return _RawGetResult(
                 status=ResendControlPlaneStatus.UNKNOWN,
                 reason=ResendControlPlaneReason.INVALID_RESPONSE,
@@ -267,7 +263,7 @@ class ResendControlPlaneClient:
         """Retrieve one domain without returning DNS or routing configuration."""
         try:
             normalized_domain_id = str(uuid.UUID(domain_id))
-        except (ValueError, TypeError, AttributeError):
+        except ValueError, TypeError, AttributeError:
             return ResendControlPlaneResult(status=ResendControlPlaneStatus.FAIL)
 
         response = await self._get(f"/domains/{normalized_domain_id}")
@@ -328,7 +324,7 @@ class ResendControlPlaneClient:
 def _sanitize_domain(value: dict[str, object]) -> ResendDomainState | None:
     try:
         domain_id = str(uuid.UUID(str(value.get("id"))))
-    except (ValueError, TypeError, AttributeError):
+    except ValueError, TypeError, AttributeError:
         return None
 
     raw_name = value.get("name")
@@ -415,7 +411,7 @@ def _sanitize_webhook(
 ) -> ResendWebhookState | None:
     try:
         webhook_id = str(uuid.UUID(str(value.get("id"))))
-    except (ValueError, TypeError, AttributeError):
+    except ValueError, TypeError, AttributeError:
         return None
 
     raw_status = value.get("status")

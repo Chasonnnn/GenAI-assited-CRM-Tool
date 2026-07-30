@@ -1723,7 +1723,7 @@ def _resolve_sender_user_id_from_job(db: Session, email_log: EmailLog) -> UUID |
         return None
     try:
         return UUID(str(sender))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 

@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
-from typing import Any, TypeAlias
+from typing import Any
 
 from app.utils.height import canonicalize_height_ft
 from app.utils.normalization import normalize_phone, normalize_state
@@ -27,8 +27,8 @@ from app.utils.normalization import normalize_phone, normalize_state
 # Types
 # =============================================================================
 
-TransformResult: TypeAlias = tuple[Any, list[str]]  # (value, warnings)
-TransformerFn: TypeAlias = Callable[[str], TransformResult]
+type TransformResult = tuple[Any, list[str]]  # (value, warnings)
+type TransformerFn = Callable[[str], TransformResult]
 
 
 META_PLATFORM_VALUE_PATTERN = re.compile(

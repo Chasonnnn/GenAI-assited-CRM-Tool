@@ -87,7 +87,7 @@ def _tiptap_doc_from_text(text: str) -> JsonObject:
 
 def _get_retention_policy(
     db: Session, org_id: UUID, entity_type: str = "interview"
-) -> "DataRetentionPolicy | None":
+) -> DataRetentionPolicy | None:
     """Get retention policy for interviews."""
     from app.db.models import DataRetentionPolicy
 

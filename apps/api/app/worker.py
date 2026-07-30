@@ -591,7 +591,7 @@ def _resolve_integration_keys(db, job, integration_type) -> list[str]:
         if ad_account_id:
             try:
                 ad_account_uuid = UUID(ad_account_id)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 keys.append(str(ad_account_id))
             else:
                 from app.db.models import MetaAdAccount
@@ -872,7 +872,7 @@ def _mark_send_email_failed(db, job, error_msg: str) -> None:
         return
     try:
         parsed_email_log_id = UUID(email_log_id)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return
 
     email_log = (

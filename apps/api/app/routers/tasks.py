@@ -36,7 +36,7 @@ router = APIRouter(
 )
 
 
-def _check_task_surrogate_access(task, session: "UserSession", db: Session) -> None:
+def _check_task_surrogate_access(task, session: UserSession, db: Session) -> None:
     """Check surrogate access for a task linked to a surrogate."""
     from app.core.surrogate_access import check_surrogate_access
     from app.services import surrogate_service

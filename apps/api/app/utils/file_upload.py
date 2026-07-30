@@ -21,7 +21,7 @@ def content_length_exceeds_limit(
         return False
     try:
         content_length = int(content_length_header)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return False
     return content_length > (max_size_bytes + overhead_bytes)
 

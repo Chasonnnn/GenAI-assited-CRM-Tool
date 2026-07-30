@@ -248,7 +248,7 @@ def cleanup_old_versions(
                     if version not in keep_versions:
                         s3.delete_object(Bucket=bucket, Key=key)
                         deleted_count += 1
-                except (ValueError, IndexError):
+                except ValueError, IndexError:
                     continue
         except ClientError:
             pass
@@ -263,7 +263,7 @@ def cleanup_old_versions(
                     if version not in keep_versions:
                         os.remove(os.path.join(local_path, filename))
                         deleted_count += 1
-                except (ValueError, OSError):
+                except ValueError, OSError:
                     continue
 
     return deleted_count

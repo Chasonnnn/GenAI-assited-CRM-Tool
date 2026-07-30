@@ -93,7 +93,7 @@ def _resolve_stage_ref(
     stage = None
     try:
         stage_uuid = UUID(str(value))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         stage_uuid = None
 
     if stage_uuid is not None:

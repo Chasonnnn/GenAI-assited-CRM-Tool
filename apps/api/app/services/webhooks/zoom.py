@@ -24,7 +24,7 @@ MAX_TIMESTAMP_SKEW_SECONDS = 300
 def _is_timestamp_within_window(timestamp: str) -> bool:
     try:
         timestamp_int = int(timestamp)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return False
 
     now = int(datetime.now(UTC).timestamp())

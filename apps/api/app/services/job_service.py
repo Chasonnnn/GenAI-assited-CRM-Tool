@@ -606,7 +606,7 @@ def recover_stale_resend_reconciliation_jobs(
         payload = job.payload if isinstance(job.payload, dict) else {}
         try:
             event_id = UUID(str(payload.get("event_id")))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             event_id = None
         event = None
         if event_id is not None:

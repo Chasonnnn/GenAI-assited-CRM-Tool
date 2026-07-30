@@ -785,7 +785,7 @@ class WorkflowEngineCore:
                         if isinstance(raw_schedule_time, datetime)
                         else datetime.fromisoformat(str(raw_schedule_time))
                     )
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     schedule_time = None
 
                 if (
@@ -935,13 +935,13 @@ class WorkflowEngineCore:
         if operator == WorkflowConditionOperator.GREATER_THAN.value:
             try:
                 return float(entity_value or 0) > float(condition_value)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return False
 
         if operator == WorkflowConditionOperator.LESS_THAN.value:
             try:
                 return float(entity_value or 0) < float(condition_value)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return False
 
         return False

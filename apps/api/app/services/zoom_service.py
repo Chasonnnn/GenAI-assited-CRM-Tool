@@ -56,7 +56,7 @@ class CreateMeetingResult(BaseModel):
 def _meeting_from_model(model: ZoomMeetingModel) -> ZoomMeeting:
     try:
         meeting_id = int(model.zoom_meeting_id)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         meeting_id = 0
 
     return ZoomMeeting(

@@ -119,7 +119,7 @@ def _validate_request_host(request: Request, org_slug: str) -> None:
     raise HTTPException(status_code=403, detail="Session invalid for this domain")
 
 
-def get_db(request: Request = None) -> Generator[Session, None, None]:
+def get_db(request: Request = None) -> Generator[Session]:
     """
     Database session dependency.
 
@@ -137,7 +137,7 @@ def get_db(request: Request = None) -> Generator[Session, None, None]:
 
 
 @contextmanager
-def get_db_for_stream() -> Generator[Session, None, None]:
+def get_db_for_stream() -> Generator[Session]:
     """Database session for streaming endpoints."""
     db = SessionLocal()
     try:

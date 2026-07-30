@@ -59,7 +59,7 @@ def _verify_svix_signature(
     # Reject stale or malformed timestamps to prevent replay attacks.
     try:
         timestamp = int(svix_timestamp)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return False
     now = int(time.time())
     if abs(now - timestamp) > 300:
@@ -529,7 +529,7 @@ def _downgrade_workflow_execution_for_delivery_failure(
 
     try:
         execution_id = UUID(str(execution_id_value))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         logger.warning(
             "Resend: invalid workflow_execution_id in workflow email job payload: job_id=%s",
             job.id,
@@ -788,7 +788,7 @@ def _organization_email_log_from_correlation_tags(
     try:
         tagged_organization_id = UUID(str(tags["organization_id"]))
         tagged_email_log_id = UUID(str(tags["email_log_id"]))
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         logger.warning("Resend webhook has invalid email correlation tags")
         return None, True
     if tagged_organization_id != organization_id:
@@ -961,7 +961,7 @@ class PlatformResendWebhookHandler:
         try:
             organization_id = UUID(str(tags["organization_id"]))
             email_log_id = UUID(str(tags["email_log_id"]))
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             logger.warning(
                 "Platform Resend webhook missing valid tenant correlation tags; "
                 "acknowledging unsupported legacy event"

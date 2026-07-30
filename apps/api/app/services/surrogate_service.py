@@ -222,7 +222,7 @@ def _has_valid_decimal(value: object | None) -> bool:
         return False
     try:
         return Decimal(str(value)) > 0
-    except (InvalidOperation, ValueError, TypeError):
+    except InvalidOperation, ValueError, TypeError:
         return False
 
 
@@ -231,7 +231,7 @@ def _has_valid_int(value: object | None) -> bool:
         return False
     try:
         return int(value) > 0
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return False
 
 
@@ -1677,7 +1677,7 @@ def list_surrogates(
         try:
             from_date = datetime.fromisoformat(created_from.replace("Z", "+00:00"))
             filter_clauses.append(Surrogate.created_at >= from_date)
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             logger.debug("surrogate_filter_invalid_created_at")
 
     if created_to:
@@ -1687,7 +1687,7 @@ def list_surrogates(
                 filter_clauses.append(Surrogate.created_at < to_date)
             else:
                 filter_clauses.append(Surrogate.created_at <= to_date)
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             pass  # Ignore invalid date format
 
     # Search (name, email, phone)
@@ -2237,7 +2237,7 @@ def list_surrogate_activity(
             continue
         try:
             existing_interview_appointment_ids.add(UUID(str(appointment_id)))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
 
     missing_interview_appointment_query = (
@@ -2276,7 +2276,7 @@ def list_surrogate_activity(
                 continue
             try:
                 queue_ids.add(UUID(str(queue_id)))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 continue
 
         if details.get("from_owner_type") == OwnerType.QUEUE.value:
@@ -2284,7 +2284,7 @@ def list_surrogate_activity(
             if from_owner_id:
                 try:
                     queue_ids.add(UUID(str(from_owner_id)))
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     pass
 
         for key in ("to_user_id", "from_user_id"):
@@ -2293,21 +2293,21 @@ def list_surrogate_activity(
                 continue
             try:
                 user_ids.add(UUID(str(user_id)))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 continue
 
         template_id = details.get("template_id")
         if template_id:
             try:
                 template_ids.add(UUID(str(template_id)))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 pass
 
         email_log_id = details.get("email_log_id")
         if email_log_id:
             try:
                 email_log_ids.add(UUID(str(email_log_id)))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 pass
 
     for history_row in status_history_rows:

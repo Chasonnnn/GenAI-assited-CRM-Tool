@@ -619,8 +619,8 @@ class SurrogateRead(BaseModel):
     partner_state: str | None = None
     partner_postal: str | None = None
     lead_intake_warnings: list[SurrogateLeadIntakeWarning] = Field(default_factory=list)
-    latest_contact_outcome: "LatestContactOutcomeRead | None" = None
-    latest_interview_outcome: "LatestInterviewOutcomeRead | None" = None
+    latest_contact_outcome: LatestContactOutcomeRead | None = None
+    latest_interview_outcome: LatestInterviewOutcomeRead | None = None
 
     # Demographics
     date_of_birth: date | None
@@ -835,7 +835,7 @@ class SurrogateStatusChangeResponse(BaseModel):
     """
 
     status: str  # 'applied' or 'pending_approval'
-    surrogate: "SurrogateRead | None" = None
+    surrogate: SurrogateRead | None = None
     request_id: UUID | None = None
     message: str | None = None
 

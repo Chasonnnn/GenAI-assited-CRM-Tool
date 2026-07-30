@@ -134,7 +134,7 @@ def _parse_google_watch_expiration(value: object | None) -> datetime | None:
     try:
         # Google returns epoch milliseconds as string.
         expiration_ms = int(str(value))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     if expiration_ms <= 0:
         return None

@@ -46,7 +46,7 @@ class PipelineRead(BaseModel):
     entity_type: str
     name: str
     is_default: bool
-    stages: list["StageRead"]
+    stages: list[StageRead]
     feature_config: PipelineFeatureConfig
     current_version: int
     created_at: str
@@ -60,7 +60,7 @@ class PipelineCreate(BaseModel):
 
     name: str = Field(min_length=1, max_length=100)
     entity_type: str = Field(default=SURROGATE_PIPELINE_ENTITY)
-    stages: list["StageCreate"] | None = None  # Uses defaults if not provided
+    stages: list[StageCreate] | None = None  # Uses defaults if not provided
     feature_config: PipelineFeatureConfig | None = None
 
 
