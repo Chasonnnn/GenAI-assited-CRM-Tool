@@ -21,8 +21,8 @@ def test_get_signed_media_url_local():
 
 
 def test_get_signed_media_url_s3_virtual(monkeypatch):
-    from app.services import attachment_service
     from app.core.config import settings
+    from app.services import attachment_service
 
     monkeypatch.setattr(
         attachment_service,
@@ -36,8 +36,8 @@ def test_get_signed_media_url_s3_virtual(monkeypatch):
 
 
 def test_get_signed_media_url_s3_path_style(monkeypatch):
-    from app.services import attachment_service
     from app.core.config import settings
+    from app.services import attachment_service
 
     monkeypatch.setattr(
         attachment_service,
@@ -51,8 +51,8 @@ def test_get_signed_media_url_s3_path_style(monkeypatch):
 
 
 def test_get_signed_media_url_s3_regional(monkeypatch):
-    from app.services import attachment_service
     from app.core.config import settings
+    from app.services import attachment_service
 
     monkeypatch.setattr(
         attachment_service,

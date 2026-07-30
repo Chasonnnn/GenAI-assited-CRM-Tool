@@ -4,8 +4,7 @@ Handles OAuth connect/callback flow and connection-scoped asset management.
 """
 
 import logging
-from typing import Any, Annotated
-
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status

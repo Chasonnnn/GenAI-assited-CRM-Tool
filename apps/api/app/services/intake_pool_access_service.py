@@ -144,20 +144,25 @@ def list_grants(db: Session, org_id: UUID, grantee_user_id: UUID | None = None) 
     """List intake pool grants with source/grantee display details."""
     source_user = aliased(User)
     grantee_user = aliased(User)
-    query = db.query(
-        IntakePoolAccessGrant,
-        source_user.display_name.label("source_name"),
-        source_user.email.label("source_email"),
-        grantee_user.display_name.label("grantee_name"),
-        grantee_user.email.label("grantee_email"),
-    ).join(
-        source_user,
-        source_user.id == IntakePoolAccessGrant.source_user_id,
-    ).join(
-        grantee_user,
-        grantee_user.id == IntakePoolAccessGrant.grantee_user_id,
-    ).filter(
-        IntakePoolAccessGrant.organization_id == org_id,
+    query = (
+        db.query(
+            IntakePoolAccessGrant,
+            source_user.display_name.label("source_name"),
+            source_user.email.label("source_email"),
+            grantee_user.display_name.label("grantee_name"),
+            grantee_user.email.label("grantee_email"),
+        )
+        .join(
+            source_user,
+            source_user.id == IntakePoolAccessGrant.source_user_id,
+        )
+        .join(
+            grantee_user,
+            grantee_user.id == IntakePoolAccessGrant.grantee_user_id,
+        )
+        .filter(
+            IntakePoolAccessGrant.organization_id == org_id,
+        )
     )
     if grantee_user_id:
         query = query.filter(IntakePoolAccessGrant.grantee_user_id == grantee_user_id)

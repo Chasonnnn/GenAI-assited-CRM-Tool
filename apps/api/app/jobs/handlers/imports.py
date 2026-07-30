@@ -16,8 +16,8 @@ async def process_csv_import(db, job) -> None:
         - import_id: UUID of the SurrogateImport record
         - dedupe_action: "skip" (default) or other action
     """
-    from app.services import import_service
     from app.db.models import SurrogateImport
+    from app.services import import_service
 
     payload = job.payload or {}
     import_id = payload.get("import_id")

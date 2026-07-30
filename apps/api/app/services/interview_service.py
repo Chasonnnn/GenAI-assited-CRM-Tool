@@ -3,7 +3,7 @@
 import hashlib
 import json
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -12,10 +12,10 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import (
     Attachment,
-    SurrogateInterview,
     InterviewAttachment,
     InterviewNote,
     InterviewTranscriptVersion,
+    SurrogateInterview,
     User,
 )
 from app.schemas.interview import InterviewCreate, InterviewUpdate
@@ -147,7 +147,7 @@ def create_interview(
     if retention_policy and retention_policy.retention_days:
         from datetime import timedelta
 
-        expires_at = datetime.now(timezone.utc) + timedelta(days=retention_policy.retention_days)
+        expires_at = datetime.now(UTC) + timedelta(days=retention_policy.retention_days)
 
     interview = SurrogateInterview(
         surrogate_id=surrogate_id,
@@ -392,7 +392,7 @@ def update_interview(
             interview.transcript_hash = new_hash
             interview.transcript_size_bytes = new_size
 
-    interview.updated_at = datetime.now(timezone.utc)
+    interview.updated_at = datetime.now(UTC)
     db.flush()
     return interview
 
@@ -468,7 +468,7 @@ async def update_transcript(
         interview.transcript_version = new_version
         interview.transcript_hash = new_hash
         interview.transcript_size_bytes = new_size
-        interview.updated_at = datetime.now(timezone.utc)
+        interview.updated_at = datetime.now(UTC)
 
     db.flush()
     return interview
@@ -566,7 +566,7 @@ def restore_version(
     interview.transcript_version = new_version
     interview.transcript_hash = new_hash
     interview.transcript_size_bytes = version.content_size_bytes
-    interview.updated_at = datetime.now(timezone.utc)
+    interview.updated_at = datetime.now(UTC)
 
     db.flush()
     return interview

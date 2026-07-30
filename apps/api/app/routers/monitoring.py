@@ -1,8 +1,8 @@
 """External monitoring webhooks (internal, secret-protected)."""
 
-from datetime import datetime, timezone
-from typing import Any, Annotated
-
+import logging
+from datetime import UTC, datetime
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -10,13 +10,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.deps import get_db
 from app.core.security import verify_secret
 from app.core.structured_logging import build_log_context
-from app.db.enums import AlertSeverity, AlertType, AlertStatus
-from app.core.deps import get_db
+from app.db.enums import AlertSeverity, AlertStatus, AlertType
 from app.services import alert_service, membership_service
-import logging
-
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +156,7 @@ def receive_gcp_alert(
 
     if incident.state and incident.state.lower() == "closed":
         alert.status = AlertStatus.RESOLVED.value
-        alert.resolved_at = _parse_ts(incident.ended_at) or datetime.now(timezone.utc)
+        alert.resolved_at = _parse_ts(incident.ended_at) or datetime.now(UTC)
     db.commit()
 
     logger.info(

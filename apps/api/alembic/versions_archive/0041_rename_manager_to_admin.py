@@ -7,7 +7,6 @@ Create Date: 2024-12-20
 
 from alembic import op
 
-
 revision = "0041_rename_manager_to_admin"
 down_revision = "0040_permission_system"
 branch_labels = None

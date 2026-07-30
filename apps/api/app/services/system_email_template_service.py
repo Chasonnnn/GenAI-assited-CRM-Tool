@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 
 from app.db.models import EmailTemplate, PlatformSystemEmailTemplate
 
-
 ORG_INVITE_SYSTEM_KEY = "org_invite"
 
 _LEGACY_ORG_INVITE_SUBJECT = "Invitation to join {{org_name}} as {{role_title}}"

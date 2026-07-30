@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 logger = logging.getLogger(__name__)
@@ -18,8 +18,8 @@ async def process_workflow_sweep(db, job) -> None:
         - sweep_type: 'scheduled', 'inactivity', 'task_due', 'task_overdue', or 'all'
         - evaluated_at: Timezone-aware ISO timestamp captured when the sweep was queued
     """
-    from app.services import workflow_triggers
     from app.db.models import Organization
+    from app.services import workflow_triggers
 
     payload = job.payload or {}
     sweep_type = payload.get("sweep_type", "all")
@@ -86,13 +86,13 @@ async def process_workflow_approval_expiry(db, job) -> None:
 
     This job should be scheduled to run every 5 minutes.
     """
-    from app.services import task_service
+    from app.db.enums import TaskStatus, TaskType
     from app.db.models import Task
-    from app.db.enums import TaskType, TaskStatus
+    from app.services import task_service
 
     logger.info("Starting workflow approval expiry sweep for org %s", job.organization_id)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Find overdue approval tasks
     overdue_tasks = (
@@ -127,8 +127,8 @@ async def process_workflow_resume(db, job) -> None:
         - execution_id: UUID of the workflow execution
         - task_id: UUID of the resolved approval task
     """
-    from app.db.models import WorkflowExecution, Task, AutomationWorkflow, WorkflowResumeJob
-    from app.db.enums import WorkflowExecutionStatus, TaskStatus
+    from app.db.enums import TaskStatus, WorkflowExecutionStatus
+    from app.db.models import AutomationWorkflow, Task, WorkflowExecution, WorkflowResumeJob
     from app.services.workflow_engine import WorkflowEngine
 
     payload = job.payload or {}
@@ -246,7 +246,7 @@ async def process_workflow_resume(db, job) -> None:
             .first()
         )
         if resume_job:
-            resume_job.processed_at = datetime.now(timezone.utc)
+            resume_job.processed_at = datetime.now(UTC)
 
     db.commit()
     logger.info("Workflow resume complete for execution %s", execution_id)

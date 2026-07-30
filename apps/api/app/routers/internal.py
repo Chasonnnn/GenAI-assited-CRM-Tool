@@ -5,26 +5,26 @@ Protected by X-Internal-Secret header.
 Call from external cron (Render/Railway/GH Actions).
 """
 
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
-
-from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
 from app.core.config import settings
 from app.core.security import verify_secret
-from app.db.session import SessionLocal
 from app.db.enums import (
-    AlertType,
     AlertSeverity,
-    IntegrationType,
+    AlertType,
     ConfigStatus,
+    IntegrationType,
     JobType,
 )
+from app.db.session import SessionLocal
 from app.services import (
     alert_service,
     contact_reminder_service,
+    google_calendar_sync_service,
     intelligent_suggestions_service,
     job_service,
     meta_admin_service,
@@ -33,9 +33,7 @@ from app.services import (
     ops_service,
     org_service,
     task_service,
-    google_calendar_sync_service,
 )
-
 
 router = APIRouter(prefix="/internal/scheduled", tags=["internal"])
 
@@ -75,7 +73,7 @@ def check_meta_tokens(x_internal_secret: Annotated[str, "fastapi_param"] = Heade
     """
     verify_internal_secret(x_internal_secret)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expiry_threshold = now + timedelta(days=7)
 
     pages_checked = 0
@@ -100,7 +98,7 @@ def check_meta_tokens(x_internal_secret: Annotated[str, "fastapi_param"] = Heade
             # Handle naive datetime (make it timezone-aware assuming UTC)
             token_expires = mapping.token_expires_at
             if token_expires.tzinfo is None:
-                token_expires = token_expires.replace(tzinfo=timezone.utc)
+                token_expires = token_expires.replace(tzinfo=UTC)
 
             # Check if expired
             if token_expires < now:
@@ -170,7 +168,7 @@ def check_meta_tokens(x_internal_secret: Annotated[str, "fastapi_param"] = Heade
 
             token_expires = connection.token_expires_at
             if token_expires.tzinfo is None:
-                token_expires = token_expires.replace(tzinfo=timezone.utc)
+                token_expires = token_expires.replace(tzinfo=UTC)
 
             connection_key = str(connection.id)
             user_label = connection.meta_user_name or connection.meta_user_id
@@ -357,7 +355,7 @@ def google_calendar_sync_schedule(x_internal_secret: Annotated[str, "fastapi_par
     with SessionLocal() as db:
         counts = google_calendar_sync_service.schedule_google_calendar_sync_jobs(
             db=db,
-            now=datetime.now(timezone.utc),
+            now=datetime.now(UTC),
         )
 
     return GoogleCalendarSyncScheduleResponse(
@@ -441,6 +439,7 @@ def task_notifications_sweep(x_internal_secret: Annotated[str, "fastapi_param"] 
 
     from datetime import datetime
     from zoneinfo import ZoneInfo
+
     from app.services import notification_service
 
     tasks_due_soon = 0
@@ -617,7 +616,7 @@ def meta_spend_sync(
         ad_accounts = meta_admin_service.list_active_ad_accounts(db)
 
         for ad_account in ad_accounts:
-            run_at = datetime.now(timezone.utc) + timedelta(
+            run_at = datetime.now(UTC) + timedelta(
                 seconds=_jitter_seconds_for_account(ad_account.id)
             )
             job_service.schedule_job(
@@ -656,6 +655,7 @@ def subscription_sweep(x_internal_secret: Annotated[str, "fastapi_param"] = Head
     verify_internal_secret(x_internal_secret)
 
     from sqlalchemy import text
+
     from app.services.platform_service import log_admin_action
 
     extended_count = 0

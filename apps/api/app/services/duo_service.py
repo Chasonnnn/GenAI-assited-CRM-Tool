@@ -6,7 +6,6 @@ Provides:
 - Callback verification
 """
 
-from typing import Tuple
 import logging
 import re
 from urllib.parse import urlparse
@@ -65,7 +64,7 @@ def get_duo_client(redirect_uri: str | None = None) -> duo_universal.Client:
         )
 
     client_redirect_uri = (
-        _strip_invisible((redirect_uri or settings.DUO_REDIRECT_URI or ""))
+        _strip_invisible(redirect_uri or settings.DUO_REDIRECT_URI or "")
         .strip()
         .strip('"')
         .strip("'")
@@ -81,7 +80,7 @@ def get_duo_client(redirect_uri: str | None = None) -> duo_universal.Client:
     )
 
 
-def health_check() -> Tuple[bool, str]:
+def health_check() -> tuple[bool, str]:
     """
     Check Duo API connectivity.
 
@@ -133,7 +132,7 @@ def verify_callback(
     expected_state: str,
     username: str,
     redirect_uri: str | None = None,
-) -> Tuple[bool, dict | None]:
+) -> tuple[bool, dict | None]:
     """
     Verify the Duo callback and exchange the code for auth result.
 

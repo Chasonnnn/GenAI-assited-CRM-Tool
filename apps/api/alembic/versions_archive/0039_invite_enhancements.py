@@ -5,10 +5,10 @@ Revises: 0038_attachments
 Create Date: 2025-12-20
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "0039_invite_enhancements"

@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.orm import Query
@@ -64,7 +64,7 @@ def _seed_org2_request(db):
         entity_type="surrogate",
         entity_id=surrogate.id,
         target_stage_id=stage.id,
-        effective_at=datetime.now(timezone.utc),
+        effective_at=datetime.now(UTC),
         reason="Regression request",
         status="pending",
     )
@@ -169,7 +169,7 @@ def test_status_change_request_target_stage_scoped_to_org(db, test_auth, default
         entity_type="surrogate",
         entity_id=surrogate.id,
         target_stage_id=foreign_stage.id,
-        effective_at=datetime.now(timezone.utc),
+        effective_at=datetime.now(UTC),
         reason="Regression request",
         status="pending",
     )
@@ -209,7 +209,7 @@ def test_get_pending_requests_skips_count_for_short_first_page(
         entity_type="surrogate",
         entity_id=surrogate.id,
         target_stage_id=default_stage.id,
-        effective_at=datetime.now(timezone.utc),
+        effective_at=datetime.now(UTC),
         reason="Regression request",
         status="pending",
     )
@@ -219,7 +219,10 @@ def test_get_pending_requests_skips_count_for_short_first_page(
     original_count = Query.count
 
     def _count_should_not_be_called(self, *args, **kwargs):
-        if self.column_descriptions and self.column_descriptions[0].get("name") == "StatusChangeRequest":
+        if (
+            self.column_descriptions
+            and self.column_descriptions[0].get("name") == "StatusChangeRequest"
+        ):
             raise AssertionError("get_pending_requests should not call Query.count()")
         return original_count(self, *args, **kwargs)
 

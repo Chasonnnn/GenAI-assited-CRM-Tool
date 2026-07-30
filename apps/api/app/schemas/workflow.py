@@ -8,11 +8,10 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field, field_validator
 
 from app.db.enums import (
-    WorkflowTriggerType,
-    WorkflowConditionOperator,
     OwnerType,
+    WorkflowConditionOperator,
+    WorkflowTriggerType,
 )
-
 
 # =============================================================================
 # Field Registry (Whitelist for conditions and updates)

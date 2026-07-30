@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
-from datetime import datetime, timedelta, timezone
 import uuid
+from dataclasses import asdict
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -309,7 +309,7 @@ async def test_rate_limit_defers_the_shared_admission_lane_by_bounded_retry_afte
         "AsyncClient",
         lambda **_kwargs: fake_client,
     )
-    before_request = datetime.now(timezone.utc)
+    before_request = datetime.now(UTC)
 
     result = await resend_control_plane.ResendControlPlaneClient(
         db=db,
@@ -317,7 +317,7 @@ async def test_rate_limit_defers_the_shared_admission_lane_by_bounded_retry_afte
         admission_identity=admission_identity,
     ).list_domains()
 
-    after_request = datetime.now(timezone.utc)
+    after_request = datetime.now(UTC)
     assert result.retry_after_seconds == 3600
     shared_admission = (
         db.query(EmailProviderAdmission)
@@ -356,7 +356,7 @@ async def test_rate_limit_without_retry_after_applies_safe_shared_cooldown(
         "AsyncClient",
         lambda **_kwargs: fake_client,
     )
-    before_request = datetime.now(timezone.utc)
+    before_request = datetime.now(UTC)
 
     result = await resend_control_plane.ResendControlPlaneClient(
         db=db,
@@ -364,7 +364,7 @@ async def test_rate_limit_without_retry_after_applies_safe_shared_cooldown(
         admission_identity=admission_identity,
     ).list_domains()
 
-    after_request = datetime.now(timezone.utc)
+    after_request = datetime.now(UTC)
     assert result.retry_after_seconds is None
     shared_admission = (
         db.query(EmailProviderAdmission)
@@ -609,7 +609,7 @@ async def test_onboarding_key_validation_uses_exact_credential_admission(
         "AsyncClient",
         lambda **_kwargs: fake_client,
     )
-    before = datetime.now(timezone.utc)
+    before = datetime.now(UTC)
 
     result = await resend_settings_service.test_api_key("re_unclassified", db=db)
 

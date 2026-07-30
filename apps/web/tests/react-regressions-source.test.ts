@@ -121,7 +121,7 @@ function readTsxSourcesUnder(pathFromWebRoot: string): Array<{ path: string; sou
 }
 
 describe("React regression guards (source)", () => {
-    it("reserves side-sheet overlays for the calendar agenda", () => {
+    it("reserves side-sheet overlays for reviewed consumers", () => {
         const sheetConsumers = [
             ...readTsxSourcesUnder("app"),
             ...readTsxSourcesUnder("components"),
@@ -131,6 +131,7 @@ describe("React regression guards (source)", () => {
             .map(({ path }) => path)
 
         expect(sheetConsumers).toEqual([
+            "components/ai/AIChatDrawer.tsx",
             "components/appointments/UnifiedCalendar.tsx",
         ])
     })
@@ -274,7 +275,18 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("const [setContext] = useState(")
         expect(source).toContain("const [clearContext] = useState(")
         expect(source).toContain(
-            "}, [canUseAI, clearContext, entityId, entityName, entityType, setContext])"
+            [
+                "}, [",
+                "        canUseAI,",
+                "        clearContext,",
+                "        entityContextLabel,",
+                "        entityId,",
+                "        entityName,",
+                "        entityStatusLabel,",
+                "        entityType,",
+                "        setContext,",
+                "    ])",
+            ].join("\n")
         )
         expect(source.match(/\buseEffect\(/g)).toHaveLength(1)
         expect(source).toContain("useAIToggleHotkey(canUseAI")
@@ -288,6 +300,13 @@ describe("React regression guards (source)", () => {
         expect(hotkeySource).toContain('window.addEventListener("keydown", handleKeyDown)')
         expect(hotkeySource).toContain('window.removeEventListener("keydown", handleKeyDown)')
         expect(hotkeySource).toContain("}, [enabled])")
+    })
+
+    it("uses stable keys for AI chat proposed actions", () => {
+        const source = readSource("components/ai/AIChatPanel.tsx")
+
+        expect(source).toContain("function getProposedActionKey(")
+        expect(source).not.toContain("key={action.approval_id || index}")
     })
 
     it("documents intentional exhaustive-deps exceptions with React Doctor rule names", () => {

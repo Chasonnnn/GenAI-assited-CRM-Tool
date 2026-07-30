@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from app.db.enums import JobScope
@@ -66,7 +66,7 @@ async def process_resend_event_reconcile(db, job) -> None:
     if email_log is None:
         attempts = max(1, int(getattr(job, "attempts", 1) or 1))
         delay_seconds = min(300, 5 * (2 ** (attempts - 1)))
-        job.run_at = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
+        job.run_at = datetime.now(UTC) + timedelta(seconds=delay_seconds)
         raise RuntimeError("Resend event correlation pending")
 
     from app.services.webhooks.resend import _process_verified_payload
@@ -106,6 +106,6 @@ async def process_resend_readiness_check(db, job) -> None:
     retry_after = result.retry_after_seconds
     if retry_after is not None or not result.persisted:
         delay_seconds = max(0, min(3600, int(retry_after or 0)))
-        job.run_at = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
+        job.run_at = datetime.now(UTC) + timedelta(seconds=delay_seconds)
         db.flush()
         raise RuntimeError("Resend readiness retry requested")

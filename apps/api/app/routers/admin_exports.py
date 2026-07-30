@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import os
-from typing import Optional, Annotated
-
+from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -25,7 +24,6 @@ from app.services import (
     compliance_service,
     job_service,
 )
-
 
 router = APIRouter(prefix="/admin/exports", tags=["Admin - Exports"])
 ADMIN_EXPORT_LIMIT = f"{settings.RATE_LIMIT_ADMIN_EXPORTS}/minute"
@@ -147,11 +145,9 @@ def export_config(
 @limiter.limit(ADMIN_EXPORT_LIMIT)
 def export_analytics(
     request: Request,
-    from_date: Annotated[Optional[str], "fastapi_param"] = Query(
-        None, description="ISO date string"
-    ),
-    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None, description="ISO date string"),
-    ad_id: Annotated[Optional[str], "fastapi_param"] = Query(
+    from_date: Annotated[str | None, "fastapi_param"] = Query(None, description="ISO date string"),
+    to_date: Annotated[str | None, "fastapi_param"] = Query(None, description="ISO date string"),
+    ad_id: Annotated[str | None, "fastapi_param"] = Query(
         None, description="Optional campaign filter"
     ),
     session: Annotated[UserSession, "fastapi_param"] = Depends(

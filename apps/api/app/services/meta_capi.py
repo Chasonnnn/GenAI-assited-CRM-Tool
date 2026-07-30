@@ -20,12 +20,13 @@ from typing import TYPE_CHECKING
 import httpx
 
 from app.core.config import settings
-from app.services.meta_api import compute_appsecret_proof
 from app.services import meta_outbound_service
+from app.services.meta_api import compute_appsecret_proof
 from app.types import JsonObject
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
+
     from app.db.models import MetaAdAccount
 
 logger = logging.getLogger(__name__)

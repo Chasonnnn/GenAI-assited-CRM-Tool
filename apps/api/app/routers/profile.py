@@ -1,22 +1,21 @@
 """Profile card API endpoints for case manager+ users."""
 
-from typing import Any, Annotated
-
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.surrogate_access import check_surrogate_access
 from app.core.deps import (
     get_current_session,
     get_db,
     require_csrf_header,
 )
+from app.core.surrogate_access import check_surrogate_access
 from app.db.enums import Role
 from app.schemas.auth import UserSession
-from app.services import surrogate_service, org_service, profile_service
+from app.services import org_service, profile_service, surrogate_service
 
 router = APIRouter(prefix="/surrogates", tags=["profile"])
 
@@ -208,6 +207,7 @@ def export_profile_pdf(
 ) -> object:
     """Export profile as PDF with hidden fields masked."""
     from fastapi.responses import Response
+
     from app.services import pdf_export_service
 
     _require_case_manager(session)

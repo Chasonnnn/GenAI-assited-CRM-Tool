@@ -5,9 +5,10 @@ Revises: f3bc6a65a816
 Create Date: 2025-12-18
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 # revision identifiers, used by Alembic
 revision = "0027_automation_workflows"

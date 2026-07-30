@@ -12,6 +12,8 @@ export interface EntityContext {
     entityType: "surrogate" | "intended-parent" | "dashboard" | "task" | "match"
     entityId: string
     entityName: string
+    entityContextLabel?: string
+    entityStatusLabel?: string
 }
 
 interface AIContextValue {
@@ -19,9 +21,12 @@ interface AIContextValue {
     entityType: "surrogate" | "intended-parent" | "dashboard" | "task" | "match" | null
     entityId: string | null
     entityName: string | null
+    entityContextLabel: string | null
+    entityStatusLabel: string | null
 
     // Panel state
     isOpen: boolean
+    hasOpenedPanel: boolean
     togglePanel: () => void
     openPanel: () => void
     closePanel: () => void
@@ -42,6 +47,8 @@ type EntityContextState = {
     entityType: EntityContext["entityType"] | null
     entityId: string | null
     entityName: string | null
+    entityContextLabel: string | null
+    entityStatusLabel: string | null
 }
 
 type EntityContextAction =
@@ -49,12 +56,46 @@ type EntityContextAction =
     | { type: "clear" }
     | { type: "sync-pathname"; pathname: string }
 
+type AIChatPanelState = {
+    isOpen: boolean
+    hasOpenedPanel: boolean
+}
+
+type AIChatPanelAction =
+    | { type: "toggle" }
+    | { type: "open" }
+    | { type: "close" }
+
+function aiChatPanelReducer(
+    state: AIChatPanelState,
+    action: AIChatPanelAction
+): AIChatPanelState {
+    switch (action.type) {
+        case "toggle": {
+            const isOpen = !state.isOpen
+            return {
+                isOpen,
+                hasOpenedPanel: state.hasOpenedPanel || isOpen,
+            }
+        }
+        case "open":
+            return {
+                isOpen: true,
+                hasOpenedPanel: true,
+            }
+        case "close":
+            return state.isOpen ? { ...state, isOpen: false } : state
+    }
+}
+
 function createEmptyEntityContext(pathname: string): EntityContextState {
     return {
         pathname,
         entityType: null,
         entityId: null,
         entityName: null,
+        entityContextLabel: null,
+        entityStatusLabel: null,
     }
 }
 
@@ -85,7 +126,9 @@ function aiEntityContextReducer(
             if (
                 state.entityType === action.context.entityType &&
                 state.entityId === action.context.entityId &&
-                state.entityName === action.context.entityName
+                state.entityName === action.context.entityName &&
+                state.entityContextLabel === (action.context.entityContextLabel ?? null) &&
+                state.entityStatusLabel === (action.context.entityStatusLabel ?? null)
             ) {
                 return state
             }
@@ -94,6 +137,8 @@ function aiEntityContextReducer(
                 entityType: action.context.entityType,
                 entityId: action.context.entityId,
                 entityName: action.context.entityName,
+                entityContextLabel: action.context.entityContextLabel ?? null,
+                entityStatusLabel: action.context.entityStatusLabel ?? null,
             }
         case "clear":
             return state.entityId ? createEmptyEntityContext(state.pathname) : state
@@ -121,7 +166,11 @@ export function AIContextProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Panel state
-    const [isOpen, setIsOpen] = useState(false)
+    const [panelState, dispatchPanelState] = useReducer(aiChatPanelReducer, {
+        isOpen: false,
+        hasOpenedPanel: false,
+    })
+    const { isOpen, hasOpenedPanel } = panelState
 
     // Permission check - AI is optional
     // Visibility is controlled by ai_enabled flag from org settings
@@ -131,7 +180,7 @@ export function AIContextProvider({ children }: { children: React.ReactNode }) {
         isAIEnabled && (effectivePermissions?.permissions || []).includes("use_ai_assistant")
 
     useAIToggleHotkey(canUseAI, () => {
-        setIsOpen(prev => !prev)
+        dispatchPanelState({ type: "toggle" })
     })
 
     const [setContext] = useState(
@@ -147,22 +196,25 @@ export function AIContextProvider({ children }: { children: React.ReactNode }) {
     )
 
     const togglePanel = () => {
-        setIsOpen(prev => !prev)
+        dispatchPanelState({ type: "toggle" })
     }
 
     const openPanel = () => {
-        setIsOpen(true)
+        dispatchPanelState({ type: "open" })
     }
 
     const closePanel = () => {
-        setIsOpen(false)
+        dispatchPanelState({ type: "close" })
     }
 
     const value: AIContextValue = {
         entityType: entityContext.entityType,
         entityId: entityContext.entityId,
         entityName: entityContext.entityName,
+        entityContextLabel: entityContext.entityContextLabel,
+        entityStatusLabel: entityContext.entityStatusLabel,
         isOpen,
+        hasOpenedPanel,
         togglePanel,
         openPanel,
         closePanel,
@@ -189,13 +241,30 @@ export function useSetAIContext(ctx: EntityContext | null) {
     const entityType = ctx?.entityType ?? null
     const entityId = ctx?.entityId ?? null
     const entityName = ctx?.entityName ?? null
+    const entityContextLabel = ctx?.entityContextLabel ?? null
+    const entityStatusLabel = ctx?.entityStatusLabel ?? null
 
     useEffect(() => {
         if (entityType && entityId && entityName && canUseAI) {
-            setContext({ entityType, entityId, entityName })
+            setContext({
+                entityType,
+                entityId,
+                entityName,
+                ...(entityContextLabel ? { entityContextLabel } : {}),
+                ...(entityStatusLabel ? { entityStatusLabel } : {}),
+            })
         }
         return () => {
             clearContext()
         }
-    }, [canUseAI, clearContext, entityId, entityName, entityType, setContext])
+    }, [
+        canUseAI,
+        clearContext,
+        entityContextLabel,
+        entityId,
+        entityName,
+        entityStatusLabel,
+        entityType,
+        setContext,
+    ])
 }

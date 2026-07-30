@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import event
@@ -16,21 +16,21 @@ async def test_notifications_cursor_pagination(authed_client, db, test_org, test
         user_id=test_user.id,
         type="general",
         title="First",
-        created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
     )
     n2 = Notification(
         organization_id=test_org.id,
         user_id=test_user.id,
         type="general",
         title="Second",
-        created_at=datetime(2025, 1, 2, tzinfo=timezone.utc),
+        created_at=datetime(2025, 1, 2, tzinfo=UTC),
     )
     n3 = Notification(
         organization_id=test_org.id,
         user_id=test_user.id,
         type="general",
         title="Third",
-        created_at=datetime(2025, 1, 3, tzinfo=timezone.utc),
+        created_at=datetime(2025, 1, 3, tzinfo=UTC),
     )
     db.add_all([n1, n2, n3])
     db.commit()
@@ -93,7 +93,7 @@ def test_get_unread_count_uses_direct_count_and_preserves_scope(db, test_org, te
                 user_id=test_user.id,
                 type="general",
                 title="Read",
-                read_at=datetime.now(timezone.utc),
+                read_at=datetime.now(UTC),
             ),
             Notification(
                 organization_id=other_org.id,

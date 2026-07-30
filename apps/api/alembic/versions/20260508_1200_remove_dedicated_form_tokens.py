@@ -8,9 +8,9 @@ Create Date: 2026-05-08 12:00:00.000000
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 
 revision: str = "20260508_1200"
 down_revision: str | Sequence[str] | None = "20260506_2035"
@@ -45,7 +45,9 @@ def upgrade() -> None:
         op.drop_column("form_submissions", "token_id")
 
     if _has_column("form_submissions", "source_mode"):
-        op.execute("UPDATE form_submissions SET source_mode = 'shared' WHERE source_mode = 'dedicated'")
+        op.execute(
+            "UPDATE form_submissions SET source_mode = 'shared' WHERE source_mode = 'dedicated'"
+        )
         op.alter_column(
             "form_submissions",
             "source_mode",

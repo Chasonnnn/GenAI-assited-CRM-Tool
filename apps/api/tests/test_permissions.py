@@ -10,9 +10,11 @@ Tests cover:
 - Org scoping
 """
 
-from datetime import datetime, timedelta, timezone
 import uuid
+from datetime import UTC, datetime, timedelta
+
 import pytest
+
 from app.db.enums import Role
 from app.db.models import (
     AuthIdentity,
@@ -26,7 +28,6 @@ from app.db.models import (
     UserSession,
 )
 from app.services import permission_service
-
 
 # =============================================================================
 # Fixtures
@@ -252,7 +253,7 @@ def test_deprovision_member_removes_auth_surface_and_membership(db, org_a, case_
         user_id=case_manager_user.id,
         organization_id=org_a.id,
         session_token_hash="old-session-token-hash",
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
     )
     gmail_integration = UserIntegration(
         user_id=case_manager_user.id,

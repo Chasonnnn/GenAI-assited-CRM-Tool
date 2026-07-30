@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import fields, replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -19,8 +19,8 @@ def _probe(
     probe_started_at: datetime | None = None,
     checked_at: datetime | None = None,
 ) -> resend_readiness_snapshot_service.ReadinessProbeResult:
-    started = probe_started_at or datetime(2026, 7, 23, 14, 0, tzinfo=timezone.utc)
-    completed = checked_at or datetime(2026, 7, 23, 14, 1, tzinfo=timezone.utc)
+    started = probe_started_at or datetime(2026, 7, 23, 14, 0, tzinfo=UTC)
+    completed = checked_at or datetime(2026, 7, 23, 14, 1, tzinfo=UTC)
     return resend_readiness_snapshot_service.ReadinessProbeResult(
         config_fingerprint=config_fingerprint,
         probe_started_at=started,
@@ -58,13 +58,13 @@ def test_organization_snapshot_is_cache_only_and_scoped_to_exact_org(db, test_or
         db,
         organization_id=test_org.id,
         current_config_fingerprint="a" * 64,
-        now=datetime(2026, 7, 23, 14, 15, tzinfo=timezone.utc),
+        now=datetime(2026, 7, 23, 14, 15, tzinfo=UTC),
     )
     other_snapshot = resend_readiness_snapshot_service.get_organization_snapshot(
         db,
         organization_id=other_org.id,
         current_config_fingerprint="a" * 64,
-        now=datetime(2026, 7, 23, 14, 15, tzinfo=timezone.utc),
+        now=datetime(2026, 7, 23, 14, 15, tzinfo=UTC),
     )
 
     assert accepted is True
@@ -77,13 +77,13 @@ def test_organization_snapshot_is_cache_only_and_scoped_to_exact_org(db, test_or
 
 def test_older_probe_cannot_overwrite_a_newer_result(db, test_org):
     newer = _probe(
-        probe_started_at=datetime(2026, 7, 23, 14, 10, tzinfo=timezone.utc),
-        checked_at=datetime(2026, 7, 23, 14, 11, tzinfo=timezone.utc),
+        probe_started_at=datetime(2026, 7, 23, 14, 10, tzinfo=UTC),
+        checked_at=datetime(2026, 7, 23, 14, 11, tzinfo=UTC),
     )
     older = replace(
         _probe(
-            probe_started_at=datetime(2026, 7, 23, 13, 0, tzinfo=timezone.utc),
-            checked_at=datetime(2026, 7, 23, 14, 20, tzinfo=timezone.utc),
+            probe_started_at=datetime(2026, 7, 23, 13, 0, tzinfo=UTC),
+            checked_at=datetime(2026, 7, 23, 14, 20, tzinfo=UTC),
         ),
         probe_status="failed",
         overall_status="unknown",
@@ -120,7 +120,7 @@ def test_older_probe_cannot_overwrite_a_newer_result(db, test_org):
         db,
         organization_id=test_org.id,
         current_config_fingerprint="a" * 64,
-        now=datetime(2026, 7, 23, 14, 30, tzinfo=timezone.utc),
+        now=datetime(2026, 7, 23, 14, 30, tzinfo=UTC),
     )
     assert snapshot.overall_status == "ready"
     assert snapshot.checked_at == newer.checked_at
@@ -181,8 +181,8 @@ def test_platform_snapshot_is_isolated_from_organization_snapshots(db, test_org)
     organization_probe = _probe()
     platform_probe = replace(
         _probe(
-            probe_started_at=datetime(2026, 7, 23, 14, 2, tzinfo=timezone.utc),
-            checked_at=datetime(2026, 7, 23, 14, 3, tzinfo=timezone.utc),
+            probe_started_at=datetime(2026, 7, 23, 14, 2, tzinfo=UTC),
+            checked_at=datetime(2026, 7, 23, 14, 3, tzinfo=UTC),
         ),
         overall_status="needs_attention",
         domain_status="needs_attention",
@@ -206,12 +206,12 @@ def test_platform_snapshot_is_isolated_from_organization_snapshots(db, test_org)
         db,
         organization_id=test_org.id,
         current_config_fingerprint="a" * 64,
-        now=datetime(2026, 7, 23, 14, 15, tzinfo=timezone.utc),
+        now=datetime(2026, 7, 23, 14, 15, tzinfo=UTC),
     )
     platform_view = resend_readiness_snapshot_service.get_platform_snapshot(
         db,
         current_config_fingerprint="a" * 64,
-        now=datetime(2026, 7, 23, 14, 15, tzinfo=timezone.utc),
+        now=datetime(2026, 7, 23, 14, 15, tzinfo=UTC),
     )
 
     assert organization_view.overall_status == "ready"
@@ -224,7 +224,7 @@ def test_platform_snapshot_is_isolated_from_organization_snapshots(db, test_org)
 
 def test_stale_snapshot_downgrades_green_statuses_to_unknown(db, test_org):
     probe = _probe(
-        checked_at=datetime(2026, 7, 23, 14, 1, tzinfo=timezone.utc),
+        checked_at=datetime(2026, 7, 23, 14, 1, tzinfo=UTC),
     )
     resend_readiness_snapshot_service.upsert_organization_snapshot(
         db,
@@ -237,7 +237,7 @@ def test_stale_snapshot_downgrades_green_statuses_to_unknown(db, test_org):
         db,
         organization_id=test_org.id,
         current_config_fingerprint="a" * 64,
-        now=datetime(2026, 7, 23, 15, 2, tzinfo=timezone.utc),
+        now=datetime(2026, 7, 23, 15, 2, tzinfo=UTC),
         fresh_for=timedelta(hours=1),
     )
 
@@ -272,7 +272,7 @@ def test_config_fingerprint_mismatch_is_discarded_on_write_and_read(db, test_org
         db,
         organization_id=test_org.id,
         current_config_fingerprint="b" * 64,
-        now=datetime(2026, 7, 23, 14, 15, tzinfo=timezone.utc),
+        now=datetime(2026, 7, 23, 14, 15, tzinfo=UTC),
     )
 
     assert fenced_view.freshness == "never_checked"
@@ -284,8 +284,8 @@ def test_failed_probe_retains_success_only_for_the_same_configuration(db, test_o
     success = _probe()
     failed_same_config = replace(
         _probe(
-            probe_started_at=datetime(2026, 7, 23, 14, 10, tzinfo=timezone.utc),
-            checked_at=datetime(2026, 7, 23, 14, 11, tzinfo=timezone.utc),
+            probe_started_at=datetime(2026, 7, 23, 14, 10, tzinfo=UTC),
+            checked_at=datetime(2026, 7, 23, 14, 11, tzinfo=UTC),
         ),
         probe_status="failed",
         overall_status="unknown",
@@ -301,8 +301,8 @@ def test_failed_probe_retains_success_only_for_the_same_configuration(db, test_o
     failed_new_config = replace(
         failed_same_config,
         config_fingerprint="b" * 64,
-        probe_started_at=datetime(2026, 7, 23, 14, 20, tzinfo=timezone.utc),
-        checked_at=datetime(2026, 7, 23, 14, 21, tzinfo=timezone.utc),
+        probe_started_at=datetime(2026, 7, 23, 14, 20, tzinfo=UTC),
+        checked_at=datetime(2026, 7, 23, 14, 21, tzinfo=UTC),
     )
 
     resend_readiness_snapshot_service.upsert_organization_snapshot(
@@ -321,7 +321,7 @@ def test_failed_probe_retains_success_only_for_the_same_configuration(db, test_o
         db,
         organization_id=test_org.id,
         current_config_fingerprint="a" * 64,
-        now=datetime(2026, 7, 23, 14, 15, tzinfo=timezone.utc),
+        now=datetime(2026, 7, 23, 14, 15, tzinfo=UTC),
     )
     assert same_config_view.last_success_at == success.checked_at
 
@@ -335,7 +335,7 @@ def test_failed_probe_retains_success_only_for_the_same_configuration(db, test_o
         db,
         organization_id=test_org.id,
         current_config_fingerprint="b" * 64,
-        now=datetime(2026, 7, 23, 14, 30, tzinfo=timezone.utc),
+        now=datetime(2026, 7, 23, 14, 30, tzinfo=UTC),
     )
     assert new_config_view.last_success_at is None
 

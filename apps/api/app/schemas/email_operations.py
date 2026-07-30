@@ -8,7 +8,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-
 ReadinessOverall = Literal["ready", "needs_attention", "not_configured"]
 ReadinessCheckStatus = Literal["pass", "fail", "unknown", "not_applicable"]
 

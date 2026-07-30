@@ -6,9 +6,10 @@ Create Date: 2025-12-19
 
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "0032_add_zoom_meetings"

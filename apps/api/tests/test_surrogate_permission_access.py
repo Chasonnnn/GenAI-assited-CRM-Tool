@@ -56,7 +56,9 @@ def _create_surrogate(
     paused_from_stage_key: str | None = None,
 ) -> Surrogate:
     stage = _get_stage(db, org_id, stage_key)
-    paused_from_stage = _get_stage(db, org_id, paused_from_stage_key) if paused_from_stage_key else None
+    paused_from_stage = (
+        _get_stage(db, org_id, paused_from_stage_key) if paused_from_stage_key else None
+    )
     email = normalize_email(f"{name.lower().replace(' ', '-')}-{uuid.uuid4().hex[:8]}@example.com")
     surrogate_number = f"S{uuid.uuid4().int % 90000 + 10000:05d}"
     surrogate = Surrogate(

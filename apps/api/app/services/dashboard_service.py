@@ -1,13 +1,12 @@
 """Dashboard service - data for dashboard widgets."""
 
-from datetime import datetime, timedelta, timezone
-from uuid import UUID
 import asyncio
 import logging
 import threading
+from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 import anyio
-
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
@@ -77,7 +76,7 @@ def get_upcoming_items(
     pipeline_id: UUID | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Get upcoming tasks and meetings for dashboard widgets."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     today = now.date()
     end_date = today + timedelta(days=days)
 
@@ -234,7 +233,7 @@ def get_attention_items(
         - stuck_surrogates: Surrogates that haven't moved stages in X days
         - total_count: Sum of all attention items
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     today = now.date()
     owner_only = _should_scope_attention_to_owner(db, org_id, user_id, user_role)
     effective_owner_id = assignee_id or (user_id if owner_only else None)
@@ -380,9 +379,7 @@ def get_attention_items(
         user_role is not None and not _is_admin_role(user_role)
     )
     if needs_task_surrogate_join:
-        overdue_tasks_query = overdue_tasks_query.join(
-            Surrogate, Task.surrogate_id == Surrogate.id
-        )
+        overdue_tasks_query = overdue_tasks_query.join(Surrogate, Task.surrogate_id == Surrogate.id)
         task_filters.extend(
             [
                 Surrogate.organization_id == org_id,

@@ -6,7 +6,7 @@ Missing permission: defaults to False (deny)
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
@@ -193,7 +193,7 @@ def set_user_override(
     else:
         if existing:
             existing.override_type = override_type
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
         else:
             db.add(
                 UserPermissionOverride(
@@ -254,7 +254,7 @@ def set_role_default(
 
     if existing:
         existing.is_granted = is_granted
-        existing.updated_at = datetime.now(timezone.utc)
+        existing.updated_at = datetime.now(UTC)
     else:
         db.add(
             RolePermission(

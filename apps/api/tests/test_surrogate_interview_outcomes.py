@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -30,7 +30,7 @@ def _create_linked_appointment(
     client_name: str = "Interview Candidate",
     client_email: str = "candidate@example.com",
 ) -> Appointment:
-    start = datetime.now(timezone.utc) + timedelta(days=2)
+    start = datetime.now(UTC) + timedelta(days=2)
     appointment = Appointment(
         id=uuid4(),
         organization_id=org_id,
@@ -121,7 +121,7 @@ async def test_log_interview_outcome_supports_backdated_occurred_at(authed_clien
     )
     surrogate_id = surrogate_payload["id"]
 
-    occurred_at = datetime.now(timezone.utc) - timedelta(days=1, hours=2)
+    occurred_at = datetime.now(UTC) - timedelta(days=1, hours=2)
     response = await authed_client.post(
         f"/surrogates/{surrogate_id}/interview-outcomes",
         json={
@@ -160,7 +160,7 @@ async def test_log_interview_outcome_rejects_future_occurred_at(authed_client):
     )
     surrogate_id = surrogate_payload["id"]
 
-    future_at = datetime.now(timezone.utc) + timedelta(hours=4)
+    future_at = datetime.now(UTC) + timedelta(hours=4)
     response = await authed_client.post(
         f"/surrogates/{surrogate_id}/interview-outcomes",
         json={
@@ -199,8 +199,8 @@ async def test_log_interview_outcome_rejects_cross_org_appointment(authed_client
         client_email="cross-org@example.com",
         client_phone="+15555550124",
         client_timezone="America/Los_Angeles",
-        scheduled_start=datetime.now(timezone.utc) + timedelta(days=1),
-        scheduled_end=datetime.now(timezone.utc) + timedelta(days=1, minutes=30),
+        scheduled_start=datetime.now(UTC) + timedelta(days=1),
+        scheduled_end=datetime.now(UTC) + timedelta(days=1, minutes=30),
         duration_minutes=30,
         buffer_before_minutes=0,
         buffer_after_minutes=0,

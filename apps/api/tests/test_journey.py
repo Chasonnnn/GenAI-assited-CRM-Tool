@@ -1,7 +1,7 @@
-from contextlib import asynccontextmanager
-from datetime import datetime, timezone
-from uuid import UUID
 import uuid
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -112,8 +112,7 @@ async def _accept_match(authed_client, surrogate_id: str) -> dict:
 
 def _iter_milestones(payload: dict):
     for phase in payload.get("phases", []):
-        for milestone in phase.get("milestones", []):
-            yield milestone
+        yield from phase.get("milestones", [])
 
 
 def _find_milestone(payload: dict, slug: str):
@@ -143,7 +142,7 @@ async def test_journey_completion_date_uses_next_milestone_entry(authed_client, 
     approved_matching = _find_milestone(payload, "approved_matching")
     assert approved_matching["status"] == "completed"
     assert approved_matching["completed_at"] is not None
-    expected_date = datetime.now(timezone.utc).date().isoformat()
+    expected_date = datetime.now(UTC).date().isoformat()
     assert approved_matching["completed_at"].startswith(expected_date)
 
     match_confirmed = _find_milestone(payload, "match_confirmed")
@@ -164,7 +163,7 @@ async def test_journey_terminal_state_has_banner_and_no_current(authed_client, d
 
     assert payload["is_terminal"] is True
     assert payload["terminal_date"] is not None
-    expected_date = datetime.now(timezone.utc).date().isoformat()
+    expected_date = datetime.now(UTC).date().isoformat()
     assert payload["terminal_date"].startswith(expected_date)
     assert all(milestone["status"] != "current" for milestone in _iter_milestones(payload))
 

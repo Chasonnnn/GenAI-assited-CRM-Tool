@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from sqlalchemy import Float, cast, func
 from sqlalchemy.sql.elements import ColumnElement
-
 
 INCHES_PER_FOOT = Decimal("12")
 HEIGHT_CANONICAL_QUANTUM = Decimal("0.01")

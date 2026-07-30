@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
 from app.core.encryption import hash_email, hash_phone
-from app.db.enums import FormSubmissionMatchStatus
-from app.db.enums import IntakeLeadStatus
+from app.db.enums import FormSubmissionMatchStatus, IntakeLeadStatus
 from app.db.models import (
     AutomationWorkflow,
     FormIntakeDraft,
@@ -514,7 +513,7 @@ async def test_shared_draft_lookup_excludes_stale_drafts(authed_client, db):
         db.query(FormIntakeDraft).filter(FormIntakeDraft.draft_session_id == session_id).first()
     )
     assert stale_draft is not None
-    stale_draft.updated_at = datetime.now(timezone.utc) - timedelta(days=45)
+    stale_draft.updated_at = datetime.now(UTC) - timedelta(days=45)
     db.commit()
 
     lookup_res = await authed_client.post(

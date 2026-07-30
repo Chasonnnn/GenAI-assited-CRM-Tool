@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import Any
 
@@ -13,7 +13,6 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from app.core.config import settings
-
 
 DEFAULT_TOKEN_TTL_SECONDS = 300  # 5 minutes
 
@@ -80,7 +79,7 @@ def create_subject_token(
     claims: dict[str, Any] | None = None,
     ttl_seconds: int = DEFAULT_TOKEN_TTL_SECONDS,
 ) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "iss": get_oidc_issuer(),
         "sub": subject,

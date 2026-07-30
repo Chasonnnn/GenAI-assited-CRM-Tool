@@ -1,16 +1,15 @@
 """Dashboard router - API endpoints for dashboard widgets."""
 
 from typing import Annotated
-
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db
-from app.schemas.auth import UserSession
 from app.db.enums import Role
+from app.schemas.auth import UserSession
 from app.services import dashboard_service
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])

@@ -1,8 +1,8 @@
 """Surrogate service - business logic for surrogate operations."""
 
-from datetime import date, datetime, time, timedelta, timezone
-from decimal import Decimal, InvalidOperation
 import logging
+from datetime import UTC, date, datetime, time, timedelta
+from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from pydantic import EmailStr, TypeAdapter, ValidationError
@@ -15,10 +15,10 @@ from app.db.enums import (
     AlertSeverity,
     AlertType,
     AppointmentStatus,
-    SurrogateActivityType,
-    SurrogateSource,
     OwnerType,
     Role,
+    SurrogateActivityType,
+    SurrogateSource,
 )
 from app.db.models import (
     EmailLog,
@@ -36,7 +36,7 @@ from app.schemas.surrogate import (
     SurrogateUpdate,
     mask_ssn_last4,
 )
-from app.utils.pagination import PaginationParams, paginate_query
+from app.services.surrogate_status_service import StatusChangeResult
 from app.utils.normalization import (
     escape_like_string,
     extract_email_domain,
@@ -48,7 +48,7 @@ from app.utils.normalization import (
     normalize_search_text,
     normalize_state,
 )
-from app.services.surrogate_status_service import StatusChangeResult
+from app.utils.pagination import PaginationParams, paginate_query
 
 logger = logging.getLogger(__name__)
 
@@ -475,10 +475,8 @@ def create_surrogate(
 
     Phone and state are validated in schema layer.
     """
-    from app.services import activity_service
     from app.db.enums import OwnerType
-    from app.services import queue_service
-    from app.services import pipeline_service
+    from app.services import activity_service, pipeline_service, queue_service
 
     assign_to_user = data.assign_to_user if data.assign_to_user is not None else user_id is not None
     if user_id and assign_to_user:
@@ -508,7 +506,7 @@ def create_surrogate(
             created_by_user_id=user_id,
             owner_type=owner_type,
             owner_id=owner_id,
-            assigned_at=datetime.now(timezone.utc) if owner_type == OwnerType.USER.value else None,
+            assigned_at=datetime.now(UTC) if owner_type == OwnerType.USER.value else None,
             stage_id=default_stage.id,
             status_label=default_stage.label,
             source=data.source.value,
@@ -1018,9 +1016,8 @@ def assign_surrogate(
     user_id: UUID,
 ) -> Surrogate:
     """Assign surrogateto a user or queue."""
-    from app.services import activity_service
     from app.db.enums import OwnerType
-    from app.services import queue_service
+    from app.services import activity_service, queue_service
 
     old_owner_type = surrogate.owner_type
     old_owner_id = surrogate.owner_id
@@ -1029,7 +1026,7 @@ def assign_surrogate(
         surrogate.owner_type = OwnerType.USER.value
         surrogate.owner_id = owner_id
         # Set assigned_at when assigning to a user
-        surrogate.assigned_at = datetime.now(timezone.utc)
+        surrogate.assigned_at = datetime.now(UTC)
     elif owner_type == OwnerType.QUEUE:
         surrogate = queue_service.assign_surrogate_to_queue(
             db=db,
@@ -1133,7 +1130,7 @@ def archive_surrogate(
         return surrogate  # Already archived
 
     surrogate.is_archived = True
-    surrogate.archived_at = datetime.now(timezone.utc)
+    surrogate.archived_at = datetime.now(UTC)
     surrogate.archived_by_user_id = user_id
 
     # Record in status history with prior status for restore reference
@@ -1553,10 +1550,12 @@ def list_surrogates(
         (surrogates, total_count or None, next_cursor)
     """
     import base64
+    from datetime import datetime
+
+    from sqlalchemy import asc, desc
+
     from app.db.enums import OwnerType
     from app.db.models import PipelineStage, Queue
-    from datetime import datetime
-    from sqlalchemy import asc, desc
 
     def _encode_cursor(created_at: datetime, surrogate_id: UUID) -> str:
         raw = f"{created_at.isoformat()}|{surrogate_id}"
@@ -1963,14 +1962,14 @@ def get_surrogate_stats(
     """
     from datetime import timedelta
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     week_ago = now - timedelta(days=7)
     two_weeks_ago = now - timedelta(days=14)
     last_24h = now - timedelta(hours=24)
     prev_24h = now - timedelta(hours=48)
 
-    from app.db.models import Task, PipelineStage
     from app.db.enums import TaskType
+    from app.db.models import PipelineStage, Task
 
     surrogate_filters = [
         Surrogate.organization_id == org_id,
@@ -2537,8 +2536,8 @@ def log_interview_outcome(
     """Log an interview outcome activity for a surrogate."""
     from app.services import activity_service, appointment_service
 
-    occurred_at = data.occurred_at or datetime.now(timezone.utc)
-    now = datetime.now(timezone.utc)
+    occurred_at = data.occurred_at or datetime.now(UTC)
+    now = datetime.now(UTC)
     if occurred_at > now:
         raise ValueError("Cannot log future outcomes")
 

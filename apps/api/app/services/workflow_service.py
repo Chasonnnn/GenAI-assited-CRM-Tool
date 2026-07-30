@@ -1,56 +1,55 @@
 """Workflow service - CRUD operations for automation workflows."""
 
 from copy import deepcopy
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import func, and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
+from app.db.enums import OwnerType, WorkflowExecutionStatus, WorkflowTriggerType
 from app.db.models import (
     AutomationWorkflow,
-    WorkflowExecution,
-    UserWorkflowPreference,
-    User,
-    Queue,
     EmailTemplate,
-    Surrogate,
     Pipeline,
+    Queue,
+    Surrogate,
+    User,
+    UserWorkflowPreference,
+    WorkflowExecution,
 )
-from app.db.enums import WorkflowTriggerType, WorkflowExecutionStatus, OwnerType
 from app.schemas.workflow import (
-    WorkflowCreate,
-    WorkflowUpdate,
-    WorkflowRead,
-    WorkflowStats,
-    WorkflowOptions,
-    Condition,
     ALLOWED_CONDITION_FIELDS,
-    ALLOWED_UPDATE_FIELDS,
     ALLOWED_EMAIL_VARIABLES,
-    StatusChangeTriggerConfig,
-    ScheduledTriggerConfig,
-    TaskDueTriggerConfig,
-    InactivityTriggerConfig,
-    SurrogateUpdatedTriggerConfig,
+    ALLOWED_UPDATE_FIELDS,
+    AddNoteActionConfig,
+    AssignSurrogateActionConfig,
+    AutoMatchSubmissionActionConfig,
+    Condition,
+    CreateIntakeLeadActionConfig,
+    CreateTaskActionConfig,
     FormStartedTriggerConfig,
     FormSubmittedTriggerConfig,
+    InactivityTriggerConfig,
     IntakeLeadCreatedTriggerConfig,
+    PromoteIntakeLeadActionConfig,
+    ScheduledTriggerConfig,
     SendEmailActionConfig,
-    CreateTaskActionConfig,
-    AssignSurrogateActionConfig,
     SendNotificationActionConfig,
     SendZapierConversionEventActionConfig,
+    StatusChangeTriggerConfig,
+    SurrogateUpdatedTriggerConfig,
+    TaskDueTriggerConfig,
     UpdateFieldActionConfig,
-    AddNoteActionConfig,
-    PromoteIntakeLeadActionConfig,
-    AutoMatchSubmissionActionConfig,
-    CreateIntakeLeadActionConfig,
+    WorkflowCreate,
+    WorkflowOptions,
+    WorkflowRead,
+    WorkflowStats,
+    WorkflowUpdate,
 )
 from app.services import user_service
 from app.services.workflow_email_provider import validate_email_provider
 from app.utils.pagination import paginate_query_by_offset
-
 
 # =============================================================================
 # Constants
@@ -544,7 +543,7 @@ def update_workflow(
         workflow.is_enabled = data.is_enabled
 
     workflow.updated_by_user_id = user_id
-    workflow.updated_at = datetime.now(timezone.utc)
+    workflow.updated_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(workflow)
@@ -649,7 +648,7 @@ def toggle_workflow(
     """Toggle a workflow's enabled state."""
     workflow.is_enabled = not workflow.is_enabled
     workflow.updated_by_user_id = user_id
-    workflow.updated_at = datetime.now(timezone.utc)
+    workflow.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(workflow)
     return workflow
@@ -721,10 +720,10 @@ def duplicate_workflow(
 
 def get_workflow_stats(db: Session, org_id: UUID) -> WorkflowStats:
     """Get workflow statistics for dashboard."""
+    from app.db.enums import TaskStatus, TaskType
     from app.db.models import Task
-    from app.db.enums import TaskType, TaskStatus
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     day_ago = now - timedelta(hours=24)
 
     (
@@ -1044,7 +1043,8 @@ def get_workflow_options(
     # Email templates - scope-aware filtering
     # For org workflows: only org + system templates
     # For personal workflows: personal (user's own) + org + system templates
-    from sqlalchemy import or_, and_
+    from sqlalchemy import and_, or_
+
     from app.services import system_email_template_service
 
     template_query = db.query(EmailTemplate).filter(
@@ -1113,8 +1113,8 @@ def get_workflow_options(
     ]
 
     # Forms (published)
-    from app.db.models import Form
     from app.db.enums import FormStatus
+    from app.db.models import Form
 
     published_forms = (
         db.query(Form)
@@ -1253,7 +1253,7 @@ def get_execution(db: Session, org_id: UUID, execution_id: UUID) -> WorkflowExec
 
 def get_execution_stats(db: Session, org_id: UUID) -> dict:
     """Get execution statistics for the dashboard."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     day_ago = now - timedelta(hours=24)
 
     total_24h, failed_24h, successes, avg_duration = (

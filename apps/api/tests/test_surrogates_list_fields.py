@@ -1,12 +1,12 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy import update as sql_update
 
-from app.db.models import EmailLog, Form, FormSubmission, MetaLead, Surrogate, SurrogateActivityLog
 from app.db.enums import SurrogateActivityType
+from app.db.models import EmailLog, Form, FormSubmission, MetaLead, Surrogate, SurrogateActivityLog
 
 
 @pytest.mark.asyncio
@@ -67,7 +67,7 @@ async def test_surrogates_list_does_not_fallback_to_updated_at_for_last_activity
     ).delete()
     surrogate = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
     assert surrogate is not None
-    surrogate.updated_at = datetime.now(timezone.utc)
+    surrogate.updated_at = datetime.now(UTC)
     db.commit()
 
     list_res = await authed_client.get("/surrogates")
@@ -123,8 +123,8 @@ async def test_surrogates_list_supports_updated_at_sorting(authed_client, db):
     second_row = db.query(Surrogate).filter(Surrogate.id == uuid.UUID(second_id)).first()
     assert first_row is not None and second_row is not None
 
-    first_updated_at = datetime(2030, 1, 2, 9, 0, tzinfo=timezone.utc)
-    second_updated_at = datetime(2030, 1, 3, 9, 0, tzinfo=timezone.utc)
+    first_updated_at = datetime(2030, 1, 2, 9, 0, tzinfo=UTC)
+    second_updated_at = datetime(2030, 1, 3, 9, 0, tzinfo=UTC)
 
     db.execute(text("ALTER TABLE surrogates DISABLE TRIGGER ALL"))
     try:
@@ -189,9 +189,9 @@ async def test_surrogates_list_supports_last_modified_sorting(authed_client, db,
     assert second_res.status_code == 201, second_res.text
     second_id = second_res.json()["id"]
 
-    first_updated_at = datetime(2030, 1, 2, 9, 0, tzinfo=timezone.utc)
-    second_updated_at = datetime(2030, 1, 3, 9, 0, tzinfo=timezone.utc)
-    first_activity_at = datetime(2030, 1, 4, 9, 0, tzinfo=timezone.utc)
+    first_updated_at = datetime(2030, 1, 2, 9, 0, tzinfo=UTC)
+    second_updated_at = datetime(2030, 1, 3, 9, 0, tzinfo=UTC)
+    first_activity_at = datetime(2030, 1, 4, 9, 0, tzinfo=UTC)
 
     db.execute(text("ALTER TABLE surrogates DISABLE TRIGGER ALL"))
     try:
@@ -297,8 +297,8 @@ async def test_surrogate_created_dates_filters_priority_only(authed_client, db):
     normal_row = db.query(Surrogate).filter(Surrogate.id == uuid.UUID(normal_id)).first()
     assert priority_row is not None and normal_row is not None
 
-    priority_row.created_at = datetime(2025, 1, 10, 12, 0, tzinfo=timezone.utc)
-    normal_row.created_at = datetime(2025, 1, 11, 12, 0, tzinfo=timezone.utc)
+    priority_row.created_at = datetime(2025, 1, 10, 12, 0, tzinfo=UTC)
+    normal_row.created_at = datetime(2025, 1, 11, 12, 0, tzinfo=UTC)
     db.commit()
 
     dates_res = await authed_client.get("/surrogates/created-dates", params={"is_priority": "true"})
@@ -332,8 +332,8 @@ async def test_surrogates_list_created_to_date_includes_entire_day(authed_client
     next_day_row = db.query(Surrogate).filter(Surrogate.id == uuid.UUID(next_day_id)).first()
     assert same_day_row is not None and next_day_row is not None
 
-    same_day_row.created_at = datetime(2025, 1, 10, 15, 45, tzinfo=timezone.utc)
-    next_day_row.created_at = datetime(2025, 1, 11, 0, 0, 1, tzinfo=timezone.utc)
+    same_day_row.created_at = datetime(2025, 1, 10, 15, 45, tzinfo=UTC)
+    next_day_row.created_at = datetime(2025, 1, 11, 0, 0, 1, tzinfo=UTC)
     db.commit()
 
     list_res = await authed_client.get("/surrogates", params={"created_to": "2025-01-10"})
@@ -566,7 +566,7 @@ async def test_surrogate_detail_flags_bounced_email_from_resend_activity(
         subject="Test bounced email",
         body="Body",
         resend_status="bounced",
-        bounced_at=datetime.now(timezone.utc),
+        bounced_at=datetime.now(UTC),
         error="bounced",
     )
     db.add(email_log)

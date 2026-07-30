@@ -4,7 +4,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
@@ -193,9 +193,7 @@ async def test_use_template_resolves_form_name_trigger_config(db, test_org):
 
 
 @pytest.mark.asyncio
-async def test_use_template_accepts_selected_published_form_when_form_name_is_stale(
-    db, test_org
-):
+async def test_use_template_accepts_selected_published_form_when_form_name_is_stale(db, test_org):
     admin = create_user_with_role(db, test_org.id, Role.ADMIN)
     ewi_form = create_published_form(db, test_org.id, admin.id, "EWI pre-questionnaire")
     template = create_template(
@@ -313,4 +311,7 @@ async def test_use_template_rejects_selected_form_for_non_form_template(db, test
             },
         )
         assert res.status_code == 400
-        assert res.json()["detail"] == "trigger_form_id is only valid for form-trigger workflow templates"
+        assert (
+            res.json()["detail"]
+            == "trigger_form_id is only valid for form-trigger workflow templates"
+        )

@@ -47,8 +47,17 @@ function AIContextProbe() {
             <output aria-label="entity type">{context.entityType ?? "none"}</output>
             <output aria-label="entity id">{context.entityId ?? "none"}</output>
             <output aria-label="entity name">{context.entityName ?? "none"}</output>
+            <output aria-label="entity context label">{context.entityContextLabel ?? "none"}</output>
+            <output aria-label="entity status label">{context.entityStatusLabel ?? "none"}</output>
             <output aria-label="panel state">{context.isOpen ? "open" : "closed"}</output>
+            <output aria-label="panel has opened">{context.hasOpenedPanel ? "yes" : "no"}</output>
             <output aria-label="ai access">{context.canUseAI ? "allowed" : "blocked"}</output>
+            <button type="button" onClick={context.openPanel}>
+                Open panel
+            </button>
+            <button type="button" onClick={context.closePanel}>
+                Close panel
+            </button>
             <button
                 type="button"
                 onClick={() =>
@@ -56,6 +65,8 @@ function AIContextProbe() {
                         entityType: "surrogate",
                         entityId: "surrogate-1",
                         entityName: "Jane Candidate",
+                        entityContextLabel: "Surrogate S10001",
+                        entityStatusLabel: "Heartbeat confirmed",
                     })
                 }
             >
@@ -128,12 +139,16 @@ describe("AIContextProvider", () => {
         expect(screen.getByLabelText("entity type")).toHaveTextContent("surrogate")
         expect(screen.getByLabelText("entity id")).toHaveTextContent("surrogate-1")
         expect(screen.getByLabelText("entity name")).toHaveTextContent("Jane Candidate")
+        expect(screen.getByLabelText("entity context label")).toHaveTextContent("Surrogate S10001")
+        expect(screen.getByLabelText("entity status label")).toHaveTextContent("Heartbeat confirmed")
 
         fireEvent.click(screen.getByRole("button", { name: "Clear context" }))
 
         expect(screen.getByLabelText("entity type")).toHaveTextContent("none")
         expect(screen.getByLabelText("entity id")).toHaveTextContent("none")
         expect(screen.getByLabelText("entity name")).toHaveTextContent("none")
+        expect(screen.getByLabelText("entity context label")).toHaveTextContent("none")
+        expect(screen.getByLabelText("entity status label")).toHaveTextContent("none")
     })
 
     it("sets declarative entity context without a provider render loop", async () => {
@@ -250,5 +265,19 @@ describe("AIContextProvider", () => {
         })
 
         expect(screen.getByLabelText("panel state")).toHaveTextContent("open")
+    })
+
+    it("remembers the first open so the drawer can finish its close lifecycle", () => {
+        renderAIContextProbe()
+
+        expect(screen.getByLabelText("panel has opened")).toHaveTextContent("no")
+
+        fireEvent.click(screen.getByRole("button", { name: "Open panel" }))
+        expect(screen.getByLabelText("panel state")).toHaveTextContent("open")
+        expect(screen.getByLabelText("panel has opened")).toHaveTextContent("yes")
+
+        fireEvent.click(screen.getByRole("button", { name: "Close panel" }))
+        expect(screen.getByLabelText("panel state")).toHaveTextContent("closed")
+        expect(screen.getByLabelText("panel has opened")).toHaveTextContent("yes")
     })
 })

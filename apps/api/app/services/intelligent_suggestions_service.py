@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, time, timedelta, timezone
-from typing import Iterable
+from collections.abc import Iterable
+from datetime import UTC, datetime, time, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -282,7 +282,7 @@ def _business_day_cutoff_exclusive_utc(
         if is_business_day(local_dt):
             remaining -= 1
             if remaining <= 0:
-                return local_dt.astimezone(timezone.utc)
+                return local_dt.astimezone(UTC)
         cursor_date -= timedelta(days=1)
 
 
@@ -965,7 +965,7 @@ def get_intelligent_rule_ids(
     rule_key: str,
     now_utc: datetime | None = None,
 ) -> set[UUID]:
-    now_utc = now_utc or datetime.now(timezone.utc)
+    now_utc = now_utc or datetime.now(UTC)
     rules, results = _rule_ids_for_user(
         db,
         org_id=org_id,
@@ -1005,7 +1005,7 @@ def get_intelligent_summary(
     user_role: Role | str,
     now_utc: datetime | None = None,
 ) -> dict:
-    now_utc = now_utc or datetime.now(timezone.utc)
+    now_utc = now_utc or datetime.now(UTC)
     counts = {rule_key: 0 for rule_key in INTELLIGENT_RULE_KEYS}
     settings = get_or_create_settings(db, org_id)
     if not settings.enabled:
@@ -1056,7 +1056,7 @@ def get_dynamic_filter_surrogate_ids(
     dynamic_filter: str,
     now_utc: datetime | None = None,
 ) -> set[UUID]:
-    now_utc = now_utc or datetime.now(timezone.utc)
+    now_utc = now_utc or datetime.now(UTC)
 
     if dynamic_filter == FILTER_INTELLIGENT_ANY:
         rules, results = _rule_ids_for_user(
@@ -1107,7 +1107,7 @@ def process_daily_digest_for_org(
     org_id: UUID,
     now_utc: datetime | None = None,
 ) -> dict:
-    now_utc = now_utc or datetime.now(timezone.utc)
+    now_utc = now_utc or datetime.now(UTC)
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
         return {"users_checked": 0, "notifications_created": 0, "skipped": True}
@@ -1179,7 +1179,7 @@ def process_daily_digest_for_all_orgs(
     *,
     now_utc: datetime | None = None,
 ) -> dict:
-    now_utc = now_utc or datetime.now(timezone.utc)
+    now_utc = now_utc or datetime.now(UTC)
     org_ids: Iterable[UUID] = [row[0] for row in db.query(Organization.id).all()]
     orgs_processed = 0
     users_checked = 0

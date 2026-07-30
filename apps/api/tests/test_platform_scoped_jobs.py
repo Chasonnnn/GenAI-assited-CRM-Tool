@@ -1,6 +1,6 @@
 """Contract tests for organization- and platform-scoped background jobs."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
@@ -41,7 +41,7 @@ def test_database_rejects_incoherent_job_scope_and_organization(db, test_org):
             organization_id=test_org.id,
             job_type=JobType.NOTIFICATION.value,
             payload={},
-            run_at=datetime.now(timezone.utc),
+            run_at=datetime.now(UTC),
             status=JobStatus.PENDING.value,
         ),
         Job(
@@ -49,7 +49,7 @@ def test_database_rejects_incoherent_job_scope_and_organization(db, test_org):
             organization_id=None,
             job_type=JobType.NOTIFICATION.value,
             payload={},
-            run_at=datetime.now(timezone.utc),
+            run_at=datetime.now(UTC),
             status=JobStatus.PENDING.value,
         ),
     ]

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     ForeignKey,
@@ -101,14 +100,14 @@ class Match(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    surrogate: Mapped["Surrogate"] = relationship()
-    intended_parent: Mapped["IntendedParent"] = relationship()
-    proposed_by: Mapped["User"] = relationship(foreign_keys=[proposed_by_user_id])
-    reviewed_by: Mapped["User"] = relationship(foreign_keys=[reviewed_by_user_id])
+    organization: Mapped[Organization] = relationship()
+    surrogate: Mapped[Surrogate] = relationship()
+    intended_parent: Mapped[IntendedParent] = relationship()
+    proposed_by: Mapped[User] = relationship(foreign_keys=[proposed_by_user_id])
+    reviewed_by: Mapped[User] = relationship(foreign_keys=[reviewed_by_user_id])
 
     # Match events relationship
-    events: Mapped[list["MatchEvent"]] = relationship(
+    events: Mapped[list[MatchEvent]] = relationship(
         back_populates="match",
         cascade="all, delete-orphan",
         order_by="MatchEvent.starts_at",
@@ -174,9 +173,9 @@ class MatchEvent(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    match: Mapped["Match"] = relationship(back_populates="events")
-    created_by: Mapped["User"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    match: Mapped[Match] = relationship(back_populates="events")
+    created_by: Mapped[User] = relationship()
 
 
 # =============================================================================

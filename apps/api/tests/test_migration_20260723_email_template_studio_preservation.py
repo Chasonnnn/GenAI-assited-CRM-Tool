@@ -2,13 +2,13 @@
 
 import json
 import logging
-from pathlib import Path
 import uuid
+from pathlib import Path
 
-from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
 
+from alembic import command
 
 API_ROOT = Path(__file__).resolve().parents[1]
 PRE_STUDIO_REVISION = "20260723_0270"

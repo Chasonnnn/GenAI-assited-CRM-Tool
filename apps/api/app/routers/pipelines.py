@@ -7,15 +7,12 @@ v2: With version control
 """
 
 from typing import Annotated
-
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.stage_definitions import SURROGATE_PIPELINE_ENTITY, normalize_pipeline_entity_type
 from app.core.deps import (
     get_current_session,
     get_db,
@@ -23,7 +20,7 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
-
+from app.core.stage_definitions import SURROGATE_PIPELINE_ENTITY, normalize_pipeline_entity_type
 from app.schemas.auth import UserSession
 from app.schemas.pipeline_semantics import PipelineFeatureConfig, StageSemantics
 from app.services import pipeline_semantics_service, pipeline_service, version_service
@@ -754,8 +751,8 @@ def rollback_pipeline(
         raise HTTPException(status_code=400, detail=error)
 
     # Audit log the rollback
-    from app.services import audit_service
     from app.db.enums import AuditEventType
+    from app.services import audit_service
 
     audit_service.log_event(
         db=db,

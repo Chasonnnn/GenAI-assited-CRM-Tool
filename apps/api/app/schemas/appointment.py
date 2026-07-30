@@ -1,11 +1,10 @@
 """Appointment schemas - Pydantic models for appointments API."""
 
 from datetime import date, datetime, time
-from uuid import UUID
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
-
 
 # =============================================================================
 # Appointment Types

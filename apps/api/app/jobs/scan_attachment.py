@@ -17,12 +17,11 @@ import subprocess  # nosec B404
 import tempfile
 from uuid import UUID
 
-
 from app.core.config import settings
+from app.db.enums import AlertSeverity, AlertType
 from app.db.models import Attachment, FormSubmissionFile
 from app.db.session import SessionLocal
-from app.services import attachment_service, notification_service, alert_service
-from app.db.enums import AlertSeverity, AlertType
+from app.services import alert_service, attachment_service, notification_service
 
 logger = logging.getLogger(__name__)
 

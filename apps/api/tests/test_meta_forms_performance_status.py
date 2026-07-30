@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def test_meta_form_performance_includes_mapping_status(db, test_org):
@@ -20,7 +20,7 @@ def test_meta_form_performance_includes_mapping_status(db, test_org):
         meta_lead_id="lead_status",
         meta_form_id="form_status",
         meta_page_id="page_status",
-        meta_created_time=datetime.now(timezone.utc),
+        meta_created_time=datetime.now(UTC),
     )
     db.add(lead)
     db.commit()

@@ -7,35 +7,34 @@ Unauthenticated endpoints for clients to:
 - Reschedule/cancel via tokens
 """
 
-from typing import Annotated
-
 from datetime import date, timedelta
+from typing import Annotated
 from urllib.parse import urlparse
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import get_db
+from app.core.rate_limit import limiter
 from app.schemas.appointment import (
-    AppointmentTypeRead,
+    AppointmentCancel,
     AppointmentCreate,
     AppointmentReschedule,
-    AppointmentCancel,
-    TimeSlotRead,
+    AppointmentTypeRead,
     AvailableSlotsResponse,
-    StaffInfoRead,
     PublicBookingPageRead,
+    StaffInfoRead,
+    TimeSlotRead,
 )
-from app.core.rate_limit import limiter
 from app.services import (
-    appointment_service,
     appointment_email_service,
+    appointment_service,
     media_service,
-    user_service,
     org_service,
+    user_service,
 )
-from app.core.config import settings
 
 router = APIRouter(prefix="/book", tags=["booking"])
 PUBLIC_FORM_LIMIT = f"{settings.RATE_LIMIT_PUBLIC_FORMS}/minute"

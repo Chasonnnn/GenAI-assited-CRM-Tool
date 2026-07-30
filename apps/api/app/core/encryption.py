@@ -9,7 +9,6 @@ from cryptography.fernet import Fernet, InvalidToken
 from app.core.config import settings
 from app.utils.normalization import normalize_email, normalize_phone
 
-
 _fernet: Fernet | None = None
 _data_fernet: Fernet | None = None
 _ENCRYPTED_PREFIX = "enc:"
@@ -137,6 +136,5 @@ def is_encryption_configured() -> bool:
 def is_pii_encryption_configured() -> bool:
     """Check if PII encryption is properly configured."""
     return bool(
-        settings.DATA_ENCRYPTION_KEY.get_secret_value()
-        and settings.PII_HASH_KEY.get_secret_value()
+        settings.DATA_ENCRYPTION_KEY.get_secret_value() and settings.PII_HASH_KEY.get_secret_value()
     )

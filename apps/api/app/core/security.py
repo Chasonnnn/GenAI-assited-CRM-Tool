@@ -3,13 +3,12 @@
 import hashlib
 import json
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import jwt
 
 from app.core.config import settings
-
 
 # =============================================================================
 # Constant-Time Secret Verification
@@ -53,8 +52,8 @@ def create_session_token(
         "token_version": token_version,
         "mfa_verified": mfa_verified,
         "mfa_required": mfa_required,
-        "iat": datetime.now(timezone.utc),
-        "exp": datetime.now(timezone.utc) + timedelta(hours=settings.JWT_EXPIRES_HOURS),
+        "iat": datetime.now(UTC),
+        "exp": datetime.now(UTC) + timedelta(hours=settings.JWT_EXPIRES_HOURS),
     }
     return jwt.encode(payload, settings.JWT_SECRET.get_secret_value(), algorithm="HS256")
 
@@ -85,8 +84,8 @@ def create_support_session_token(
         "support": True,
         "support_session_id": str(support_session_id),
         "support_mode": mode,
-        "iat": datetime.now(timezone.utc),
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes),
+        "iat": datetime.now(UTC),
+        "exp": datetime.now(UTC) + timedelta(minutes=ttl_minutes),
     }
     return jwt.encode(payload, settings.JWT_SECRET.get_secret_value(), algorithm="HS256")
 
@@ -132,8 +131,8 @@ def create_export_token(
         "org_id": str(org_id),
         "surrogate_id": str(surrogate_id),
         "purpose": purpose,
-        "iat": datetime.now(timezone.utc),
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes),
+        "iat": datetime.now(UTC),
+        "exp": datetime.now(UTC) + timedelta(minutes=ttl_minutes),
     }
     if variant:
         payload["variant"] = variant

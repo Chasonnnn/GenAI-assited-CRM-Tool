@@ -11,7 +11,7 @@ Handles:
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 from uuid import UUID
 
@@ -439,7 +439,7 @@ def save_oauth_connection(
     If a connection for this org+meta_user already exists, update it.
     Otherwise create a new one.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     token_expires_at = None
     if expires_in:
         token_expires_at = now + timedelta(seconds=expires_in)
@@ -482,7 +482,7 @@ def save_oauth_connection(
 def deactivate_oauth_connection(db: Session, connection: MetaOAuthConnection) -> None:
     """Deactivate an OAuth connection (soft delete)."""
     connection.is_active = False
-    connection.updated_at = datetime.now(timezone.utc)
+    connection.updated_at = datetime.now(UTC)
     db.commit()
 
 

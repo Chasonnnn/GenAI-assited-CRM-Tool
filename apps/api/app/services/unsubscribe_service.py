@@ -7,12 +7,10 @@ import hashlib
 import hmac
 import json
 import time
-from typing import Optional
 from uuid import UUID
 
 from app.core.config import settings
 from app.utils.normalization import normalize_email
-
 
 TOKEN_VERSION = 1
 
@@ -58,7 +56,7 @@ def generate_unsubscribe_token(*, org_id: UUID, email: str) -> str:
     return f"{payload_b64}.{signature}"
 
 
-def parse_unsubscribe_token(token: str) -> Optional[tuple[UUID, str]]:
+def parse_unsubscribe_token(token: str) -> tuple[UUID, str] | None:
     """Parse and verify an unsubscribe token. Returns (org_id, email) or None."""
     if not token:
         return None

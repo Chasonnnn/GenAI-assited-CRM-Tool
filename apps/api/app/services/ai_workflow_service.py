@@ -13,19 +13,18 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
+from app.db.enums import AlertSeverity, AlertType
 from app.db.models import (
     AutomationWorkflow,
     EmailTemplate,
-    User,
     Pipeline,
     PipelineStage,
+    User,
 )
-from app.db.enums import AlertSeverity, AlertType
+from app.schemas.workflow import ALLOWED_CONDITION_FIELDS
 from app.services import ai_settings_service, workflow_service
 from app.services.ai_prompt_registry import get_prompt
 from app.services.ai_response_validation import parse_json_object, validate_model
-from app.schemas.workflow import ALLOWED_CONDITION_FIELDS
-
 
 logger = logging.getLogger(__name__)
 

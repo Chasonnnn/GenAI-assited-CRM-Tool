@@ -5,18 +5,18 @@ Revises: 0028_remove_assigned_to_user_id
 Create Date: 2024-12-18
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0029_task_owner_model"
-down_revision: Union[str, None] = "0028_remove_assigned_to_user_id"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "0028_remove_assigned_to_user_id"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

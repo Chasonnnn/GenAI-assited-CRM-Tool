@@ -41,7 +41,7 @@ async def test_case_create_assign_to_user_false_uses_queue(authed_client, db, te
 
 def test_system_case_defaults_to_unassigned_queue(db, test_org):
     from app.schemas.surrogate import SurrogateCreate
-    from app.services import surrogate_service, queue_service
+    from app.services import queue_service, surrogate_service
 
     case = surrogate_service.create_surrogate(
         db=db,

@@ -1,5 +1,6 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
-from datetime import datetime, timedelta, timezone
 
 
 @pytest.mark.asyncio
@@ -20,7 +21,7 @@ async def test_internal_token_check_tracks_oauth_expiry(client, db, monkeypatch,
 
     monkeypatch.setattr(internal_router, "SessionLocal", lambda: _TestSession())
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expired_conn = MetaOAuthConnection(
         organization_id=test_auth.org.id,
         meta_user_id="expired-user",

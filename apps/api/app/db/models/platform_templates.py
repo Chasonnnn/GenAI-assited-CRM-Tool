@@ -6,15 +6,15 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    TIMESTAMP,
     Boolean,
+    ForeignKey,
+    Index,
     Integer,
     String,
     Text,
-    TIMESTAMP,
-    text,
-    ForeignKey,
-    Index,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -128,7 +128,7 @@ class PlatformEmailTemplateTarget(Base):
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
-    template: Mapped["PlatformEmailTemplate"] = relationship()
+    template: Mapped[PlatformEmailTemplate] = relationship()
 
 
 class PlatformFormTemplate(Base):
@@ -194,7 +194,7 @@ class PlatformFormTemplateTarget(Base):
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
-    template: Mapped["PlatformFormTemplate"] = relationship()
+    template: Mapped[PlatformFormTemplate] = relationship()
 
 
 class PlatformFormTemplateHiddenOrg(Base):
@@ -231,4 +231,4 @@ class PlatformFormTemplateHiddenOrg(Base):
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
-    template: Mapped["PlatformFormTemplate"] = relationship()
+    template: Mapped[PlatformFormTemplate] = relationship()

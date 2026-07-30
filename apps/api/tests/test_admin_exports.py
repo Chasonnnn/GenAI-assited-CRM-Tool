@@ -2,21 +2,21 @@ import io
 import json
 import uuid
 import zipfile
-from datetime import date, datetime, time, timezone
+from datetime import UTC, date, datetime, time
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 from app.core.config import settings
-from app.core.deps import COOKIE_NAME, get_db
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
-from app.core.security import create_session_token
+from app.core.deps import COOKIE_NAME, get_db
 from app.core.encryption import hash_email
-from app.db.enums import Role, OwnerType, SurrogateSource
+from app.core.security import create_session_token
+from app.db.enums import OwnerType, Role, SurrogateSource
 from app.db.models import (
+    AppointmentType,
     AvailabilityOverride,
     AvailabilityRule,
-    AppointmentType,
     BookingLink,
     DataRetentionPolicy,
     Form,
@@ -31,8 +31,8 @@ from app.db.models import (
 )
 from app.main import app
 from app.services import admin_export_service, job_service
-from app.worker import process_admin_export
 from app.utils.normalization import normalize_email
+from app.worker import process_admin_export
 
 
 @pytest.fixture(scope="function")
@@ -194,7 +194,7 @@ class TestAdminExports:
         test_user.signature_phone = "+1 555 2222"
         test_user.signature_photo_url = "users/photos/signature.png"
 
-        created_at = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        created_at = datetime(2025, 1, 1, tzinfo=UTC)
         form_id = uuid.uuid4()
         logo_id = uuid.uuid4()
         mapping_id = uuid.uuid4()

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 import uuid
-from datetime import datetime, timedelta, date, timezone
+from collections import defaultdict
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import func, text, and_, case, or_
+from sqlalchemy import and_, case, func, or_, text
 from sqlalchemy.orm import Session
 
 from app.core.pipeline_stage_colors import resolve_stage_color
@@ -162,7 +162,7 @@ def get_surrogates_trend(
 ) -> list[dict[str, Any]]:
     """Get new surrogates created over time."""
     if not end:
-        end = datetime.now(timezone.utc)
+        end = datetime.now(UTC)
     if not start:
         start = end - timedelta(days=30)
 
@@ -378,13 +378,9 @@ def get_cached_surrogates_by_status(
         "user_id": str(user_id) if user_id else None,
     }
     range_start = (
-        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
-        if start_date
-        else None
+        datetime.combine(start_date, datetime.min.time(), tzinfo=UTC) if start_date else None
     )
-    range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
-    )
+    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC) if end_date else None
     return _get_or_compute_snapshot(
         db,
         organization_id,
@@ -484,13 +480,9 @@ def get_cached_surrogates_by_state(
         "source": source,
     }
     range_start = (
-        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
-        if start_date
-        else None
+        datetime.combine(start_date, datetime.min.time(), tzinfo=UTC) if start_date else None
     )
-    range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
-    )
+    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC) if end_date else None
     return _get_or_compute_snapshot(
         db,
         organization_id,
@@ -541,13 +533,9 @@ def get_cached_surrogates_by_source(
         "end_date": end_date.isoformat() if end_date else None,
     }
     range_start = (
-        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
-        if start_date
-        else None
+        datetime.combine(start_date, datetime.min.time(), tzinfo=UTC) if start_date else None
     )
-    range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
-    )
+    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC) if end_date else None
     return _get_or_compute_snapshot(
         db,
         organization_id,
@@ -665,13 +653,9 @@ def get_cached_surrogates_by_assignee(
         "label": label,
     }
     range_start = (
-        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
-        if start_date
-        else None
+        datetime.combine(start_date, datetime.min.time(), tzinfo=UTC) if start_date else None
     )
-    range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
-    )
+    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC) if end_date else None
     return _get_or_compute_snapshot(
         db,
         organization_id,
@@ -747,13 +731,9 @@ def get_cached_conversion_funnel(
         "end_date": end_date.isoformat() if end_date else None,
     }
     range_start = (
-        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
-        if start_date
-        else None
+        datetime.combine(start_date, datetime.min.time(), tzinfo=UTC) if start_date else None
     )
-    range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
-    )
+    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC) if end_date else None
     return _get_or_compute_snapshot(
         db,
         organization_id,
@@ -786,7 +766,7 @@ def get_summary_kpis(
     prev_start = start_date - timedelta(days=period_days)
     prev_end = start_date - timedelta(days=1)
 
-    stale_date = datetime.now(timezone.utc) - timedelta(days=7)
+    stale_date = datetime.now(UTC) - timedelta(days=7)
     stages = _get_default_pipeline_stages(db, organization_id)
     stage_by_slug = {s.slug: s for s in stages if s.is_active}
     attention_stage_ids = [
@@ -895,13 +875,9 @@ def get_cached_summary_kpis(
         "end_date": end_date.isoformat() if end_date else None,
     }
     range_start = (
-        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
-        if start_date
-        else None
+        datetime.combine(start_date, datetime.min.time(), tzinfo=UTC) if start_date else None
     )
-    range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
-    )
+    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC) if end_date else None
     return _get_or_compute_snapshot(
         db,
         organization_id,
@@ -1081,14 +1057,14 @@ def get_performance_by_user(
     if not start_date:
         start_date = end_date - timedelta(days=30)
 
-    start_dt = datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
-    end_dt = datetime.combine(end_date, datetime.max.time(), tzinfo=timezone.utc)
+    start_dt = datetime.combine(start_date, datetime.min.time(), tzinfo=UTC)
+    end_dt = datetime.combine(end_date, datetime.max.time(), tzinfo=UTC)
 
     pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
     analytics_config = get_analytics_stage_configuration(db, organization_id, pipeline.id)
     columns = _build_performance_columns(analytics_config)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     if mode == "cohort":
         user_data, unassigned = _get_cohort_performance(
@@ -1397,13 +1373,9 @@ def get_cached_performance_by_user(
         "pipeline_version": pipeline.current_version,
     }
     range_start = (
-        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
-        if start_date
-        else None
+        datetime.combine(start_date, datetime.min.time(), tzinfo=UTC) if start_date else None
     )
-    range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
-    )
+    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC) if end_date else None
     return _get_or_compute_snapshot(
         db,
         organization_id,

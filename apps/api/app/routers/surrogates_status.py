@@ -1,7 +1,6 @@
 """Surrogate status change routes."""
 
 from typing import Annotated
-
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -34,6 +33,7 @@ def change_status(
 ):
     """Change surrogate stage (records history, respects access control)."""
     from datetime import date
+
     from app.services import pipeline_service, surrogate_status_service
 
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)

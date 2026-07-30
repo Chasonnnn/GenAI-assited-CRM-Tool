@@ -2,7 +2,6 @@
 
 from typing import Any
 
-
 DEFAULT_MAX_RECURSION_DEPTH = 100
 
 

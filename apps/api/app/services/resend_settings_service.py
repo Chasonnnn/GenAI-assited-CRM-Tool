@@ -7,7 +7,7 @@ Supports Resend API and Gmail default sender.
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from cryptography.fernet import Fernet
 from sqlalchemy.orm import Session
@@ -193,7 +193,7 @@ def update_resend_settings(
         s.default_sender_user_id = default_sender_user_id
 
     s.current_version += 1
-    s.updated_at = datetime.now(timezone.utc)
+    s.updated_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(s)
@@ -209,7 +209,7 @@ def clear_default_sender(
     s = get_or_create_resend_settings(db, organization_id, user_id)
     s.default_sender_user_id = None
     s.current_version += 1
-    s.updated_at = datetime.now(timezone.utc)
+    s.updated_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(s)
@@ -230,7 +230,7 @@ def rotate_webhook_id(
 
     s.webhook_id = str(uuid.uuid4())
     s.current_version += 1
-    s.updated_at = datetime.now(timezone.utc)
+    s.updated_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(s)

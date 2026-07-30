@@ -5,7 +5,6 @@ import logging
 import uuid
 from typing import Any
 
-
 ops_logger = logging.getLogger("app.ops")
 
 SAFE_PATH_ENTITY_ID_KEYS = {

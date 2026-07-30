@@ -13,7 +13,11 @@ from app.services import gmail_service
 
 
 def _ops_records(caplog, message: str):
-    return [record for record in caplog.records if record.name == "app.ops" and record.message == message]
+    return [
+        record
+        for record in caplog.records
+        if record.name == "app.ops" and record.message == message
+    ]
 
 
 @pytest.mark.asyncio

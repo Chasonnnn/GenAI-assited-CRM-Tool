@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -34,7 +34,7 @@ async def test_surrogate_detail_outcome_summaries_use_latest_relevant_timestamps
     surrogate = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
     assert surrogate is not None
 
-    now = datetime.now(timezone.utc).replace(microsecond=0)
+    now = datetime.now(UTC).replace(microsecond=0)
 
     db.add_all(
         [
@@ -68,7 +68,10 @@ async def test_surrogate_detail_outcome_summaries_use_latest_relevant_timestamps
                 organization_id=test_auth.org.id,
                 activity_type="interview_outcome_logged",
                 actor_user_id=test_auth.user.id,
-                details={"outcome": "no_show", "occurred_at": (now - timedelta(minutes=3)).isoformat()},
+                details={
+                    "outcome": "no_show",
+                    "occurred_at": (now - timedelta(minutes=3)).isoformat(),
+                },
                 created_at=now - timedelta(minutes=3),
             ),
             SurrogateActivityLog(
@@ -77,7 +80,10 @@ async def test_surrogate_detail_outcome_summaries_use_latest_relevant_timestamps
                 organization_id=test_auth.org.id,
                 activity_type="interview_outcome_logged",
                 actor_user_id=test_auth.user.id,
-                details={"outcome": "completed", "occurred_at": (now - timedelta(minutes=8)).isoformat()},
+                details={
+                    "outcome": "completed",
+                    "occurred_at": (now - timedelta(minutes=8)).isoformat(),
+                },
                 created_at=now - timedelta(minutes=1),
             ),
         ]
@@ -136,7 +142,7 @@ async def test_surrogate_detail_outcome_summaries_ignore_cross_org_rows(
     db.add(other_org)
     db.flush()
 
-    now = datetime.now(timezone.utc).replace(microsecond=0)
+    now = datetime.now(UTC).replace(microsecond=0)
     same_org_contact_at = now - timedelta(minutes=15)
     same_org_interview_at = now - timedelta(minutes=12)
 
@@ -172,7 +178,10 @@ async def test_surrogate_detail_outcome_summaries_ignore_cross_org_rows(
                 organization_id=test_auth.org.id,
                 activity_type="interview_outcome_logged",
                 actor_user_id=test_auth.user.id,
-                details={"outcome": "rescheduled", "occurred_at": same_org_interview_at.isoformat()},
+                details={
+                    "outcome": "rescheduled",
+                    "occurred_at": same_org_interview_at.isoformat(),
+                },
                 created_at=same_org_interview_at,
             ),
             SurrogateActivityLog(
@@ -181,7 +190,10 @@ async def test_surrogate_detail_outcome_summaries_ignore_cross_org_rows(
                 organization_id=other_org.id,
                 activity_type="interview_outcome_logged",
                 actor_user_id=test_auth.user.id,
-                details={"outcome": "cancelled", "occurred_at": (now - timedelta(minutes=2)).isoformat()},
+                details={
+                    "outcome": "cancelled",
+                    "occurred_at": (now - timedelta(minutes=2)).isoformat(),
+                },
                 created_at=now - timedelta(minutes=2),
             ),
         ]
@@ -193,10 +205,12 @@ async def test_surrogate_detail_outcome_summaries_ignore_cross_org_rows(
     payload = response.json()
 
     assert payload["latest_contact_outcome"]["outcome"] == "voicemail"
-    assert datetime.fromisoformat(
-        payload["latest_contact_outcome"]["at"].replace("Z", "+00:00")
-    ) == same_org_contact_at
+    assert (
+        datetime.fromisoformat(payload["latest_contact_outcome"]["at"].replace("Z", "+00:00"))
+        == same_org_contact_at
+    )
     assert payload["latest_interview_outcome"]["outcome"] == "rescheduled"
-    assert datetime.fromisoformat(
-        payload["latest_interview_outcome"]["at"].replace("Z", "+00:00")
-    ) == same_org_interview_at
+    assert (
+        datetime.fromisoformat(payload["latest_interview_outcome"]["at"].replace("Z", "+00:00"))
+        == same_org_interview_at
+    )

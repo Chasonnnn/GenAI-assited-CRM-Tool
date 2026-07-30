@@ -3,12 +3,11 @@
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.surrogate_access import check_surrogate_access, can_modify_surrogate
 from app.core.deps import (
     get_db,
     require_any_permissions,
@@ -16,9 +15,10 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
+from app.core.surrogate_access import can_modify_surrogate, check_surrogate_access
 from app.db.enums import Role
 from app.schemas.auth import UserSession
-from app.services import activity_service, attachment_service, surrogate_service, ip_service
+from app.services import activity_service, attachment_service, ip_service, surrogate_service
 from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
 
 csrf_header_dependency = require_csrf_header
@@ -511,6 +511,7 @@ def download_local_attachment(
 ) -> object:
     """Serve local attachments (dev only)."""
     from fastapi.responses import FileResponse
+
     from app.services.attachment_service import resolve_local_storage_path
 
     attachment = attachment_service.get_attachment_by_storage_key(

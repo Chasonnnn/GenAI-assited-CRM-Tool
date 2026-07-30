@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -197,7 +196,7 @@ class IntendedParent(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"),
-        onupdate=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -205,9 +204,9 @@ class IntendedParent(Base):
     search_vector = mapped_column(TSVECTOR, nullable=True)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    stage: Mapped["PipelineStage | None"] = relationship(foreign_keys=[stage_id])
-    status_history: Mapped[list["IntendedParentStatusHistory"]] = relationship(
+    organization: Mapped[Organization] = relationship()
+    stage: Mapped[PipelineStage | None] = relationship(foreign_keys=[stage_id])
+    status_history: Mapped[list[IntendedParentStatusHistory]] = relationship(
         back_populates="intended_parent", cascade="all, delete-orphan"
     )
 
@@ -277,7 +276,7 @@ class IntendedParentStatusHistory(Base):
     )
 
     # Relationships
-    intended_parent: Mapped["IntendedParent"] = relationship(back_populates="status_history")
+    intended_parent: Mapped[IntendedParent] = relationship(back_populates="status_history")
 
 
 # =============================================================================

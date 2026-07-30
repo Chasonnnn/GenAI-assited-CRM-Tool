@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -80,7 +79,7 @@ class AISettings(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped[Organization] = relationship()
 
 
 class AIConversation(Base):
@@ -110,9 +109,9 @@ class AIConversation(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    user: Mapped["User"] = relationship()
-    messages: Mapped[list["AIMessage"]] = relationship(
+    organization: Mapped[Organization] = relationship()
+    user: Mapped[User] = relationship()
+    messages: Mapped[list[AIMessage]] = relationship(
         back_populates="conversation", order_by="AIMessage.created_at"
     )
 
@@ -146,8 +145,8 @@ class AIMessage(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    conversation: Mapped["AIConversation"] = relationship(back_populates="messages")
-    action_approvals: Mapped[list["AIActionApproval"]] = relationship(back_populates="message")
+    conversation: Mapped[AIConversation] = relationship(back_populates="messages")
+    action_approvals: Mapped[list[AIActionApproval]] = relationship(back_populates="message")
 
     __table_args__ = (Index("ix_ai_messages_conversation", "conversation_id", "created_at"),)
 
@@ -181,7 +180,7 @@ class AIActionApproval(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    message: Mapped["AIMessage"] = relationship(back_populates="action_approvals")
+    message: Mapped[AIMessage] = relationship(back_populates="action_approvals")
 
     __table_args__ = (
         Index("ix_ai_action_approvals_message", "message_id"),
@@ -303,7 +302,7 @@ class AIStudioSettings(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped[Organization] = relationship()
 
 
 class AIStudioDraft(Base):
@@ -322,7 +321,9 @@ class AIStudioDraft(Base):
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    status: Mapped[str] = mapped_column(String(20), default="preview", server_default=text("'preview'"))
+    status: Mapped[str] = mapped_column(
+        String(20), default="preview", server_default=text("'preview'")
+    )
     platform: Mapped[str] = mapped_column(String(30), nullable=False)
     format: Mapped[str] = mapped_column(String(30), nullable=False)
     tone: Mapped[str] = mapped_column(String(30), nullable=False)
@@ -355,8 +356,8 @@ class AIStudioDraft(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
-    organization: Mapped["Organization"] = relationship()
-    created_by: Mapped["User"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    created_by: Mapped[User] = relationship()
 
     __table_args__ = (
         Index("ix_ai_studio_drafts_org_created", "organization_id", "created_at"),

@@ -6,15 +6,15 @@ Stores encrypted tokens per-user.
 
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
 import httpx
 from cryptography.fernet import Fernet
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.async_utils import run_async
+from app.core.config import settings
 from app.db.enums import AlertSeverity, AlertType
 from app.db.models import UserIntegration
 from app.types import JsonObject
@@ -24,13 +24,13 @@ logger = logging.getLogger(__name__)
 
 def _now_utc() -> datetime:
     """Timezone-aware UTC timestamp."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _is_expired(expires_at: datetime) -> bool:
     """Return True if expires_at is in the past (treat naive datetimes as UTC)."""
     if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
+        expires_at = expires_at.replace(tzinfo=UTC)
     return expires_at <= _now_utc()
 
 

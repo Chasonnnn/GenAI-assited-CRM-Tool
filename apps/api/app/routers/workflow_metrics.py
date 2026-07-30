@@ -1,7 +1,6 @@
 """Workflow metrics router for UI instrumentation events."""
 
-from typing import Any, Literal, Annotated
-
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request

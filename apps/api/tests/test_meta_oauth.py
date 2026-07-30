@@ -244,8 +244,8 @@ async def test_meta_oauth_connect_assets_overwrite_flow(
     authed_client: AsyncClient, db, test_auth, monkeypatch
 ):
     from app.core.encryption import decrypt_token, encrypt_token
+    from app.db.models import MetaAdAccount, MetaOAuthConnection, MetaPageMapping
     from app.services import meta_oauth_service
-    from app.db.models import MetaOAuthConnection, MetaAdAccount, MetaPageMapping
 
     async def fake_fetch_user_pages(token: str, cursor: str | None = None):
         return PaginatedResult(
@@ -333,7 +333,7 @@ async def test_meta_oauth_connect_assets_overwrite_flow(
 @pytest.mark.asyncio
 async def test_meta_oauth_disconnect_unlinks_assets(authed_client: AsyncClient, db, test_auth):
     from app.core.encryption import encrypt_token
-    from app.db.models import MetaOAuthConnection, MetaAdAccount, MetaPageMapping
+    from app.db.models import MetaAdAccount, MetaOAuthConnection, MetaPageMapping
 
     conn = MetaOAuthConnection(
         organization_id=test_auth.org.id,

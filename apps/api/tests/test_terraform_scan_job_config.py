@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -53,12 +52,8 @@ def test_worker_capacity_remains_available_for_background_automation() -> None:
     tfvars_example = _read("infra/terraform/terraform.tfvars.example")
 
     worker_min = variables.split('variable "worker_min_instances"', 1)[1].split("}", 1)[0]
-    schedule_enabled = variables.split('variable "worker_schedule_enabled"', 1)[1].split(
-        "}", 1
-    )[0]
-    night_min = variables.split('variable "worker_min_instances_night"', 1)[1].split(
-        "}", 1
-    )[0]
+    schedule_enabled = variables.split('variable "worker_schedule_enabled"', 1)[1].split("}", 1)[0]
+    night_min = variables.split('variable "worker_min_instances_night"', 1)[1].split("}", 1)[0]
 
     assert "default     = 1" in worker_min
     assert "default     = false" in schedule_enabled
@@ -74,15 +69,13 @@ def test_worker_workflow_fallbacks_have_explicit_safe_terraform_controls() -> No
     locals = _read("infra/terraform/locals.tf")
     cloudrun = _read("infra/terraform/cloudrun.tf")
 
-    scheduled = variables.split('variable "workflow_sweep_fallback_enabled"', 1)[1].split(
+    scheduled = variables.split('variable "workflow_sweep_fallback_enabled"', 1)[1].split("}", 1)[0]
+    maintenance = variables.split('variable "workflow_maintenance_fallback_enabled"', 1)[1].split(
         "}", 1
     )[0]
-    maintenance = variables.split(
-        'variable "workflow_maintenance_fallback_enabled"', 1
-    )[1].split("}", 1)[0]
-    approvals = variables.split(
-        'variable "workflow_approval_expiry_fallback_enabled"', 1
-    )[1].split("}", 1)[0]
+    approvals = variables.split('variable "workflow_approval_expiry_fallback_enabled"', 1)[1].split(
+        "}", 1
+    )[0]
 
     assert "default     = true" in scheduled
     assert "default     = false" in maintenance

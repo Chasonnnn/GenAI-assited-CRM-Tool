@@ -6,7 +6,6 @@ so domain services don't depend directly on notification_service internals.
 
 from __future__ import annotations
 
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -21,7 +20,6 @@ from app.db.models import (
     Surrogate,
 )
 from app.services import notification_service
-
 
 # =============================================================================
 # Settings / CRUD passthrough
@@ -46,12 +44,12 @@ def create_notification(
     user_id: UUID,
     type: NotificationType,
     title: str,
-    body: Optional[str] = None,
-    entity_type: Optional[str] = None,
-    entity_id: Optional[UUID] = None,
-    dedupe_key: Optional[str] = None,
+    body: str | None = None,
+    entity_type: str | None = None,
+    entity_id: UUID | None = None,
+    dedupe_key: str | None = None,
     dedupe_window_hours: int | None = 1,
-) -> Optional[Notification]:
+) -> Notification | None:
     return notification_service.create_notification(
         db=db,
         org_id=org_id,
@@ -187,7 +185,7 @@ def notify_task_assigned(
     org_id: UUID,
     assignee_id: UUID,
     actor_name: str,
-    surrogate_number: Optional[str] = None,
+    surrogate_number: str | None = None,
 ) -> None:
     notification_service.notify_task_assigned(
         db, task_id, task_title, org_id, assignee_id, actor_name, surrogate_number
@@ -200,7 +198,7 @@ def notify_workflow_approval_requested(
     task_title: str,
     org_id: UUID,
     assignee_id: UUID,
-    surrogate_number: Optional[str] = None,
+    surrogate_number: str | None = None,
 ) -> None:
     notification_service.notify_workflow_approval_requested(
         db, task_id, task_title, org_id, assignee_id, surrogate_number
@@ -214,7 +212,7 @@ def notify_task_due_soon(
     org_id: UUID,
     assignee_id: UUID,
     due_date: str,
-    surrogate_number: Optional[str] = None,
+    surrogate_number: str | None = None,
 ) -> None:
     notification_service.notify_task_due_soon(
         db, task_id, task_title, org_id, assignee_id, due_date, surrogate_number
@@ -228,7 +226,7 @@ def notify_task_overdue(
     org_id: UUID,
     assignee_id: UUID,
     due_date: str,
-    surrogate_number: Optional[str] = None,
+    surrogate_number: str | None = None,
 ) -> None:
     notification_service.notify_task_overdue(
         db, task_id, task_title, org_id, assignee_id, due_date, surrogate_number

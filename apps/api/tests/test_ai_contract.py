@@ -13,7 +13,7 @@ from httpx import AsyncClient
 from sqlalchemy import inspect
 
 from app.core.encryption import hash_email
-from app.db.models import AIActionApproval, AIConversation, AISettings, Surrogate, AIEntitySummary
+from app.db.models import AIActionApproval, AIConversation, AIEntitySummary, AISettings, Surrogate
 from app.services import ai_settings_service
 from app.services.ai_provider import ChatResponse
 from app.utils.normalization import normalize_email

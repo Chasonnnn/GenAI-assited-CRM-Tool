@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta, timezone
 import logging
-from typing import Coroutine, TypeVar
+from collections.abc import Coroutine
+from datetime import UTC, date, datetime, time, timedelta
+from typing import TypeVar
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -188,10 +189,10 @@ def backfill_confirmed_appointments_to_google(
     )
 
     if date_start:
-        start_dt = datetime.combine(date_start, time.min, tzinfo=timezone.utc)
+        start_dt = datetime.combine(date_start, time.min, tzinfo=UTC)
         query = query.filter(Appointment.scheduled_start >= start_dt)
     if date_end:
-        end_dt = datetime.combine(date_end, time.max, tzinfo=timezone.utc)
+        end_dt = datetime.combine(date_end, time.max, tzinfo=UTC)
         query = query.filter(Appointment.scheduled_start <= end_dt)
 
     targets = query.limit(max(1, limit)).all()
@@ -232,7 +233,7 @@ async def _sync_manual_google_events_for_appointments_async(
     """
     from app.services import calendar_service
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     google_cancel_reason = "Cancelled in Google Calendar"
 
     def _mark_cancelled_from_google(appt: Appointment) -> None:
@@ -247,14 +248,12 @@ async def _sync_manual_google_events_for_appointments_async(
         appt.cancel_token_expires_at = None
 
     time_min = (
-        datetime.combine(date_start, time.min, tzinfo=timezone.utc)
+        datetime.combine(date_start, time.min, tzinfo=UTC)
         if date_start
         else now - timedelta(days=30)
     )
     time_max = (
-        datetime.combine(date_end, time.max, tzinfo=timezone.utc)
-        if date_end
-        else now + timedelta(days=180)
+        datetime.combine(date_end, time.max, tzinfo=UTC) if date_end else now + timedelta(days=180)
     )
     if time_max < time_min:
         return 0
@@ -322,13 +321,13 @@ async def _sync_manual_google_events_for_appointments_async(
         if not isinstance(start, datetime) or not isinstance(end, datetime):
             continue
         if start.tzinfo is None:
-            start = start.replace(tzinfo=timezone.utc)
+            start = start.replace(tzinfo=UTC)
         else:
-            start = start.astimezone(timezone.utc)
+            start = start.astimezone(UTC)
         if end.tzinfo is None:
-            end = end.replace(tzinfo=timezone.utc)
+            end = end.replace(tzinfo=UTC)
         else:
-            end = end.astimezone(timezone.utc)
+            end = end.astimezone(UTC)
         if end <= start:
             continue
 

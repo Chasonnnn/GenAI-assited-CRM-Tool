@@ -21,7 +21,4 @@ def test_sanitize_template_html_preserves_attributed_blank_paragraphs():
 
     sanitized = email_service.sanitize_template_html(html)
 
-    assert sanitized == (
-        '<p style="text-align:center">&nbsp;</p>'
-        '<p class="legacy">&nbsp;</p>'
-    )
+    assert sanitized == ('<p style="text-align:center">&nbsp;</p><p class="legacy">&nbsp;</p>')

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Final
 
-
 RESEND_DELIVERY_STATUS_BY_EVENT_TYPE: Final = {
     "email.scheduled": "scheduled",
     "email.sent": "sent",

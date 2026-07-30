@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import re
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import select
@@ -14,7 +14,6 @@ from app.db.enums import AuditEventType
 from app.db.models import EmailTemplate, EmailTemplateDraft, EntityVersion
 from app.services import audit_service, email_service, version_service
 from app.services.email_content import html_to_text
-
 
 _TEMPLATE_VARIABLE_RE = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
 _PARAGRAPH_RE = re.compile(r"<p\b[^>]*>(.*?)</p>", re.IGNORECASE | re.DOTALL)

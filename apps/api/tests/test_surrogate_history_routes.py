@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
 import uuid
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -95,12 +95,12 @@ async def test_surrogate_history_route_returns_dual_timestamps(authed_client, db
     surrogate_id = create_res.json()["id"]
     surrogate_row = db.query(Surrogate).filter(Surrogate.id == uuid.UUID(surrogate_id)).first()
     assert surrogate_row is not None
-    surrogate_row.created_at = datetime.now(timezone.utc) - timedelta(days=4)
+    surrogate_row.created_at = datetime.now(UTC) - timedelta(days=4)
     surrogate_row.updated_at = surrogate_row.created_at
     db.commit()
 
     target_stage = _get_stage(db, test_auth.org.id, "contacted")
-    effective_at = datetime.now(timezone.utc) - timedelta(days=1, hours=2)
+    effective_at = datetime.now(UTC) - timedelta(days=1, hours=2)
 
     update_res = await authed_client.patch(
         f"/surrogates/{surrogate_id}/status",
@@ -157,15 +157,15 @@ async def test_surrogate_activity_route_includes_stage_changes_in_chronological_
     surrogate_id = create_res.json()["id"]
     surrogate_row = db.query(Surrogate).filter(Surrogate.id == uuid.UUID(surrogate_id)).first()
     assert surrogate_row is not None
-    surrogate_row.created_at = datetime.now(timezone.utc) - timedelta(days=5)
+    surrogate_row.created_at = datetime.now(UTC) - timedelta(days=5)
     surrogate_row.updated_at = surrogate_row.created_at
     db.commit()
 
     contacted_stage = _get_stage(db, test_auth.org.id, "contacted")
     qualified_stage = _get_stage(db, test_auth.org.id, "pre_qualified")
 
-    contacted_at = datetime.now(timezone.utc) - timedelta(days=3)
-    qualified_at = datetime.now(timezone.utc) - timedelta(days=2)
+    contacted_at = datetime.now(UTC) - timedelta(days=3)
+    qualified_at = datetime.now(UTC) - timedelta(days=2)
 
     contacted_res = await authed_client.patch(
         f"/surrogates/{surrogate_id}/status",
@@ -217,7 +217,7 @@ async def test_surrogate_activity_route_derives_missing_interview_scheduled_acti
     surrogate_id = create_res.json()["id"]
 
     interview_stage = _get_stage(db, test_auth.org.id, "interview_scheduled")
-    scheduled_at = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=3)
+    scheduled_at = datetime.now(UTC).replace(microsecond=0) + timedelta(days=3)
 
     update_res = await authed_client.patch(
         f"/surrogates/{surrogate_id}/status",
@@ -248,9 +248,7 @@ async def test_surrogate_activity_route_derives_missing_interview_scheduled_acti
     assert activity_res.status_code == 200, activity_res.text
     items = activity_res.json()["items"]
 
-    interview_entries = [
-        item for item in items if item["activity_type"] == "interview_scheduled"
-    ]
+    interview_entries = [item for item in items if item["activity_type"] == "interview_scheduled"]
     assert len(interview_entries) == 1
     assert interview_entries[0]["id"] == str(appointment.id)
     assert interview_entries[0]["actor_user_id"] == str(test_auth.user.id)

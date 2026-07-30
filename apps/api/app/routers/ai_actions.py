@@ -1,9 +1,8 @@
 """AI action approval routes."""
 
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Annotated
-
+from datetime import UTC, datetime
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -87,7 +86,7 @@ def reject_action(
 
     # Mark as rejected
     approval.status = "rejected"
-    approval.executed_at = datetime.now(timezone.utc)
+    approval.executed_at = datetime.now(UTC)
 
     # Audit log
     audit_service.log_ai_action_rejected(

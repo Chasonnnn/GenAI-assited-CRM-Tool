@@ -3,7 +3,7 @@
 import calendar
 import logging
 import secrets
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from typing import TypedDict
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -70,7 +70,7 @@ def _normalize_effective_at(
     - Past date with time 00:00:00: default to 12:00 PM in org timezone
     - Otherwise: use as-is (assume UTC if no timezone)
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     if effective_at is None:
         return now
@@ -89,10 +89,10 @@ def _normalize_effective_at(
             return now
         if effective_date < today_org:
             noon = datetime.combine(effective_date, time(12, 0, 0)).replace(tzinfo=org_tz)
-            return noon.astimezone(timezone.utc)
-        return effective_at.astimezone(timezone.utc)
+            return noon.astimezone(UTC)
+        return effective_at.astimezone(UTC)
 
-    return effective_at.astimezone(timezone.utc)
+    return effective_at.astimezone(UTC)
 
 
 def _get_org_user(db: Session, org_id: UUID, user_id: UUID | None) -> User | None:
@@ -175,7 +175,7 @@ def _normalize_interview_scheduled_at(
         scheduled_at = scheduled_at.replace(tzinfo=org_tz)
     else:
         scheduled_at = scheduled_at.astimezone(org_tz)
-    return scheduled_at.astimezone(timezone.utc)
+    return scheduled_at.astimezone(UTC)
 
 
 def _get_or_create_interview_appointment_type(
@@ -369,7 +369,7 @@ def change_status(
     """
     from app.services import pipeline_semantics_service, pipeline_service, surrogate_stage_context
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     org_tz_str = _get_org_timezone(db, surrogate.organization_id)
     normalized_effective_at = _normalize_effective_at(effective_at, org_tz_str)
 
@@ -775,7 +775,7 @@ def apply_status_change(
                 else None,
             },
         )
-        scheduled_activity.created_at = max(datetime.now(timezone.utc), effective_at)
+        scheduled_activity.created_at = max(datetime.now(UTC), effective_at)
     db.commit()
     db.refresh(surrogate)
 

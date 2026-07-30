@@ -4,29 +4,28 @@ Notification Service - handles in-app notifications.
 Provides CRUD for notifications and trigger functions for surrogate/task events.
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional
-from uuid import UUID
-
+import asyncio
 import logging
 import threading
-import asyncio
+from datetime import UTC, datetime, timedelta
+from uuid import UUID
+
 import anyio
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.db.enums import NotificationType, Role, OwnerType
-from app.db.models import (
-    Notification,
-    UserNotificationSettings,
-    Surrogate,
-    IntendedParent,
-    Attachment,
-    Membership,
-    StatusChangeRequest,
-    Match,
-)
 from app.core.websocket import send_ws_to_user
+from app.db.enums import NotificationType, OwnerType, Role
+from app.db.models import (
+    Attachment,
+    IntendedParent,
+    Match,
+    Membership,
+    Notification,
+    StatusChangeRequest,
+    Surrogate,
+    UserNotificationSettings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -160,12 +159,12 @@ def create_notification(
     user_id: UUID,
     type: NotificationType,
     title: str,
-    body: Optional[str] = None,
-    entity_type: Optional[str] = None,
-    entity_id: Optional[UUID] = None,
-    dedupe_key: Optional[str] = None,
+    body: str | None = None,
+    entity_type: str | None = None,
+    entity_id: UUID | None = None,
+    dedupe_key: str | None = None,
     dedupe_window_hours: int | None = 1,
-) -> Optional[Notification]:
+) -> Notification | None:
     """
     Create a notification.
 
@@ -180,7 +179,7 @@ def create_notification(
             Notification.user_id == user_id,
         )
         if dedupe_window_hours is not None:
-            window_start = datetime.now(timezone.utc) - timedelta(hours=dedupe_window_hours)
+            window_start = datetime.now(UTC) - timedelta(hours=dedupe_window_hours)
             query = query.filter(Notification.created_at > window_start)
         existing = query.first()
 
@@ -288,7 +287,7 @@ def mark_read(
     notification_id: UUID,
     user_id: UUID,
     org_id: UUID,
-) -> Optional[Notification]:
+) -> Notification | None:
     """Mark a notification as read (scoped by org for tenant isolation)."""
     notification = (
         db.query(Notification)
@@ -301,7 +300,7 @@ def mark_read(
     )
 
     if notification and not notification.read_at:
-        notification.read_at = datetime.now(timezone.utc)
+        notification.read_at = datetime.now(UTC)
         db.commit()
         db.refresh(notification)
         unread_count = get_unread_count(db, user_id, org_id)
@@ -323,7 +322,7 @@ def mark_all_read(
             Notification.organization_id == org_id,
             Notification.read_at.is_(None),
         )
-        .update({"read_at": datetime.now(timezone.utc)})
+        .update({"read_at": datetime.now(UTC)})
     )
     db.commit()
     unread_count = get_unread_count(db, user_id, org_id)
@@ -782,7 +781,7 @@ def notify_task_assigned(
     org_id: UUID,
     assignee_id: UUID,
     actor_name: str,
-    surrogate_number: Optional[str] = None,
+    surrogate_number: str | None = None,
 ) -> None:
     """Notify user when a task is assigned to them."""
     if not assignee_id:
@@ -816,7 +815,7 @@ def notify_workflow_approval_requested(
     task_title: str,
     org_id: UUID,
     assignee_id: UUID,
-    surrogate_number: Optional[str] = None,
+    surrogate_number: str | None = None,
 ) -> None:
     """Notify user when a workflow approval is requested."""
     if not assignee_id:
@@ -851,7 +850,7 @@ def notify_task_due_soon(
     org_id: UUID,
     assignee_id: UUID,
     due_date: str,
-    surrogate_number: Optional[str] = None,
+    surrogate_number: str | None = None,
 ) -> None:
     """Notify user when a task is due soon (within 24h). One-time notification."""
     if not assignee_id:
@@ -889,7 +888,7 @@ def notify_task_overdue(
     org_id: UUID,
     assignee_id: UUID,
     due_date: str,
-    surrogate_number: Optional[str] = None,
+    surrogate_number: str | None = None,
 ) -> None:
     """Notify user when a task is overdue. One-time notification."""
     if not assignee_id:

@@ -1,8 +1,8 @@
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 from uuid import UUID
-import uuid
+from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -13,8 +13,7 @@ from app.core.security import create_session_token
 from app.db.enums import OwnerType, Role
 from app.db.models import Membership, StatusChangeRequest, Surrogate, SurrogateStatusHistory, User
 from app.main import app
-from app.services import pipeline_service
-from app.services import session_service
+from app.services import pipeline_service, session_service
 
 
 def _org_timezone() -> ZoneInfo:
@@ -255,9 +254,7 @@ async def test_approve_status_change_request_applies_regression(db, test_org):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", [Role.ADMIN, Role.DEVELOPER])
-async def test_surrogate_status_regression_self_approves_for_admin_or_developer(
-    db, test_org, role
-):
+async def test_surrogate_status_regression_self_approves_for_admin_or_developer(db, test_org, role):
     contacted_stage = _get_stage(db, test_org.id, "contacted")
     new_unread_stage = _get_stage(db, test_org.id, "new_unread")
 

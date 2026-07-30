@@ -5,10 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
-from typing import Mapping, Sequence
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, case, or_, select
@@ -20,8 +20,8 @@ from app.db.enums import (
     EmailDeliveryStatus,
     EmailProvider,
     EmailProviderScope,
-    EmailSuppressionPolicy,
     EmailStatus,
+    EmailSuppressionPolicy,
 )
 from app.db.models import (
     AppointmentEmailLog,
@@ -728,7 +728,7 @@ def queue_rendered_email(
                     idempotency_key=idempotency_key,
                     request_fingerprint=request_fingerprint,
                     status=EmailDeliveryStatus.PENDING.value,
-                    run_at=schedule_at or datetime.now(timezone.utc),
+                    run_at=schedule_at or datetime.now(UTC),
                     max_attempts=max_attempts,
                 )
                 db.add(delivery)
@@ -848,7 +848,7 @@ def claim_due_deliveries(
     if lease_for.total_seconds() <= 0:
         raise ValueError("lease_for must be positive")
 
-    claimed_at = now or datetime.now(timezone.utc)
+    claimed_at = now or datetime.now(UTC)
     eligible = or_(
         and_(
             EmailDelivery.status.in_(
@@ -1102,7 +1102,7 @@ def record_delivery_success(
     """Atomically project provider acceptance through the current fencing token."""
     if not provider_message_id.strip():
         raise ValueError("provider_message_id is required")
-    completed_at = now or datetime.now(timezone.utc)
+    completed_at = now or datetime.now(UTC)
     _prelock_campaign_source_for_claim(db, claim)
     delivery = _locked_delivery_for_claim(db, claim)
     attempt = (
@@ -1163,7 +1163,7 @@ def record_delivery_cancelled(
     safe_reason_message = _safe_error(reason_message, limit=1000)
     if not safe_reason_type or not safe_reason_message:
         raise ValueError("cancellation reason is required")
-    completed_at = now or datetime.now(timezone.utc)
+    completed_at = now or datetime.now(UTC)
     _prelock_campaign_source_for_claim(db, claim)
     delivery = _locked_delivery_for_claim(db, claim)
     attempt = (
@@ -1233,7 +1233,7 @@ def renew_delivery_lease(
     """Extend an active lease without changing its fencing token."""
     if lease_for.total_seconds() <= 0:
         raise ValueError("lease_for must be positive")
-    renewed_at = now or datetime.now(timezone.utc)
+    renewed_at = now or datetime.now(UTC)
     delivery = _locked_delivery_for_claim(db, claim)
     if delivery.lease_expires_at is None or delivery.lease_expires_at <= renewed_at:
         raise DeliveryLeaseLost("delivery lease has already expired")
@@ -1284,7 +1284,7 @@ def record_delivery_reconciliation_required(
     now: datetime | None = None,
 ) -> EmailDelivery:
     """Fence an unresolved provider outcome against all automatic retries."""
-    completed_at = now or datetime.now(timezone.utc)
+    completed_at = now or datetime.now(UTC)
     _prelock_campaign_source_for_claim(db, claim)
     delivery = _locked_delivery_for_claim(db, claim)
     attempt = (
@@ -1349,7 +1349,7 @@ def record_delivery_failure(
     now: datetime | None = None,
 ) -> EmailDelivery:
     """Finish the active attempt and either retry or dead-letter the message."""
-    failed_at = now or datetime.now(timezone.utc)
+    failed_at = now or datetime.now(UTC)
     _prelock_campaign_source_for_claim(db, claim)
     delivery = _locked_delivery_for_claim(db, claim)
     attempt = (

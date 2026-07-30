@@ -7,9 +7,9 @@ import math
 import os
 import re
 import uuid
+from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
-from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
 
@@ -17,9 +17,9 @@ from pypdf import PdfReader, PdfWriter
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.stage_definitions import LABEL_OVERRIDES
 from app.core.security import create_export_token
-from app.db.models import Attachment, SurrogateInterview, FormSubmission
+from app.core.stage_definitions import LABEL_OVERRIDES
+from app.db.models import Attachment, FormSubmission, SurrogateInterview
 from app.services import (
     form_submission_service,
     interview_service,
@@ -28,7 +28,6 @@ from app.services import (
     tiptap_service,
 )
 from app.utils.presentation import humanize_identifier
-
 
 # Chart colors matching frontend design system
 CHART_COLORS = [
@@ -1500,7 +1499,7 @@ def _generate_analytics_html(
     meta_spend: dict | None = None,
 ) -> str:
     """Generate HTML for analytics report."""
-    generated_at = datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M UTC")
+    generated_at = datetime.now(UTC).strftime("%B %d, %Y at %H:%M UTC")
 
     # Key Metrics table (including ad spend if available)
     ad_spend_cards = ""
@@ -1972,8 +1971,8 @@ async def export_analytics_pdf_async(
     )
 
     # Fetch meta spend data asynchronously
-    meta_start = start_dt or datetime(1970, 1, 1, tzinfo=timezone.utc)
-    meta_end = end_dt or datetime.now(timezone.utc)
+    meta_start = start_dt or datetime(1970, 1, 1, tzinfo=UTC)
+    meta_end = end_dt or datetime.now(UTC)
     meta_spend = await analytics_service.get_meta_spend_summary(
         db=db,
         organization_id=organization_id,
@@ -2029,7 +2028,7 @@ def export_analytics_pdf(
 def _format_month_year(dt: datetime | None) -> str:
     if not dt:
         return ""
-    return dt.astimezone(timezone.utc).strftime("%B %Y")
+    return dt.astimezone(UTC).strftime("%B %Y")
 
 
 def _format_iso_month_year(value: str | None) -> str:
@@ -2039,7 +2038,7 @@ def _format_iso_month_year(value: str | None) -> str:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return ""
-    return parsed.astimezone(timezone.utc).strftime("%B %Y")
+    return parsed.astimezone(UTC).strftime("%B %Y")
 
 
 def _find_repo_root() -> Path | None:
@@ -2081,7 +2080,7 @@ def _generate_journey_html(
     milestone_images: dict[str, str],
 ) -> str:
     surrogate_name = html.escape(journey.surrogate_name)
-    generated_at = datetime.now(timezone.utc).strftime("%B %Y")
+    generated_at = datetime.now(UTC).strftime("%B %Y")
 
     terminal_html = ""
     if journey.is_terminal and journey.terminal_message:

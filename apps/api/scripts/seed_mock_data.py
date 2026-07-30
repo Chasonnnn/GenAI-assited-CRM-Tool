@@ -7,27 +7,13 @@ import json
 import os
 import random
 import re
-from datetime import date, datetime, timezone, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from app.core.encryption import hash_email, hash_phone
 from sqlalchemy import func
-from app.db.session import SessionLocal
-from app.db.models import (
-    EntityNote,
-    IntendedParentStatusHistory,
-    Match,
-    Membership,
-    Organization,
-    PipelineStage,
-    IntendedParent,
-    Surrogate,
-    SurrogateActivityLog,
-    SurrogateContactAttempt,
-    SurrogateStatusHistory,
-    User,
-)
+
+from app.core.encryption import hash_email, hash_phone
 from app.db.enums import (
     ContactMethod,
     ContactOutcome,
@@ -37,6 +23,21 @@ from app.db.enums import (
     SurrogateActivityType,
     SurrogateSource,
 )
+from app.db.models import (
+    EntityNote,
+    IntendedParent,
+    IntendedParentStatusHistory,
+    Match,
+    Membership,
+    Organization,
+    PipelineStage,
+    Surrogate,
+    SurrogateActivityLog,
+    SurrogateContactAttempt,
+    SurrogateStatusHistory,
+    User,
+)
+from app.db.session import SessionLocal
 from app.services import dev_service, match_service, pipeline_service, template_seeder
 from app.utils.height import total_inches_to_height_ft
 
@@ -463,7 +464,7 @@ def create_status_history(
     created_at: datetime,
 ) -> dict[str, datetime]:
     """Create status history entries for the stage path."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     cursor = created_at + timedelta(days=random.randint(0, 3))
     contact_times: dict[str, datetime] = {}
     previous = None
@@ -540,7 +541,7 @@ def _log_surrogate_activity(
             f"Supported: {sorted(SUPPORTED_ACTIVITY_MODES)}"
         )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     created_event_time = min(created_at + timedelta(minutes=5), now)
 
     db.add(
@@ -689,9 +690,7 @@ def create_surrogates(
         hospital_addr = random_address()
         created_min = 10 + stage.order * 5
         created_max = created_min + 120
-        created_at = datetime.now(timezone.utc) - timedelta(
-            days=random.randint(created_min, created_max)
-        )
+        created_at = datetime.now(UTC) - timedelta(days=random.randint(created_min, created_max))
         assigned_at = created_at + timedelta(days=random.randint(0, 14))
 
         pregnancy_start = date.today() - timedelta(days=random.randint(30, 220))
@@ -878,7 +877,7 @@ def _create_ip_status_history(
     target_status: str,
     stage_ids_by_key: dict[str, UUID],
 ) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     path = _build_ip_status_path(target_status)
     previous = None
     cursor = created_at + timedelta(days=random.randint(0, 2))
@@ -945,7 +944,7 @@ def create_intended_parents(
         phone = random_phone()
         state = random.choice(STATES)
         owner_user = _pick_owner(users_by_role, fallback_user)
-        created_at = datetime.now(timezone.utc) - timedelta(days=random.randint(5, 540))
+        created_at = datetime.now(UTC) - timedelta(days=random.randint(5, 540))
 
         intended_parent = IntendedParent(
             id=uuid4(),
@@ -970,10 +969,10 @@ def create_intended_parents(
             owner_type="user",
             owner_id=owner_user.id,
             # Activity tracking
-            last_activity=datetime.now(timezone.utc) - timedelta(days=random.randint(0, 30)),
+            last_activity=datetime.now(UTC) - timedelta(days=random.randint(0, 30)),
             # Timestamps
             created_at=created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
         )
 
         db.add(intended_parent)

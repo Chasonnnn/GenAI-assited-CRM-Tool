@@ -38,8 +38,8 @@ async def process_campaign_send(db, job) -> None:
 
     try:
         # Check if campaign was cancelled before executing
-        from app.db.models import Campaign
         from app.db.enums import CampaignStatus
+        from app.db.models import Campaign
 
         campaign = db.query(Campaign).filter(Campaign.id == UUID(campaign_id)).first()
         if not campaign:

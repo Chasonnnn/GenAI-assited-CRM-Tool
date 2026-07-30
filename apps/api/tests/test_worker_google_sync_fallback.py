@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -27,7 +27,7 @@ def test_dormant_workflow_maintenance_fallbacks_are_opt_in():
 def test_workflow_fallback_schedulers_noop_when_disabled(db, monkeypatch, function_name, flag_name):
     from app import worker
 
-    now = datetime(2026, 7, 26, 9, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 7, 26, 9, 1, tzinfo=UTC)
     last_run_at = now - timedelta(hours=1)
     monkeypatch.setattr(worker, flag_name, False)
 
@@ -44,7 +44,7 @@ def test_maybe_schedule_google_calendar_sync_jobs_calls_scheduler_when_due(db, m
     from app import worker
     from app.services import google_calendar_sync_service
 
-    now = datetime(2026, 2, 20, 15, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 2, 20, 15, 0, tzinfo=UTC)
     called: list[datetime] = []
 
     def fake_schedule_google_calendar_sync_jobs(*, db, now):
@@ -81,7 +81,7 @@ def test_maybe_schedule_google_calendar_sync_jobs_skips_when_not_due(db, monkeyp
     from app import worker
     from app.services import google_calendar_sync_service
 
-    now = datetime(2026, 2, 20, 15, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 2, 20, 15, 0, tzinfo=UTC)
     last_run_at = now - timedelta(seconds=120)
     called = False
 
@@ -120,7 +120,7 @@ def test_maybe_schedule_google_calendar_sync_jobs_noop_when_disabled(db, monkeyp
     from app import worker
     from app.services import google_calendar_sync_service
 
-    now = datetime(2026, 2, 20, 15, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 2, 20, 15, 0, tzinfo=UTC)
     last_run_at = now - timedelta(minutes=10)
     called = False
 
@@ -158,7 +158,7 @@ def test_maybe_schedule_gmail_sync_jobs_calls_scheduler_when_due(db, monkeypatch
     from app import worker
     from app.services import ticketing_service
 
-    now = datetime(2026, 2, 20, 15, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 2, 20, 15, 0, tzinfo=UTC)
     called: list[datetime] = []
 
     def fake_schedule_incremental_sync_jobs(db):
@@ -192,7 +192,7 @@ def test_maybe_schedule_gmail_sync_jobs_skips_when_not_due(db, monkeypatch):
     from app import worker
     from app.services import ticketing_service
 
-    now = datetime(2026, 2, 20, 15, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 2, 20, 15, 0, tzinfo=UTC)
     last_run_at = now - timedelta(seconds=30)
     called = False
 
@@ -228,7 +228,7 @@ def test_maybe_schedule_gmail_sync_jobs_noop_when_disabled(db, monkeypatch):
     from app import worker
     from app.services import ticketing_service
 
-    now = datetime(2026, 2, 20, 15, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 2, 20, 15, 0, tzinfo=UTC)
     last_run_at = now - timedelta(minutes=5)
     called = False
 
@@ -277,7 +277,7 @@ def test_maybe_schedule_workflow_sweep_jobs_enqueues_each_org_when_due(db, test_
     db.add(workflow)
     db.commit()
 
-    now = datetime(2026, 7, 26, 9, 1, 37, tzinfo=timezone.utc)
+    now = datetime(2026, 7, 26, 9, 1, 37, tzinfo=UTC)
     monkeypatch.setattr(worker, "WORKFLOW_SWEEP_FALLBACK_ENABLED", True, raising=False)
     monkeypatch.setattr(worker, "WORKFLOW_SWEEP_FALLBACK_INTERVAL_SECONDS", 60, raising=False)
 
@@ -321,7 +321,7 @@ def test_maybe_schedule_workflow_sweep_jobs_skips_org_without_a_due_cron(db, tes
     db.add(workflow)
     db.commit()
 
-    now = datetime(2026, 7, 26, 9, 1, 37, tzinfo=timezone.utc)
+    now = datetime(2026, 7, 26, 9, 1, 37, tzinfo=UTC)
     monkeypatch.setattr(worker, "WORKFLOW_SWEEP_FALLBACK_ENABLED", True)
     monkeypatch.setattr(worker, "WORKFLOW_SWEEP_FALLBACK_INTERVAL_SECONDS", 60)
 
@@ -362,7 +362,7 @@ def test_workflow_sweep_fallback_is_idempotent_per_minute_and_advances_buckets(
     )
     db.commit()
 
-    now = datetime(2026, 7, 26, 9, 1, 37, tzinfo=timezone.utc)
+    now = datetime(2026, 7, 26, 9, 1, 37, tzinfo=UTC)
     monkeypatch.setattr(worker, "WORKFLOW_SWEEP_FALLBACK_ENABLED", True)
     monkeypatch.setattr(worker, "WORKFLOW_SWEEP_FALLBACK_INTERVAL_SECONDS", 60)
 
@@ -412,7 +412,7 @@ def test_maybe_schedule_workflow_maintenance_jobs_enqueues_hourly_sweeps(db, tes
     )
     db.commit()
 
-    now = datetime(2026, 7, 26, 9, 1, 37, tzinfo=timezone.utc)
+    now = datetime(2026, 7, 26, 9, 1, 37, tzinfo=UTC)
     monkeypatch.setattr(worker, "WORKFLOW_MAINTENANCE_FALLBACK_ENABLED", True, raising=False)
     monkeypatch.setattr(
         worker,
@@ -459,7 +459,7 @@ def test_maybe_schedule_workflow_maintenance_jobs_skips_unconfigured_types(
     from app.db.enums import JobType
     from app.db.models import Job
 
-    now = datetime(2026, 7, 26, 9, 1, 37, tzinfo=timezone.utc)
+    now = datetime(2026, 7, 26, 9, 1, 37, tzinfo=UTC)
     monkeypatch.setattr(worker, "WORKFLOW_MAINTENANCE_FALLBACK_ENABLED", True)
     monkeypatch.setattr(worker, "WORKFLOW_MAINTENANCE_FALLBACK_INTERVAL_SECONDS", 3600)
 
@@ -490,7 +490,7 @@ def test_maybe_schedule_workflow_approval_expiry_jobs_enqueues_each_org_when_due
     from app.db.enums import JobType, OwnerType, TaskStatus, TaskType
     from app.db.models import Job, Task
 
-    now = datetime(2026, 7, 26, 9, 3, 37, tzinfo=timezone.utc)
+    now = datetime(2026, 7, 26, 9, 3, 37, tzinfo=UTC)
     monkeypatch.setattr(
         worker,
         "WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED",
@@ -544,7 +544,7 @@ def test_maybe_schedule_workflow_approval_expiry_jobs_skips_org_without_due_task
     from app.db.enums import JobType
     from app.db.models import Job
 
-    now = datetime(2026, 7, 26, 9, 3, 37, tzinfo=timezone.utc)
+    now = datetime(2026, 7, 26, 9, 3, 37, tzinfo=UTC)
     monkeypatch.setattr(worker, "WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED", True)
     monkeypatch.setattr(worker, "WORKFLOW_APPROVAL_EXPIRY_FALLBACK_INTERVAL_SECONDS", 300)
 

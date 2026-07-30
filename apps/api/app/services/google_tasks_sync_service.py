@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, time, timezone
+from datetime import UTC, date, datetime, time
 from typing import Any
 from urllib.parse import quote, unquote
 from uuid import UUID
@@ -106,8 +106,8 @@ def _to_utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _parse_google_datetime(value: object | None) -> datetime | None:
@@ -126,7 +126,7 @@ def _parse_google_datetime(value: object | None) -> datetime | None:
 
 
 def _to_google_datetime(value: datetime) -> str:
-    utc_value = _to_utc(value) or datetime.now(timezone.utc)
+    utc_value = _to_utc(value) or datetime.now(UTC)
     return utc_value.isoformat().replace("+00:00", "Z")
 
 
@@ -138,7 +138,7 @@ def _task_due_to_google(task: Task) -> str | None:
     if not task.due_date:
         return None
     due_time = task.due_time or time.min
-    due_dt = datetime.combine(task.due_date, due_time, tzinfo=timezone.utc)
+    due_dt = datetime.combine(task.due_date, due_time, tzinfo=UTC)
     return _to_google_datetime(due_dt)
 
 

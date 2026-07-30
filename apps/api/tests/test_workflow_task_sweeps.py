@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -125,13 +125,13 @@ def test_inactivity_sweep_executes_only_the_workflow_whose_threshold_matches(
         id=uuid4(),
         owner_type="user",
         owner_id=uuid4(),
-        updated_at=datetime.now(timezone.utc) - timedelta(days=10),
+        updated_at=datetime.now(UTC) - timedelta(days=10),
     )
     executed: list[AutomationWorkflow] = []
 
     def fake_iter(_db, _org_id, updated_before=None, **_kwargs):
         assert updated_before is not None
-        if updated_before > datetime.now(timezone.utc) - timedelta(days=20):
+        if updated_before > datetime.now(UTC) - timedelta(days=20):
             return [surrogate]
         return []
 
@@ -257,7 +257,7 @@ async def test_workflow_sweep_job_preserves_the_scheduled_evaluation_time(
 ):
     from app.jobs.handlers.workflows import process_workflow_sweep
 
-    evaluated_at = datetime(2026, 7, 26, 9, 1, 37, tzinfo=timezone.utc)
+    evaluated_at = datetime(2026, 7, 26, 9, 1, 37, tzinfo=UTC)
     job = SimpleNamespace(
         organization_id=test_org.id,
         payload={

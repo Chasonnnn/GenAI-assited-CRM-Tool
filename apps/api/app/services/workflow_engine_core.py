@@ -3,13 +3,12 @@
 import logging
 import time
 import uuid as uuid_module
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.models import AutomationWorkflow, Membership, User, WorkflowExecution
 from app.db.enums import (
     OwnerType,
     Role,
@@ -19,6 +18,7 @@ from app.db.enums import (
     WorkflowExecutionStatus,
     WorkflowTriggerType,
 )
+from app.db.models import AutomationWorkflow, Membership, User, WorkflowExecution
 from app.services import workflow_service
 from app.services.workflow_engine_adapters import WorkflowDomainAdapter
 
@@ -438,7 +438,7 @@ class WorkflowEngineCore:
 
         # Update workflow stats
         workflow.run_count += 1
-        workflow.last_run_at = datetime.now(timezone.utc)
+        workflow.last_run_at = datetime.now(UTC)
         workflow.last_error = (
             None if all_success else (action_results[-1].get("error") if action_results else None)
         )
@@ -629,7 +629,7 @@ class WorkflowEngineCore:
 
             # Update workflow stats
             workflow.run_count += 1
-            workflow.last_run_at = datetime.now(timezone.utc)
+            workflow.last_run_at = datetime.now(UTC)
             db.commit()
 
         elif task.status == TaskStatus.DENIED.value:
@@ -776,7 +776,7 @@ class WorkflowEngineCore:
             return f"{workflow.id}:{entity_id}:{trigger_type}"
 
         if trigger_type in ["scheduled", "inactivity", "task_due", "task_overdue"]:
-            occurrence_key = datetime.now(timezone.utc).date().isoformat()
+            occurrence_key = datetime.now(UTC).date().isoformat()
             if trigger_type == "scheduled" and event_data:
                 raw_schedule_time = event_data.get("schedule_time")
                 try:
@@ -793,7 +793,7 @@ class WorkflowEngineCore:
                     and schedule_time.tzinfo is not None
                     and schedule_time.utcoffset() is not None
                 ):
-                    occurrence_key = schedule_time.astimezone(timezone.utc).strftime("%Y%m%dT%H%MZ")
+                    occurrence_key = schedule_time.astimezone(UTC).strftime("%Y%m%dT%H%MZ")
 
             return f"{workflow.id}:{entity_id}:{trigger_type}:{occurrence_key}"
 
@@ -818,9 +818,10 @@ class WorkflowEngineCore:
         Returns error message if rate limited, None if OK to proceed.
         """
         from datetime import timedelta
+
         from sqlalchemy import func
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Check per-hour limit (global for this workflow)
         if workflow.rate_limit_per_hour:

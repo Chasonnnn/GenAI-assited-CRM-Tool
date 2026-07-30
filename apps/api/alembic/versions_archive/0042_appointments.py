@@ -5,11 +5,11 @@ Revises: 0041_rename_manager_to_admin
 Create Date: 2024-12-21
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import UUID
 
+from alembic import op
 
 revision = "0042_appointments"
 down_revision = "0041_rename_manager_to_admin"

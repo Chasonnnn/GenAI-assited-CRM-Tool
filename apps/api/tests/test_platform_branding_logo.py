@@ -4,8 +4,8 @@ import pytest
 from PIL import Image
 
 from app.core.config import settings
-from app.services import platform_branding_service
 from app.routers import platform as platform_router
+from app.services import platform_branding_service
 
 
 def _strip_api_base(url: str) -> str:

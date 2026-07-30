@@ -127,9 +127,9 @@ def test_workflow_service_get(db, test_org, test_workflow):
 
 def test_workflow_service_create(db, test_org, test_user):
     """Test workflow service create function."""
-    from app.services import workflow_service
-    from app.schemas.workflow import WorkflowCreate
     from app.db.enums import WorkflowTriggerType
+    from app.schemas.workflow import WorkflowCreate
+    from app.services import workflow_service
 
     create_data = WorkflowCreate(
         name="New Service Workflow",
@@ -146,9 +146,9 @@ def test_workflow_service_create(db, test_org, test_user):
 
 def test_workflow_service_form_submitted_enforces_auto_match_priority(db, test_org, test_user):
     """form_submitted workflows must place auto_match before create_intake_lead."""
-    from app.services import workflow_service
-    from app.schemas.workflow import WorkflowCreate
     from app.db.enums import WorkflowTriggerType
+    from app.schemas.workflow import WorkflowCreate
+    from app.services import workflow_service
 
     with pytest.raises(
         ValueError, match="auto_match_submission must be placed before create_intake_lead"
@@ -171,9 +171,9 @@ def test_workflow_service_form_submitted_enforces_auto_match_priority(db, test_o
 
 def test_workflow_service_auto_match_submission_org_scope_only(db, test_org, test_user):
     """auto_match_submission is not allowed for personal workflows."""
-    from app.services import workflow_service
-    from app.schemas.workflow import WorkflowCreate
     from app.db.enums import WorkflowTriggerType
+    from app.schemas.workflow import WorkflowCreate
+    from app.services import workflow_service
 
     with pytest.raises(
         ValueError, match="auto_match_submission is only supported for org workflows"
@@ -194,9 +194,9 @@ def test_workflow_service_auto_match_submission_org_scope_only(db, test_org, tes
 
 def test_workflow_service_form_submission_actions_allow_requires_approval(db, test_org, test_user):
     """form_submitted intake-routing actions can be approval-gated per step."""
-    from app.services import workflow_service
-    from app.schemas.workflow import WorkflowCreate
     from app.db.enums import WorkflowTriggerType
+    from app.schemas.workflow import WorkflowCreate
+    from app.services import workflow_service
 
     workflow = workflow_service.create_workflow(
         db,
@@ -223,9 +223,9 @@ def test_workflow_service_send_zapier_conversion_event_requires_status_changed_t
     db, test_org, test_user
 ):
     """send_zapier_conversion_event is valid only for status_changed workflows."""
-    from app.services import workflow_service
-    from app.schemas.workflow import WorkflowCreate
     from app.db.enums import WorkflowTriggerType
+    from app.schemas.workflow import WorkflowCreate
+    from app.services import workflow_service
 
     with pytest.raises(
         ValueError,
@@ -247,9 +247,9 @@ def test_workflow_service_send_zapier_conversion_event_allows_any_status_change(
     db, test_org, test_user
 ):
     """send_zapier_conversion_event can run on any status change without a fixed target stage."""
-    from app.services import workflow_service
-    from app.schemas.workflow import WorkflowCreate
     from app.db.enums import WorkflowTriggerType
+    from app.schemas.workflow import WorkflowCreate
+    from app.services import workflow_service
 
     workflow = workflow_service.create_workflow(
         db,
@@ -270,8 +270,8 @@ def test_workflow_service_send_zapier_conversion_event_allows_any_status_change(
 
 def test_workflow_service_update(db, test_org, test_user, test_workflow):
     """Test workflow service update function."""
-    from app.services import workflow_service
     from app.schemas.workflow import WorkflowUpdate
+    from app.services import workflow_service
 
     update_data = WorkflowUpdate(
         name="Updated Workflow",
@@ -365,9 +365,9 @@ def test_workflow_service_list_org_executions_includes_surrogate_identity(
 def test_ai_workflow_service_validation():
     """Test AI workflow validation logic."""
     from app.services.ai_workflow_service import (
-        GeneratedWorkflow,
-        AVAILABLE_TRIGGERS,
         AVAILABLE_ACTIONS,
+        AVAILABLE_TRIGGERS,
+        GeneratedWorkflow,
     )
 
     # Valid workflow
@@ -461,8 +461,8 @@ def test_generated_workflow_model():
 
 
 def _create_surrogate_for_workflow(db, test_org, test_user, default_stage):
-    from app.db.models import Surrogate
     from app.db.enums import OwnerType
+    from app.db.models import Surrogate
 
     normalized_email = normalize_email("surrogate@example.com")
     surrogate = Surrogate(
@@ -484,8 +484,8 @@ def _create_surrogate_for_workflow(db, test_org, test_user, default_stage):
 
 
 def _create_task_for_workflow(db, test_org, test_user, surrogate_id=None):
-    from app.db.models import Task
     from app.db.enums import OwnerType
+    from app.db.models import Task
 
     task = Task(
         id=uuid4(),
@@ -503,8 +503,8 @@ def _create_task_for_workflow(db, test_org, test_user, surrogate_id=None):
 
 def test_task_triggered_workflow_maps_to_surrogate(db, test_org, test_user, default_stage):
     """Task-triggered actions should run against the task's surrogate."""
-    from app.db.models import AutomationWorkflow, EntityNote
     from app.db.enums import WorkflowTriggerType
+    from app.db.models import AutomationWorkflow, EntityNote
     from app.services.workflow_engine import engine
 
     surrogate = _create_surrogate_for_workflow(db, test_org, test_user, default_stage)
@@ -550,8 +550,8 @@ def test_task_triggered_workflow_maps_to_surrogate(db, test_org, test_user, defa
 
 def test_task_triggered_workflow_skips_without_surrogate(db, test_org, test_user, default_stage):
     """Task-triggered actions should skip when no surrogate is linked."""
+    from app.db.enums import WorkflowExecutionStatus, WorkflowTriggerType
     from app.db.models import AutomationWorkflow, EntityNote
-    from app.db.enums import WorkflowTriggerType, WorkflowExecutionStatus
     from app.services.workflow_engine import engine
 
     _create_surrogate_for_workflow(db, test_org, test_user, default_stage)

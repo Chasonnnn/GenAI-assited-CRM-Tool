@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -11,7 +11,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 from app.db.enums import Role
-from app.db.models import Membership, OrgInvite, Organization, User
+from app.db.models import Membership, Organization, OrgInvite, User
 
 
 class _SessionProxy:
@@ -210,8 +210,8 @@ def test_cli_update_meta_page_token_rejects_missing_encryption(monkeypatch, _cli
 
 
 def test_cli_update_meta_page_token_create_and_update(monkeypatch, db, _cli_db):
-    from app.db.models import MetaPageMapping
     from app.core import encryption
+    from app.db.models import MetaPageMapping
 
     org = _create_org(db, slug="acme")
     db.commit()
@@ -253,7 +253,7 @@ def test_cli_deactivate_meta_page(monkeypatch, db, _cli_db):
         page_id="page-123",
         page_name="Page",
         access_token_encrypted="enc:token",
-        token_expires_at=datetime.now(timezone.utc),
+        token_expires_at=datetime.now(UTC),
         is_active=True,
     )
     db.add(mapping)

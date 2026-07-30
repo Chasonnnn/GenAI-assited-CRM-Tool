@@ -1,7 +1,5 @@
 """Settings endpoints for organization and user preferences."""
 
-from typing import Annotated
-
 import io
 import logging
 import mimetypes
@@ -9,6 +7,7 @@ import os
 import re
 import uuid as uuid_lib
 from datetime import datetime
+from typing import Annotated
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
@@ -736,8 +735,9 @@ def _get_logo_storage_backend() -> str:
 
 def _get_local_logo_path() -> str:
     """Get local logo storage directory."""
-    from app.core.config import settings
     import tempfile
+
+    from app.core.config import settings
 
     path = getattr(settings, "LOCAL_STORAGE_PATH", None)
     if not path:

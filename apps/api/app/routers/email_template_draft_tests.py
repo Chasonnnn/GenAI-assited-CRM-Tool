@@ -20,7 +20,6 @@ from app.schemas.email_template_drafts import (
 )
 from app.services import email_template_draft_service
 
-
 router = APIRouter(
     prefix="/email-template-drafts",
     tags=["Email Template Drafts"],

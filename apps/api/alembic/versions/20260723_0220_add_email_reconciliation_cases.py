@@ -5,10 +5,10 @@ Revises: 20260723_0210
 Create Date: 2026-07-23 17:45:00
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
+from alembic import op
 
 revision = "20260723_0220"
 down_revision = "20260723_0210"

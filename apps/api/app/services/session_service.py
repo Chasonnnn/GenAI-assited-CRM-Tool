@@ -3,7 +3,7 @@
 import hashlib
 import ipaddress
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import Request
@@ -94,7 +94,7 @@ def create_session(
     user_agent = request.headers.get("User-Agent") if request else None
     ip_address = get_client_ip(request)
     device_info = parse_device_info(user_agent)
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.JWT_EXPIRES_HOURS)
+    expires_at = datetime.now(UTC) + timedelta(hours=settings.JWT_EXPIRES_HOURS)
 
     session_record = UserSession(
         user_id=user_id,
@@ -132,7 +132,7 @@ def get_session_by_token_hash(
     """
     stmt = select(UserSession).where(
         UserSession.session_token_hash == token_hash,
-        UserSession.expires_at > datetime.now(timezone.utc),
+        UserSession.expires_at > datetime.now(UTC),
     )
     return db.scalars(stmt).first()
 
@@ -163,7 +163,7 @@ def list_user_sessions(
         .where(
             UserSession.user_id == user_id,
             UserSession.organization_id == org_id,
-            UserSession.expires_at > datetime.now(timezone.utc),
+            UserSession.expires_at > datetime.now(UTC),
         )
         .order_by(UserSession.last_active_at.desc())
     )
@@ -261,7 +261,7 @@ def cleanup_expired_for_user(db: Session, user_id: UUID) -> int:
     """
     stmt = delete(UserSession).where(
         UserSession.user_id == user_id,
-        UserSession.expires_at <= datetime.now(timezone.utc),
+        UserSession.expires_at <= datetime.now(UTC),
     )
     result = db.execute(stmt)
     db.commit()
@@ -278,7 +278,7 @@ def cleanup_all_expired_sessions(db: Session) -> int:
         Number of sessions deleted
     """
     stmt = delete(UserSession).where(
-        UserSession.expires_at <= datetime.now(timezone.utc),
+        UserSession.expires_at <= datetime.now(UTC),
     )
     result = db.execute(stmt)
     db.commit()
@@ -305,7 +305,7 @@ def update_last_active(
         session_record: The session to update
         throttle_minutes: Minimum minutes between updates
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     threshold = now - timedelta(minutes=throttle_minutes)
 
     if session_record.last_active_at < threshold:
@@ -359,7 +359,7 @@ def _publish_session_revoked(token_hash: str) -> None:
         return
 
     try:
-        from app.core.websocket import manager, SESSION_REVOKE_CHANNEL
+        from app.core.websocket import SESSION_REVOKE_CHANNEL, manager
 
         manager.notify_revocation(token_hash)
     except Exception:

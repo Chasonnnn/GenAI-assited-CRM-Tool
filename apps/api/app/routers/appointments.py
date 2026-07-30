@@ -7,13 +7,11 @@ Internal authenticated endpoints for staff to manage:
 - Appointment approval/management
 """
 
-from typing import Annotated
-
 from datetime import date, timedelta
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
@@ -23,33 +21,33 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
-from app.schemas.auth import UserSession
 from app.schemas.appointment import (
+    AppointmentCancel,
+    AppointmentLinkUpdate,
+    AppointmentListResponse,
+    AppointmentRead,
+    AppointmentReschedule,
     AppointmentTypeCreate,
     AppointmentTypeRead,
     AppointmentTypeUpdate,
-    AvailabilityRulesSet,
-    AvailabilityRuleRead,
     AvailabilityOverrideCreate,
     AvailabilityOverrideRead,
+    AvailabilityRuleRead,
+    AvailabilityRulesSet,
+    AvailableSlotsResponse,
     BookingLinkRead,
-    AppointmentRead,
-    AppointmentListResponse,
-    AppointmentLinkUpdate,
-    AppointmentReschedule,
-    AppointmentCancel,
     PublicBookingPageRead,
     StaffInfoRead,
     TimeSlotRead,
-    AvailableSlotsResponse,
 )
+from app.schemas.auth import UserSession
 from app.services import (
-    appointment_service,
     appointment_email_service,
+    appointment_service,
     audit_service,
     media_service,
-    user_service,
     org_service,
+    user_service,
 )
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
@@ -590,7 +588,7 @@ def update_appointment_link(
 ):
     """Update surrogate/intended parent linkage for an appointment."""
     from app.core.surrogate_access import check_surrogate_access
-    from app.services import surrogate_service, ip_service
+    from app.services import ip_service, surrogate_service
 
     appt = appointment_service.get_appointment(db, appointment_id, session.org_id)
     if not appt:

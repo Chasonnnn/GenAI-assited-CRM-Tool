@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    TIMESTAMP,
     CheckConstraint,
     ForeignKey,
     Index,
     Integer,
     String,
     Text,
-    TIMESTAMP,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -62,9 +61,7 @@ class Job(Base):
             "idx_jobs_stale_resend_reconciliation",
             "claimed_at",
             "id",
-            postgresql_where=text(
-                "status = 'running' AND job_type = 'resend_event_reconcile'"
-            ),
+            postgresql_where=text("status = 'running' AND job_type = 'resend_event_reconcile'"),
         ),
     )
 
@@ -150,5 +147,5 @@ class ExportJob(Base):
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    created_by: Mapped["User | None"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    created_by: Mapped[User | None] = relationship()

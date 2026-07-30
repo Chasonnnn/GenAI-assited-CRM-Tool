@@ -6,12 +6,12 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, field_serializer
+from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator
 
-from app.db.enums import SurrogateSource, OwnerType
+from app.db.enums import OwnerType, SurrogateSource
 from app.utils.height import canonicalize_height_ft
 from app.utils.journey_timing import normalize_journey_timing_preference
-from app.utils.normalization import normalize_phone, normalize_state, format_race_label
+from app.utils.normalization import format_race_label, normalize_phone, normalize_state
 
 MaritalStatus = Literal[
     "Single",

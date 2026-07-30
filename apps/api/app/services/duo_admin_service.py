@@ -7,7 +7,7 @@ import hashlib
 import hmac
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import format_datetime
 from typing import Any
 from urllib.parse import quote, urlparse
@@ -134,9 +134,7 @@ class DuoAdminClient:
             canonical.encode("utf-8"),
             hashlib.sha1,
         ).hexdigest()
-        token = base64.b64encode(f"{self.integration_key}:{signature}".encode("utf-8")).decode(
-            "ascii"
-        )
+        token = base64.b64encode(f"{self.integration_key}:{signature}".encode()).decode("ascii")
         return f"Basic {token}"
 
     def _request(
@@ -151,7 +149,7 @@ class DuoAdminClient:
         normalized_params = {
             key: value for key, value in (params or {}).items() if value is not None
         }
-        date_header = format_datetime(datetime.now(timezone.utc), usegmt=True)
+        date_header = format_datetime(datetime.now(UTC), usegmt=True)
         headers = {
             "Accept": "application/json",
             "Date": date_header,

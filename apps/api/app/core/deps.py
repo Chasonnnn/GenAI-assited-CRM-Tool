@@ -1,22 +1,22 @@
 """FastAPI dependencies for authentication, authorization, and database access."""
 
-from contextlib import contextmanager
-from datetime import datetime, timezone
-from urllib.parse import urlparse
-from typing import Generator
-from uuid import UUID
 import logging
+from collections.abc import Generator
+from contextlib import contextmanager
+from datetime import UTC, datetime
+from urllib.parse import urlparse
+from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, validate_csrf
 from app.core.permissions import PermissionKey
 from app.core.security import decode_session_token
-from app.core.csrf import CSRF_HEADER, CSRF_COOKIE_NAME, validate_csrf
 from app.core.structured_logging import build_request_log_context, log_structured_event
-from app.db.session import SessionLocal
 from app.db.org_scope import set_org_scope
+from app.db.session import SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -206,8 +206,8 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
     request.state.request_db = db
 
     # Import here to avoid circular imports
-    from app.db.models import Membership, Organization
     from app.db.enums import Role
+    from app.db.models import Membership, Organization
     from app.schemas.auth import UserSession
     from app.services import session_service
 
@@ -259,7 +259,7 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
         if not support_session:
             raise HTTPException(status_code=401, detail="Support session not found")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if support_session.revoked_at or support_session.expires_at <= now:
             raise HTTPException(status_code=401, detail="Support session expired or revoked")
 

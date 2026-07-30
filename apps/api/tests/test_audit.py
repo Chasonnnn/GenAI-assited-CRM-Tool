@@ -1,10 +1,10 @@
 """Tests for the audit log system."""
 
+import re
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-import re
 from threading import Event
-import uuid
 
 import pytest
 from sqlalchemy import text
@@ -12,9 +12,7 @@ from sqlalchemy import text
 from app.db.enums import AuditEventType
 from app.db.models import AuditLog, Organization
 from app.db.session import SessionLocal
-from app.services import audit_service
-from app.services import version_service
-
+from app.services import audit_service, version_service
 
 # =============================================================================
 # Unit Tests (no DB required)

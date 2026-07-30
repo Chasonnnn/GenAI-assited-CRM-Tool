@@ -6,7 +6,6 @@ import re
 from collections.abc import Mapping, Sequence
 from uuid import UUID
 
-
 MAX_RESEND_TAGS = 75
 MAX_RESEND_TAG_LENGTH = 256
 _TAG_VALUE_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")

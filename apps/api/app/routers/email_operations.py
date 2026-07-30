@@ -34,7 +34,6 @@ from app.services import (
     resend_readiness_orchestration_service,
 )
 
-
 router = APIRouter(prefix="/email-operations", tags=["email-operations"])
 
 

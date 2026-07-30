@@ -14,9 +14,9 @@ from collections.abc import Sequence
 from typing import Any
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 
 revision: str = "20260624_1730"
 down_revision: str | Sequence[str] | None = "20260624_1130"

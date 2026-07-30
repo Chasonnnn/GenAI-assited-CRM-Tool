@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date
 from decimal import Decimal
 from types import UnionType
-from typing import Any, Mapping, Union, get_args, get_origin
+from typing import Any, Union, get_args, get_origin
 
 from pydantic import EmailStr, ValidationError
 
@@ -13,7 +14,6 @@ from app.schemas.surrogate import SurrogateCreate, SurrogateUpdate
 from app.services.import_transformers import get_suggested_transformer, transform_value
 from app.utils.journey_timing import normalize_journey_timing_preference
 from app.utils.normalization import normalize_email, normalize_name
-
 
 REQUIRED_SURROGATE_CREATE_FIELDS = frozenset({"full_name", "email"})
 
@@ -96,9 +96,7 @@ def coerce_surrogate_field_value(surrogate_field: str, value: Any) -> Any:
         transformed = transform_value(transformer_name, str(value))
         if transformed.success:
             return transformed.value
-        raise ValueError(
-            transformed.error or f"Invalid value for {surrogate_field}: {value}"
-        )
+        raise ValueError(transformed.error or f"Invalid value for {surrogate_field}: {value}")
 
     field_type = SURROGATE_FIELD_TYPES.get(surrogate_field)
     if field_type == "str":
@@ -214,9 +212,7 @@ def build_surrogate_create_from_payload(
         for field in invalid_fields:
             sanitized.pop(field, None)
 
-        return SurrogateCreate(**sanitized), sorted(
-            {*coercion_dropped_fields, *invalid_fields}
-        )
+        return SurrogateCreate(**sanitized), sorted({*coercion_dropped_fields, *invalid_fields})
 
 
 def _parse_bool(value: Any) -> bool:

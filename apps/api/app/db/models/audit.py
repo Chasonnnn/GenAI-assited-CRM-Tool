@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -104,8 +103,8 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    actor: Mapped["User | None"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    actor: Mapped[User | None] = relationship()
 
 
 # =============================================================================
@@ -155,9 +154,9 @@ class LegalHold(Base):
     released_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
-    released_by: Mapped["User | None"] = relationship(foreign_keys=[released_by_user_id])
+    organization: Mapped[Organization] = relationship()
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_user_id])
+    released_by: Mapped[User | None] = relationship(foreign_keys=[released_by_user_id])
 
 
 class DataRetentionPolicy(Base):
@@ -194,5 +193,5 @@ class DataRetentionPolicy(Base):
     )
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    created_by: Mapped["User | None"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    created_by: Mapped[User | None] = relationship()

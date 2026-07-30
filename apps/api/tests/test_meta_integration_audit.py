@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -34,7 +34,7 @@ async def test_meta_lead_fetch_does_not_auto_convert_without_mapping(db, test_or
         return (
             {
                 "id": leadgen_id,
-                "created_time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+0000"),
+                "created_time": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+0000"),
                 "field_data": [
                     {"name": "full_name", "values": ["Test User"]},
                     {"name": "email", "values": ["test@example.com"]},
@@ -239,8 +239,8 @@ async def test_get_meta_spend_summary_uses_stored_data(db, test_org):
     db.add(row)
     db.commit()
 
-    start = datetime.combine(spend_date, datetime.min.time(), tzinfo=timezone.utc)
-    end = datetime.combine(spend_date, datetime.min.time(), tzinfo=timezone.utc)
+    start = datetime.combine(spend_date, datetime.min.time(), tzinfo=UTC)
+    end = datetime.combine(spend_date, datetime.min.time(), tzinfo=UTC)
 
     result = await analytics_meta_service.get_meta_spend_summary(
         db=db,

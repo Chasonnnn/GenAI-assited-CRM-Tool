@@ -1,15 +1,14 @@
 """Journey router - API endpoints for surrogate journey timeline."""
 
-from typing import Annotated
-
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_permission, require_csrf_header
+from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
 from app.core.policies import POLICIES
 from app.core.security import decode_export_token
 from app.core.surrogate_access import check_surrogate_access
@@ -228,6 +227,7 @@ def export_surrogate_journey(
 ) -> object:
     """Export the journey timeline as a standalone PDF."""
     from fastapi.responses import Response
+
     from app.services import pdf_export_service
 
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)

@@ -11,14 +11,15 @@ import asyncio
 import time
 from urllib.parse import urlparse
 from uuid import UUID
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.websocket import manager, send_ws_to_user, send_ws_to_org
-from app.core.security import decode_session_token
 from app.core.deps import COOKIE_NAME
+from app.core.security import decode_session_token
 from app.core.structured_logging import log_structured_event
+from app.core.websocket import manager, send_ws_to_org, send_ws_to_user
 from app.db.session import SessionLocal
 from app.services import session_service
 
@@ -85,6 +86,7 @@ def validate_websocket_origin(origin: str | None, db: Session) -> bool:
         return True
 
     from urllib.parse import urlparse
+
     from app.services import org_service
 
     parsed = urlparse(normalized)
@@ -300,7 +302,7 @@ async def websocket_notifications(
                 # Handle ping
                 if data == "ping":
                     await websocket.send_text("pong")
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
             except WebSocketDisconnect:
                 break

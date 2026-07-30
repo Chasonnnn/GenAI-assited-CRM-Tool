@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Coroutine, TypeVar
+from collections.abc import Coroutine
+from typing import TypeVar
 
 import anyio
 

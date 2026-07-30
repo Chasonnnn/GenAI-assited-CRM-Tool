@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
@@ -50,7 +50,7 @@ class _AsyncClient:
 
 def test_oauth_helper_time_and_encryption():
     now = oauth_service._now_utc()
-    assert now.tzinfo == timezone.utc
+    assert now.tzinfo == UTC
     assert oauth_service._is_expired(now - timedelta(seconds=1)) is True
     assert oauth_service._is_expired((now + timedelta(minutes=1)).replace(tzinfo=None)) is False
 
@@ -99,7 +99,7 @@ def test_oauth_get_access_token_refreshes_when_expired(monkeypatch, db, test_use
         refresh_token="refresh-token",
         expires_in=1,
     )
-    integration.token_expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    integration.token_expires_at = datetime.now(UTC) - timedelta(minutes=1)
     db.add(integration)
     db.commit()
 
@@ -122,7 +122,7 @@ async def test_oauth_get_access_token_async_refresh_failure(monkeypatch, db, tes
         refresh_token="refresh-token",
         expires_in=1,
     )
-    integration.token_expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    integration.token_expires_at = datetime.now(UTC) - timedelta(minutes=1)
     db.add(integration)
     db.commit()
 

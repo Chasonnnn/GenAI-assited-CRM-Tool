@@ -9,35 +9,34 @@ Handles:
 """
 
 import hashlib
+import re
 import secrets
-from datetime import date, datetime, time, timedelta, timezone
-from zoneinfo import ZoneInfo
+from datetime import UTC, date, datetime, time, timedelta
 from typing import NamedTuple
 from uuid import UUID
-import re
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
+from app.db.enums import AppointmentEmailType, AppointmentStatus, MeetingMode
 from app.db.models import (
-    AppointmentType,
-    AvailabilityRule,
-    AvailabilityOverride,
-    BookingLink,
     Appointment,
     AppointmentEmailLog,
-    Task,
-    UserIntegration,
-    Surrogate,
+    AppointmentType,
+    AvailabilityOverride,
+    AvailabilityRule,
+    BookingLink,
     IntendedParent,
     Organization,
+    Surrogate,
+    Task,
     User,
+    UserIntegration,
 )
-from app.schemas.appointment import AppointmentRead, AppointmentListItem
-from app.db.enums import AppointmentEmailType, AppointmentStatus, MeetingMode
+from app.schemas.appointment import AppointmentListItem, AppointmentRead
 from app.services import appointment_integrations
 from app.utils.pagination import paginate_query_by_offset
-
 
 # =============================================================================
 # Types
@@ -165,7 +164,7 @@ def _normalize_scheduled_start(
     if scheduled_start.tzinfo is None:
         tz = _get_timezone(client_timezone)
         scheduled_start = scheduled_start.replace(tzinfo=tz)
-    return scheduled_start.astimezone(timezone.utc)
+    return scheduled_start.astimezone(UTC)
 
 
 def _validate_time_range(start: time, end: time, label: str) -> None:
@@ -889,8 +888,8 @@ def get_available_slots(
 
         current_date += timedelta(days=1)
 
-    client_start_utc = client_start.astimezone(timezone.utc)
-    client_end_utc = client_end.astimezone(timezone.utc)
+    client_start_utc = client_start.astimezone(UTC)
+    client_end_utc = client_end.astimezone(UTC)
     slots = [slot for slot in slots if client_start_utc <= slot.start <= client_end_utc]
 
     return slots
@@ -958,11 +957,11 @@ def _build_day_slots(
     # Create datetime objects in user's timezone, then normalize to UTC
     day_start_local = datetime.combine(slot_date, start_time, tzinfo=user_tz)
     day_end_local = datetime.combine(slot_date, end_time, tzinfo=user_tz)
-    day_start = day_start_local.astimezone(timezone.utc)
-    day_end = day_end_local.astimezone(timezone.utc)
+    day_start = day_start_local.astimezone(UTC)
+    day_end = day_end_local.astimezone(UTC)
 
     # Skip if booking would be in the past
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if day_end <= now:
         return slots
 
@@ -1008,7 +1007,7 @@ def _build_day_slots(
                     task_start_local = datetime.combine(
                         task.due_date, task.due_time, tzinfo=user_tz
                     )
-                    task_start = task_start_local.astimezone(timezone.utc)
+                    task_start = task_start_local.astimezone(UTC)
                     task_end = task_start + timedelta(minutes=task.duration_minutes)
                     if not (slot_end <= task_start or slot_start >= task_end):
                         has_conflict = True
@@ -1031,9 +1030,9 @@ def _get_conflicting_appointments(
     exclude_appointment_id: UUID | None = None,
 ) -> list["Appointment"]:
     """Get appointments that could conflict with new bookings."""
-    start_dt = datetime.combine(date_start, time.min, tzinfo=timezone.utc)
-    end_dt = datetime.combine(date_end, time.max, tzinfo=timezone.utc)
-    now = datetime.now(timezone.utc)
+    start_dt = datetime.combine(date_start, time.min, tzinfo=UTC)
+    end_dt = datetime.combine(date_end, time.max, tzinfo=UTC)
+    now = datetime.now(UTC)
 
     query = db.query(Appointment).filter(
         Appointment.organization_id == org_id,
@@ -1093,7 +1092,7 @@ def expire_pending_appointments(
     user_id: UUID | None = None,
 ) -> int:
     """Expire pending appointments past their approval window."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     query = db.query(Appointment).filter(
         Appointment.status == AppointmentStatus.PENDING.value,
         Appointment.pending_expires_at.isnot(None),
@@ -1182,7 +1181,7 @@ def create_booking(
     _validate_timezone_name(client_timezone, "client timezone")
     scheduled_start = _normalize_scheduled_start(scheduled_start, client_timezone)
     scheduled_end = scheduled_start + timedelta(minutes=appt_type.duration_minutes)
-    pending_expires = datetime.now(timezone.utc) + timedelta(minutes=60)
+    pending_expires = datetime.now(UTC) + timedelta(minutes=60)
     token_expires = scheduled_end + timedelta(days=7)
 
     slot_query = SlotQuery(
@@ -1269,9 +1268,7 @@ def approve_booking(
 
     if appointment.status != AppointmentStatus.PENDING.value:
         raise ValueError(f"Cannot approve appointment with status {appointment.status}")
-    if appointment.pending_expires_at and appointment.pending_expires_at <= datetime.now(
-        timezone.utc
-    ):
+    if appointment.pending_expires_at and appointment.pending_expires_at <= datetime.now(UTC):
         appointment.status = AppointmentStatus.EXPIRED.value
         appointment.pending_expires_at = None
         appointment.reschedule_token = None
@@ -1329,7 +1326,7 @@ def approve_booking(
         appointment_integrations.create_google_meet_link(db, appointment, appt_type_name)
 
     appointment.status = AppointmentStatus.CONFIRMED.value
-    appointment.approved_at = datetime.now(timezone.utc)
+    appointment.approved_at = datetime.now(UTC)
     appointment.approved_by_user_id = approved_by_user_id
     appointment.pending_expires_at = None
 
@@ -1404,7 +1401,7 @@ def reschedule_booking(
             raise ValueError("Invalid reschedule token")
         if (
             appointment.reschedule_token_expires_at
-            and appointment.reschedule_token_expires_at <= datetime.now(timezone.utc)
+            and appointment.reschedule_token_expires_at <= datetime.now(UTC)
         ):
             raise ValueError("Reschedule link has expired")
 
@@ -1414,7 +1411,7 @@ def reschedule_booking(
     ]:
         raise ValueError(f"Cannot reschedule appointment with status {appointment.status}")
     if appointment.status == AppointmentStatus.PENDING.value and appointment.pending_expires_at:
-        if appointment.pending_expires_at <= datetime.now(timezone.utc):
+        if appointment.pending_expires_at <= datetime.now(UTC):
             appointment.status = AppointmentStatus.EXPIRED.value
             appointment.pending_expires_at = None
             appointment.reschedule_token = None
@@ -1452,7 +1449,7 @@ def reschedule_booking(
     appointment.scheduled_start = new_start
     appointment.scheduled_end = new_end
     if appointment.status == AppointmentStatus.PENDING.value:
-        appointment.pending_expires_at = datetime.now(timezone.utc) + timedelta(minutes=60)
+        appointment.pending_expires_at = datetime.now(UTC) + timedelta(minutes=60)
 
     # Regenerate meeting link for Zoom appointments (confirmed only)
     meeting_mode = appointment.meeting_mode
@@ -1581,7 +1578,7 @@ def cancel_booking(
             raise ValueError("Invalid cancel token")
         if (
             appointment.cancel_token_expires_at
-            and appointment.cancel_token_expires_at <= datetime.now(timezone.utc)
+            and appointment.cancel_token_expires_at <= datetime.now(UTC)
         ):
             raise ValueError("Cancel link has expired")
 
@@ -1591,7 +1588,7 @@ def cancel_booking(
     ]:
         raise ValueError(f"Cannot cancel appointment with status {appointment.status}")
     if appointment.status == AppointmentStatus.PENDING.value and appointment.pending_expires_at:
-        if appointment.pending_expires_at <= datetime.now(timezone.utc):
+        if appointment.pending_expires_at <= datetime.now(UTC):
             appointment.status = AppointmentStatus.EXPIRED.value
             appointment.pending_expires_at = None
             appointment.reschedule_token = None
@@ -1602,7 +1599,7 @@ def cancel_booking(
             raise ValueError("Appointment request has expired")
 
     appointment.status = AppointmentStatus.CANCELLED.value
-    appointment.cancelled_at = datetime.now(timezone.utc)
+    appointment.cancelled_at = datetime.now(UTC)
     appointment.cancelled_by_client = by_client
     appointment.cancellation_reason = reason
     appointment.reschedule_token = None
@@ -1683,7 +1680,7 @@ def get_appointment_by_token(
     token_type: str,  # "reschedule" or "cancel"
 ) -> Appointment | None:
     """Get appointment by self-service token scoped to org."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if token_type == "reschedule":  # nosec B105
         appt = (
             db.query(Appointment)
@@ -1722,7 +1719,7 @@ def get_appointment_by_manage_token(
     token: str,
 ) -> Appointment | None:
     """Get appointment by either self-service token (reschedule/cancel)."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     appt = (
         db.query(Appointment)
         .filter(
@@ -1829,11 +1826,11 @@ def list_appointments(
         query = query.filter(Appointment.status == status)
 
     if date_start:
-        start_dt = datetime.combine(date_start, time.min, tzinfo=timezone.utc)
+        start_dt = datetime.combine(date_start, time.min, tzinfo=UTC)
         query = query.filter(Appointment.scheduled_start >= start_dt)
 
     if date_end:
-        end_dt = datetime.combine(date_end, time.max, tzinfo=timezone.utc)
+        end_dt = datetime.combine(date_end, time.max, tzinfo=UTC)
         query = query.filter(Appointment.scheduled_start <= end_dt)
 
     # Filter by surrogate_id OR intended_parent_id (for match-scoped views)
@@ -1903,7 +1900,7 @@ def mark_email_sent(
 ) -> AppointmentEmailLog:
     """Mark an appointment email as sent."""
     log.status = "sent"
-    log.sent_at = datetime.now(timezone.utc)
+    log.sent_at = datetime.now(UTC)
     log.external_message_id = external_message_id
     db.commit()
     db.refresh(log)

@@ -1,9 +1,9 @@
 """AI bulk task creation routes."""
 
 from __future__ import annotations
-from typing import Annotated
 
 import logging
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session

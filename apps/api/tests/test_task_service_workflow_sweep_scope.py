@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timezone
+from datetime import UTC, date, datetime, time
 from uuid import uuid4
 
 from app.core.encryption import hash_email
@@ -81,8 +81,8 @@ def test_iter_tasks_due_in_window_requires_task_organization_match(
         task_service.iter_tasks_due_in_window(
             db,
             test_org.id,
-            datetime(2026, 7, 25, 0, 0, tzinfo=timezone.utc),
-            datetime(2026, 7, 25, 23, 59, tzinfo=timezone.utc),
+            datetime(2026, 7, 25, 0, 0, tzinfo=UTC),
+            datetime(2026, 7, 25, 23, 59, tzinfo=UTC),
         )
     )
 

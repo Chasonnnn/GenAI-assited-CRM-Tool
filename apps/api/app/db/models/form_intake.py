@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
+import uuid
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-import uuid
-from datetime import datetime, date
-
 from sqlalchemy import (
+    TIMESTAMP,
     Boolean,
     Date,
     ForeignKey,
     Index,
     Integer,
     String,
-    TIMESTAMP,
     Text,
     UniqueConstraint,
     text,
@@ -111,9 +110,9 @@ class FormIntakeLink(Base):
         nullable=False,
     )
 
-    organization: Mapped["Organization"] = relationship()
-    form: Mapped["Form"] = relationship()
-    created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
+    organization: Mapped[Organization] = relationship()
+    form: Mapped[Form] = relationship()
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_user_id])
 
 
 class PublishedIntakeVersion(Base):
@@ -162,9 +161,9 @@ class PublishedIntakeVersion(Base):
         TIMESTAMP(), server_default=text("now()"), nullable=False
     )
 
-    organization: Mapped["Organization"] = relationship()
-    form: Mapped["Form"] = relationship()
-    intake_link: Mapped["FormIntakeLink"] = relationship(foreign_keys=[intake_link_id])
+    organization: Mapped[Organization] = relationship()
+    form: Mapped[Form] = relationship()
+    intake_link: Mapped[FormIntakeLink] = relationship(foreign_keys=[intake_link_id])
 
 
 class IntakeLead(Base):
@@ -249,13 +248,11 @@ class IntakeLead(Base):
     )
     promoted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
 
-    organization: Mapped["Organization"] = relationship()
-    form: Mapped["Form | None"] = relationship()
-    intake_link: Mapped["FormIntakeLink | None"] = relationship()
-    form_submission: Mapped["FormSubmission | None"] = relationship(
-        foreign_keys=[form_submission_id]
-    )
-    promoted_surrogate: Mapped["Surrogate | None"] = relationship(
+    organization: Mapped[Organization] = relationship()
+    form: Mapped[Form | None] = relationship()
+    intake_link: Mapped[FormIntakeLink | None] = relationship()
+    form_submission: Mapped[FormSubmission | None] = relationship(foreign_keys=[form_submission_id])
+    promoted_surrogate: Mapped[Surrogate | None] = relationship(
         foreign_keys=[promoted_surrogate_id]
     )
 
@@ -438,8 +435,8 @@ class FormSubmissionMatchCandidate(Base):
         TIMESTAMP(), server_default=text("now()"), nullable=False
     )
 
-    submission: Mapped["FormSubmission"] = relationship()
-    surrogate: Mapped["Surrogate"] = relationship()
+    submission: Mapped[FormSubmission] = relationship()
+    surrogate: Mapped[Surrogate] = relationship()
 
 
 class FormIntakeDraft(Base):
@@ -518,6 +515,6 @@ class FormIntakeDraft(Base):
         nullable=False,
     )
 
-    organization: Mapped["Organization"] = relationship()
-    intake_link: Mapped["FormIntakeLink"] = relationship()
-    form: Mapped["Form"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    intake_link: Mapped[FormIntakeLink] = relationship()
+    form: Mapped[Form] = relationship()

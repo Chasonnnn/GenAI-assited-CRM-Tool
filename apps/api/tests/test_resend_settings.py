@@ -4,7 +4,6 @@ import uuid
 
 import pytest
 
-
 RATE_LIMIT_GROUP_TOKEN = "Team-Rate-Limit-Group-Token-0001"
 RATE_LIMIT_GROUP_FINGERPRINT = "4e8474447c3fd54573744a0863e5142271c8f094f25d62f953fbf1c34f38a5ec"
 

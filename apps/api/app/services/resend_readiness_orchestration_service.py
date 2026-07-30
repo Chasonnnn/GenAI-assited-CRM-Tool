@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 from uuid import UUID
 
@@ -56,8 +56,8 @@ def _active_job_query(
 
 def _as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _active_check_state(
@@ -89,7 +89,7 @@ def _active_check_state(
         return "idle", None
 
     queued_at = _as_utc(pending_job.created_at)
-    if queued_at <= datetime.now(timezone.utc) - READINESS_QUEUE_STALL_AFTER:
+    if queued_at <= datetime.now(UTC) - READINESS_QUEUE_STALL_AFTER:
         return "stalled", queued_at
     return "queued", queued_at
 

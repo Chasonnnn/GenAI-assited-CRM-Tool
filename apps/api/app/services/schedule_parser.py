@@ -7,15 +7,15 @@ import hashlib
 import logging
 from datetime import date, datetime, time
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from zoneinfo import ZoneInfo
 
 from app.db.enums import TaskType
 from app.db.models import Organization
-from app.services.ai_provider import ChatMessage
 from app.services.ai_prompt_registry import get_prompt
+from app.services.ai_provider import ChatMessage
 from app.services.ai_response_validation import parse_json_array
 
 logger = logging.getLogger(__name__)

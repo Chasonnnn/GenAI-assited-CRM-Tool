@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
@@ -47,7 +47,7 @@ def _make_failed_job(db, test_org, *, job_type: JobType) -> Job:
         organization_id=test_org.id,
         job_type=job_type.value,
         payload={"organization_id": str(test_org.id), "test": True},
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
         status=JobStatus.FAILED.value,
         attempts=3,
         max_attempts=3,

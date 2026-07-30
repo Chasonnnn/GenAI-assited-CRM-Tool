@@ -11,9 +11,9 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import SurrogateInterview, InterviewNote, Surrogate
-from app.services.ai_provider import ChatMessage
+from app.db.models import InterviewNote, Surrogate, SurrogateInterview
 from app.services import ai_settings_service
+from app.services.ai_provider import ChatMessage
 from app.services.ai_settings_service import get_ai_settings, is_consent_required
 from app.services.ai_usage_service import log_usage
 
@@ -121,8 +121,8 @@ def _extend_known_names_from_text(
 
 def _strip_html(content: str) -> str:
     """Convert HTML content into readable text for AI prompts."""
-    import re
     import html as html_module
+    import re
 
     text = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", content, flags=re.DOTALL | re.I)
     text = re.sub(r"<[^>]+>", " ", text)

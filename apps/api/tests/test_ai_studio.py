@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import base64
-from contextlib import asynccontextmanager
-from datetime import datetime, timezone
 import uuid
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -155,7 +155,7 @@ async def test_ai_studio_generation_uses_isolated_agents_and_skills(
             provider="gemini",
             model="gemini-3-flash-preview",
             api_key_encrypted=ai_settings_service.encrypt_api_key("sk-assistant"),
-            consent_accepted_at=datetime.now(timezone.utc),
+            consent_accepted_at=datetime.now(UTC),
             consent_accepted_by=test_user.id,
         )
     )

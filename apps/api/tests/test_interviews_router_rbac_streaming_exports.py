@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -36,7 +36,7 @@ def interview_surrogate(db, test_org, test_user, default_stage):
 def _create_interview(db, org_id, surrogate_id, user_id):
     data = InterviewCreate(
         interview_type="phone",
-        conducted_at=datetime.now(timezone.utc),
+        conducted_at=datetime.now(UTC),
         duration_minutes=20,
         transcript_json={
             "type": "doc",
@@ -104,7 +104,7 @@ async def test_interview_summarize_stream_endpoint_returns_sse(
         model="gemini-3-flash-preview",
         current_version=1,
         anonymize_pii=False,
-        consent_accepted_at=datetime.now(timezone.utc),
+        consent_accepted_at=datetime.now(UTC),
         consent_accepted_by=test_user.id,
         api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
     )

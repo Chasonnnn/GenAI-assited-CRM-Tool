@@ -6,7 +6,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
@@ -17,8 +17,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.encryption import hash_date_of_birth, hash_email, hash_phone
 from app.db.enums import (
-    FormPurpose,
     FormLinkMode,
+    FormPurpose,
     FormStatus,
     FormSubmissionMatchStatus,
     FormSubmissionStatus,
@@ -483,7 +483,7 @@ def get_embed_setup_health(
     return {
         "status": status,
         "checks": checks,
-        "updated_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(UTC),
     }
 
 
@@ -560,7 +560,7 @@ def ensure_default_intake_routing_workflow(
 
     trigger_config = {"form_id": str(form.id)}
     actions = _default_intake_routing_actions()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     if workflow:
         workflow.trigger_config = trigger_config
@@ -658,11 +658,11 @@ def get_intake_link_by_slug(
 def _is_link_publicly_available(link: FormIntakeLink) -> bool:
     if not link.is_active:
         return False
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if link.expires_at:
         expires_at = link.expires_at
         if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
+            expires_at = expires_at.replace(tzinfo=UTC)
         if expires_at < now:
             return False
     if link.max_submissions is not None and link.submissions_count >= link.max_submissions:
@@ -785,7 +785,7 @@ def rotate_intake_link(
         campaign_name=link.campaign_name,
         event_name=link.event_name,
     )
-    link.updated_at = datetime.now(timezone.utc)
+    link.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(link)
     return link
@@ -972,7 +972,7 @@ def _detect_duplicate_recent_submission(
     if window_seconds <= 0:
         return False
 
-    cutoff = datetime.now(timezone.utc) - timedelta(seconds=window_seconds)
+    cutoff = datetime.now(UTC) - timedelta(seconds=window_seconds)
     recent = (
         db.query(FormSubmission)
         .filter(
@@ -1246,7 +1246,7 @@ def _create_shared_submission(
     if identity is None:
         mapping_lookup = _build_form_mapping_lookup(db, form.id)
         identity = _extract_identity_partial(answers=answers, mapping_lookup=mapping_lookup)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     submission = FormSubmission(
         organization_id=form.organization_id,
@@ -1478,7 +1478,7 @@ def _enqueue_privacy_safe_tracking_event(
 ) -> TrackingEventLog:
     event_payload = {
         "event_name": "Lead",
-        "event_time": int(datetime.now(timezone.utc).timestamp()),
+        "event_time": int(datetime.now(UTC).timestamp()),
         "event_id": f"sf_evt_{submission.id}",
         "action_source": "website",
         "event_source_url": f"/embed/forms/{link.slug}",
@@ -1655,7 +1655,7 @@ def submit_lead_capture_embed(
         accepted=consent_accepted,
         session=session,
     )
-    session.consumed_at = datetime.now(timezone.utc)
+    session.consumed_at = datetime.now(UTC)
     if link.tracking_mode in META_TRACKING_MODES:
         _enqueue_privacy_safe_tracking_event(
             db,
@@ -1696,7 +1696,7 @@ def auto_match_submission(
         if submission.match_status != FormSubmissionMatchStatus.LINKED.value:
             submission.match_status = FormSubmissionMatchStatus.LINKED.value
             submission.match_reason = submission.match_reason or "already_linked"
-            submission.matched_at = submission.matched_at or datetime.now(timezone.utc)
+            submission.matched_at = submission.matched_at or datetime.now(UTC)
             db.commit()
             db.refresh(submission)
         return submission, FormSubmissionMatchStatus.LINKED.value
@@ -1751,7 +1751,7 @@ def auto_match_submission(
         submission.surrogate_id = matched.id
         submission.match_status = FormSubmissionMatchStatus.LINKED.value
         submission.match_reason = "phone_dob_name_exact"
-        submission.matched_at = datetime.now(timezone.utc)
+        submission.matched_at = datetime.now(UTC)
         db.commit()
         db.refresh(submission)
         return submission, FormSubmissionMatchStatus.LINKED.value
@@ -1796,7 +1796,7 @@ def auto_match_submission(
         submission.surrogate_id = matched.id
         submission.match_status = FormSubmissionMatchStatus.LINKED.value
         submission.match_reason = "email_dob_name_exact"
-        submission.matched_at = datetime.now(timezone.utc)
+        submission.matched_at = datetime.now(UTC)
         db.commit()
         db.refresh(submission)
         return submission, FormSubmissionMatchStatus.LINKED.value
@@ -1910,9 +1910,7 @@ def create_intake_lead_for_submission(
     submission.intake_lead_id = lead.id
     submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
     submission.match_reason = (
-        "workflow_website_lead_creation"
-        if auto_promote_website_lead
-        else "workflow_lead_creation"
+        "workflow_website_lead_creation" if auto_promote_website_lead else "workflow_lead_creation"
     )
     submission.matched_at = None
     db.query(FormSubmissionMatchCandidate).filter(
@@ -2020,7 +2018,7 @@ def lookup_shared_resume_draft(
         return {"status": "insufficient_identity"}
 
     window_days = max(1, int(settings.FORMS_SHARED_DRAFT_RESUME_WINDOW_DAYS or 30))
-    cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
+    cutoff = datetime.now(UTC) - timedelta(days=window_days)
     query = db.query(FormIntakeDraft).filter(
         FormIntakeDraft.organization_id == link.organization_id,
         FormIntakeDraft.form_id == form.id,
@@ -2078,7 +2076,7 @@ def restore_shared_draft(
         raise ValueError("Source draft not found")
 
     target = get_shared_draft(db, link=link, draft_session_id=draft_session_id)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if not target:
         target = FormIntakeDraft(
             organization_id=link.organization_id,
@@ -2171,7 +2169,7 @@ def upsert_shared_draft(
         form_submission_service._validate_field_value(fields[key], value)  # type: ignore[attr-defined]
 
     draft = get_shared_draft(db, link=link, draft_session_id=draft_session_id)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if not draft:
         draft = FormIntakeDraft(
             organization_id=link.organization_id,
@@ -2255,7 +2253,7 @@ def resolve_submission_match(
         submission.surrogate_id = surrogate.id
         submission.match_status = FormSubmissionMatchStatus.LINKED.value
         submission.match_reason = "manually_linked"
-        submission.matched_at = datetime.now(timezone.utc)
+        submission.matched_at = datetime.now(UTC)
         if review_notes is not None:
             submission.review_notes = review_notes.strip() or None
         db.query(FormSubmissionMatchCandidate).filter(
@@ -2501,7 +2499,7 @@ def promote_intake_lead(
 
     lead.status = IntakeLeadStatus.PROMOTED.value
     lead.promoted_surrogate_id = surrogate.id
-    lead.promoted_at = datetime.now(timezone.utc)
+    lead.promoted_at = datetime.now(UTC)
 
     linked_count = (
         db.query(FormSubmission)
@@ -2515,7 +2513,7 @@ def promote_intake_lead(
                 FormSubmission.surrogate_id: surrogate.id,
                 FormSubmission.match_status: FormSubmissionMatchStatus.LINKED.value,
                 FormSubmission.match_reason: "lead_promoted_to_surrogate",
-                FormSubmission.matched_at: datetime.now(timezone.utc),
+                FormSubmission.matched_at: datetime.now(UTC),
             },
             synchronize_session=False,
         )

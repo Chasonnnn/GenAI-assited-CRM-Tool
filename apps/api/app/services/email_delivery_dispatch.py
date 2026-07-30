@@ -11,9 +11,10 @@ import asyncio
 import base64
 import logging
 import math
+from collections.abc import Awaitable, Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Awaitable, Callable, ContextManager
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -39,8 +40,8 @@ from app.services.email_delivery_service import (
     record_delivery_cancelled,
     record_delivery_failure,
     record_delivery_reconciliation_required,
-    record_delivery_suppressed,
     record_delivery_success,
+    record_delivery_suppressed,
     stored_request_fingerprint_matches,
 )
 
@@ -263,7 +264,7 @@ def _prepare_delivery(db: Session, claim: DeliveryClaim) -> PreparedDelivery:
         or delivery.lease_token != claim.lease_token
     ):
         raise DeliveryLeaseLost("delivery lease is no longer owned by this worker")
-    if delivery.lease_expires_at is None or delivery.lease_expires_at <= datetime.now(timezone.utc):
+    if delivery.lease_expires_at is None or delivery.lease_expires_at <= datetime.now(UTC):
         raise DeliveryLeaseLost("delivery lease has expired")
     if delivery.provider != EmailProvider.RESEND.value:
         raise DeliveryConfigurationError("Email provider is not supported")
@@ -356,7 +357,7 @@ def _revalidate_delivery_for_send(db: Session, claim: DeliveryClaim) -> None:
         or delivery.lease_token != claim.lease_token
     ):
         raise DeliveryLeaseLost("delivery lease is no longer owned by this worker")
-    if delivery.lease_expires_at is None or delivery.lease_expires_at <= datetime.now(timezone.utc):
+    if delivery.lease_expires_at is None or delivery.lease_expires_at <= datetime.now(UTC):
         raise DeliveryLeaseLost("delivery lease has expired")
 
     email_log = delivery.email_log
@@ -455,7 +456,7 @@ async def dispatch_claim(
             error_message="Provider admission is temporarily unavailable",
         )
 
-    admitted_at = datetime.now(timezone.utc)
+    admitted_at = datetime.now(UTC)
     wait_seconds = max(0.0, (reservation.send_at - admitted_at).total_seconds())
     provider_window = timedelta(seconds=MIN_PROVIDER_IO_WINDOW_SECONDS)
     if reservation.send_at + provider_window > prepared.lease_expires_at:
@@ -470,7 +471,7 @@ async def dispatch_claim(
     if wait_seconds:
         await sleeper(wait_seconds)
 
-    if datetime.now(timezone.utc) + provider_window > prepared.lease_expires_at:
+    if datetime.now(UTC) + provider_window > prepared.lease_expires_at:
         return record_delivery_failure(
             db,
             claim=claim,
@@ -479,7 +480,7 @@ async def dispatch_claim(
             error_message="Delivery lease is too short for provider I/O",
             retry_after=timedelta(seconds=1),
         )
-    if datetime.now(timezone.utc) >= prepared.idempotency_expires_at:
+    if datetime.now(UTC) >= prepared.idempotency_expires_at:
         return record_delivery_reconciliation_required(
             db,
             claim=claim,
@@ -609,7 +610,7 @@ async def dispatch_claim(
 
 async def dispatch_due_delivery_batch(
     *,
-    session_factory: Callable[[], ContextManager[Session]],
+    session_factory: Callable[[], AbstractContextManager[Session]],
     worker_id: str,
     limit: int = 5,
     lease_for: timedelta = timedelta(minutes=2),

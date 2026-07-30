@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta, timezone, time
 import uuid
+from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -38,7 +38,7 @@ def _create_surrogate(db, org_id, user_id):
 
 def test_status_change_backdate_requires_reason(db, test_org, test_user):
     surrogate = _create_surrogate(db, test_org.id, test_user.id)
-    surrogate.created_at = datetime.now(timezone.utc) - timedelta(days=7)
+    surrogate.created_at = datetime.now(UTC) - timedelta(days=7)
     db.commit()
 
     target_stage = _get_stage(db, test_org.id, "contacted")
@@ -77,7 +77,7 @@ def test_status_change_regression_creates_pending_request(db, test_org, test_use
         .first()
     )
     assert history is not None
-    history.recorded_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    history.recorded_at = datetime.now(UTC) - timedelta(minutes=10)
     db.commit()
 
     regression = surrogate_status_service.change_status(
@@ -129,7 +129,7 @@ def test_status_change_regression_self_approves_for_admin_or_developer(
         .first()
     )
     assert history is not None
-    history.recorded_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    history.recorded_at = datetime.now(UTC) - timedelta(minutes=10)
     db.commit()
 
     regression = surrogate_status_service.change_status(
@@ -252,7 +252,7 @@ def test_interview_scheduled_creates_confirmed_interview_appointment(db, test_or
     surrogate = _create_surrogate(db, test_org.id, test_user.id)
     surrogate.phone = "5551234567"
     interview_stage = _get_stage(db, test_org.id, "interview_scheduled")
-    scheduled_at = datetime.now(timezone.utc) + timedelta(days=3)
+    scheduled_at = datetime.now(UTC) + timedelta(days=3)
 
     result = surrogate_status_service.change_status(
         db=db,
@@ -318,7 +318,7 @@ def test_on_hold_creates_follow_up_and_resume_cleans_up(db, test_org, test_user)
     new_unread_stage = _get_stage(db, test_org.id, "new_unread")
     on_hold_stage = _get_stage(db, test_org.id, "on_hold")
 
-    surrogate.created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    surrogate.created_at = datetime(2026, 1, 1, tzinfo=UTC)
     db.commit()
 
     effective_at = datetime(2026, 1, 31, 12, 0, tzinfo=ZoneInfo("America/Los_Angeles"))
@@ -359,7 +359,7 @@ def test_on_hold_creates_follow_up_and_resume_cleans_up(db, test_org, test_user)
         .first()
     )
     assert latest_history is not None
-    latest_history.recorded_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    latest_history.recorded_at = datetime.now(UTC) - timedelta(minutes=10)
     db.commit()
 
     resumed = surrogate_status_service.change_status(
@@ -384,7 +384,7 @@ def test_on_hold_follow_up_assigns_queue_owned_cases_to_actor(db, test_org, test
 
     surrogate.owner_type = OwnerType.QUEUE.value
     surrogate.owner_id = uuid.uuid4()
-    surrogate.created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    surrogate.created_at = datetime(2026, 1, 1, tzinfo=UTC)
     db.commit()
 
     surrogate_status_service.change_status(
@@ -436,7 +436,7 @@ def test_leaving_on_hold_uses_paused_from_stage_for_regression_logic(db, test_or
         .first()
     )
     assert latest_history is not None
-    latest_history.recorded_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    latest_history.recorded_at = datetime.now(UTC) - timedelta(minutes=10)
     db.commit()
 
     applied = surrogate_status_service.change_status(

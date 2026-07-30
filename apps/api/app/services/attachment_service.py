@@ -2,25 +2,24 @@
 
 import csv
 import hashlib
-from io import BytesIO, StringIO
 import logging
 import os
 import shutil
 import tempfile
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from io import BytesIO, StringIO
 from typing import BinaryIO
 
 from botocore.client import BaseClient
 from botocore.exceptions import ClientError
-from sqlalchemy.orm import Session
 from sqlalchemy import event
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.enums import AuditEventType, JobStatus, JobType
 from app.db.models import Attachment, Job
-from app.services import storage_client
-from app.services import audit_service, job_service
+from app.services import audit_service, job_service, storage_client
 
 logger = logging.getLogger(__name__)
 
@@ -337,6 +336,7 @@ def strip_exif_data(file: BinaryIO, content_type: str) -> BinaryIO:
 
     try:
         from io import BytesIO
+
         from PIL import Image, UnidentifiedImageError
 
         file.seek(0)
@@ -577,7 +577,7 @@ def ensure_attachment_scan_job(
     from app.services import scan_dispatch_service
 
     attachment_id_str = str(attachment_id)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stale_after_seconds = scan_dispatch_service.scan_stale_lease_seconds()
     in_flight_jobs = (
         db.query(Job)
@@ -625,7 +625,7 @@ def dispatch_attachment_scan_if_needed(
     from app.services import scan_dispatch_service
 
     attachment_id_str = str(attachment_id)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stale_after_seconds = scan_dispatch_service.scan_stale_lease_seconds()
 
     job = (
@@ -819,7 +819,7 @@ def soft_delete_attachment(
     if not attachment:
         return False
 
-    attachment.deleted_at = datetime.now(timezone.utc)
+    attachment.deleted_at = datetime.now(UTC)
     attachment.deleted_by_user_id = user_id
 
     # Audit log
@@ -858,7 +858,7 @@ def mark_attachment_scanned(
         return
 
     attachment.scan_status = scan_result
-    attachment.scanned_at = datetime.now(timezone.utc)
+    attachment.scanned_at = datetime.now(UTC)
 
     if scan_result == "clean":
         attachment.quarantined = False

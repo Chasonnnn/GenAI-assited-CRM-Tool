@@ -1,12 +1,12 @@
 """Authentication router with Google OAuth and session management."""
 
-from typing import Annotated
-
 import io
 import logging
 import re
+from typing import Annotated
 from urllib.parse import urlencode, urlparse
 from uuid import UUID as UUIDType
+
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -23,8 +23,8 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import COOKIE_NAME, get_current_session, get_db, require_csrf_header
 from app.core.csrf import CSRF_COOKIE_NAME
+from app.core.deps import COOKIE_NAME, get_current_session, get_db, require_csrf_header
 from app.core.rate_limit import limiter
 from app.core.security import (
     create_oauth_state_payload,
@@ -36,10 +36,10 @@ from app.services import (
     auth_callback_service,
     media_service,
     org_service,
-    storage_client,
-    storage_url_service,
     session_service,
     signature_template_service,
+    storage_client,
+    storage_url_service,
     user_service,
 )
 from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
@@ -448,6 +448,7 @@ async def upload_avatar(
 
     # Upload to S3
     import uuid as uuid_module
+
     from app.core.config import settings as app_settings
 
     file_id = str(uuid_module.uuid4())
@@ -857,6 +858,7 @@ async def upload_signature_photo(
 
     # Upload to S3 under signatures/ prefix
     import uuid as uuid_module
+
     from app.core.config import settings as app_settings
 
     file_id = str(uuid_module.uuid4())

@@ -7,18 +7,18 @@ Create Date: 2025-12-17
 Org-configurable pipelines for case status display customization (v1: display-only).
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0016_add_pipelines"
-down_revision: Union[str, Sequence[str], None] = "0015_add_case_imports"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "0015_add_case_imports"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

@@ -16,10 +16,10 @@ Tables:
 Also adds last_contacted_at and last_contact_method to cases table.
 """
 
-from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "0010_ai_assistant"

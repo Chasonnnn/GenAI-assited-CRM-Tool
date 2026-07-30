@@ -1,34 +1,34 @@
 """Tests for workflow approval functionality."""
 
-import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from app.db.enums import (
-    TaskType,
-    TaskStatus,
-    WorkflowExecutionStatus,
-    WorkflowTriggerType,
-    OwnerType,
-)
-from app.db.models import (
-    Task,
-    Surrogate,
-    User,
-    AutomationWorkflow,
-    WorkflowExecution,
-)
+import pytest
+
 from app.core.constants import SYSTEM_USER_ID
 from app.core.encryption import hash_email
-from app.utils.normalization import normalize_email
-from app.utils.business_hours import (
-    is_business_day,
-    is_business_time,
-    add_business_hours,
-    calculate_approval_due_date,
+from app.db.enums import (
+    OwnerType,
+    TaskStatus,
+    TaskType,
+    WorkflowExecutionStatus,
+    WorkflowTriggerType,
+)
+from app.db.models import (
+    AutomationWorkflow,
+    Surrogate,
+    Task,
+    User,
+    WorkflowExecution,
 )
 from app.services.workflow_action_preview import build_action_preview, render_action_payload
-
+from app.utils.business_hours import (
+    add_business_hours,
+    calculate_approval_due_date,
+    is_business_day,
+    is_business_time,
+)
+from app.utils.normalization import normalize_email
 
 # =============================================================================
 # Fixtures
@@ -67,45 +67,45 @@ class TestBusinessHoursCalculator:
     def test_is_business_day_weekday(self):
         """Monday-Friday should be business days (if not holiday)."""
         # Monday Jan 6, 2025 - pass datetime not date
-        monday = datetime(2025, 1, 6, 12, 0, tzinfo=timezone.utc)
+        monday = datetime(2025, 1, 6, 12, 0, tzinfo=UTC)
         assert is_business_day(monday) is True
 
     def test_is_business_day_weekend(self):
         """Saturday and Sunday should not be business days."""
         # Saturday Jan 4, 2025
-        saturday = datetime(2025, 1, 4, 12, 0, tzinfo=timezone.utc)
+        saturday = datetime(2025, 1, 4, 12, 0, tzinfo=UTC)
         assert is_business_day(saturday) is False
 
     def test_is_business_day_holiday(self):
         """US federal holidays should not be business days."""
         # New Year's Day 2025 - pass datetime not date
-        new_years = datetime(2025, 1, 1, 12, 0, tzinfo=timezone.utc)
+        new_years = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
         assert is_business_day(new_years) is False
 
     def test_is_business_time_during_hours(self):
         """10am on a weekday should be business time."""
         # Monday Jan 6, 2025 at 10:00am
-        monday_10am = datetime(2025, 1, 6, 10, 0, tzinfo=timezone.utc)
+        monday_10am = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
         assert is_business_time(monday_10am) is True
 
     def test_is_business_time_before_hours(self):
         """7am on a weekday should not be business time."""
-        monday_7am = datetime(2025, 1, 6, 7, 0, tzinfo=timezone.utc)
+        monday_7am = datetime(2025, 1, 6, 7, 0, tzinfo=UTC)
         assert is_business_time(monday_7am) is False
 
     def test_is_business_time_after_hours(self):
         """7pm on a weekday should not be business time."""
-        monday_7pm = datetime(2025, 1, 6, 19, 0, tzinfo=timezone.utc)
+        monday_7pm = datetime(2025, 1, 6, 19, 0, tzinfo=UTC)
         assert is_business_time(monday_7pm) is False
 
     def test_is_business_time_weekend(self):
         """12pm on Saturday should not be business time."""
-        saturday_noon = datetime(2025, 1, 4, 12, 0, tzinfo=timezone.utc)
+        saturday_noon = datetime(2025, 1, 4, 12, 0, tzinfo=UTC)
         assert is_business_time(saturday_noon) is False
 
     def test_add_business_hours_same_day(self):
         """Adding 2 hours at 10am should result in 12pm same day."""
-        start = datetime(2025, 1, 6, 10, 0, tzinfo=timezone.utc)
+        start = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
         result = add_business_hours(start, 2, "UTC")
         assert result.hour == 12
         assert result.day == 6
@@ -114,7 +114,7 @@ class TestBusinessHoursCalculator:
         """Adding 10 hours should span to next business day."""
         # Start at 2pm Monday, add 10 hours
         # 4 hours left Monday (2pm-6pm), then 6 hours Tuesday (8am-2pm)
-        start = datetime(2025, 1, 6, 14, 0, tzinfo=timezone.utc)
+        start = datetime(2025, 1, 6, 14, 0, tzinfo=UTC)
         result = add_business_hours(start, 10, "UTC")
         assert result.day == 7  # Tuesday
         assert result.hour == 14  # 2pm
@@ -123,7 +123,7 @@ class TestBusinessHoursCalculator:
         """Hours added on Friday afternoon should skip to Monday."""
         # Friday Jan 3, 2025 at 5pm, add 2 hours
         # 1 hour left Friday (5pm-6pm), weekend skipped, 1 hour Monday (8am-9am)
-        friday_5pm = datetime(2025, 1, 3, 17, 0, tzinfo=timezone.utc)
+        friday_5pm = datetime(2025, 1, 3, 17, 0, tzinfo=UTC)
         result = add_business_hours(friday_5pm, 2, "UTC")
         assert result.weekday() == 0  # Monday
         assert result.hour == 9
@@ -132,7 +132,7 @@ class TestBusinessHoursCalculator:
         """48 business hours = ~5 business days (4.8 days at 10 hrs/day)."""
         # Monday 9am, add 48 hours
         # Mon: 9 hours (9am-6pm), Tue-Thu: 30 hours, Fri: 9 hours = 48 total
-        monday_9am = datetime(2025, 1, 6, 9, 0, tzinfo=timezone.utc)
+        monday_9am = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
         result = add_business_hours(monday_9am, 48, "UTC")
         # Should be Friday at 5pm (9+10+10+10+9=48)
         assert result.weekday() == 4  # Friday
@@ -140,7 +140,7 @@ class TestBusinessHoursCalculator:
 
     def test_calculate_approval_due_date(self):
         """Due date should be 48 business hours from now."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         due = calculate_approval_due_date(now, None, None)
         assert due > now
 
@@ -265,7 +265,7 @@ class TestWorkflowApprovalTaskService:
             workflow_action_type="assign_surrogate",
             workflow_action_preview="Assign surrogate to User",
             workflow_action_payload={"action_type": "assign_surrogate"},
-            due_at=datetime.now(timezone.utc) + timedelta(hours=48),
+            due_at=datetime.now(UTC) + timedelta(hours=48),
         )
         db.add(task)
         db.flush()
@@ -334,7 +334,7 @@ class TestWorkflowApprovalTaskService:
             workflow_action_type="assign_surrogate",
             workflow_action_preview="Assign surrogate to User",
             workflow_action_payload={"action_type": "assign_surrogate"},
-            due_at=datetime.now(timezone.utc) + timedelta(hours=48),
+            due_at=datetime.now(UTC) + timedelta(hours=48),
         )
         db.add(task)
         db.flush()
@@ -409,7 +409,7 @@ class TestWorkflowApprovalTaskService:
             workflow_action_type="assign_surrogate",
             workflow_action_preview="Assign surrogate to User",
             workflow_action_payload={"action_type": "assign_surrogate"},
-            due_at=datetime.now(timezone.utc) + timedelta(hours=48),
+            due_at=datetime.now(UTC) + timedelta(hours=48),
         )
         db.add(task)
         db.flush()
@@ -478,7 +478,7 @@ class TestWorkflowApprovalTaskService:
             workflow_action_type="assign_surrogate",
             workflow_action_preview="Assign surrogate to User",
             workflow_action_payload={"action_type": "assign_surrogate"},
-            due_at=datetime.now(timezone.utc) - timedelta(hours=1),  # Past due
+            due_at=datetime.now(UTC) - timedelta(hours=1),  # Past due
         )
         db.add(task)
         db.flush()
@@ -549,7 +549,7 @@ class TestWorkflowApprovalEndpoint:
             workflow_action_type="assign_surrogate",
             workflow_action_preview="Assign surrogate to User",
             workflow_action_payload={"action_type": "assign_surrogate"},
-            due_at=datetime.now(timezone.utc) + timedelta(hours=48),
+            due_at=datetime.now(UTC) + timedelta(hours=48),
         )
         db.add(task)
         db.flush()
@@ -616,7 +616,7 @@ class TestWorkflowApprovalEndpoint:
             workflow_action_type="assign_surrogate",
             workflow_action_preview="Assign surrogate to User",
             workflow_action_payload={"action_type": "assign_surrogate"},
-            due_at=datetime.now(timezone.utc) + timedelta(hours=48),
+            due_at=datetime.now(UTC) + timedelta(hours=48),
         )
         db.add(task)
         db.flush()
@@ -649,7 +649,7 @@ class TestWorkflowApprovalEndpoint:
             owner_type=OwnerType.USER.value,
             owner_id=test_user.id,
             created_by_user_id=SYSTEM_USER_ID,
-            due_at=datetime.now(timezone.utc) + timedelta(hours=48),
+            due_at=datetime.now(UTC) + timedelta(hours=48),
         )
         db.add(task)
         db.commit()
@@ -722,7 +722,7 @@ class TestOwnerChangeInvalidation:
             workflow_action_type="assign_surrogate",
             workflow_action_preview="Assign surrogate to User",
             workflow_action_payload={"action_type": "assign_surrogate"},
-            due_at=datetime.now(timezone.utc) + timedelta(hours=48),
+            due_at=datetime.now(UTC) + timedelta(hours=48),
         )
         db.add(task)
         db.flush()

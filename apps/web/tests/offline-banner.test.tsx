@@ -65,4 +65,17 @@ describe("OfflineBanner", () => {
         })
         expect(window.fetch).toBe(wrappedFetch)
     })
+
+    it("announces the offline state without exposing the decorative icon", async () => {
+        Object.defineProperty(navigator, "onLine", {
+            configurable: true,
+            value: false,
+        })
+
+        const { container } = render(<OfflineBanner />)
+
+        const alert = await screen.findByRole("alert")
+        expect(alert).toHaveTextContent("You're offline. Some features may be unavailable.")
+        expect(container.querySelector("svg")).toHaveAttribute("aria-hidden", "true")
+    })
 })

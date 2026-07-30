@@ -9,10 +9,9 @@ Endpoints:
 - Export (PDF, JSON)
 """
 
-from typing import Annotated
-
 import asyncio
 from collections.abc import AsyncIterator
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import (
@@ -25,12 +24,10 @@ from fastapi import (
     UploadFile,
     status,
 )
-
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.core.surrogate_access import can_modify_surrogate, check_surrogate_access
 from app.core.deps import (
     get_current_session,
     get_db,
@@ -39,11 +36,11 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.permissions import PermissionKey as P
+from app.core.surrogate_access import can_modify_surrogate, check_surrogate_access
 from app.db.enums import Role
 from app.schemas.auth import UserSession
-from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
-from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
 from app.schemas.interview import (
+    AllInterviewsSummaryResponse,
     InterviewAttachmentRead,
     InterviewCreate,
     InterviewListItem,
@@ -51,25 +48,26 @@ from app.schemas.interview import (
     InterviewNoteRead,
     InterviewNoteUpdate,
     InterviewRead,
+    InterviewSummaryResponse,
     InterviewUpdate,
     InterviewVersionDiff,
     InterviewVersionListItem,
     InterviewVersionRead,
-    InterviewSummaryResponse,
-    AllInterviewsSummaryResponse,
     TranscriptionRequest,
     TranscriptionStatusRead,
 )
 from app.services import (
-    attachment_service,
     ai_interview_service,
-    surrogate_service,
+    attachment_service,
     interview_attachment_service,
     interview_note_service,
     interview_service,
     org_service,
     pdf_export_service,
+    surrogate_service,
 )
+from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
+from app.utils.sse import STREAM_HEADERS, format_sse, sse_preamble
 
 router = APIRouter(tags=["interviews"])
 

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
 import uuid
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -123,7 +123,7 @@ async def test_surrogates_list_owner_filter_for_case_manager_keeps_visibility_po
             other_user.id,
             "under_review",
             "Hidden Other User Case",
-            datetime.now(timezone.utc) - timedelta(days=1),
+            datetime.now(UTC) - timedelta(days=1),
         )
         visible = _create_surrogate(
             db,
@@ -131,7 +131,7 @@ async def test_surrogates_list_owner_filter_for_case_manager_keeps_visibility_po
             other_user.id,
             "approved",
             "Visible Other User Case",
-            datetime.now(timezone.utc),
+            datetime.now(UTC),
         )
 
         response = await client.get(
@@ -168,8 +168,8 @@ async def test_surrogate_created_dates_owner_filter_for_case_manager_keeps_visib
             )
         )
         db.flush()
-        hidden_created_at = datetime(2026, 1, 3, tzinfo=timezone.utc)
-        visible_created_at = datetime(2026, 1, 4, tzinfo=timezone.utc)
+        hidden_created_at = datetime(2026, 1, 3, tzinfo=UTC)
+        visible_created_at = datetime(2026, 1, 4, tzinfo=UTC)
         _create_surrogate(
             db,
             test_org.id,

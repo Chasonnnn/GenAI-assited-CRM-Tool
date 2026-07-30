@@ -10,9 +10,10 @@ Salesforce-style single owner model:
 - Backfill: existing cases get owner_type="user", owner_id=assigned_to or created_by
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "0023_add_queues_ownership"

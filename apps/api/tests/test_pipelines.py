@@ -2,7 +2,7 @@
 
 import uuid
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -10,13 +10,13 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event
 
-from app.core.pipeline_stage_colors import resolve_stage_color
-from app.core.stage_definitions import get_default_stage_defs
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.encryption import hash_email
+from app.core.pipeline_stage_colors import resolve_stage_color
 from app.core.security import create_session_token
-from app.db.enums import Role
+from app.core.stage_definitions import get_default_stage_defs
+from app.db.enums import Role, WorkflowTriggerType
 from app.db.models import (
     EmailTemplate,
     Membership,
@@ -38,7 +38,6 @@ from app.services import (
     workflow_service,
     zapier_settings_service,
 )
-from app.db.enums import WorkflowTriggerType
 from app.utils.normalization import normalize_email
 
 
@@ -94,14 +93,13 @@ def _remove_stage_key_refs(feature_config: dict, stage_key: str) -> dict:
     return next_config
 
 
-def _remap_stage_key_refs(feature_config: dict, removed_stage_key: str, target_stage_key: str) -> dict:
+def _remap_stage_key_refs(
+    feature_config: dict, removed_stage_key: str, target_stage_key: str
+) -> dict:
     next_config = deepcopy(feature_config)
 
     def replace_keys(values: list[str]) -> list[str]:
-        replaced = [
-            target_stage_key if key == removed_stage_key else key
-            for key in values
-        ]
+        replaced = [target_stage_key if key == removed_stage_key else key for key in values]
         return list(dict.fromkeys(replaced))
 
     for milestone in next_config["journey"]["milestones"]:
@@ -1007,8 +1005,7 @@ async def test_pipeline_change_preview_requires_remap_for_pre_qualified_integrat
     assert "active_surrogates" in required_remap["reasons"]
     assert "integrations" in required_remap["reasons"]
     assert any(
-        "Pre-Qualified" in issue and "remap target" in issue
-        for issue in preview["blocking_issues"]
+        "Pre-Qualified" in issue and "remap target" in issue for issue in preview["blocking_issues"]
     )
 
     pre_qualified_dependency = next(
@@ -1267,7 +1264,9 @@ async def test_apply_pipeline_draft_removes_pre_qualified_and_remaps_integration
     pre_qualified_stage = next(
         stage for stage in pipeline["stages"] if stage["stage_key"] == "pre_qualified"
     )
-    contacted_stage = next(stage for stage in pipeline["stages"] if stage["stage_key"] == "contacted")
+    contacted_stage = next(
+        stage for stage in pipeline["stages"] if stage["stage_key"] == "contacted"
+    )
     pre_qualified_db = pipeline_service.get_stage_by_id(db, UUID(pre_qualified_stage["id"]))
     contacted_db = pipeline_service.get_stage_by_id(db, UUID(contacted_stage["id"]))
     assert pre_qualified_db is not None
@@ -1306,9 +1305,7 @@ async def test_apply_pipeline_draft_removes_pre_qualified_and_remaps_integration
             "stages": [
                 _draft_stage_payload(stage, index + 1)
                 for index, stage in enumerate(
-                    stage
-                    for stage in pipeline["stages"]
-                    if stage["stage_key"] != "pre_qualified"
+                    stage for stage in pipeline["stages"] if stage["stage_key"] != "pre_qualified"
                 )
             ],
             "feature_config": _remap_stage_key_refs(
@@ -1645,7 +1642,7 @@ async def test_apply_pipeline_draft_remaps_paused_from_stage_and_pending_status_
         entity_type="surrogate",
         entity_id=surrogate.id,
         target_stage_id=UUID(custom_stage["id"]),
-        effective_at=datetime.now(timezone.utc),
+        effective_at=datetime.now(UTC),
         reason="Need approval",
         requested_by_user_id=test_user.id,
         status="pending",

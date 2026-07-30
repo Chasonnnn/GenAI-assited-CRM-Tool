@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     ForeignKey,
@@ -168,4 +167,4 @@ class SystemAlert(Base):
     )
 
     # Relationships
-    resolved_by: Mapped["User | None"] = relationship()
+    resolved_by: Mapped[User | None] = relationship()

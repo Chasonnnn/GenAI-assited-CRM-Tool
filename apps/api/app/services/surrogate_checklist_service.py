@@ -18,7 +18,6 @@ from app.utils.journey_timing import (
     normalize_journey_timing_text,
 )
 
-
 ChecklistValueType = Literal["boolean", "text", "number"]
 
 

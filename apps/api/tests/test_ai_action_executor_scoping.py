@@ -1,7 +1,7 @@
 import uuid
 
 from app.core.encryption import hash_email
-from app.db.models import Organization, Pipeline, PipelineStage, Surrogate, EntityNote, Task
+from app.db.models import EntityNote, Organization, Pipeline, PipelineStage, Surrogate, Task
 from app.services.ai_action_executor import AddNoteExecutor, CreateTaskExecutor
 from app.utils.normalization import normalize_email
 

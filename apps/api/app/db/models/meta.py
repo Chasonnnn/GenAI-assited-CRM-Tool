@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
@@ -95,8 +94,8 @@ class MetaOAuthConnection(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    connected_by_user: Mapped["User"] = relationship(foreign_keys=[connected_by_user_id])
+    organization: Mapped[Organization] = relationship()
+    connected_by_user: Mapped[User] = relationship(foreign_keys=[connected_by_user_id])
 
 
 class MetaLead(Base):
@@ -218,8 +217,8 @@ class MetaPageMapping(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    oauth_connection: Mapped["MetaOAuthConnection | None"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    oauth_connection: Mapped[MetaOAuthConnection | None] = relationship()
 
 
 class MetaAdAccount(Base):
@@ -279,15 +278,15 @@ class MetaAdAccount(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    oauth_connection: Mapped["MetaOAuthConnection | None"] = relationship()
-    campaigns: Mapped[list["MetaCampaign"]] = relationship(
+    organization: Mapped[Organization] = relationship()
+    oauth_connection: Mapped[MetaOAuthConnection | None] = relationship()
+    campaigns: Mapped[list[MetaCampaign]] = relationship(
         back_populates="ad_account", cascade="all, delete-orphan"
     )
-    adsets: Mapped[list["MetaAdSet"]] = relationship(
+    adsets: Mapped[list[MetaAdSet]] = relationship(
         back_populates="ad_account", cascade="all, delete-orphan"
     )
-    ads: Mapped[list["MetaAd"]] = relationship(
+    ads: Mapped[list[MetaAd]] = relationship(
         back_populates="ad_account", cascade="all, delete-orphan"
     )
 
@@ -335,12 +334,12 @@ class MetaCampaign(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    ad_account: Mapped["MetaAdAccount"] = relationship(back_populates="campaigns")
-    adsets: Mapped[list["MetaAdSet"]] = relationship(
+    organization: Mapped[Organization] = relationship()
+    ad_account: Mapped[MetaAdAccount] = relationship(back_populates="campaigns")
+    adsets: Mapped[list[MetaAdSet]] = relationship(
         back_populates="campaign", cascade="all, delete-orphan"
     )
-    ads: Mapped[list["MetaAd"]] = relationship(
+    ads: Mapped[list[MetaAd]] = relationship(
         back_populates="campaign", cascade="all, delete-orphan"
     )
 
@@ -395,10 +394,10 @@ class MetaAdSet(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    ad_account: Mapped["MetaAdAccount"] = relationship(back_populates="adsets")
-    campaign: Mapped["MetaCampaign"] = relationship(back_populates="adsets")
-    ads: Mapped[list["MetaAd"]] = relationship(back_populates="adset", cascade="all, delete-orphan")
+    organization: Mapped[Organization] = relationship()
+    ad_account: Mapped[MetaAdAccount] = relationship(back_populates="adsets")
+    campaign: Mapped[MetaCampaign] = relationship(back_populates="adsets")
+    ads: Mapped[list[MetaAd]] = relationship(back_populates="adset", cascade="all, delete-orphan")
 
 
 class MetaAd(Base):
@@ -457,10 +456,10 @@ class MetaAd(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    ad_account: Mapped["MetaAdAccount"] = relationship(back_populates="ads")
-    adset: Mapped["MetaAdSet"] = relationship(back_populates="ads")
-    campaign: Mapped["MetaCampaign"] = relationship(back_populates="ads")
+    organization: Mapped[Organization] = relationship()
+    ad_account: Mapped[MetaAdAccount] = relationship(back_populates="ads")
+    adset: Mapped[MetaAdSet] = relationship(back_populates="ads")
+    campaign: Mapped[MetaCampaign] = relationship(back_populates="ads")
 
 
 class MetaDailySpend(Base):
@@ -523,8 +522,8 @@ class MetaDailySpend(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    ad_account: Mapped["MetaAdAccount"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    ad_account: Mapped[MetaAdAccount] = relationship()
 
 
 class MetaAdPlatformDaily(Base):
@@ -577,8 +576,8 @@ class MetaAdPlatformDaily(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    ad_account: Mapped["MetaAdAccount"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    ad_account: Mapped[MetaAdAccount] = relationship()
 
 
 class MetaForm(Base):
@@ -642,8 +641,8 @@ class MetaForm(Base):
     )
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    versions: Mapped[list["MetaFormVersion"]] = relationship(
+    organization: Mapped[Organization] = relationship()
+    versions: Mapped[list[MetaFormVersion]] = relationship(
         back_populates="form",
         foreign_keys="MetaFormVersion.form_id",
         cascade="all, delete-orphan",
@@ -681,7 +680,7 @@ class MetaFormVersion(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    form: Mapped["MetaForm"] = relationship(back_populates="versions", foreign_keys=[form_id])
+    form: Mapped[MetaForm] = relationship(back_populates="versions", foreign_keys=[form_id])
 
 
 # =============================================================================

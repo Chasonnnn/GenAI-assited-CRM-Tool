@@ -1,6 +1,6 @@
 """Intended parent stage change helpers (apply + request + history + notifications)."""
 
-from datetime import datetime, time, timedelta, timezone
+from datetime import UTC, datetime, time, timedelta
 from typing import TypedDict
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -9,8 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.enums import Role
 from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
+from app.db.enums import Role
 from app.db.models import (
     IntendedParent,
     IntendedParentStatusHistory,
@@ -53,7 +53,7 @@ def _normalize_effective_at(
     effective_at: datetime | None,
     org_timezone_str: str,
 ) -> datetime:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     if effective_at is None:
         return now
@@ -72,10 +72,10 @@ def _normalize_effective_at(
             return now
         if effective_date < today_org:
             noon = datetime.combine(effective_date, time(12, 0, 0)).replace(tzinfo=org_tz)
-            return noon.astimezone(timezone.utc)
-        return effective_at.astimezone(timezone.utc)
+            return noon.astimezone(UTC)
+        return effective_at.astimezone(UTC)
 
-    return effective_at.astimezone(timezone.utc)
+    return effective_at.astimezone(UTC)
 
 
 def get_default_pipeline_stage(
@@ -133,7 +133,7 @@ def change_status(
     if new_stage.id == current_stage.id:
         raise ValueError("Target stage is same as current stage")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     org_tz_str = _get_org_timezone(db, ip.organization_id)
     normalized_effective_at = _normalize_effective_at(effective_at, org_tz_str)
 
@@ -268,8 +268,8 @@ def apply_status_change(
     """Apply a stage change to an intended parent."""
     ip.stage_id = new_stage.id
     ip.status = new_stage.stage_key
-    ip.last_activity = datetime.now(timezone.utc)
-    ip.updated_at = datetime.now(timezone.utc)
+    ip.last_activity = datetime.now(UTC)
+    ip.updated_at = datetime.now(UTC)
 
     history = IntendedParentStatusHistory(
         intended_parent_id=ip.id,

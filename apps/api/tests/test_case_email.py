@@ -1,8 +1,9 @@
 """Tests for email sending from cases."""
 
+from uuid import uuid4
+
 import pytest
 from httpx import AsyncClient
-from uuid import uuid4
 
 
 def _configure_org_resend(db, test_org, test_user) -> None:
@@ -56,9 +57,9 @@ async def test_get_template_variables_returns_resolved_values(
     authed_client: AsyncClient, db, test_org, test_user
 ):
     """Template variable preview should return resolved values for the surrogate context."""
-    from app.services import surrogate_service
-    from app.schemas.surrogate import SurrogateCreate
     from app.db.enums import SurrogateSource
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import surrogate_service
 
     case_data = SurrogateCreate(
         full_name="Ashley Nicole Harden",
@@ -82,9 +83,9 @@ async def test_get_template_variables_returns_resolved_values(
 @pytest.mark.asyncio
 async def test_send_email_template_not_found(authed_client: AsyncClient, db, test_org, test_user):
     """Test send email with non-existent template returns 404."""
-    from app.services import surrogate_service
-    from app.schemas.surrogate import SurrogateCreate
     from app.db.enums import SurrogateSource
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import surrogate_service
 
     # Create a case
     case_data = SurrogateCreate(
@@ -110,9 +111,9 @@ async def test_send_email_rejects_template_with_unresolved_case_variables(
     """Manual case sends should fail clearly if a template needs non-case variables."""
     from unittest.mock import AsyncMock
 
-    from app.services import surrogate_service, email_service, gmail_service
-    from app.schemas.surrogate import SurrogateCreate
     from app.db.enums import SurrogateSource
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import email_service, gmail_service, surrogate_service
 
     case_data = SurrogateCreate(
         full_name="Appointment Template Case",
@@ -152,9 +153,9 @@ async def test_send_email_auto_requires_personal_gmail_even_with_org_resend(
     authed_client: AsyncClient, db, test_org, test_user, monkeypatch
 ):
     """Manual auto sends should fail fast instead of falling back to org Resend."""
-    from app.services import surrogate_service, email_service
-    from app.schemas.surrogate import SurrogateCreate
     from app.db.enums import SurrogateSource
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import email_service, surrogate_service
 
     # Create a case
     case_data = SurrogateCreate(
@@ -198,9 +199,9 @@ async def test_send_email_auto_requires_personal_gmail(
     authed_client: AsyncClient, db, test_org, test_user, monkeypatch
 ):
     """Auto provider should not fall back to any Resend configuration."""
-    from app.services import surrogate_service, email_service, oauth_service
-    from app.schemas.surrogate import SurrogateCreate
     from app.db.enums import SurrogateSource
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import email_service, oauth_service, surrogate_service
 
     case = surrogate_service.create_surrogate(
         db,
@@ -241,9 +242,9 @@ async def test_send_email_auto_uses_connected_gmail_even_with_org_resend(
     authed_client: AsyncClient, db, test_org, test_user, monkeypatch
 ):
     """Auto provider should resolve to the user's Gmail for manual sends."""
-    from app.services import surrogate_service, email_service, gmail_service, oauth_service
-    from app.schemas.surrogate import SurrogateCreate
     from app.db.enums import SurrogateSource
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import email_service, gmail_service, oauth_service, surrogate_service
 
     _configure_org_resend(db, test_org, test_user)
     case = surrogate_service.create_surrogate(
@@ -284,9 +285,7 @@ async def test_send_email_auto_uses_connected_gmail_even_with_org_resend(
 
 
 @pytest.mark.asyncio
-async def test_intake_assignee_can_send_email_at_interview_scheduled(
-    db, test_org, monkeypatch
-):
+async def test_intake_assignee_can_send_email_at_interview_scheduled(db, test_org, monkeypatch):
     """Intake owner can send a manual Gmail email from Interview Scheduled."""
     from httpx import ASGITransport
 
@@ -297,8 +296,14 @@ async def test_intake_assignee_can_send_email_at_interview_scheduled(
     from app.db.models import Membership, User
     from app.main import app
     from app.schemas.surrogate import SurrogateCreate
-    from app.services import email_service, gmail_service, oauth_service, pipeline_service
-    from app.services import session_service, surrogate_service
+    from app.services import (
+        email_service,
+        gmail_service,
+        oauth_service,
+        pipeline_service,
+        session_service,
+        surrogate_service,
+    )
 
     intake_user = User(
         id=uuid4(),
@@ -330,9 +335,7 @@ async def test_intake_assignee_can_send_email_at_interview_scheduled(
         ),
     )
     pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id, intake_user.id)
-    interview_stage = pipeline_service.get_stage_by_key(
-        db, pipeline.id, "interview_scheduled"
-    )
+    interview_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "interview_scheduled")
     assert interview_stage is not None
     case.stage_id = interview_stage.id
     case.status_label = interview_stage.label
@@ -404,9 +407,9 @@ async def test_send_email_rejects_resend_provider_for_surrogate_manual_send(
     authed_client: AsyncClient, db, test_org, test_user, monkeypatch
 ):
     """Manual surrogate email sends should not use org Resend even when configured."""
-    from app.services import surrogate_service, email_service
-    from app.schemas.surrogate import SurrogateCreate
     from app.db.enums import SurrogateSource
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import email_service, surrogate_service
 
     case_data = SurrogateCreate(
         full_name="Provider Strict Case",
@@ -441,8 +444,7 @@ async def test_send_email_rejects_resend_provider_for_surrogate_manual_send(
     assert data["provider_used"] is None
     assert data["email_log_id"] is None
     assert (
-        data["error"]
-        == "Manual case email sends use personal Gmail only. Connect Gmail in "
+        data["error"] == "Manual case email sends use personal Gmail only. Connect Gmail in "
         "Settings > Integrations."
     )
 
@@ -452,9 +454,9 @@ async def test_send_email_suppressed_returns_error(
     authed_client: AsyncClient, db, test_org, test_user
 ):
     """Suppressed recipients should be skipped before provider selection."""
-    from app.services import surrogate_service, email_service, campaign_service
-    from app.schemas.surrogate import SurrogateCreate
     from app.db.enums import SurrogateSource
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import campaign_service, email_service, surrogate_service
 
     case_data = SurrogateCreate(
         full_name="Suppressed Case",
@@ -495,9 +497,9 @@ async def test_send_email_gmail_appends_personal_signature_and_unsubscribe_foote
     authed_client: AsyncClient, db, test_org, test_user, monkeypatch
 ):
     """Case send-email should append personal signature + unsubscribe footer for surrogate sends."""
-    from app.services import surrogate_service, email_service
-    from app.schemas.surrogate import SurrogateCreate
     from app.db.enums import SurrogateSource
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import email_service, surrogate_service
 
     test_org.signature_company_name = "Org Signature Co"
     test_org.signature_template = "classic"

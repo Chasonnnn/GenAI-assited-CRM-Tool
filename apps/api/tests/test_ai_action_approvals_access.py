@@ -1,9 +1,9 @@
-from contextlib import asynccontextmanager
-from datetime import datetime, timezone
 import uuid
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
@@ -130,7 +130,7 @@ async def test_ai_action_approval_requires_surrogate_access(db, test_org, test_u
         action_type="add_note",
         action_payload={"type": "add_note", "content": "AI note"},
         status="pending",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(approval)
     db.flush()

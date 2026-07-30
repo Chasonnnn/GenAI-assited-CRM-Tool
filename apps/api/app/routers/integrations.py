@@ -6,12 +6,10 @@ Each user connects their own accounts.
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
-
 import httpx
-
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
@@ -19,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.async_utils import run_async
 from app.core.config import settings
-from app.core.deps import get_db, get_current_session, require_csrf_header
+from app.core.deps import get_current_session, get_db, require_csrf_header
 from app.core.rate_limit import limiter
 from app.core.security import (
     create_oauth_state_payload,
@@ -621,7 +619,7 @@ async def sync_google_calendar_now(
             session.org_id,
         )
 
-    integration.updated_at = datetime.now(timezone.utc)
+    integration.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(integration)
 
@@ -800,8 +798,10 @@ async def get_google_calendar_events(
     - date_end: End date (ISO format YYYY-MM-DD)
     - timezone: Optional client timezone (e.g., "America/New_York") for accurate day boundaries
     """
-    from datetime import datetime as dt, time as tm
+    from datetime import datetime as dt
+    from datetime import time as tm
     from zoneinfo import ZoneInfo
+
     from app.services import calendar_service
 
     # Parse dates
@@ -1040,10 +1040,10 @@ async def create_zoom_meeting(
     - Creates a meeting task
     """
     from datetime import datetime as dt
-    from app.db.enums import EntityType
+
     from app.core.surrogate_access import check_surrogate_access
-    from app.services import zoom_service
-    from app.services import surrogate_service, ip_service
+    from app.db.enums import EntityType
+    from app.services import ip_service, surrogate_service, zoom_service
 
     # Parse entity type
     if request.entity_type == "surrogate":
@@ -1256,8 +1256,8 @@ def send_zoom_meeting_invite(
     if request.surrogate_id:
         try:
             parsed_surrogate_id = uuid.UUID(request.surrogate_id)
-            from app.services import surrogate_service
             from app.core.surrogate_access import check_surrogate_access
+            from app.services import surrogate_service
 
             surrogate = surrogate_service.get_surrogate(db, session.org_id, parsed_surrogate_id)
             if surrogate:

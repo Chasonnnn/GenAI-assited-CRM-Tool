@@ -8,7 +8,6 @@ from app.core.config import settings
 from app.db.models import Organization
 from app.services import version_service
 
-
 # Reserved slugs that cannot be used for organizations (system/infra/env names)
 RESERVED_SLUGS = frozenset(
     {
@@ -134,7 +133,7 @@ def create_org(
     db.refresh(org)
 
     # Seed default role permissions for new org
-    from app.services import permission_service, compliance_service
+    from app.services import compliance_service, permission_service
 
     permission_service.seed_role_defaults(db, org.id)
     db.commit()

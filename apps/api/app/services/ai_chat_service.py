@@ -9,32 +9,32 @@ import re
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone, date
+from datetime import UTC, date, datetime, timedelta
 
 import nh3
 import sqlalchemy as sa
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.async_utils import run_async
+from app.db.enums import AlertSeverity, AlertType, TaskType
 from app.db.models import (
-    AIConversation,
-    AIMessage,
     AIActionApproval,
-    AIUsageLog,
+    AIConversation,
     AIEntitySummary,
-    Surrogate,
+    AIMessage,
+    AIUsageLog,
     EntityNote,
+    Surrogate,
     Task,
     UserIntegration,
 )
-from app.db.enums import AlertSeverity, AlertType, TaskType
-from app.services.ai_provider import ChatMessage, ChatResponse, AIProvider
 from app.services import ai_settings_service
 from app.services.ai_prompt_registry import get_prompt
 from app.services.ai_prompt_schemas import AIChatActionProposal
-from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_text
+from app.services.ai_provider import AIProvider, ChatMessage, ChatResponse
 from app.services.ai_response_validation import parse_json_object, validate_model
+from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_text
 from app.types import JsonObject
-from app.core.async_utils import run_async
 
 logger = logging.getLogger(__name__)
 
@@ -284,7 +284,7 @@ def _get_or_update_entity_summary(
     entity_id: uuid.UUID,
     summary_text: str,
 ) -> AIEntitySummary:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     summary = (
         db.query(AIEntitySummary)
         .filter(
@@ -328,9 +328,7 @@ def _get_cached_entity_summary(
     )
     if not summary:
         return None
-    if summary.updated_at < datetime.now(timezone.utc) - timedelta(
-        minutes=ENTITY_SUMMARY_TTL_MINUTES
-    ):
+    if summary.updated_at < datetime.now(UTC) - timedelta(minutes=ENTITY_SUMMARY_TTL_MINUTES):
         return None
     return summary.summary_text
 
@@ -930,7 +928,7 @@ async def chat_async(
     db.add(usage_log)
 
     # Update conversation timestamp
-    preparation.conversation.updated_at = datetime.now(timezone.utc)
+    preparation.conversation.updated_at = datetime.now(UTC)
 
     db.commit()
 
@@ -1080,7 +1078,7 @@ async def stream_chat_async(
     )
     db.add(usage_log)
 
-    preparation.conversation.updated_at = datetime.now(timezone.utc)
+    preparation.conversation.updated_at = datetime.now(UTC)
 
     try:
         db.commit()

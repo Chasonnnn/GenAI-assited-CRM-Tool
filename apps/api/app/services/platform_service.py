@@ -4,10 +4,10 @@ Handles cross-org operations for platform administrators.
 Do NOT reuse org-scoped services - this service operates across all tenants.
 """
 
-import hmac
 import hashlib
+import hmac
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import Request
@@ -16,20 +16,20 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.core.config import settings
+from app.core.security import create_support_session_token
+from app.db.enums import AlertSeverity, AlertType, JobType, Role
 from app.db.models import (
     AdminActionLog,
+    EmailLog,
+    Membership,
     Organization,
     OrganizationSubscription,
-    User,
-    Membership,
     OrgInvite,
-    EmailLog,
-    SystemAlert,
     SupportSession,
+    SystemAlert,
+    User,
 )
-from app.db.enums import AlertSeverity, AlertType, Role, JobType
-from app.core.security import create_support_session_token
-from app.services import alert_service, duo_admin_service, mfa_service, session_service, job_service
+from app.services import alert_service, duo_admin_service, job_service, mfa_service, session_service
 from app.utils.normalization import escape_like_string
 from app.utils.pagination import paginate_query_by_offset
 from app.utils.presentation import humanize_identifier
@@ -144,7 +144,7 @@ def get_platform_stats(db: Session) -> dict:
     )
 
     # Count active users (logged in within last 30 days)
-    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+    thirty_days_ago = datetime.now(UTC) - timedelta(days=30)
     active_user_count = (
         db.query(func.count(User.id))
         .filter(
@@ -347,7 +347,7 @@ def request_organization_deletion(
     if org.deleted_at:
         raise ValueError("Organization is already scheduled for deletion")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     org.deleted_at = now
     org.purge_at = now + timedelta(days=ORG_DELETE_GRACE_DAYS)
     org.deleted_by_user_id = actor_id
@@ -396,13 +396,13 @@ def restore_organization_deletion(
         raise ValueError("Organization not found")
     if not org.deleted_at:
         raise ValueError("Organization is not scheduled for deletion")
-    if org.purge_at and org.purge_at <= datetime.now(timezone.utc):
+    if org.purge_at and org.purge_at <= datetime.now(UTC):
         raise ValueError("Deletion window has expired")
 
     org.deleted_at = None
     org.purge_at = None
     org.deleted_by_user_id = None
-    org.updated_at = datetime.now(timezone.utc)
+    org.updated_at = datetime.now(UTC)
 
     log_admin_action(
         db=db,
@@ -428,7 +428,7 @@ def force_delete_organization(
     if not org:
         raise ValueError("Organization not found")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if not org.deleted_at:
         org.deleted_at = now
         org.purge_at = now
@@ -472,7 +472,7 @@ def purge_organization(db: Session, org_id: UUID) -> bool:
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org or not org.deleted_at or not org.purge_at:
         return False
-    if org.purge_at > datetime.now(timezone.utc):
+    if org.purge_at > datetime.now(UTC):
         return False
 
     db.delete(org)
@@ -536,7 +536,7 @@ def create_organization(
         organization_id=org.id,
         plan_key="starter",
         status="active",
-        current_period_end=datetime.now(timezone.utc) + timedelta(days=30),
+        current_period_end=datetime.now(UTC) + timedelta(days=30),
     )
     db.add(subscription)
 
@@ -546,7 +546,7 @@ def create_organization(
         email=normalized_admin_email,
         role=Role.ADMIN.value,
         invited_by_user_id=actor_id,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        expires_at=datetime.now(UTC) + timedelta(days=7),
     )
     db.add(invite)
 
@@ -776,7 +776,7 @@ def create_support_session(
     reason_text_value = reason_text.strip() if reason_text else None
 
     ttl_minutes = settings.SUPPORT_SESSION_TTL_MINUTES
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = now + timedelta(minutes=ttl_minutes)
 
     support_session = SupportSession(
@@ -857,7 +857,7 @@ def revoke_support_session(
         return None
 
     if support_session.revoked_at is None:
-        support_session.revoked_at = datetime.now(timezone.utc)
+        support_session.revoked_at = datetime.now(UTC)
 
         log_admin_action(
             db=db,
@@ -1087,7 +1087,7 @@ def list_invites(db: Session, org_id: UUID) -> list[dict]:
         )
         email_logs = {log.idempotency_key: log for log in logs}
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     results = []
     for inv in invites:
@@ -1167,7 +1167,7 @@ def create_invite(
     role_value = invite_service.validate_invite_role(role, allow_developer=True)
 
     # Check for existing pending invite (global uniqueness by email).
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     existing = (
         db.query(OrgInvite)
         .filter(
@@ -1295,7 +1295,7 @@ def revoke_invite(
     if invite.revoked_at:
         raise ValueError("Invite is already revoked")
 
-    invite.revoked_at = datetime.now(timezone.utc)
+    invite.revoked_at = datetime.now(UTC)
     invite.revoked_by_user_id = actor_id
 
     log_admin_action(
@@ -1362,14 +1362,14 @@ def resend_invite(
         cooldown_end = invite.last_resent_at + timedelta(
             minutes=invite_service.INVITE_RESEND_COOLDOWN_MINUTES
         )
-        cooldown_seconds = max(0, int((cooldown_end - datetime.now(timezone.utc)).total_seconds()))
+        cooldown_seconds = max(0, int((cooldown_end - datetime.now(UTC)).total_seconds()))
 
     status = "pending"
     if invite.revoked_at:
         status = "revoked"
     elif invite.accepted_at:
         status = "accepted"
-    elif invite.expires_at and invite.expires_at < datetime.now(timezone.utc):
+    elif invite.expires_at and invite.expires_at < datetime.now(UTC):
         status = "expired"
 
     return {
@@ -1732,7 +1732,7 @@ def resolve_alert(
 
     if alert.status != "resolved":
         alert.status = "resolved"
-        alert.resolved_at = datetime.now(timezone.utc)
+        alert.resolved_at = datetime.now(UTC)
         alert.resolved_by_user_id = actor_id
 
         log_admin_action(

@@ -9,8 +9,8 @@ async def test_health_check(client: AsyncClient, monkeypatch):
     """
     Test health and readiness endpoints.
     """
-    from app.core import migrations as db_migrations
     from app.core import config
+    from app.core import migrations as db_migrations
     from app.core.migrations import MigrationStatus
 
     monkeypatch.setattr(config.settings, "DB_MIGRATION_CHECK", True)
@@ -64,8 +64,8 @@ async def test_health_check(client: AsyncClient, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_readyz_fails_when_migrations_pending(client: AsyncClient, monkeypatch):
-    from app.core import migrations as db_migrations
     from app.core import config
+    from app.core import migrations as db_migrations
     from app.core.migrations import MigrationStatus
 
     monkeypatch.setattr(config.settings, "DB_MIGRATION_CHECK", True)
@@ -86,8 +86,8 @@ async def test_readyz_fails_when_migrations_pending(client: AsyncClient, monkeyp
 
 @pytest.mark.asyncio
 async def test_readyz_degrades_when_redis_down_and_fail_open(client: AsyncClient, monkeypatch):
-    from app.core import config
     import app.main as main
+    from app.core import config
 
     monkeypatch.setattr(config.settings, "DB_MIGRATION_CHECK", False)
     monkeypatch.setattr(config.settings, "RATE_LIMIT_FAIL_OPEN", True)
@@ -108,8 +108,8 @@ async def test_readyz_degrades_when_redis_down_and_fail_open(client: AsyncClient
 
 @pytest.mark.asyncio
 async def test_readyz_fails_when_redis_required(client: AsyncClient, monkeypatch):
-    from app.core import config
     import app.main as main
+    from app.core import config
 
     monkeypatch.setattr(config.settings, "DB_MIGRATION_CHECK", False)
     monkeypatch.setattr(config.settings, "RATE_LIMIT_FAIL_OPEN", True)

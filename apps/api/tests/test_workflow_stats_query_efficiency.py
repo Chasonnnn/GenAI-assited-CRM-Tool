@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from sqlalchemy import event
@@ -124,7 +124,7 @@ def _add_approval_task(
 
 
 def test_get_workflow_stats_uses_four_selects_and_preserves_counts(db, test_org, test_user):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     other_org = Organization(
         id=uuid4(),
         name="Other Workflow Stats Org",
@@ -300,7 +300,7 @@ def test_get_workflow_stats_uses_four_selects_and_preserves_counts(db, test_org,
 
 
 def test_get_execution_stats_uses_one_select_and_preserves_counts(db, test_org, test_user):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     other_org = Organization(
         id=uuid4(),
         name="Other Execution Stats Org",

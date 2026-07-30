@@ -6,10 +6,9 @@ import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Annotated
-
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
@@ -28,6 +27,10 @@ from app.core.permissions import PermissionKey as P
 from app.core.rate_limit import limiter
 from app.core.surrogate_access import check_surrogate_access
 from app.schemas.auth import UserSession
+from app.services.ai_email_template_service import (
+    EmailTemplateGenerationRequest,
+    EmailTemplateGenerationResponse,
+)
 from app.services.ai_prompt_registry import get_prompt
 from app.services.ai_prompt_schemas import (
     AIDashboardAnalysisOutput,
@@ -35,11 +38,7 @@ from app.services.ai_prompt_schemas import (
     AISurrogateSummaryOutput,
 )
 from app.services.ai_response_validation import parse_json_object, validate_model
-from app.services.ai_email_template_service import (
-    EmailTemplateGenerationRequest,
-    EmailTemplateGenerationResponse,
-)
-from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
+from app.utils.sse import STREAM_HEADERS, format_sse, sse_preamble
 
 router = APIRouter()
 AI_GENERATION_LIMIT = f"{settings.RATE_LIMIT_AI_GENERATION}/minute"
@@ -964,7 +963,7 @@ async def analyze_dashboard(
         )
 
     # Gather dashboard stats
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     surrogate_stats = surrogate_service.get_surrogate_stats(db, session.org_id)
     total_surrogates = surrogate_stats["total"]
@@ -1088,7 +1087,7 @@ async def analyze_dashboard_stream(
             detail="AI consent not accepted",
         )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     surrogate_stats = surrogate_service.get_surrogate_stats(db, session.org_id)
     total_surrogates = surrogate_stats["total"]
     status_summary = surrogate_stats["by_status"]

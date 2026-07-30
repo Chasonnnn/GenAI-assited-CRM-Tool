@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import time
 import uuid
+from datetime import UTC
 
 import pytest
 from sqlalchemy import event
@@ -234,8 +235,8 @@ class TestResendWebhookHandler:
         """Create an EmailLog for testing webhook events."""
         import base64
 
-        from app.db.models import EmailLog
         from app.db.enums import EmailStatus
+        from app.db.models import EmailLog
         from app.services import resend_settings_service
 
         # Create Resend settings
@@ -393,7 +394,7 @@ class TestResendWebhookHandler:
         from uuid import uuid4
 
         from app.db.enums import CampaignStatus
-        from app.db.models import Campaign, CampaignRun, CampaignRecipient, EmailTemplate
+        from app.db.models import Campaign, CampaignRecipient, CampaignRun, EmailTemplate
 
         email_log, settings, webhook_secret = setup_email_log
 
@@ -609,6 +610,7 @@ class TestResendWebhookHandler:
     ):
         """Test that hard bounces add email to suppression list."""
         import json
+
         from app.db.models import EmailSuppression
 
         email_log, settings, webhook_secret = setup_email_log
@@ -656,6 +658,7 @@ class TestResendWebhookHandler:
     ):
         """Bounced event should append an email_bounced activity for linked surrogates."""
         import json
+
         from app.db.enums import SurrogateActivityType
         from app.db.models import SurrogateActivityLog
 
@@ -802,6 +805,7 @@ class TestResendWebhookHandler:
     async def test_webhook_complained_adds_suppression(self, db, test_org, client, setup_email_log):
         """Test that complaints add email to suppression list."""
         import json
+
         from app.db.models import EmailSuppression
 
         email_log, settings, webhook_secret = setup_email_log
@@ -1086,14 +1090,14 @@ class TestResendWebhookHandler:
         expected_resend_status,
         expected_email_status,
     ):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
         from app.db.models import EmailDeliveryAttempt
         from app.services.email_delivery_service import record_delivery_success
 
         _existing_log, settings, webhook_secret = setup_email_log
-        claimed_at = datetime.now(timezone.utc)
+        claimed_at = datetime.now(UTC)
         queued, claim = _queue_claimed_resend_delivery(
             db,
             test_org.id,
@@ -1151,7 +1155,7 @@ class TestResendWebhookHandler:
         client,
         setup_email_log,
     ):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
         from app.db.models import EmailDeliveryAttempt
@@ -1160,7 +1164,7 @@ class TestResendWebhookHandler:
         )
 
         _existing_log, settings, webhook_secret = setup_email_log
-        claimed_at = datetime.now(timezone.utc)
+        claimed_at = datetime.now(UTC)
         queued, claim = _queue_claimed_resend_delivery(
             db,
             test_org.id,
@@ -1217,14 +1221,14 @@ class TestResendWebhookHandler:
         client,
         setup_email_log,
     ):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
         from app.db.models import EmailDeliveryAttempt
         from app.services.email_delivery_service import record_delivery_failure
 
         _existing_log, settings, webhook_secret = setup_email_log
-        claimed_at = datetime.now(timezone.utc)
+        claimed_at = datetime.now(UTC)
         queued, claim = _queue_claimed_resend_delivery(
             db,
             test_org.id,
@@ -1296,14 +1300,14 @@ class TestResendWebhookHandler:
         client,
         setup_email_log,
     ):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
         from app.db.models import EmailDeliveryAttempt
         from app.services.email_delivery_service import claim_due_deliveries
 
         _existing_log, settings, webhook_secret = setup_email_log
-        claimed_at = datetime.now(timezone.utc)
+        claimed_at = datetime.now(UTC)
         queued, _claim = _queue_claimed_resend_delivery(
             db,
             test_org.id,
@@ -1370,14 +1374,14 @@ class TestResendWebhookHandler:
         client,
         setup_email_log,
     ):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
         from app.db.models import EmailDeliveryAttempt
         from app.services.email_delivery_service import claim_due_deliveries
 
         _existing_log, settings, webhook_secret = setup_email_log
-        claimed_at = datetime.now(timezone.utc)
+        claimed_at = datetime.now(UTC)
         queued, _claim = _queue_claimed_resend_delivery(
             db,
             test_org.id,
@@ -1446,7 +1450,7 @@ class TestResendWebhookHandler:
         client,
         setup_email_log,
     ):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
         from app.db.models import EmailDeliveryAttempt, EmailReconciliationCase
@@ -1455,7 +1459,7 @@ class TestResendWebhookHandler:
         )
 
         _existing_log, settings, webhook_secret = setup_email_log
-        claimed_at = datetime.now(timezone.utc)
+        claimed_at = datetime.now(UTC)
         queued, claim = _queue_claimed_resend_delivery(
             db,
             test_org.id,
@@ -1526,7 +1530,7 @@ class TestResendWebhookHandler:
         client,
         setup_email_log,
     ):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from app.db.enums import EmailDeliveryAttemptOutcome, EmailDeliveryStatus
         from app.db.models import EmailDeliveryAttempt
@@ -1536,7 +1540,7 @@ class TestResendWebhookHandler:
         )
 
         _existing_log, settings, webhook_secret = setup_email_log
-        claimed_at = datetime.now(timezone.utc)
+        claimed_at = datetime.now(UTC)
         queued, claim = _queue_claimed_resend_delivery(
             db,
             test_org.id,
@@ -1761,14 +1765,14 @@ class TestResendWebhookHandler:
         expected_error,
     ):
         import json
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
         from uuid import uuid4
 
         from app.db.enums import AppointmentStatus, MeetingMode
         from app.db.models import Appointment, AppointmentEmailLog, AppointmentType
 
         email_log, settings, webhook_secret = setup_email_log
-        accepted_at = datetime(2026, 7, 21, 14, 0, tzinfo=timezone.utc)
+        accepted_at = datetime(2026, 7, 21, 14, 0, tzinfo=UTC)
         email_log.sent_at = accepted_at
         appointment_type = AppointmentType(
             id=uuid4(),
@@ -2008,7 +2012,7 @@ class TestResendWebhookHandler:
         assert reconciliation_case.status == "pending"
         assert reconciliation_case.reason_code == "correlation_pending"
 
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from app.db.enums import JobStatus
         from app.jobs.handlers.resend import process_resend_event_reconcile
@@ -2017,7 +2021,7 @@ class TestResendWebhookHandler:
         reconcile_job = job_service.mark_job_running(db, reconcile_job)
         reconcile_job.attempts = 5
         db.commit()
-        retry_started_at = datetime.now(timezone.utc)
+        retry_started_at = datetime.now(UTC)
 
         with pytest.raises(RuntimeError, match="correlation pending"):
             await process_resend_event_reconcile(db, reconcile_job)
@@ -2244,7 +2248,7 @@ class TestResendWebhookHandler:
     ):
         """A Svix id already bound to one route cannot be replayed onto another."""
         import json
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from pydantic import SecretStr
 
@@ -2294,7 +2298,7 @@ class TestResendWebhookHandler:
             provider_account_id=f"organization:{test_org.id}",
             provider_event_id=msg_id,
             event_type="email.delivered",
-            event_created_at=datetime(2026, 7, 21, 14, 2, tzinfo=timezone.utc),
+            event_created_at=datetime(2026, 7, 21, 14, 2, tzinfo=UTC),
             payload={"type": "email.delivered", "data": {"email_id": "organization-message"}},
         )
         db.add_all([platform_email_log, organization_event])
@@ -2371,8 +2375,8 @@ class TestCampaignRunProviderLock:
 
     def test_enqueue_campaign_locks_provider(self, db, test_org, test_user):
         """Test that enqueue_campaign_send locks the email provider on the run."""
-        from app.db.models import Campaign, CampaignRun, EmailTemplate
         from app.db.enums import CampaignStatus
+        from app.db.models import Campaign, CampaignRun, EmailTemplate
         from app.services import campaign_service, resend_settings_service
 
         # Setup: Create Resend settings
@@ -2423,8 +2427,8 @@ class TestCampaignRunProviderLock:
 
     def test_enqueue_campaign_fails_without_provider(self, db, test_org, test_user):
         """Test that enqueue fails if email provider not configured."""
-        from app.db.models import Campaign, EmailTemplate
         from app.db.enums import CampaignStatus
+        from app.db.models import Campaign, EmailTemplate
         from app.services import campaign_service, resend_settings_service
 
         # Create settings without provider

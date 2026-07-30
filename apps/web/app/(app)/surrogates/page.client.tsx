@@ -1416,6 +1416,7 @@ export function SurrogatesPageClient() {
                                     size="sm"
                                     onClick={() => clearActiveFilter(chip.key)}
                                     className="gap-2"
+                                    aria-label={`Remove filter: ${chip.label}`}
                                 >
                                     {chip.label}
                                     <XIcon className="size-3" />

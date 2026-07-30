@@ -20,9 +20,9 @@ const AIChatDrawer = dynamic(
 )
 
 export function AIChatDrawerHost() {
-    const { canUseAI, isOpen } = useAIContext()
+    const { canUseAI, hasOpenedPanel } = useAIContext()
 
-    if (!canUseAI || !isOpen) {
+    if (!canUseAI || !hasOpenedPanel) {
         return null
     }
 

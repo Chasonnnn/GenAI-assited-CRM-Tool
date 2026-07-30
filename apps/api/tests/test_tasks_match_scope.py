@@ -4,9 +4,9 @@ import uuid
 
 import pytest
 
-from app.db.models import IntendedParent, Match, Membership, Organization, Task, User
-from app.db.enums import Role
 from app.core.encryption import hash_email
+from app.db.enums import Role
+from app.db.models import IntendedParent, Match, Membership, Organization, Task, User
 from app.utils.normalization import normalize_email
 
 

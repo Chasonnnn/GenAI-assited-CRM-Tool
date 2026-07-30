@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -59,7 +59,7 @@ def test_ticketing_utility_helpers() -> None:
 
 
 def test_ticketing_cursor_roundtrip_and_invalid() -> None:
-    now = datetime.now(timezone.utc).replace(microsecond=123456)
+    now = datetime.now(UTC).replace(microsecond=123456)
     row_id = uuid4()
     encoded = ticketing_service._encode_cursor(sort_ts=now, row_id=row_id)
     decoded_ts, decoded_id = ticketing_service._decode_cursor(encoded)
@@ -82,17 +82,17 @@ def test_ticketing_watch_helpers(monkeypatch) -> None:
     assert ticketing_service._parse_int("42") == 42
     assert ticketing_service._parse_int("bad") is None
 
-    future = datetime.now(timezone.utc) + timedelta(days=2)
+    future = datetime.now(UTC) + timedelta(days=2)
     mailbox = SimpleNamespace(
         provider=SimpleNamespace(value="gmail"),
         is_enabled=True,
         gmail_watch_topic_name="projects/test/topics/gmail",
         gmail_watch_expiration_at=future,
     )
-    assert ticketing_service._gmail_watch_is_due(mailbox, now=datetime.now(timezone.utc)) is False
+    assert ticketing_service._gmail_watch_is_due(mailbox, now=datetime.now(UTC)) is False
 
-    mailbox.gmail_watch_expiration_at = datetime.now(timezone.utc) + timedelta(hours=1)
-    assert ticketing_service._gmail_watch_is_due(mailbox, now=datetime.now(timezone.utc)) is True
+    mailbox.gmail_watch_expiration_at = datetime.now(UTC) + timedelta(hours=1)
+    assert ticketing_service._gmail_watch_is_due(mailbox, now=datetime.now(UTC)) is True
 
     assert (
         ticketing_service.integration_has_inbound_scope(
@@ -122,7 +122,7 @@ def test_pause_resume_and_get_mailbox_sync_status(db, test_org):
         minutes=0,
         reason=None,
     )
-    assert pause_until > datetime.now(timezone.utc)
+    assert pause_until > datetime.now(UTC)
     assert "Manual pause" in pause_reason
 
     db.add_all(
@@ -138,7 +138,7 @@ def test_pause_resume_and_get_mailbox_sync_status(db, test_org):
                 job_type=JobType.MAILBOX_WATCH_REFRESH.value,
                 status="running",
                 claim_token=uuid4(),
-                claimed_at=datetime.now(timezone.utc),
+                claimed_at=datetime.now(UTC),
                 payload={"mailbox_id": str(mailbox.id)},
             ),
         ]

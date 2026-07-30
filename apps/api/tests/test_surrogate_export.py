@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
-from io import BytesIO
 import uuid
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
+from io import BytesIO
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -442,7 +442,7 @@ def test_export_surrogate_packet_pdf_uses_latest_submission_for_multi_form(
         schema=schema,
     )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     first_submission = _create_submission(
         db,
         test_org.id,
@@ -582,7 +582,7 @@ async def test_surrogate_export_view_includes_form_aware_checklist_and_hides_una
         answers_json={"journey_start": "0-3 months"},
         schema_snapshot=form.published_schema_json,
         mapping_snapshot=[],
-        submitted_at=datetime.now(timezone.utc),
+        submitted_at=datetime.now(UTC),
     )
     db.add(submission)
     db.flush()

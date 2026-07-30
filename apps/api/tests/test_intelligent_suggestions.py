@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta, timezone
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -180,7 +180,7 @@ async def test_surrogates_dynamic_filter_new_unread_stale(
     test_user,
 ):
     _ensure_intelligent_schema(db)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     stale = Surrogate(
         id=uuid.uuid4(),
@@ -235,7 +235,7 @@ async def test_surrogates_dynamic_filter_attention_unreached_excludes_recent_act
     test_user,
 ):
     _ensure_intelligent_schema(db)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     stale = Surrogate(
         id=uuid.uuid4(),
@@ -308,7 +308,7 @@ async def test_surrogates_dynamic_filter_attention_stuck_excludes_post_approval_
     assert approved_stage is not None
     assert ready_to_match_stage is not None
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     approved_stuck = Surrogate(
         id=uuid.uuid4(),
         surrogate_number="S91005",
@@ -396,7 +396,7 @@ async def test_surrogates_dynamic_filter_attention_stuck_excludes_terminal_and_p
             )
         )
     ]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     active_stuck = Surrogate(
         id=uuid.uuid4(),
         surrogate_number="S91007",
@@ -468,7 +468,7 @@ async def test_intelligent_suggestions_summary_filters_by_cutoff_without_row_loo
     monkeypatch,
 ):
     _ensure_intelligent_schema(db)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stale = Surrogate(
         id=uuid.uuid4(),
         surrogate_number="S91008",
@@ -538,7 +538,7 @@ async def test_intelligent_suggestions_summary_endpoint(
     test_user,
 ):
     _ensure_intelligent_schema(db)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stale = Surrogate(
         id=uuid.uuid4(),
         surrogate_number="S91003",

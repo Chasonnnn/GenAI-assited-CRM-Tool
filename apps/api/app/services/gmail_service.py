@@ -6,12 +6,12 @@ Uses Gmail API to send emails via user's connected account.
 import base64
 import logging
 import uuid
-from uuid import UUID
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from uuid import UUID
 
 import httpx
 from sqlalchemy.exc import IntegrityError
@@ -444,7 +444,7 @@ async def send_email_logged(
     if result.get("success"):
         email_log.status = EmailStatus.SENT.value
         email_log.external_id = result.get("message_id")
-        email_log.sent_at = datetime.now(timezone.utc)
+        email_log.sent_at = datetime.now(UTC)
         email_log.error = None
     else:
         email_log.status = EmailStatus.FAILED.value

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import importlib.util
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,9 +11,9 @@ import pytest
 
 from app.db.models import (
     AuditLog,
-    EmailReconciliationCase,
     EmailDelivery,
     EmailLog,
+    EmailReconciliationCase,
     Job,
     Organization,
     ResendWebhookEvent,
@@ -116,7 +116,7 @@ async def test_reconciliation_queue_is_org_scoped_and_never_projects_raw_event_d
     db,
     test_org,
 ):
-    detected_at = datetime(2026, 7, 23, 12, 0, tzinfo=timezone.utc)
+    detected_at = datetime(2026, 7, 23, 12, 0, tzinfo=UTC)
     event = ResendWebhookEvent(
         id=uuid4(),
         organization_id=test_org.id,
@@ -219,7 +219,7 @@ def test_reconciliation_migration_backfills_only_source_ids_and_controlled_codes
     db,
     test_org,
 ):
-    detected_at = datetime(2026, 7, 23, 13, 0, tzinfo=timezone.utc)
+    detected_at = datetime(2026, 7, 23, 13, 0, tzinfo=UTC)
     event = ResendWebhookEvent(
         id=uuid4(),
         organization_id=test_org.id,
@@ -302,7 +302,7 @@ def test_final_automatic_correlation_failure_requires_operator_action(
 ):
     from app.services import job_service
 
-    detected_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    detected_at = datetime.now(UTC) - timedelta(minutes=10)
     event = ResendWebhookEvent(
         id=uuid4(),
         organization_id=test_org.id,
@@ -359,7 +359,7 @@ def test_stale_reconciliation_claim_is_recovered_and_old_worker_is_fenced(
 ):
     from app.services import job_service
 
-    detected_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    detected_at = datetime.now(UTC) - timedelta(hours=1)
     event = ResendWebhookEvent(
         id=uuid4(),
         organization_id=test_org.id,
@@ -403,7 +403,7 @@ def test_stale_reconciliation_claim_is_recovered_and_old_worker_is_fenced(
 
     summary = job_service.recover_stale_resend_reconciliation_jobs(
         db,
-        now=datetime.now(timezone.utc),
+        now=datetime.now(UTC),
         stale_after=timedelta(minutes=5),
         limit=100,
     )
@@ -441,7 +441,7 @@ def test_stale_reconciliation_claim_is_recovered_and_old_worker_is_fenced(
     db.commit()
     final_summary = job_service.recover_stale_resend_reconciliation_jobs(
         db,
-        now=datetime.now(timezone.utc),
+        now=datetime.now(UTC),
         stale_after=timedelta(minutes=5),
         limit=100,
     )
@@ -465,7 +465,7 @@ async def test_retry_correlation_requeues_only_local_work_with_version_and_audit
     test_org,
     monkeypatch,
 ):
-    detected_at = datetime.now(timezone.utc) - timedelta(hours=2)
+    detected_at = datetime.now(UTC) - timedelta(hours=2)
     event = ResendWebhookEvent(
         id=uuid4(),
         organization_id=test_org.id,
@@ -584,7 +584,7 @@ async def test_link_orphan_event_projects_existing_message_atomically_without_se
     test_org,
     monkeypatch,
 ):
-    detected_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    detected_at = datetime.now(UTC) - timedelta(hours=1)
     provider_message_id = f"manual-link-{uuid4().hex}"
     email_log = EmailLog(
         id=uuid4(),
@@ -703,7 +703,7 @@ async def test_link_orphan_event_rejects_a_message_from_another_delivery_route(
     db,
     test_org,
 ):
-    detected_at = datetime.now(timezone.utc)
+    detected_at = datetime.now(UTC)
     provider_message_id = f"route-conflict-{uuid4().hex}"
     platform_log = EmailLog(
         id=uuid4(),
@@ -775,7 +775,7 @@ async def test_link_orphan_event_rejects_cross_org_and_conflicting_signed_tags(
     db,
     test_org,
 ):
-    detected_at = datetime.now(timezone.utc)
+    detected_at = datetime.now(UTC)
     other_org = Organization(
         id=uuid4(),
         name="Other Link Target Org",
@@ -866,7 +866,7 @@ async def test_dismiss_allows_only_controlled_unsupported_orphan_events(
     test_auth,
     test_org,
 ):
-    detected_at = datetime.now(timezone.utc)
+    detected_at = datetime.now(UTC)
     unsupported_event = ResendWebhookEvent(
         id=uuid4(),
         organization_id=test_org.id,
@@ -958,7 +958,7 @@ async def test_unknown_delivery_resolutions_are_audited_and_never_resend(
     test_org,
     monkeypatch,
 ):
-    detected_at = datetime.now(timezone.utc) - timedelta(minutes=30)
+    detected_at = datetime.now(UTC) - timedelta(minutes=30)
 
     def _unknown_delivery_case(label: str):
         email_log = EmailLog(
@@ -1085,7 +1085,7 @@ async def test_verified_provider_evidence_supersedes_operator_not_sent_resolutio
     db,
     test_org,
 ):
-    detected_at = datetime.now(timezone.utc) - timedelta(minutes=20)
+    detected_at = datetime.now(UTC) - timedelta(minutes=20)
     email_log = EmailLog(
         id=uuid4(),
         organization_id=test_org.id,
@@ -1140,7 +1140,7 @@ async def test_verified_provider_evidence_supersedes_operator_not_sent_resolutio
     )
     assert response.status_code == 200
 
-    event_created_at = datetime.now(timezone.utc)
+    event_created_at = datetime.now(UTC)
     provider_message_id = f"verified-later-{uuid4().hex}"
     payload = {
         "type": "email.delivered",

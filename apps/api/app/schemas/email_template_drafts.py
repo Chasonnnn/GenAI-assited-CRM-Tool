@@ -11,7 +11,6 @@ from app.schemas.email import (
     EmailTemplateTestSendResponse,
 )
 
-
 EmailTemplateDraftScope = Literal["org", "personal"]
 
 

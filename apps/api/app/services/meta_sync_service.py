@@ -9,7 +9,7 @@ Handles syncing data from Meta Marketing API:
 import hashlib
 import json
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -17,16 +17,16 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
-    Surrogate,
     MetaAd,
     MetaAdAccount,
+    MetaAdPlatformDaily,
     MetaAdSet,
     MetaCampaign,
     MetaDailySpend,
-    MetaAdPlatformDaily,
     MetaForm,
     MetaFormVersion,
     MetaPageMapping,
+    Surrogate,
 )
 from app.services import meta_api, meta_token_service
 from app.types import JsonObject
@@ -136,7 +136,7 @@ async def sync_hierarchy(
             result["ads"] += 1
 
     # Update watermark
-    ad_account.hierarchy_synced_at = datetime.now(timezone.utc)
+    ad_account.hierarchy_synced_at = datetime.now(UTC)
     ad_account.last_error = None
     ad_account.last_error_at = None
 
@@ -180,7 +180,7 @@ def _upsert_campaign(
         campaign.objective = data.get("objective")
         campaign.status = data.get("status", "UNKNOWN")
         campaign.updated_time = updated_time
-        campaign.synced_at = datetime.now(timezone.utc)
+        campaign.synced_at = datetime.now(UTC)
     else:
         campaign = MetaCampaign(
             organization_id=org_id,
@@ -249,7 +249,7 @@ def _upsert_adset(
         adset.targeting_geo = targeting_geo
         adset.status = data.get("status", "UNKNOWN")
         adset.updated_time = updated_time
-        adset.synced_at = datetime.now(timezone.utc)
+        adset.synced_at = datetime.now(UTC)
     else:
         adset = MetaAdSet(
             organization_id=org_id,
@@ -334,7 +334,7 @@ def _upsert_ad(
         ad.campaign_external_id = campaign_external_id
         ad.status = data.get("status", "UNKNOWN")
         ad.updated_time = updated_time
-        ad.synced_at = datetime.now(timezone.utc)
+        ad.synced_at = datetime.now(UTC)
     else:
         ad = MetaAd(
             organization_id=org_id,
@@ -470,7 +470,7 @@ async def sync_spend(
     result["campaigns"] = len(campaign_set)
 
     # Update watermark
-    ad_account.spend_synced_at = datetime.now(timezone.utc)
+    ad_account.spend_synced_at = datetime.now(UTC)
     ad_account.last_error = None
     ad_account.last_error_at = None
 
@@ -546,7 +546,7 @@ def _upsert_spend_row(
         existing.reach = reach
         existing.clicks = clicks
         existing.leads = leads
-        existing.synced_at = datetime.now(timezone.utc)
+        existing.synced_at = datetime.now(UTC)
         return existing
     else:
         row = MetaDailySpend(
@@ -704,7 +704,7 @@ def _upsert_ad_platform_row(
         existing.impressions = impressions
         existing.clicks = clicks
         existing.leads = leads
-        existing.synced_at = datetime.now(timezone.utc)
+        existing.synced_at = datetime.now(UTC)
         return existing
 
     row = MetaAdPlatformDaily(
@@ -802,7 +802,7 @@ async def sync_forms(
         if not token_result.token:
             logger.debug(f"Skipping form sync for page {page.page_id} - no token")
             page.last_error = "Page token unavailable"
-            page.last_error_at = datetime.now(timezone.utc)
+            page.last_error_at = datetime.now(UTC)
             continue
 
         access_token = token_result.token
@@ -813,7 +813,7 @@ async def sync_forms(
         if error:
             logger.error(f"Form fetch failed for page {page.page_id}: {error}")
             page.last_error = error
-            page.last_error_at = datetime.now(timezone.utc)
+            page.last_error_at = datetime.now(UTC)
             # Mark token error if using OAuth
             if token_result.connection_id:
                 meta_token_service.mark_token_error(
@@ -830,7 +830,7 @@ async def sync_forms(
                     result["versions_created"] += 1
 
         # Update watermark
-        page.forms_synced_at = datetime.now(timezone.utc)
+        page.forms_synced_at = datetime.now(UTC)
         page.last_error = None
         page.last_error_at = None
 
@@ -883,8 +883,8 @@ def _upsert_form(
 
     if form:
         form.form_name = form_name
-        form.synced_at = datetime.now(timezone.utc)
-        form.updated_at = datetime.now(timezone.utc)
+        form.synced_at = datetime.now(UTC)
+        form.updated_at = datetime.now(UTC)
     else:
         form = MetaForm(
             organization_id=org_id,
@@ -948,7 +948,7 @@ def _record_sync_error(
 ) -> None:
     """Record sync error on ad account and OAuth connection."""
     ad_account.last_error = error[:500]
-    ad_account.last_error_at = datetime.now(timezone.utc)
+    ad_account.last_error_at = datetime.now(UTC)
 
     # Also record on OAuth connection for health tracking
     if connection_id:

@@ -3,21 +3,21 @@
 v2: With version control for templates.
 """
 
-from email.utils import parseaddr
-from html import escape as html_escape
 import hashlib
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from email.utils import parseaddr
+from html import escape as html_escape
 from typing import TypedDict
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
+import nh3
+from email_validator import EmailNotValidError, validate_email
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-import nh3
-from email_validator import EmailNotValidError, validate_email
-
+from app.db.enums import EmailStatus
 from app.db.models import (
     Attachment,
     EmailDelivery,
@@ -27,13 +27,11 @@ from app.db.models import (
     Job,
     Surrogate,
 )
-from app.db.enums import EmailStatus
 from app.services import email_sender, version_service
 from app.services.template_variable_catalog import VARIABLE_PATTERN as _TEMPLATE_VARIABLE_PATTERN
 from app.types import JsonObject
 from app.utils.normalization import normalize_email
 from app.utils.presentation import humanize_identifier
-
 
 # Variable pattern for template substitution: {{ variable_name }} (whitespace allowed)
 VARIABLE_PATTERN = _TEMPLATE_VARIABLE_PATTERN
@@ -412,7 +410,7 @@ def update_template(
         template.is_active = is_active
 
     # Snapshot the new published state without rewriting prior history.
-    template.updated_at = datetime.now(timezone.utc)
+    template.updated_at = datetime.now(UTC)
 
     version = version_service.create_version(
         db=db,
@@ -482,7 +480,7 @@ def rollback_template(
         template.body = sanitize_template_html(payload.get("body") or "")
     template.is_active = payload.get("is_active", template.is_active)
     template.current_version = new_version.version
-    template.updated_at = datetime.now(timezone.utc)
+    template.updated_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(template)
@@ -554,7 +552,8 @@ def list_templates_for_user(
     Returns:
         List of templates the user can see
     """
-    from sqlalchemy import or_, and_
+    from sqlalchemy import and_, or_
+
     from app.services import system_email_template_service
 
     query = db.query(EmailTemplate).filter(EmailTemplate.organization_id == org_id)
@@ -888,8 +887,7 @@ def find_unresolved_template_variables(
 
 def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dict[str, str]:
     """Build flat template variables for a surrogate context."""
-    from app.db.enums import FormPurpose, FormStatus
-    from app.db.enums import OwnerType
+    from app.db.enums import FormPurpose, FormStatus, OwnerType
     from app.db.models import BookingLink, Form, Organization, Queue, User
     from app.services import media_service
 
@@ -909,7 +907,7 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
     email = surrogate.email or ""
     unsubscribe_url = ""
     if email:
-        from app.services import unsubscribe_service, org_service
+        from app.services import org_service, unsubscribe_service
 
         unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
             org_id=surrogate.organization_id,
@@ -925,8 +923,7 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
     appointment_date = ""
     appointment_time = ""
     appointment_location = ""
-    from app.services import form_intake_service
-    from app.services import form_service
+    from app.services import form_intake_service, form_service
 
     default_application_form = form_service.get_default_surrogate_application_form(
         db, surrogate.organization_id
@@ -1011,7 +1008,7 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
                     "confirmed",
                 ]
             ),
-            Appointment.scheduled_start >= datetime.now(timezone.utc),
+            Appointment.scheduled_start >= datetime.now(UTC),
         )
         .order_by(Appointment.scheduled_start.asc())
         .first()
@@ -1103,7 +1100,7 @@ def build_intended_parent_template_variables(db: Session, intended_parent) -> di
     email = intended_parent.email or ""
     unsubscribe_url = ""
     if email:
-        from app.services import unsubscribe_service, org_service
+        from app.services import org_service, unsubscribe_service
 
         unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
             org_id=intended_parent.organization_id,
@@ -1138,6 +1135,7 @@ def build_appointment_template_variables(
     Uses client_timezone from the appointment for user-facing display.
     """
     from zoneinfo import ZoneInfo
+
     from app.db.models import Organization
     from app.services import media_service
 
@@ -1473,6 +1471,7 @@ def send_email(
     Creates an immutable EmailLog and leased delivery outbox row.
     Returns (email_log, delivery).
     """
+    from app.db.enums import EmailSuppressionPolicy
     from app.services import org_service, resend_settings_service, unsubscribe_service
     from app.services.email_content import html_to_text
     from app.services.email_delivery_service import (
@@ -1481,7 +1480,6 @@ def send_email(
         RenderedEmail,
         queue_rendered_email,
     )
-    from app.db.enums import EmailSuppressionPolicy
 
     resend_settings = resend_settings_service.get_resend_settings(db, org_id)
     if not resend_settings_service.is_resend_sender_configured(resend_settings):
@@ -1685,7 +1683,7 @@ def send_from_template(
 def mark_email_sent(db: Session, email_log: EmailLog) -> EmailLog:
     """Mark an email as sent."""
     email_log.status = EmailStatus.SENT.value
-    email_log.sent_at = datetime.now(timezone.utc)
+    email_log.sent_at = datetime.now(UTC)
     email_log.error = None
     db.commit()
     db.refresh(email_log)
@@ -1811,8 +1809,8 @@ def _sync_campaign_recipient(
     error: str | None = None,
 ) -> None:
     """Update campaign recipient/run stats when an email log changes."""
-    from app.db.models import CampaignRecipient, CampaignRun, Campaign
     from app.db.enums import CampaignRecipientStatus, CampaignStatus
+    from app.db.models import Campaign, CampaignRecipient, CampaignRun
 
     cr = (
         db.query(CampaignRecipient)
@@ -1829,7 +1827,7 @@ def _sync_campaign_recipient(
     if status == EmailStatus.SENT.value:
         cr.status = CampaignRecipientStatus.SENT.value
         if not cr.sent_at:
-            cr.sent_at = datetime.now(timezone.utc)
+            cr.sent_at = datetime.now(UTC)
         cr.error = None
     elif status == EmailStatus.SKIPPED.value:
         cr.status = CampaignRecipientStatus.SKIPPED.value
@@ -1860,7 +1858,7 @@ def _sync_campaign_recipient(
     pending_count = status_counts.get(CampaignRecipientStatus.PENDING.value, 0)
 
     if pending_count == 0:
-        run.completed_at = datetime.now(timezone.utc)
+        run.completed_at = datetime.now(UTC)
         run.status = "completed" if run.failed_count == 0 else "failed"
     else:
         run.status = "running"

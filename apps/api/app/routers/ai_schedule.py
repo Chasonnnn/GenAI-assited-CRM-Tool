@@ -1,13 +1,13 @@
 """AI schedule parsing routes."""
 
 from __future__ import annotations
-from typing import Annotated
 
 import asyncio
 import logging
 import uuid
 from collections.abc import AsyncIterator
-from datetime import datetime, date, time
+from datetime import date, datetime, time
+from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -22,9 +22,9 @@ from app.core.rate_limit import limiter
 from app.core.surrogate_access import check_surrogate_access
 from app.schemas.auth import UserSession
 from app.services.ai_prompt_registry import get_prompt
-from app.services.ai_response_validation import parse_json_array
 from app.services.ai_provider import ChatMessage
-from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
+from app.services.ai_response_validation import parse_json_array
+from app.utils.sse import STREAM_HEADERS, format_sse, sse_preamble
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -186,10 +186,10 @@ async def parse_schedule_stream(
     session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
 ) -> StreamingResponse:
     """Stream schedule parsing via SSE."""
-    from app.services import ai_settings_service, ip_service, match_service, surrogate_service
-    from app.services.schedule_parser import ProposedTask
     from app.db.enums import TaskType
+    from app.services import ai_settings_service, ip_service, match_service, surrogate_service
     from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_text
+    from app.services.schedule_parser import ProposedTask
 
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
     if settings and ai_settings_service.is_consent_required(settings):

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -43,9 +43,9 @@ async def test_surrogate_created_dates_endpoint_returns_distinct_context_dates(a
     third_row = db.query(Surrogate).filter(Surrogate.id == uuid.UUID(third_id)).first()
     assert first_row is not None and second_row is not None and third_row is not None
 
-    first_row.created_at = datetime(2026, 2, 16, 15, 0, tzinfo=timezone.utc)
-    second_row.created_at = datetime(2026, 2, 18, 9, 30, tzinfo=timezone.utc)
-    third_row.created_at = datetime(2026, 2, 18, 17, 45, tzinfo=timezone.utc)
+    first_row.created_at = datetime(2026, 2, 16, 15, 0, tzinfo=UTC)
+    second_row.created_at = datetime(2026, 2, 18, 9, 30, tzinfo=UTC)
+    third_row.created_at = datetime(2026, 2, 18, 17, 45, tzinfo=UTC)
     db.commit()
 
     all_dates_res = await authed_client.get("/surrogates/created-dates")
@@ -87,10 +87,10 @@ async def test_intended_parent_created_before_date_uses_created_at_day_boundary(
     )
     assert same_day_row is not None and next_day_row is not None
 
-    same_day_row.created_at = datetime(2025, 1, 10, 13, 20, tzinfo=timezone.utc)
-    next_day_row.created_at = datetime(2025, 1, 11, 0, 0, 1, tzinfo=timezone.utc)
+    same_day_row.created_at = datetime(2025, 1, 10, 13, 20, tzinfo=UTC)
+    next_day_row.created_at = datetime(2025, 1, 11, 0, 0, 1, tzinfo=UTC)
     # Ensure created_before is not accidentally using updated_at
-    next_day_row.updated_at = datetime(2025, 1, 10, 16, 0, tzinfo=timezone.utc)
+    next_day_row.updated_at = datetime(2025, 1, 10, 16, 0, tzinfo=UTC)
     db.commit()
 
     list_res = await authed_client.get("/intended-parents", params={"created_before": "2025-01-10"})
@@ -142,9 +142,9 @@ async def test_intended_parent_created_dates_endpoint_returns_distinct_context_d
     )
     assert alpha_row is not None and beta_row is not None and beta_two_row is not None
 
-    alpha_row.created_at = datetime(2026, 2, 16, 10, 0, tzinfo=timezone.utc)
-    beta_row.created_at = datetime(2026, 2, 18, 12, 0, tzinfo=timezone.utc)
-    beta_two_row.created_at = datetime(2026, 2, 18, 16, 30, tzinfo=timezone.utc)
+    alpha_row.created_at = datetime(2026, 2, 16, 10, 0, tzinfo=UTC)
+    beta_row.created_at = datetime(2026, 2, 18, 12, 0, tzinfo=UTC)
+    beta_two_row.created_at = datetime(2026, 2, 18, 16, 30, tzinfo=UTC)
     db.commit()
 
     all_dates_res = await authed_client.get("/intended-parents/created-dates")

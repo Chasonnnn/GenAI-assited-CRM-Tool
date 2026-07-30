@@ -5,13 +5,14 @@ v2: With version control (API keys are redacted in snapshots).
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from cryptography.fernet import Fernet
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import AISettings, Organization
+from app.services import version_service
 from app.services.ai_provider import (
     AIProvider,
     VertexAPIKeyConfig,
@@ -19,8 +20,6 @@ from app.services.ai_provider import (
     VertexWIFConfig,
     VertexWIFProvider,
 )
-from app.services import version_service
-
 
 ENTITY_TYPE = "ai_settings"
 
@@ -166,7 +165,7 @@ def update_ai_settings(
         org = db.query(Organization).filter(Organization.id == organization_id).first()
         if org:
             org.ai_enabled = is_enabled
-            org.updated_at = datetime.now(timezone.utc)
+            org.updated_at = datetime.now(UTC)
     if provider is not None:
         ai_settings.provider = provider
     if api_key is not None:
@@ -197,7 +196,7 @@ def update_ai_settings(
         ai_settings.anonymize_pii = anonymize_pii
 
     ai_settings.current_version += 1
-    ai_settings.updated_at = datetime.now(timezone.utc)
+    ai_settings.updated_at = datetime.now(UTC)
 
     # Create version snapshot
     version_service.create_version(
@@ -222,9 +221,9 @@ def accept_consent(
 ) -> AISettings:
     """Record that a user accepted the AI data processing consent."""
     ai_settings = get_or_create_ai_settings(db, organization_id, user_id)
-    ai_settings.consent_accepted_at = datetime.now(timezone.utc)
+    ai_settings.consent_accepted_at = datetime.now(UTC)
     ai_settings.consent_accepted_by = user_id
-    ai_settings.updated_at = datetime.now(timezone.utc)
+    ai_settings.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(ai_settings)
     return ai_settings
@@ -414,7 +413,7 @@ def rollback_ai_settings(
     # NOTE: api_key is NOT rolled back - it's always [REDACTED] in versions
 
     ai_settings.current_version = new_version.version
-    ai_settings.updated_at = datetime.now(timezone.utc)
+    ai_settings.updated_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(ai_settings)

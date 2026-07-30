@@ -1,5 +1,26 @@
 """Service layer modules."""
 
+# Import service modules (not individual functions) for cleaner access
+from app.services import (
+    ai_task_service,
+    clamav_signature_service,
+    duo_admin_service,
+    form_submission_service,
+    intended_parent_status_service,
+    meta_crm_dataset_monitor_service,
+    meta_crm_dataset_service,
+    meta_crm_dataset_settings_service,
+    meta_lead_service,
+    meta_outbound_service,
+    note_service,
+    scan_dispatch_service,
+    status_change_request_service,
+    surrogate_events,
+    surrogate_outcome_summary_service,
+    surrogate_service,
+    task_service,
+    wif_oidc_service,
+)
 from app.services.auth_service import (
     create_user_from_invite,
     find_user_by_identity,
@@ -26,26 +47,6 @@ from app.services.user_service import (
     revoke_all_sessions,
     update_user_profile,
 )
-
-# Import service modules (not individual functions) for cleaner access
-from app.services import surrogate_service
-from app.services import note_service
-from app.services import task_service
-from app.services import ai_task_service
-from app.services import meta_lead_service
-from app.services import meta_outbound_service
-from app.services import meta_crm_dataset_monitor_service
-from app.services import meta_crm_dataset_service
-from app.services import meta_crm_dataset_settings_service
-from app.services import status_change_request_service
-from app.services import intended_parent_status_service
-from app.services import form_submission_service
-from app.services import clamav_signature_service
-from app.services import scan_dispatch_service
-from app.services import surrogate_events
-from app.services import wif_oidc_service
-from app.services import duo_admin_service
-from app.services import surrogate_outcome_summary_service
 
 __all__ = [
     # Auth service

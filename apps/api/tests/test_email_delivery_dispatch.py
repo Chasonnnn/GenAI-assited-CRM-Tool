@@ -2,7 +2,7 @@
 
 import asyncio
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -15,8 +15,8 @@ from app.db.enums import (
     CampaignStatus,
     EmailDeliveryAttemptOutcome,
     EmailDeliveryStatus,
-    EmailSuppressionPolicy,
     EmailStatus,
+    EmailSuppressionPolicy,
     SuppressionReason,
 )
 from app.db.models import (
@@ -29,26 +29,26 @@ from app.db.models import (
     EmailProviderAdmission,
     EmailSuppression,
     EmailTemplate,
-    OrgInvite,
     Organization,
+    OrgInvite,
     ResendSettings,
 )
 from app.db.session import SessionLocal
 from app.services import attachment_service, email_delivery_dispatch, resend_settings_service
-from app.services.email_service import EmailAttachmentValidationError
-from app.services.email_provider_admission_service import (
-    reserve_provider_request_slot,
-)
 from app.services.email_delivery_service import (
-    DeliveryRoute,
     DeliveryClaim,
     DeliveryLeaseLost,
+    DeliveryRoute,
     EmailSource,
     RenderedEmail,
     claim_due_deliveries,
     queue_rendered_email,
     record_delivery_success,
 )
+from app.services.email_provider_admission_service import (
+    reserve_provider_request_slot,
+)
+from app.services.email_service import EmailAttachmentValidationError
 from app.services.resend_transport import ResendSendResult
 
 
@@ -97,7 +97,7 @@ def _queue_and_claim(db, test_org, *, attachments=()):
         idempotency_key=f"dispatch/{uuid4()}",
         source=EmailSource(source_type="test", source_id=uuid4()),
         attachments=attachments,
-        schedule_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+        schedule_at=datetime.now(UTC) - timedelta(seconds=1),
         commit=False,
     )
     claim = claim_due_deliveries(
@@ -136,7 +136,7 @@ def _queue_campaign_claim(db, test_org, test_user):
         campaign_id=campaign.id,
         status="running",
         email_provider="resend",
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
         total_count=1,
         sent_count=0,
         delivered_count=0,
@@ -176,7 +176,7 @@ def _queue_campaign_claim(db, test_org, test_user):
             template_id=template.id,
             purpose="marketing",
         ),
-        schedule_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+        schedule_at=datetime.now(UTC) - timedelta(seconds=1),
         commit=False,
     )
     recipient.email_log_id = queued.email_log.id
@@ -417,7 +417,7 @@ async def test_dispatch_claim_preserves_reviewed_opt_out_bypass_policy(
             purpose="marketing",
             suppression_policy=EmailSuppressionPolicy.ALLOW_OPT_OUT,
         ),
-        schedule_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+        schedule_at=datetime.now(UTC) - timedelta(seconds=1),
         commit=False,
     )
 
@@ -485,14 +485,14 @@ async def test_dispatch_claim_preserves_idempotency_and_provider_retry_after(
         "send_email",
         fake_send_email,
     )
-    before_dispatch = datetime.now(timezone.utc)
+    before_dispatch = datetime.now(UTC)
     credential_identity = (
         "credential:f7240bc588740b1d7f0dae7cb89e18923b38a1c2cc27f9ccdd5945e196df481f"
     )
 
     delivery = await email_delivery_dispatch.dispatch_claim(db, claim=claim)
 
-    after_dispatch = datetime.now(timezone.utc)
+    after_dispatch = datetime.now(UTC)
     assert sent_idempotency_key == queued.delivery.idempotency_key
     assert delivery.status == EmailDeliveryStatus.RETRY_SCHEDULED.value
     assert before_dispatch + timedelta(seconds=75) <= delivery.run_at
@@ -657,7 +657,7 @@ async def test_dispatch_claim_retries_unknown_outcome_then_requires_reconciliati
         rendered_email=_rendered_email(),
         idempotency_key=f"ambiguous-timeout/{uuid4()}",
         source=EmailSource(source_type="test", source_id=uuid4()),
-        schedule_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+        schedule_at=datetime.now(UTC) - timedelta(seconds=1),
         max_attempts=2,
         commit=False,
     )
@@ -723,7 +723,7 @@ async def test_dispatch_claim_retries_unknown_outcome_then_requires_reconciliati
 async def test_dispatch_due_batch_starts_all_claimed_network_calls_concurrently(
     monkeypatch,
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     claims = [
         DeliveryClaim(
             delivery_id=uuid4(),
@@ -1159,7 +1159,7 @@ async def test_dispatch_claim_keeps_platform_route_while_using_team_admission_id
         rendered_email=_rendered_email(),
         idempotency_key=f"platform-dispatch/{uuid4()}",
         source=EmailSource(source_type="platform_invite", source_id=uuid4()),
-        schedule_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+        schedule_at=datetime.now(UTC) - timedelta(seconds=1),
         commit=False,
     )
     claim = claim_due_deliveries(
@@ -1216,7 +1216,7 @@ async def test_dispatch_claim_never_starts_provider_io_for_an_expired_lease(
         )
     )
     db.flush()
-    expired_claim_time = datetime.now(timezone.utc) - timedelta(minutes=2)
+    expired_claim_time = datetime.now(UTC) - timedelta(minutes=2)
     queue_rendered_email(
         db,
         organization_id=test_org.id,
@@ -1279,7 +1279,7 @@ async def test_dispatch_claim_commits_provider_admission_before_wait_and_network
             db,
             SimpleNamespace(id=organization_id),
         )
-        future_base = datetime.now(timezone.utc) + timedelta(seconds=1)
+        future_base = datetime.now(UTC) + timedelta(seconds=1)
         seed_session = SessionLocal(bind=db_engine)
         try:
             first = reserve_provider_request_slot(
@@ -1485,9 +1485,7 @@ async def test_dispatch_claim_rechecks_suppression_after_provider_admission_wait
     monkeypatch.setattr(
         email_delivery_dispatch.email_provider_admission_service,
         "reserve_provider_request_slot",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            send_at=datetime.now(timezone.utc) + timedelta(seconds=1)
-        ),
+        lambda *_args, **_kwargs: SimpleNamespace(send_at=datetime.now(UTC) + timedelta(seconds=1)),
     )
 
     async def add_suppression_during_wait(_delay_seconds: float) -> None:
@@ -1547,9 +1545,7 @@ async def test_dispatch_claim_rechecks_lease_ownership_after_provider_admission_
     monkeypatch.setattr(
         email_delivery_dispatch.email_provider_admission_service,
         "reserve_provider_request_slot",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            send_at=datetime.now(timezone.utc) + timedelta(seconds=1)
-        ),
+        lambda *_args, **_kwargs: SimpleNamespace(send_at=datetime.now(UTC) + timedelta(seconds=1)),
     )
 
     async def replace_lease_during_wait(_delay_seconds: float) -> None:
@@ -1594,9 +1590,7 @@ async def test_dispatch_claim_rechecks_campaign_eligibility_after_provider_admis
     monkeypatch.setattr(
         email_delivery_dispatch.email_provider_admission_service,
         "reserve_provider_request_slot",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            send_at=datetime.now(timezone.utc) + timedelta(seconds=1)
-        ),
+        lambda *_args, **_kwargs: SimpleNamespace(send_at=datetime.now(UTC) + timedelta(seconds=1)),
     )
 
     async def cancel_campaign_during_wait(_delay_seconds: float) -> None:
@@ -1645,7 +1639,7 @@ async def test_dispatch_claim_rechecks_invite_eligibility_after_provider_admissi
         organization_id=test_org.id,
         email="recipient@example.com",
         role="case_manager",
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
         send_revision=0,
     )
     db.add(invite)
@@ -1662,7 +1656,7 @@ async def test_dispatch_claim_rechecks_invite_eligibility_after_provider_admissi
             source_id=invite.id,
             purpose="transactional",
         ),
-        schedule_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+        schedule_at=datetime.now(UTC) - timedelta(seconds=1),
         commit=False,
     )
     claim = claim_due_deliveries(
@@ -1676,13 +1670,11 @@ async def test_dispatch_claim_rechecks_invite_eligibility_after_provider_admissi
     monkeypatch.setattr(
         email_delivery_dispatch.email_provider_admission_service,
         "reserve_provider_request_slot",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            send_at=datetime.now(timezone.utc) + timedelta(seconds=1)
-        ),
+        lambda *_args, **_kwargs: SimpleNamespace(send_at=datetime.now(UTC) + timedelta(seconds=1)),
     )
 
     async def revoke_invite_during_wait(_delay_seconds: float) -> None:
-        invite.revoked_at = datetime.now(timezone.utc)
+        invite.revoked_at = datetime.now(UTC)
         db.commit()
 
     async def fake_send_email(**_kwargs):
@@ -1726,7 +1718,7 @@ async def test_dispatch_claim_rechecks_idempotency_window_after_admission_wait(
     )
     db.flush()
     queued, claim = _queue_and_claim(db, test_org)
-    base_time = datetime.now(timezone.utc)
+    base_time = datetime.now(UTC)
     queued.delivery.idempotency_expires_at = base_time + timedelta(seconds=1)
     db.commit()
 
@@ -1798,7 +1790,7 @@ async def test_dispatch_claim_defers_when_provider_slot_outlives_the_lease(
         rendered_email=_rendered_email(),
         idempotency_key=f"short-admission-lease/{uuid4()}",
         source=EmailSource(source_type="test", source_id=uuid4()),
-        schedule_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+        schedule_at=datetime.now(UTC) - timedelta(seconds=1),
         commit=False,
     )
     claim = claim_due_deliveries(
@@ -1873,7 +1865,7 @@ async def test_dispatch_claim_cancels_a_campaign_recipient_that_is_no_longer_eli
         campaign_id=campaign.id,
         status="running",
         email_provider="resend",
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
         total_count=1,
         sent_count=0,
         delivered_count=0,
@@ -1913,7 +1905,7 @@ async def test_dispatch_claim_cancels_a_campaign_recipient_that_is_no_longer_eli
             template_id=template.id,
             purpose="marketing",
         ),
-        schedule_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+        schedule_at=datetime.now(UTC) - timedelta(seconds=1),
         commit=False,
     )
     recipient.email_log_id = queued.email_log.id

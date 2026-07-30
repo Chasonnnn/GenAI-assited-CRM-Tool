@@ -1,5 +1,6 @@
 """Import template service for reusable CSV mappings."""
 
+from datetime import UTC
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -149,12 +150,12 @@ def delete_template(db: Session, template: ImportTemplate) -> None:
 
 def increment_template_usage(db: Session, template_id: UUID) -> None:
     """Increment the usage count and update last_used_at."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     db.query(ImportTemplate).filter(ImportTemplate.id == template_id).update(
         {
             "usage_count": ImportTemplate.usage_count + 1,
-            "last_used_at": datetime.now(timezone.utc),
+            "last_used_at": datetime.now(UTC),
         }
     )
     db.commit()

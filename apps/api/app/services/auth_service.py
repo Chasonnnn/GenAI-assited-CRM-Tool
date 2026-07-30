@@ -1,19 +1,19 @@
 """Authentication service - user resolution, invite handling, session creation."""
 
-from datetime import datetime, timezone
 import logging
 import re
+from datetime import UTC, datetime
 from uuid import UUID
 
+from fastapi import Request
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
-from fastapi import Request
 
 from app.core.security import create_session_token
 from app.db.enums import AuditEventType, AuthProvider, Role
 from app.db.models import AuthIdentity, Membership, OrgInvite, User
-from app.services.google_oauth import GoogleUserInfo
 from app.services import session_service
+from app.services.google_oauth import GoogleUserInfo
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +145,7 @@ def create_user_from_invite(
         db.add(membership)
 
     # Mark invite as accepted
-    invite.accepted_at = datetime.now(timezone.utc)
+    invite.accepted_at = datetime.now(UTC)
 
     # Add to Surrogate Pool queue if role qualifies
     from app.services import membership_service
@@ -297,7 +297,7 @@ def _refresh_email_for_existing_google_member(
     user.display_name = google_user.name or user.display_name or new_email.split("@")[0]
     if google_user.picture:
         user.avatar_url = google_user.picture
-    user.updated_at = datetime.now(timezone.utc)
+    user.updated_at = datetime.now(UTC)
     identity.email = new_email
 
     audit_service.log_event(
@@ -350,7 +350,7 @@ def _transfer_identity_to_invited_user(
     user = _get_or_create_user_for_verified_email(db, google_user)
 
     role_value = invite_service.validate_invite_role(invite.role)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     existing_membership = (
         db.query(Membership)
@@ -414,7 +414,7 @@ def _create_login_session(
     membership: Membership,
     request: Request | None = None,
 ) -> str:
-    user.last_login_at = datetime.now(timezone.utc)
+    user.last_login_at = datetime.now(UTC)
     db.commit()
 
     # MFA is required for all users. A fresh Google login still needs Duo/TOTP verification.

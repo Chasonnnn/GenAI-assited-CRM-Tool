@@ -8,7 +8,7 @@ import hmac
 import json
 import logging
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import HTTPException, Request
@@ -118,11 +118,11 @@ def _parse_event_created_at(value: object) -> datetime:
         try:
             parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
             if parsed.tzinfo is None:
-                return parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc)
+                return parsed.replace(tzinfo=UTC)
+            return parsed.astimezone(UTC)
         except ValueError:
             logger.warning("Resend webhook has invalid created_at timestamp")
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _first_timestamp(current: datetime | None, event_created_at: datetime) -> datetime:
@@ -246,7 +246,7 @@ def _enqueue_event_reconciliation(db: Session, event: ResendWebhookEvent) -> Non
                 reason="Duplicate signed webhook revived orphan correlation",
                 commit=False,
             )
-            existing.run_at = datetime.now(timezone.utc) + timedelta(seconds=5)
+            existing.run_at = datetime.now(UTC) + timedelta(seconds=5)
             existing.max_attempts = _EVENT_RECONCILE_MAX_ATTEMPTS
             email_reconciliation_service.ensure_orphan_webhook_case(
                 db,
@@ -267,7 +267,7 @@ def _enqueue_event_reconciliation(db: Session, event: ResendWebhookEvent) -> Non
         org_id=event.organization_id,
         job_type=JobType.RESEND_EVENT_RECONCILE,
         payload={"event_id": str(event.id)},
-        run_at=datetime.now(timezone.utc) + timedelta(seconds=5),
+        run_at=datetime.now(UTC) + timedelta(seconds=5),
         idempotency_key=idempotency_key,
         commit=False,
     )
@@ -694,7 +694,7 @@ def _process_verified_payload(
         event_created_at=event_created_at,
     )
     locked_event.email_log_id = locked_email_log.id
-    locked_event.processed_at = datetime.now(timezone.utc)
+    locked_event.processed_at = datetime.now(UTC)
     from app.services import email_reconciliation_service
 
     email_reconciliation_service.resolve_orphan_webhook_case(

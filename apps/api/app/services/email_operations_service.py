@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import and_, func, or_
@@ -26,19 +26,19 @@ from app.schemas.email_operations import (
     EmailOperationMessageListResponse,
     EmailOperationMessageSummary,
     EmailOperationProviderEvent,
-    EmailReconciliationCaseListResponse,
-    EmailReconciliationCaseSummary,
-    EmailReconciliationCounts,
     EmailOperationsReadinessCheck,
     EmailOperationsReadinessResponse,
     EmailOperationsSummary24h,
+    EmailReconciliationCaseListResponse,
+    EmailReconciliationCaseSummary,
+    EmailReconciliationCounts,
 )
 
 
 def _as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _encode_cursor(*, created_at: datetime, message_id: UUID) -> str:
@@ -470,7 +470,7 @@ def get_readiness(
     now: datetime | None = None,
 ) -> EmailOperationsReadinessResponse:
     """Compute readiness solely from persisted configuration and evidence."""
-    evaluated_at = _as_utc(now or datetime.now(timezone.utc))
+    evaluated_at = _as_utc(now or datetime.now(UTC))
     cutoff = evaluated_at - timedelta(hours=24)
     settings = (
         db.query(ResendSettings)
@@ -711,11 +711,7 @@ def get_readiness(
     ]
     overall = (
         "ready"
-        if can_send
-        and (
-            not tracking_opted_in
-            or (can_track and activity_check.status != "fail")
-        )
+        if can_send and (not tracking_opted_in or (can_track and activity_check.status != "fail"))
         else "needs_attention"
     )
     return EmailOperationsReadinessResponse(

@@ -1,11 +1,11 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def test_meta_platform_breakdown_counts(db, test_org):
     from app.db.models import MetaLead
     from app.services import analytics_meta_service
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     leads = [
         MetaLead(
             organization_id=test_org.id,

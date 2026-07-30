@@ -14,8 +14,6 @@ def test_model_metadata_has_no_unresolved_foreign_key_cycles() -> None:
         list(Base.metadata.sorted_tables)
 
     cycle_warnings = [
-        warning
-        for warning in caught
-        if "unresolvable cycles" in str(warning.message).lower()
+        warning for warning in caught if "unresolvable cycles" in str(warning.message).lower()
     ]
     assert cycle_warnings == []

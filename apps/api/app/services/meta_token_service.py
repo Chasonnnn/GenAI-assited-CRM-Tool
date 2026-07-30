@@ -13,7 +13,7 @@ Error Categories:
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from uuid import UUID
 
@@ -264,7 +264,7 @@ def mark_token_valid(db: Session, connection_id: UUID) -> None:
     """
     conn = db.get(MetaOAuthConnection, connection_id)
     if conn:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         conn.last_validated_at = now
         # Clear error state on success
         if conn.last_error:
@@ -292,7 +292,7 @@ def mark_token_error(db: Session, connection_id: UUID, error: Exception) -> Erro
     category = classify_meta_error(error)
     conn = db.get(MetaOAuthConnection, connection_id)
     if conn:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         conn.last_error = str(error)[:1000]  # Truncate long errors
         conn.last_error_at = now
         conn.last_error_code = category.value

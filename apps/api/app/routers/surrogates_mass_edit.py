@@ -1,6 +1,7 @@
 """Developer-only surrogate mass edit routes."""
 
 from __future__ import annotations
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,7 +21,6 @@ from app.schemas.surrogate_mass_edit import (
     SurrogateMassEditStagePreviewResponse,
 )
 from app.services import surrogate_mass_edit_service
-
 
 router = APIRouter()
 

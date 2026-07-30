@@ -5,7 +5,7 @@ import mimetypes
 import re
 import uuid
 import zipfile
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from fastapi import UploadFile
@@ -29,24 +29,23 @@ from app.db.models import (
     Job,
     Surrogate,
 )
-from app.schemas.forms import FormField, FormFieldCondition, FormFieldColumn, FormSchema
+from app.schemas.forms import FormField, FormFieldColumn, FormFieldCondition, FormSchema
 from app.schemas.surrogate import SurrogateUpdate
+from app.services import job_service
 from app.services.attachment_service import (
     calculate_checksum,
     generate_signed_url,
     register_storage_cleanup_on_rollback,
     sanitize_upload_content,
-    strip_exif_data,
     store_file,
+    strip_exif_data,
 )
 from app.services.import_transformers import transform_height_flexible
-from app.services import job_service
 from app.services.surrogate_input_normalization_service import (
     SURROGATE_FIELD_TYPES,
     coerce_surrogate_field_value,
 )
 from app.utils.normalization import normalize_phone
-
 
 DEFAULT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 DEFAULT_MAX_FILE_COUNT = 10
@@ -414,7 +413,7 @@ def ensure_submission_file_scan_job(
     from app.services import scan_dispatch_service
 
     submission_file_id_str = str(submission_file_id)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stale_after_seconds = scan_dispatch_service.scan_stale_lease_seconds()
     in_flight_jobs = (
         db.query(Job)
@@ -462,7 +461,7 @@ def dispatch_submission_file_scan_if_needed(
     from app.services import scan_dispatch_service
 
     submission_file_id_str = str(submission_file_id)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stale_after_seconds = scan_dispatch_service.scan_stale_lease_seconds()
 
     jobs = (
@@ -557,7 +556,7 @@ def soft_delete_submission_file(
 
     filename = file_record.filename
 
-    file_record.deleted_at = datetime.now(timezone.utc)
+    file_record.deleted_at = datetime.now(UTC)
     file_record.deleted_by_user_id = user_id
 
     from app.services import audit_service
@@ -657,7 +656,7 @@ def approve_submission(
             commit=False,
         )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     submission.status = FormSubmissionStatus.APPROVED.value
     submission.reviewed_at = now
     submission.reviewed_by_user_id = reviewer_id
@@ -694,7 +693,7 @@ def reject_submission(
         raise ValueError("Submission is not pending review")
 
     submission.status = FormSubmissionStatus.REJECTED.value
-    submission.reviewed_at = datetime.now(timezone.utc)
+    submission.reviewed_at = datetime.now(UTC)
     submission.reviewed_by_user_id = reviewer_id
     submission.review_notes = review_notes
 

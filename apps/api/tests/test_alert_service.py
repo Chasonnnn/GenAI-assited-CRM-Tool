@@ -2,7 +2,7 @@
 
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import event
@@ -29,7 +29,7 @@ def test_create_or_update_alert_upserts_and_reopens_resolved(db, test_org, test_
     db.commit()
 
     alert.status = AlertStatus.RESOLVED.value
-    alert.resolved_at = datetime.now(timezone.utc)
+    alert.resolved_at = datetime.now(UTC)
     alert.resolved_by_user_id = test_user.id
     db.commit()
 
@@ -56,7 +56,7 @@ def test_create_or_update_alert_upserts_and_reopens_resolved(db, test_org, test_
 
 
 def test_list_alerts_returns_exact_total_on_full_page(db, test_org):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for index in range(3):
         db.add(
             SystemAlert(
@@ -93,7 +93,7 @@ def test_count_alerts_uses_direct_count_and_preserves_filters(db, test_org):
         slug=f"other-alert-org-{uuid.uuid4().hex[:8]}",
     )
     db.add(other_org)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     db.add_all(
         [
             SystemAlert(
@@ -184,7 +184,7 @@ def test_create_or_update_alert_snooze_reopen_semantics(db, test_org):
     db.commit()
 
     alert.status = AlertStatus.SNOOZED.value
-    alert.snoozed_until = datetime.now(timezone.utc) + timedelta(hours=1)
+    alert.snoozed_until = datetime.now(UTC) + timedelta(hours=1)
     db.commit()
 
     still_snoozed = alert_service.create_or_update_alert(
@@ -203,7 +203,7 @@ def test_create_or_update_alert_snooze_reopen_semantics(db, test_org):
     assert still_snoozed.status == AlertStatus.SNOOZED.value
     assert still_snoozed.occurrence_count == 2
 
-    still_snoozed.snoozed_until = datetime.now(timezone.utc) - timedelta(minutes=1)
+    still_snoozed.snoozed_until = datetime.now(UTC) - timedelta(minutes=1)
     db.commit()
 
     reopened = alert_service.create_or_update_alert(

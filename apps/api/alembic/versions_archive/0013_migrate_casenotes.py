@@ -10,16 +10,15 @@ Per "No Backward Compatibility" rule:
 - This is a one-way migration (no downgrade to restore old table)
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
 revision: str = "0013_migrate_casenotes"
-down_revision: Union[str, Sequence[str], None] = "0012_add_indexes"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "0012_add_indexes"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

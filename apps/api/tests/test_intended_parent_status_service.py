@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta, timezone, time
 import uuid
+from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -32,7 +32,7 @@ def _get_ip_stage(db, org_id, stage_key: str):
 
 def test_ip_status_backdate_requires_reason(db, test_org, test_user):
     ip = _create_ip(db, test_org.id, test_user.id)
-    ip.created_at = datetime.now(timezone.utc) - timedelta(days=7)
+    ip.created_at = datetime.now(UTC) - timedelta(days=7)
     db.commit()
 
     org_now = datetime.now(ZoneInfo("America/Los_Angeles"))
@@ -72,7 +72,7 @@ def test_ip_status_regression_creates_pending_request(db, test_org, test_user):
         .first()
     )
     assert history is not None
-    history.recorded_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    history.recorded_at = datetime.now(UTC) - timedelta(minutes=10)
     db.commit()
 
     regression = intended_parent_status_service.change_status(
@@ -102,9 +102,7 @@ def test_ip_status_regression_creates_pending_request(db, test_org, test_user):
 
 
 @pytest.mark.parametrize("role", [Role.ADMIN, Role.DEVELOPER])
-def test_ip_status_regression_self_approves_for_admin_or_developer(
-    db, test_org, test_user, role
-):
+def test_ip_status_regression_self_approves_for_admin_or_developer(db, test_org, test_user, role):
     ip = _create_ip(db, test_org.id, test_user.id)
     ready_stage = _get_ip_stage(db, test_org.id, IntendedParentStatus.READY_TO_MATCH.value)
     new_stage = _get_ip_stage(db, test_org.id, IntendedParentStatus.NEW.value)
@@ -125,7 +123,7 @@ def test_ip_status_regression_self_approves_for_admin_or_developer(
         .first()
     )
     assert history is not None
-    history.recorded_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    history.recorded_at = datetime.now(UTC) - timedelta(minutes=10)
     db.commit()
 
     regression = intended_parent_status_service.change_status(

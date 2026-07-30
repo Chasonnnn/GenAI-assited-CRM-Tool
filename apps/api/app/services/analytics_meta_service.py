@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, date, timezone
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import func, literal, text
@@ -62,8 +62,7 @@ def get_meta_performance(
 
     lead_time = func.coalesce(MetaLead.meta_created_time, MetaLead.received_at)
     qualified_count = (
-        func.count(MetaLead.id)
-        .filter(
+        func.count(MetaLead.id).filter(
             MetaLead.is_converted.is_(True),
             Surrogate.stage_id.in_(qualified_or_later_ids),
         )
@@ -72,8 +71,7 @@ def get_meta_performance(
     )
 
     converted_count = (
-        func.count(MetaLead.id)
-        .filter(
+        func.count(MetaLead.id).filter(
             MetaLead.is_converted.is_(True),
             Surrogate.stage_id.in_(converted_or_later_ids),
         )
@@ -219,13 +217,9 @@ def get_cached_meta_platform_breakdown(
         "end_date": end_date.isoformat() if end_date else None,
     }
     range_start = (
-        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
-        if start_date
-        else None
+        datetime.combine(start_date, datetime.min.time(), tzinfo=UTC) if start_date else None
     )
-    range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
-    )
+    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC) if end_date else None
     return _get_or_compute_snapshot(
         db,
         organization_id,
@@ -367,13 +361,9 @@ def get_cached_leads_by_ad(
         "end_date": end_date.isoformat() if end_date else None,
     }
     range_start = (
-        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
-        if start_date
-        else None
+        datetime.combine(start_date, datetime.min.time(), tzinfo=UTC) if start_date else None
     )
-    range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
-    )
+    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC) if end_date else None
     return _get_or_compute_snapshot(
         db,
         organization_id,
@@ -461,13 +451,9 @@ def get_cached_funnel_with_filter(
         "ad_id": ad_id,
     }
     range_start = (
-        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
-        if start_date
-        else None
+        datetime.combine(start_date, datetime.min.time(), tzinfo=UTC) if start_date else None
     )
-    range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
-    )
+    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC) if end_date else None
     return _get_or_compute_snapshot(
         db,
         organization_id,
@@ -524,13 +510,9 @@ def get_cached_surrogates_by_state_with_filter(
         "ad_id": ad_id,
     }
     range_start = (
-        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
-        if start_date
-        else None
+        datetime.combine(start_date, datetime.min.time(), tzinfo=UTC) if start_date else None
     )
-    range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
-    )
+    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC) if end_date else None
     return _get_or_compute_snapshot(
         db,
         organization_id,
@@ -990,8 +972,8 @@ def get_cached_spend_by_campaign(
         "end_date": end_date.isoformat(),
         "ad_account_id": str(ad_account_id) if ad_account_id else None,
     }
-    range_start = datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
-    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
+    range_start = datetime.combine(start_date, datetime.min.time(), tzinfo=UTC)
+    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC)
     return _get_or_compute_snapshot(
         db,
         organization_id,
@@ -1017,8 +999,8 @@ def get_cached_spend_by_breakdown(
         "breakdown_type": breakdown_type,
         "ad_account_id": str(ad_account_id) if ad_account_id else None,
     }
-    range_start = datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
-    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
+    range_start = datetime.combine(start_date, datetime.min.time(), tzinfo=UTC)
+    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC)
     return _get_or_compute_snapshot(
         db,
         organization_id,
@@ -1046,8 +1028,8 @@ def get_cached_spend_trend(
         "ad_account_id": str(ad_account_id) if ad_account_id else None,
         "campaign_external_id": campaign_external_id,
     }
-    range_start = datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
-    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
+    range_start = datetime.combine(start_date, datetime.min.time(), tzinfo=UTC)
+    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC)
     return _get_or_compute_snapshot(
         db,
         organization_id,
@@ -1183,13 +1165,9 @@ def get_cached_leads_by_form(
         "end_date": end_date.isoformat() if end_date else None,
     }
     range_start = (
-        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
-        if start_date
-        else None
+        datetime.combine(start_date, datetime.min.time(), tzinfo=UTC) if start_date else None
     )
-    range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
-    )
+    range_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC) if end_date else None
     return _get_or_compute_snapshot(
         db,
         organization_id,

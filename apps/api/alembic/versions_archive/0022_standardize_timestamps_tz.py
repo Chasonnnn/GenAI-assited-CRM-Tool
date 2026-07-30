@@ -14,16 +14,15 @@ This migration:
 - Renames the auth_identities (provider, provider_subject) unique constraint to uq_auth_identity.
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
 revision: str = "0022_standardize_timestamps_tz"
-down_revision: Union[str, Sequence[str], None] = "0021_org_integration_versioning"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "0021_org_integration_versioning"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def _to_timestamptz(table: str, column: str) -> None:

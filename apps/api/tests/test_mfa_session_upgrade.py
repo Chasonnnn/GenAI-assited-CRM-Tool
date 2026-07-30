@@ -1,5 +1,5 @@
-from http.cookies import SimpleCookie
 import json
+from http.cookies import SimpleCookie
 
 import pyotp
 import pytest
@@ -62,8 +62,8 @@ async def test_mfa_complete_creates_session_for_upgraded_token(client, db, test_
 async def test_duo_callback_creates_session_for_upgraded_token(
     client, db, test_user, test_org, monkeypatch
 ):
-    from app.services import duo_service
     from app.routers.mfa import DUO_STATE_COOKIE
+    from app.services import duo_service
 
     monkeypatch.setattr(duo_service, "is_available", lambda: True)
 

@@ -1,24 +1,23 @@
 """Match service - query helpers for matches and match events."""
 
-from datetime import datetime, date, timezone
+from datetime import UTC, date, datetime
 from uuid import UUID
 
-from sqlalchemy import asc, desc, func, and_, or_, text
+from sqlalchemy import and_, asc, desc, func, or_, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 from app.db.enums import AuditEventType, MatchStatus, SurrogateActivityType
 from app.db.models import (
-    Surrogate,
     IntendedParent,
     Match,
     MatchEvent,
     StatusChangeRequest,
+    Surrogate,
 )
 from app.utils.normalization import escape_like_string, normalize_identifier, normalize_search_text
 from app.utils.pagination import paginate_query_by_offset
-from sqlalchemy.exc import IntegrityError
-
-from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 
 
 def generate_match_number(db: Session, org_id: UUID) -> str:
@@ -414,8 +413,8 @@ def mark_match_reviewing_if_needed(
 
         match.status = MatchStatus.REVIEWING.value
         match.reviewed_by_user_id = actor_user_id
-        match.reviewed_at = datetime.now(timezone.utc)
-        match.updated_at = datetime.now(timezone.utc)
+        match.reviewed_at = datetime.now(UTC)
+        match.updated_at = datetime.now(UTC)
 
         activity_service.log_activity(
             db=db,
@@ -484,11 +483,11 @@ def accept_match(
 
     match.status = MatchStatus.ACCEPTED.value
     match.reviewed_by_user_id = actor_user_id
-    match.reviewed_at = datetime.now(timezone.utc)
+    match.reviewed_at = datetime.now(UTC)
     if notes:
         clean_notes = note_service.sanitize_html(notes)
         match.notes = (match.notes or "") + "\n\n" + clean_notes
-    match.updated_at = datetime.now(timezone.utc)
+    match.updated_at = datetime.now(UTC)
 
     ip = get_intended_parent(db, match.intended_parent_id, org_id)
     if ip:
@@ -515,8 +514,8 @@ def accept_match(
                     new_stage=matched_ip_stage,
                     user_id=actor_user_id,
                     reason="Match accepted",
-                    effective_at=datetime.now(timezone.utc),
-                    recorded_at=datetime.now(timezone.utc),
+                    effective_at=datetime.now(UTC),
+                    recorded_at=datetime.now(UTC),
                 )
 
     other_matches = list_pending_matches_for_surrogate(
@@ -526,7 +525,7 @@ def accept_match(
     )
     for other in other_matches:
         other.status = MatchStatus.CANCELLED.value
-        other.updated_at = datetime.now(timezone.utc)
+        other.updated_at = datetime.now(UTC)
 
     activity_service.log_activity(
         db=db,
@@ -583,12 +582,12 @@ def reject_match(
 
     match.status = MatchStatus.REJECTED.value
     match.reviewed_by_user_id = actor_user_id
-    match.reviewed_at = datetime.now(timezone.utc)
+    match.reviewed_at = datetime.now(UTC)
     match.rejection_reason = rejection_reason
     if notes:
         clean_notes = note_service.sanitize_html(notes)
         match.notes = (match.notes or "") + "\n\n" + clean_notes
-    match.updated_at = datetime.now(timezone.utc)
+    match.updated_at = datetime.now(UTC)
 
     activity_service.log_activity(
         db=db,
@@ -647,7 +646,7 @@ def request_cancel_match(
     if existing_request:
         raise ValueError("A pending cancellation request already exists for this match")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     request = StatusChangeRequest(
         organization_id=org_id,
         entity_type="match",
@@ -702,7 +701,7 @@ def cancel_match(
     from app.services import activity_service, audit_service
 
     match.status = MatchStatus.CANCELLED.value
-    match.updated_at = datetime.now(timezone.utc)
+    match.updated_at = datetime.now(UTC)
 
     activity_service.log_activity(
         db=db,
@@ -742,7 +741,7 @@ def update_match_notes(
     from app.services import note_service
 
     match.notes = note_service.sanitize_html(notes)
-    match.updated_at = datetime.now(timezone.utc)
+    match.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(match)
     return match
@@ -826,7 +825,7 @@ def update_match_event(
         event.starts_at = starts_at
         event.ends_at = ends_at
 
-    event.updated_at = datetime.now(timezone.utc)
+    event.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(event)
     return event

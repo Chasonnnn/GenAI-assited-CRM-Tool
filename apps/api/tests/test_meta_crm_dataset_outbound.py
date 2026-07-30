@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -10,7 +10,7 @@ import pytest
 
 
 def _create_form_submission_for_meta_event(db, org_id):
-    from app.db.enums import FormSubmissionMatchStatus, FormSubmissionStatus, FormStatus
+    from app.db.enums import FormStatus, FormSubmissionMatchStatus, FormSubmissionStatus
     from app.db.models import Form, FormSubmission
 
     form = Form(
@@ -33,7 +33,7 @@ def _create_form_submission_for_meta_event(db, org_id):
         status=FormSubmissionStatus.PENDING_REVIEW.value,
         match_status=FormSubmissionMatchStatus.WORKFLOW_PENDING.value,
         match_reason="workflow_pending",
-        submitted_at=datetime.now(timezone.utc),
+        submitted_at=datetime.now(UTC),
     )
     db.add(submission)
     db.flush()
@@ -145,7 +145,7 @@ async def test_meta_crm_dataset_test_event_queues_job(authed_client, db, test_or
 def test_build_meta_crm_dataset_payload_uses_crm_shape():
     from app.services import meta_crm_dataset_service
 
-    event_time = datetime(2026, 3, 8, 4, 0, 0, tzinfo=timezone.utc)
+    event_time = datetime(2026, 3, 8, 4, 0, 0, tzinfo=UTC)
     payload = meta_crm_dataset_service.build_stage_event_payload(
         lead_id="1559954882011881",
         event_name="Qualified",
@@ -181,7 +181,7 @@ def test_build_meta_crm_dataset_payload_ignores_invalid_click_ids():
     payload = meta_crm_dataset_service.build_stage_event_payload(
         lead_id="1559954882011881",
         event_name="Lead",
-        event_time=datetime(2026, 3, 8, 4, 0, 0, tzinfo=timezone.utc),
+        event_time=datetime(2026, 3, 8, 4, 0, 0, tzinfo=UTC),
         crm_name="Surrogacy Force CRM",
         include_hashed_pii=False,
         email=None,
@@ -195,7 +195,7 @@ def test_build_meta_crm_dataset_payload_ignores_invalid_click_ids():
 def test_build_website_lead_payload_uses_website_shape_without_sensitive_fields():
     from app.services import meta_crm_dataset_service
 
-    event_time = datetime(2026, 3, 8, 4, 0, 0, tzinfo=timezone.utc)
+    event_time = datetime(2026, 3, 8, 4, 0, 0, tzinfo=UTC)
     payload = meta_crm_dataset_service.build_website_lead_event_payload(
         event_time=event_time,
         event_source_url="https://ewi-surrogacy.com",
@@ -282,9 +282,7 @@ def test_enqueue_website_lead_event_skips_without_match_keys(db, test_org):
     assert monitor_event.reason == "missing_user_data"
 
 
-def test_enqueue_website_lead_event_is_submission_owned_and_can_attach_lead_later(
-    db, test_org
-):
+def test_enqueue_website_lead_event_is_submission_owned_and_can_attach_lead_later(db, test_org):
     from app.db.enums import JobType
     from app.db.models import Job, MetaCrmDatasetEvent
     from app.services import (
@@ -372,7 +370,7 @@ def test_enqueue_meta_crm_dataset_stage_event_includes_fbc_from_meta_lead(db, te
             "email": "lead@example.com",
             "fbc": "fb.1.1772942400.persisted-click-id",
         },
-        received_at=datetime.now(timezone.utc),
+        received_at=datetime.now(UTC),
     )
     db.add(meta_lead)
     db.commit()
@@ -453,7 +451,7 @@ def test_enqueue_meta_crm_dataset_stage_event_skips_meta_leads_older_than_90_day
         meta_page_id="page_1",
         field_data={"email": "stale@example.com"},
         field_data_raw={"email": "stale@example.com"},
-        received_at=datetime.now(timezone.utc) - timedelta(days=91),
+        received_at=datetime.now(UTC) - timedelta(days=91),
     )
     db.add(meta_lead)
     db.commit()
@@ -511,11 +509,11 @@ def test_enqueue_meta_crm_dataset_stage_event_skips_meta_leads_older_than_90_day
 
 @pytest.mark.asyncio
 async def test_meta_crm_dataset_job_handler_posts_dataset_payload(monkeypatch, db, test_org):
-    from app.db.enums import JobType
     from app.core.config import settings as app_settings
+    from app.db.enums import JobType
     from app.db.models import MetaCrmDatasetEvent
-    from app.services import job_service, meta_crm_dataset_settings_service
     from app.jobs.handlers import meta
+    from app.services import job_service, meta_crm_dataset_settings_service
 
     settings = meta_crm_dataset_settings_service.get_or_create_settings(db, test_org.id)
     settings.dataset_id = "1428122951556949"

@@ -1,14 +1,14 @@
 """Queue management service with claim/release and audit logging."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
-from sqlalchemy import and_, select, update
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
 
+from sqlalchemy import and_, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.db.enums import OwnerType, SurrogateActivityType
 from app.db.models import Queue, QueueMember, Surrogate, SurrogateActivityLog, User
-from app.db.enums import SurrogateActivityType
-from app.db.enums import OwnerType
 from app.services import activity_service
 
 
@@ -240,8 +240,8 @@ def get_or_create_surrogate_pool_queue(db: Session, org_id: UUID) -> Queue:
         db.flush()
 
         # Auto-add all case_manager+ users as members
-        from app.db.models import Membership
         from app.db.enums import Role
+        from app.db.models import Membership
 
         manager_roles = [Role.CASE_MANAGER.value, Role.ADMIN.value, Role.DEVELOPER.value]
         memberships = (
@@ -327,7 +327,7 @@ def claim_surrogate(
     # Transfer ownership to user
     surrogate.owner_type = OwnerType.USER.value
     surrogate.owner_id = claimer_user_id
-    surrogate.assigned_at = datetime.now(timezone.utc)
+    surrogate.assigned_at = datetime.now(UTC)
 
     # Log activity
     activity_service.log_activity(

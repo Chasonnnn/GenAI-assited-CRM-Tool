@@ -8,9 +8,10 @@ import json
 import os
 import tempfile
 import zipfile
-from datetime import datetime, timezone
+from collections.abc import Iterable, Iterator, Sequence
+from datetime import UTC, datetime
 from importlib.util import find_spec
-from typing import Any, Iterable, Iterator, Sequence
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import and_
@@ -20,35 +21,34 @@ from app.core.config import settings
 from app.db.enums import OwnerType
 from app.db.models import (
     AISettings,
+    AppointmentType,
     AutomationWorkflow,
     AvailabilityOverride,
     AvailabilityRule,
-    AppointmentType,
     BookingLink,
     DataRetentionPolicy,
+    EmailTemplate,
     Form,
     FormFieldMapping,
     FormLogo,
     LegalHold,
-    OrgCounter,
-    Surrogate,
-    EmailTemplate,
     Membership,
     MetaPageMapping,
     Organization,
+    OrgCounter,
     Pipeline,
     PipelineStage,
     Queue,
     QueueMember,
     RolePermission,
-    UserPermissionOverride,
+    Surrogate,
     User,
     UserIntegration,
     UserNotificationSettings,
+    UserPermissionOverride,
     WorkflowTemplate,
 )
 from app.services import ai_usage_service, analytics_service
-
 
 CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@")
 
@@ -144,7 +144,7 @@ def build_export_filename(export_type: str) -> str:
     """Build a timestamped filename for admin exports."""
     prefix = EXPORT_TYPE_FILENAMES.get(export_type, "admin_export")
     extension = "csv" if export_type == "surrogates_csv" else "zip"
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     return f"{prefix}_{timestamp}.{extension}"
 
 
@@ -948,7 +948,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
 
     manifest = {
         "organization_id": str(org_id),
-        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "exported_at": datetime.now(UTC).isoformat(),
         "version": settings.VERSION,
     }
 

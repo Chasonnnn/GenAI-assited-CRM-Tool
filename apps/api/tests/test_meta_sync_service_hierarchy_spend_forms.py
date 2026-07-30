@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import uuid4
@@ -189,7 +189,7 @@ def test_record_sync_error_truncates_and_updates_timestamps(db, test_org):
     assert account.last_error is not None
     assert len(account.last_error) <= 500
     assert account.last_error_at is not None
-    assert account.last_error_at <= datetime.now(timezone.utc)
+    assert account.last_error_at <= datetime.now(UTC)
 
 
 @pytest.mark.asyncio
@@ -475,7 +475,7 @@ async def test_meta_sync_ad_platform_and_schedule_branches(db, test_org, monkeyp
     await meta_sync_service.run_spend_sync_schedule(db, account)
     assert captured_ranges[-1] == (date(2025, 7, 15), date(2026, 1, 10))
 
-    account.spend_synced_at = datetime.now(timezone.utc)
+    account.spend_synced_at = datetime.now(UTC)
     await meta_sync_service.run_spend_sync_schedule(db, account)
     assert captured_ranges[-1] == (date(2025, 10, 13), date(2026, 1, 10))
 

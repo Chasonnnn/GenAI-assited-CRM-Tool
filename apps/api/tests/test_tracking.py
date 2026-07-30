@@ -9,7 +9,6 @@ import pytest
 
 from app.services import tracking_service
 
-
 # =============================================================================
 # Token Generation Tests
 # =============================================================================
@@ -152,7 +151,7 @@ def test_prepare_email_for_tracking():
 
 def test_record_open_creates_event(db, test_org, test_user):
     """Test that recording an open creates an event and updates counters."""
-    from app.db.models import CampaignRecipient, CampaignRun, Campaign, EmailTemplate
+    from app.db.models import Campaign, CampaignRecipient, CampaignRun, EmailTemplate
 
     # Create email template first (required by Campaign)
     template = EmailTemplate(
@@ -214,7 +213,7 @@ def test_record_open_creates_event(db, test_org, test_user):
 
 def test_record_open_increments_count(db, test_org, test_user):
     """Test that multiple opens increment count but only set opened_at once."""
-    from app.db.models import CampaignRecipient, CampaignRun, Campaign, EmailTemplate
+    from app.db.models import Campaign, CampaignRecipient, CampaignRun, EmailTemplate
 
     # Create email template first
     template = EmailTemplate(
@@ -279,7 +278,7 @@ def test_record_open_invalid_token(db):
 
 def test_record_click_creates_event(db, test_org, test_user):
     """Test that recording a click creates an event and updates counters."""
-    from app.db.models import CampaignRecipient, CampaignRun, Campaign, EmailTemplate
+    from app.db.models import Campaign, CampaignRecipient, CampaignRun, EmailTemplate
 
     # Create email template first
     template = EmailTemplate(
@@ -345,7 +344,7 @@ def test_record_click_creates_event(db, test_org, test_user):
 
 def test_record_click_invalid_signature(db, test_org, test_user):
     """Test that invalid signature returns None and does not update counters."""
-    from app.db.models import CampaignRecipient, CampaignRun, Campaign, EmailTemplate
+    from app.db.models import Campaign, CampaignRecipient, CampaignRun, EmailTemplate
 
     template = EmailTemplate(
         organization_id=test_org.id,

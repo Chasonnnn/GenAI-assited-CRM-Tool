@@ -6,9 +6,8 @@ Endpoints for:
 - Viewing and editing role default permissions
 """
 
-from typing import Annotated
-
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -16,18 +15,17 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
-from app.core.policies import POLICIES
 from app.core.permissions import (
     PERMISSION_REGISTRY,
     ROLE_DEFAULTS,
     get_all_permissions,
     get_role_default_permissions,
 )
+from app.core.policies import POLICIES
 from app.db.enums import AuditEventType, Role
 from app.schemas.auth import UserSession
 from app.services import permission_service
 from app.utils.presentation import humanize_identifier
-
 
 router = APIRouter(prefix="/settings/permissions", tags=["Permissions"])
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import re
 
-
 _ADMISSION_GROUP_NAMESPACE = b"resend-rate-limit-group:v1\0"
 _GROUP_TOKEN_MIN_LENGTH = 32
 _GROUP_TOKEN_MAX_LENGTH = 256

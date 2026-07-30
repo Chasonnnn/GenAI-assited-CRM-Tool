@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 from app.db.enums import JobStatus, JobType
 from app.db.models import Attachment, FormSubmissionFile, Job
 from app.services import scan_dispatch_service
-
 
 _REMOTE_SCAN_JOB_TYPES = {
     JobType.ATTACHMENT_SCAN.value,
@@ -71,7 +70,7 @@ def recover_stale_remote_scan_claims(
     limit: int = 50,
 ) -> ScanClaimRecoveryReport:
     """Recover stale scan claims without invoking scanners or user request paths."""
-    recovered_at = now or datetime.now(timezone.utc)
+    recovered_at = now or datetime.now(UTC)
     stale_before = recovered_at - timedelta(
         seconds=scan_dispatch_service.scan_stale_lease_seconds()
     )

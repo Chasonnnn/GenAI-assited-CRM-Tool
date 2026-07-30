@@ -1,19 +1,19 @@
 """Service layer for contact attempts tracking."""
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select, func, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.surrogate_access import check_surrogate_access
-from app.db.enums import SurrogateActivityType, ContactStatus, OwnerType
+from app.db.enums import ContactStatus, OwnerType, SurrogateActivityType
 from app.db.models import (
+    Organization,
     Surrogate,
     SurrogateActivityLog,
     SurrogateContactAttempt,
-    Organization,
     User,
 )
 from app.schemas.auth import UserSession
@@ -22,7 +22,7 @@ from app.schemas.surrogate import (
     ContactAttemptResponse,
     ContactAttemptsSummary,
 )
-from app.services import pipeline_semantics_service, surrogate_service, pipeline_service
+from app.services import pipeline_semantics_service, pipeline_service, surrogate_service
 
 
 def _sanitize_note_preview(note: str | None, max_chars: int = 120) -> str | None:
@@ -79,10 +79,10 @@ def create_contact_attempt(
         raise ValueError("Cannot log attempts before assignment")
 
     # Default attempted_at to now if not provided
-    attempted_at = data.attempted_at or datetime.now(timezone.utc)
+    attempted_at = data.attempted_at or datetime.now(UTC)
 
     # Validate attempted_at
-    if attempted_at > datetime.now(timezone.utc):
+    if attempted_at > datetime.now(UTC):
         raise ValueError("Cannot log future attempts")
 
     if surrogate.assigned_at and attempted_at < surrogate.assigned_at:
@@ -243,7 +243,7 @@ def get_surrogate_contact_attempts_summary(
 
     # Calculate days since last attempt
     if last_attempt_at:
-        delta = datetime.now(timezone.utc) - last_attempt_at
+        delta = datetime.now(UTC) - last_attempt_at
         days_since = delta.days
     else:
         days_since = None

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from threading import Barrier, Thread
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -63,7 +63,7 @@ def _create_run(db, org_id: UUID, campaign_id: UUID, *, status: str = "running")
         campaign_id=campaign_id,
         status=status,
         email_provider="smtp",
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
         total_count=0,
         sent_count=0,
         delivered_count=0,
@@ -129,7 +129,7 @@ def test_campaign_enqueue_send_now_and_scheduled(monkeypatch, db, test_org, test
     campaign_later = _create_campaign(
         db, test_org.id, test_user.id, template.id, status=CampaignStatus.DRAFT.value
     )
-    campaign_later.scheduled_at = datetime.now(timezone.utc) + timedelta(hours=2)
+    campaign_later.scheduled_at = datetime.now(UTC) + timedelta(hours=2)
     db.commit()
 
     monkeypatch.setattr(
@@ -268,7 +268,7 @@ def test_scheduled_campaign_queues_the_template_selected_at_schedule_time(
         template.id,
         status=CampaignStatus.DRAFT.value,
     )
-    campaign.scheduled_at = datetime.now(timezone.utc) + timedelta(hours=2)
+    campaign.scheduled_at = datetime.now(UTC) + timedelta(hours=2)
     recipient = _create_surrogate(
         db,
         org_id=test_org.id,
@@ -399,6 +399,18 @@ def test_campaign_retry_queue_and_cancel(monkeypatch, db, test_org, test_user):
     db.add(recipient)
     db.flush()
 
+    from sqlalchemy.orm import Query
+
+    original_count = Query.count
+
+    def _count_should_not_be_called(self, *args, **kwargs):
+        entity = self.column_descriptions[0].get("entity") if self.column_descriptions else None
+        if entity is CampaignRecipient:
+            raise AssertionError("campaign retry should use a direct aggregate count")
+        return original_count(self, *args, **kwargs)
+
+    monkeypatch.setattr(Query, "count", _count_should_not_be_called)
+
     msg, run_id, job_id, failed_count = campaign_service.enqueue_campaign_retry_failed(
         db,
         org_id=test_org.id,
@@ -472,9 +484,9 @@ def test_cancel_campaign_cancels_only_unleased_run_deliveries(
         status=CampaignStatus.SENDING.value,
     )
     run = _create_run(db, test_org.id, campaign.id, status="running")
-    run.started_at = datetime.now(timezone.utc)
+    run.started_at = datetime.now(UTC)
     older_run = _create_run(db, test_org.id, campaign.id, status="running")
-    older_run.started_at = datetime.now(timezone.utc) - timedelta(days=1)
+    older_run.started_at = datetime.now(UTC) - timedelta(days=1)
 
     def queue_recipient(target_run, email: str):
         recipient = CampaignRecipient(
@@ -558,7 +570,7 @@ def test_cancel_campaign_cancels_only_unleased_run_deliveries(
 
     retry_recipient, retry_log, retry_delivery = queue_recipient(run, "retry-cancel@example.com")
     retry_delivery.status = EmailDeliveryStatus.RETRY_SCHEDULED.value
-    retry_delivery.run_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+    retry_delivery.run_at = datetime.now(UTC) + timedelta(minutes=5)
 
     leased_recipient, leased_log, leased_delivery = queue_recipient(
         run, "leased-cancel@example.com"
@@ -567,7 +579,7 @@ def test_cancel_campaign_cancels_only_unleased_run_deliveries(
     leased_delivery.attempt_count = 1
     leased_delivery.lease_token = uuid4()
     leased_delivery.lease_owner = "worker-1"
-    leased_delivery.lease_expires_at = datetime.now(timezone.utc) + timedelta(minutes=2)
+    leased_delivery.lease_expires_at = datetime.now(UTC) + timedelta(minutes=2)
 
     older_recipient, older_log, older_delivery = queue_recipient(older_run, "older-run@example.com")
     db.commit()
@@ -772,7 +784,7 @@ def test_campaign_delivery_success_projection_is_atomic_and_monotonic(
 
     engine = db.get_bind()
     sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
-    sent_at = datetime(2026, 7, 23, 12, 0, tzinfo=timezone.utc)
+    sent_at = datetime(2026, 7, 23, 12, 0, tzinfo=UTC)
     try:
         projected = campaign_service.project_campaign_recipient_delivery(
             db,
@@ -959,7 +971,7 @@ def test_campaign_delivery_skipped_projection_does_not_regress_delivered_recipie
         status=CampaignRecipientStatus.DELIVERED.value,
         email_log_id=delivered_log.id,
         external_message_id="delivered-provider-id",
-        sent_at=datetime(2026, 7, 23, 11, 0, tzinfo=timezone.utc),
+        sent_at=datetime(2026, 7, 23, 11, 0, tzinfo=UTC),
     )
     db.add_all([suppressed_recipient, delivered_recipient])
     db.flush()
@@ -1133,7 +1145,7 @@ def test_recompute_campaign_run_aggregates_finalizes_from_recipient_truth(
     )
     run = _create_run(db, test_org.id, campaign.id, status="running")
     run.total_count = 4
-    stale_completed_at = datetime(2026, 7, 22, 12, 0, tzinfo=timezone.utc)
+    stale_completed_at = datetime(2026, 7, 22, 12, 0, tzinfo=UTC)
     run.completed_at = stale_completed_at
     recipients = [
         CampaignRecipient(
@@ -1143,7 +1155,7 @@ def test_recompute_campaign_run_aggregates_finalizes_from_recipient_truth(
             entity_id=uuid4(),
             recipient_email="sent@example.com",
             status=CampaignRecipientStatus.SENT.value,
-            opened_at=datetime(2026, 7, 23, 12, 0, tzinfo=timezone.utc),
+            opened_at=datetime(2026, 7, 23, 12, 0, tzinfo=UTC),
         ),
         CampaignRecipient(
             id=uuid4(),
@@ -1152,7 +1164,7 @@ def test_recompute_campaign_run_aggregates_finalizes_from_recipient_truth(
             entity_id=uuid4(),
             recipient_email="delivered@example.com",
             status=CampaignRecipientStatus.DELIVERED.value,
-            clicked_at=datetime(2026, 7, 23, 12, 1, tzinfo=timezone.utc),
+            clicked_at=datetime(2026, 7, 23, 12, 1, tzinfo=UTC),
         ),
         CampaignRecipient(
             id=uuid4(),
@@ -1262,8 +1274,7 @@ def test_execute_campaign_run_with_duplicates_and_suppression(
             return self
 
         def yield_per(self, _size):
-            for row in self._rows:
-                yield row
+            yield from self._rows
 
         def count(self):
             return len(self._rows)
@@ -1397,7 +1408,7 @@ def test_execute_campaign_run_does_not_revive_concurrently_cancelled_campaign(
     )
     run = _create_run(db, test_org.id, campaign.id, status="failed")
     run.error_message = "cancelled"
-    run.completed_at = datetime.now(timezone.utc)
+    run.completed_at = datetime.now(UTC)
     db.commit()
 
     result = campaign_service.execute_campaign_run(
@@ -1448,8 +1459,8 @@ def test_retry_failed_campaign_run_updates_recipients(
         recipient_email="retry@example.com",
         recipient_name="Retry Person",
         status=CampaignRecipientStatus.FAILED.value,
-        opened_at=datetime(2026, 7, 23, 12, 0, tzinfo=timezone.utc),
-        clicked_at=datetime(2026, 7, 23, 12, 1, tzinfo=timezone.utc),
+        opened_at=datetime(2026, 7, 23, 12, 0, tzinfo=UTC),
+        clicked_at=datetime(2026, 7, 23, 12, 1, tzinfo=UTC),
     )
     db.add(failed_recipient)
     db.commit()
@@ -1539,7 +1550,7 @@ def test_retry_failed_campaign_run_does_not_revive_concurrently_cancelled_campai
     run = _create_run(db, test_org.id, campaign.id, status="failed")
     run.email_provider = "resend"
     run.error_message = "cancelled"
-    run.completed_at = datetime.now(timezone.utc)
+    run.completed_at = datetime.now(UTC)
     entity = _create_surrogate(
         db,
         org_id=test_org.id,
@@ -1652,7 +1663,7 @@ def test_retry_failed_campaign_recipient_advances_revision_and_keeps_prior_messa
     prior_log.status = EmailStatus.FAILED.value
     prior_log.error = "provider rejected"
     prior_delivery.status = EmailDeliveryStatus.FAILED.value
-    prior_delivery.completed_at = datetime.now(timezone.utc)
+    prior_delivery.completed_at = datetime.now(UTC)
     recipient.email_log_id = prior_log.id
     db.commit()
 

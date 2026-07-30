@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -23,7 +23,7 @@ async def test_duo_initiate_prefers_ops_return_to(
     monkeypatch.setattr(settings, "ENV", "prod", raising=False)
     monkeypatch.setattr(settings, "FRONTEND_URL", "", raising=False)
     test_org.slug = "ewi"
-    test_user.duo_enrolled_at = datetime.now(timezone.utc)
+    test_user.duo_enrolled_at = datetime.now(UTC)
     db.commit()
     monkeypatch.setattr(duo_service, "is_available", lambda: True)
 
@@ -54,7 +54,7 @@ async def test_duo_initiate_ignores_invalid_return_to(
     monkeypatch.setattr(settings, "ENV", "prod", raising=False)
     monkeypatch.setattr(settings, "FRONTEND_URL", "", raising=False)
     test_org.slug = "ewi"
-    test_user.duo_enrolled_at = datetime.now(timezone.utc)
+    test_user.duo_enrolled_at = datetime.now(UTC)
     db.commit()
     monkeypatch.setattr(duo_service, "is_available", lambda: True)
 
@@ -84,7 +84,7 @@ async def test_duo_initiate_rate_limited_after_five_attempts(
 ):
     from app.services import duo_service
 
-    test_user.duo_enrolled_at = datetime.now(timezone.utc)
+    test_user.duo_enrolled_at = datetime.now(UTC)
     db.commit()
     monkeypatch.setattr(duo_service, "is_available", lambda: True)
     monkeypatch.setattr(

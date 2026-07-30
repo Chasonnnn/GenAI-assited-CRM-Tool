@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    TIMESTAMP,
     Boolean,
     CheckConstraint,
     ForeignKey,
@@ -17,7 +17,6 @@ from sqlalchemy import (
     LargeBinary,
     Numeric,
     String,
-    TIMESTAMP,
     Text,
     UniqueConstraint,
     text,
@@ -398,28 +397,28 @@ class Surrogate(Base):
     search_vector = mapped_column(TSVECTOR, nullable=True)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship(back_populates="surrogates")
-    created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
-    archived_by: Mapped["User | None"] = relationship(foreign_keys=[archived_by_user_id])
-    stage: Mapped["PipelineStage"] = relationship(foreign_keys=[stage_id])
-    paused_from_stage: Mapped["PipelineStage | None"] = relationship(
+    organization: Mapped[Organization] = relationship(back_populates="surrogates")
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_user_id])
+    archived_by: Mapped[User | None] = relationship(foreign_keys=[archived_by_user_id])
+    stage: Mapped[PipelineStage] = relationship(foreign_keys=[stage_id])
+    paused_from_stage: Mapped[PipelineStage | None] = relationship(
         foreign_keys=[paused_from_stage_id]
     )
-    on_hold_follow_up_task: Mapped["Task | None"] = relationship(
+    on_hold_follow_up_task: Mapped[Task | None] = relationship(
         foreign_keys=[on_hold_follow_up_task_id]
     )
 
     # Owner relationships for eager loading (fixes N+1 query)
     # These use custom join conditions since owner_id can point to either User or Queue
     # Using selectin loading to avoid LEFT OUTER JOIN conflicts with FOR UPDATE
-    owner_user: Mapped["User | None"] = relationship(
+    owner_user: Mapped[User | None] = relationship(
         "User",
         foreign_keys=[owner_id],
         primaryjoin="and_(Surrogate.owner_id==User.id, Surrogate.owner_type=='user')",
         viewonly=True,
         lazy="selectin",
     )
-    owner_queue: Mapped["Queue | None"] = relationship(
+    owner_queue: Mapped[Queue | None] = relationship(
         "Queue",
         foreign_keys=[owner_id],
         primaryjoin="and_(Surrogate.owner_id==Queue.id, Surrogate.owner_type=='queue')",
@@ -428,10 +427,10 @@ class Surrogate(Base):
     )
 
     # Notes use EntityNote with entity_type='surrogate' - no direct relationship
-    status_history: Mapped[list["SurrogateStatusHistory"]] = relationship(
+    status_history: Mapped[list[SurrogateStatusHistory]] = relationship(
         back_populates="surrogate", cascade="all, delete-orphan"
     )
-    contact_attempts: Mapped[list["SurrogateContactAttempt"]] = relationship(
+    contact_attempts: Mapped[list[SurrogateContactAttempt]] = relationship(
         back_populates="surrogate",
         cascade="all, delete-orphan",
         order_by="desc(SurrogateContactAttempt.attempted_at)",
@@ -519,7 +518,7 @@ class SurrogateStatusHistory(Base):
     )
 
     # Relationships
-    surrogate: Mapped["Surrogate"] = relationship(back_populates="status_history")
+    surrogate: Mapped[Surrogate] = relationship(back_populates="status_history")
 
 
 class SurrogateActivityLog(Base):
@@ -568,8 +567,8 @@ class SurrogateActivityLog(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    surrogate: Mapped["Surrogate"] = relationship()
-    actor: Mapped["User | None"] = relationship(foreign_keys=[actor_user_id])
+    surrogate: Mapped[Surrogate] = relationship()
+    actor: Mapped[User | None] = relationship(foreign_keys=[actor_user_id])
 
 
 # NOTE: SurrogateNote model removed (migrated to EntityNote with entity_type='surrogate')
@@ -652,8 +651,8 @@ class SurrogateContactAttempt(Base):
     )  # surrogates.owner_id at time of attempt
 
     # Relationships
-    surrogate: Mapped["Surrogate"] = relationship(back_populates="contact_attempts")
-    attempted_by: Mapped["User | None"] = relationship()
+    surrogate: Mapped[Surrogate] = relationship(back_populates="contact_attempts")
+    attempted_by: Mapped[User | None] = relationship()
 
     @property
     def is_backdated(self) -> bool:
@@ -751,10 +750,10 @@ class SurrogateImport(Base):
     deduplication_stats: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
-    approved_by: Mapped["User | None"] = relationship(foreign_keys=[approved_by_user_id])
-    template: Mapped["ImportTemplate | None"] = relationship(back_populates="imports")
+    organization: Mapped[Organization] = relationship()
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_user_id])
+    approved_by: Mapped[User | None] = relationship(foreign_keys=[approved_by_user_id])
+    template: Mapped[ImportTemplate | None] = relationship(back_populates="imports")
 
 
 # =============================================================================
@@ -826,9 +825,9 @@ class ImportTemplate(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    created_by: Mapped["User | None"] = relationship()
-    imports: Mapped[list["SurrogateImport"]] = relationship(back_populates="template")
+    organization: Mapped[Organization] = relationship()
+    created_by: Mapped[User | None] = relationship()
+    imports: Mapped[list[SurrogateImport]] = relationship(back_populates="template")
 
 
 class CustomField(Base):
@@ -874,9 +873,9 @@ class CustomField(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
-    created_by: Mapped["User | None"] = relationship()
-    values: Mapped[list["CustomFieldValue"]] = relationship(
+    organization: Mapped[Organization] = relationship()
+    created_by: Mapped[User | None] = relationship()
+    values: Mapped[list[CustomFieldValue]] = relationship(
         back_populates="custom_field",
         cascade="all, delete-orphan",
     )
@@ -914,8 +913,8 @@ class CustomFieldValue(Base):
     value_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     # Relationships
-    surrogate: Mapped["Surrogate"] = relationship()
-    custom_field: Mapped["CustomField"] = relationship(back_populates="values")
+    surrogate: Mapped[Surrogate] = relationship()
+    custom_field: Mapped[CustomField] = relationship(back_populates="values")
 
 
 # =============================================================================
@@ -956,9 +955,9 @@ class SurrogateProfileOverride(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    surrogate: Mapped["Surrogate"] = relationship()
-    organization: Mapped["Organization"] = relationship()
-    updated_by: Mapped["User | None"] = relationship()
+    surrogate: Mapped[Surrogate] = relationship()
+    organization: Mapped[Organization] = relationship()
+    updated_by: Mapped[User | None] = relationship()
 
 
 class SurrogateProfileState(Base):
@@ -995,9 +994,9 @@ class SurrogateProfileState(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
-    surrogate: Mapped["Surrogate"] = relationship()
-    organization: Mapped["Organization"] = relationship()
-    updated_by: Mapped["User | None"] = relationship()
+    surrogate: Mapped[Surrogate] = relationship()
+    organization: Mapped[Organization] = relationship()
+    updated_by: Mapped[User | None] = relationship()
 
 
 class SurrogateProfileHiddenField(Base):
@@ -1032,9 +1031,9 @@ class SurrogateProfileHiddenField(Base):
     hidden_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    surrogate: Mapped["Surrogate"] = relationship()
-    organization: Mapped["Organization"] = relationship()
-    hidden_by: Mapped["User | None"] = relationship()
+    surrogate: Mapped[Surrogate] = relationship()
+    organization: Mapped[Organization] = relationship()
+    hidden_by: Mapped[User | None] = relationship()
 
 
 # =============================================================================
@@ -1126,19 +1125,19 @@ class SurrogateInterview(Base):
     search_vector = mapped_column(TSVECTOR, nullable=True)
 
     # Relationships
-    surrogate: Mapped["Surrogate"] = relationship()
-    organization: Mapped["Organization"] = relationship()
-    conducted_by: Mapped["User"] = relationship()
-    versions: Mapped[list["InterviewTranscriptVersion"]] = relationship(
+    surrogate: Mapped[Surrogate] = relationship()
+    organization: Mapped[Organization] = relationship()
+    conducted_by: Mapped[User] = relationship()
+    versions: Mapped[list[InterviewTranscriptVersion]] = relationship(
         back_populates="interview", cascade="all, delete-orphan"
     )
-    notes: Mapped[list["InterviewNote"]] = relationship(
+    notes: Mapped[list[InterviewNote]] = relationship(
         back_populates="interview", cascade="all, delete-orphan"
     )
-    interview_attachments: Mapped[list["InterviewAttachment"]] = relationship(
+    interview_attachments: Mapped[list[InterviewAttachment]] = relationship(
         back_populates="interview", cascade="all, delete-orphan"
     )
-    retention_policy: Mapped["DataRetentionPolicy | None"] = relationship()
+    retention_policy: Mapped[DataRetentionPolicy | None] = relationship()
 
 
 class InterviewTranscriptVersion(Base):
@@ -1187,9 +1186,9 @@ class InterviewTranscriptVersion(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    interview: Mapped["SurrogateInterview"] = relationship(back_populates="versions")
-    organization: Mapped["Organization"] = relationship()
-    author: Mapped["User"] = relationship()
+    interview: Mapped[SurrogateInterview] = relationship(back_populates="versions")
+    organization: Mapped[Organization] = relationship()
+    author: Mapped[User] = relationship()
 
 
 class InterviewNote(Base):
@@ -1259,17 +1258,17 @@ class InterviewNote(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    interview: Mapped["SurrogateInterview"] = relationship(back_populates="notes")
-    organization: Mapped["Organization"] = relationship()
-    author: Mapped["User"] = relationship(foreign_keys=[author_user_id])
-    resolved_by: Mapped["User | None"] = relationship(foreign_keys=[resolved_by_user_id])
-    parent: Mapped["InterviewNote | None"] = relationship(
+    interview: Mapped[SurrogateInterview] = relationship(back_populates="notes")
+    organization: Mapped[Organization] = relationship()
+    author: Mapped[User] = relationship(foreign_keys=[author_user_id])
+    resolved_by: Mapped[User | None] = relationship(foreign_keys=[resolved_by_user_id])
+    parent: Mapped[InterviewNote | None] = relationship(
         "InterviewNote",
         remote_side="InterviewNote.id",
         back_populates="replies",
         foreign_keys=[parent_id],
     )
-    replies: Mapped[list["InterviewNote"]] = relationship(
+    replies: Mapped[list[InterviewNote]] = relationship(
         "InterviewNote",
         back_populates="parent",
         foreign_keys="InterviewNote.parent_id",
@@ -1321,9 +1320,9 @@ class InterviewAttachment(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    interview: Mapped["SurrogateInterview"] = relationship(back_populates="interview_attachments")
-    attachment: Mapped["Attachment"] = relationship()
-    organization: Mapped["Organization"] = relationship()
+    interview: Mapped[SurrogateInterview] = relationship(back_populates="interview_attachments")
+    attachment: Mapped[Attachment] = relationship()
+    organization: Mapped[Organization] = relationship()
 
 
 # =============================================================================
@@ -1379,11 +1378,11 @@ class JourneyFeaturedImage(Base):
     )
 
     # Relationships
-    surrogate: Mapped["Surrogate"] = relationship()
-    organization: Mapped["Organization"] = relationship()
-    attachment: Mapped["Attachment"] = relationship()
-    created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
-    updated_by: Mapped["User | None"] = relationship(foreign_keys=[updated_by_user_id])
+    surrogate: Mapped[Surrogate] = relationship()
+    organization: Mapped[Organization] = relationship()
+    attachment: Mapped[Attachment] = relationship()
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_user_id])
+    updated_by: Mapped[User | None] = relationship(foreign_keys=[updated_by_user_id])
 
 
 # =============================================================================
@@ -1435,4 +1434,4 @@ class ImportMappingCorrection(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped[Organization] = relationship()

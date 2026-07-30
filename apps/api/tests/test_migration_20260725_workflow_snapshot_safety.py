@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import uuid
+from pathlib import Path
 
-from alembic import command
-from alembic.config import Config
 import pytest
+from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
+from alembic import command
 
 API_ROOT = Path(__file__).resolve().parents[1]
 PRE_SNAPSHOT_REVISION = "20260723_0280"

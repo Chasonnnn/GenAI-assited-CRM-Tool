@@ -3,7 +3,7 @@ Tests for AI email template generation.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.db.models import AISettings
 from app.services import ai_settings_service
@@ -18,7 +18,7 @@ def _enable_ai(db, org_id, user_id) -> AISettings:
         model="gemini-3-flash-preview",
         current_version=1,
         anonymize_pii=False,
-        consent_accepted_at=datetime.now(timezone.utc),
+        consent_accepted_at=datetime.now(UTC),
         consent_accepted_by=user_id,
         api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
     )

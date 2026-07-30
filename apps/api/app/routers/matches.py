@@ -1,12 +1,11 @@
 """Matches router - API endpoints for matching surrogates with intended parents."""
 
-from datetime import date as date_type, datetime, timezone, timedelta
-from typing import Any, Annotated
-
+from datetime import UTC, datetime, timedelta
+from datetime import date as date_type
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, Response
-
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -701,13 +700,9 @@ def list_match_events(
     # Date filtering (timed events + overlapping all-day events)
     if from_date or to_date:
         try:
-            from_dt = (
-                datetime.fromisoformat(from_date).replace(tzinfo=timezone.utc)
-                if from_date
-                else None
-            )
+            from_dt = datetime.fromisoformat(from_date).replace(tzinfo=UTC) if from_date else None
             to_dt = (
-                datetime.fromisoformat(to_date).replace(tzinfo=timezone.utc) + timedelta(days=1)
+                datetime.fromisoformat(to_date).replace(tzinfo=UTC) + timedelta(days=1)
                 if to_date
                 else None
             )

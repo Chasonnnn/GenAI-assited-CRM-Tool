@@ -7,15 +7,19 @@ import logging
 import re
 import uuid
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.db.models import MetaLead, Organization
-from app.services import meta_api, meta_lead_service, meta_form_mapping_service
-from app.services import zapier_settings_service
+from app.services import (
+    meta_api,
+    meta_form_mapping_service,
+    meta_lead_service,
+    zapier_settings_service,
+)
 from app.utils.datetime_parsing import parse_datetime_with_timezone
 
 logger = logging.getLogger(__name__)
@@ -467,7 +471,7 @@ def _build_status_message(status: str, duplicate: bool, surrogate_id: str | None
 
 def build_test_payload(form_id: str | None, fields: dict[str, Any] | None = None) -> dict[str, Any]:
     """Build a test payload that exercises the Meta lead mapping pipeline."""
-    created_time = datetime.now(timezone.utc).isoformat()
+    created_time = datetime.now(UTC).isoformat()
     base_fields: dict[str, Any] = {
         "full_name": "Zapier Test Lead",
         "email": "zapier-test@example.com",

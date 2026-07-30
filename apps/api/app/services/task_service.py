@@ -1,18 +1,18 @@
 """Task service - business logic for task management."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException, Request
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.db.enums import TaskType, TaskStatus, OwnerType
+from app.db.enums import OwnerType, TaskStatus, TaskType
 from app.db.models import (
-    Surrogate,
     Membership,
     Queue,
+    Surrogate,
     Task,
     User,
     WorkflowExecution,
@@ -30,7 +30,6 @@ from app.schemas.task import (
 from app.services import membership_service, queue_service
 from app.utils.normalization import escape_like_string
 from app.utils.pagination import paginate_query_by_offset
-
 
 logger = logging.getLogger(__name__)
 
@@ -220,7 +219,7 @@ def complete_task(
         return task
 
     task.is_completed = True
-    task.completed_at = datetime.now(timezone.utc)
+    task.completed_at = datetime.now(UTC)
     task.completed_by_user_id = user_id
 
     if commit:
@@ -272,7 +271,7 @@ def bulk_complete_tasks(
 
     from app.core.deps import is_owner_or_assignee_or_admin
     from app.core.surrogate_access import check_surrogate_access
-    from app.services import surrogate_service, dashboard_events
+    from app.services import dashboard_events, surrogate_service
 
     results: dict = {"completed": 0, "failed": []}
     completed_tasks_to_sync: list[Task] = []
@@ -578,6 +577,7 @@ def list_tasks(
         (tasks, total_count)
     """
     from datetime import date
+
     from app.core.surrogate_access import build_surrogate_visibility_filter
     from app.db.enums import Role
     from app.db.models import Surrogate
@@ -591,18 +591,15 @@ def list_tasks(
     # filter out tasks linked to surrogates they can't access.
     if user_role == Role.INTAKE_SPECIALIST.value or user_role == Role.INTAKE_SPECIALIST:
         if user_id:
-            accessible_surrogate_ids = (
-                select(Surrogate.id)
-                .where(
-                    Surrogate.organization_id == org_id,
-                    build_surrogate_visibility_filter(
-                        db,
-                        org_id,
-                        user_role,
-                        user_id,
-                        surrogate_model=Surrogate,
-                    ),
-                )
+            accessible_surrogate_ids = select(Surrogate.id).where(
+                Surrogate.organization_id == org_id,
+                build_surrogate_visibility_filter(
+                    db,
+                    org_id,
+                    user_role,
+                    user_id,
+                    surrogate_model=Surrogate,
+                ),
             )
 
             query = query.filter(
@@ -869,6 +866,7 @@ def iter_tasks_due_in_window(
 ):
     """Yield tasks due within a time window (org-scoped)."""
     from datetime import datetime as dt
+
     from app.db.models import Surrogate
 
     start_date = window_start.date()
@@ -1046,7 +1044,7 @@ def resolve_workflow_approval(
         )
 
     # Update task based on decision
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if decision == "approve":
         task.status = TaskStatus.COMPLETED.value
         task.is_completed = True
@@ -1089,8 +1087,9 @@ def _queue_workflow_resume_job(
 ) -> WorkflowResumeJob | None:
     """Queue a workflow resume job with idempotency."""
     from sqlalchemy.exc import IntegrityError
+
+    from app.db.enums import JobStatus, JobType
     from app.db.models import Job
-    from app.db.enums import JobType, JobStatus
 
     resume_job = WorkflowResumeJob(
         idempotency_key=idempotency_key,
@@ -1116,7 +1115,7 @@ def _queue_workflow_resume_job(
             "task_id": str(task_id),
             "idempotency_key": idempotency_key,
         },
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
         status=JobStatus.PENDING.value,
         idempotency_key=idempotency_key,
     )
@@ -1139,8 +1138,8 @@ def _log_approval_activity(
     resolved_at: datetime,
 ) -> None:
     """Log approval activity with latency metrics."""
-    from app.services import activity_service
     from app.db.enums import SurrogateActivityType
+    from app.services import activity_service
 
     latency_hours = (resolved_at - task.created_at).total_seconds() / 3600
 
@@ -1186,7 +1185,7 @@ def get_pending_approval_tasks(
 
 def get_expired_approval_tasks(db: Session) -> list[Task]:
     """Get approval tasks that have passed their due_at deadline."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     return (
         db.query(Task)
@@ -1205,7 +1204,7 @@ def expire_approval_task(
     task: Task,
 ) -> None:
     """Mark an approval task as expired and queue resume job."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     if task.status not in [TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]:
         logger.info("Skip expiring task %s with status %s", task.id, task.status)
@@ -1230,8 +1229,8 @@ def expire_approval_task(
     db.commit()
 
     # Notify owner that approval expired
-    from app.services import notification_facade
     from app.db.enums import NotificationType
+    from app.services import notification_facade
 
     if notification_facade.should_notify(
         db, task.owner_id, task.organization_id, "approval_timeouts"
@@ -1281,7 +1280,7 @@ def invalidate_pending_approvals_for_surrogate(
         # Mark task as denied
         task.status = TaskStatus.DENIED.value
         task.workflow_denial_reason = reason
-        task.updated_at = datetime.now(timezone.utc)
+        task.updated_at = datetime.now(UTC)
 
         # Cancel workflow execution
         if task.workflow_execution_id:

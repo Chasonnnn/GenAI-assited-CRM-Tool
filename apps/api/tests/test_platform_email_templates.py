@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -73,7 +73,7 @@ def test_ambiguous_legacy_org_invites_never_promote_one_tenant_to_global(
         scope="org",
         is_system_template=True,
         system_key=system_email_template_service.ORG_INVITE_SYSTEM_KEY,
-        updated_at=datetime.now(timezone.utc) - timedelta(days=1),
+        updated_at=datetime.now(UTC) - timedelta(days=1),
     )
     newer = EmailTemplate(
         id=uuid4(),
@@ -85,7 +85,7 @@ def test_ambiguous_legacy_org_invites_never_promote_one_tenant_to_global(
         scope="org",
         is_system_template=True,
         system_key=system_email_template_service.ORG_INVITE_SYSTEM_KEY,
-        updated_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(UTC),
     )
     db.add_all([older, newer])
     db.commit()

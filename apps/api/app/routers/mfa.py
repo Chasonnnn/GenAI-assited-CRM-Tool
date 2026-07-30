@@ -8,9 +8,9 @@ Provides:
 - MFA verification during login
 """
 
-from typing import Annotated
-
 import json
+from datetime import UTC
+from typing import Annotated
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -19,13 +19,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import COOKIE_NAME, get_current_session, get_db, require_csrf_header
 from app.core.csrf import CSRF_COOKIE_NAME, set_csrf_cookie
+from app.core.deps import COOKIE_NAME, get_current_session, get_db, require_csrf_header
 from app.core.rate_limit import limiter
 from app.core.security import create_session_token, generate_oauth_state, hash_user_agent
 from app.schemas.auth import UserSession
 from app.services import duo_service, membership_service, mfa_service, org_service, user_service
-
 
 router = APIRouter(prefix="/mfa", tags=["mfa"])
 
@@ -693,15 +692,15 @@ def verify_duo_callback(
     )
 
     # Mark user as Duo enrolled and enable MFA
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    user.duo_enrolled_at = datetime.now(timezone.utc)
+    user.duo_enrolled_at = datetime.now(UTC)
     user.duo_user_id = auth_result.get("sub") if auth_result else None
 
     recovery_codes: list[str] | None = None
     if not user.mfa_enabled:
         user.mfa_enabled = True
-        user.mfa_required_at = datetime.now(timezone.utc)
+        user.mfa_required_at = datetime.now(UTC)
 
         # Generate recovery codes if not already present
         if not user.mfa_recovery_codes:

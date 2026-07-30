@@ -2,13 +2,12 @@ import io
 import os
 import uuid
 
-from starlette.datastructures import UploadFile, Headers
+from starlette.datastructures import Headers, UploadFile
 
 from app.core.config import settings
 from app.core.encryption import hash_email
 from app.db.models import Form, FormSubmission, FormSubmissionFile, Surrogate
-from app.services import attachment_service
-from app.services import form_submission_service
+from app.services import attachment_service, form_submission_service
 from app.services.form_submission_service import _store_submission_file
 from app.utils.normalization import normalize_email
 

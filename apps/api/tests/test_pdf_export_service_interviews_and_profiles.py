@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -153,7 +153,7 @@ def test_interview_export_html_helpers(monkeypatch):
                 "interview": {
                     "interview_type": "phone",
                     "status": "completed",
-                    "conducted_at": datetime.now(timezone.utc),
+                    "conducted_at": datetime.now(UTC),
                     "conducted_by_name": "Owner",
                     "duration_minutes": 30,
                     "transcript_json": {"type": "doc", "content": []},
@@ -162,7 +162,7 @@ def test_interview_export_html_helpers(monkeypatch):
                 "notes": [
                     {
                         "author_name": "Owner",
-                        "created_at": datetime.now(timezone.utc),
+                        "created_at": datetime.now(UTC),
                         "anchor_text": "General",
                         "content": "<p>Note body</p>",
                         "replies": [],
@@ -201,7 +201,7 @@ def test_export_submission_pdf_and_export_interviews_pdf(db, test_org, test_user
     assert submission_pdf.startswith(b"%PDF")
 
     interview = SimpleNamespace(
-        id=uuid4(), conducted_at=datetime.now(timezone.utc), created_at=datetime.now(timezone.utc)
+        id=uuid4(), conducted_at=datetime.now(UTC), created_at=datetime.now(UTC)
     )
     monkeypatch.setattr(
         interview_service,
@@ -211,7 +211,7 @@ def test_export_submission_pdf_and_export_interviews_pdf(db, test_org, test_user
                 "interview": {
                     "interview_type": "phone",
                     "status": "completed",
-                    "conducted_at": datetime.now(timezone.utc),
+                    "conducted_at": datetime.now(UTC),
                     "conducted_by_name": "Owner",
                     "duration_minutes": 15,
                     "transcript_json": None,

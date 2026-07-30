@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -29,7 +29,7 @@ def test_compliance_masking_and_redaction_helpers():
 
     payload = {
         "email": "jane@example.com",
-        "created_at": datetime(2026, 1, 2, tzinfo=timezone.utc),
+        "created_at": datetime(2026, 1, 2, tzinfo=UTC),
         "details": {"phone": "212-555-1212"},
     }
     value = compliance_service._redact_value("details", payload, person_linked=True)
@@ -38,14 +38,14 @@ def test_compliance_masking_and_redaction_helpers():
 
     assert compliance_service._csv_safe("=SUM(A1:A3)").startswith("'=")
     assert compliance_service._serialize_value({"a": 1}) == '{"a":1}'
-    assert compliance_service._serialize_json_value(
-        {"t": datetime(2026, 1, 2, tzinfo=timezone.utc)}
-    )["t"].startswith("2026-01-02")
+    assert compliance_service._serialize_json_value({"t": datetime(2026, 1, 2, tzinfo=UTC)})[
+        "t"
+    ].startswith("2026-01-02")
 
 
 def test_compliance_build_export_rows_and_storage_helpers(monkeypatch, tmp_path, db, test_org):
     actor_id = uuid4()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     logs = [
         SimpleNamespace(
             id=uuid4(),

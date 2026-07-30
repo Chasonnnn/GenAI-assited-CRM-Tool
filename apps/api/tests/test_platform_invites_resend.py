@@ -1,6 +1,6 @@
 """Tests for platform invite resend support."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -17,7 +17,7 @@ async def test_platform_list_invites_includes_resend_fields(authed_client, db, t
         organization_id=test_org.id,
         email="invitee@example.com",
         role=Role.ADMIN.value,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
     )
     db.add(invite)
     db.commit()
@@ -43,14 +43,14 @@ async def test_platform_list_invites_uses_monotonic_send_revision_for_engagement
         organization_id=test_org.id,
         email="engaged-invitee@example.com",
         role=Role.ADMIN.value,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
         resend_count=2,
         send_revision=7,
     )
     db.add(invite)
     db.flush()
-    opened_at = datetime(2026, 7, 23, 13, 0, tzinfo=timezone.utc)
-    clicked_at = datetime(2026, 7, 23, 13, 5, tzinfo=timezone.utc)
+    opened_at = datetime(2026, 7, 23, 13, 0, tzinfo=UTC)
+    clicked_at = datetime(2026, 7, 23, 13, 5, tzinfo=UTC)
     db.add(
         EmailLog(
             organization_id=test_org.id,
@@ -83,8 +83,7 @@ async def test_platform_resend_invite_updates_state(
 ):
     from app.db.enums import Role
     from app.db.models import OrgInvite
-    from app.services import invite_email_service
-    from app.services import platform_email_service
+    from app.services import invite_email_service, platform_email_service
 
     test_user.is_platform_admin = True
     db.commit()
@@ -93,7 +92,7 @@ async def test_platform_resend_invite_updates_state(
         organization_id=test_org.id,
         email="invitee@example.com",
         role=Role.ADMIN.value,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
     )
     db.add(invite)
     db.commit()
@@ -127,8 +126,7 @@ async def test_platform_create_invite_reuses_expired_pending_invite(
 ):
     from app.db.enums import Role
     from app.db.models import OrgInvite
-    from app.services import invite_email_service
-    from app.services import platform_email_service
+    from app.services import invite_email_service, platform_email_service
 
     test_user.is_platform_admin = True
     db.commit()
@@ -137,7 +135,7 @@ async def test_platform_create_invite_reuses_expired_pending_invite(
         organization_id=test_org.id,
         email="invitee@example.com",
         role=Role.CASE_MANAGER.value,
-        expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        expires_at=datetime.now(UTC) - timedelta(hours=1),
     )
     db.add(existing)
     db.commit()
@@ -161,7 +159,7 @@ async def test_platform_create_invite_reuses_expired_pending_invite(
 
     db.refresh(existing)
     assert existing.expires_at is not None
-    assert existing.expires_at > datetime.now(timezone.utc)
+    assert existing.expires_at > datetime.now(UTC)
 
 
 @pytest.mark.asyncio
@@ -170,8 +168,7 @@ async def test_platform_create_invite_allows_inactive_prior_member(
 ):
     from app.db.enums import Role
     from app.db.models import Membership, User
-    from app.services import invite_email_service
-    from app.services import platform_email_service
+    from app.services import invite_email_service, platform_email_service
 
     test_user.is_platform_admin = True
     prior_user = User(
@@ -254,7 +251,7 @@ async def test_platform_resend_invite_rolls_back_revision_when_delivery_cannot_b
         organization_id=test_org.id,
         email="atomic-platform-resend@example.com",
         role=Role.ADMIN.value,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+        expires_at=datetime.now(UTC) + timedelta(days=3),
     )
     db.add(invite)
     db.commit()

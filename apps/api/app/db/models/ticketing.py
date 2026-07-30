@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
@@ -79,7 +78,7 @@ class MailboxCredential(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped[Organization] = relationship()
 
 
 class Mailbox(Base):
@@ -131,10 +130,10 @@ class Mailbox(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
-    organization: Mapped["Organization"] = relationship()
-    credential: Mapped["MailboxCredential | None"] = relationship()
-    user_integration: Mapped["UserIntegration | None"] = relationship()
-    default_queue: Mapped["Queue | None"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    credential: Mapped[MailboxCredential | None] = relationship()
+    user_integration: Mapped[UserIntegration | None] = relationship()
+    default_queue: Mapped[Queue | None] = relationship()
 
 
 class EmailRawBlob(Base):
@@ -158,7 +157,7 @@ class EmailRawBlob(Base):
     content_type: Mapped[str] = mapped_column(String(100), nullable=False, default="message/rfc822")
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped[Organization] = relationship()
 
 
 class EmailMessage(Base):
@@ -195,7 +194,7 @@ class EmailMessage(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     first_seen_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped[Organization] = relationship()
 
 
 class EmailMessageContent(Base):
@@ -249,8 +248,8 @@ class EmailMessageContent(Base):
     attachment_count: Mapped[int] = mapped_column(Integer, server_default=text("0"), nullable=False)
     snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    organization: Mapped["Organization"] = relationship()
-    message: Mapped["EmailMessage"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    message: Mapped[EmailMessage] = relationship()
 
 
 class EmailMessageThreadRef(Base):
@@ -279,8 +278,8 @@ class EmailMessageThreadRef(Base):
     ref_rfc_message_id: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
-    organization: Mapped["Organization"] = relationship()
-    message: Mapped["EmailMessage"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    message: Mapped[EmailMessage] = relationship()
 
 
 class EmailMessageOccurrence(Base):
@@ -355,10 +354,10 @@ class EmailMessageOccurrence(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
-    organization: Mapped["Organization"] = relationship()
-    mailbox: Mapped["Mailbox"] = relationship()
-    raw_blob: Mapped["EmailRawBlob | None"] = relationship()
-    message: Mapped["EmailMessage | None"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    mailbox: Mapped[Mailbox] = relationship()
+    raw_blob: Mapped[EmailRawBlob | None] = relationship()
+    message: Mapped[EmailMessage | None] = relationship()
 
 
 class EmailMessageAttachment(Base):
@@ -394,9 +393,9 @@ class EmailMessageAttachment(Base):
     content_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
-    organization: Mapped["Organization"] = relationship()
-    message: Mapped["EmailMessage"] = relationship()
-    attachment: Mapped["Attachment"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    message: Mapped[EmailMessage] = relationship()
+    attachment: Mapped[Attachment] = relationship()
 
 
 class Ticket(Base):
@@ -462,10 +461,10 @@ class Ticket(Base):
     last_activity_at: Mapped[datetime | None] = mapped_column(nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
-    organization: Mapped["Organization"] = relationship()
-    assignee_user: Mapped["User | None"] = relationship(foreign_keys=[assignee_user_id])
-    assignee_queue: Mapped["Queue | None"] = relationship(foreign_keys=[assignee_queue_id])
-    surrogate: Mapped["Surrogate | None"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    assignee_user: Mapped[User | None] = relationship(foreign_keys=[assignee_user_id])
+    assignee_queue: Mapped[Queue | None] = relationship(foreign_keys=[assignee_queue_id])
+    surrogate: Mapped[Surrogate | None] = relationship()
 
 
 class TicketMessage(Base):
@@ -498,9 +497,9 @@ class TicketMessage(Base):
         _enum_type(LinkConfidence, name="ticket_link_confidence"), nullable=False
     )
 
-    organization: Mapped["Organization"] = relationship()
-    ticket: Mapped["Ticket"] = relationship()
-    message: Mapped["EmailMessage"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    ticket: Mapped[Ticket] = relationship()
+    message: Mapped[EmailMessage] = relationship()
 
 
 class TicketEvent(Base):
@@ -529,9 +528,9 @@ class TicketEvent(Base):
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
 
-    organization: Mapped["Organization"] = relationship()
-    ticket: Mapped["Ticket"] = relationship()
-    actor: Mapped["User | None"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    ticket: Mapped[Ticket] = relationship()
+    actor: Mapped[User | None] = relationship()
 
 
 class TicketNote(Base):
@@ -559,9 +558,9 @@ class TicketNote(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
-    organization: Mapped["Organization"] = relationship()
-    ticket: Mapped["Ticket"] = relationship()
-    author: Mapped["User | None"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    ticket: Mapped[Ticket] = relationship()
+    author: Mapped[User | None] = relationship()
 
 
 class TicketSavedView(Base):
@@ -587,7 +586,7 @@ class TicketSavedView(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped[Organization] = relationship()
 
 
 class TicketSurrogateLinkCandidate(Base):
@@ -622,9 +621,9 @@ class TicketSurrogateLinkCandidate(Base):
     is_selected: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("FALSE"))
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
-    organization: Mapped["Organization"] = relationship()
-    ticket: Mapped["Ticket"] = relationship()
-    surrogate: Mapped["Surrogate"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    ticket: Mapped[Ticket] = relationship()
+    surrogate: Mapped[Surrogate] = relationship()
 
 
 class SurrogateEmailContact(Base):
@@ -677,6 +676,6 @@ class SurrogateEmailContact(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
-    organization: Mapped["Organization"] = relationship()
-    surrogate: Mapped["Surrogate"] = relationship()
-    created_by: Mapped["User | None"] = relationship()
+    organization: Mapped[Organization] = relationship()
+    surrogate: Mapped[Surrogate] = relationship()
+    created_by: Mapped[User | None] = relationship()

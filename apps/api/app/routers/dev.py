@@ -1,16 +1,15 @@
 """Development-only endpoints for testing and seeding."""
 
-from typing import Annotated
-
 import re
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import COOKIE_NAME, get_db
 from app.core.csrf import set_csrf_cookie
+from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token, verify_secret
 from app.services import (
     dev_service,

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
+
 import boto3
 from botocore.client import BaseClient
 from botocore.config import Config
-from urllib.parse import urlparse
 
 from app.core.config import settings
 

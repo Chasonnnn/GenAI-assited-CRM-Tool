@@ -1,17 +1,17 @@
 """Profile service for surrogate profile card overrides and hidden fields."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.db.enums import SurrogateActivityType
 from app.db.models import (
-    SurrogateProfileOverride,
-    SurrogateProfileHiddenField,
-    SurrogateProfileState,
     FormSubmission,
+    SurrogateProfileHiddenField,
+    SurrogateProfileOverride,
+    SurrogateProfileState,
 )
 from app.services import activity_service
 
@@ -302,7 +302,7 @@ def save_profile_overrides(
             field_key=field_key,
             value=value,
             updated_by_user_id=user_id,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
         )
         db.add(override)
 
@@ -311,7 +311,7 @@ def save_profile_overrides(
         if base_state:
             base_state.base_submission_id = new_base_submission_id
             base_state.updated_by_user_id = user_id
-            base_state.updated_at = datetime.now(timezone.utc)
+            base_state.updated_at = datetime.now(UTC)
         else:
             db.add(
                 SurrogateProfileState(
@@ -320,7 +320,7 @@ def save_profile_overrides(
                     organization_id=org_id,
                     base_submission_id=new_base_submission_id,
                     updated_by_user_id=user_id,
-                    updated_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(UTC),
                 )
             )
 
@@ -379,7 +379,7 @@ def set_field_hidden(
             organization_id=org_id,
             field_key=field_key,
             hidden_by_user_id=user_id,
-            hidden_at=datetime.now(timezone.utc),
+            hidden_at=datetime.now(UTC),
         )
         db.add(hidden_field)
         activity_service.log_activity(

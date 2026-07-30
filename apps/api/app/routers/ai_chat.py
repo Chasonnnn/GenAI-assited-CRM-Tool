@@ -4,8 +4,7 @@ import asyncio
 import logging
 import uuid
 from collections.abc import AsyncIterator
-from typing import Any, Annotated
-
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
@@ -25,7 +24,7 @@ from app.core.rate_limit import limiter
 from app.core.surrogate_access import check_surrogate_access
 from app.db.enums import Role
 from app.schemas.auth import UserSession
-from app.utils.sse import format_sse, format_sse_comment, sse_preamble, STREAM_HEADERS
+from app.utils.sse import STREAM_HEADERS, format_sse, format_sse_comment, sse_preamble
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

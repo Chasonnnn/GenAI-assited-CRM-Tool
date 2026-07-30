@@ -1,33 +1,31 @@
 """Intended Parents router - CRUD, status, notes for IPs."""
 
-from typing import Annotated
-
 from decimal import Decimal
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, Response
-
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
-    get_db,
     get_current_session,
+    get_db,
     require_csrf_header,
     require_permission,
 )
 from app.core.policies import POLICIES
 from app.db.enums import AuditEventType, EntityType, Role
 from app.schemas.auth import UserSession
+from app.schemas.entity_note import EntityNoteCreate, EntityNoteListItem, EntityNoteRead
 from app.schemas.intended_parent import (
     IntendedParentCreate,
-    IntendedParentUpdate,
     IntendedParentRead,
-    IntendedParentStatusUpdate,
-    IntendedParentStatusHistoryItem,
-    IntendedParentStatusChangeResponse,
     IntendedParentStats,
+    IntendedParentStatusChangeResponse,
+    IntendedParentStatusHistoryItem,
+    IntendedParentStatusUpdate,
+    IntendedParentUpdate,
 )
-from app.schemas.entity_note import EntityNoteCreate, EntityNoteRead, EntityNoteListItem
 from app.services import audit_service, ip_service, note_service, user_service
 from app.utils.normalization import normalize_email
 

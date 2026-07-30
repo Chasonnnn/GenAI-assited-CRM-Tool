@@ -23,7 +23,6 @@ from app.db.models import Attachment, EntityNote, IntendedParent, PipelineStage,
 from app.schemas.auth import UserSession
 from app.utils.normalization import escape_like_string, normalize_identifier, normalize_search_text
 
-
 logger = logging.getLogger(__name__)
 
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.services import ticketing_service
 
@@ -50,7 +50,7 @@ def test_schedule_incremental_sync_jobs_skips_watch_refresh_when_fresh(db, test_
     from app.db.models import Job
 
     mailbox = _make_mailbox(db, org_id=test_org.id, email_address="watch-fresh@example.com")
-    mailbox.gmail_watch_expiration_at = datetime.now(timezone.utc) + timedelta(days=2)
+    mailbox.gmail_watch_expiration_at = datetime.now(UTC) + timedelta(days=2)
     db.add(mailbox)
     db.commit()
 

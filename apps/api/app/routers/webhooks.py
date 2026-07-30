@@ -1,9 +1,8 @@
 """Webhooks router - external service integrations."""
 
-from typing import Annotated
-
 import base64
 import json
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
@@ -11,12 +10,12 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import get_db
-from app.services import google_calendar_sync_service, ticketing_service
-from app.services.webhooks import get_handler
-from app.services.webhooks.meta import simulate_meta_webhook as simulate_meta_webhook_handler
 
 # Rate limiting
 from app.core.rate_limit import limiter
+from app.services import google_calendar_sync_service, ticketing_service
+from app.services.webhooks import get_handler
+from app.services.webhooks.meta import simulate_meta_webhook as simulate_meta_webhook_handler
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 

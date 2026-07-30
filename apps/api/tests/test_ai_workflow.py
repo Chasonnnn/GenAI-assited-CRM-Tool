@@ -4,22 +4,21 @@ Tests for AI workflow generation and action execution.
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.core.encryption import hash_email
-from app.db.models import Surrogate, EntityNote, Task, EmailTemplate, PipelineStage, AISettings
+from app.db.models import AISettings, EmailTemplate, EntityNote, PipelineStage, Surrogate, Task
 from app.services import ai_settings_service
-from app.services.ai_provider import ChatResponse
-from app.services.ai_workflow_service import GeneratedWorkflow, validate_workflow
 from app.services.ai_action_executor import (
+    ACTION_PERMISSIONS,
     AddNoteExecutor,
     CreateTaskExecutor,
     UpdateStatusExecutor,
     get_executor,
-    ACTION_PERMISSIONS,
 )
+from app.services.ai_provider import ChatResponse
+from app.services.ai_workflow_service import GeneratedWorkflow, validate_workflow
 from app.utils.normalization import normalize_email
-
 
 # =============================================================================
 # AI Workflow Validation Tests
@@ -34,7 +33,7 @@ def test_ai_workflow_prompt_anonymizes_users(db, test_org, test_user, monkeypatc
         model="gemini-3-flash-preview",
         current_version=1,
         anonymize_pii=True,
-        consent_accepted_at=datetime.now(timezone.utc),
+        consent_accepted_at=datetime.now(UTC),
         consent_accepted_by=test_user.id,
         api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
     )
@@ -92,7 +91,7 @@ def test_ai_workflow_prompt_filters_templates_by_scope(db, test_org, test_user, 
         model="gemini-3-flash-preview",
         current_version=1,
         anonymize_pii=False,
-        consent_accepted_at=datetime.now(timezone.utc),
+        consent_accepted_at=datetime.now(UTC),
         consent_accepted_by=test_user.id,
         api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
     )
@@ -120,8 +119,8 @@ def test_ai_workflow_prompt_filters_templates_by_scope(db, test_org, test_user, 
         created_by_user_id=test_user.id,
     )
 
-    from app.db.models import User, Membership
     from app.db.enums import Role
+    from app.db.models import Membership, User
 
     other_user = User(
         id=uuid.uuid4(),
@@ -399,8 +398,8 @@ class TestWorkflowValidation:
 
     def test_validate_personal_scope_rejects_other_owner_template(self, db, test_org, test_user):
         """Personal workflows should only use templates owned by the workflow owner."""
-        from app.db.models import User, Membership
         from app.db.enums import Role
+        from app.db.models import Membership, User
 
         other_user = User(
             id=uuid.uuid4(),

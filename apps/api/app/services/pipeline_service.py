@@ -1,6 +1,6 @@
 """Pipeline service - manage org-configurable stage pipelines."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -779,7 +779,7 @@ def sync_missing_stages(
     for index, item in enumerate(ordered_items, start=1):
         if isinstance(item, PipelineStage):
             item.order = index
-            item.updated_at = datetime.now(timezone.utc)
+            item.updated_at = datetime.now(UTC)
             continue
 
         db.add(
@@ -984,7 +984,7 @@ def _bump_pipeline_version(
         comment=comment,
     )
     locked_pipeline.current_version = version.version
-    locked_pipeline.updated_at = datetime.now(timezone.utc)
+    locked_pipeline.updated_at = datetime.now(UTC)
 
 
 # =============================================================================
@@ -1043,7 +1043,7 @@ def rollback_pipeline(
         {"feature_config": payload.get("feature_config")}
     ).model_dump(mode="json")
     pipeline.current_version = new_version.version
-    pipeline.updated_at = datetime.now(timezone.utc)
+    pipeline.updated_at = datetime.now(UTC)
 
     # Reconcile stage rows by immutable stage_key (fallback to slug for legacy payloads)
     payload_stages = payload.get("stages", [])
@@ -1082,9 +1082,9 @@ def rollback_pipeline(
             ).model_dump(mode="json")
             stage.is_intake_stage = stage.stage_type == "intake"
             stage.is_active = stage_data.get("is_active", stage.is_active)
-            stage.updated_at = datetime.now(timezone.utc)
+            stage.updated_at = datetime.now(UTC)
             if not stage.is_active and stage.deleted_at is None:
-                stage.deleted_at = datetime.now(timezone.utc)
+                stage.deleted_at = datetime.now(UTC)
         else:
             stage = PipelineStage(
                 pipeline_id=pipeline.id,
@@ -1118,8 +1118,8 @@ def rollback_pipeline(
     for stage_key, stage in existing_by_key.items():
         if stage_key not in payload_stage_keys and stage.is_active:
             stage.is_active = False
-            stage.deleted_at = datetime.now(timezone.utc)
-            stage.updated_at = datetime.now(timezone.utc)
+            stage.deleted_at = datetime.now(UTC)
+            stage.updated_at = datetime.now(UTC)
 
     _ensure_pipeline_semantics_defaults(db, pipeline)
     _validate_pipeline_configuration(db, pipeline)
@@ -1456,7 +1456,7 @@ def update_stage(
             stage_label=stage.label,
         )
 
-    stage.updated_at = datetime.now(timezone.utc)
+    stage.updated_at = datetime.now(UTC)
     if pipeline:
         _ensure_pipeline_semantics_defaults(db, pipeline)
         _validate_pipeline_configuration(db, pipeline)
@@ -1540,8 +1540,8 @@ def delete_stage(
 
     # Soft-delete stage
     stage.is_active = False
-    stage.deleted_at = datetime.now(timezone.utc)
-    stage.updated_at = datetime.now(timezone.utc)
+    stage.deleted_at = datetime.now(UTC)
+    stage.updated_at = datetime.now(UTC)
 
     if pipeline:
         _ensure_pipeline_semantics_defaults(db, pipeline)
@@ -1898,8 +1898,8 @@ def apply_pipeline_draft(
             stage.semantics = dict(draft_stage["semantics"])
             stage.is_intake_stage = stage.stage_type == "intake"
             stage.is_active = bool(draft_stage.get("is_active", True))
-            stage.deleted_at = None if stage.is_active else datetime.now(timezone.utc)
-            stage.updated_at = datetime.now(timezone.utc)
+            stage.deleted_at = None if stage.is_active else datetime.now(UTC)
+            stage.updated_at = datetime.now(UTC)
             if (
                 pipeline.entity_type == SURROGATE_PIPELINE_ENTITY
                 and stage.is_active
@@ -2015,8 +2015,8 @@ def apply_pipeline_draft(
             )
 
         stage.is_active = False
-        stage.deleted_at = datetime.now(timezone.utc)
-        stage.updated_at = datetime.now(timezone.utc)
+        stage.deleted_at = datetime.now(UTC)
+        stage.updated_at = datetime.now(UTC)
 
     pipeline.name = name or pipeline.name
     pipeline.feature_config = pipeline_change_service.apply_feature_config_stage_remaps(

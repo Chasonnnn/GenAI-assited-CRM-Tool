@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import hashlib
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -11,16 +11,15 @@ import pytest
 from app.db.enums import JobStatus, JobType
 from app.db.models import Attachment, AuditLog, EmailLog, Job
 
-
 WORKFLOW_JOB_ID = UUID("91000000-0000-4000-8000-000000000001")
 TOKENED_JOB_ID = UUID("91000000-0000-4000-8000-000000000002")
 ATTACHMENT_JOB_ID = UUID("91000000-0000-4000-8000-000000000003")
 SYNC_JOB_ID = UUID("91000000-0000-4000-8000-000000000004")
 ORG_DELETE_JOB_ID = UUID("91000000-0000-4000-8000-000000000005")
-STALE_BEFORE = datetime(2026, 7, 24, tzinfo=timezone.utc)
-EVALUATED_AT = datetime(2026, 7, 25, 22, 44, tzinfo=timezone.utc)
-APPLIED_AT = datetime(2026, 7, 25, 23, 5, tzinfo=timezone.utc)
-LEGACY_RUN_AT = datetime(2026, 5, 20, 5, 4, tzinfo=timezone.utc)
+STALE_BEFORE = datetime(2026, 7, 24, tzinfo=UTC)
+EVALUATED_AT = datetime(2026, 7, 25, 22, 44, tzinfo=UTC)
+APPLIED_AT = datetime(2026, 7, 25, 23, 5, tzinfo=UTC)
+LEGACY_RUN_AT = datetime(2026, 5, 20, 5, 4, tzinfo=UTC)
 
 
 def _expected_single_decision_fingerprint(
@@ -424,7 +423,7 @@ def test_apply_records_actual_time_separately_from_plan_evaluation(db, test_org)
         file_size=128,
         checksum_sha256="b" * 64,
         scan_status="clean",
-        scanned_at=datetime(2026, 3, 15, 21, 55, tzinfo=timezone.utc),
+        scanned_at=datetime(2026, 3, 15, 21, 55, tzinfo=UTC),
         quarantined=False,
     )
     db.add(attachment)
@@ -553,7 +552,7 @@ def test_dry_run_completes_attachment_job_when_scan_already_finished(db, test_or
         file_size=128,
         checksum_sha256="a" * 64,
         scan_status="clean",
-        scanned_at=datetime(2026, 3, 15, 21, 55, tzinfo=timezone.utc),
+        scanned_at=datetime(2026, 3, 15, 21, 55, tzinfo=UTC),
         quarantined=False,
     )
     db.add(attachment)
@@ -615,8 +614,8 @@ def test_dry_run_supersedes_expired_periodic_google_sync(db, test_org, job_type)
 def test_dry_run_quarantines_overdue_organization_delete_for_admin_review(db, test_org):
     from app.services import legacy_job_reconciliation_service
 
-    test_org.deleted_at = datetime(2026, 1, 2, tzinfo=timezone.utc)
-    test_org.purge_at = datetime(2026, 2, 1, tzinfo=timezone.utc)
+    test_org.deleted_at = datetime(2026, 1, 2, tzinfo=UTC)
+    test_org.purge_at = datetime(2026, 2, 1, tzinfo=UTC)
     job = _legacy_job(
         job_id=ORG_DELETE_JOB_ID,
         org_id=test_org.id,

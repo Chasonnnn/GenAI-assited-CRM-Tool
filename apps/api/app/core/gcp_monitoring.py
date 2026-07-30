@@ -1,13 +1,12 @@
 """GCP monitoring helpers for Cloud Logging and Error Reporting."""
 
-from dataclasses import dataclass
 import logging
 import os
 import secrets
+from dataclasses import dataclass
 from typing import Any
 
 from app.core.config import settings
-
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +79,8 @@ def setup_gcp_monitoring(service_name: str) -> MonitoringClients:
     error_reporter = None
 
     try:
-        from google.cloud import logging as cloud_logging
         from google.cloud import error_reporting
+        from google.cloud import logging as cloud_logging
     except Exception as exc:
         logger.warning("GCP monitoring dependencies unavailable: %s", exc)
         return MonitoringClients(error_reporter=None, logging_enabled=False)

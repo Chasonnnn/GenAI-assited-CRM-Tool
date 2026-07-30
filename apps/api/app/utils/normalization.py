@@ -2,8 +2,6 @@
 
 import re
 import unicodedata
-from typing import Optional
-
 
 # =============================================================================
 # US States (including DC and territories)
@@ -171,7 +169,7 @@ RACE_LABEL_OVERRIDES = {
 LOWERCASE_TITLE_WORDS = {"or", "and", "of", "the", "a", "an", "in", "on", "to", "for"}
 
 
-def format_race_label(race: Optional[str]) -> Optional[str]:
+def format_race_label(race: str | None) -> str | None:
     """Normalize race labels for display without mutating stored values."""
     if not race:
         return None
@@ -196,7 +194,7 @@ def format_race_label(race: Optional[str]) -> Optional[str]:
     return " ".join(words)
 
 
-def normalize_race_key(race: Optional[str]) -> Optional[str]:
+def normalize_race_key(race: str | None) -> str | None:
     """Normalize a race input into a stable key used by filters and display helpers."""
     if not race:
         return None
@@ -211,7 +209,7 @@ def normalize_race_key(race: Optional[str]) -> Optional[str]:
     return RACE_KEY_ALIASES.get(normalized_key, normalized_key)
 
 
-def normalize_state(state: Optional[str]) -> Optional[str]:
+def normalize_state(state: str | None) -> str | None:
     """
     Normalize state input to 2-letter uppercase code.
 
@@ -243,7 +241,7 @@ def normalize_state(state: Optional[str]) -> Optional[str]:
     )
 
 
-def normalize_phone(phone: Optional[str]) -> Optional[str]:
+def normalize_phone(phone: str | None) -> str | None:
     """
     Normalize phone to E.164 format (+15551234567).
 
@@ -282,7 +280,7 @@ def normalize_phone(phone: Optional[str]) -> Optional[str]:
     raise ValueError(f"Invalid phone number '{phone}'. Use 10-digit US format (e.g., 5551234567).")
 
 
-def normalize_email(email: Optional[str]) -> Optional[str]:
+def normalize_email(email: str | None) -> str | None:
     """
     Normalize email to lowercase.
 
@@ -297,7 +295,7 @@ def normalize_email(email: Optional[str]) -> Optional[str]:
     return email.strip().lower()
 
 
-def normalize_name(name: Optional[str]) -> Optional[str]:
+def normalize_name(name: str | None) -> str | None:
     """
     Normalize name by stripping whitespace and collapsing multiple spaces.
 
@@ -320,7 +318,7 @@ def _strip_accents(value: str) -> str:
     )
 
 
-def normalize_search_text(value: Optional[str]) -> Optional[str]:
+def normalize_search_text(value: str | None) -> str | None:
     """
     Normalize free-text for search matching.
 
@@ -336,7 +334,7 @@ def normalize_search_text(value: Optional[str]) -> Optional[str]:
     return _strip_accents(collapsed).lower()
 
 
-def normalize_identifier(value: Optional[str]) -> Optional[str]:
+def normalize_identifier(value: str | None) -> str | None:
     """
     Normalize identifier-like strings (numbers/short codes) for search.
 
@@ -356,7 +354,7 @@ def escape_like_string(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
 
 
-def extract_email_domain(email: Optional[str]) -> Optional[str]:
+def extract_email_domain(email: str | None) -> str | None:
     """
     Extract lowercased email domain for ops filtering.
 
@@ -368,7 +366,7 @@ def extract_email_domain(email: Optional[str]) -> Optional[str]:
     return normalized.split("@", 1)[1]
 
 
-def extract_phone_last4(phone: Optional[str]) -> Optional[str]:
+def extract_phone_last4(phone: str | None) -> str | None:
     """
     Extract last 4 digits from a normalized phone number.
     """

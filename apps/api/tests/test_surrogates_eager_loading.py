@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from datetime import UTC
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
@@ -571,7 +572,7 @@ def test_list_surrogate_activity_includes_template_name(db, test_org, test_user)
 
 
 def test_list_surrogate_activity_includes_email_delivery_engagement(db, test_org, test_user):
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     surrogate = surrogate_service.create_surrogate(
         db,
@@ -582,9 +583,9 @@ def test_list_surrogate_activity_includes_email_delivery_engagement(db, test_org
             email=f"activity-email-engagement-{uuid4().hex[:8]}@example.com",
         ),
     )
-    delivered_at = datetime(2026, 7, 21, 14, 3, tzinfo=timezone.utc)
-    opened_at = datetime(2026, 7, 21, 14, 8, tzinfo=timezone.utc)
-    clicked_at = datetime(2026, 7, 21, 14, 12, tzinfo=timezone.utc)
+    delivered_at = datetime(2026, 7, 21, 14, 3, tzinfo=UTC)
+    opened_at = datetime(2026, 7, 21, 14, 8, tzinfo=UTC)
+    clicked_at = datetime(2026, 7, 21, 14, 12, tzinfo=UTC)
     email_log = EmailLog(
         organization_id=test_org.id,
         surrogate_id=surrogate.id,

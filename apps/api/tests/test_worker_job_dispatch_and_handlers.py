@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
 import logging
+from datetime import UTC, datetime, timedelta
 from threading import Barrier, Thread
 from types import SimpleNamespace
 from uuid import uuid4
@@ -11,9 +11,9 @@ import pytest
 from sqlalchemy import text, update
 from sqlalchemy.orm import Session
 
+from app import worker
 from app.db.enums import JobStatus, JobType
 from app.db.models import Job, Organization
-from app import worker
 
 
 class _CtxSession:
@@ -58,7 +58,7 @@ def _job(
         attempts=attempts,
         max_attempts=max_attempts,
         payload=payload or {},
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
         claim_token=claim_token,
     )
 
@@ -162,12 +162,12 @@ async def test_worker_periodically_recovers_stale_claims_before_claiming(monkeyp
     monkeypatch.setattr(
         worker,
         "maybe_schedule_google_calendar_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
         worker,
         "maybe_schedule_gmail_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
 
     def _recover(_session, **kwargs):
@@ -221,7 +221,7 @@ async def test_stale_side_effect_claim_is_quarantined_without_handler_call(
     job_type,
     payload,
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     job = Job(
         organization_id=test_org.id,
         job_type=job_type,
@@ -245,12 +245,12 @@ async def test_stale_side_effect_claim_is_quarantined_without_handler_call(
     monkeypatch.setattr(
         worker,
         "maybe_schedule_google_calendar_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
         worker,
         "maybe_schedule_gmail_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
         worker,
@@ -509,7 +509,7 @@ async def test_worker_reconciles_accepted_resend_event(db, test_org):
         provider_account_id=f"organization:{test_org.id}",
         provider_event_id="svix_reconcile_event",
         event_type="email.delivered",
-        event_created_at=datetime(2026, 7, 21, 14, 3, tzinfo=timezone.utc),
+        event_created_at=datetime(2026, 7, 21, 14, 3, tzinfo=UTC),
         payload={
             "type": "email.delivered",
             "created_at": "2026-07-21T14:03:00.000Z",
@@ -561,7 +561,7 @@ async def test_worker_reconciles_platform_event_only_to_platform_route(db, test_
         provider_account_id="platform:default",
         provider_event_id="svix_platform_reconcile_event",
         event_type="email.delivered",
-        event_created_at=datetime(2026, 7, 21, 14, 3, tzinfo=timezone.utc),
+        event_created_at=datetime(2026, 7, 21, 14, 3, tzinfo=UTC),
         payload={
             "type": "email.delivered",
             "created_at": "2026-07-21T14:03:00.000Z",
@@ -621,7 +621,7 @@ async def test_worker_reconciles_older_orphan_event_after_provider_acceptance(
         record_delivery_success,
     )
 
-    provider_created_at = datetime(2026, 7, 21, 14, 3, tzinfo=timezone.utc)
+    provider_created_at = datetime(2026, 7, 21, 14, 3, tzinfo=UTC)
     accepted_at = provider_created_at + timedelta(minutes=2)
     provider_message_id = f"resend_race_{event_type.rsplit('.', 1)[-1]}"
     queued = queue_rendered_email(
@@ -696,7 +696,7 @@ def test_verified_resend_projection_rejects_a_cross_route_message(db, test_org):
     from app.db.models import EmailLog, ResendWebhookEvent
     from app.services.webhooks.resend import _process_verified_payload
 
-    provider_created_at = datetime(2026, 7, 21, 14, 3, tzinfo=timezone.utc)
+    provider_created_at = datetime(2026, 7, 21, 14, 3, tzinfo=UTC)
     platform_email_log = EmailLog(
         organization_id=test_org.id,
         recipient_email="cross-route@example.com",
@@ -747,7 +747,7 @@ def test_verified_resend_projection_locks_tenant_event_and_email_rows(db, test_o
     from app.db.models import EmailLog, ResendWebhookEvent
     from app.services.webhooks.resend import _process_verified_payload
 
-    provider_created_at = datetime(2026, 7, 21, 14, 3, tzinfo=timezone.utc)
+    provider_created_at = datetime(2026, 7, 21, 14, 3, tzinfo=UTC)
     email_log = EmailLog(
         organization_id=test_org.id,
         recipient_email="locked@example.com",
@@ -812,7 +812,7 @@ def test_concurrent_resend_open_events_do_not_lose_counts(db_engine):
 
     organization_id = uuid4()
     email_log_id = uuid4()
-    provider_created_at = datetime(2026, 7, 21, 14, 3, tzinfo=timezone.utc)
+    provider_created_at = datetime(2026, 7, 21, 14, 3, tzinfo=UTC)
     event_ids: list = []
     setup = SessionLocal(bind=db_engine)
     try:
@@ -931,10 +931,10 @@ async def test_worker_loop_single_iteration_success_and_failure(monkeypatch, db)
     monkeypatch.setattr(
         worker,
         "maybe_schedule_google_calendar_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
-        worker, "maybe_schedule_gmail_sync_jobs", lambda *args, **kwargs: datetime.now(timezone.utc)
+        worker, "maybe_schedule_gmail_sync_jobs", lambda *args, **kwargs: datetime.now(UTC)
     )
     stale_recovery_calls = {"count": 0}
 
@@ -1014,7 +1014,7 @@ async def test_worker_preserves_handler_retry_schedule_across_rollback(monkeypat
         max_attempts=8,
     )
     pending_jobs = [job]
-    retry_run_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+    retry_run_at = datetime.now(UTC) + timedelta(minutes=5)
     captured_retry_run_at = []
 
     monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(db))
@@ -1025,12 +1025,12 @@ async def test_worker_preserves_handler_retry_schedule_across_rollback(monkeypat
     monkeypatch.setattr(
         worker,
         "maybe_schedule_google_calendar_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
         worker,
         "maybe_schedule_gmail_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
         worker.job_service,
@@ -1098,12 +1098,12 @@ async def test_worker_claims_one_job_at_a_time_within_each_batch(monkeypatch, db
     monkeypatch.setattr(
         worker,
         "maybe_schedule_google_calendar_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
         worker,
         "maybe_schedule_gmail_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
 
     def _claim(session, *, limit, job_types):
@@ -1159,12 +1159,12 @@ async def test_worker_heartbeats_current_token_while_handler_runs(monkeypatch, d
     monkeypatch.setattr(
         worker,
         "maybe_schedule_google_calendar_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
         worker,
         "maybe_schedule_gmail_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
         worker.job_service,
@@ -1229,12 +1229,12 @@ async def test_worker_finishes_active_job_without_claiming_another_after_stop(mo
     monkeypatch.setattr(
         worker,
         "maybe_schedule_google_calendar_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
         worker,
         "maybe_schedule_gmail_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
 
     def _claim(session, *, limit, job_types):
@@ -1283,11 +1283,11 @@ async def test_worker_cannot_adopt_a_newer_claim_after_handler_expires_job(
         job_type=JobType.NOTIFICATION.value,
         status=JobStatus.RUNNING.value,
         payload={},
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
         attempts=1,
         max_attempts=3,
         claim_token=original_token,
-        claimed_at=datetime.now(timezone.utc),
+        claimed_at=datetime.now(UTC),
     )
     worker_db.add_all([organization, job])
     worker_db.commit()
@@ -1301,12 +1301,12 @@ async def test_worker_cannot_adopt_a_newer_claim_after_handler_expires_job(
     monkeypatch.setattr(
         worker,
         "maybe_schedule_google_calendar_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
         worker,
         "maybe_schedule_gmail_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
 
     def _claim(*_args, **_kwargs):
@@ -1325,7 +1325,7 @@ async def test_worker_cannot_adopt_a_newer_claim_after_handler_expires_job(
             .where(Job.id == job.id)
             .values(
                 claim_token=newer_token,
-                claimed_at=datetime.now(timezone.utc),
+                claimed_at=datetime.now(UTC),
             )
             .execution_options(synchronize_session=False)
         )
@@ -1362,11 +1362,11 @@ async def test_worker_rolls_back_aborted_session_before_failing_current_claim(
         job_type=JobType.NOTIFICATION.value,
         status=JobStatus.RUNNING.value,
         payload={},
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
         attempts=1,
         max_attempts=1,
         claim_token=claim_token,
-        claimed_at=datetime.now(timezone.utc),
+        claimed_at=datetime.now(UTC),
     )
     worker_db.add_all([organization, job])
     worker_db.commit()
@@ -1380,12 +1380,12 @@ async def test_worker_rolls_back_aborted_session_before_failing_current_claim(
     monkeypatch.setattr(
         worker,
         "maybe_schedule_google_calendar_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
         worker,
         "maybe_schedule_gmail_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
 
     def _claim(*_args, **_kwargs):
@@ -1432,11 +1432,11 @@ async def test_worker_failure_cas_cannot_overwrite_newer_claim_after_session_rol
         job_type=JobType.NOTIFICATION.value,
         status=JobStatus.RUNNING.value,
         payload={},
-        run_at=datetime.now(timezone.utc),
+        run_at=datetime.now(UTC),
         attempts=1,
         max_attempts=1,
         claim_token=original_token,
-        claimed_at=datetime.now(timezone.utc),
+        claimed_at=datetime.now(UTC),
     )
     worker_db.add_all([organization, job])
     worker_db.commit()
@@ -1451,12 +1451,12 @@ async def test_worker_failure_cas_cannot_overwrite_newer_claim_after_session_rol
     monkeypatch.setattr(
         worker,
         "maybe_schedule_google_calendar_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
         worker,
         "maybe_schedule_gmail_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
 
     def _claim(*_args, **_kwargs):
@@ -1485,7 +1485,7 @@ async def test_worker_failure_cas_cannot_overwrite_newer_claim_after_session_rol
             .where(Job.id == job_id)
             .values(
                 claim_token=newer_token,
-                claimed_at=datetime.now(timezone.utc),
+                claimed_at=datetime.now(UTC),
             )
             .execution_options(synchronize_session=False)
         )
@@ -1526,10 +1526,10 @@ async def test_worker_loop_leaves_job_running_when_handler_defers_completion(mon
     monkeypatch.setattr(
         worker,
         "maybe_schedule_google_calendar_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
-        worker, "maybe_schedule_gmail_sync_jobs", lambda *args, **kwargs: datetime.now(timezone.utc)
+        worker, "maybe_schedule_gmail_sync_jobs", lambda *args, **kwargs: datetime.now(UTC)
     )
     monkeypatch.setattr(
         worker.job_service,
@@ -1574,12 +1574,12 @@ async def test_worker_loop_dispatches_one_bounded_email_delivery_batch(monkeypat
     monkeypatch.setattr(
         worker,
         "maybe_schedule_google_calendar_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
         worker,
         "maybe_schedule_gmail_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
         worker.job_service,
@@ -1631,12 +1631,12 @@ async def test_worker_loop_drains_full_email_batches_before_poll_sleep(monkeypat
     monkeypatch.setattr(
         worker,
         "maybe_schedule_google_calendar_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
         worker,
         "maybe_schedule_gmail_sync_jobs",
-        lambda *args, **kwargs: datetime.now(timezone.utc),
+        lambda *args, **kwargs: datetime.now(UTC),
     )
     monkeypatch.setattr(
         worker.job_service,

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.schemas.surrogate import SurrogateCreate
 
@@ -14,7 +14,7 @@ def test_meta_ad_performance_breakdown(db, test_org, test_user):
         data=SurrogateCreate(full_name="Lead One", email="lead1@example.com"),
     )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     leads = [
         MetaLead(
             organization_id=test_org.id,

@@ -15,8 +15,8 @@ async def test_websocket_pubsub_no_redis(monkeypatch):
 
 
 def test_session_revocation_publish_without_redis(monkeypatch):
-    from app.services import session_service
     import app.core.websocket as websocket
+    from app.services import session_service
 
     called = {"count": 0}
 

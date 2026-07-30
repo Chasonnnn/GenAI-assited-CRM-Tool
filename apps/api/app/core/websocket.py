@@ -5,12 +5,11 @@ Manages active WebSocket connections per user, allowing
 server-sent messages to reach connected clients instantly.
 """
 
-from typing import Dict, Set
-from uuid import UUID, uuid4
 import asyncio
 import json
-import os
 import logging
+import os
+from uuid import UUID, uuid4
 
 from fastapi import WebSocket
 
@@ -27,15 +26,15 @@ class ConnectionManager:
 
     def __init__(self):
         # user_id -> set of active WebSocket connections
-        self._connections: Dict[UUID, Set[WebSocket]] = {}
+        self._connections: dict[UUID, set[WebSocket]] = {}
         # user_id -> org_id (for org-based broadcasts)
-        self._user_orgs: Dict[UUID, UUID] = {}
+        self._user_orgs: dict[UUID, UUID] = {}
         # token_hash -> set of active WebSocket connections
-        self._connections_by_token: Dict[str, Set[WebSocket]] = {}
+        self._connections_by_token: dict[str, set[WebSocket]] = {}
         # websocket -> token_hash
-        self._ws_tokens: Dict[WebSocket, str] = {}
+        self._ws_tokens: dict[WebSocket, str] = {}
         # websocket -> user_id
-        self._ws_users: Dict[WebSocket, UUID] = {}
+        self._ws_users: dict[WebSocket, UUID] = {}
         self._lock = asyncio.Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
 

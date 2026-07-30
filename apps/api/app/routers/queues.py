@@ -1,16 +1,15 @@
 """Queue management API endpoints."""
 
 from typing import Annotated
-
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, Response
 
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
-    get_db,
     get_current_session,
+    get_db,
     require_csrf_header,
     require_permission,
 )
@@ -19,14 +18,14 @@ from app.db.enums import Role
 from app.schemas.auth import UserSession
 from app.services import queue_service
 from app.services.queue_service import (
-    QueueNotFoundError,
-    SurrogateNotFoundError,
-    SurrogateAlreadyClaimedError,
     DuplicateQueueNameError,
     NotQueueMemberError,
     QueueMemberExistsError,
     QueueMemberNotFoundError,
     QueueMemberUserNotFoundError,
+    QueueNotFoundError,
+    SurrogateAlreadyClaimedError,
+    SurrogateNotFoundError,
 )
 
 router = APIRouter(

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ async def process_meta_lead_fetch(db, job) -> None:
     4. Store in meta_leads table
     5. Update status on success/failure
     """
-    from app.db.models import MetaPageMapping, MetaLead
+    from app.db.models import MetaLead, MetaPageMapping
     from app.services import (
         meta_api,
         meta_lead_service,
@@ -50,7 +50,7 @@ async def process_meta_lead_fetch(db, job) -> None:
     access_token = token_result.token or ""
     if not access_token:
         mapping.last_error = "No page token available for Meta lead fetch"
-        mapping.last_error_at = datetime.now(timezone.utc)
+        mapping.last_error_at = datetime.now(UTC)
         db.commit()
         raise Exception("No page token available for Meta lead fetch")
 
@@ -60,7 +60,7 @@ async def process_meta_lead_fetch(db, job) -> None:
     if error:
         # Update mapping with error
         mapping.last_error = error
-        mapping.last_error_at = datetime.now(timezone.utc)
+        mapping.last_error_at = datetime.now(UTC)
         db.commit()
         if token_result.connection_id:
             meta_token_service.mark_token_error(db, token_result.connection_id, Exception(error))
@@ -112,7 +112,7 @@ async def process_meta_lead_fetch(db, job) -> None:
         raise Exception(store_error)
 
     # Update success tracking (even for idempotent re-stores)
-    mapping.last_success_at = datetime.now(timezone.utc)
+    mapping.last_success_at = datetime.now(UTC)
     mapping.last_error = None
     db.commit()
     if token_result.connection_id:
@@ -285,7 +285,7 @@ async def process_meta_capi_event(db, job) -> None:
     if not success:
         # Record error on ad account for observability
         ad_account.last_error = f"CAPI: {error}"
-        ad_account.last_error_at = datetime.now(timezone.utc)
+        ad_account.last_error_at = datetime.now(UTC)
         db.commit()
         raise Exception(error or "Meta CAPI failed")
 

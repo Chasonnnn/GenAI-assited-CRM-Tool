@@ -1,7 +1,7 @@
 import base64
 import hashlib
 import hmac
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import format_datetime
 from urllib.parse import quote
 
@@ -41,12 +41,12 @@ def test_duo_admin_client_signs_and_sanitizes_requests(monkeypatch):
     )
     monkeypatch.setattr(settings, "DUO_ADMIN_TIMEOUT_SECONDS", 7.5)
 
-    fixed_now = datetime(2026, 3, 9, 21, 30, 0, tzinfo=timezone.utc)
+    fixed_now = datetime(2026, 3, 9, 21, 30, 0, tzinfo=UTC)
 
     class FixedDateTime(datetime):
         @classmethod
         def now(cls, tz=None):
-            return fixed_now.astimezone(tz or timezone.utc)
+            return fixed_now.astimezone(tz or UTC)
 
     captured: dict[str, object] = {}
 
@@ -113,7 +113,7 @@ def test_duo_admin_client_signs_and_sanitizes_requests(monkeypatch):
         canonical.encode("utf-8"),
         hashlib.sha1,
     ).hexdigest()
-    expected_auth = base64.b64encode(f"DIXXXXXXXXXXXXXXXXXX:{expected_sig}".encode("utf-8")).decode(
+    expected_auth = base64.b64encode(f"DIXXXXXXXXXXXXXXXXXX:{expected_sig}".encode()).decode(
         "ascii"
     )
     assert headers["Authorization"] == f"Basic {expected_auth}"

@@ -7,7 +7,7 @@ email and organization-owned Resend integrations cannot drift apart.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
 
@@ -73,8 +73,8 @@ def _seconds_from_retry_after(value: str) -> float | None:
         return None
 
     if retry_at.tzinfo is None:
-        retry_at = retry_at.replace(tzinfo=timezone.utc)
-    return max(0.0, (retry_at - datetime.now(timezone.utc)).total_seconds())
+        retry_at = retry_at.replace(tzinfo=UTC)
+    return max(0.0, (retry_at - datetime.now(UTC)).total_seconds())
 
 
 def _provider_retry_delay(response: httpx.Response) -> float | None:

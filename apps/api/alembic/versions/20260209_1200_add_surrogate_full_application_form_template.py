@@ -8,19 +8,20 @@ Create Date: 2026-02-09 12:00:00.000000
 from __future__ import annotations
 
 import importlib.util
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence, Union, Any
+from typing import Any
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "20260209_1200"
-down_revision: Union[str, Sequence[str], None] = "20260207_1200"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "20260207_1200"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 TEMPLATE_NAME = "Surrogate Full Application Form"

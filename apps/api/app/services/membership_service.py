@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Membership, Queue, QueueMember
 
-
 logger = logging.getLogger(__name__)
 
 # Queue name for surrogate claim workflow

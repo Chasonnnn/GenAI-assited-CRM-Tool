@@ -6,7 +6,7 @@ Tests cover:
 - MFA enrollment flow
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -174,11 +174,11 @@ class TestMFAStatus:
 
     def test_has_mfa_setup_with_totp(self):
         """User with TOTP enabled should have MFA setup."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         class MockUser:
             mfa_enabled = True
-            totp_enabled_at = datetime.now(timezone.utc)
+            totp_enabled_at = datetime.now(UTC)
             duo_enrolled_at = None
 
         assert mfa_service.has_mfa_setup(MockUser()) is True
@@ -207,7 +207,7 @@ class TestMFAEndpoints:
         secret = "JBSWY3DPEHPK3PXP"
         test_user.mfa_enabled = True
         test_user.totp_secret = secret
-        test_user.duo_enrolled_at = datetime.now(timezone.utc)
+        test_user.duo_enrolled_at = datetime.now(UTC)
         db.commit()
 
         code = pyotp.TOTP(secret).now()
@@ -228,7 +228,7 @@ class TestMFAEndpoints:
         secret = "JBSWY3DPEHPK3PXP"
         test_user.mfa_enabled = True
         test_user.totp_secret = secret
-        test_user.duo_enrolled_at = datetime.now(timezone.utc)
+        test_user.duo_enrolled_at = datetime.now(UTC)
         db.commit()
 
         code = pyotp.TOTP(secret).now()
@@ -245,7 +245,7 @@ class TestMFAEndpoints:
         recovery_codes = mfa_service.generate_recovery_codes(2)
         test_user.mfa_enabled = True
         test_user.mfa_recovery_codes = mfa_service.hash_recovery_codes(recovery_codes)
-        test_user.duo_enrolled_at = datetime.now(timezone.utc)
+        test_user.duo_enrolled_at = datetime.now(UTC)
         db.commit()
 
         response = await authed_client.post("/mfa/verify", json={"code": recovery_codes[0]})
@@ -309,7 +309,7 @@ class TestMFAEndpoints:
             test_user.mfa_recovery_codes = None
         else:
             test_user.mfa_enabled = True
-            test_user.totp_enabled_at = datetime.now(timezone.utc)
+            test_user.totp_enabled_at = datetime.now(UTC)
             test_user.mfa_recovery_codes = mfa_service.hash_recovery_codes(["ABCD2345"])
         db.commit()
 

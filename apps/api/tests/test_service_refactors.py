@@ -4,7 +4,7 @@ from app.db.enums import Role
 
 
 def test_meta_admin_service_list_and_get_ad_accounts(db, test_org):
-    from app.db.models import Organization, MetaAdAccount
+    from app.db.models import MetaAdAccount, Organization
     from app.services import meta_admin_service
 
     other_org = Organization(
@@ -50,8 +50,8 @@ def test_meta_admin_service_list_and_get_ad_accounts(db, test_org):
 
 
 def test_task_service_bulk_complete_emits_dashboard(db, test_org, test_user, monkeypatch):
-    from app.db.models import Task
     from app.db.enums import TaskType
+    from app.db.models import Task
     from app.schemas.auth import UserSession
     from app.services import dashboard_events, task_service
 

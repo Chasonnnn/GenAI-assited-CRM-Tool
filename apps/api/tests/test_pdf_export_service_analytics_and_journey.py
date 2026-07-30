@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -193,7 +193,7 @@ def test_export_journey_pdf_and_generate_journey_html(db, test_org, monkeypatch)
         journey_version=1,
         is_terminal=True,
         terminal_message="Case is in terminal status",
-        terminal_date=datetime.now(timezone.utc).isoformat(),
+        terminal_date=datetime.now(UTC).isoformat(),
         phases=[phase],
         organization_name="Test Org",
         organization_logo_url=None,
