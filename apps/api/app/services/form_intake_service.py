@@ -11,7 +11,7 @@ from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 from fastapi import UploadFile
-from sqlalchemy import or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -301,12 +301,15 @@ def create_published_intake_version(
 ) -> PublishedIntakeVersion:
     schema_snapshot = json.loads(json.dumps(form.published_schema_json or form.schema_json or {}))
     mapping_snapshot = form_submission_service._snapshot_mappings(db, form.id)  # type: ignore[attr-defined]
+    # ⚡ Bolt: Optimize count query to avoid subquery overhead
     version_number = (
-        db.query(PublishedIntakeVersion)
-        .filter(PublishedIntakeVersion.intake_link_id == link.id)
-        .count()
-        + 1
-    )
+        db.scalar(
+            select(func.count(PublishedIntakeVersion.id)).where(
+                PublishedIntakeVersion.intake_link_id == link.id
+            )
+        )
+        or 0
+    ) + 1
     tracking_policy_snapshot = {
         "tracking_mode": link.tracking_mode,
         "allowed_embed_origins": link.allowed_embed_origins or [],
@@ -2430,13 +2433,15 @@ def promote_intake_lead(
             .first()
         )
         if surrogate:
+            # ⚡ Bolt: Optimize count query to avoid subquery overhead
             linked_count = (
-                db.query(FormSubmission)
-                .filter(
-                    FormSubmission.intake_lead_id == lead.id,
-                    FormSubmission.surrogate_id == surrogate.id,
+                db.scalar(
+                    select(func.count(FormSubmission.id)).where(
+                        FormSubmission.intake_lead_id == lead.id,
+                        FormSubmission.surrogate_id == surrogate.id,
+                    )
                 )
-                .count()
+                or 0
             )
             return surrogate, linked_count
 
