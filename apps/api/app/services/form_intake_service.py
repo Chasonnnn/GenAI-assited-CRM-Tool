@@ -11,7 +11,7 @@ from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 from fastapi import UploadFile
-from sqlalchemy import or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -302,9 +302,12 @@ def create_published_intake_version(
     schema_snapshot = json.loads(json.dumps(form.published_schema_json or form.schema_json or {}))
     mapping_snapshot = form_submission_service._snapshot_mappings(db, form.id)  # type: ignore[attr-defined]
     version_number = (
-        db.query(PublishedIntakeVersion)
-        .filter(PublishedIntakeVersion.intake_link_id == link.id)
-        .count()
+        # Optimization: use explicit func.count() to skip SQLAlchemy subquery generation overhead
+        db.scalar(
+            select(func.count(PublishedIntakeVersion.id)).where(
+                PublishedIntakeVersion.intake_link_id == link.id
+            )
+        )
         + 1
     )
     tracking_policy_snapshot = {
@@ -2430,13 +2433,12 @@ def promote_intake_lead(
             .first()
         )
         if surrogate:
-            linked_count = (
-                db.query(FormSubmission)
-                .filter(
+            # Optimization: use explicit func.count() to skip SQLAlchemy subquery generation overhead
+            linked_count = db.scalar(
+                select(func.count(FormSubmission.id)).where(
                     FormSubmission.intake_lead_id == lead.id,
                     FormSubmission.surrogate_id == surrogate.id,
                 )
-                .count()
             )
             return surrogate, linked_count
 
