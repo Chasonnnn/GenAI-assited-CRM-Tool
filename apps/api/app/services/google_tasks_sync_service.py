@@ -31,6 +31,10 @@ GOOGLE_TASKS_SCOPES = {
 }
 
 
+class _GoogleTasksInsufficientScopeError(Exception):
+    """Signal an authenticated Google Tasks response that lacks Tasks scope."""
+
+
 def _normalize_scopes(scopes: object) -> set[str]:
     if not isinstance(scopes, list):
         return set()
@@ -76,15 +80,36 @@ def _is_insufficient_scope_error(status_code: int, payload: dict[str, Any] | Non
         return False
     if not payload or not isinstance(payload.get("error"), dict):
         return False
-    message = payload["error"].get("message")
-    if not isinstance(message, str):
-        return False
-    lowered = message.lower()
-    return (
-        "insufficient authentication scopes" in lowered
-        or "insufficientpermissions" in lowered
-        or "insufficient permissions" in lowered
-    )
+    error = payload["error"]
+    message = error.get("message")
+    if isinstance(message, str):
+        lowered = message.lower()
+        if (
+            "insufficient authentication scopes" in lowered
+            or "insufficientpermissions" in lowered
+            or "insufficient permissions" in lowered
+        ):
+            return True
+
+    errors = error.get("errors")
+    if isinstance(errors, list):
+        for item in errors:
+            if not isinstance(item, dict):
+                continue
+            reason = str(item.get("reason") or "").lower()
+            if reason in {"insufficientpermissions", "accesstokenscopeinsufficient"}:
+                return True
+
+    details = error.get("details")
+    if isinstance(details, list):
+        for item in details:
+            if not isinstance(item, dict):
+                continue
+            reason = str(item.get("reason") or "").lower()
+            if reason == "access_token_scope_insufficient":
+                return True
+
+    return False
 
 
 def _mark_integration_missing_google_tasks_scope(integration: object) -> bool:
@@ -100,6 +125,22 @@ def _mark_integration_missing_google_tasks_scope(integration: object) -> bool:
         return False
     integration.granted_scopes = filtered
     return True
+
+
+def _disable_google_tasks_after_scope_error(
+    db: Session,
+    *,
+    integration: object,
+    user_id: UUID,
+) -> None:
+    """Persist the scope failure once so later task mutations skip Google."""
+    if not _mark_integration_missing_google_tasks_scope(integration):
+        return
+    db.commit()
+    logger.warning(
+        "Google Tasks outbound sync disabled (insufficient scopes) user=%s; reconnect Google Calendar integration",
+        user_id,
+    )
 
 
 def _to_utc(value: datetime | None) -> datetime | None:
@@ -322,6 +363,9 @@ async def _upsert_google_task_for_platform_task(
             json_body=payload,
         )
 
+    if _is_insufficient_scope_error(status_code, response_payload):
+        raise _GoogleTasksInsufficientScopeError
+
     if status_code not in (200, 201) or not response_payload:
         return None
 
@@ -344,11 +388,13 @@ async def _delete_google_task_for_platform_task(task: Task, db: Session) -> bool
     task_list_id = task.google_task_list_id or GOOGLE_DEFAULT_TASKLIST_ID
     encoded_task_list_id = _encode_google_id(task_list_id)
     encoded_task_id = _encode_google_id(task.google_task_id)
-    status_code, _ = await _google_request(
+    status_code, response_payload = await _google_request(
         access_token=token,
         method="DELETE",
         path=f"/lists/{encoded_task_list_id}/tasks/{encoded_task_id}",
     )
+    if _is_insufficient_scope_error(status_code, response_payload):
+        raise _GoogleTasksInsufficientScopeError
     return status_code in (200, 204, 404)
 
 
@@ -367,9 +413,18 @@ def sync_platform_task_to_google(db: Session, task: Task) -> None:
     integration = oauth_service.get_user_integration(db, task.owner_id, "google_calendar")
     if not integration:
         return
+    if integration_scope_known_to_exclude_google_tasks(integration):
+        return
 
     try:
         result = run_async(_upsert_google_task_for_platform_task(task, db), timeout=30)
+    except _GoogleTasksInsufficientScopeError:
+        _disable_google_tasks_after_scope_error(
+            db,
+            integration=integration,
+            user_id=task.owner_id,
+        )
+        return
     except Exception as exc:
         logger.warning("Platform→Google task sync failed task=%s error=%s", task.id, exc)
         return
@@ -401,9 +456,17 @@ def delete_platform_task_from_google(db: Session, task: Task) -> None:
     integration = oauth_service.get_user_integration(db, task.owner_id, "google_calendar")
     if not integration:
         return
+    if integration_scope_known_to_exclude_google_tasks(integration):
+        return
 
     try:
         run_async(_delete_google_task_for_platform_task(task, db), timeout=30)
+    except _GoogleTasksInsufficientScopeError:
+        _disable_google_tasks_after_scope_error(
+            db,
+            integration=integration,
+            user_id=task.owner_id,
+        )
     except Exception as exc:
         logger.warning("Platform delete→Google task sync failed task=%s error=%s", task.id, exc)
 
