@@ -2370,6 +2370,171 @@ class TestResendWebhookHandler:
         assert response.json() == {"status": "ok"}
 
 
+def test_concurrent_signed_webhooks_with_delivery_are_acknowledged(db_engine):
+    """Concurrent provider events must not deadlock the delivery projection."""
+    import json
+    from threading import Barrier, BrokenBarrierError, Thread
+
+    from fastapi.testclient import TestClient
+    from sqlalchemy import event as sqlalchemy_event
+
+    from app.core.deps import get_db
+    from app.db.enums import EmailDeliveryStatus
+    from app.db.models import EmailDelivery, Organization, ResendWebhookEvent
+    from app.db.session import SessionLocal
+    from app.main import app
+    from app.services import resend_settings_service
+    from app.services.email_delivery_service import (
+        DeliveryRoute,
+        EmailSource,
+        RenderedEmail,
+        queue_rendered_email,
+    )
+
+    organization_id = uuid.uuid4()
+    provider_message_id = f"concurrent-{uuid.uuid4().hex}"
+    webhook_secret_bytes = b"concurrent_webhook_secret"
+    webhook_secret = "whsec_" + base64.urlsafe_b64encode(webhook_secret_bytes).decode(
+        "utf-8"
+    ).rstrip("=")
+
+    setup = SessionLocal(bind=db_engine)
+    try:
+        setup.add(
+            Organization(
+                id=organization_id,
+                name="Concurrent Webhook Test",
+                slug=f"concurrent-webhook-{uuid.uuid4().hex[:10]}",
+            )
+        )
+        setup.commit()
+        resend_settings = resend_settings_service.update_resend_settings(
+            setup,
+            organization_id,
+            organization_id,
+            email_provider="resend",
+            api_key="re_concurrent_test_key",
+            from_email="care@example.com",
+            verified_domain="example.com",
+            webhook_signing_secret=webhook_secret,
+        )
+        queued = queue_rendered_email(
+            setup,
+            organization_id=organization_id,
+            route=DeliveryRoute.ORGANIZATION_RESEND,
+            provider_account_id=f"organization:{organization_id}",
+            rendered_email=RenderedEmail(
+                recipient_email="concurrent@recipient.com",
+                subject="Concurrent webhook",
+                html="<p>Concurrent webhook</p>",
+                text="Concurrent webhook",
+                from_email="Surrogacy Force <care@example.com>",
+            ),
+            idempotency_key=f"concurrent-webhook/{uuid.uuid4()}",
+            source=EmailSource(source_type="test"),
+            commit=True,
+        )
+        assert queued.delivery is not None
+        email_log_id = queued.email_log.id
+        delivery_id = queued.delivery.id
+        webhook_id = resend_settings.webhook_id
+    finally:
+        setup.close()
+
+    insert_barrier = Barrier(2)
+
+    def synchronize_event_inserts(conn, cursor, statement, parameters, context, executemany):
+        if "insert into resend_webhook_events" not in statement.lower():
+            return
+        try:
+            insert_barrier.wait(timeout=5)
+        except BrokenBarrierError:
+            pass
+
+    def request_db():
+        session = SessionLocal(bind=db_engine)
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app.dependency_overrides[get_db] = request_db
+    sqlalchemy_event.listen(db_engine, "after_cursor_execute", synchronize_event_inserts)
+    responses = [None, None]
+    request_errors: list[BaseException] = []
+
+    def post_event(index: int, event_type: str) -> None:
+        try:
+            payload = {
+                "type": event_type,
+                "created_at": f"2026-07-31T10:00:0{index}.000Z",
+                "data": {
+                    "email_id": provider_message_id,
+                    "tags": {
+                        "organization_id": str(organization_id),
+                        "email_log_id": str(email_log_id),
+                    },
+                },
+            }
+            body = json.dumps(payload).encode("utf-8")
+            timestamp = str(int(time.time()))
+            msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+            with TestClient(app, raise_server_exceptions=False) as request_client:
+                responses[index] = request_client.post(
+                    f"/webhooks/resend/{webhook_id}",
+                    content=body,
+                    headers={
+                        "Content-Type": "application/json",
+                        "svix-id": msg_id,
+                        "svix-timestamp": timestamp,
+                        "svix-signature": signature,
+                    },
+                )
+        except BaseException as exc:
+            request_errors.append(exc)
+
+    try:
+        threads = [
+            Thread(target=post_event, args=(0, "email.sent")),
+            Thread(target=post_event, args=(1, "email.delivered")),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+
+        assert all(not thread.is_alive() for thread in threads)
+        assert request_errors == []
+        assert [response.status_code for response in responses] == [200, 200]
+
+        verify = SessionLocal(bind=db_engine)
+        try:
+            delivery = verify.get(EmailDelivery, delivery_id)
+            assert delivery is not None
+            assert delivery.status == EmailDeliveryStatus.SENT.value
+            assert delivery.provider_message_id == provider_message_id
+            assert (
+                verify.query(ResendWebhookEvent)
+                .filter(
+                    ResendWebhookEvent.organization_id == organization_id,
+                    ResendWebhookEvent.processed_at.isnot(None),
+                )
+                .count()
+                == 2
+            )
+        finally:
+            verify.close()
+    finally:
+        sqlalchemy_event.remove(db_engine, "after_cursor_execute", synchronize_event_inserts)
+        app.dependency_overrides.pop(get_db, None)
+        cleanup = SessionLocal(bind=db_engine)
+        try:
+            cleanup.query(Organization).filter(Organization.id == organization_id).delete()
+            cleanup.commit()
+        finally:
+            cleanup.close()
+
+
 class TestCampaignRunProviderLock:
     """Test that email provider is locked on CampaignRun creation."""
 
