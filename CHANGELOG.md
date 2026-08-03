@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.57](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.56...surrogacy-crm-platform-v0.91.57) (2026-08-03)
+
+
+### Bug Fixes
+
+* Avoid closed-loop revocation warnings ([386a70c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/386a70c3b70093249e92cab9449b68c6a1d7bfac))
+* Prevent Resend webhook projection deadlocks ([90af9e6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/90af9e687a1684b22fbcff11fc6c77d982976945))
+* Remove PII from unsubscribe request URLs ([daaf245](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/daaf2452b4229ba5ab26418b581ceb1533e3575a))
+* Repair Cloud Run error diagnostics ([271a8e7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/271a8e7c6e1f076c0b15241b20c522fc4422bf6e))
+* Repair Cloud Run log failures ([a62b64d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a62b64d1d25c26d2dca51378f172cad332b14412))
+* Stop repeated Google Tasks scope failures ([96c7a57](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/96c7a5703ec442aeca2e71935b3cd263b6e258f5))
+
+
+### Maintenance
+
+* Format unsubscribe token changes ([cebd9fe](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cebd9febc3bab8777addbe0185682f6fa87b6e46))
+
 ## [0.91.56](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.55...surrogacy-crm-platform-v0.91.56) (2026-07-30)
 
 
