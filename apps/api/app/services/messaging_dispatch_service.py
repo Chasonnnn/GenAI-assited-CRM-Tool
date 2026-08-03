@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.orm import Session
 
 from app.core.encryption import hash_pii
@@ -229,6 +230,12 @@ def _reserve_account_slot(
     now: datetime,
 ) -> datetime | None:
     account_hash = hash_pii(account_sid, purpose="twilio-admission")
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(
+            postgresql_insert(MessagingProviderAdmission)
+            .values(account_sid_hash=account_hash, next_slot_at=now)
+            .on_conflict_do_nothing(index_elements=["account_sid_hash"])
+        )
     admission = db.execute(
         select(MessagingProviderAdmission)
         .where(MessagingProviderAdmission.account_sid_hash == account_hash)

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from threading import Barrier, Lock, Thread
+from uuid import uuid4
 
 ACCOUNT_SID = "AC" + ("1" * 32)
 API_KEY_SID = "SK" + ("2" * 32)
@@ -281,3 +283,69 @@ def test_ambiguous_timezone_defers_without_provider_io(db, test_org, monkeypatch
     db.refresh(delivery)
     assert delivery.status == "retry_scheduled"
     assert delivery.last_error_type == "recipient_location_ambiguous"
+
+
+def test_concurrent_first_account_admission_initialization_is_atomic(
+    db_engine,
+) -> None:
+    import pytest
+
+    from app.core.encryption import hash_pii
+    from app.db.models import MessagingProviderAdmission, TwilioRoute
+    from app.db.session import SessionLocal
+    from app.services import messaging_dispatch_service
+
+    if db_engine.dialect.name != "postgresql":
+        pytest.skip("Concurrent messaging admission requires PostgreSQL")
+
+    route = TwilioRoute(
+        purpose="operational",
+        capability_evidence={"messages_per_second": 10},
+    )
+    account_sid = f"AC{uuid4().hex}"
+    fixed_now = datetime.now(UTC).replace(microsecond=0)
+    barrier = Barrier(2)
+    result_lock = Lock()
+    results: list[datetime | None] = []
+    errors: list[Exception] = []
+
+    def reserve_once() -> None:
+        session = SessionLocal(bind=db_engine)
+        try:
+            barrier.wait(timeout=10)
+            reserved = messaging_dispatch_service._reserve_account_slot(
+                session,
+                account_sid=account_sid,
+                route=route,
+                now=fixed_now,
+            )
+            session.commit()
+            with result_lock:
+                results.append(reserved)
+        except Exception as exc:
+            session.rollback()
+            with result_lock:
+                errors.append(exc)
+        finally:
+            session.close()
+
+    threads = [Thread(target=reserve_once) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=15)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert errors == []
+    assert results.count(None) == 1
+    assert [value for value in results if value is not None] == [
+        fixed_now + timedelta(milliseconds=100)
+    ]
+
+    account_hash = hash_pii(account_sid, purpose="twilio-admission")
+    cleanup = SessionLocal(bind=db_engine)
+    try:
+        cleanup.query(MessagingProviderAdmission).filter_by(account_sid_hash=account_hash).delete()
+        cleanup.commit()
+    finally:
+        cleanup.close()
