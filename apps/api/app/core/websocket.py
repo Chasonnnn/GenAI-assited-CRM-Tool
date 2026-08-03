@@ -203,10 +203,14 @@ async def _publish_ws_event(event: dict) -> None:
         return
     try:
         await client.publish(WEBSOCKET_EVENT_CHANNEL, json.dumps(event))
-    except Exception:
+    except Exception as exc:
         logger.warning(
             "ws_event_publish_failed",
-            extra={"event": "ws_event_publish_failed", "channel": WEBSOCKET_EVENT_CHANNEL},
+            extra={
+                "event": "ws_event_publish_failed",
+                "channel": WEBSOCKET_EVENT_CHANNEL,
+                "error_class": exc.__class__.__name__,
+            },
         )
 
 
