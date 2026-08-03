@@ -44,9 +44,21 @@ class ConnectionManager:
 
     def notify_revocation(self, token_hash: str) -> None:
         """Schedule local WebSocket cleanup for a revoked session."""
-        if not token_hash or not self._loop:
+        loop = self._loop
+        if not token_hash or loop is None:
             return
-        self._loop.call_soon_threadsafe(asyncio.create_task, self.close_by_token_hash(token_hash))
+
+        def _schedule_cleanup() -> None:
+            loop.create_task(self.close_by_token_hash(token_hash))
+
+        try:
+            loop.call_soon_threadsafe(_schedule_cleanup)
+        except RuntimeError:
+            # The event loop can close between registration and this cross-thread call.
+            # Ignore that lifecycle race, but preserve unrelated scheduling failures.
+            if loop.is_closed():
+                return
+            raise
 
     async def connect(
         self,

@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 
 import pytest
@@ -22,6 +23,45 @@ class FakeWebSocket:
         self.closed = True
         self.close_code = code
         self.close_reason = reason
+
+
+def test_notify_revocation_ignores_a_closed_event_loop():
+    manager = ConnectionManager()
+    loop = asyncio.new_event_loop()
+    manager.set_event_loop(loop)
+    loop.close()
+
+    manager.notify_revocation("revoked-token")
+
+
+def test_notify_revocation_preserves_unrelated_scheduling_errors():
+    class BrokenEventLoop:
+        def call_soon_threadsafe(self, _callback):
+            raise RuntimeError("scheduler failure")
+
+        def is_closed(self):
+            return False
+
+    manager = ConnectionManager()
+    manager.set_event_loop(BrokenEventLoop())
+
+    with pytest.raises(RuntimeError, match="scheduler failure"):
+        manager.notify_revocation("revoked-token")
+
+
+@pytest.mark.asyncio
+async def test_notify_revocation_schedules_cleanup_on_registered_loop():
+    manager = ConnectionManager()
+    user_id = uuid.uuid4()
+    websocket = FakeWebSocket()
+    await manager.connect(websocket, user_id, token_hash="revoked-token")
+    manager.set_event_loop(asyncio.get_running_loop())
+
+    manager.notify_revocation("revoked-token")
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    assert websocket.closed is True
 
 
 @pytest.mark.asyncio
