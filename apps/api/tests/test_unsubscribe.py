@@ -175,16 +175,22 @@ async def test_legacy_unsubscribe_token_remains_compatible(client, db, test_org)
         "iat": int(time.time()),
         "exp": int(time.time()) + 3600,
     }
-    payload_b64 = base64.urlsafe_b64encode(
-        json.dumps(payload, separators=(",", ":")).encode()
-    ).decode().rstrip("=")
-    signature = base64.urlsafe_b64encode(
-        hmac.new(
-            settings.jwt_secrets[0].encode(),
-            payload_b64.encode(),
-            hashlib.sha256,
-        ).digest()
-    ).decode().rstrip("=")
+    payload_b64 = (
+        base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode())
+        .decode()
+        .rstrip("=")
+    )
+    signature = (
+        base64.urlsafe_b64encode(
+            hmac.new(
+                settings.jwt_secrets[0].encode(),
+                payload_b64.encode(),
+                hashlib.sha256,
+            ).digest()
+        )
+        .decode()
+        .rstrip("=")
+    )
 
     response = await client.get(f"/email/unsubscribe/{payload_b64}.{signature}")
 

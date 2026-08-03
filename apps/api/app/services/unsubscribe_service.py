@@ -65,9 +65,7 @@ def generate_unsubscribe_token(db: Session, *, org_id: UUID, email: str) -> str:
 
 def _parse_opaque_token(db: Session, token: str) -> tuple[UUID, str] | None:
     record = (
-        db.query(UnsubscribeToken)
-        .filter(UnsubscribeToken.token_hash == _token_hash(token))
-        .first()
+        db.query(UnsubscribeToken).filter(UnsubscribeToken.token_hash == _token_hash(token)).first()
     )
     if record is None:
         return None
