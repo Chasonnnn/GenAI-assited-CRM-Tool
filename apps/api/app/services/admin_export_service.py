@@ -15,6 +15,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import and_
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session, aliased
 
 from app.core.config import settings
@@ -33,6 +34,19 @@ from app.db.models import (
     FormLogo,
     LegalHold,
     Membership,
+    MessageDelivery,
+    MessageDeliveryAttempt,
+    MessageMediaAsset,
+    MessageMediaLink,
+    MessageReconciliationCase,
+    MessageTemplate,
+    MessageWebhookEvent,
+    MessagingConsentEvidence,
+    MessagingConsentState,
+    MessagingContact,
+    MessagingConversation,
+    MessagingGlobalSuppression,
+    MessagingMessage,
     MetaPageMapping,
     Organization,
     OrgCounter,
@@ -42,6 +56,7 @@ from app.db.models import (
     QueueMember,
     RolePermission,
     Surrogate,
+    TwilioRoute,
     User,
     UserIntegration,
     UserNotificationSettings,
@@ -56,6 +71,7 @@ EXPORT_TYPE_FILENAMES = {
     "surrogates_csv": "surrogates_export",
     "org_config_zip": "org_config_export",
     "analytics_zip": "analytics_export",
+    "messaging_zip": "messaging_records_export",
 }
 
 
@@ -176,6 +192,84 @@ def _write_csv(headers: Sequence[str], rows: Iterable[Sequence[Any]]) -> str:
 
 def _write_json(data: Any) -> str:
     return json.dumps(data, indent=2, sort_keys=True, default=str)
+
+
+def _serialize_model_rows(rows: Iterable[Any], *, exclude: set[str] | None = None) -> list[dict]:
+    """Serialize mapped columns, including decrypted values exposed by encrypted types."""
+    excluded = exclude or set()
+    payload: list[dict] = []
+    for row in rows:
+        values = {
+            attribute.key: getattr(row, attribute.key)
+            for attribute in sa_inspect(type(row)).column_attrs
+            if attribute.key not in excluded
+        }
+        payload.append(values)
+    return payload
+
+
+def build_messaging_records_zip(db: Session, org_id: UUID) -> bytes:
+    """Build a complete organization messaging archive without provider credentials."""
+    models_and_files = (
+        (MessagingContact, "contacts.json"),
+        (MessagingConsentEvidence, "consent_evidence.json"),
+        (MessagingConsentState, "consent_states.json"),
+        (MessagingGlobalSuppression, "global_suppressions.json"),
+        (MessagingConversation, "conversations.json"),
+        (MessagingMessage, "messages.json"),
+        (MessageTemplate, "templates.json"),
+        (MessageMediaAsset, "media_assets.json"),
+        (MessageMediaLink, "media_links.json"),
+        (MessageDelivery, "deliveries.json"),
+        (MessageDeliveryAttempt, "delivery_attempts.json"),
+        (MessageWebhookEvent, "webhook_events.json"),
+        (MessageReconciliationCase, "reconciliation_cases.json"),
+    )
+    manifest = {
+        "organization_id": str(org_id),
+        "exported_at": datetime.now(UTC).isoformat(),
+        "version": settings.VERSION,
+        "contains_sensitive_data": True,
+        "credential_fields_included": False,
+    }
+    routes = (
+        db.query(TwilioRoute)
+        .filter(TwilioRoute.organization_id == org_id)
+        .order_by(TwilioRoute.purpose)
+        .all()
+    )
+    route_payload = [
+        {
+            "id": route.id,
+            "purpose": route.purpose,
+            "enabled": route.enabled,
+            "sender_phone_last4": route.sender_phone_last4,
+            "a2p_status": route.a2p_status,
+            "advanced_opt_out_status": route.advanced_opt_out_status,
+            "consent_management_status": route.consent_management_status,
+            "capability_evidence": route.capability_evidence,
+            "webhook_id": route.webhook_id,
+            "created_at": route.created_at,
+            "updated_at": route.updated_at,
+        }
+        for route in routes
+    ]
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("manifest.json", _write_json(manifest))
+        archive.writestr("routes.json", _write_json(route_payload))
+        for model, filename in models_and_files:
+            rows = (
+                db.query(model)
+                .filter(model.organization_id == org_id)
+                .order_by(model.created_at.asc() if hasattr(model, "created_at") else model.id)
+                .all()
+            )
+            archive.writestr(filename, _write_json(_serialize_model_rows(rows)))
+
+    buffer.seek(0)
+    return buffer.read()
 
 
 def stream_surrogates_csv(db: Session, org_id: UUID) -> Iterator[str]:

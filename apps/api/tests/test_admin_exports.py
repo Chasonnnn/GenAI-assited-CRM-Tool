@@ -24,8 +24,13 @@ from app.db.models import (
     FormLogo,
     LegalHold,
     Membership,
+    MessagingContact,
+    MessagingConversation,
+    MessagingMessage,
     OrgCounter,
     Surrogate,
+    TwilioRoute,
+    TwilioSettings,
     User,
     WorkflowTemplate,
 )
@@ -92,6 +97,79 @@ async def non_dev_client(db, test_org):
 
 
 class TestAdminExports:
+    @pytest.mark.asyncio
+    async def test_admin_can_export_org_scoped_messaging_archive(
+        self,
+        non_dev_client,
+        db,
+        test_org,
+    ):
+        twilio_settings = TwilioSettings(organization_id=test_org.id)
+        db.add(twilio_settings)
+        db.flush()
+        route = TwilioRoute(
+            settings_id=twilio_settings.id,
+            organization_id=test_org.id,
+            purpose="operational",
+        )
+        contact = MessagingContact(
+            organization_id=test_org.id,
+            phone_e164="+14155550100",
+            phone_hash="a" * 64,
+            phone_last4="0100",
+        )
+        db.add_all([route, contact])
+        db.flush()
+        conversation = MessagingConversation(
+            organization_id=test_org.id,
+            contact_id=contact.id,
+            route_id=route.id,
+        )
+        db.add(conversation)
+        db.flush()
+        message = MessagingMessage(
+            organization_id=test_org.id,
+            conversation_id=conversation.id,
+            contact_id=contact.id,
+            route_id=route.id,
+            purpose="operational",
+            direction="inbound",
+            body="Please call tomorrow",
+            from_phone_hash="a" * 64,
+            from_phone_last4="0100",
+            to_phone_hash="b" * 64,
+            to_phone_last4="0200",
+        )
+        db.add(message)
+        db.commit()
+
+        response = await non_dev_client.post("/messaging/exports")
+        assert response.status_code == 202
+        job_id = response.json()["job_id"]
+
+        job = job_service.get_job(db, uuid.UUID(job_id), test_org.id)
+        assert job is not None
+        await process_admin_export(db, job)
+        job_service.mark_job_completed(db, job)
+
+        download = await non_dev_client.get(f"/messaging/exports/{job_id}/file")
+        assert download.status_code == 200
+        assert download.headers["content-type"].startswith("application/zip")
+        with zipfile.ZipFile(io.BytesIO(download.content)) as archive:
+            assert "contacts.json" in archive.namelist()
+            assert "messages.json" in archive.namelist()
+            contacts = json.loads(archive.read("contacts.json"))
+            messages = json.loads(archive.read("messages.json"))
+            routes = json.loads(archive.read("routes.json"))
+            manifest = json.loads(archive.read("manifest.json"))
+
+        assert contacts[0]["phone_e164"] == "+14155550100"
+        assert messages[0]["body"] == "Please call tomorrow"
+        assert "messaging_service_sid_encrypted" not in routes[0]
+        assert "sender_phone_encrypted" not in routes[0]
+        assert manifest["organization_id"] == str(test_org.id)
+        assert manifest["credential_fields_included"] is False
+
     def test_resolve_admin_export_path_rejects_traversal(self, monkeypatch, tmp_path):
         original_local_dir = settings.EXPORT_LOCAL_DIR
         settings.EXPORT_LOCAL_DIR = str(tmp_path)

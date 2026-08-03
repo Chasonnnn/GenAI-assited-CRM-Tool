@@ -19,7 +19,7 @@ from uuid import UUID
 
 from app.core.config import settings
 from app.db.enums import AlertSeverity, AlertType
-from app.db.models import Attachment, FormSubmissionFile
+from app.db.models import Attachment, FormSubmissionFile, MessageMediaAsset
 from app.db.session import SessionLocal
 from app.services import alert_service, attachment_service, notification_service
 
@@ -337,6 +337,100 @@ def scan_form_submission_file_job(file_id: UUID) -> bool:
             except Exception as cleanup_error:
                 logger.debug(
                     "Failed to clean up temp file %s: %s",
+                    temp_file,
+                    cleanup_error,
+                    exc_info=cleanup_error,
+                )
+        db.close()
+
+
+def scan_message_media_asset_job(asset_id: UUID) -> bool:
+    """Scan one outbound MMS image and apply a fail-closed terminal state."""
+    from app.services import message_content_service
+
+    if not getattr(settings, "ATTACHMENT_SCAN_ENABLED", False):
+        logger.info("Scanning disabled, marking messaging media %s as clean", asset_id)
+        db = SessionLocal()
+        try:
+            message_content_service.mark_media_asset_scanned(
+                db,
+                asset_id=asset_id,
+                scan_result="clean",
+            )
+            db.commit()
+            return True
+        finally:
+            db.close()
+
+    db = SessionLocal()
+    temp_file = None
+    try:
+        asset = (
+            db.query(MessageMediaAsset)
+            .filter(
+                MessageMediaAsset.id == asset_id,
+                MessageMediaAsset.scan_status == "pending",
+            )
+            .first()
+        )
+        if asset is None:
+            logger.info("Messaging media %s was not found or is already scanned", asset_id)
+            return False
+
+        temp_file = _download_storage_key_to_temp(asset.storage_key)
+        scan_status, _message = _run_clamav_scan(temp_file)
+        if scan_status == "clean":
+            result = "clean"
+            reason = None
+        elif scan_status == "infected":
+            result = "quarantined"
+            reason = "malware_detected"
+        elif settings.is_dev:
+            result = "clean"
+            reason = None
+            logger.warning(
+                "Messaging media scan unavailable in dev/test (%s); treating as clean",
+                scan_status,
+            )
+        else:
+            result = "rejected"
+            reason = "scan_failed"
+            logger.error("Messaging media scan failed (%s) for %s", scan_status, asset_id)
+
+        message_content_service.mark_media_asset_scanned(
+            db,
+            asset_id=asset_id,
+            scan_result=result,
+            quarantine_reason=reason,
+        )
+        db.commit()
+        return True
+    except Exception as exc:
+        logger.error("Failed to scan messaging media %s: %s", asset_id, exc)
+        db.rollback()
+        try:
+            message_content_service.mark_media_asset_scanned(
+                db,
+                asset_id=asset_id,
+                scan_result="rejected",
+                quarantine_reason="scan_failed",
+            )
+            db.commit()
+        except Exception as mark_error:
+            logger.warning(
+                "Failed to mark messaging media %s as rejected: %s",
+                asset_id,
+                mark_error,
+                exc_info=mark_error,
+            )
+        return False
+    finally:
+        if temp_file and attachment_service._get_storage_backend() == "s3":
+            try:
+                os.unlink(temp_file)
+            except Exception as cleanup_error:
+                logger.debug(
+                    "Failed to clean up messaging media temp file %s: %s",
                     temp_file,
                     cleanup_error,
                     exc_info=cleanup_error,

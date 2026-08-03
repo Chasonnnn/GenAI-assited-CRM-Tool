@@ -9,14 +9,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.enums import JobStatus, JobType
-from app.db.models import Attachment, FormSubmissionFile, Job
+from app.db.models import Attachment, FormSubmissionFile, Job, MessageMediaAsset
 from app.services import scan_dispatch_service
 
 _REMOTE_SCAN_JOB_TYPES = {
     JobType.ATTACHMENT_SCAN.value,
     JobType.FORM_SUBMISSION_FILE_SCAN.value,
+    JobType.MESSAGE_MEDIA_SCAN.value,
 }
-_TERMINAL_SCAN_STATUSES = {"clean", "infected", "error"}
+_TERMINAL_SCAN_STATUSES = {"clean", "infected", "error", "quarantined", "rejected"}
 
 
 @dataclass(frozen=True)
@@ -35,9 +36,12 @@ def _resource_status(db: Session, job: Job) -> str | None:
     if job.job_type == JobType.ATTACHMENT_SCAN.value:
         raw_resource_id = payload.get("attachment_id")
         model = Attachment
-    else:
+    elif job.job_type == JobType.FORM_SUBMISSION_FILE_SCAN.value:
         raw_resource_id = payload.get("submission_file_id")
         model = FormSubmissionFile
+    else:
+        raw_resource_id = payload.get("media_asset_id")
+        model = MessageMediaAsset
     if not raw_resource_id:
         return None
     return db.execute(
