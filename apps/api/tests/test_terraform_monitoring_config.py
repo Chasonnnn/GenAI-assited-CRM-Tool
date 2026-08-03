@@ -101,6 +101,14 @@ def test_api_and_worker_use_distinct_error_reporting_service_names() -> None:
     assert "setup_gcp_monitoring(settings.GCP_SERVICE_NAME)" in worker_content
 
 
+def test_unsubscribe_request_urls_are_excluded_from_cloud_log_storage() -> None:
+    content = _read("infra/terraform/logging.tf")
+
+    assert 'resource "google_logging_project_exclusion" "unsubscribe_request_urls"' in content
+    assert 'log_id("run.googleapis.com/requests")' in content
+    assert 'httpRequest.requestUrl =~ "/email/unsubscribe/"' in content
+
+
 def test_cloudrun_ignores_gcloud_client_metadata() -> None:
     for rel_path in (
         "infra/terraform/cloudrun.tf",

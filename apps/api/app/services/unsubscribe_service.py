@@ -6,13 +6,19 @@ import base64
 import hashlib
 import hmac
 import json
+import secrets
 import time
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+from sqlalchemy.orm import Session
+
 from app.core.config import settings
+from app.db.models import UnsubscribeToken
 from app.utils.normalization import normalize_email
 
-TOKEN_VERSION = 1
+LEGACY_TOKEN_VERSION = 1
+OPAQUE_TOKEN_PREFIX = "u2_"
 
 
 def _b64encode(raw: bytes) -> str:
@@ -33,49 +39,66 @@ def _get_signing_secrets() -> list[str]:
     return [s for s in settings.jwt_secrets if s]
 
 
-def generate_unsubscribe_token(*, org_id: UUID, email: str) -> str:
-    """Generate a signed unsubscribe token."""
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def generate_unsubscribe_token(db: Session, *, org_id: UUID, email: str) -> str:
+    """Generate and persist a high-entropy token without storing its raw value."""
     email_norm = normalize_email(email) or ""
-    now = int(time.time())
-    exp = now + settings.UNSUBSCRIBE_TOKEN_TTL_DAYS * 86400
+    if not email_norm:
+        raise ValueError("A valid recipient email is required")
 
-    payload = {
-        "v": TOKEN_VERSION,
-        "org_id": str(org_id),
-        "email": email_norm,
-        "iat": now,
-        "exp": exp,
-    }
-    payload_b64 = _b64encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
-
-    secrets = _get_signing_secrets()
-    if not secrets:
-        raise ValueError("JWT_SECRET must be set to generate unsubscribe tokens")
-
-    signature = _sign(payload_b64, secrets[0])
-    return f"{payload_b64}.{signature}"
+    token = f"{OPAQUE_TOKEN_PREFIX}{secrets.token_urlsafe(32)}"
+    now = datetime.now(UTC)
+    db.add(
+        UnsubscribeToken(
+            organization_id=org_id,
+            email=email_norm,
+            token_hash=_token_hash(token),
+            expires_at=now + timedelta(days=settings.UNSUBSCRIBE_TOKEN_TTL_DAYS),
+        )
+    )
+    db.flush()
+    return token
 
 
-def parse_unsubscribe_token(token: str) -> tuple[UUID, str] | None:
-    """Parse and verify an unsubscribe token. Returns (org_id, email) or None."""
-    if not token:
+def _parse_opaque_token(db: Session, token: str) -> tuple[UUID, str] | None:
+    record = (
+        db.query(UnsubscribeToken)
+        .filter(UnsubscribeToken.token_hash == _token_hash(token))
+        .first()
+    )
+    if record is None:
         return None
 
+    now = datetime.now(UTC)
+    expires_at = record.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if expires_at < now:
+        return None
+
+    # Consumption is an audit marker, not a one-shot invalidation. Mail clients
+    # and providers may repeat GET/POST requests, and suppression is idempotent.
+    if record.consumed_at is None:
+        record.consumed_at = now
+        db.flush()
+
+    return record.organization_id, normalize_email(record.email) or record.email
+
+
+def _parse_legacy_token(token: str) -> tuple[UUID, str] | None:
+    """Verify an unexpired v1 signed token already present in delivered mail."""
     try:
         payload_b64, signature = token.split(".", 1)
     except ValueError:
         return None
 
-    secrets = _get_signing_secrets()
-    if not secrets:
-        return None
-
-    valid = False
-    for secret in secrets:
-        expected = _sign(payload_b64, secret)
-        if hmac.compare_digest(expected, signature):
-            valid = True
-            break
+    valid = any(
+        hmac.compare_digest(_sign(payload_b64, secret), signature)
+        for secret in _get_signing_secrets()
+    )
     if not valid:
         return None
 
@@ -84,7 +107,7 @@ def parse_unsubscribe_token(token: str) -> tuple[UUID, str] | None:
     except Exception:
         return None
 
-    if payload.get("v") != TOKEN_VERSION:
+    if payload.get("v") != LEGACY_TOKEN_VERSION:
         return None
 
     exp = payload.get("exp")
@@ -99,34 +122,54 @@ def parse_unsubscribe_token(token: str) -> tuple[UUID, str] | None:
     email = normalize_email(payload.get("email")) or ""
     if not email:
         return None
-
     return org_id, email
 
 
-def build_unsubscribe_url(*, org_id: UUID, email: str, base_url: str | None = None) -> str:
-    """Build a full unsubscribe URL for use in email bodies.
+def parse_unsubscribe_token(db: Session, token: str) -> tuple[UUID, str] | None:
+    """Resolve an opaque token or verify a still-valid legacy v1 token."""
+    if not token:
+        return None
+    if token.startswith(OPAQUE_TOKEN_PREFIX):
+        return _parse_opaque_token(db, token)
+    return _parse_legacy_token(token)
 
-    `base_url` is typically the organization's portal base URL
-    (e.g., https://ewi.surrogacyforce.com).
-    """
-    token = generate_unsubscribe_token(org_id=org_id, email=email)
+
+def build_unsubscribe_url(
+    db: Session,
+    *,
+    org_id: UUID,
+    email: str,
+    base_url: str | None = None,
+) -> str:
+    """Build a full unsubscribe URL for use in email bodies."""
+    token = generate_unsubscribe_token(db, org_id=org_id, email=email)
     base = (base_url or settings.FRONTEND_URL or settings.API_BASE_URL or "").strip()
     if not base:
         return f"/email/unsubscribe/{token}"
     return f"{base.rstrip('/')}/email/unsubscribe/{token}"
 
 
-def build_list_unsubscribe_url(*, org_id: UUID, email: str, base_url: str | None = None) -> str:
+def build_list_unsubscribe_url(
+    db: Session,
+    *,
+    org_id: UUID,
+    email: str,
+    base_url: str | None = None,
+) -> str:
     """Build the List-Unsubscribe URL used for one-click unsubscribe."""
-    url = build_unsubscribe_url(org_id=org_id, email=email, base_url=base_url)
+    url = build_unsubscribe_url(db, org_id=org_id, email=email, base_url=base_url)
     return f"{url.rstrip('/')}/one-click"
 
 
 def build_list_unsubscribe_headers(
-    *, org_id: UUID, email: str, base_url: str | None = None
+    db: Session,
+    *,
+    org_id: UUID,
+    email: str,
+    base_url: str | None = None,
 ) -> dict[str, str]:
     """Build List-Unsubscribe headers for one-click unsubscribe."""
-    url = build_list_unsubscribe_url(org_id=org_id, email=email, base_url=base_url)
+    url = build_list_unsubscribe_url(db, org_id=org_id, email=email, base_url=base_url)
     return {
         "List-Unsubscribe": f"<{url}>",
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",

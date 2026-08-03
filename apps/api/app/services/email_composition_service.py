@@ -152,6 +152,7 @@ def compose_template_email_html(
     unsubscribe_url = ""
     if (recipient_email or "").strip():
         unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
+            db,
             org_id=org_id,
             email=recipient_email,
             base_url=portal_base_url,

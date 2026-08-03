@@ -393,6 +393,7 @@ async def process_workflow_email(db, job) -> None:
     from app.services import unsubscribe_service
 
     headers = unsubscribe_service.build_list_unsubscribe_headers(
+        db,
         org_id=job.organization_id,
         email=recipient_email,
         base_url=portal_base_url,

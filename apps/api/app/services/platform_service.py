@@ -1494,6 +1494,7 @@ async def send_system_email_campaign(
         full_name = user.display_name or ""
         first_name = full_name.split()[0] if full_name else ""
         unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
+            db,
             org_id=org_id,
             email=user.email,
             base_url=org_service.get_org_portal_base_url(org),

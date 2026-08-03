@@ -34,6 +34,39 @@ if TYPE_CHECKING:
     from app.db.models import Attachment, Job, Organization, Surrogate, User
 
 
+class UnsubscribeToken(Base):
+    """Opaque public unsubscribe token mapped to one tenant recipient."""
+
+    __tablename__ = "unsubscribe_tokens"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_unsubscribe_tokens_token_hash"),
+        Index(
+            "idx_unsubscribe_tokens_org_email",
+            "organization_id",
+            "email",
+        ),
+        Index("idx_unsubscribe_tokens_expires_at", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    email: Mapped[str] = mapped_column(CITEXT(), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+
+
 class EmailTemplate(Base):
     """
     Email templates with variable placeholders.

@@ -51,6 +51,7 @@ def build_sample_variables(
         portal_base_url = org_service.get_org_portal_base_url(org)
 
         unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
+            db,
             org_id=org_id,
             email=to_email,
             base_url=portal_base_url,
@@ -178,6 +179,7 @@ async def send_resend_logged(
 
     org = org_service.get_org_by_id(db, org_id)
     headers = unsubscribe_service.build_list_unsubscribe_headers(
+        db,
         org_id=org_id,
         email=to_email,
         base_url=org_service.get_org_portal_base_url(org),
