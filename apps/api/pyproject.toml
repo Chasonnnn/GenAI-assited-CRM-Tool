@@ -85,6 +85,8 @@ dependencies = [
     "proto-plus==1.27.0",
     "pypdf==6.14.2",
     "openai>=2.36.0",
+    "twilio==9.10.9",
+    "phonenumbers==9.0.34",
 ]
 
 [project.optional-dependencies]
