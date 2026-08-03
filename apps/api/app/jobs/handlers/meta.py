@@ -23,6 +23,7 @@ async def process_meta_lead_fetch(db, job) -> None:
     from app.services import (
         meta_api,
         meta_lead_service,
+        meta_sync_service,
         meta_token_service,
     )
 
@@ -94,6 +95,14 @@ async def process_meta_lead_fetch(db, job) -> None:
 
     # Parse Meta timestamp
     meta_created_time = meta_api.parse_meta_timestamp(lead_data.get("created_time"))
+    disclaimer_responses = lead_data.get("custom_disclaimer_responses")
+    if not isinstance(disclaimer_responses, list):
+        disclaimer_responses = None
+    legal_snapshot = meta_sync_service.get_latest_form_legal_snapshot(
+        db,
+        org_id=mapping.organization_id,
+        form_external_id=lead_data.get("form_id"),
+    )
 
     # Store meta lead (handles dedupe)
     meta_lead, store_error = meta_lead_service.store_meta_lead(
@@ -106,6 +115,8 @@ async def process_meta_lead_fetch(db, job) -> None:
         meta_form_id=lead_data.get("form_id"),
         meta_page_id=page_id,
         meta_created_time=meta_created_time,
+        custom_disclaimer_responses=disclaimer_responses,
+        meta_form_legal_snapshot_id=legal_snapshot.id if legal_snapshot else None,
     )
 
     if store_error:

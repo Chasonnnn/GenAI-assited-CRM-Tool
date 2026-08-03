@@ -54,6 +54,27 @@ export default function TermsPage() {
 
                     <section className="space-y-3">
                         <h2 className="text-xl font-semibold text-zinc-950">
+                            Organization text messaging programs
+                        </h2>
+                        <p>
+                            Organizations that enable SMS or MMS remain responsible for their legal
+                            messaging brand, registered senders, campaign registration, disclosures,
+                            consent evidence, message classification, sending hours, and compliance
+                            with applicable carrier and legal requirements. Promotional and
+                            operational consent must be requested separately and cannot be required
+                            as a condition of applying for unrelated services.
+                        </p>
+                        <p>
+                            Organizations must honor STOP and other reasonable revocation requests,
+                            keep message templates and media appropriate for the approved program,
+                            and obtain counsel approval for their disclosure language. Surrogacy
+                            Force may block sending when consent, registration, provider readiness,
+                            or compliance evidence is missing.
+                        </p>
+                    </section>
+
+                    <section className="space-y-3">
+                        <h2 className="text-xl font-semibold text-zinc-950">
                             Accounts and access
                         </h2>
                         <p>

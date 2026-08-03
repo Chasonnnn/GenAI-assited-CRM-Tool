@@ -111,6 +111,7 @@ class MetaLead(Base):
     __table_args__ = (
         UniqueConstraint("organization_id", "meta_lead_id", name="uq_meta_lead"),
         Index("idx_meta_leads_status", "organization_id", "status"),
+        Index("idx_meta_leads_legal_snapshot", "meta_form_legal_snapshot_id"),
         Index(
             "idx_meta_unconverted",
             "organization_id",
@@ -137,6 +138,14 @@ class MetaLead(Base):
     # Raw field_data preserving multi-select arrays (for form analysis)
     field_data_raw: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     raw_payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Exact affirmative/negative responses returned by Meta's lead endpoint.
+    # These are evidence inputs only; missing or malformed values never imply consent.
+    custom_disclaimer_responses: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    meta_form_legal_snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("meta_form_legal_snapshots.id", ondelete="SET NULL", use_alter=True),
+        nullable=True,
+    )
     # Fields not covered by current mapping (for review)
     unmapped_fields: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
@@ -681,6 +690,43 @@ class MetaFormVersion(Base):
 
     # Relationships
     form: Mapped[MetaForm] = relationship(back_populates="versions", foreign_keys=[form_id])
+
+
+class MetaFormLegalSnapshot(Base):
+    """Immutable legal copy observed for a Meta lead form.
+
+    Meta does not expose a native legal-copy version identifier. This snapshot is
+    intentionally independent of ``MetaFormVersion`` so changing disclosure copy
+    cannot silently change the question-schema hash or invalidate field mappings.
+    """
+
+    __tablename__ = "meta_form_legal_snapshots"
+    __table_args__ = (
+        UniqueConstraint("form_id", "legal_content_hash", name="uq_meta_form_legal_snapshot"),
+        Index("idx_meta_form_legal_snapshot_org", "organization_id"),
+        Index("idx_meta_form_legal_snapshot_form", "form_id", "detected_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    form_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("meta_forms.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    legal_content: Mapped[dict | list] = mapped_column(JSONB, nullable=False)
+    privacy_policy_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    legal_content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    detected_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+
+    organization: Mapped[Organization] = relationship()
+    form: Mapped[MetaForm] = relationship()
 
 
 # =============================================================================

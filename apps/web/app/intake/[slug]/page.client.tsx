@@ -1133,6 +1133,8 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     const [submissionOutcome, setSubmissionOutcome] = React.useState<FormSubmissionSharedResponse["outcome"] | null>(null)
     const [datePickerOpen, setDatePickerOpen] = React.useState<Record<string, boolean>>({})
     const [agreed, setAgreed] = React.useState(false)
+    const [smsOperational, setSmsOperational] = React.useState(false)
+    const [smsPromotional, setSmsPromotional] = React.useState(false)
     const [resumePrompt, setResumePrompt] = React.useState<SharedResumePrompt | null>(null)
     const [isRestoringResume, setIsRestoringResume] = React.useState(false)
     const suppressedIdentityFingerprintsRef = React.useRef<Set<string> | null>(null)
@@ -1424,7 +1426,20 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             const fileFieldKeys = fileEntries.length
                 ? fileEntries.map((entry) => entry.fieldKey)
                 : undefined
-            const response = await submitSharedPublicForm(token, answers, files, fileFieldKeys)
+            const hasMessagingConsent = Boolean(
+                formConfig?.messaging_consent?.operational
+                || formConfig?.messaging_consent?.promotional,
+            )
+            const response = hasMessagingConsent
+                ? await submitSharedPublicForm(
+                    token,
+                    answers,
+                    files,
+                    fileFieldKeys,
+                    undefined,
+                    { operational: smsOperational, promotional: smsPromotional },
+                )
+                : await submitSharedPublicForm(token, answers, files, fileFieldKeys)
             if (draftSessionId) {
                 window.localStorage.removeItem(`intake-draft-session:${token}`)
             }
@@ -1824,6 +1839,66 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                                     result in disqualification from the program.
                                 </label>
                             </div>
+
+                            {formConfig.messaging_consent?.operational ? (
+                                <div className="flex items-start gap-3 rounded-lg border border-stone-200 bg-white p-4">
+                                    <Checkbox
+                                        id="sms-operational"
+                                        checked={smsOperational}
+                                        onCheckedChange={(checked) => setSmsOperational(checked === true)}
+                                        className="mt-1"
+                                    />
+                                    <label htmlFor="sms-operational" className="text-sm leading-relaxed text-stone-600">
+                                        {formConfig.messaging_consent.operational.disclosure}{" "}
+                                        <a
+                                            href={formConfig.messaging_consent.operational.sms_terms_url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="underline underline-offset-2"
+                                        >
+                                            SMS Terms
+                                        </a>{" "}
+                                        <a
+                                            href={formConfig.messaging_consent.operational.privacy_policy_url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="underline underline-offset-2"
+                                        >
+                                            Privacy Policy
+                                        </a>
+                                    </label>
+                                </div>
+                            ) : null}
+
+                            {formConfig.messaging_consent?.promotional ? (
+                                <div className="flex items-start gap-3 rounded-lg border border-stone-200 bg-white p-4">
+                                    <Checkbox
+                                        id="sms-promotional"
+                                        checked={smsPromotional}
+                                        onCheckedChange={(checked) => setSmsPromotional(checked === true)}
+                                        className="mt-1"
+                                    />
+                                    <label htmlFor="sms-promotional" className="text-sm leading-relaxed text-stone-600">
+                                        {formConfig.messaging_consent.promotional.disclosure}{" "}
+                                        <a
+                                            href={formConfig.messaging_consent.promotional.sms_terms_url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="underline underline-offset-2"
+                                        >
+                                            SMS Terms
+                                        </a>{" "}
+                                        <a
+                                            href={formConfig.messaging_consent.promotional.privacy_policy_url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="underline underline-offset-2"
+                                        >
+                                            Privacy Policy
+                                        </a>
+                                    </label>
+                                </div>
+                            ) : null}
 
                             <PrivacyNotice text={privacyNotice ?? null} />
                         </CardContent>

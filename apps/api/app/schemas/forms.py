@@ -340,6 +340,17 @@ class FormIntakeLinkRead(BaseModel):
     updated_at: datetime
 
 
+class MessagingConsentOptionRead(BaseModel):
+    disclosure: str
+    sms_terms_url: str
+    privacy_policy_url: str
+
+
+class MessagingConsentOptionsRead(BaseModel):
+    operational: MessagingConsentOptionRead | None = None
+    promotional: MessagingConsentOptionRead | None = None
+
+
 class FormIntakePublicRead(BaseModel):
     form_id: UUID
     intake_link_id: UUID
@@ -351,6 +362,7 @@ class FormIntakePublicRead(BaseModel):
     allowed_mime_types: list[str] | None
     campaign_name: str | None
     event_name: str | None
+    messaging_consent: MessagingConsentOptionsRead
 
 
 class FormEmbedConsentRead(BaseModel):
@@ -371,6 +383,7 @@ class FormEmbedPublicRead(BaseModel):
     campaign_name: str | None
     event_name: str | None
     tracking_mode: TrackingMode
+    messaging_consent: MessagingConsentOptionsRead
     consent: FormEmbedConsentRead
     thank_you_config: dict[str, object]
     embed_theme_json: dict[str, object]
@@ -414,6 +427,8 @@ class FormEmbedSubmitRequest(BaseModel):
     published_version_id: UUID
     answers: dict[str, object]
     consent: FormEmbedConsentSubmit | None = None
+    sms_operational: bool = False
+    sms_promotional: bool = False
     attribution: dict[str, object] = Field(default_factory=dict)
 
 
