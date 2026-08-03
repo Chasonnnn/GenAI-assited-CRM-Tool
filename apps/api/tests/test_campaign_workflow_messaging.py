@@ -153,6 +153,86 @@ def test_messaging_campaign_materializes_promotional_outbox_occurrence(
     assert delivery.idempotency_key == f"campaign-message/{recipient.id}/v0"
 
 
+async def test_messaging_campaign_retry_stays_in_durable_outbox(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+):
+    from app.db.enums import JobType
+    from app.db.models import CampaignRecipient, CampaignRun, Job
+    from app.schemas.campaign import CampaignCreate
+    from app.services import campaign_service
+
+    template = _published_message_template(
+        db,
+        test_org,
+        test_user,
+        purpose="promotional",
+        body="EWI Surrogacy promotional texts. Reply STOP to opt out.",
+    )
+    campaign = campaign_service.create_campaign(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        data=CampaignCreate(
+            name="Messaging retry boundary",
+            channel="messaging",
+            message_template_version_id=template.id,
+            recipient_type="case",
+        ),
+    )
+    campaign.status = "failed"
+    run = CampaignRun(
+        organization_id=test_org.id,
+        campaign_id=campaign.id,
+        status="failed",
+        total_count=1,
+        failed_count=1,
+    )
+    db.add(run)
+    db.flush()
+    db.add(
+        CampaignRecipient(
+            run_id=run.id,
+            entity_type="case",
+            entity_id=uuid4(),
+            recipient_phone_last4="0185",
+            status="failed",
+            error="Simulated provider failure",
+        )
+    )
+    db.commit()
+    jobs_before = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.CAMPAIGN_SEND.value,
+        )
+        .count()
+    )
+
+    response = await authed_client.post(f"/campaigns/{campaign.id}/runs/{run.id}/retry-failed")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Messaging delivery retries are managed by the durable messaging outbox"
+    )
+    db.refresh(campaign)
+    db.refresh(run)
+    assert campaign.status == "failed"
+    assert run.status == "failed"
+    assert (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.CAMPAIGN_SEND.value,
+        )
+        .count()
+        == jobs_before
+    )
+
+
 def test_send_message_workflow_requires_published_purpose_matching_template(
     db,
     test_org,
