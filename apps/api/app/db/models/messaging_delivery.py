@@ -297,7 +297,8 @@ class MessageDelivery(Base):
             "consent_evidence_id",
             unique=True,
             postgresql_where=text(
-                "is_enrollment_confirmation = true AND consent_evidence_id IS NOT NULL"
+                "is_enrollment_confirmation = true AND consent_evidence_id IS NOT NULL "
+                "AND status NOT IN ('failed', 'cancelled')"
             ),
         ),
     )

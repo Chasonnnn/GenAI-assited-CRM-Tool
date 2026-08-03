@@ -365,7 +365,8 @@ def upgrade() -> None:
         ["organization_id", "contact_id", "purpose", "consent_evidence_id"],
         unique=True,
         postgresql_where=sa.text(
-            "is_enrollment_confirmation = true AND consent_evidence_id IS NOT NULL"
+            "is_enrollment_confirmation = true AND consent_evidence_id IS NOT NULL "
+            "AND status NOT IN ('failed', 'cancelled')"
         ),
     )
     op.create_table(
@@ -480,7 +481,8 @@ def downgrade() -> None:
         "uq_message_delivery_enrollment_epoch",
         table_name="message_deliveries",
         postgresql_where=sa.text(
-            "is_enrollment_confirmation = true AND consent_evidence_id IS NOT NULL"
+            "is_enrollment_confirmation = true AND consent_evidence_id IS NOT NULL "
+            "AND status NOT IN ('failed', 'cancelled')"
         ),
     )
     op.drop_index("idx_message_deliveries_org_created", table_name="message_deliveries")

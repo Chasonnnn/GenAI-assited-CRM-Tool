@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -379,11 +379,30 @@ def claim_due_deliveries(
 ) -> list[MessageDelivery]:
     """Claim due rows with SKIP LOCKED and a monotonic fencing generation."""
     now = datetime.now(UTC)
+    db.execute(
+        update(MessageDelivery)
+        .where(
+            MessageDelivery.status.in_(("pending", "retry_scheduled")),
+            MessageDelivery.run_at <= now,
+            MessageDelivery.attempt_count >= MessageDelivery.max_attempts,
+        )
+        .values(
+            status="failed",
+            last_error_type="max_attempts_exhausted",
+            last_error="Maximum delivery attempts exhausted",
+            completed_at=now,
+            lease_token=None,
+            lease_owner=None,
+            lease_expires_at=None,
+            updated_at=now,
+        )
+    )
     query = (
         select(MessageDelivery)
         .where(
             MessageDelivery.status.in_(("pending", "retry_scheduled")),
             MessageDelivery.run_at <= now,
+            MessageDelivery.attempt_count < MessageDelivery.max_attempts,
         )
         .order_by(MessageDelivery.run_at, MessageDelivery.id)
         .limit(limit)

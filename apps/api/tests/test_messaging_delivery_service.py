@@ -196,3 +196,112 @@ def test_expired_lease_is_quarantined_for_reconciliation_not_resent(db, test_org
     assert delivery.status == "reconciliation_required"
     assert delivery.attempts[0].outcome == "lease_expired"
     assert db.query(MessageReconciliationCase).filter_by(delivery_id=delivery.id).count() == 1
+
+
+def test_claim_terminalizes_exhausted_delivery_without_blocking_healthy_rows(
+    db,
+    test_org,
+) -> None:
+    from app.services import messaging_consent_service, messaging_delivery_service
+
+    exhausted_consent = _consented_contact(db, test_org)
+    exhausted = messaging_delivery_service.materialize_delivery(
+        db,
+        organization_id=test_org.id,
+        contact_id=exhausted_consent.contact_id,
+        purpose="operational",
+        body="Exhausted enrollment",
+        idempotency_key="workflow:exhausted:occurrence-1",
+        source_type="workflow",
+        source_id=None,
+        template_version_id=None,
+        media_asset_ids=[],
+        is_enrollment_confirmation=True,
+    )
+    exhausted.status = "retry_scheduled"
+    exhausted.attempt_count = exhausted.max_attempts
+    exhausted.run_at = datetime.now(UTC) - timedelta(minutes=1)
+
+    healthy_consent = messaging_consent_service.record_opt_in(
+        db,
+        organization_id=test_org.id,
+        phone="+14155550111",
+        purpose="operational",
+        affirmative=True,
+        disclosure_text="Operational SMS disclosure v1",
+        source="website",
+        source_reference="intake-healthy",
+        occurred_at=datetime(2026, 7, 31, 12, 1, tzinfo=UTC),
+        idempotency_key="intake-healthy-operational",
+        evidence_metadata={"affirmative_action": "checked"},
+    )
+    healthy = messaging_delivery_service.materialize_delivery(
+        db,
+        organization_id=test_org.id,
+        contact_id=healthy_consent.contact_id,
+        purpose="operational",
+        body="Healthy enrollment",
+        idempotency_key="workflow:healthy:occurrence-1",
+        source_type="workflow",
+        source_id=None,
+        template_version_id=None,
+        media_asset_ids=[],
+        is_enrollment_confirmation=True,
+    )
+    db.commit()
+
+    claimed = messaging_delivery_service.claim_due_deliveries(
+        db,
+        worker_id="healthy-worker",
+        limit=2,
+    )
+
+    assert [item.id for item in claimed] == [healthy.id]
+    db.refresh(exhausted)
+    assert exhausted.status == "failed"
+    assert exhausted.attempt_count == exhausted.max_attempts
+    assert exhausted.last_error_type == "max_attempts_exhausted"
+
+
+@pytest.mark.parametrize("terminal_status", ["failed", "cancelled"])
+def test_terminal_enrollment_confirmation_can_be_replaced(
+    db,
+    test_org,
+    terminal_status,
+) -> None:
+    from app.services import messaging_delivery_service
+
+    consent = _consented_contact(db, test_org)
+    failed = messaging_delivery_service.materialize_delivery(
+        db,
+        organization_id=test_org.id,
+        contact_id=consent.contact_id,
+        purpose="operational",
+        body="First enrollment",
+        idempotency_key="workflow:enrollment:failed",
+        source_type="workflow",
+        source_id=None,
+        template_version_id=None,
+        media_asset_ids=[],
+        is_enrollment_confirmation=True,
+    )
+    failed.status = terminal_status
+    failed.completed_at = datetime.now(UTC)
+    db.commit()
+
+    replacement = messaging_delivery_service.materialize_delivery(
+        db,
+        organization_id=test_org.id,
+        contact_id=consent.contact_id,
+        purpose="operational",
+        body="Replacement enrollment",
+        idempotency_key="workflow:enrollment:replacement",
+        source_type="workflow",
+        source_id=None,
+        template_version_id=None,
+        media_asset_ids=[],
+        is_enrollment_confirmation=True,
+    )
+
+    assert replacement.id != failed.id
+    assert replacement.status == "pending"
