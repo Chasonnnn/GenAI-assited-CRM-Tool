@@ -11,6 +11,7 @@ from app.db.enums import OwnerType, WorkflowExecutionStatus, WorkflowTriggerType
 from app.db.models import (
     AutomationWorkflow,
     EmailTemplate,
+    MessageTemplate,
     Pipeline,
     Queue,
     Surrogate,
@@ -35,6 +36,7 @@ from app.schemas.workflow import (
     PromoteIntakeLeadActionConfig,
     ScheduledTriggerConfig,
     SendEmailActionConfig,
+    SendMessageActionConfig,
     SendNotificationActionConfig,
     SendZapierConversionEventActionConfig,
     StatusChangeTriggerConfig,
@@ -846,6 +848,7 @@ def get_workflow_options(
     org_id: UUID,
     workflow_scope: str | None = None,
     user_id: UUID | None = None,
+    allow_messaging: bool = False,
 ) -> WorkflowOptions:
     """Get available options for workflow builder UI."""
     # Trigger types with descriptions
@@ -996,6 +999,17 @@ def get_workflow_options(
         },
     ]
 
+    messaging_available = allow_messaging and workflow_scope != "personal"
+    if messaging_available:
+        action_types.insert(
+            1,
+            {
+                "value": "send_message",
+                "label": "Send SMS/MMS",
+                "description": "Queue a consent-gated message using a published template",
+            },
+        )
+
     surrogate_action_values = [
         "send_email",
         "create_task",
@@ -1004,6 +1018,8 @@ def get_workflow_options(
         "update_field",
         "add_note",
     ]
+    if messaging_available:
+        surrogate_action_values.insert(1, "send_message")
     status_changed_action_values = [
         *surrogate_action_values,
         "send_zapier_conversion_event",
@@ -1022,7 +1038,11 @@ def get_workflow_options(
         elif entity_type == "form_submission":
             action_types_by_trigger[trigger] = form_submission_action_values
         elif entity_type == "intake_lead":
-            action_types_by_trigger[trigger] = ["send_notification", "promote_intake_lead"]
+            action_types_by_trigger[trigger] = [
+                "send_notification",
+                "promote_intake_lead",
+                *(["send_message"] if messaging_available else []),
+            ]
         else:
             action_types_by_trigger[trigger] = ["send_notification"]
 
@@ -1082,6 +1102,27 @@ def get_workflow_options(
     templates = template_query.order_by(EmailTemplate.scope.desc(), EmailTemplate.name).all()
     email_templates = [{"id": str(t.id), "name": t.name, "scope": t.scope} for t in templates]
 
+    message_templates: list[dict] = []
+    if messaging_available:
+        published_message_templates = (
+            db.query(MessageTemplate)
+            .filter(
+                MessageTemplate.organization_id == org_id,
+                MessageTemplate.status == "published",
+            )
+            .order_by(MessageTemplate.purpose, MessageTemplate.name, MessageTemplate.version.desc())
+            .all()
+        )
+        message_templates = [
+            {
+                "id": str(template.id),
+                "name": template.name,
+                "purpose": template.purpose,
+                "version": template.version,
+            }
+            for template in published_message_templates
+        ]
+
     # Users in org
     from app.db.models import Membership
 
@@ -1137,6 +1178,7 @@ def get_workflow_options(
         update_fields=list(ALLOWED_UPDATE_FIELDS),
         email_variables=list(ALLOWED_EMAIL_VARIABLES),
         email_templates=email_templates,
+        message_templates=message_templates,
         users=users,
         queues=queue_options,
         statuses=statuses,
@@ -1552,6 +1594,24 @@ def _validate_action_config(
         elif workflow_scope == "personal":
             if template.scope == "personal" and template.owner_user_id != owner_user_id:
                 raise ValueError("Personal email templates must be owned by the workflow owner")
+
+    elif action_type == "send_message":
+        config = SendMessageActionConfig.model_validate(action)
+        if workflow_scope != "org":
+            raise ValueError("send_message is only supported for org workflows")
+        template = (
+            db.query(MessageTemplate)
+            .filter(
+                MessageTemplate.id == config.message_template_version_id,
+                MessageTemplate.organization_id == org_id,
+                MessageTemplate.status == "published",
+            )
+            .first()
+        )
+        if template is None:
+            raise ValueError("Published message template not found in organization")
+        if template.purpose != config.purpose:
+            raise ValueError("Message template purpose does not match action purpose")
 
     elif action_type == "create_task":
         config = CreateTaskActionConfig.model_validate(action)

@@ -11,7 +11,7 @@ from app.core.deps import (
     get_db,
     require_csrf_header,
 )
-from app.db.enums import WorkflowEventSource, WorkflowExecutionStatus, WorkflowTriggerType
+from app.db.enums import Role, WorkflowEventSource, WorkflowExecutionStatus, WorkflowTriggerType
 from app.schemas.auth import UserSession
 from app.schemas.workflow import (
     ExecutionListResponse,
@@ -46,6 +46,18 @@ router = APIRouter(
     tags=["Workflows"],
     # No default permission - individual endpoints check based on scope
 )
+
+
+def _uses_messaging(actions: list[dict] | None) -> bool:
+    return any(action.get("action_type") == "send_message" for action in actions or [])
+
+
+def _require_messaging_admin(session: UserSession) -> None:
+    if session.role not in {Role.ADMIN, Role.DEVELOPER}:
+        raise HTTPException(
+            status_code=403,
+            detail="Messaging workflows require an organization admin or developer",
+        )
 
 
 # =============================================================================
@@ -111,6 +123,10 @@ def get_workflow_options(
         org_id=session.org_id,
         workflow_scope=workflow_scope,
         user_id=session.user_id,
+        allow_messaging=(
+            session.role in {Role.ADMIN, Role.DEVELOPER}
+            and workflow_scope != "personal"
+        ),
     )
 
 
@@ -190,6 +206,9 @@ def retry_workflow_execution(
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
 
+    if _uses_messaging(workflow.actions):
+        _require_messaging_admin(session)
+
     if not workflow_access.can_edit(db, session, workflow):
         raise HTTPException(status_code=403, detail="Cannot retry this workflow")
 
@@ -230,6 +249,8 @@ def create_workflow(
     - Org workflows: require manage_automation permission
     - Personal workflows: any authenticated user can create
     """
+    if _uses_messaging(data.actions):
+        _require_messaging_admin(session)
     if not workflow_access.can_create(db, session, data.scope):
         raise HTTPException(
             status_code=403,
@@ -280,6 +301,8 @@ def update_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if _uses_messaging(workflow.actions) or _uses_messaging(data.actions):
+        _require_messaging_admin(session)
     if not workflow_access.can_edit(db, session, workflow):
         raise HTTPException(status_code=403, detail="Cannot edit this workflow")
 
@@ -305,6 +328,8 @@ def delete_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if _uses_messaging(workflow.actions):
+        _require_messaging_admin(session)
     if not workflow_access.can_delete(db, session, workflow):
         raise HTTPException(status_code=403, detail="Cannot delete this workflow")
 
@@ -326,6 +351,8 @@ def toggle_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if _uses_messaging(workflow.actions):
+        _require_messaging_admin(session)
     if not workflow_access.can_toggle(db, session, workflow):
         raise HTTPException(status_code=403, detail="Cannot toggle this workflow")
 
@@ -352,6 +379,8 @@ def duplicate_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if _uses_messaging(workflow.actions):
+        _require_messaging_admin(session)
     if not workflow_access.can_duplicate(db, session, workflow):
         raise HTTPException(status_code=403, detail="Cannot duplicate this workflow")
 
@@ -385,6 +414,8 @@ def test_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if _uses_messaging(workflow.actions):
+        _require_messaging_admin(session)
     if not workflow_access.can_view(db, session, workflow):
         raise HTTPException(status_code=403, detail="Cannot view this workflow")
 
@@ -465,6 +496,8 @@ def test_workflow(
 
         if action_type == "send_email":
             description += f"Send template {action.get('template_id')}"
+        elif action_type == "send_message":
+            description += f"Queue {action.get('purpose')} message"
         elif action_type == "create_task":
             description += f"Create task '{action.get('title')}'"
         elif action_type == "assign_surrogate":

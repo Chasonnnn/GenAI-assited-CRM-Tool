@@ -53,6 +53,7 @@ import {
     MailIcon,
     RefreshCcwIcon,
     PencilIcon,
+    MessageSquareTextIcon,
 } from "lucide-react"
 import { format } from "date-fns"
 import { toast } from "@/components/ui/toast"
@@ -72,6 +73,7 @@ import {
 import { useEmailTemplate, useEmailTemplates } from "@/lib/hooks/use-email-templates"
 import type { Campaign, CampaignRecipient, CampaignRun, FilterCriteria } from "@/lib/api/campaigns"
 import type { EmailTemplate, EmailTemplateListItem } from "@/lib/api/email-templates"
+import { listMessagingTemplates, type MessagingTemplateVersion } from "@/lib/api/twilio"
 import { useIntendedParentStatuses } from "@/lib/hooks/use-metadata"
 import { useQuery } from "@tanstack/react-query"
 import { getDefaultPipeline } from "@/lib/api/pipelines"
@@ -184,7 +186,10 @@ function createCampaignEditDraft(campaign: Campaign): CampaignEditDraftState {
     return {
         name: campaign.name,
         description: campaign.description ?? "",
-        templateId: campaign.email_template_id,
+        templateId:
+            campaign.channel === "messaging"
+                ? campaign.message_template_version_id ?? ""
+                : campaign.email_template_id ?? "",
         recipientType,
         stages: recipientType === "intended_parent" ? stageSlugs : stageIds,
         states,
@@ -336,10 +341,13 @@ function createCampaignDetailHandlers({
                     data: {
                         name: editDraft.name,
                         description: editDraft.description,
-                        email_template_id: editDraft.templateId,
+                        ...(campaign.channel === "messaging"
+                            ? { message_template_version_id: editDraft.templateId }
+                            : { email_template_id: editDraft.templateId }),
                         recipient_type: editDraft.recipientType,
                         filter_criteria: buildCampaignEditFilterCriteria(editDraft),
-                        include_unsubscribed: editDraft.includeUnsubscribed,
+                        include_unsubscribed:
+                            campaign.channel === "email" && editDraft.includeUnsubscribed,
                         ...(scheduledAt ? { scheduled_at: scheduledAt } : {}),
                     },
                 })
@@ -522,31 +530,62 @@ function CampaignStatsGrid({
                 </CardContent>
             </Card>
 
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                        <CheckCircle2Icon className="size-4 text-green-500" />
-                        Opened
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-green-600">{openedCount}</div>
-                    <p className="text-sm text-muted-foreground">{openPercent}% of sent</p>
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                        <MousePointerClickIcon className="size-4 text-blue-500" />
-                        Clicked
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-blue-600">{clickedCount}</div>
-                    <p className="text-sm text-muted-foreground">{clickPercent}% of sent</p>
-                </CardContent>
-            </Card>
+            {campaign.channel === "messaging" ? (
+                <>
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                <CheckCircle2Icon className="size-4 text-green-500" />
+                                Delivered
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold text-green-600">
+                                {campaign.delivered_count}
+                            </div>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-muted-foreground">
+                                Failed
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold text-destructive">
+                                {campaign.failed_count}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </>
+            ) : (
+                <>
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                <CheckCircle2Icon className="size-4 text-green-500" />
+                                Opened
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold text-green-600">{openedCount}</div>
+                            <p className="text-sm text-muted-foreground">{openPercent}% of sent</p>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                <MousePointerClickIcon className="size-4 text-blue-500" />
+                                Clicked
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold text-blue-600">{clickedCount}</div>
+                            <p className="text-sm text-muted-foreground">{clickPercent}% of sent</p>
+                        </CardContent>
+                    </Card>
+                </>
+            )}
         </div>
     )
 }
@@ -622,12 +661,14 @@ function CampaignFilterSummaryCard({
                             <p className="text-sm text-muted-foreground">Anytime</p>
                         )}
                     </div>
-                    <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">Unsubscribed Recipients</p>
-                        <p className="text-sm text-muted-foreground">
-                            {campaign.include_unsubscribed ? "Included" : "Excluded"}
-                        </p>
-                    </div>
+                    {campaign.channel === "email" && (
+                        <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">Unsubscribed Recipients</p>
+                            <p className="text-sm text-muted-foreground">
+                                {campaign.include_unsubscribed ? "Included" : "Excluded"}
+                            </p>
+                        </div>
+                    )}
                 </div>
                 {(filterCriteria.source || filterCriteria.is_priority) && (
                     <div className="flex flex-wrap gap-2">
@@ -650,10 +691,12 @@ function CampaignFilterSummaryCard({
 
 function CampaignTemplatePreviewCard({
     template,
+    channel,
     open,
     onOpenChange,
 }: {
-    template: EmailTemplate | null | undefined
+    template: Pick<EmailTemplate, "subject" | "body"> | MessagingTemplateVersion | null | undefined
+    channel: Campaign["channel"]
     open: boolean
     onOpenChange: (open: boolean) => void
 }) {
@@ -667,8 +710,14 @@ function CampaignTemplatePreviewCard({
                     <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                                <MailIcon className="size-4 text-muted-foreground" />
-                                <CardTitle className="text-base">Email Template</CardTitle>
+                                {channel === "messaging" ? (
+                                    <MessageSquareTextIcon className="size-4 text-muted-foreground" />
+                                ) : (
+                                    <MailIcon className="size-4 text-muted-foreground" />
+                                )}
+                                <CardTitle className="text-base">
+                                    {channel === "messaging" ? "Messaging Template" : "Email Template"}
+                                </CardTitle>
                             </div>
                             {open ? (
                                 <ChevronUpIcon className="size-4 text-muted-foreground" />
@@ -682,10 +731,12 @@ function CampaignTemplatePreviewCard({
                     <CardContent className="pt-0 space-y-4">
                         {template ? (
                             <>
-                                <div className="bg-muted/50 rounded-lg p-4">
-                                    <p className="text-sm text-muted-foreground mb-1">Subject</p>
-                                    <p className="font-medium">{template.subject}</p>
-                                </div>
+                                {"subject" in template && (
+                                    <div className="bg-muted/50 rounded-lg p-4">
+                                        <p className="text-sm text-muted-foreground mb-1">Subject</p>
+                                        <p className="font-medium">{template.subject}</p>
+                                    </div>
+                                )}
                                 <div className="bg-muted/50 rounded-lg p-4">
                                     <p className="text-sm text-muted-foreground mb-1">Body</p>
                                     <p className="whitespace-pre-wrap text-sm">{template.body}</p>
@@ -702,6 +753,7 @@ function CampaignTemplatePreviewCard({
 }
 
 function CampaignRecipientsCard({
+    channel,
     latestRun,
     recipients,
     recipientFilter,
@@ -709,6 +761,7 @@ function CampaignRecipientsCard({
     onRecipientFilterChange,
     onRetryFailed,
 }: {
+    channel: Campaign["channel"]
     latestRun: CampaignRun | undefined
     recipients: CampaignRecipient[] | undefined
     recipientFilter: string
@@ -765,7 +818,7 @@ function CampaignRecipientsCard({
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Name</TableHead>
-                                <TableHead>Email</TableHead>
+                                <TableHead>{channel === "messaging" ? "Phone" : "Email"}</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Sent At</TableHead>
                             </TableRow>
@@ -777,7 +830,11 @@ function CampaignRecipientsCard({
                                         {recipient.recipient_name || "-"}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
-                                        {recipient.recipient_email}
+                                        {channel === "messaging"
+                                            ? recipient.recipient_phone_last4
+                                                ? `••• ••• ${recipient.recipient_phone_last4}`
+                                                : "-"
+                                            : recipient.recipient_email ?? "-"}
                                     </TableCell>
                                     <TableCell>
                                         <Badge
@@ -826,7 +883,7 @@ function CampaignEditDialog({
     open: boolean
     campaign: Campaign
     editDraft: CampaignEditDraftState
-    templates: EmailTemplateListItem[] | undefined
+    templates: Array<Pick<EmailTemplateListItem, "id" | "name">> | undefined
     editStageOptions: CampaignStageOption[]
     editStageIdSet: ReadonlySet<string>
     editStateCodeSet: ReadonlySet<string>
@@ -985,29 +1042,31 @@ function CampaignEditDialog({
                             </p>
                         )}
                     </div>
-                    <div className="rounded-lg border bg-card p-4">
-                        <div className="flex items-start gap-3">
-                            <Checkbox
-                                id="edit-include-unsubscribed"
-                                checked={editDraft.includeUnsubscribed}
-                                onCheckedChange={(checked) =>
-                                    dispatchEditDraft({
-                                        type: "toggleIncludeUnsubscribed",
-                                        value: checked === true,
-                                    })
-                                }
-                            />
-                            <div className="space-y-1">
-                                <Label htmlFor="edit-include-unsubscribed" className="cursor-pointer">
-                                    Include unsubscribed recipients
-                                </Label>
-                                <p className="text-xs text-muted-foreground">
-                                    When enabled, recipients who opted out of marketing emails may be included.
-                                    Hard bounces and complaints are always suppressed.
-                                </p>
+                    {campaign.channel === "email" && (
+                        <div className="rounded-lg border bg-card p-4">
+                            <div className="flex items-start gap-3">
+                                <Checkbox
+                                    id="edit-include-unsubscribed"
+                                    checked={editDraft.includeUnsubscribed}
+                                    onCheckedChange={(checked) =>
+                                        dispatchEditDraft({
+                                            type: "toggleIncludeUnsubscribed",
+                                            value: checked === true,
+                                        })
+                                    }
+                                />
+                                <div className="space-y-1">
+                                    <Label htmlFor="edit-include-unsubscribed" className="cursor-pointer">
+                                        Include unsubscribed recipients
+                                    </Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        When enabled, recipients who opted out of marketing emails may be included.
+                                        Hard bounces and complaints are always suppressed.
+                                    </p>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    )}
                     {(campaign.status === "draft" || campaign.status === "scheduled") && (
                         <div className="space-y-2">
                             <Label htmlFor="edit-scheduled-at">Scheduled send time (optional)</Label>
@@ -1057,6 +1116,7 @@ type CampaignConfirmationDialogState = {
 }
 
 function CampaignConfirmationDialogs({
+    channel,
     dialogs,
     onDeleteOpenChange,
     onCancelOpenChange,
@@ -1067,6 +1127,7 @@ function CampaignConfirmationDialogs({
     onSendNow,
     onRetryFailed,
 }: {
+    channel: Campaign["channel"]
     dialogs: CampaignConfirmationDialogState
     onDeleteOpenChange: (open: boolean) => void
     onCancelOpenChange: (open: boolean) => void
@@ -1104,7 +1165,7 @@ function CampaignConfirmationDialogs({
                     <AlertDialogHeader>
                         <AlertDialogTitle>Stop Campaign</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will stop any scheduled or in-progress sends. Emails already queued may still deliver.
+                            This will stop any scheduled or in-progress sends. {channel === "messaging" ? "Messages" : "Emails"} already queued may still deliver.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -1124,7 +1185,7 @@ function CampaignConfirmationDialogs({
                     <AlertDialogHeader>
                         <AlertDialogTitle>Send Campaign Now</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will immediately start sending this campaign. You can stop it once it begins, but some emails may still deliver.
+                            This will immediately start sending this campaign. You can stop it once it begins, but some {channel === "messaging" ? "messages" : "emails"} may still deliver.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -1196,8 +1257,15 @@ export default function CampaignDetailPage() {
         latestRun?.id,
         recipientQuery
     )
-    const { data: template } = useEmailTemplate(campaign?.email_template_id ?? null)
-    const { data: templates } = useEmailTemplates()
+    const { data: emailTemplate } = useEmailTemplate(
+        campaign?.channel === "email" ? campaign.email_template_id : null,
+    )
+    const { data: emailTemplates } = useEmailTemplates()
+    const { data: messagingTemplates } = useQuery({
+        queryKey: ["messaging-templates", "promotional", "published"],
+        queryFn: () => listMessagingTemplates({ purpose: "promotional", status: "published" }),
+        enabled: campaign?.channel === "messaging",
+    })
 
     const deleteCampaign = useDeleteCampaign()
     const duplicateCampaign = useDuplicateCampaign()
@@ -1259,6 +1327,12 @@ export default function CampaignDetailPage() {
     }
 
     if (!campaign) return null
+
+    const messageTemplate = messagingTemplates?.find(
+        (candidate) => candidate.id === campaign.message_template_version_id,
+    )
+    const template = campaign.channel === "messaging" ? messageTemplate : emailTemplate
+    const templates = campaign.channel === "messaging" ? messagingTemplates : emailTemplates
 
     // Calculate percentages
     const totalRecipients = campaign.total_recipients || 0
@@ -1345,7 +1419,12 @@ export default function CampaignDetailPage() {
                     totalCount={preview?.total_count || 0}
                     sampleRecipients={
                         preview?.sample_recipients?.map((recipient) => ({
-                            email: recipient.email,
+                            email:
+                                campaign.channel === "messaging"
+                                    ? recipient.phone_last4
+                                        ? `••• ••• ${recipient.phone_last4}`
+                                        : "Phone unavailable"
+                                    : recipient.email ?? "Email unavailable",
                             name: recipient.name,
                         })) || []
                     }
@@ -1356,11 +1435,13 @@ export default function CampaignDetailPage() {
 
                 <CampaignTemplatePreviewCard
                     template={template}
+                    channel={campaign.channel}
                     open={showTemplatePreview}
                     onOpenChange={setShowTemplatePreview}
                 />
 
                 <CampaignRecipientsCard
+                    channel={campaign.channel}
                     latestRun={latestRun}
                     recipients={recipients}
                     recipientFilter={recipientFilter}
@@ -1392,6 +1473,7 @@ export default function CampaignDetailPage() {
             />
 
             <CampaignConfirmationDialogs
+                channel={campaign.channel}
                 dialogs={{
                     deleteOpen: showDeleteDialog,
                     cancelOpen: showCancelDialog,

@@ -21,7 +21,9 @@ export interface FilterCriteria {
 export interface CampaignCreate {
     name: string
     description?: string
-    email_template_id: string
+    channel?: "email" | "messaging"
+    email_template_id?: string
+    message_template_version_id?: string
     recipient_type: "case" | "intended_parent"
     filter_criteria?: FilterCriteria
     scheduled_at?: string
@@ -32,6 +34,8 @@ export interface CampaignUpdate {
     name?: string
     description?: string
     email_template_id?: string
+    channel?: "email" | "messaging"
+    message_template_version_id?: string
     recipient_type?: "case" | "intended_parent"
     filter_criteria?: FilterCriteria
     scheduled_at?: string
@@ -42,8 +46,11 @@ export interface Campaign {
     id: string
     name: string
     description: string | null
-    email_template_id: string
+    channel: "email" | "messaging"
+    email_template_id: string | null
     email_template_name: string | null
+    message_template_version_id: string | null
+    message_template_name: string | null
     recipient_type: "case" | "intended_parent"
     filter_criteria: FilterCriteria
     scheduled_at: string | null
@@ -65,7 +72,9 @@ export interface Campaign {
 export interface CampaignListItem {
     id: string
     name: string
+    channel: "email" | "messaging"
     email_template_name: string | null
+    message_template_name: string | null
     recipient_type: "case" | "intended_parent"
     status: "draft" | "scheduled" | "sending" | "completed" | "cancelled" | "failed"
     scheduled_at: string | null
@@ -99,7 +108,9 @@ export interface CampaignRecipient {
     id: string
     entity_type: string
     entity_id: string
-    recipient_email: string
+    recipient_email: string | null
+    recipient_phone_last4: string | null
+    message_delivery_id: string | null
     recipient_name: string | null
     status: "pending" | "sent" | "delivered" | "failed" | "skipped"
     error: string | null
@@ -110,13 +121,17 @@ export interface CampaignRecipient {
 export interface RecipientPreview {
     entity_type: string
     entity_id: string
-    email: string
+    email: string | null
+    phone_last4: string | null
     name: string | null
     stage: string | null
 }
 
 export interface CampaignPreview {
     total_count: number
+    eligible_count: number | null
+    suppressed_count: number
+    unknown_consent_count: number
     sample_recipients: RecipientPreview[]
 }
 
@@ -178,10 +193,16 @@ export async function duplicateCampaign(id: string): Promise<Campaign> {
     const original = await getCampaign(id)
     const payload: CampaignCreate = {
         name: `${original.name} (Copy)`,
-        email_template_id: original.email_template_id,
+        channel: original.channel,
         recipient_type: original.recipient_type,
         filter_criteria: original.filter_criteria,
-        include_unsubscribed: original.include_unsubscribed,
+        include_unsubscribed: original.channel === "email" && original.include_unsubscribed,
+    }
+    if (original.channel === "email" && original.email_template_id) {
+        payload.email_template_id = original.email_template_id
+    }
+    if (original.channel === "messaging" && original.message_template_version_id) {
+        payload.message_template_version_id = original.message_template_version_id
     }
     if (original.description) {
         payload.description = original.description
@@ -204,6 +225,7 @@ export async function previewRecipients(
  * Use this in Step 4 of campaign creation to show recipient count.
  */
 export async function previewFilters(
+    channel: "email" | "messaging",
     recipientType: "case" | "intended_parent",
     filterCriteria: FilterCriteria,
     includeUnsubscribed: boolean,
@@ -211,6 +233,7 @@ export async function previewFilters(
 ): Promise<CampaignPreview> {
     const query = limit ? `?limit=${limit}` : ""
     return api.post<CampaignPreview>(`/campaigns/preview-filters${query}`, {
+        channel,
         recipient_type: recipientType,
         filter_criteria: filterCriteria,
         include_unsubscribed: includeUnsubscribed,

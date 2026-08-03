@@ -79,6 +79,7 @@ import { US_STATES } from "@/lib/constants/us-states"
 import { getIntendedParentStageOptions } from "@/lib/intended-parent-stage-utils"
 import type { CampaignListItem, FilterCriteria } from "@/lib/api/campaigns"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
+import { listMessagingTemplates } from "@/lib/api/twilio"
 
 const statusStyles: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; className?: string }> = {
     draft: { variant: "secondary" },
@@ -116,6 +117,7 @@ const STATE_OPTIONS = US_STATES.filter((state) => !TERRITORY_CODES.has(state.val
 const TERRITORY_OPTIONS = US_STATES.filter((state) => TERRITORY_CODES.has(state.value))
 
 type RecipientType = "case" | "intended_parent"
+type CampaignChannel = "email" | "messaging"
 type ScheduleFor = "now" | "later"
 type StateSetter<T> = Dispatch<SetStateAction<T>>
 type StateOption = (typeof US_STATES)[number]
@@ -147,6 +149,7 @@ type CampaignWizardState = {
     wizardStep: number
     campaignName: string
     campaignDescription: string
+    channel: CampaignChannel
     selectedTemplateId: string
     recipientType: RecipientType
     selectedStages: string[]
@@ -161,9 +164,14 @@ type CampaignWizardState = {
     minScheduleDate: string
 }
 
+type CampaignTemplateOption = Pick<EmailTemplateListItem, "id" | "name"> & {
+    subject?: string
+    body?: string
+}
+
 type CampaignWizardData = {
-    templates: EmailTemplateListItem[] | undefined
-    selectedTemplate: EmailTemplateListItem | undefined
+    templates: CampaignTemplateOption[] | undefined
+    selectedTemplate: CampaignTemplateOption | undefined
     stageOptions: CampaignStageOption[]
     stagePresetsAvailable: StagePreset[]
     selectedStageLabels: string[]
@@ -184,6 +192,7 @@ type CampaignWizardActions = {
     setWizardStep: StateSetter<number>
     setCampaignName: StateSetter<string>
     setCampaignDescription: StateSetter<string>
+    setChannel: StateSetter<CampaignChannel>
     setSelectedTemplateId: StateSetter<string>
     setRecipientType: StateSetter<RecipientType>
     setSelectedStages: StateSetter<string[]>
@@ -339,9 +348,17 @@ function buildCampaignWizardDerivedData({
     selectedStates: string[]
     stateSearch: string
     showTerritories: boolean
-    templates: EmailTemplateListItem[] | undefined
+    templates: CampaignTemplateOption[] | undefined
     selectedTemplateId: string
-    previewFiltersData: { sample_recipients?: { email: string; name: string | null }[] } | undefined
+    previewFiltersData:
+        | {
+              sample_recipients?: {
+                  email: string | null
+                  phone_last4: string | null
+                  name: string | null
+              }[]
+          }
+        | undefined
 }) {
     const normalizedStateSearch = stateSearch.trim().toLowerCase()
     const filteredStates = STATE_OPTIONS.filter((state) =>
@@ -384,7 +401,11 @@ function buildCampaignWizardDerivedData({
     const selectedTemplate = templates?.find((template) => template.id === selectedTemplateId)
     const previewSampleRecipients =
         previewFiltersData?.sample_recipients?.map((recipient) => ({
-            email: recipient.email,
+            email:
+                recipient.email ??
+                (recipient.phone_last4
+                    ? `••• ••• ${recipient.phone_last4}`
+                    : "Contact unavailable"),
             name: recipient.name,
         })) || []
 
@@ -420,6 +441,7 @@ export default function CampaignsPage() {
     const perPage = 20
     const [campaignName, setCampaignName] = useState("")
     const [campaignDescription, setCampaignDescription] = useState("")
+    const [channel, setChannel] = useState<CampaignChannel>("email")
     const [selectedTemplateId, setSelectedTemplateId] = useState("")
     const [recipientType, setRecipientType] = useState<RecipientType>("case")
     const [selectedStages, setSelectedStages] = useState<string[]>([])
@@ -435,7 +457,18 @@ export default function CampaignsPage() {
     const minScheduleDate = toLocalDateTimeInput(new Date())
 
     const { data: campaigns, isLoading } = useCampaigns(statusFilter)
-    const { data: templates } = useEmailTemplates()
+    const { data: emailTemplates } = useEmailTemplates()
+    const { data: messageTemplates } = useQuery({
+        queryKey: ["messaging-templates", "promotional", "published"],
+        queryFn: () => listMessagingTemplates({ purpose: "promotional", status: "published" }),
+    })
+    const templates: CampaignTemplateOption[] | undefined = channel === "email"
+        ? emailTemplates
+        : messageTemplates?.map((template) => ({
+            id: template.id,
+            name: template.name,
+            body: template.body,
+        }))
     const createCampaign = useCreateCampaign()
     const deleteCampaign = useDeleteCampaign()
     const duplicateCampaign = useDuplicateCampaign()
@@ -485,6 +518,7 @@ export default function CampaignsPage() {
         setWizardStep(1)
         setCampaignName("")
         setCampaignDescription("")
+        setChannel("email")
         setSelectedTemplateId("")
         setRecipientType("case")
         setSelectedStages([])
@@ -499,9 +533,10 @@ export default function CampaignsPage() {
 
     const previewRecipientSelection = () => {
         previewFilters.mutate({
+            channel,
             recipientType,
             filterCriteria: buildFilterCriteria(),
-            includeUnsubscribed,
+            includeUnsubscribed: channel === "email" && includeUnsubscribed,
         })
     }
 
@@ -534,10 +569,13 @@ export default function CampaignsPage() {
                     : undefined
             const campaign = await createCampaign.mutateAsync({
                 name: campaignName,
-                email_template_id: selectedTemplateId,
+                channel,
+                ...(channel === "email"
+                    ? { email_template_id: selectedTemplateId }
+                    : { message_template_version_id: selectedTemplateId }),
                 recipient_type: recipientType,
                 filter_criteria: buildFilterCriteria(),
-                include_unsubscribed: includeUnsubscribed,
+                include_unsubscribed: channel === "email" && includeUnsubscribed,
                 ...(campaignDescription ? { description: campaignDescription } : {}),
                 ...(scheduledAt ? { scheduled_at: scheduledAt } : {}),
             })
@@ -616,6 +654,7 @@ export default function CampaignsPage() {
         wizardStep,
         campaignName,
         campaignDescription,
+        channel,
         selectedTemplateId,
         recipientType,
         selectedStages,
@@ -651,6 +690,13 @@ export default function CampaignsPage() {
         setWizardStep,
         setCampaignName,
         setCampaignDescription,
+        setChannel: (next) => {
+            setChannel(next)
+            setSelectedTemplateId("")
+            if (typeof next !== "function" && next === "messaging") {
+                setIncludeUnsubscribed(false)
+            }
+        },
         setSelectedTemplateId,
         setRecipientType,
         setSelectedStages,
@@ -835,7 +881,7 @@ function CampaignsEmptyState({ onCreateCampaign }: { onCreateCampaign: () => voi
                 <MailIcon className="size-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-medium">No campaigns found</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                    Create your first campaign to start sending targeted emails
+                    Create your first campaign to send consent-gated email or text messages
                 </p>
                 <Button onClick={onCreateCampaign}>
                     <PlusIcon className="size-4" />
@@ -940,7 +986,12 @@ function CampaignsTableRow({
                 </Link>
             </TableCell>
             <TableCell className="text-muted-foreground">
-                {campaign.email_template_name || "-"}
+                <div className="space-y-1">
+                    <span>{campaign.email_template_name || campaign.message_template_name || "-"}</span>
+                    <Badge variant="outline" className="ml-2 text-[10px]">
+                        {campaign.channel === "messaging" ? "SMS/MMS" : "Email"}
+                    </Badge>
+                </div>
             </TableCell>
             <TableCell>
                 <div className="flex items-center gap-1">
@@ -970,12 +1021,14 @@ function CampaignsTableRow({
                 </div>
             </TableCell>
             <TableCell className="text-sm text-muted-foreground">
-                {campaign.opened_count}
-                <span className="ml-1 text-xs">({openRate}%)</span>
+                {campaign.channel === "email" ? (
+                    <>{campaign.opened_count}<span className="ml-1 text-xs">({openRate}%)</span></>
+                ) : "—"}
             </TableCell>
             <TableCell className="text-sm text-muted-foreground">
-                {campaign.clicked_count}
-                <span className="ml-1 text-xs">({clickRate}%)</span>
+                {campaign.channel === "email" ? (
+                    <>{campaign.clicked_count}<span className="ml-1 text-xs">({clickRate}%)</span></>
+                ) : "—"}
             </TableCell>
             <TableCell className="text-muted-foreground text-sm">
                 {campaign.scheduled_at
@@ -1194,6 +1247,31 @@ function CampaignDetailsStep({
         <div className="space-y-4">
             <h3 className="font-medium">Campaign Details</h3>
             <div className="space-y-2">
+                <Label>Channel *</Label>
+                <Select
+                    value={state.channel}
+                    onValueChange={(value) => {
+                        if (value === "email" || value === "messaging") actions.setChannel(value)
+                    }}
+                >
+                    <SelectTrigger>
+                        <SelectValue placeholder="Choose a channel">
+                            {(value: string | null) => value === "messaging" ? "SMS / MMS" : "Email"}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="email">Email</SelectItem>
+                        <SelectItem value="messaging">SMS / MMS</SelectItem>
+                    </SelectContent>
+                </Select>
+                {state.channel === "messaging" ? (
+                    <p className="text-xs text-muted-foreground">
+                        Messaging campaigns always use the promotional route and exclude recipients
+                        without current promotional consent.
+                    </p>
+                ) : null}
+            </div>
+            <div className="space-y-2">
                 <Label htmlFor="name">Campaign Name *</Label>
                 <Input
                     id="name"
@@ -1226,7 +1304,9 @@ function CampaignTemplateStep({
 }) {
     return (
         <div className="space-y-4">
-            <h3 className="font-medium">Select Email Template</h3>
+            <h3 className="font-medium">
+                Select {state.channel === "messaging" ? "Promotional Message" : "Email"} Template
+            </h3>
             <div className="space-y-2">
                 <Label>Template *</Label>
                 <Select
@@ -1258,8 +1338,14 @@ function CampaignTemplateStep({
                     </CardHeader>
                     <CardContent>
                         <div className="text-sm">
-                            <p className="font-medium text-muted-foreground">Subject:</p>
-                            <p className="mb-2">{data.selectedTemplate.subject}</p>
+                            <p className="font-medium text-muted-foreground">
+                                {state.channel === "messaging" ? "Message:" : "Subject:"}
+                            </p>
+                            <p className="mb-2 whitespace-pre-wrap">
+                                {state.channel === "messaging"
+                                    ? data.selectedTemplate.body
+                                    : data.selectedTemplate.subject}
+                            </p>
                         </div>
                     </CardContent>
                 </Card>
@@ -1307,7 +1393,7 @@ function CampaignRecipientsStep({
                 </Select>
             </div>
             <CampaignStageFilter state={state} data={data} actions={actions} />
-            <div className="rounded-lg border bg-card p-4">
+            {state.channel === "email" ? <div className="rounded-lg border bg-card p-4">
                 <div className="flex items-start gap-3">
                     <Checkbox
                         id="include-unsubscribed"
@@ -1327,13 +1413,13 @@ function CampaignRecipientsStep({
                         </p>
                     </div>
                 </div>
-            </div>
+            </div> : null}
             <Card className="bg-muted/50">
                 <CardContent className="py-4">
                     <p className="text-sm text-muted-foreground">
-                        Recipients will be filtered when the campaign is sent. Hard bounces and
-                        complaints are always suppressed. Marketing opt-outs are excluded by
-                        default (unless enabled above).
+                        {state.channel === "messaging"
+                            ? "Recipients are suppressed unless promotional consent is current. There is no unsubscribe bypass for messaging campaigns."
+                            : "Recipients will be filtered when the campaign is sent. Hard bounces and complaints are always suppressed. Marketing opt-outs are excluded by default unless enabled above."}
                     </p>
                 </CardContent>
             </Card>
@@ -1545,6 +1631,12 @@ function CampaignReviewStep({
             <Card>
                 <CardContent className="py-4 space-y-3">
                     <div className="flex justify-between">
+                        <span className="text-muted-foreground">Channel:</span>
+                        <span className="font-medium">
+                            {state.channel === "messaging" ? "SMS / MMS" : "Email"}
+                        </span>
+                    </div>
+                    <div className="flex justify-between">
                         <span className="text-muted-foreground">Campaign Name:</span>
                         <span className="font-medium">{state.campaignName}</span>
                     </div>
@@ -1558,12 +1650,12 @@ function CampaignReviewStep({
                             {state.recipientType === "case" ? "Surrogates" : "Intended Parents"}
                         </span>
                     </div>
-                    <div className="flex justify-between">
+                    {state.channel === "email" ? <div className="flex justify-between">
                         <span className="text-muted-foreground">Unsubscribed Recipients:</span>
                         <span className="font-medium">
                             {state.includeUnsubscribed ? "Included" : "Excluded"}
                         </span>
-                    </div>
+                    </div> : null}
                     <CampaignReviewStageSummary state={state} data={data} />
                     <CampaignReviewStateSummary state={state} data={data} />
                 </CardContent>

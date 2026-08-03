@@ -24,7 +24,14 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
-    from app.db.models import EmailLog, EmailTemplate, Organization, User
+    from app.db.models import (
+        EmailLog,
+        EmailTemplate,
+        MessageDelivery,
+        MessageTemplate,
+        Organization,
+        User,
+    )
 
 
 class Campaign(Base):
@@ -38,6 +45,18 @@ class Campaign(Base):
     __tablename__ = "campaigns"
     __table_args__ = (
         UniqueConstraint("organization_id", "name", name="uq_campaign_name"),
+        CheckConstraint("channel IN ('email', 'messaging')", name="ck_campaigns_channel"),
+        CheckConstraint(
+            "(channel = 'email' AND email_template_id IS NOT NULL "
+            "AND message_template_version_id IS NULL) OR "
+            "(channel = 'messaging' AND email_template_id IS NULL "
+            "AND message_template_version_id IS NOT NULL)",
+            name="ck_campaigns_channel_template",
+        ),
+        CheckConstraint(
+            "channel = 'email' OR include_unsubscribed = false",
+            name="ck_campaigns_messaging_no_unsubscribe_bypass",
+        ),
         Index("idx_campaigns_org_status", "organization_id", "status"),
         Index("idx_campaigns_org_created", "organization_id", "created_at"),
     )
@@ -55,11 +74,21 @@ class Campaign(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Template
-    email_template_id: Mapped[uuid.UUID] = mapped_column(
+    channel: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'email'")
+    )
+
+    # Immutable channel template selection. MessageTemplate is already one
+    # version per row, while email retains its existing snapshot behavior.
+    email_template_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("email_templates.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
+    )
+    message_template_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("message_templates.id", ondelete="RESTRICT"),
+        nullable=True,
     )
 
     # Recipient filtering
@@ -99,7 +128,8 @@ class Campaign(Base):
 
     # Relationships
     organization: Mapped[Organization] = relationship()
-    email_template: Mapped[EmailTemplate] = relationship()
+    email_template: Mapped[EmailTemplate | None] = relationship()
+    message_template: Mapped[MessageTemplate | None] = relationship()
     created_by: Mapped[User | None] = relationship()
     runs: Mapped[list[CampaignRun]] = relationship(
         back_populates="campaign",
@@ -153,6 +183,11 @@ class CampaignRun(Base):
     # Immutable published template selected when this run was queued. Nullable
     # only for runs created before the snapshot migration.
     email_template_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    message_template_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("message_templates.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
 
     # Counts
     total_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -183,6 +218,12 @@ class CampaignRecipient(Base):
         Index("idx_campaign_recipients_run", "run_id"),
         Index("idx_campaign_recipients_entity", "entity_type", "entity_id"),
         Index("idx_campaign_recipients_email_log", "email_log_id"),
+        Index(
+            "idx_campaign_recipients_message_delivery",
+            "message_delivery_id",
+            unique=True,
+            postgresql_where=text("message_delivery_id IS NOT NULL"),
+        ),
         Index("idx_campaign_recipients_tracking_token", "tracking_token", unique=True),
         UniqueConstraint("run_id", "entity_type", "entity_id", name="uq_campaign_recipient"),
         CheckConstraint(
@@ -205,7 +246,8 @@ class CampaignRecipient(Base):
         String(30), nullable=False
     )  # 'case' | 'intended_parent'
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    recipient_email: Mapped[str] = mapped_column(CITEXT, nullable=False)
+    recipient_email: Mapped[str | None] = mapped_column(CITEXT, nullable=True)
+    recipient_phone_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
     recipient_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Status
@@ -222,6 +264,11 @@ class CampaignRecipient(Base):
     email_log_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("email_logs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    message_delivery_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("message_deliveries.id", ondelete="SET NULL"),
         nullable=True,
     )
     send_revision: Mapped[int] = mapped_column(
@@ -247,6 +294,9 @@ class CampaignRecipient(Base):
     # Relationships
     run: Mapped[CampaignRun] = relationship(back_populates="recipients")
     email_log: Mapped[EmailLog | None] = relationship(foreign_keys=[email_log_id])
+    message_delivery: Mapped[MessageDelivery | None] = relationship(
+        foreign_keys=[message_delivery_id]
+    )
     tracking_events: Mapped[list[CampaignTrackingEvent]] = relationship(
         back_populates="recipient", cascade="all, delete-orphan"
     )

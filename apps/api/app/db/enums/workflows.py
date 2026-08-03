@@ -41,6 +41,7 @@ class WorkflowActionType(str, Enum):
     """Actions a workflow can execute."""
 
     SEND_EMAIL = "send_email"
+    SEND_MESSAGE = "send_message"
     CREATE_TASK = "create_task"
     ASSIGN_SURROGATE = "assign_surrogate"
     SEND_NOTIFICATION = "send_notification"
