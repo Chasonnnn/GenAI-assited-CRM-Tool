@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.56](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.55...surrogacy-crm-platform-v0.91.56) (2026-07-30)
+
+
+### Features
+
+* upgrade AI chat panel experience ([c25e73b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c25e73b650a1941bd50d7208ff8fe1cbc76c863d))
+
+
+### Bug Fixes
+
+* consolidate validated PR findings ([8413ee6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8413ee6ed6c5d55dcc53ed6c6827d34bfe5b9b30))
+* consolidate validated PR findings and Ruff cleanup ([5e02569](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5e02569510c4c25a83a391bb6cb57d7569f646b4))
+* keep pnpm manifest Corepack compatible ([bc66c34](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bc66c34ed12eec0d7664e167a6d6471cd8fdb308))
+* show 90-day stuck lead threshold ([db7a4ac](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/db7a4ac7eef7e3f0402b59860e21762e38dbfc21))
+* show AI approval stage labels and pin the toolchain ([2a13aa9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2a13aa9314afc2e9c4b26612c1ed80441032a92a))
+* show target stage in AI approvals ([a90440d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a90440dd0a74b4094470c8c4d991fa0f69758c1f))
+* use 90-day stuck lead threshold ([886146a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/886146a097cb1693af50897f413fbd7bdd731dff))
+* use 90-day stuck lead threshold ([0096636](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/00966367b14d904af2f519940c5b2901ed9b88b4))
+
+
+### Maintenance
+
+* format Python sources with Ruff 0.16 ([36d23e8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/36d23e81b32d424c51c85f08fe5a7b46b20aff50))
+* pin shared Mise toolchain ([a253ede](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a253edef6274f7d51bf2069b5df6bb3bb6833134))
+* standardize CRM toolchain on Python 3.14 ([b3da7f7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b3da7f75d63a2f0010fea278e6681336134654ef))
+
 ## [0.91.55](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.54...surrogacy-crm-platform-v0.91.55) (2026-07-27)
 
 
