@@ -82,6 +82,33 @@ def test_worker_memory_default_matches_production_footprint() -> None:
     assert 'default     = "512Mi"' in worker_memory_block
 
 
+def test_api_and_worker_use_distinct_error_reporting_service_names() -> None:
+    locals_content = _read("infra/terraform/locals.tf")
+    api_env_block = _slice_block(
+        locals_content,
+        "api_env = merge(local.common_env, {",
+        "worker_env = merge(local.common_env, {",
+    )
+    worker_env_block = _slice_block(
+        locals_content,
+        "worker_env = merge(local.common_env, {",
+        "common_secret_keys = [",
+    )
+    worker_content = _read("apps/api/app/worker.py")
+
+    assert re.search(r"GCP_SERVICE_NAME\s*=\s*var\.api_service_name", api_env_block)
+    assert re.search(r"GCP_SERVICE_NAME\s*=\s*var\.worker_job_name", worker_env_block)
+    assert "setup_gcp_monitoring(settings.GCP_SERVICE_NAME)" in worker_content
+
+
+def test_unsubscribe_request_urls_are_excluded_from_cloud_log_storage() -> None:
+    content = _read("infra/terraform/logging.tf")
+
+    assert 'resource "google_logging_project_exclusion" "unsubscribe_request_urls"' in content
+    assert 'log_id("run.googleapis.com/requests")' in content
+    assert 'httpRequest.requestUrl =~ "/email/unsubscribe/"' in content
+
+
 def test_cloudrun_ignores_gcloud_client_metadata() -> None:
     for rel_path in (
         "infra/terraform/cloudrun.tf",

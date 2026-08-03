@@ -51,6 +51,7 @@ from app.db.models.email import (
     EmailTemplate,
     EmailTemplateDraft,
     ResendWebhookEvent,
+    UnsubscribeToken,
 )
 from app.db.models.form_intake import (
     ConsentRecord,
@@ -199,6 +200,7 @@ __all__ = [
     "EmailTemplate",
     "EmailTemplateDraft",
     "ResendWebhookEvent",
+    "UnsubscribeToken",
     "EntityNote",
     "EntityVersion",
     "ExportJob",

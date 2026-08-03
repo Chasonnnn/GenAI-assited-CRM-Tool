@@ -113,7 +113,9 @@ _LEASE_EXPIRED_RECONCILIATION_ERROR = (
     "Delivery lease expired after the final attempt; provider outcome is unknown "
     "and operator reconciliation is required"
 )
-_UNSUBSCRIBE_TOKEN_RE = re.compile(r"(?<=/email/unsubscribe/)[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
+_UNSUBSCRIBE_TOKEN_RE = re.compile(
+    r"(?<=/email/unsubscribe/)(?:u2_[A-Za-z0-9_-]+|[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)"
+)
 _RESEND_STATUS_RANK = {
     "scheduled": 5,
     "sent": 10,

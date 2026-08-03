@@ -94,6 +94,7 @@ async def send_email_logged(
     resolved_text = text if (text or "").strip() else html_to_text(html)
     organization = org_service.get_org_by_id(db, org_id)
     list_headers = unsubscribe_service.build_list_unsubscribe_headers(
+        db,
         org_id=org_id,
         email=to_email,
         base_url=org_service.get_org_portal_base_url(organization),

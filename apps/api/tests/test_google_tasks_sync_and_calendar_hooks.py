@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, time, timedelta
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -417,6 +417,63 @@ async def test_sync_google_tasks_marks_scope_missing_after_403(db, test_auth, mo
 
     db.refresh(integration)
     assert integration.granted_scopes == []
+
+
+@pytest.mark.asyncio
+async def test_task_api_disables_outbound_google_sync_after_scope_403(
+    authed_client,
+    db,
+    test_auth,
+    monkeypatch,
+):
+    from app.db.models import UserIntegration
+
+    integration = UserIntegration(
+        user_id=test_auth.user.id,
+        integration_type="google_calendar",
+        access_token_encrypted="token-1",
+        refresh_token_encrypted="token-2",
+        granted_scopes=None,
+    )
+    db.add(integration)
+    db.commit()
+
+    async def _token(*_args, **_kwargs):
+        return "tok"
+
+    google_requests = []
+
+    async def _fake_request(*, access_token, method, path, params=None, json_body=None):
+        del access_token, params, json_body
+        google_requests.append((method, path))
+        return 403, {"error": {"message": "Request had insufficient authentication scopes."}}
+
+    monkeypatch.setattr(google_tasks_sync_service.oauth_service, "get_access_token_async", _token)
+    monkeypatch.setattr(google_tasks_sync_service, "_google_request", _fake_request)
+
+    created = await authed_client.post("/tasks", json={"title": "Scope recovery task"})
+    assert created.status_code == 201, created.text
+    task_id = created.json()["id"]
+
+    db.refresh(integration)
+    assert integration.granted_scopes == []
+
+    updated = await authed_client.patch(
+        f"/tasks/{task_id}",
+        json={"title": "Scope recovery task updated"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["title"] == "Scope recovery task updated"
+
+    task = db.get(Task, UUID(task_id))
+    assert task is not None
+    task.google_task_id = "stale-remote-task"
+    task.google_task_list_id = google_tasks_sync_service.GOOGLE_DEFAULT_TASKLIST_ID
+    db.commit()
+
+    deleted = await authed_client.delete(f"/tasks/{task_id}")
+    assert deleted.status_code == 204, deleted.text
+    assert google_requests == [("POST", "/lists/%40default/tasks")]
 
 
 def test_calendar_watch_helper_functions(monkeypatch):
