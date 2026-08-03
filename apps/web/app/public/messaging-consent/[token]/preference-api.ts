@@ -41,6 +41,7 @@ export async function updateMessagingPreference(
     input: {
         action: "opt_in" | "opt_out"
         purposes: Array<"operational" | "promotional">
+        submission_id: string
     },
 ): Promise<MessagingPreference> {
     const response = await fetch(

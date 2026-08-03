@@ -130,6 +130,7 @@ class MessagingPreferenceUpdateRequest(BaseModel):
     action: Literal["opt_in", "opt_out"]
     purposes: list[MessagingPurpose] = Field(min_length=1, max_length=2)
     affirmative: bool = False
+    submission_id: UUID
 
     @field_validator("purposes")
     @classmethod

@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings as app_settings
-from app.db.models import MessagingContact, TwilioSettings
+from app.db.models import MessagingConsentEvidence, MessagingContact, TwilioSettings
 from app.schemas.messaging import (
     MessagingPreferencePurposeResponse,
     MessagingPreferenceResponse,
@@ -32,6 +32,22 @@ class MessagingPreferenceInvalid(ValueError):
 
 class MessagingPreferenceDisclosureStale(ValueError):
     pass
+
+
+def _submission_occurred_at(
+    db: Session,
+    *,
+    organization_id: uuid.UUID,
+    idempotency_key: str,
+    default: datetime,
+) -> datetime:
+    existing = db.execute(
+        select(MessagingConsentEvidence.occurred_at).where(
+            MessagingConsentEvidence.organization_id == organization_id,
+            MessagingConsentEvidence.idempotency_key == idempotency_key,
+        )
+    ).scalar_one_or_none()
+    return existing or default
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,9 +69,7 @@ def _b64decode(value: str) -> bytes:
 
 
 def _sign(payload: str, secret: str) -> str:
-    return _b64encode(
-        hmac.new(secret.encode(), payload.encode(), hashlib.sha256).digest()
-    )
+    return _b64encode(hmac.new(secret.encode(), payload.encode(), hashlib.sha256).digest())
 
 
 def _disclosure(settings: TwilioSettings, purpose: str) -> str:
@@ -104,8 +118,7 @@ def generate_preference_token(
         "contact": str(contact_id),
         "purposes": list(selected),
         "disclosures": {
-            purpose: _disclosure_hash(_disclosure(settings, purpose))
-            for purpose in selected
+            purpose: _disclosure_hash(_disclosure(settings, purpose)) for purpose in selected
         },
         "jti": uuid.uuid4().hex,
         "iat": int(issued_at.timestamp()),
@@ -160,9 +173,7 @@ def _load_preference(db: Session, token: PreferenceToken):
         )
     ).scalar_one_or_none()
     settings = db.execute(
-        select(TwilioSettings).where(
-            TwilioSettings.organization_id == token.organization_id
-        )
+        select(TwilioSettings).where(TwilioSettings.organization_id == token.organization_id)
     ).scalar_one_or_none()
     if contact is None or settings is None:
         raise MessagingPreferenceInvalid("Messaging consent link is invalid or expired")
@@ -171,9 +182,7 @@ def _load_preference(db: Session, token: PreferenceToken):
         token.disclosure_hashes.get(purpose) != _disclosure_hash(value)
         for purpose, value in disclosures.items()
     ):
-        raise MessagingPreferenceDisclosureStale(
-            "This consent link uses an outdated disclosure"
-        )
+        raise MessagingPreferenceDisclosureStale("This consent link uses an outdated disclosure")
     return contact, settings, disclosures
 
 
@@ -186,11 +195,13 @@ def project_preference(
     disclosures = {
         purpose: value
         for purpose in PURPOSES
-        if (value := (
-            settings.operational_disclosure
-            if purpose == "operational"
-            else settings.promotional_disclosure
-        ))
+        if (
+            value := (
+                settings.operational_disclosure
+                if purpose == "operational"
+                else settings.promotional_disclosure
+            )
+        )
         and value.strip()
     }
     states = {state.purpose: state.status for state in contact.consent_states}
@@ -221,6 +232,7 @@ def update_preference(
     action: str,
     purposes: list[str],
     affirmative: bool,
+    submission_id: uuid.UUID,
 ) -> MessagingPreferenceResponse:
     contact, _settings, disclosures = _load_preference(db, token)
     selected = tuple(dict.fromkeys(purposes))
@@ -231,6 +243,7 @@ def update_preference(
     now = datetime.now(UTC)
     if action == "opt_in":
         for purpose in selected:
+            idempotency_key = f"preference:{token.jti}:{submission_id}:opt-in:{purpose}"
             messaging_consent_service.record_opt_in(
                 db,
                 organization_id=token.organization_id,
@@ -240,13 +253,22 @@ def update_preference(
                 disclosure_text=disclosures[purpose],
                 source="preference_page",
                 source_reference=token.jti,
-                occurred_at=now,
-                idempotency_key=f"preference:{token.jti}:opt-in:{purpose}",
-                evidence_metadata={"affirmative_action": "selected_and_submitted"},
+                occurred_at=_submission_occurred_at(
+                    db,
+                    organization_id=token.organization_id,
+                    idempotency_key=idempotency_key,
+                    default=now,
+                ),
+                idempotency_key=idempotency_key,
+                evidence_metadata={
+                    "affirmative_action": "selected_and_submitted",
+                    "submission_id": str(submission_id),
+                },
                 commit=False,
             )
     elif action == "opt_out":
         if set(selected) == set(PURPOSES):
+            idempotency_key = f"preference:{token.jti}:{submission_id}:opt-out:all"
             messaging_consent_service.record_global_stop(
                 db,
                 organization_id=token.organization_id,
@@ -254,13 +276,22 @@ def update_preference(
                 instruction_text="Messaging preference page: stop all text messages",
                 source="preference_page",
                 source_reference=token.jti,
-                occurred_at=now,
-                idempotency_key=f"preference:{token.jti}:opt-out:all",
-                evidence_metadata={"affirmative_action": "selected_and_submitted"},
+                occurred_at=_submission_occurred_at(
+                    db,
+                    organization_id=token.organization_id,
+                    idempotency_key=idempotency_key,
+                    default=now,
+                ),
+                idempotency_key=idempotency_key,
+                evidence_metadata={
+                    "affirmative_action": "selected_and_submitted",
+                    "submission_id": str(submission_id),
+                },
                 commit=False,
             )
         else:
             for purpose in selected:
+                idempotency_key = f"preference:{token.jti}:{submission_id}:opt-out:{purpose}"
                 messaging_consent_service.record_purpose_opt_out(
                     db,
                     organization_id=token.organization_id,
@@ -269,9 +300,17 @@ def update_preference(
                     instruction_text=f"Messaging preference page: stop {purpose} texts",
                     source="preference_page",
                     source_reference=token.jti,
-                    occurred_at=now,
-                    idempotency_key=f"preference:{token.jti}:opt-out:{purpose}",
-                    evidence_metadata={"affirmative_action": "selected_and_submitted"},
+                    occurred_at=_submission_occurred_at(
+                        db,
+                        organization_id=token.organization_id,
+                        idempotency_key=idempotency_key,
+                        default=now,
+                    ),
+                    idempotency_key=idempotency_key,
+                    evidence_metadata={
+                        "affirmative_action": "selected_and_submitted",
+                        "submission_id": str(submission_id),
+                    },
                     commit=False,
                 )
     else:

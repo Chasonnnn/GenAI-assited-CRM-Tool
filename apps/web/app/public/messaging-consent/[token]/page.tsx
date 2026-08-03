@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button"
 import type { Metadata } from "next"
 import { headers } from "next/headers"
+import { randomUUID } from "node:crypto"
 
 import { getMessagingPreference, type MessagingConsentStatus } from "./preference-api"
 
@@ -71,6 +72,8 @@ export default async function MessagingConsentPage({
                     if (!item) return null
                     const title = purpose === "operational" ? "Application and process updates" : "Promotions and opportunities"
                     const pending = item.status === "reopt_pending"
+                    const optInSubmissionId = randomUUID()
+                    const optOutSubmissionId = randomUUID()
                     return (
                         <section key={purpose} className="rounded-xl border bg-card p-6 shadow-sm">
                             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -92,11 +95,13 @@ export default async function MessagingConsentPage({
                                 <form action={`/public/messaging-consent/${encodeURIComponent(token)}/update`} method="post">
                                     <input type="hidden" name="action" value="opt_in" />
                                     <input type="hidden" name="purpose" value={purpose} />
+                                    <input type="hidden" name="submission_id" value={optInSubmissionId} />
                                     <Button type="submit">Agree to these texts</Button>
                                 </form>
                                 <form action={`/public/messaging-consent/${encodeURIComponent(token)}/update`} method="post">
                                     <input type="hidden" name="action" value="opt_out" />
                                     <input type="hidden" name="purpose" value={purpose} />
+                                    <input type="hidden" name="submission_id" value={optOutSubmissionId} />
                                     <Button type="submit" variant="outline">Stop these texts</Button>
                                 </form>
                             </div>
