@@ -71,6 +71,9 @@ from app.routers import (
     journey,
     mailboxes,
     matches,
+    messaging,
+    messaging_inbox,
+    messaging_public,
     meta_crm_dataset,
     meta_forms,
     meta_oauth,
@@ -97,6 +100,7 @@ from app.routers import (
     templates,
     tickets,
     tracking,
+    twilio,
     unsubscribe,
     webhooks,
     workflow_metrics,
@@ -754,6 +758,15 @@ app.include_router(settings_router.router)
 
 # Resend Email Configuration (Admin)
 app.include_router(resend.router)
+
+# Twilio Messaging Configuration (Admin)
+app.include_router(twilio.router)
+
+# Organization-scoped Messaging Consent Administration (Admin)
+app.include_router(messaging.router)
+app.include_router(messaging.media_router)
+app.include_router(messaging_inbox.router)
+app.include_router(messaging_public.router)
 
 # Zapier Webhook Configuration (Admin)
 app.include_router(zapier.router)

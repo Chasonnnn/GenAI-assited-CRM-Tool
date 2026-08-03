@@ -2345,6 +2345,137 @@
       "200"
     ]
   },
+  "/messaging/candidates/{surrogate_id}/conversations": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/consents/import": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/consents/revocations": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/conversations": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/conversations/{conversation_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/conversations/{conversation_id}/link": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/conversations/{conversation_id}/read": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/exports": {
+    "POST": [
+      "202"
+    ]
+  },
+  "/messaging/exports/{job_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/exports/{job_id}/download": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/exports/{job_id}/file": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/media": {
+    "POST": [
+      "201",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/media/{asset_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/media/{asset_id}/access": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/media/{asset_id}/content": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "HEAD": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/reconciliation/{case_id}": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/templates": {
+    "POST": [
+      "201",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/templates/{template_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/templates/{template_id}/publish": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/messaging/templates/{template_key}/versions": {
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
   "/mfa/complete": {
     "POST": [
       "200",
@@ -2786,6 +2917,16 @@
   },
   "/public/org-by-domain": {
     "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/public/messaging-consent/{token}": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
       "200",
       "422"
     ]
@@ -3694,6 +3835,35 @@
       "422"
     ]
   },
+  "/twilio/readiness": {
+    "GET": [
+      "200"
+    ],
+    "POST": [
+      "202"
+    ]
+  },
+  "/twilio/settings": {
+    "GET": [
+      "200"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/twilio/settings/rotate-webhook": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/twilio/settings/test": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/webhooks/google-calendar": {
     "POST": [
       "200"
@@ -3719,6 +3889,18 @@
     ]
   },
   "/webhooks/resend/{webhook_id}": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/webhooks/twilio/{webhook_id}/inbound": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/webhooks/twilio/{webhook_id}/status": {
     "POST": [
       "200",
       "422"

@@ -42,6 +42,7 @@ import {
     SparklesIcon,
     CheckIcon,
     TrashIcon,
+    MessageSquareTextIcon,
 } from "lucide-react"
 import { useIntegrationHealth } from "@/lib/hooks/use-ops"
 import { useAuth } from "@/lib/auth-context"
@@ -59,6 +60,7 @@ import {
 } from "@/lib/hooks/use-user-integrations"
 import { useAISettings, useUpdateAISettings, useTestAPIKey, useAIConsent, useAcceptConsent } from "@/lib/hooks/use-ai"
 import { useResendSettings, useUpdateResendSettings, useTestResendKey, useRotateWebhook, useEligibleSenders } from "@/lib/hooks/use-resend"
+import { useTwilioReadiness, useTwilioSettings } from "@/lib/hooks/use-twilio"
 import {
     useZapierSettings,
     useZapierTestLead,
@@ -107,6 +109,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { toast } from "@/components/ui/toast"
 import type { IntegrationStatus, GoogleCalendarStatusResponse } from "@/lib/api/integrations"
 import type { IntegrationHealth } from "@/lib/api/ops"
+import type { TwilioReadinessStatus } from "@/lib/api/twilio"
 import type {
     EligibleSender,
     ResendSettings,
@@ -5758,6 +5761,12 @@ export default function IntegrationsPage() {
     const { data: resendSettings, isLoading: resendSettingsLoading } = useResendSettings(
         organizationIntegrationsEnabled
     )
+    const { data: twilioSettings, isLoading: twilioSettingsLoading } = useTwilioSettings(
+        organizationIntegrationsEnabled
+    )
+    const { data: twilioReadiness, isLoading: twilioReadinessLoading } = useTwilioReadiness(
+        organizationIntegrationsEnabled
+    )
     const { data: zapierSettings, isLoading: zapierSettingsLoading } = useZapierSettings(
         organizationIntegrationsEnabled
     )
@@ -5811,6 +5820,12 @@ export default function IntegrationsPage() {
             ? resendSettings?.from_email ?? "Resend configured"
             : resendSettings?.default_sender_email ?? "Gmail sender selected"
         : "Choose a provider"
+    const messagingReadinessStatus = twilioReadiness?.overall_status
+        ?? (twilioSettings?.enabled ? "unknown" : "not_configured")
+    const messagingStatus = MESSAGING_STATUS_PRESENTATION[messagingReadinessStatus]
+    const messagingDetail = twilioSettings?.enabled
+        ? "Twilio delivery enabled for configured routes"
+        : "Configure SMS + MMS routes and consent controls"
     const inboundWebhooks = zapierSettings?.inbound_webhooks ?? []
     const zapierConfigured = inboundWebhooks.some((hook) => hook.secret_configured) || Boolean(zapierSettings?.secret_configured)
     const zapierActive = inboundWebhooks.some((hook) => hook.is_active) || Boolean(zapierSettings?.is_active)
@@ -5868,6 +5883,7 @@ export default function IntegrationsPage() {
         : "Connect Facebook or add a CRM dataset to get started"
     const AiStatusIcon = aiStatusIcon
     const EmailStatusIcon = emailStatusIcon
+    const MessagingStatusIcon = messagingStatus.Icon
     const ZapierStatusIcon = zapierStatusIcon
     const MetaStatusIcon = metaStatusIcon
 
@@ -5919,6 +5935,11 @@ export default function IntegrationsPage() {
                     emailStatusLabel={emailStatusLabel}
                     emailStatusVariant={emailStatusVariant}
                     EmailStatusIcon={EmailStatusIcon}
+                    messagingSettingsLoading={twilioSettingsLoading || twilioReadinessLoading}
+                    messagingStatusLabel={messagingStatus.label}
+                    messagingStatusVariant={messagingStatus.variant}
+                    MessagingStatusIcon={MessagingStatusIcon}
+                    messagingDetail={messagingDetail}
                     zapierSettingsLoading={zapierSettingsLoading}
                     zapierStatusLabel={zapierStatusLabel}
                     zapierStatusVariant={zapierStatusVariant}
@@ -5983,6 +6004,18 @@ export default function IntegrationsPage() {
 
 type BadgeVariant = "default" | "secondary" | "destructive"
 type IconComponent = typeof CheckCircleIcon
+
+const MESSAGING_STATUS_PRESENTATION: Record<
+    TwilioReadinessStatus,
+    { label: string; variant: BadgeVariant; Icon: IconComponent }
+> = {
+    ready: { label: "Ready", variant: "default", Icon: CheckCircleIcon },
+    degraded: { label: "Needs attention", variant: "secondary", Icon: AlertTriangleIcon },
+    blocked: { label: "Blocked", variant: "destructive", Icon: XCircleIcon },
+    not_configured: { label: "Not configured", variant: "secondary", Icon: AlertTriangleIcon },
+    action_required: { label: "Action required", variant: "destructive", Icon: AlertTriangleIcon },
+    unknown: { label: "Verification pending", variant: "secondary", Icon: AlertTriangleIcon },
+}
 
 function IntegrationsPageHeader({
     canRefresh,
@@ -6232,6 +6265,11 @@ function OrganizationIntegrationsSection({
     emailStatusLabel,
     emailStatusVariant,
     EmailStatusIcon,
+    messagingSettingsLoading,
+    messagingStatusLabel,
+    messagingStatusVariant,
+    MessagingStatusIcon,
+    messagingDetail,
     zapierSettingsLoading,
     zapierStatusLabel,
     zapierStatusVariant,
@@ -6264,6 +6302,11 @@ function OrganizationIntegrationsSection({
     emailStatusLabel: string
     emailStatusVariant: BadgeVariant
     EmailStatusIcon: IconComponent
+    messagingSettingsLoading: boolean
+    messagingStatusLabel: string
+    messagingStatusVariant: BadgeVariant
+    MessagingStatusIcon: IconComponent
+    messagingDetail: string
     zapierSettingsLoading: boolean
     zapierStatusLabel: string
     zapierStatusVariant: BadgeVariant
@@ -6286,7 +6329,7 @@ function OrganizationIntegrationsSection({
         <div>
             <h2 className="mb-4 text-lg font-semibold">Organization Integrations</h2>
             <p className="mb-4 text-sm text-muted-foreground">
-                Configure shared services like AI, email delivery, and Zapier for the organization.
+                Configure shared services like AI, email, messaging, and Zapier for the organization.
             </p>
             {!canManageOrganizationIntegrations ? (
                 <Alert className="mb-4">
@@ -6318,6 +6361,23 @@ function OrganizationIntegrationsSection({
                     <p className="text-xs text-muted-foreground">
                         {aiSettingsProvider ? `Provider: ${aiProviderLabel}` : "No provider configured"}
                     </p>
+                </OrganizationIntegrationCard>
+
+                <OrganizationIntegrationCard
+                    Icon={MessageSquareTextIcon}
+                    iconContainerClassName="bg-cyan-100 dark:bg-cyan-900"
+                    iconClassName="text-cyan-700 dark:text-cyan-300"
+                    title="Messaging Delivery"
+                    description="Twilio SMS + MMS sending, replies, and opt-out handling"
+                    isLoading={messagingSettingsLoading}
+                    statusLabel={messagingStatusLabel}
+                    statusVariant={messagingStatusVariant}
+                    StatusIcon={MessagingStatusIcon}
+                    canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                    actionLabel="Configure Messaging"
+                    actionHref="/settings/integrations/messaging"
+                >
+                    <p className="text-xs text-muted-foreground">{messagingDetail}</p>
                 </OrganizationIntegrationCard>
 
                 <OrganizationIntegrationCard
@@ -6406,6 +6466,7 @@ function OrganizationIntegrationCard({
     StatusIcon,
     canManageOrganizationIntegrations,
     actionLabel,
+    actionHref,
     onConfigure,
     children,
 }: {
@@ -6420,7 +6481,8 @@ function OrganizationIntegrationCard({
     StatusIcon: IconComponent
     canManageOrganizationIntegrations: boolean
     actionLabel: string
-    onConfigure: () => void
+    actionHref?: string
+    onConfigure?: () => void
     children: ReactNode
 }) {
     return (
@@ -6451,14 +6513,24 @@ function OrganizationIntegrationCard({
                             {statusLabel}
                         </Badge>
                         {children}
-                        <Button
-                            variant="outline"
-                            className="w-full"
-                            onClick={onConfigure}
-                            disabled={!canManageOrganizationIntegrations}
-                        >
-                            {canManageOrganizationIntegrations ? actionLabel : "Admin access required"}
-                        </Button>
+                        {canManageOrganizationIntegrations && actionHref ? (
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                render={<Link href={actionHref} />}
+                            >
+                                {actionLabel}
+                            </Button>
+                        ) : (
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={onConfigure}
+                                disabled={!canManageOrganizationIntegrations}
+                            >
+                                {canManageOrganizationIntegrations ? actionLabel : "Admin access required"}
+                            </Button>
+                        )}
                     </div>
                 )}
             </CardContent>
