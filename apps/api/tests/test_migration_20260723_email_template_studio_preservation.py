@@ -13,7 +13,7 @@ from alembic import command
 API_ROOT = Path(__file__).resolve().parents[1]
 PRE_STUDIO_REVISION = "20260723_0270"
 STUDIO_REVISION = "20260723_0280"
-PINNED_SEND_REVISION = "20260725_0290"
+CURRENT_HEAD_REVISION = "20260731_2250"
 
 ORG_ID = uuid.UUID("10000000-0000-0000-0000-000000000001")
 USER_ID = uuid.UUID("20000000-0000-0000-0000-000000000001")
@@ -650,7 +650,7 @@ def test_template_studio_upgrade_preserves_existing_template_stores(db_engine) -
             )
             assert (
                 connection.scalar(text("SELECT version_num FROM alembic_version"))
-                == PINNED_SEND_REVISION
+                == CURRENT_HEAD_REVISION
             )
         finally:
             transaction.rollback()

@@ -88,6 +88,26 @@ from app.db.models.intelligent_suggestions import (
 from app.db.models.intended_parents import IntendedParent, IntendedParentStatusHistory
 from app.db.models.jobs import ExportJob, Job
 from app.db.models.matches import Match, MatchEvent
+from app.db.models.messaging import (
+    MessagingConsentEvidence,
+    MessagingConsentState,
+    MessagingContact,
+    MessagingGlobalSuppression,
+    TwilioRoute,
+    TwilioSettings,
+)
+from app.db.models.messaging_delivery import (
+    MessageDelivery,
+    MessageDeliveryAttempt,
+    MessageMediaAsset,
+    MessageMediaLink,
+    MessageReconciliationCase,
+    MessageTemplate,
+    MessageWebhookEvent,
+    MessagingConversation,
+    MessagingMessage,
+    MessagingProviderAdmission,
+)
 from app.db.models.meta import (
     MetaAd,
     MetaAdAccount,
@@ -292,6 +312,22 @@ __all__ = [
     "TicketSavedView",
     "TicketSurrogateLinkCandidate",
     "TrackingEventLog",
+    "MessagingConsentEvidence",
+    "MessagingConsentState",
+    "MessagingContact",
+    "MessagingGlobalSuppression",
+    "MessagingConversation",
+    "MessagingMessage",
+    "MessagingProviderAdmission",
+    "MessageDelivery",
+    "MessageDeliveryAttempt",
+    "MessageMediaAsset",
+    "MessageMediaLink",
+    "MessageReconciliationCase",
+    "MessageTemplate",
+    "MessageWebhookEvent",
+    "TwilioRoute",
+    "TwilioSettings",
     "EmailRawBlob",
     "EmailMessage",
     "EmailMessageContent",
