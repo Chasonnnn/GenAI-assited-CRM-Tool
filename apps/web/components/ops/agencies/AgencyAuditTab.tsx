@@ -1,6 +1,6 @@
 "use client"
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
     Table,
     TableBody,
@@ -21,9 +21,6 @@ export function AgencyAuditTab({ actionLogs }: AgencyAuditTabProps) {
         <Card>
             <CardHeader>
                 <CardTitle className="text-lg">Admin Action Log</CardTitle>
-                <CardDescription>
-                    Platform admin actions related to this organization
-                </CardDescription>
             </CardHeader>
             <CardContent>
                 {actionLogs.length === 0 ? (

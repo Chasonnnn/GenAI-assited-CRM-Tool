@@ -753,7 +753,6 @@ function AIAssistantHeader() {
         <div className="flex shrink-0 items-center gap-3 border-b p-4">
             <div className="flex-1">
                 <h1 className="text-2xl font-semibold">AI Assistant</h1>
-                <p className="text-xs text-muted-foreground">Get help with your tasks and workflows</p>
             </div>
             <Badge variant="outline">Global mode</Badge>
         </div>

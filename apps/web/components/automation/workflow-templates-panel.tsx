@@ -266,7 +266,6 @@ function WorkflowTemplatesHeader({
         <div className="flex items-center justify-between">
             <div>
                 <h1 className="text-2xl font-semibold">Workflow Templates</h1>
-                <p className="text-sm text-muted-foreground">Use templates to quickly create workflows</p>
             </div>
             <Button onClick={onCreateWorkflow}>
                 <PlusIcon className="mr-2 size-4" />

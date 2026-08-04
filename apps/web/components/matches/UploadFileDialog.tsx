@@ -8,7 +8,6 @@ import { useState, useRef, useId } from "react"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -82,9 +81,6 @@ export function UploadFileDialog({
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle>Upload File</DialogTitle>
-                    <DialogDescription>
-                        Upload a file to the Surrogate or Intended Parent record.
-                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">

@@ -4,7 +4,7 @@ import { Suspense, use, useState, useRef } from "react"
 import type { Route } from "next"
 import NextImage from "next/image"
 import { useRouter } from "next/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -1271,7 +1271,6 @@ function SettingsPageContent({ searchParams }: { searchParams: SettingsPageSearc
               <Card>
                 <CardHeader>
                   <CardTitle>General</CardTitle>
-                  <CardDescription>Profile and access settings</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-10">
                   {/* Profile Section */}
@@ -1283,7 +1282,6 @@ function SettingsPageContent({ searchParams }: { searchParams: SettingsPageSearc
                   <div className="space-y-6">
                     <div>
                       <h3 className="font-medium">Access</h3>
-                      <p className="text-sm text-muted-foreground">2FA and session controls</p>
                     </div>
 
                     <div className="flex items-center justify-between rounded-lg border border-border p-4">
@@ -1317,11 +1315,8 @@ function SettingsPageContent({ searchParams }: { searchParams: SettingsPageSearc
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <MailIcon className="size-5" aria-hidden="true" />
-                      Email Signature Settings
+                      Organization Email Signature
                     </CardTitle>
-                    <CardDescription>
-                      Organization-wide email signature configuration. These settings apply to all users.
-                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-10">
                     {/* Organization Branding (includes preview) */}
@@ -1346,9 +1341,6 @@ function SettingsPageContent({ searchParams }: { searchParams: SettingsPageSearc
                       <LightbulbIcon className="size-5" aria-hidden="true" />
                       Intelligent Suggestion Rules
                     </CardTitle>
-                    <CardDescription>
-                      Configure org-wide intelligent suggestion thresholds and digest behavior.
-                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <IntelligentSuggestionsSection />

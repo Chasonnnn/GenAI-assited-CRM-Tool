@@ -49,10 +49,11 @@ export default function RolePermissionsPage() {
                 <Shield className="size-6" aria-hidden="true" />
                     Role Permissions
                 </h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                    Configure default permissions for each role in your organization.
-                    {!isDeveloper && " Only Developers can modify role defaults."}
-                </p>
+                {!isDeveloper && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                        Only Developers can modify role defaults.
+                    </p>
+                )}
             </div>
 
             <div className="grid gap-4">

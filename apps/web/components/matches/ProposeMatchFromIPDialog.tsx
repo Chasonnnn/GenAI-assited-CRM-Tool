@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -83,11 +83,8 @@ export function ProposeMatchFromIPDialog({
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <HeartHandshakeIcon className="size-5" />
-                        Propose Match
+                        {ipName ? `Propose match for ${ipName}` : "Propose Match"}
                     </DialogTitle>
-                    <DialogDescription>
-                        {ipName ? `Create a match proposal for ${ipName}` : "Create a match proposal for this intended parent"}
-                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">

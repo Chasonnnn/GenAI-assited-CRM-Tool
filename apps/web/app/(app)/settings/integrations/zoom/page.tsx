@@ -1,6 +1,6 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableHead, TableHeader, TableBody, TableRow, TableCell } from "@/components/ui/table"
@@ -44,7 +44,6 @@ export default function ZoomSettingsPage() {
                     </div>
                     <div>
                         <h1 className="text-2xl font-semibold">Zoom Integration</h1>
-                        <p className="text-sm text-muted-foreground">Manage your Zoom connection and view appointment history</p>
                     </div>
                 </div>
             </div>
@@ -133,7 +132,6 @@ export default function ZoomSettingsPage() {
                 <Card>
                     <CardHeader>
                         <CardTitle>Appointment History</CardTitle>
-                        <CardDescription>Recent Zoom appointments created via the app</CardDescription>
                     </CardHeader>
                     <CardContent>
                         {meetingsLoading ? (

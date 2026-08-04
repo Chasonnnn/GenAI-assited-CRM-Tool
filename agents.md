@@ -271,6 +271,8 @@ Dropdown audit rule:
 - For platform-wide audits, start with `rg -nU "<SelectValue[^>]*(/>|>\\s*</SelectValue>)" apps/web/app apps/web/components` and review every match whose `SelectItem` values are ids, enums, slugs, stage keys, queue ids, user ids, provider ids, or sentinel values.
 - Add or update tests for the trigger label and any related chip/badge/summary label whenever a dropdown bug is fixed.
 
+UI descriptions: Do not add subtitles, helper text, or descriptive copy beneath headings, labels, cards, or settings by default. Prefer one concise, self-explanatory heading or label. Only add supporting copy when the user explicitly asks for it or when it is necessary to prevent misunderstanding or error, and never use it to restate the heading.
+
 ---
 
 ## 6) Testing

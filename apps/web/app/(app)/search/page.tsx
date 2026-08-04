@@ -82,9 +82,6 @@ export default function SearchPage() {
             {/* Header */}
             <div>
                 <h1 className="text-2xl font-semibold">Search</h1>
-                <p className="text-muted-foreground">
-                    Search across surrogates, notes, files, and intended parents
-                </p>
             </div>
 
             {/* Search Input */}
