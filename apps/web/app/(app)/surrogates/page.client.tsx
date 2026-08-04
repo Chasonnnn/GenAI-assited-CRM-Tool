@@ -1642,7 +1642,7 @@ export function SurrogatesPageClient() {
                                                     {surrogateItem.owner_name ? (
                                                         <TooltipProvider>
                                                             <Tooltip>
-                                                                <TooltipTrigger>
+                                                                <TooltipTrigger aria-label={`Assigned to ${surrogateItem.owner_name}`}>
                                                                     <Avatar className="size-7">
                                                                         <AvatarFallback className="text-xs">
                                                                             {getInitials(surrogateItem.owner_name)}
