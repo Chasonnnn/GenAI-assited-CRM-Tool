@@ -22,7 +22,7 @@ def test_dependency_pins_match_security_fixes():
     )
 
     expected_minimum_pins = {
-        "cryptography": "48.0.1",
+        "cryptography": "50.0.0",
         "mako": "1.3.12",
         "pyjwt": "2.13.0",
         "python-dotenv": "1.2.2",

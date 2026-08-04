@@ -413,6 +413,7 @@ async def send_email_logged(
 
         org = org_service.get_org_by_id(db, org_id)
         headers = unsubscribe_service.build_list_unsubscribe_headers(
+            db,
             org_id=org_id,
             email=to,
             base_url=org_service.get_org_portal_base_url(org),

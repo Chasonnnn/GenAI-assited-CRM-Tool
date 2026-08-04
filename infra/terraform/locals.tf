@@ -53,12 +53,12 @@ locals {
     ALLOWED_EMAIL_DOMAINS              = var.allowed_email_domains
     GCP_MONITORING_ENABLED             = tostring(var.gcp_monitoring_enabled)
     GCP_PROJECT_ID                     = var.project_id
-    GCP_SERVICE_NAME                   = var.api_service_name
     DB_MIGRATION_CHECK                 = tostring(var.db_migration_check)
     DB_AUTO_MIGRATE                    = tostring(var.db_auto_migrate)
   }, local.optional_env)
 
   api_env = merge(local.common_env, {
+    GCP_SERVICE_NAME       = var.api_service_name
     TRUST_PROXY_HEADERS    = tostring(var.trust_proxy_headers)
     TRUST_PROXY_HOSTS      = var.trust_proxy_hosts
     RATE_LIMIT_AUTH        = tostring(var.rate_limit_auth)
@@ -67,6 +67,7 @@ locals {
   })
 
   worker_env = merge(local.common_env, {
+    GCP_SERVICE_NAME                          = var.worker_job_name
     WORKFLOW_SWEEP_FALLBACK_ENABLED           = tostring(var.workflow_sweep_fallback_enabled)
     WORKFLOW_MAINTENANCE_FALLBACK_ENABLED     = tostring(var.workflow_maintenance_fallback_enabled)
     WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED = tostring(var.workflow_approval_expiry_fallback_enabled)

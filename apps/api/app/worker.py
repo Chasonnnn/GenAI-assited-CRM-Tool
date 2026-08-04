@@ -48,7 +48,7 @@ from app.services import (
     scan_dispatch_service,
 )
 
-monitoring = setup_gcp_monitoring(f"{settings.GCP_SERVICE_NAME}-worker")
+monitoring = setup_gcp_monitoring(settings.GCP_SERVICE_NAME)
 
 # Configure logging (fallback when Cloud Logging isn't enabled)
 if not monitoring.logging_enabled:

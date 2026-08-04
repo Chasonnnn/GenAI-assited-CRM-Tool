@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 import pytest
 
 
@@ -12,6 +14,27 @@ async def test_websocket_pubsub_no_redis(monkeypatch):
     await websocket._publish_ws_event({"type": "noop"})
     await websocket.start_websocket_event_listener()
     await websocket.start_session_revocation_listener()
+
+
+@pytest.mark.asyncio
+async def test_websocket_send_records_safe_redis_publish_failure(monkeypatch, caplog):
+    import app.core.websocket as websocket
+
+    class FailingRedis:
+        async def publish(self, channel, payload):
+            del channel, payload
+            raise ConnectionError("redis endpoint details must not be logged")
+
+    monkeypatch.setattr(websocket, "get_async_redis_client", lambda: FailingRedis())
+
+    await websocket.send_ws_to_user(uuid4(), {"type": "task.updated", "secret": "hidden"})
+
+    record = next(record for record in caplog.records if record.msg == "ws_event_publish_failed")
+    assert record.event == "ws_event_publish_failed"
+    assert record.channel == websocket.WEBSOCKET_EVENT_CHANNEL
+    assert record.error_class == "ConnectionError"
+    assert "redis endpoint details" not in record.getMessage()
+    assert "hidden" not in record.getMessage()
 
 
 def test_session_revocation_publish_without_redis(monkeypatch):

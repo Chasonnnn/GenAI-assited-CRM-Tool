@@ -6,6 +6,8 @@ import secrets
 from dataclasses import dataclass
 from typing import Any
 
+from google.cloud.error_reporting.util import HTTPContext
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -114,11 +116,11 @@ def report_exception(error_reporter: Any | None, request: Any | None = None) -> 
 
     http_context = None
     if request is not None:
-        http_context = {
-            "method": request.method,
-            "url": str(request.url.path),
-            "userAgent": request.headers.get("user-agent"),
-        }
+        http_context = HTTPContext(
+            method=request.method,
+            url=str(request.url.path),
+            user_agent=request.headers.get("user-agent"),
+        )
 
     try:
         request_id = _build_request_id(request)

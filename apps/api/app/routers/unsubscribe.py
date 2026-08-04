@@ -38,7 +38,7 @@ def unsubscribe_get(
     token: str, db: Annotated[Session, "fastapi_param"] = Depends(get_db)
 ) -> HTMLResponse:
     """Process unsubscribe link clicks (one-click and manual)."""
-    parsed = unsubscribe_service.parse_unsubscribe_token(token)
+    parsed = unsubscribe_service.parse_unsubscribe_token(db, token)
     if not parsed:
         return _unsubscribe_response(False)
 

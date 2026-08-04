@@ -741,6 +741,12 @@ def _accept_or_process_verified_payload(
         event_created_at=_parse_event_created_at(payload.get("created_at")),
         payload=payload,
     )
+    # Acceptance is the durable boundary for a verified provider event.  In
+    # particular, commit the event row before taking delivery/email projection
+    # locks: the event's email_log foreign key otherwise keeps a KEY SHARE lock
+    # while concurrent events contend for the same delivery row, which can
+    # deadlock when the winner advances the email log.
+    db.commit()
     if event.provider_scope != provider_scope or event.provider_account_id != provider_account_id:
         logger.warning(
             "Resend webhook event route conflict ignored for org=%s "

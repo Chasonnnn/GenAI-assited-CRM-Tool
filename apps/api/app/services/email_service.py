@@ -910,6 +910,7 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
         from app.services import org_service, unsubscribe_service
 
         unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
+            db,
             org_id=surrogate.organization_id,
             email=email,
             base_url=org_service.get_org_portal_base_url(org),
@@ -1103,6 +1104,7 @@ def build_intended_parent_template_variables(db: Session, intended_parent) -> di
         from app.services import org_service, unsubscribe_service
 
         unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
+            db,
             org_id=intended_parent.organization_id,
             email=email,
             base_url=org_service.get_org_portal_base_url(org),
@@ -1494,6 +1496,7 @@ def send_email(
         else str(resend_settings.from_email)
     )
     headers = unsubscribe_service.build_list_unsubscribe_headers(
+        db,
         org_id=org_id,
         email=recipient_email,
         base_url=org_service.get_org_portal_base_url(organization),
