@@ -129,6 +129,7 @@ describe('SurrogatesPage Accessibility', () => {
                         status_label: 'New Unread',
                         source: 'manual',
                         email: 'john@example.com',
+                        owner_name: 'Casey Manager',
                         created_at: new Date().toISOString(),
                         is_priority: false,
                         is_archived: false,
@@ -166,6 +167,14 @@ describe('SurrogatesPage Accessibility', () => {
         render(<SurrogatesPage />)
         expect(screen.getByLabelText('Select all surrogates')).toBeInTheDocument()
         expect(screen.getByLabelText('Select John Doe')).toBeInTheDocument()
+    })
+
+    it('gives the surrogate owner trigger a descriptive accessible name', () => {
+        render(<SurrogatesPage />)
+
+        expect(
+            screen.getByRole('button', { name: 'Assigned to Casey Manager' })
+        ).toBeInTheDocument()
     })
 
     it('renders assign dropdown with aria-label when items selected', async () => {
