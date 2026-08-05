@@ -1815,27 +1815,33 @@ def retry_failed_campaign_run(
     retried_count = 0
     skipped_count = 0
 
-    for recipient in failed_recipients:
+    entity_ids = [r.entity_id for r in failed_recipients if r.entity_id]
+    entities_by_id = {}
+    if entity_ids:
         if campaign.recipient_type == "case":
-            entity = (
+            entities = (
                 db.query(Surrogate)
                 .filter(
-                    Surrogate.id == recipient.entity_id,
                     Surrogate.organization_id == org_id,
+                    Surrogate.id.in_(entity_ids),
                     Surrogate.is_archived.is_(False),
                 )
-                .first()
+                .all()
             )
         else:
-            entity = (
+            entities = (
                 db.query(IntendedParent)
                 .filter(
-                    IntendedParent.id == recipient.entity_id,
                     IntendedParent.organization_id == org_id,
+                    IntendedParent.id.in_(entity_ids),
                     IntendedParent.is_archived.is_(False),
                 )
-                .first()
+                .all()
             )
+        entities_by_id = {e.id: e for e in entities}
+
+    for recipient in failed_recipients:
+        entity = entities_by_id.get(recipient.entity_id)
 
         if not entity or not getattr(entity, "email", None):
             recipient.status = CampaignRecipientStatus.SKIPPED.value
