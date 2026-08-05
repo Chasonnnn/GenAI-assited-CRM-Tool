@@ -249,9 +249,6 @@ function QueuesPageHeader({ onCreate }: { onCreate: () => void }) {
                     <UsersIcon className="size-6" aria-hidden="true" />
                     Queue Management
                 </h1>
-                <p className="text-muted-foreground">
-                    Manage case queues for your organization
-                </p>
             </div>
             <Button onClick={onCreate}>
                 <PlusIcon className="size-4 mr-2" aria-hidden="true" />

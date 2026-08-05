@@ -13,7 +13,7 @@
 
 import { useState } from "react"
 import Link from "@/components/app-link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -266,9 +266,6 @@ function BookingLinkCard() {
                     <LinkIcon className="size-5" />
                     Your Booking Link
                 </CardTitle>
-                <CardDescription>
-                    Share this link to let clients book appointments with you
-                </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="flex gap-2">
@@ -390,9 +387,6 @@ function AvailabilityRulesCard() {
                     <ClockIcon className="size-5" />
                     Weekly Availability
                 </CardTitle>
-                <CardDescription>
-                    Set your regular working hours for each day of the week
-                </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="space-y-3">
@@ -560,9 +554,6 @@ function AppointmentTypesHeader({
         <CardHeader className="flex flex-row items-center justify-between">
             <div>
                 <CardTitle>Appointment Types</CardTitle>
-                <CardDescription>
-                    Different appointment types clients can book
-                </CardDescription>
             </div>
             <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
                 <Button onClick={onCreate}>

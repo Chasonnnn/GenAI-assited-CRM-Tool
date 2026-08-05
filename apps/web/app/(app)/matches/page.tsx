@@ -360,9 +360,6 @@ export default function MatchesPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-semibold">Matches</h1>
-                    <p className="text-sm text-muted-foreground">
-                        Surrogate and intended parent matching
-                    </p>
                 </div>
                 <Button onClick={() => setNewMatchOpen(true)}>
                     <PlusIcon className="size-4 mr-2" />

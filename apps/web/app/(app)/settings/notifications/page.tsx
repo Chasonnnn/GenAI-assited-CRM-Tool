@@ -1,13 +1,12 @@
 "use client"
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Bell, BellOff, AlertTriangle, CheckCircle2, Loader2, FolderOpen, RefreshCw, ArrowRightLeft, ListChecks, CheckSquare, Calendar } from "lucide-react"
 import { toast } from "@/components/ui/toast"
 import { useState } from "react"
 import { useNotificationSettings, useUpdateNotificationSettings } from "@/lib/hooks/use-notifications"
-import { useAuth } from "@/lib/auth-context"
 import type { NotificationSettings } from "@/lib/api/notifications"
 
 type BrowserNotificationPermission = NotificationPermission | "unsupported"
@@ -99,9 +98,6 @@ function BrowserNotificationsCard() {
                     <Bell className="size-5" aria-hidden="true" />
                     Browser Notifications
                 </CardTitle>
-                <CardDescription>
-                    Receive real-time notifications in your browser when important events occur.
-                </CardDescription>
             </CardHeader>
             <CardContent>
                 <div className="flex items-center justify-between p-4 rounded-lg border">
@@ -124,7 +120,6 @@ function BrowserNotificationsCard() {
 
 // Notification preferences card matching actual API schema
 function NotificationsSettingsCard() {
-    const { user } = useAuth()
     const { data: settings, isLoading } = useNotificationSettings()
     const updateSettings = useUpdateNotificationSettings()
 
@@ -231,9 +226,6 @@ function NotificationsSettingsCard() {
         <Card>
             <CardHeader>
                 <CardTitle>In-app Notifications</CardTitle>
-                <CardDescription>
-                    Choose which updates appear in-app for {user?.email}
-                </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 {notificationTypes.map((type) => (
@@ -266,9 +258,6 @@ export default function NotificationSettingsPage() {
         <div className="flex flex-1 flex-col gap-6 p-6 max-w-3xl mx-auto">
             <div>
                 <h1 className="text-2xl font-semibold">Notifications</h1>
-                <p className="text-sm text-muted-foreground">
-                    Manage how you receive notifications and alerts
-                </p>
             </div>
 
             <BrowserNotificationsCard />

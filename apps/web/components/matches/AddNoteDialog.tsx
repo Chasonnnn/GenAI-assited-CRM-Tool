@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -68,9 +67,6 @@ export function AddNoteDialog({
             <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
                     <DialogTitle>Add Note</DialogTitle>
-                    <DialogDescription>
-                        Add a note to the surrogate or intended parent record.
-                    </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <div className="grid gap-2">

@@ -2061,7 +2061,6 @@ function WorkflowTemplateSidebar({
             <Card>
                 <CardHeader>
                     <CardTitle>Workflow Summary</CardTitle>
-                    <CardDescription>Snapshot of current configuration.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
                     {workflowValidationError && (
@@ -2087,7 +2086,6 @@ function WorkflowTemplateSidebar({
             <Card>
                 <CardHeader>
                     <CardTitle>Hints</CardTitle>
-                    <CardDescription>Template best practices.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm text-muted-foreground">
                     <p>Use org-safe defaults (owner/creator/admin) when targeting all orgs.</p>

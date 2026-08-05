@@ -119,11 +119,11 @@ export default function RoleDetailPage() {
                     <Shield className="size-6" aria-hidden="true" />
                     {roleDetail.label} Permissions
                 </h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                    {isDeveloper
-                        ? "Toggle permissions on/off to customize this role's default access."
-                        : "View default permissions for this role. Only Developers can modify."}
-                </p>
+                {!isDeveloper && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                        Only Developers can modify role defaults.
+                    </p>
+                )}
             </div>
 
             {hasChanges && (

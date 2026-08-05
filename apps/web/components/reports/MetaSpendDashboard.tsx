@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import dynamic from "next/dynamic"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -819,9 +819,8 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
                         <CardHeader className="pb-2">
                             <CardTitle className="text-base flex items-center gap-2">
                                 <BarChart3Icon className="size-4 text-muted-foreground" />
-                                Spend Trend
+                                Daily Spend Trend
                             </CardTitle>
-                            <CardDescription>Daily spend over time</CardDescription>
                         </CardHeader>
                         <CardContent>
                             {trendLoading ? (
@@ -848,9 +847,8 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
                         <CardHeader className="pb-2">
                             <CardTitle className="text-base flex items-center gap-2">
                                 <LayoutGridIcon className="size-4 text-muted-foreground" />
-                                Campaign Performance
+                                Campaign Spend
                             </CardTitle>
-                            <CardDescription>Spend breakdown by campaign</CardDescription>
                         </CardHeader>
                         <CardContent>
                             <CampaignSpendTable data={campaigns} loading={campaignsLoading} error={campaignsError} />
@@ -860,8 +858,7 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
                     {/* Breakdown tabs */}
                     <Card>
                         <CardHeader className="pb-2">
-                            <CardTitle className="text-base">Spend Breakdown</CardTitle>
-                            <CardDescription>Analyze spend by different dimensions</CardDescription>
+                            <CardTitle className="text-base">Spend by Dimension</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <Tabs value={breakdownTab} onValueChange={(v) => setBreakdownTab(v as BreakdownParams["breakdown_type"])}>
@@ -887,9 +884,8 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
                         <CardHeader className="pb-2">
                             <CardTitle className="text-base flex items-center gap-2">
                                 <FileTextIcon className="size-4 text-muted-foreground" />
-                                Form Performance
+                                Form Conversion
                             </CardTitle>
-                            <CardDescription>Lead conversion by form</CardDescription>
                         </CardHeader>
                         <CardContent>
                             <FormPerformanceTable data={forms} loading={formsLoading} error={formsError} />
@@ -902,9 +898,8 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-base flex items-center gap-2">
                                     <LayoutGridIcon className="size-4 text-muted-foreground" />
-                                    Meta Platforms
+                                    Leads by Platform
                                 </CardTitle>
-                                <CardDescription>Lead distribution by platform</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 {platformsLoading ? (
@@ -930,9 +925,8 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-base flex items-center gap-2">
                                     <BarChart3Icon className="size-4 text-muted-foreground" />
-                                    Ads Performance
+                                    Top Ads by Lead Volume
                                 </CardTitle>
-                                <CardDescription>Top ads by lead volume</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 {adsLoading ? (

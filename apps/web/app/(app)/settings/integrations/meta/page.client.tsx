@@ -592,9 +592,6 @@ function MetaIntegrationHeader() {
             <div className="flex h-16 items-center justify-between px-6">
                 <div>
                     <h1 className="text-2xl font-semibold">Meta Integration</h1>
-                    <p className="text-sm text-muted-foreground">
-                        Connect Meta accounts to sync lead forms and conversions.
-                    </p>
                 </div>
                 <Button render={<Link href="/settings/integrations/meta/forms" />} variant="outline">
                     Manage lead forms
@@ -624,9 +621,6 @@ function MetaConnectionsCard({
             <CardHeader className="flex flex-row items-center justify-between gap-y-0">
                 <div>
                     <CardTitle>Connections</CardTitle>
-                    <CardDescription>
-                        Connect Meta accounts and manage assets for lead ads.
-                    </CardDescription>
                 </div>
                 <Button onClick={onConnect} disabled={connectUrlPending}>
                     {connectUrlPending ? (
@@ -769,7 +763,6 @@ function MetaAdAccountsCard({
         <Card>
             <CardHeader>
                 <CardTitle>Ad Accounts</CardTitle>
-                <CardDescription>Configure CAPI settings and sync visibility.</CardDescription>
             </CardHeader>
             <CardContent>
                 {adAccountsLoading ? (

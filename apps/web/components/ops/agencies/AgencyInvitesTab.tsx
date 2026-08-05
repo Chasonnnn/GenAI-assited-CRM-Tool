@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -119,10 +118,7 @@ export function AgencyInvitesTab({
                     </DialogTrigger>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>Invite user</DialogTitle>
-                            <DialogDescription>
-                                Send an invitation to join {orgName}.
-                            </DialogDescription>
+                            <DialogTitle>Invite user to {orgName}</DialogTitle>
                         </DialogHeader>
                         <div className="space-y-4">
                             <div className="space-y-2">
