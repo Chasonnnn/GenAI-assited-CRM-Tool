@@ -1275,6 +1275,19 @@ def invalidate_pending_approvals_for_surrogate(
         .all()
     )
 
+    # Bolt: Fix N+1 query by extracting execution lookup out of loop.
+    # We bulk fetch all workflow executions for pending tasks into memory to avoid
+    # querying the database repeatedly in the loop below. This turns O(N) queries into O(1).
+    execution_ids = list(
+        {t.workflow_execution_id for t in pending_tasks if t.workflow_execution_id}
+    )
+    executions_by_id = {}
+    if execution_ids:
+        executions = (
+            db.query(WorkflowExecution).filter(WorkflowExecution.id.in_(execution_ids)).all()
+        )
+        executions_by_id = {e.id: e for e in executions}
+
     count = 0
     for task in pending_tasks:
         # Mark task as denied
@@ -1284,11 +1297,7 @@ def invalidate_pending_approvals_for_surrogate(
 
         # Cancel workflow execution
         if task.workflow_execution_id:
-            execution = (
-                db.query(WorkflowExecution)
-                .filter(WorkflowExecution.id == task.workflow_execution_id)
-                .first()
-            )
+            execution = executions_by_id.get(task.workflow_execution_id)
 
             if execution and execution.status == WorkflowExecutionStatus.PAUSED.value:
                 execution.status = WorkflowExecutionStatus.CANCELED.value
