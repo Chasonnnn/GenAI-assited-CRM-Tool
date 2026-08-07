@@ -746,3 +746,93 @@ class TestOwnerChangeInvalidation:
 
         db.refresh(execution)
         assert execution.status == WorkflowExecutionStatus.CANCELED.value
+
+    def test_owner_change_bulk_loads_workflow_executions(
+        self, db, test_org, test_user, test_surrogate
+    ):
+        from sqlalchemy import event as sqlalchemy_event
+
+        from app.services import task_service
+
+        workflow = AutomationWorkflow(
+            organization_id=test_org.id,
+            name="Bulk invalidation workflow",
+            trigger_type=WorkflowTriggerType.STATUS_CHANGED.value,
+            trigger_config={},
+            conditions=[],
+            actions=[{"action_type": "assign_surrogate", "requires_approval": True}],
+            is_enabled=True,
+            created_by_user_id=test_user.id,
+            updated_by_user_id=test_user.id,
+        )
+        db.add(workflow)
+        db.flush()
+
+        executions: list[WorkflowExecution] = []
+        for index in range(2):
+            execution = WorkflowExecution(
+                organization_id=test_org.id,
+                workflow_id=workflow.id,
+                event_id=uuid4(),
+                event_source="test",
+                entity_type="surrogate",
+                entity_id=test_surrogate.id,
+                status=WorkflowExecutionStatus.PAUSED.value,
+                trigger_event={"type": "status_changed"},
+                matched_conditions=True,
+                actions_executed=[],
+            )
+            db.add(execution)
+            db.flush()
+
+            task = Task(
+                organization_id=test_org.id,
+                surrogate_id=test_surrogate.id,
+                task_type=TaskType.WORKFLOW_APPROVAL.value,
+                title=f"Approve owner change {index}",
+                status=TaskStatus.PENDING.value,
+                owner_type=OwnerType.USER.value,
+                owner_id=test_user.id,
+                created_by_user_id=SYSTEM_USER_ID,
+                workflow_execution_id=execution.id,
+                workflow_action_index=index,
+                workflow_action_type="assign_surrogate",
+                workflow_action_preview="Assign surrogate to User",
+                workflow_action_payload={"action_type": "assign_surrogate"},
+                due_at=datetime.now(UTC) + timedelta(hours=48),
+            )
+            db.add(task)
+            db.flush()
+            execution.paused_task_id = task.id
+            execution.paused_at_action_index = index
+            executions.append(execution)
+        db.commit()
+
+        statements: list[str] = []
+
+        def capture_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
+            statements.append(" ".join(statement.lower().split()))
+
+        engine = db.get_bind()
+        sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
+        try:
+            count = task_service.invalidate_pending_approvals_for_surrogate(
+                db=db,
+                surrogate_id=test_surrogate.id,
+                reason="Surrogate owner changed",
+                actor_user_id=test_user.id,
+            )
+        finally:
+            sqlalchemy_event.remove(engine, "before_cursor_execute", capture_sql)
+
+        execution_selects = [
+            statement
+            for statement in statements
+            if statement.startswith("select") and "from workflow_executions" in statement
+        ]
+        assert len(execution_selects) == 1
+        assert "workflow_executions.id in (" in execution_selects[0]
+        assert count == 2
+        assert all(
+            execution.status == WorkflowExecutionStatus.CANCELED.value for execution in executions
+        )

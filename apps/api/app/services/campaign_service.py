@@ -1792,21 +1792,22 @@ def retry_failed_campaign_run(
     org = org_service.get_org_by_id(db, org_id)
     portal_base_url = org_service.get_org_portal_base_url(org)
 
-    failed_recipients = (
+    failed_recipient_query = (
         db.query(CampaignRecipient)
         .filter(
             CampaignRecipient.run_id == run_id,
             CampaignRecipient.status == CampaignRecipientStatus.FAILED.value,
         )
         .order_by(func.lower(CampaignRecipient.recipient_email), CampaignRecipient.id)
-        .all()
     )
+    failed_recipients = failed_recipient_query.all()
     if not failed_recipients:
         return _campaign_run_result(run, retried_count=0)
 
     campaign.status = CampaignStatus.SENDING.value
     run.status = "running"
     db.commit()
+    failed_recipients = failed_recipient_query.all()
 
     suppressed_emails = _load_suppressed_emails(
         db, org_id, ignore_opt_out=bool(getattr(campaign, "include_unsubscribed", False))
@@ -1815,27 +1816,37 @@ def retry_failed_campaign_run(
     retried_count = 0
     skipped_count = 0
 
-    for recipient in failed_recipients:
+    entity_ids = list(
+        dict.fromkeys(
+            recipient.entity_id
+            for recipient in failed_recipients
+            if recipient.entity_id is not None
+        )
+    )
+    entities_by_id: dict[UUID, Surrogate | IntendedParent] = {}
+    entity_batch_size = max(1, CAMPAIGN_SEND_BATCH_SIZE)
+    for offset in range(0, len(entity_ids), entity_batch_size):
+        entity_id_batch = entity_ids[offset : offset + entity_batch_size]
         if campaign.recipient_type == "case":
-            entity = (
-                db.query(Surrogate)
-                .filter(
-                    Surrogate.id == recipient.entity_id,
+            entities = db.scalars(
+                select(Surrogate).where(
                     Surrogate.organization_id == org_id,
+                    Surrogate.id.in_(entity_id_batch),
                     Surrogate.is_archived.is_(False),
                 )
-                .first()
-            )
+            ).all()
         else:
-            entity = (
-                db.query(IntendedParent)
-                .filter(
-                    IntendedParent.id == recipient.entity_id,
+            entities = db.scalars(
+                select(IntendedParent).where(
                     IntendedParent.organization_id == org_id,
+                    IntendedParent.id.in_(entity_id_batch),
                     IntendedParent.is_archived.is_(False),
                 )
-                .first()
-            )
+            ).all()
+        entities_by_id.update((entity.id, entity) for entity in entities)
+
+    for recipient in failed_recipients:
+        entity = entities_by_id.get(recipient.entity_id)
 
         if not entity or not getattr(entity, "email", None):
             recipient.status = CampaignRecipientStatus.SKIPPED.value
