@@ -48,6 +48,13 @@ import { useIsMobile } from "@/hooks/use-mobile"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
+const INTENT_PREFETCH_ROUTES = new Set([
+    "/dashboard",
+    "/surrogates",
+    "/intended-parents",
+    "/intended-parents/matches",
+    "/tasks",
+])
 
 const navigation = [
     {
@@ -211,6 +218,33 @@ function getNavItemClass(active: boolean) {
     )
 }
 
+function IntentPrefetchLink({
+    href,
+    children,
+    enabled = false,
+    ...props
+}: Omit<React.ComponentProps<typeof Link>, "href" | "prefetch"> & {
+    href: Route
+    enabled?: boolean
+}) {
+    const [hasIntent, setHasIntent] = React.useState(false)
+    const enablePrefetch = () => setHasIntent(true)
+    const intentProps = enabled
+        ? { onMouseEnter: enablePrefetch, onFocus: enablePrefetch }
+        : {}
+
+    return (
+        <Link
+            href={href}
+            prefetch={enabled && hasIntent ? null : false}
+            {...intentProps}
+            {...props}
+        >
+            {children}
+        </Link>
+    )
+}
+
 function SidebarNavLink({
     item,
     active,
@@ -222,15 +256,15 @@ function SidebarNavLink({
 }) {
     const Icon = item.icon
     return (
-        <Link
+        <IntentPrefetchLink
             href={item.url as Route}
-            prefetch={false}
+            enabled={INTENT_PREFETCH_ROUTES.has(item.url)}
             className={getNavItemClass(active)}
             title={item.title}
         >
             <Icon className="size-4 shrink-0" />
             {!isCollapsed && <span className="truncate">{item.title}</span>}
-        </Link>
+        </IntentPrefetchLink>
     )
 }
 
@@ -357,14 +391,14 @@ function AppSidebarContent({
                     {!collapsed && sections.tasks && (
                         <div className="ml-6 flex flex-col gap-1">
                             {tasksItems.map((subItem) => (
-                                <Link
+                                <IntentPrefetchLink
                                     key={subItem.url}
                                     href={subItem.url as Route}
-                                    prefetch={false}
+                                    enabled={INTENT_PREFETCH_ROUTES.has(subItem.url)}
                                     className={getNavItemClass(pathname === subItem.url || Boolean(pathname?.startsWith(subItem.url + "/")))}
                                 >
                                     <span className="truncate text-sm">{subItem.title}</span>
-                                </Link>
+                                </IntentPrefetchLink>
                             ))}
                         </div>
                     )}
