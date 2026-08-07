@@ -1,29 +1,20 @@
 "use client"
 
 import { useSyncExternalStore } from "react"
+import { useOffline } from "next/offline"
 import { WifiOff } from "lucide-react"
-import { useMountEffect } from "@/lib/hooks/use-mount-effect"
 
-let offlineSnapshot = false
-const offlineListeners = new Set<() => void>()
-
-function setOfflineSnapshot(nextSnapshot: boolean) {
-    if (offlineSnapshot === nextSnapshot) return
-    offlineSnapshot = nextSnapshot
-    for (const listener of offlineListeners) {
-        listener()
-    }
-}
-
-function subscribeOffline(listener: () => void) {
-    offlineListeners.add(listener)
+function subscribeBrowserConnectivity(listener: () => void) {
+    window.addEventListener("online", listener)
+    window.addEventListener("offline", listener)
     return () => {
-        offlineListeners.delete(listener)
+        window.removeEventListener("online", listener)
+        window.removeEventListener("offline", listener)
     }
 }
 
-function getOfflineSnapshot() {
-    return offlineSnapshot
+function getBrowserOfflineSnapshot() {
+    return !navigator.onLine
 }
 
 function getServerOfflineSnapshot() {
@@ -34,65 +25,17 @@ function getServerOfflineSnapshot() {
  * Offline detection banner.
  *
  * Shows a non-blocking banner when the user appears to be offline.
- * Detection uses both navigator.onLine and fetch failure tracking.
- *
- * IMPORTANT: Resets isOffline on next successful fetch to avoid
- * sticky banner after network recovery.
+ * Next's experimental signal detects failed framework navigations and Server
+ * Actions when enabled. Browser events retain the existing baseline behavior.
  */
 export function OfflineBanner() {
-    const isOffline = useSyncExternalStore(
-        subscribeOffline,
-        getOfflineSnapshot,
+    const isNextOffline = useOffline()
+    const isBrowserOffline = useSyncExternalStore(
+        subscribeBrowserConnectivity,
+        getBrowserOfflineSnapshot,
         getServerOfflineSnapshot
     )
-
-    // Track online/offline events
-    useMountEffect(() => {
-        const handleOnline = () => setOfflineSnapshot(false)
-        const handleOffline = () => setOfflineSnapshot(true)
-
-        // Check initial state
-        if (!navigator.onLine) {
-            setOfflineSnapshot(true)
-        }
-
-        window.addEventListener("online", handleOnline)
-        window.addEventListener("offline", handleOffline)
-
-        return () => {
-            window.removeEventListener("online", handleOnline)
-            window.removeEventListener("offline", handleOffline)
-        }
-    })
-
-    // Intercept fetch to detect network failures
-    useMountEffect(() => {
-        const originalFetch = window.fetch
-
-        window.fetch = async (...args) => {
-            try {
-                const response = await originalFetch(...args)
-                // Successful fetch - clear offline state.
-                setOfflineSnapshot(false)
-                return response
-            } catch (error) {
-                // Network error - likely offline.
-                if (
-                    error instanceof TypeError &&
-                    (error.message.includes("Failed to fetch") ||
-                        error.message.includes("NetworkError") ||
-                        error.message.includes("Network request failed"))
-                ) {
-                    setOfflineSnapshot(true)
-                }
-                throw error
-            }
-        }
-
-        return () => {
-            window.fetch = originalFetch
-        }
-    })
+    const isOffline = isNextOffline || isBrowserOffline
 
     if (!isOffline) {
         return null
