@@ -5,8 +5,19 @@ const withBundleAnalyzer =
   process.env.ANALYZE === "true"
     ? require("@next/bundle-analyzer")({ enabled: true })
     : (config) => config;
+const enableInstantNavigations =
+  process.env.NEXT_ENABLE_INSTANT_NAVIGATIONS === "true";
+const enableOfflineRetry =
+  process.env.NEXT_EXPERIMENTAL_OFFLINE_RETRY === "true";
+const enableRustReactCompiler =
+  process.env.NEXT_EXPERIMENTAL_RUST_REACT_COMPILER === "true";
 
 module.exports = withBundleAnalyzer({
+  // Cache Components changes rendering semantics globally. Keep it paired with Partial
+  // Prefetching and behind a build-time adoption gate until every tenant route passes
+  // the production-prerender and authenticated-navigation gates documented in docs/.
+  cacheComponents: enableInstantNavigations,
+  partialPrefetching: enableInstantNavigations,
   // React Compiler (stable in React 19) auto-memoizes components/hooks, letting us retire
   // manual useMemo/useCallback over time. Next runs it via babel-plugin-react-compiler but
   // only on files with JSX/Hooks (SWC pre-filter), so build-time cost stays small.
@@ -16,6 +27,16 @@ module.exports = withBundleAnalyzer({
   // and wired into tsconfig; this flag turns on enforcement.
   typedRoutes: true,
   experimental: {
+    // The project-level `tsc` binary is TypeScript 7, while the `typescript` package
+    // name intentionally provides the TypeScript 6 JavaScript API for ESLint. Next
+    // resolves that package name directly, so use its API checker during builds and
+    // keep the native TS7 CLI as the separate fast `pnpm run typecheck` gate.
+    useTypeScriptCli: false,
+    // Automatic retry only covers Next navigations, prefetches, and Server Actions.
+    // React Query and direct fetch calls retain their existing retry policies.
+    useOffline: enableOfflineRetry,
+    // Experimental Turbopack-only compiler. The stable Babel compiler remains the default.
+    turbopackRustReactCompiler: enableRustReactCompiler,
     // Tree-shake heavy barrel-export libs so only the modules actually used are bundled.
     // lucide-react / date-fns / recharts are optimized by Next automatically, so they are
     // intentionally omitted here.
