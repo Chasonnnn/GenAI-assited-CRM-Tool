@@ -1,0 +1,3 @@
+## 2024-08-07 - N+1 Query on Email Campaigns
+**Learning:** Found an N+1 query issue in `send_system_email_campaign` within `apps/api/app/services/platform_service.py` where it iterated over target recipients and redundantly fetched their Organization via `org_service.get_org_by_id` inside the loop for each recipient. SQLAlchemy `Query.in_()` provides a much faster batch loading pattern.
+**Action:** Always extract target entity IDs outside of loops (e.g. `target_org_ids = {t["org_id"] for t in targets}`), run a single `in_()` query to fetch them, map them to an in-memory dictionary, and use O(1) dictionary lookups (`orgs_by_id.get(id)`) inside the loop to avoid database hits per iteration.

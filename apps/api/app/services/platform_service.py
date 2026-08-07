@@ -1397,7 +1397,7 @@ async def send_system_email_campaign(
     request: Request | None = None,
 ) -> dict:
     """Send a system email template to selected org/users."""
-    from app.db.models import Membership, User
+    from app.db.models import Membership, Organization, User
     from app.services import (
         audit_service,
         email_service,
@@ -1435,11 +1435,16 @@ async def send_system_email_campaign(
     missing_targets: list[dict] = []
     recipients: list[tuple[UUID, User, Membership]] = []
 
+    # Bolt: Prefetch organizations in a single query to eliminate N+1 queries during iteration
+    target_org_ids = {target["org_id"] for target in targets}
+    org_rows = db.query(Organization).filter(Organization.id.in_(target_org_ids)).all()
+    orgs_by_id = {org.id: org for org in org_rows}
+
     for target in targets:
         org_id = target["org_id"]
         user_ids = target["user_ids"]
 
-        org = org_service.get_org_by_id(db, org_id, include_deleted=True)
+        org = orgs_by_id.get(org_id)
         if not org:
             missing_targets.append(
                 {
@@ -1477,7 +1482,7 @@ async def send_system_email_campaign(
             suppressed += 1
             continue
 
-        org = org_service.get_org_by_id(db, org_id, include_deleted=True)
+        org = orgs_by_id.get(org_id)
         if not org:
             failed += 1
             failures.append(
