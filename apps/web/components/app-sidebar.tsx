@@ -227,8 +227,7 @@ function IntentPrefetchLink({
     href: Route
     enabled?: boolean
 }) {
-    const [hasIntent, setHasIntent] = React.useState(false)
-    const enablePrefetch = () => setHasIntent(true)
+    const [hasIntent, enablePrefetch] = React.useReducer(() => true, false)
     const intentProps = enabled
         ? { onMouseEnter: enablePrefetch, onFocus: enablePrefetch }
         : {}
