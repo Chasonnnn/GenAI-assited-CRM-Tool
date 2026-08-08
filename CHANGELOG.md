@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.58](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.57...surrogacy-crm-platform-v0.91.58) (2026-08-08)
+
+
+### Features
+
+* add intended-parent navigation shell ([764f7e9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/764f7e9b4e7e2458f78580a8e99872e08329b195))
+* Add organization Twilio SMS/MMS messaging ([ee3eca9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ee3eca99b7cb070e99c1fa93a2bdeea77aff2da1))
+* adopt Next.js custom retry boundaries ([273408e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/273408e6649313a758ee473c1e84f35e920c48da))
+* integrate Next.js offline navigation state ([cd356b4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cd356b4d05ac7a44c9b2731a807486cf5ac72619))
+* prefetch priority navigation on intent ([0f32214](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0f32214082561e69659d5396f92ec9fde0c20626))
+
+
+### Bug Fixes
+
+* consolidate N+1 query fixes ([8fc313b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8fc313b6c86e367016e466c7c8bf417bde58e7f1))
+* consolidate validated PR queue findings ([a4731f3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a4731f39b629209211d252c38ebab1cfb19b2673))
+* eliminate campaign and task N+1 queries ([7d31bc9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7d31bc9eb309b30574f3975fe974e8195a151215))
+* harden Twilio delivery boundaries ([c0f334b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c0f334b65674ab4a08c86d4c24b318d410b8beb2))
+* keep Twilio readiness evidence current ([8a65364](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8a65364234d6d68938d0fbbafab683245ed94342))
+* label surrogate owner tooltip trigger ([1c468fd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1c468fd694cba8763071a4cb64f1adaa314b68d9))
+* patch frontend audit dependencies ([4740ccd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4740ccd379b45a454ca2ee5d77009797927631c6))
+* preserve messaging consent and recipient safety ([644920d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/644920d6931d29a6a8024a3a9cc1e5a7ae20d315))
+* preserve sidebar compiler invariant ([efb656d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/efb656d0ed794e836122bae5c4574206d0f7a85c))
+* upgrade cryptography security pin ([f8ad9f8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f8ad9f849f9c2a8f0143e8938ec40f3a0ed00753))
+* use direct form intake count queries ([7af9d2a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7af9d2a3ff96b2a06c203bdd6310ef658bac0601))
+
+
+### Maintenance
+
+* realign Twilio integration with main ([4e4e048](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4e4e04850309f7d3f34a585a6c6c3d6fe75960cd))
+* realign Twilio integration with main ([cf38224](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cf38224c304ef1860ab4553172c25e74aebeb5fe))
+* update vulnerable dependency pins ([4aa088d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4aa088d785c6a3411f1edf64e1947c33586aaa75))
+* upgrade frontend to Next.js 16.3 and TypeScript 7 ([4d7ae4b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4d7ae4b82e1f157055f6873b265d0158cdac6dcc))
+* upgrade frontend to Next.js 16.3 and TypeScript 7 ([2406ca9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2406ca917b51743f23c78c2ff61a489792af35a0))
+
 ## [0.91.57](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.56...surrogacy-crm-platform-v0.91.57) (2026-08-03)
 
 
