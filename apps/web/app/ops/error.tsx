@@ -9,10 +9,10 @@ import { ErrorState } from "@/components/error-state"
  */
 export default function OpsError({
     error,
-    reset,
+    retry,
 }: {
     error: Error & { digest?: string }
-    reset: () => void
+    retry: () => void
 }) {
-    return <ErrorState error={error} reset={reset} secondaryHref="/ops" secondaryLabel="Go to Ops" />
+    return <ErrorState error={error} reset={retry} secondaryHref="/ops" secondaryLabel="Go to Ops" />
 }

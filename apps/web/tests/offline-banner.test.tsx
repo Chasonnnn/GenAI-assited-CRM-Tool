@@ -1,6 +1,14 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+const { mockUseOffline } = vi.hoisted(() => ({
+    mockUseOffline: vi.fn(() => false),
+}))
+
+vi.mock("next/offline", () => ({
+    useOffline: mockUseOffline,
+}))
+
 import { OfflineBanner } from "@/components/offline-banner"
 
 describe("OfflineBanner", () => {
@@ -8,6 +16,7 @@ describe("OfflineBanner", () => {
 
     beforeEach(() => {
         nativeFetch = window.fetch
+        mockUseOffline.mockReturnValue(false)
         Object.defineProperty(navigator, "onLine", {
             configurable: true,
             value: true,
@@ -20,50 +29,40 @@ describe("OfflineBanner", () => {
         vi.restoreAllMocks()
     })
 
-    it("keeps a stable fetch wrapper across offline/online transitions", async () => {
-        let failRequests = true
-        const fetchSpy = vi.fn(async () => {
-            if (failRequests) {
-                throw new TypeError("Failed to fetch")
-            }
-            return new Response(JSON.stringify({ ok: true }), {
-                status: 200,
-                headers: { "Content-Type": "application/json" },
-            })
-        })
-
+    it("uses Next's connectivity signal without replacing the global fetch function", () => {
+        const fetchSpy = vi.fn()
         window.fetch = fetchSpy as typeof window.fetch
+        mockUseOffline.mockReturnValue(true)
+
         render(<OfflineBanner />)
 
-        await waitFor(() => {
-            expect(window.fetch).not.toBe(fetchSpy)
+        expect(window.fetch).toBe(fetchSpy)
+        expect(screen.getByRole("alert")).toHaveTextContent(
+            "You're offline. Some features may be unavailable.",
+        )
+    })
+
+    it("retains browser event detection when the experimental Next flag is off", async () => {
+        render(<OfflineBanner />)
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+
+        Object.defineProperty(navigator, "onLine", {
+            configurable: true,
+            value: false,
         })
+        act(() => window.dispatchEvent(new Event("offline")))
 
-        const wrappedFetch = window.fetch
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+            "You're offline. Some features may be unavailable.",
+        )
 
-        await act(async () => {
-            await expect(window.fetch("/api/test")).rejects.toThrow("Failed to fetch")
+        Object.defineProperty(navigator, "onLine", {
+            configurable: true,
+            value: true,
         })
+        act(() => window.dispatchEvent(new Event("online")))
 
-        await waitFor(() => {
-            expect(screen.getByText("You're offline. Some features may be unavailable.")).toBeInTheDocument()
-        })
-
-        // Wrapper should remain stable; swapping wrappers on every state change
-        // risks nested/recursive wrappers during remounts.
-        expect(window.fetch).toBe(wrappedFetch)
-
-        failRequests = false
-        await act(async () => {
-            await window.fetch("/api/test")
-        })
-
-        await waitFor(() => {
-            expect(
-                screen.queryByText("You're offline. Some features may be unavailable.")
-            ).not.toBeInTheDocument()
-        })
-        expect(window.fetch).toBe(wrappedFetch)
+        await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument())
     })
 
     it("announces the offline state without exposing the decorative icon", async () => {

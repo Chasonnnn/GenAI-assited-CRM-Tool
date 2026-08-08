@@ -41,7 +41,6 @@
   "exclude": [
     "node_modules",
     ".next/dev",
-    ".next/types/validator.ts",
     "tests",
     "vitest.config.ts"
   ]

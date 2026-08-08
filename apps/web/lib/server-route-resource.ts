@@ -10,37 +10,52 @@ type ServerRouteResourceOptions = {
 
 const DEFAULT_PASS_THROUGH_STATUSES = [401, 403]
 
+export class ServerRouteResourceError extends Error {
+    constructor(
+        public readonly status: number,
+        path: string,
+    ) {
+        super(`Failed route resource request for ${path}: ${status}`)
+        this.name = "ServerRouteResourceError"
+    }
+}
+
+async function requestServerRouteResource(path: string) {
+    const requestHeaders = await headers()
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
+    const upstreamHeaders = buildServerApiHeaders(requestHeaders)
+    const forwardedHeaders = ["cookie", "x-org-id", "x-org-slug", "x-org-name"]
+
+    for (const headerName of forwardedHeaders) {
+        const value = requestHeaders.get(headerName)
+        if (value) {
+            upstreamHeaders.set(headerName, value)
+        }
+    }
+
+    return fetch(`${apiBase}${path}`, {
+        cache: "no-store",
+        headers: upstreamHeaders,
+    })
+}
+
+export async function fetchServerRouteResource<T>(path: string): Promise<T> {
+    const response = await requestServerRouteResource(path)
+
+    if (!response.ok) {
+        throw new ServerRouteResourceError(response.status, path)
+    }
+
+    return response.json() as Promise<T>
+}
+
 export async function getServerRouteResourceStatus(
     path: string,
     options: ServerRouteResourceOptions = {},
 ): Promise<ServerRouteResourceStatus> {
-    const requestHeaders = await headers()
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
-    const upstreamHeaders = buildServerApiHeaders(requestHeaders)
-    const cookieHeader = requestHeaders.get("cookie")
-    const orgId = requestHeaders.get("x-org-id")
-    const orgSlug = requestHeaders.get("x-org-slug")
-    const orgName = requestHeaders.get("x-org-name")
     const passThroughStatuses =
         options.passThroughStatuses ?? DEFAULT_PASS_THROUGH_STATUSES
-
-    if (cookieHeader) {
-        upstreamHeaders.set("cookie", cookieHeader)
-    }
-    if (orgId) {
-        upstreamHeaders.set("x-org-id", orgId)
-    }
-    if (orgSlug) {
-        upstreamHeaders.set("x-org-slug", orgSlug)
-    }
-    if (orgName) {
-        upstreamHeaders.set("x-org-name", orgName)
-    }
-
-    const response = await fetch(`${apiBase}${path}`, {
-        cache: "no-store",
-        headers: upstreamHeaders,
-    })
+    const response = await requestServerRouteResource(path)
 
     if (response.status === 404) {
         return "not_found"
