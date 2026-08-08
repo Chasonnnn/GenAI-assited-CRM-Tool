@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings as app_settings
 from app.core.encryption import hash_phone
-from app.db.models import TwilioRoute, TwilioSettings
+from app.db.models import Organization, TwilioRoute, TwilioSettings
 from app.schemas.twilio import (
     TwilioRouteResponse,
     TwilioSettingsResponse,
@@ -71,6 +71,7 @@ def get_or_create_settings(
     db: Session,
     organization_id: uuid.UUID,
 ) -> TwilioSettings:
+    db.query(Organization.id).filter(Organization.id == organization_id).with_for_update().one()
     existing = get_settings(db, organization_id)
     if existing is not None:
         return existing

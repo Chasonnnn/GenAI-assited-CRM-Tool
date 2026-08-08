@@ -21,6 +21,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
@@ -61,6 +68,25 @@ const READINESS_LABELS: Record<TwilioReadinessStatus, string> = {
     unknown: "Unknown",
 }
 
+const A2P_STATUS_LABELS = {
+    unconfigured: "Not configured",
+    pending: "Pending",
+    approved: "Approved",
+    rejected: "Rejected",
+} as const
+
+const ADVANCED_OPT_OUT_STATUS_LABELS = {
+    unconfigured: "Not configured",
+    enabled: "Enabled",
+    verified: "Verified",
+} as const
+
+const CONSENT_MANAGEMENT_STATUS_LABELS = {
+    unknown: "Unknown",
+    available: "Available",
+    unavailable: "Unavailable",
+} as const
+
 const EVIDENCE_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -84,6 +110,10 @@ interface RouteDraft {
     senderPhoneE164: string
     clearMessagingServiceSid: boolean
     clearSenderPhone: boolean
+    a2pStatus: string
+    advancedOptOutStatus: string
+    consentManagementStatus: string
+    capabilityEvidence: Record<string, unknown> | null
     enabled: boolean
 }
 
@@ -106,6 +136,29 @@ interface SettingsDraft {
 function valueOrNull(value: string) {
     const trimmed = value.trim()
     return trimmed.length > 0 ? trimmed : null
+}
+
+function administratorCapabilityEvidence(
+    evidence: Record<string, unknown> | null,
+) {
+    if (evidence === null) return null
+    const administratorEvidence = { ...evidence }
+    delete administratorEvidence.readiness
+    return administratorEvidence
+}
+
+function initialRouteDraft(settings: TwilioRouteSettings): RouteDraft {
+    return {
+        messagingServiceSid: "",
+        senderPhoneE164: "",
+        clearMessagingServiceSid: false,
+        clearSenderPhone: false,
+        a2pStatus: settings.a2p_status,
+        advancedOptOutStatus: settings.advanced_opt_out_status,
+        consentManagementStatus: settings.consent_management_status,
+        capabilityEvidence: administratorCapabilityEvidence(settings.capability_evidence),
+        enabled: settings.enabled,
+    }
 }
 
 function initialDraft(settings: TwilioSettings): SettingsDraft {
@@ -133,20 +186,8 @@ function initialDraft(settings: TwilioSettings): SettingsDraft {
             auth_token: false,
         },
         routes: {
-            operational: {
-                messagingServiceSid: "",
-                senderPhoneE164: "",
-                clearMessagingServiceSid: false,
-                clearSenderPhone: false,
-                enabled: settings.routes.operational.enabled,
-            },
-            promotional: {
-                messagingServiceSid: "",
-                senderPhoneE164: "",
-                clearMessagingServiceSid: false,
-                clearSenderPhone: false,
-                enabled: settings.routes.promotional.enabled,
-            },
+            operational: initialRouteDraft(settings.routes.operational),
+            promotional: initialRouteDraft(settings.routes.promotional),
         },
     }
 }
@@ -398,6 +439,63 @@ function WebhookValue({ label, value }: { label: string; value: string }) {
     )
 }
 
+function EvidenceSelect({
+    id,
+    label,
+    value,
+    labels,
+    onChange,
+}: {
+    id: string
+    label: string
+    value: string
+    labels: Readonly<Record<string, string>>
+    onChange: (value: string) => void
+}) {
+    return (
+        <div className="space-y-2">
+            <Label htmlFor={id}>{label}</Label>
+            <Select value={value} onValueChange={(nextValue) => nextValue && onChange(nextValue)}>
+                <SelectTrigger id={id}>
+                    <SelectValue>
+                        {(selectedValue: string | null) =>
+                            selectedValue
+                                ? labels[selectedValue] ?? "Needs review"
+                                : "Not configured"
+                        }
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    {Object.entries(labels).map(([optionValue, optionLabel]) => (
+                        <SelectItem key={optionValue} value={optionValue}>
+                            {optionLabel}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
+    )
+}
+
+function CapabilityEvidenceToggle({
+    id,
+    label,
+    checked,
+    onCheckedChange,
+}: {
+    id: string
+    label: string
+    checked: boolean
+    onCheckedChange: (checked: boolean) => void
+}) {
+    return (
+        <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+            <Label htmlFor={id}>{label}</Label>
+            <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
+        </div>
+    )
+}
+
 function RouteConfiguration({
     purpose,
     settings,
@@ -412,8 +510,15 @@ function RouteConfiguration({
     onChange: (draft: RouteDraft) => void
 }) {
     const titlePrefix = purpose === "operational" ? "Operational" : "Promotional"
-    const smsCapable = settings.capability_evidence?.sms === true
-    const mmsCapable = settings.capability_evidence?.mms === true
+    const capabilityEvidence = draft.capabilityEvidence ?? {}
+    const smsCapable = capabilityEvidence.sms === true
+    const mmsCapable = capabilityEvidence.mms === true
+    const updateCapabilityEvidence = (key: string, value: unknown) => {
+        onChange({
+            ...draft,
+            capabilityEvidence: { ...capabilityEvidence, [key]: value },
+        })
+    }
 
     return (
         <Card>
@@ -428,8 +533,8 @@ function RouteConfiguration({
                         </CardDescription>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                        <StatusBadge status={settings.a2p_status} label={`A2P ${friendlyStatus(settings.a2p_status).toLowerCase()}`} />
-                        <StatusBadge status={settings.advanced_opt_out_status} label={`Opt-out ${friendlyStatus(settings.advanced_opt_out_status).toLowerCase()}`} />
+                        <StatusBadge status={draft.a2pStatus} label={`A2P ${friendlyStatus(draft.a2pStatus).toLowerCase()}`} />
+                        <StatusBadge status={draft.advancedOptOutStatus} label={`Opt-out ${friendlyStatus(draft.advancedOptOutStatus).toLowerCase()}`} />
                     </div>
                 </div>
             </CardHeader>
@@ -469,10 +574,83 @@ function RouteConfiguration({
                     />
                 </div>
 
+                <div className="grid gap-4 md:grid-cols-3">
+                    <EvidenceSelect
+                        id={`${purpose}-a2p-status`}
+                        label="A2P registration"
+                        value={draft.a2pStatus}
+                        labels={A2P_STATUS_LABELS}
+                        onChange={(a2pStatus) => onChange({ ...draft, a2pStatus })}
+                    />
+                    <EvidenceSelect
+                        id={`${purpose}-advanced-opt-out-status`}
+                        label="Advanced opt-out"
+                        value={draft.advancedOptOutStatus}
+                        labels={ADVANCED_OPT_OUT_STATUS_LABELS}
+                        onChange={(advancedOptOutStatus) =>
+                            onChange({ ...draft, advancedOptOutStatus })
+                        }
+                    />
+                    <EvidenceSelect
+                        id={`${purpose}-consent-management-status`}
+                        label="Consent management"
+                        value={draft.consentManagementStatus}
+                        labels={CONSENT_MANAGEMENT_STATUS_LABELS}
+                        onChange={(consentManagementStatus) =>
+                            onChange({ ...draft, consentManagementStatus })
+                        }
+                    />
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                    <CapabilityEvidenceToggle
+                        id={`${purpose}-sms-evidence`}
+                        label={`${titlePrefix} SMS capable`}
+                        checked={smsCapable}
+                        onCheckedChange={(checked) =>
+                            updateCapabilityEvidence("sms", checked)
+                        }
+                    />
+                    <CapabilityEvidenceToggle
+                        id={`${purpose}-mms-evidence`}
+                        label={`${titlePrefix} MMS capable`}
+                        checked={mmsCapable}
+                        onCheckedChange={(checked) =>
+                            updateCapabilityEvidence("mms", checked)
+                        }
+                    />
+                    <CapabilityEvidenceToggle
+                        id={`${purpose}-10dlc-evidence`}
+                        label={`${titlePrefix} US 10DLC sender`}
+                        checked={capabilityEvidence.sender_type === "10dlc"}
+                        onCheckedChange={(checked) =>
+                            updateCapabilityEvidence(
+                                "sender_type",
+                                checked ? "10dlc" : "unknown",
+                            )
+                        }
+                    />
+                    {purpose === "operational" ? (
+                        <CapabilityEvidenceToggle
+                            id="operational-meta-consent-mapping-evidence"
+                            label="Operational Meta consent mapping verified"
+                            checked={
+                                capabilityEvidence.meta_consent_mapping_verified === true
+                            }
+                            onCheckedChange={(checked) =>
+                                updateCapabilityEvidence(
+                                    "meta_consent_mapping_verified",
+                                    checked,
+                                )
+                            }
+                        />
+                    ) : null}
+                </div>
+
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                     <Badge variant="secondary">SMS {smsCapable ? "evidenced" : "not evidenced"}</Badge>
                     <Badge variant="secondary">MMS {mmsCapable ? "evidenced" : "not evidenced"}</Badge>
-                    <Badge variant="secondary">Consent {friendlyStatus(settings.consent_management_status).toLowerCase()}</Badge>
+                    <Badge variant="secondary">Consent {friendlyStatus(draft.consentManagementStatus).toLowerCase()}</Badge>
                     {readiness ? <StatusBadge status={readiness.status} label={`Route ${READINESS_LABELS[readiness.status].toLowerCase()}`} /> : null}
                 </div>
 
@@ -501,7 +679,13 @@ function addCredentialValue(
 }
 
 function buildRouteUpdate(draft: RouteDraft): TwilioRouteSettingsUpdate {
-    const update: TwilioRouteSettingsUpdate = { enabled: draft.enabled }
+    const update: TwilioRouteSettingsUpdate = {
+        enabled: draft.enabled,
+        a2p_status: draft.a2pStatus,
+        advanced_opt_out_status: draft.advancedOptOutStatus,
+        consent_management_status: draft.consentManagementStatus,
+        capability_evidence: draft.capabilityEvidence,
+    }
     if (draft.clearMessagingServiceSid) {
         update.messaging_service_sid = ""
     } else if (draft.messagingServiceSid.trim()) {

@@ -127,7 +127,11 @@ def _append_activation_issues(
 
 def _readiness_snapshot(settings: TwilioSettings) -> dict | None:
     snapshots = [(route.capability_evidence or {}).get("readiness") for route in settings.routes]
-    valid = [item for item in snapshots if isinstance(item, dict)]
+    valid = [
+        item
+        for item in snapshots
+        if isinstance(item, dict) and item.get("settings_version") == settings.current_version
+    ]
     if not valid:
         return None
     # Both purpose routes receive the same fenced probe. If only one survived a
