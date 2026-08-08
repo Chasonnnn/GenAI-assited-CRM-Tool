@@ -1884,11 +1884,16 @@ def _load_messaging_contacts_for_batch(
         )
         by_surrogate = {}
     by_phone = {contact.phone_hash: contact for contact in contacts}
-    return {
-        entity.id: by_surrogate.get(entity.id) or by_phone.get(entity.phone_hash)
-        for entity in recipients
-        if by_surrogate.get(entity.id) or by_phone.get(entity.phone_hash)
-    }
+    resolved: dict[UUID, MessagingContact] = {}
+    for entity in recipients:
+        linked_contact = by_surrogate.get(entity.id)
+        if linked_contact is not None and linked_contact.phone_hash == entity.phone_hash:
+            resolved[entity.id] = linked_contact
+            continue
+        fallback_contact = by_phone.get(entity.phone_hash)
+        if fallback_contact is not None:
+            resolved[entity.id] = fallback_contact
+    return resolved
 
 
 def _execute_messaging_campaign_run(

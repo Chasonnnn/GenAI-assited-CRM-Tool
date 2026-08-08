@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 from uuid import UUID
 
-from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -361,6 +360,8 @@ class DefaultWorkflowDomainAdapter:
                     workflow_execution_id=workflow_execution_id,
                     workflow_action_index=workflow_action_index,
                 )
+                if result.get("success") is False:
+                    return result
                 return _with_action_type(result)
 
             if action_type == WorkflowActionType.CREATE_TASK.value:
@@ -629,21 +630,16 @@ class DefaultWorkflowDomainAdapter:
         if template is None:
             raise ValueError("Published message template not found")
 
-        if isinstance(entity, Surrogate):
-            entity_link = MessagingContact.surrogate_id == entity.id
-        else:
-            entity_link = MessagingContact.intake_lead_id == entity.id
-        contact_conditions = [entity_link]
+        contact = None
         if entity.phone_hash:
-            contact_conditions.append(MessagingContact.phone_hash == entity.phone_hash)
-        contact = (
-            db.query(MessagingContact)
-            .filter(
-                MessagingContact.organization_id == entity.organization_id,
-                or_(*contact_conditions),
+            contact = (
+                db.query(MessagingContact)
+                .filter(
+                    MessagingContact.organization_id == entity.organization_id,
+                    MessagingContact.phone_hash == entity.phone_hash,
+                )
+                .first()
             )
-            .first()
-        )
         if contact is None:
             return {
                 "success": False,

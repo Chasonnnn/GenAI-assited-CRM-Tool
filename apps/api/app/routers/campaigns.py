@@ -145,6 +145,9 @@ def delete_campaign(
     _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
 ) -> Response:
     """Delete a draft campaign."""
+    campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
+    if campaign is not None and campaign.channel == "messaging":
+        _require_messaging_operator(session)
     deleted = campaign_service.delete_campaign(db, session.org_id, campaign_id)
     if not deleted:
         raise HTTPException(

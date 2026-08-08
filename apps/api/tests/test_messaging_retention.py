@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import update
+
 from app.services import compliance_service
 
 
@@ -72,6 +74,46 @@ def test_messaging_retention_query_preserves_entity_legal_hold(db, test_org, tes
         cutoff,
         set(),
         {"messaging_message": {message.id}},
+    )
+
+    assert query.count() == 0
+
+
+def test_messaging_retention_preserves_evidence_backing_active_consent_state(
+    db,
+    test_org,
+):
+    from app.db.models import MessagingConsentEvidence
+    from app.services import messaging_consent_service
+
+    result = messaging_consent_service.record_opt_in(
+        db,
+        organization_id=test_org.id,
+        phone="+14155550110",
+        purpose="operational",
+        affirmative=True,
+        disclosure_text="Operational consent disclosure",
+        source="website_intake",
+        source_reference="retention-active-consent",
+        occurred_at=datetime.now(UTC) - timedelta(days=2600),
+        idempotency_key="retention-active-consent",
+        evidence_metadata={"affirmative_action": "checked"},
+    )
+    db.execute(
+        update(MessagingConsentEvidence)
+        .where(MessagingConsentEvidence.id == result.evidence_id)
+        .values(created_at=datetime.now(UTC) - timedelta(days=2600))
+    )
+    db.commit()
+    cutoff = datetime.now(UTC) - timedelta(days=2557)
+
+    query = compliance_service._build_retention_query(
+        db,
+        test_org.id,
+        "messaging_consent_evidence",
+        cutoff,
+        set(),
+        {},
     )
 
     assert query.count() == 0

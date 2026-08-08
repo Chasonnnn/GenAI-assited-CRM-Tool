@@ -1,11 +1,81 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
+
+from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
+from app.core.deps import COOKIE_NAME, get_db
+from app.core.security import create_session_token
+from app.db.enums import Role
+from app.db.models import Membership, User, UserPermissionOverride
+from app.main import app
+from app.services import session_service
+
+
+@asynccontextmanager
+async def _messaging_client_with_email_permission(db, organization_id):
+    user = User(
+        id=uuid4(),
+        email=f"messaging-campaign-{uuid4().hex[:8]}@test.com",
+        display_name="Messaging Campaign Operator",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+    db.add_all(
+        [
+            Membership(
+                id=uuid4(),
+                user_id=user.id,
+                organization_id=organization_id,
+                role=Role.CASE_MANAGER.value,
+            ),
+            UserPermissionOverride(
+                id=uuid4(),
+                organization_id=organization_id,
+                user_id=user.id,
+                permission="manage_email_templates",
+                override_type="grant",
+            ),
+        ]
+    )
+    db.flush()
+    token = create_session_token(
+        user_id=user.id,
+        org_id=organization_id,
+        role=Role.CASE_MANAGER.value,
+        token_version=user.token_version,
+        mfa_verified=True,
+        mfa_required=True,
+    )
+    session_service.create_session(
+        db=db,
+        user_id=user.id,
+        org_id=organization_id,
+        token=token,
+        request=None,
+    )
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    csrf_token = generate_csrf_token()
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="https://test",
+        cookies={COOKIE_NAME: token, CSRF_COOKIE_NAME: csrf_token},
+        headers={CSRF_HEADER: csrf_token},
+    ) as client:
+        yield client
+    app.dependency_overrides.clear()
 
 
 def _published_message_template(db, test_org, test_user, *, purpose: str, body: str):
@@ -153,6 +223,63 @@ def test_messaging_campaign_materializes_promotional_outbox_occurrence(
     assert delivery.idempotency_key == f"campaign-message/{recipient.id}/v0"
 
 
+def test_messaging_campaign_rejects_stale_contact_after_entity_phone_changes(
+    db,
+    test_org,
+    test_user,
+    default_stage,
+):
+    from app.core.encryption import hash_phone
+    from app.db.models import CampaignRecipient, MessageDelivery
+    from app.schemas.campaign import CampaignCreate
+    from app.services import campaign_service
+
+    template = _published_message_template(
+        db,
+        test_org,
+        test_user,
+        purpose="promotional",
+        body="EWI Surrogacy opportunities. Reply STOP to opt out.",
+    )
+    template.is_enrollment_confirmation = True
+    surrogate = _messaging_surrogate(db, test_org, test_user, default_stage)
+    _consent_for_surrogate(db, test_org, surrogate, purpose="promotional")
+    surrogate.phone = "+14155550186"
+    surrogate.phone_hash = hash_phone(surrogate.phone)
+    campaign = campaign_service.create_campaign(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        data=CampaignCreate(
+            name="Stale contact guard",
+            channel="messaging",
+            message_template_version_id=template.id,
+            recipient_type="case",
+        ),
+    )
+    db.commit()
+
+    _message, run_id, _scheduled_at = campaign_service.enqueue_campaign_send(
+        db,
+        org_id=test_org.id,
+        campaign_id=campaign.id,
+        user_id=test_user.id,
+        send_now=True,
+    )
+    campaign_service.execute_campaign_run(
+        db,
+        org_id=test_org.id,
+        campaign_id=campaign.id,
+        run_id=run_id,
+        actor_user_id=test_user.id,
+    )
+
+    recipient = db.query(CampaignRecipient).filter(CampaignRecipient.run_id == run_id).one()
+    assert recipient.status == "skipped"
+    assert recipient.skip_reason == "consent_unknown"
+    assert db.query(MessageDelivery).filter(MessageDelivery.organization_id == test_org.id).count() == 0
+
+
 async def test_messaging_campaign_retry_stays_in_durable_outbox(
     authed_client,
     db,
@@ -231,6 +358,41 @@ async def test_messaging_campaign_retry_stays_in_durable_outbox(
         .count()
         == jobs_before
     )
+
+
+async def test_messaging_campaign_delete_requires_messaging_operator(
+    db,
+    test_org,
+    test_user,
+):
+    from app.schemas.campaign import CampaignCreate
+    from app.services import campaign_service
+
+    template = _published_message_template(
+        db,
+        test_org,
+        test_user,
+        purpose="promotional",
+        body="EWI Surrogacy promotional texts. Reply STOP to opt out.",
+    )
+    campaign = campaign_service.create_campaign(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        data=CampaignCreate(
+            name="Protected messaging draft",
+            channel="messaging",
+            message_template_version_id=template.id,
+            recipient_type="case",
+        ),
+    )
+    db.commit()
+
+    async with _messaging_client_with_email_permission(db, test_org.id) as client:
+        response = await client.delete(f"/campaigns/{campaign.id}")
+
+    assert response.status_code == 403
+    assert campaign_service.get_campaign(db, test_org.id, campaign.id) is not None
 
 
 def test_send_message_workflow_requires_published_purpose_matching_template(
@@ -337,3 +499,51 @@ def test_send_message_workflow_materializes_deterministic_outbox_without_inline_
     delivery = db.query(MessageDelivery).filter(MessageDelivery.id == first["delivery_id"]).one()
     assert delivery.idempotency_key == f"workflow-message/{execution_id}/action/2"
     assert delivery.template_version_id == template.id
+
+
+def test_send_message_workflow_rejects_stale_contact_after_entity_phone_changes(
+    db,
+    test_org,
+    test_user,
+    default_stage,
+):
+    from app.core.encryption import hash_phone
+    from app.db.models import MessageDelivery
+    from app.services.workflow_engine_adapters import DefaultWorkflowDomainAdapter
+
+    template = _published_message_template(
+        db,
+        test_org,
+        test_user,
+        purpose="operational",
+        body="Operational update. Reply STOP to opt out.",
+    )
+    template.is_enrollment_confirmation = True
+    surrogate = _messaging_surrogate(db, test_org, test_user, default_stage)
+    _consent_for_surrogate(db, test_org, surrogate, purpose="operational")
+    surrogate.phone = "+14155550186"
+    surrogate.phone_hash = hash_phone(surrogate.phone)
+    db.flush()
+
+    result = DefaultWorkflowDomainAdapter().execute_action(
+        db=db,
+        action={
+            "action_type": "send_message",
+            "purpose": "operational",
+            "message_template_version_id": str(template.id),
+        },
+        entity=surrogate,
+        entity_type="surrogate",
+        event_id=uuid4(),
+        depth=0,
+        workflow_scope="org",
+        workflow_execution_id=uuid4(),
+        workflow_action_index=0,
+    )
+
+    assert result == {
+        "success": False,
+        "error": "No consented messaging contact resolved",
+        "skipped": True,
+    }
+    assert db.query(MessageDelivery).filter(MessageDelivery.organization_id == test_org.id).count() == 0

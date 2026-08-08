@@ -4,7 +4,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.db.models import MetaFormVersion, MetaLead, MetaPageMapping
+from app.db.models import (
+    MessagingConsentEvidence,
+    MessagingConsentState,
+    MessagingContact,
+    MetaFormVersion,
+    MetaLead,
+    MetaPageMapping,
+)
 from app.db.models.meta import MetaFormLegalSnapshot
 from app.jobs.handlers.meta import process_meta_lead_fetch
 from app.services import meta_api, meta_lead_service, meta_sync_service, meta_token_service
@@ -153,7 +160,11 @@ async def test_meta_lead_job_retains_disclaimer_response_and_legal_snapshot(
                         {
                             "key": "sms_operational",
                             "text": "I agree to receive application texts.",
-                        }
+                        },
+                        {
+                            "key": "sms_promotional",
+                            "text": "I agree to receive promotional texts.",
+                        },
                     ]
                 }
             },
@@ -177,7 +188,8 @@ async def test_meta_lead_job_retains_disclaimer_response_and_legal_snapshot(
                 "form_id": "form_1",
                 "page_id": "page_1",
                 "custom_disclaimer_responses": [
-                    {"checkbox_key": "sms_operational", "is_checked": True}
+                    {"checkbox_key": "sms_operational", "is_checked": True},
+                    {"checkbox_key": "sms_promotional", "is_checked": False},
                 ],
             },
             None,
@@ -205,7 +217,45 @@ async def test_meta_lead_job_retains_disclaimer_response_and_legal_snapshot(
     )
     snapshot = db.get(MetaFormLegalSnapshot, lead.meta_form_legal_snapshot_id)
     assert lead.custom_disclaimer_responses == [
-        {"checkbox_key": "sms_operational", "is_checked": True}
+        {"checkbox_key": "sms_operational", "is_checked": True},
+        {"checkbox_key": "sms_promotional", "is_checked": False},
     ]
     assert snapshot is not None
     assert snapshot.form_id == form.id
+
+    contact = (
+        db.query(MessagingContact)
+        .filter(
+            MessagingContact.organization_id == test_org.id,
+            MessagingContact.meta_lead_id == lead.id,
+        )
+        .one()
+    )
+    operational = (
+        db.query(MessagingConsentState)
+        .filter(
+            MessagingConsentState.contact_id == contact.id,
+            MessagingConsentState.purpose == "operational",
+        )
+        .one()
+    )
+    promotional = (
+        db.query(MessagingConsentState)
+        .filter(
+            MessagingConsentState.contact_id == contact.id,
+            MessagingConsentState.purpose == "promotional",
+        )
+        .one()
+    )
+    evidence = db.query(MessagingConsentEvidence).filter_by(contact_id=contact.id).one()
+    assert operational.status == "opted_in"
+    assert promotional.status == "unknown"
+    assert evidence.source == "meta_lead_ads"
+    assert evidence.source_reference == "lead_1:sms_operational"
+    assert evidence.disclosure_text_snapshot == "I agree to receive application texts."
+    assert evidence.evidence_metadata == {
+        "affirmative_action": "meta_custom_disclaimer_checkbox",
+        "checkbox_key": "sms_operational",
+        "legal_snapshot_id": str(snapshot.id),
+        "privacy_policy_url": "https://agency.example/privacy",
+    }

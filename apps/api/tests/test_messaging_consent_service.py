@@ -1,14 +1,20 @@
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from datetime import UTC, datetime
+from threading import Event
 
 import pytest
+from sqlalchemy import event, select
 
 from app.db.models import (
     MessagingConsentEvidence,
+    MessagingConsentState,
     MessagingContact,
     MetaLead,
     Organization,
 )
+from app.db.session import SessionLocal
 from app.services import messaging_consent_service
 
 OCCURRED_AT = datetime(2026, 7, 31, 12, 0, tzinfo=UTC)
@@ -344,3 +350,117 @@ def test_two_purpose_opt_ins_can_share_one_caller_owned_transaction(db, test_org
         .count()
         == 0
     )
+
+
+def test_newer_stop_wins_when_an_older_opt_in_commits_later() -> None:
+    organization_id = uuid.uuid4()
+    phone = "+14155550119"
+    older_commit_reached = Event()
+    release_older_commit = Event()
+
+    setup = SessionLocal()
+    try:
+        setup.add(
+            Organization(
+                id=organization_id,
+                name="Consent Concurrency Test",
+                slug=f"consent-concurrency-{organization_id.hex[:12]}",
+            )
+        )
+        setup.commit()
+        messaging_consent_service.record_opt_in(
+            setup,
+            organization_id=organization_id,
+            phone=phone,
+            purpose="operational",
+            affirmative=True,
+            disclosure_text="Operational disclosure",
+            source="website_intake",
+            source_reference="initial-opt-in",
+            occurred_at=datetime(2026, 7, 31, 12, 0, tzinfo=UTC),
+            idempotency_key="initial-opt-in",
+            evidence_metadata={"affirmative_action": "checked"},
+        )
+    finally:
+        setup.close()
+
+    def record_older_opt_in() -> None:
+        session = SessionLocal()
+
+        def hold_before_commit(_session) -> None:
+            older_commit_reached.set()
+            assert release_older_commit.wait(timeout=5)
+
+        event.listen(session, "before_commit", hold_before_commit, once=True)
+        try:
+            messaging_consent_service.record_opt_in(
+                session,
+                organization_id=organization_id,
+                phone=phone,
+                purpose="operational",
+                affirmative=True,
+                disclosure_text="Operational disclosure",
+                source="website_intake",
+                source_reference="delayed-opt-in",
+                occurred_at=datetime(2026, 7, 31, 12, 5, tzinfo=UTC),
+                idempotency_key="delayed-opt-in",
+                evidence_metadata={"affirmative_action": "checked"},
+            )
+        finally:
+            session.close()
+
+    def record_newer_stop() -> None:
+        session = SessionLocal()
+        try:
+            messaging_consent_service.record_global_stop(
+                session,
+                organization_id=organization_id,
+                phone=phone,
+                instruction_text="STOP",
+                source="twilio_inbound",
+                source_reference="newer-stop",
+                occurred_at=datetime(2026, 7, 31, 12, 10, tzinfo=UTC),
+                idempotency_key="newer-stop",
+                evidence_metadata={},
+            )
+        finally:
+            session.close()
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            older = pool.submit(record_older_opt_in)
+            assert older_commit_reached.wait(timeout=5)
+            newer = pool.submit(record_newer_stop)
+            try:
+                newer.result(timeout=0.5)
+            except FutureTimeoutError:
+                pass
+            finally:
+                release_older_commit.set()
+            older.result(timeout=5)
+            newer.result(timeout=5)
+
+        verify = SessionLocal()
+        try:
+            state = verify.scalar(
+                select(MessagingConsentState)
+                .join(MessagingContact)
+                .where(
+                    MessagingContact.organization_id == organization_id,
+                    MessagingConsentState.purpose == "operational",
+                )
+            )
+            assert state is not None
+            assert state.status == "opted_out"
+            assert state.effective_at == datetime(2026, 7, 31, 12, 10, tzinfo=UTC)
+        finally:
+            verify.close()
+    finally:
+        cleanup = SessionLocal()
+        try:
+            organization = cleanup.get(Organization, organization_id)
+            if organization is not None:
+                cleanup.delete(organization)
+                cleanup.commit()
+        finally:
+            cleanup.close()

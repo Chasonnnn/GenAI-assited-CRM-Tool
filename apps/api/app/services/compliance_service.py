@@ -34,11 +34,14 @@ from app.db.models import (
     ExportJob,
     LegalHold,
     Match,
+    MessageDelivery,
     MessageMediaAsset,
     MessageMediaLink,
     MessageWebhookEvent,
     MessagingConsentEvidence,
+    MessagingConsentState,
     MessagingContact,
+    MessagingGlobalSuppression,
     MessagingMessage,
     Surrogate,
     SurrogateActivityLog,
@@ -1079,9 +1082,24 @@ def _build_retention_query(
             )
         return query
     if entity_type == "messaging_consent_evidence":
+        backs_consent_state = select(MessagingConsentState.id).where(
+            MessagingConsentState.organization_id == org_id,
+            MessagingConsentState.latest_evidence_id == MessagingConsentEvidence.id,
+        ).exists()
+        backs_global_suppression = select(MessagingGlobalSuppression.id).where(
+            MessagingGlobalSuppression.organization_id == org_id,
+            MessagingGlobalSuppression.latest_evidence_id == MessagingConsentEvidence.id,
+        ).exists()
+        backs_delivery = select(MessageDelivery.id).where(
+            MessageDelivery.organization_id == org_id,
+            MessageDelivery.consent_evidence_id == MessagingConsentEvidence.id,
+        ).exists()
         query = db.query(MessagingConsentEvidence).filter(
             MessagingConsentEvidence.organization_id == org_id,
             MessagingConsentEvidence.created_at < cutoff,
+            ~backs_consent_state,
+            ~backs_global_suppression,
+            ~backs_delivery,
         )
         if surrogate_hold_ids:
             held_contact_ids = select(MessagingContact.id).where(

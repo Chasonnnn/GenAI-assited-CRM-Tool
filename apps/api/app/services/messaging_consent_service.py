@@ -72,13 +72,14 @@ def _get_or_create_contact(
 ) -> MessagingContact:
     normalized_phone = _normalize_required_phone(phone)
     phone_hash = hash_phone(normalized_phone)
-    contact = (
-        db.query(MessagingContact)
-        .filter(
+    contact = db.scalar(
+        select(MessagingContact)
+        .where(
             MessagingContact.organization_id == organization_id,
             MessagingContact.phone_hash == phone_hash,
         )
-        .first()
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if contact is None:
         phone_last4 = extract_phone_last4(normalized_phone)
@@ -93,7 +94,34 @@ def _get_or_create_contact(
         db.add(contact)
         db.flush()
 
-    existing_states = {state.purpose: state for state in contact.consent_states}
+    _lock_consent_projection(
+        db,
+        organization_id=organization_id,
+        contact=contact,
+    )
+    return contact
+
+
+def _lock_consent_projection(
+    db: Session,
+    *,
+    organization_id: uuid.UUID,
+    contact: MessagingContact,
+) -> None:
+    """Lock and initialize one contact's complete consent projection."""
+    states = list(
+        db.scalars(
+            select(MessagingConsentState)
+            .where(
+                MessagingConsentState.organization_id == organization_id,
+                MessagingConsentState.contact_id == contact.id,
+            )
+            .order_by(MessagingConsentState.purpose)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    )
+    existing_states = {state.purpose: state for state in states}
     for purpose in PURPOSES:
         if purpose not in existing_states:
             state = MessagingConsentState(
@@ -105,7 +133,16 @@ def _get_or_create_contact(
             db.add(state)
             contact.consent_states.append(state)
 
-    if contact.suppression is None:
+    suppression = db.scalar(
+        select(MessagingGlobalSuppression)
+        .where(
+            MessagingGlobalSuppression.organization_id == organization_id,
+            MessagingGlobalSuppression.contact_id == contact.id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if suppression is None:
         contact.suppression = MessagingGlobalSuppression(
             organization_id=organization_id,
             contact_id=contact.id,
@@ -113,7 +150,6 @@ def _get_or_create_contact(
             reason="none",
         )
     db.flush()
-    return contact
 
 
 def _require_text(value: str | None, field_name: str) -> str:
@@ -340,9 +376,7 @@ def _enqueue_provider_sync(
             "provider_scope": JobScope.ORGANIZATION.value,
             "status": provider_status,
         },
-        idempotency_key=(
-            f"twilio-consent:{evidence.id}:{state.purpose}:{provider_status}"
-        ),
+        idempotency_key=(f"twilio-consent:{evidence.id}:{state.purpose}:{provider_status}"),
         commit=False,
     )
 
