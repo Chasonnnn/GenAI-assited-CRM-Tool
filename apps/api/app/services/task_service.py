@@ -1275,6 +1275,22 @@ def invalidate_pending_approvals_for_surrogate(
         .all()
     )
 
+    execution_ids = {
+        task.workflow_execution_id
+        for task in pending_tasks
+        if task.workflow_execution_id is not None
+    }
+    organization_ids = {task.organization_id for task in pending_tasks}
+    executions_by_id: dict[UUID, WorkflowExecution] = {}
+    if execution_ids:
+        executions = db.scalars(
+            select(WorkflowExecution).where(
+                WorkflowExecution.id.in_(execution_ids),
+                WorkflowExecution.organization_id.in_(organization_ids),
+            )
+        ).all()
+        executions_by_id = {execution.id: execution for execution in executions}
+
     count = 0
     for task in pending_tasks:
         # Mark task as denied
@@ -1284,11 +1300,7 @@ def invalidate_pending_approvals_for_surrogate(
 
         # Cancel workflow execution
         if task.workflow_execution_id:
-            execution = (
-                db.query(WorkflowExecution)
-                .filter(WorkflowExecution.id == task.workflow_execution_id)
-                .first()
-            )
+            execution = executions_by_id.get(task.workflow_execution_id)
 
             if execution and execution.status == WorkflowExecutionStatus.PAUSED.value:
                 execution.status = WorkflowExecutionStatus.CANCELED.value

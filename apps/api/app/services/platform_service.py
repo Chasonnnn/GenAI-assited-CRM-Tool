@@ -1434,12 +1434,17 @@ async def send_system_email_campaign(
 
     missing_targets: list[dict] = []
     recipients: list[tuple[UUID, User, Membership]] = []
+    organization_ids = {target["org_id"] for target in targets}
+    organizations_by_id = {
+        org.id: org
+        for org in db.query(Organization).filter(Organization.id.in_(organization_ids)).all()
+    }
 
     for target in targets:
         org_id = target["org_id"]
         user_ids = target["user_ids"]
 
-        org = org_service.get_org_by_id(db, org_id, include_deleted=True)
+        org = organizations_by_id.get(org_id)
         if not org:
             missing_targets.append(
                 {
@@ -1477,7 +1482,7 @@ async def send_system_email_campaign(
             suppressed += 1
             continue
 
-        org = org_service.get_org_by_id(db, org_id, include_deleted=True)
+        org = organizations_by_id.get(org_id)
         if not org:
             failed += 1
             failures.append(

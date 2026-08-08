@@ -340,6 +340,95 @@ async def test_platform_system_email_campaign_sends_selected_users(
 
 
 @pytest.mark.asyncio
+async def test_platform_system_email_campaign_bulk_loads_organizations_once(
+    db, test_user, test_org, monkeypatch
+):
+    from sqlalchemy import event as sqlalchemy_event
+
+    from app.db.models import Membership, User
+    from app.services import (
+        platform_email_service,
+        platform_service,
+        system_email_template_service,
+    )
+
+    membership_role = db.query(Membership.role).filter(Membership.user_id == test_user.id).scalar()
+    org_id = test_org.id
+    actor_id = test_user.id
+    actor_display_name = test_user.display_name
+    additional_users = [
+        User(
+            id=uuid4(),
+            email=f"platform-campaign-{index}-{uuid4().hex[:8]}@test.com",
+            display_name=f"Campaign User {index}",
+            token_version=1,
+            is_active=True,
+        )
+        for index in range(2)
+    ]
+    db.add_all(additional_users)
+    db.flush()
+    db.add_all(
+        [
+            Membership(
+                id=uuid4(),
+                user_id=user.id,
+                organization_id=org_id,
+                role=membership_role,
+            )
+            for user in additional_users
+        ]
+    )
+    recipient_ids = [actor_id, *(user.id for user in additional_users)]
+
+    template = system_email_template_service.ensure_system_template(
+        db, system_key=system_email_template_service.ORG_INVITE_SYSTEM_KEY
+    )
+    template.from_email = "Invites <invites@surrogacyforce.com>"
+    db.commit()
+
+    monkeypatch.setattr(platform_email_service, "platform_sender_configured", lambda: True)
+
+    async def fake_send_email_logged(**_kwargs):
+        return {"success": True}
+
+    monkeypatch.setattr(platform_email_service, "send_email_logged", fake_send_email_logged)
+
+    statements: list[str] = []
+
+    def capture_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(" ".join(statement.lower().split()))
+
+    engine = db.get_bind()
+    sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        result = await platform_service.send_system_email_campaign(
+            db=db,
+            system_key=system_email_template_service.ORG_INVITE_SYSTEM_KEY,
+            campaign_occurrence_id=uuid4(),
+            targets=[
+                {
+                    "org_id": org_id,
+                    "user_ids": recipient_ids,
+                }
+            ],
+            actor_id=actor_id,
+            actor_display_name=actor_display_name,
+        )
+    finally:
+        sqlalchemy_event.remove(engine, "before_cursor_execute", capture_sql)
+
+    organization_selects = [
+        statement
+        for statement in statements
+        if statement.startswith("select") and "from organizations" in statement
+    ]
+    assert len(organization_selects) == 1
+    assert "organizations.id in (" in organization_selects[0]
+    assert result["recipients"] == 3
+
+
+@pytest.mark.asyncio
 async def test_platform_system_email_campaign_requires_occurrence_id(
     authed_client, db, test_user, test_org
 ):

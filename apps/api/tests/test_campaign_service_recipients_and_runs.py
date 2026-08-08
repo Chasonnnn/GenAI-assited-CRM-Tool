@@ -1530,6 +1530,94 @@ def test_retry_failed_campaign_run_updates_recipients(
     assert run.clicked_count == 1
 
 
+def test_retry_failed_campaign_run_bulk_loads_entities_in_bounded_batches(
+    monkeypatch, db, test_org, test_user, default_stage
+):
+    from sqlalchemy import event as sqlalchemy_event
+
+    template = _create_template(db, test_org.id)
+    campaign = _create_campaign(
+        db, test_org.id, test_user.id, template.id, status=CampaignStatus.FAILED.value
+    )
+    run = _create_run(db, test_org.id, campaign.id, status="failed")
+
+    entities = []
+    for index in range(3):
+        entity = _create_surrogate(
+            db,
+            org_id=test_org.id,
+            user_id=test_user.id,
+            stage_id=default_stage.id,
+            status_label=default_stage.label,
+            email=f"archived-{index}@example.com",
+            name=f"Archived Recipient {index}",
+        )
+        entity.is_archived = True
+        entities.append(entity)
+    db.add_all(
+        [
+            CampaignRecipient(
+                id=uuid4(),
+                run_id=run.id,
+                entity_type="case",
+                entity_id=entity.id,
+                recipient_email=f"missing-{index}@example.com",
+                recipient_name=entity.full_name,
+                status=CampaignRecipientStatus.FAILED.value,
+            )
+            for index, entity in enumerate(entities)
+        ]
+    )
+    db.commit()
+
+    monkeypatch.setattr(campaign_service, "CAMPAIGN_SEND_BATCH_SIZE", 2)
+    monkeypatch.setattr(campaign_service, "_load_suppressed_emails", lambda *args, **kwargs: set())
+    monkeypatch.setattr(
+        "app.services.org_service.get_org_by_id",
+        lambda *_args, **_kwargs: SimpleNamespace(slug="acme"),
+    )
+    monkeypatch.setattr(
+        "app.services.org_service.get_org_portal_base_url",
+        lambda *_args, **_kwargs: "https://acme.example.com",
+    )
+
+    statements: list[str] = []
+
+    def capture_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(" ".join(statement.lower().split()))
+
+    engine = db.get_bind()
+    sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        result = campaign_service.retry_failed_campaign_run(
+            db,
+            org_id=test_org.id,
+            campaign_id=campaign.id,
+            run_id=run.id,
+            actor_user_id=test_user.id,
+        )
+    finally:
+        sqlalchemy_event.remove(engine, "before_cursor_execute", capture_sql)
+
+    entity_selects = [
+        statement
+        for statement in statements
+        if statement.startswith("select") and "from surrogates" in statement
+    ]
+    recipient_refresh_selects = [
+        statement
+        for statement in statements
+        if statement.startswith("select")
+        and "from campaign_recipients" in statement
+        and "where campaign_recipients.id =" in statement
+    ]
+    assert len(entity_selects) == 2
+    assert all("surrogates.id in (" in statement for statement in entity_selects)
+    assert recipient_refresh_selects == []
+    assert result["retried_count"] == 0
+    assert result["skipped_count"] == 3
+
+
 def test_retry_failed_campaign_run_does_not_revive_concurrently_cancelled_campaign(
     db,
     test_org,
