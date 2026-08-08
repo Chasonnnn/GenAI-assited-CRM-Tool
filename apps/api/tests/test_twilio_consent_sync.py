@@ -252,6 +252,43 @@ async def test_one_of_two_provider_updates_keeps_external_reopt_blocked(
 
 
 @pytest.mark.asyncio
+async def test_transient_consent_provider_failure_retries_without_terminal_projection(
+    db,
+    test_org,
+    monkeypatch,
+):
+    _configure_routes(db, test_org)
+    _initial_opt_in(db, test_org)
+    _global_stop(db, test_org)
+    pending = _external_reopt(db, test_org)
+    job = _sync_job(db, test_org, status="opt-in")
+    monkeypatch.setattr(
+        twilio_transport,
+        "upsert_route_consent",
+        lambda **_kwargs: twilio_transport.TwilioConsentResult(
+            success=False,
+            correlation_ids=("one", "two"),
+            failure_reason=twilio_transport.TwilioFailureReason.RATE_LIMITED,
+            provider_status_code=429,
+            retryable=True,
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="transient"):
+        await twilio_job_handler.process_twilio_consent_sync(db, job)
+
+    db.expire_all()
+    state = (
+        db.query(MessagingConsentState)
+        .filter_by(contact_id=pending.contact_id, purpose="operational")
+        .one()
+    )
+    assert state.status == "reopt_pending"
+    assert state.provider_sync_status == "pending"
+    assert state.provider_synced_at is None
+
+
+@pytest.mark.asyncio
 async def test_unavailable_or_toll_free_reopt_never_calls_provider(
     db, test_org, monkeypatch
 ):

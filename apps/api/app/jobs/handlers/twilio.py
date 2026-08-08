@@ -168,8 +168,10 @@ async def process_twilio_consent_sync(db, job) -> None:
         route_marker=sender_type,
     )
 
-    state.updated_at = datetime.now(UTC)
     if not result.success:
+        if result.retryable:
+            raise RuntimeError("Twilio consent synchronization transient failure")
+        state.updated_at = datetime.now(UTC)
         state.provider_sync_status = "failed"
         state.provider_sync_error_code = (
             result.failure_reason.value if result.failure_reason is not None else "provider_failed"
@@ -178,6 +180,7 @@ async def process_twilio_consent_sync(db, job) -> None:
         db.commit()
         return
 
+    state.updated_at = datetime.now(UTC)
     state.provider_sync_status = "synced"
     state.provider_sync_error_code = None
     state.provider_synced_at = datetime.now(UTC)

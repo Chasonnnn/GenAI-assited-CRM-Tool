@@ -277,26 +277,38 @@ def process_inbound_media_event(
             _reconciliation(db, event=event, reason_code="inbound_media_size_exceeded")
             db.commit()
             continue
-        downloaded = twilio_transport.download_inbound_media(
-            credentials=credentials,
-            media_url=media_url,
-            message_sid=message_sid,
-            media_sid=media_sid,
-            max_bytes=remaining_bytes,
-        )
-        if not downloaded.success or downloaded.content is None:
-            _reconciliation(db, event=event, reason_code="inbound_media_download_failed")
-            db.commit()
+        link = db.execute(
+            select(MessageMediaLink).where(
+                MessageMediaLink.organization_id == organization_id,
+                MessageMediaLink.message_id == message.id,
+                MessageMediaLink.position == position,
+            )
+        ).scalar_one_or_none()
+        if link is None:
+            downloaded = twilio_transport.download_inbound_media(
+                credentials=credentials,
+                media_url=media_url,
+                message_sid=message_sid,
+                media_sid=media_sid,
+                max_bytes=remaining_bytes,
+            )
+            if not downloaded.success or downloaded.content is None:
+                if downloaded.retryable:
+                    raise RuntimeError("Twilio inbound media download transient failure")
+                _reconciliation(db, event=event, reason_code="inbound_media_download_failed")
+                db.commit()
+                continue
+            remaining_bytes -= len(downloaded.content)
+            link = _persist_media(
+                db,
+                message=message,
+                position=position,
+                media_sid=media_sid,
+                claimed_content_type=claimed_content_type,
+                downloaded=downloaded,
+            )
+        elif link.provider_deleted_at is not None:
             continue
-        remaining_bytes -= len(downloaded.content)
-        link = _persist_media(
-            db,
-            message=message,
-            position=position,
-            media_sid=media_sid,
-            claimed_content_type=claimed_content_type,
-            downloaded=downloaded,
-        )
         deleted = twilio_transport.delete_inbound_media(
             credentials=credentials,
             message_sid=message_sid,
@@ -304,6 +316,8 @@ def process_inbound_media_event(
         )
         if deleted.success:
             link.provider_deleted_at = datetime.now(UTC)
+        elif deleted.retryable:
+            raise RuntimeError("Twilio inbound media deletion transient failure")
         else:
             link.processing_status = "delete_failed"
             _reconciliation(db, event=event, reason_code="inbound_media_delete_failed")

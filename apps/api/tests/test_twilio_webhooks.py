@@ -217,6 +217,117 @@ async def test_unordered_status_callbacks_preserve_monotonic_delivery_state(
     )
 
 
+async def test_status_callback_arriving_before_send_commit_is_replayed_after_sid_link(
+    client,
+    db,
+    test_org,
+    monkeypatch,
+) -> None:
+    from app.core.config import settings as app_settings
+    from app.db.models import MessageReconciliationCase
+    from app.db.models.messaging_delivery import MessageWebhookEvent
+    from app.services import (
+        messaging_consent_service,
+        messaging_delivery_service,
+        messaging_dispatch_service,
+        twilio_transport,
+    )
+    from app.services.messaging_sending_hours import RecipientTimezone, SendingWindowDecision
+
+    route = _configure_route(db, test_org)
+    route.a2p_status = "approved"
+    route.advanced_opt_out_status = "verified"
+    db.commit()
+    consent = messaging_consent_service.record_opt_in(
+        db,
+        organization_id=test_org.id,
+        phone=CONTACT,
+        purpose="operational",
+        affirmative=True,
+        disclosure_text="Operational messaging disclosure",
+        source="website",
+        source_reference="lead-status-race",
+        occurred_at=datetime(2026, 7, 31, 12, 0, tzinfo=UTC),
+        idempotency_key="lead-status-race",
+        evidence_metadata={},
+    )
+    delivery = messaging_delivery_service.materialize_delivery(
+        db,
+        organization_id=test_org.id,
+        contact_id=consent.contact_id,
+        purpose="operational",
+        body="EWI operational. Frequency varies. HELP. STOP.",
+        idempotency_key="status-race-delivery",
+        source_type="workflow",
+        source_id=None,
+        template_version_id=None,
+        media_asset_ids=[],
+        is_enrollment_confirmation=True,
+    )
+    claimed = messaging_delivery_service.claim_due_deliveries(
+        db,
+        worker_id="status-race-worker",
+        limit=1,
+    )[0]
+    message_sid = "SM" + ("9" * 32)
+    path = f"/webhooks/twilio/{route.webhook_id}/status"
+    url = f"{app_settings.API_BASE_URL.rstrip('/')}{path}"
+    callback = {
+        "AccountSid": ACCOUNT_SID,
+        "MessagingServiceSid": SERVICE_SID,
+        "MessageSid": message_sid,
+        "MessageStatus": "delivered",
+        "From": SENDER,
+        "To": CONTACT,
+    }
+
+    response = await client.post(path, data=callback, headers=_signed_headers(url, callback))
+
+    assert response.status_code == 200
+    event = db.query(MessageWebhookEvent).filter_by(provider_message_sid=message_sid).one()
+    case = db.query(MessageReconciliationCase).filter_by(webhook_event_id=event.id).one()
+    assert event.processed_at is None
+    assert case.status == "action_required"
+    monkeypatch.setattr(
+        messaging_dispatch_service.messaging_sending_hours,
+        "resolve_recipient_timezone",
+        lambda **_kwargs: RecipientTimezone("America/Los_Angeles", "state"),
+    )
+    monkeypatch.setattr(
+        messaging_dispatch_service.messaging_sending_hours,
+        "evaluate_sending_window",
+        lambda **_kwargs: SendingWindowDecision(True, None, None),
+    )
+    monkeypatch.setattr(
+        messaging_dispatch_service.twilio_transport,
+        "send_message",
+        lambda **_kwargs: twilio_transport.TwilioSendResult(
+            success=True,
+            message_sid=message_sid,
+            initial_status="accepted",
+        ),
+    )
+
+    result = messaging_dispatch_service.dispatch_claimed_delivery(
+        db,
+        organization_id=test_org.id,
+        delivery_id=delivery.id,
+        lease_token=claimed.lease_token,
+        lease_generation=claimed.lease_generation,
+        now=datetime(2026, 7, 31, 18, 0, tzinfo=UTC),
+    )
+
+    assert result == "submitted"
+    db.refresh(delivery)
+    db.refresh(event)
+    db.refresh(case)
+    assert delivery.status == "delivered"
+    assert event.processed_at is not None
+    assert case.status == "resolved"
+    assert case.delivery_id == delivery.id
+    assert case.resolution_code == "status_callback_replayed"
+
+
 async def test_inbound_mms_returns_promptly_and_queues_only_opaque_event_identity(
     client,
     db,

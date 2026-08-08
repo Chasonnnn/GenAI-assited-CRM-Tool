@@ -7,6 +7,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlencode
 from uuid import UUID
 
 from sqlalchemy import select
@@ -14,7 +15,14 @@ from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.orm import Session
 
 from app.core.encryption import hash_pii
-from app.db.models import IntakeLead, MetaLead, Surrogate
+from app.db.models import (
+    IntakeLead,
+    MessageMediaAsset,
+    MessageMediaLink,
+    MessageTemplate,
+    MetaLead,
+    Surrogate,
+)
 from app.db.models.messaging import MessagingContact, TwilioRoute, TwilioSettings
 from app.db.models.messaging_delivery import (
     MessageDelivery,
@@ -262,17 +270,63 @@ def _reserve_account_slot(
     return None
 
 
-def _media_urls(delivery: MessageDelivery) -> list[str]:
+def _media_urls(
+    db: Session,
+    delivery: MessageDelivery,
+    *,
+    now: datetime,
+) -> list[str]:
     if not delivery.message.media_links:
         return []
     try:
         from app.services import message_content_service
     except ImportError as exc:
         raise RuntimeError("Messaging media delivery is unavailable") from exc
-    return [
-        message_content_service.create_short_lived_media_url(link.media_asset)
-        for link in sorted(delivery.message.media_links, key=lambda item: item.position)
-    ]
+    media_urls: list[str] = []
+    base_url = app_base_url()
+    for link in sorted(delivery.message.media_links, key=lambda item: item.position):
+        grant = message_content_service.issue_media_access(
+            db,
+            organization_id=delivery.organization_id,
+            asset_id=link.media_asset_id,
+            now=now,
+        )
+        query = urlencode(
+            {
+                "expires": int(grant.expires_at.timestamp()),
+                "signature": grant.signature,
+            }
+        )
+        media_urls.append(f"{base_url}/messaging/media/{grant.asset_id}/content?{query}")
+    return media_urls
+
+
+def _delivery_references_phi(db: Session, delivery: MessageDelivery) -> bool:
+    if delivery.template_version_id is not None:
+        template_id = db.execute(
+            select(MessageTemplate.id).where(
+                MessageTemplate.id == delivery.template_version_id,
+                MessageTemplate.organization_id == delivery.organization_id,
+                MessageTemplate.content_classification == "phi",
+            )
+        ).scalar_one_or_none()
+        if template_id is not None:
+            return True
+    media_id = db.execute(
+        select(MessageMediaAsset.id)
+        .join(
+            MessageMediaLink,
+            MessageMediaLink.media_asset_id == MessageMediaAsset.id,
+        )
+        .where(
+            MessageMediaLink.organization_id == delivery.organization_id,
+            MessageMediaLink.message_id == delivery.message_id,
+            MessageMediaAsset.organization_id == delivery.organization_id,
+            MessageMediaAsset.content_classification == "phi",
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    return media_id is not None
 
 
 def dispatch_claimed_delivery(
@@ -400,7 +454,21 @@ def dispatch_claimed_delivery(
 
     service_sid = twilio_settings_service.decrypt_credential(route.messaging_service_sid_encrypted)
     sender = twilio_settings_service.decrypt_credential(route.sender_phone_encrypted)
-    media_urls = _media_urls(delivery)
+    if _delivery_references_phi(db, delivery):
+        from app.services import message_content_service
+
+        db.refresh(settings, with_for_update=True)
+        try:
+            message_content_service.require_phi_gate(db, organization_id)
+        except message_content_service.PhiMessagingBlocked:
+            _fail(
+                db,
+                delivery,
+                error_type="phi_messaging_disabled",
+                reason="PHI messaging is no longer enabled",
+            )
+            return "failed"
+    media_urls = _media_urls(db, delivery, now=now)
     result = twilio_transport.send_message(
         credentials=twilio_transport.TwilioCredentials(
             account_sid=account_sid,
@@ -431,6 +499,12 @@ def dispatch_claimed_delivery(
             delivery,
             status="submitted",
             provider_message_id=result.message_sid,
+        )
+        messaging_delivery_service.replay_pending_status_events(
+            db,
+            organization_id=organization_id,
+            route_id=route.id,
+            provider_message_sid=result.message_sid,
         )
         db.commit()
         return "submitted"

@@ -24,10 +24,24 @@ from app.db.models.messaging_delivery import (
     MessageMediaAsset,
     MessageMediaLink,
     MessageReconciliationCase,
+    MessageWebhookEvent,
     MessagingConversation,
     MessagingMessage,
 )
 from app.services import twilio_settings_service
+
+_PROVIDER_STATUS_RANK = {
+    "accepted": 10,
+    "scheduled": 10,
+    "queued": 20,
+    "sending": 30,
+    "sent": 40,
+    "failed": 50,
+    "undelivered": 50,
+    "canceled": 50,
+    "delivered": 60,
+    "read": 70,
+}
 
 
 class MessagingIdempotencyConflict(ValueError):
@@ -54,6 +68,203 @@ class MessagingLeaseLost(RuntimeError):
 class ConsentRecheckResult:
     allowed: bool
     reason: str | None
+
+
+def _should_advance_provider_status(current: str | None, incoming: str) -> bool:
+    if current is None:
+        return True
+    return _PROVIDER_STATUS_RANK.get(incoming, 0) >= _PROVIDER_STATUS_RANK.get(current, 0)
+
+
+def _status_delivery_and_message(
+    db: Session,
+    *,
+    organization_id: UUID,
+    route_id: UUID,
+    provider_message_sid: str,
+) -> tuple[MessageDelivery | None, MessagingMessage | None]:
+    delivery = db.scalar(
+        select(MessageDelivery)
+        .where(
+            MessageDelivery.organization_id == organization_id,
+            MessageDelivery.route_id == route_id,
+            MessageDelivery.provider_message_sid == provider_message_sid,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if delivery is None:
+        return None, None
+    message = db.scalar(
+        select(MessagingMessage)
+        .where(
+            MessagingMessage.id == delivery.message_id,
+            MessagingMessage.organization_id == organization_id,
+            MessagingMessage.route_id == route_id,
+            MessagingMessage.provider_message_sid == provider_message_sid,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return delivery, message
+
+
+def ensure_orphan_status_case(
+    db: Session,
+    *,
+    event: MessageWebhookEvent,
+) -> MessageReconciliationCase:
+    """Keep one operator-visible case for an accepted but unlinked status event."""
+    db.flush()
+    existing = db.scalar(
+        select(MessageReconciliationCase)
+        .where(
+            MessageReconciliationCase.organization_id == event.organization_id,
+            MessageReconciliationCase.webhook_event_id == event.id,
+            MessageReconciliationCase.case_type == "orphan_webhook",
+        )
+        .with_for_update()
+    )
+    if existing is not None:
+        return existing
+    case = MessageReconciliationCase(
+        organization_id=event.organization_id,
+        case_type="orphan_webhook",
+        status="action_required",
+        reason_code="status_message_not_found",
+        webhook_event_id=event.id,
+    )
+    db.add(case)
+    db.flush()
+    return case
+
+
+def _resolve_orphan_status_cases(
+    db: Session,
+    *,
+    event: MessageWebhookEvent,
+    delivery: MessageDelivery,
+    resolved_at: datetime,
+) -> None:
+    cases = list(
+        db.scalars(
+            select(MessageReconciliationCase)
+            .where(
+                MessageReconciliationCase.organization_id == event.organization_id,
+                MessageReconciliationCase.webhook_event_id == event.id,
+                MessageReconciliationCase.case_type == "orphan_webhook",
+            )
+            .with_for_update()
+        )
+    )
+    for case in cases:
+        if case.delivery_id not in {None, delivery.id}:
+            continue
+        case.delivery_id = delivery.id
+        if case.status != "resolved":
+            case.status = "resolved"
+            case.resolved_at = resolved_at
+            case.resolution_code = "status_callback_replayed"
+            case.version += 1
+
+
+def _apply_status_event(
+    db: Session,
+    *,
+    event: MessageWebhookEvent,
+    delivery: MessageDelivery,
+    message: MessagingMessage,
+    processed_at: datetime,
+) -> None:
+    status = event.provider_status or ""
+    if _should_advance_provider_status(message.provider_status, status):
+        message.provider_status = status
+        if status in {"delivered", "read"}:
+            delivery.status = "delivered"
+            delivery.completed_at = processed_at
+            from app.services import campaign_service
+
+            campaign_service.project_campaign_message_delivery(
+                db,
+                organization_id=event.organization_id,
+                message_delivery_id=delivery.id,
+                status="delivered",
+                provider_message_id=event.provider_message_sid,
+                occurred_at=event.received_at,
+                commit=False,
+            )
+        elif status in {"failed", "undelivered", "canceled"}:
+            delivery.status = "failed"
+            delivery.completed_at = processed_at
+            delivery.last_error_type = f"twilio_{status}"
+            delivery.last_error = "Twilio reported a terminal delivery failure"
+            from app.services import campaign_service
+
+            campaign_service.project_campaign_message_delivery(
+                db,
+                organization_id=event.organization_id,
+                message_delivery_id=delivery.id,
+                status="failed",
+                provider_message_id=event.provider_message_sid,
+                error="Twilio reported a terminal delivery failure",
+                occurred_at=event.received_at,
+                commit=False,
+            )
+        else:
+            delivery.status = "submitted"
+        delivery.updated_at = processed_at
+    event.processed_at = processed_at
+    _resolve_orphan_status_cases(
+        db,
+        event=event,
+        delivery=delivery,
+        resolved_at=processed_at,
+    )
+
+
+def replay_pending_status_events(
+    db: Session,
+    *,
+    organization_id: UUID,
+    route_id: UUID,
+    provider_message_sid: str,
+) -> int:
+    """Replay persisted callbacks after local SID correlation, without provider I/O."""
+    # SessionLocal disables autoflush; persist the freshly accepted event or SID link
+    # before resolving either side of the correlation.
+    db.flush()
+    delivery, message = _status_delivery_and_message(
+        db,
+        organization_id=organization_id,
+        route_id=route_id,
+        provider_message_sid=provider_message_sid,
+    )
+    if delivery is None or message is None:
+        return 0
+    events = list(
+        db.scalars(
+            select(MessageWebhookEvent)
+            .where(
+                MessageWebhookEvent.organization_id == organization_id,
+                MessageWebhookEvent.route_id == route_id,
+                MessageWebhookEvent.provider_message_sid == provider_message_sid,
+                MessageWebhookEvent.event_type == "status",
+                MessageWebhookEvent.processed_at.is_(None),
+            )
+            .order_by(MessageWebhookEvent.received_at, MessageWebhookEvent.id)
+            .with_for_update()
+        )
+    )
+    for event in events:
+        _apply_status_event(
+            db,
+            event=event,
+            delivery=delivery,
+            message=message,
+            processed_at=datetime.now(UTC),
+        )
+    db.flush()
+    return len(events)
 
 
 def _fingerprint(payload: dict) -> str:

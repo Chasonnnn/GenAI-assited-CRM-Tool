@@ -17,29 +17,20 @@ from app.core.encryption import hash_phone, hash_pii
 from app.db.enums import JobScope, JobType
 from app.db.models.messaging import MessagingContact, TwilioRoute
 from app.db.models.messaging_delivery import (
-    MessageDelivery,
-    MessageReconciliationCase,
     MessageWebhookEvent,
     MessagingConversation,
     MessagingMessage,
 )
-from app.services import job_service, messaging_consent_service, twilio_settings_service
+from app.services import (
+    job_service,
+    messaging_consent_service,
+    messaging_delivery_service,
+    twilio_settings_service,
+)
 from app.services.messaging_opt_out_classifier import classify_consent_instruction
 from app.utils.normalization import normalize_phone
 
 EMPTY_TWIML = "<Response></Response>"
-STATUS_RANK = {
-    "accepted": 10,
-    "scheduled": 10,
-    "queued": 20,
-    "sending": 30,
-    "sent": 40,
-    "failed": 50,
-    "undelivered": 50,
-    "canceled": 50,
-    "delivered": 60,
-    "read": 70,
-}
 
 
 def _empty_twiml() -> Response:
@@ -310,12 +301,6 @@ async def handle_inbound(
     return _empty_twiml()
 
 
-def _should_advance(current: str | None, incoming: str) -> bool:
-    if current is None:
-        return True
-    return STATUS_RANK.get(incoming, 0) >= STATUS_RANK.get(current, 0)
-
-
 async def handle_status(
     request: Request,
     db: Session,
@@ -354,69 +339,16 @@ async def handle_status(
         raw_fields=_raw_fields_json(form),
     )
     db.add(event)
-    message = db.execute(
-        select(MessagingMessage)
-        .where(
-            MessagingMessage.organization_id == route.organization_id,
-            MessagingMessage.provider_message_sid == message_sid,
-            MessagingMessage.route_id == route.id,
+    replayed = messaging_delivery_service.replay_pending_status_events(
+        db,
+        organization_id=route.organization_id,
+        route_id=route.id,
+        provider_message_sid=message_sid,
+    )
+    if replayed == 0:
+        messaging_delivery_service.ensure_orphan_status_case(
+            db,
+            event=event,
         )
-        .with_for_update()
-    ).scalar_one_or_none()
-    delivery = db.execute(
-        select(MessageDelivery)
-        .where(
-            MessageDelivery.organization_id == route.organization_id,
-            MessageDelivery.provider_message_sid == message_sid,
-            MessageDelivery.route_id == route.id,
-        )
-        .with_for_update()
-    ).scalar_one_or_none()
-    if message is None or delivery is None:
-        db.flush()
-        db.add(
-            MessageReconciliationCase(
-                organization_id=route.organization_id,
-                case_type="orphan_webhook",
-                status="action_required",
-                reason_code="status_message_not_found",
-                webhook_event_id=event.id,
-            )
-        )
-    elif _should_advance(message.provider_status, status):
-        message.provider_status = status
-        if status in {"delivered", "read"}:
-            delivery.status = "delivered"
-            delivery.completed_at = datetime.now(UTC)
-            from app.services import campaign_service
-
-            campaign_service.project_campaign_message_delivery(
-                db,
-                organization_id=route.organization_id,
-                message_delivery_id=delivery.id,
-                status="delivered",
-                provider_message_id=message_sid,
-                commit=False,
-            )
-        elif status in {"failed", "undelivered", "canceled"}:
-            delivery.status = "failed"
-            delivery.completed_at = datetime.now(UTC)
-            delivery.last_error_type = f"twilio_{status}"
-            delivery.last_error = "Twilio reported a terminal delivery failure"
-            from app.services import campaign_service
-
-            campaign_service.project_campaign_message_delivery(
-                db,
-                organization_id=route.organization_id,
-                message_delivery_id=delivery.id,
-                status="failed",
-                provider_message_id=message_sid,
-                error="Twilio reported a terminal delivery failure",
-                commit=False,
-            )
-        else:
-            delivery.status = "submitted"
-        delivery.updated_at = datetime.now(UTC)
-    event.processed_at = datetime.now(UTC)
     db.commit()
     return _empty_twiml()

@@ -215,6 +215,71 @@ async def test_unsupported_inbound_mime_is_quarantined_before_provider_delete(
 
 
 @pytest.mark.asyncio
+async def test_transient_inbound_media_download_failure_retries_job(
+    db,
+    test_org,
+    monkeypatch,
+):
+    event, message, media_sid = _persist_inbound_event(db, test_org)
+    job = _job_for_event(db, test_org.id, event.id)
+    monkeypatch.setattr(
+        twilio_transport,
+        "download_inbound_media",
+        lambda **_kwargs: twilio_transport.TwilioMediaDownloadResult(
+            success=False,
+            media_sid=media_sid,
+            failure_reason=twilio_transport.TwilioFailureReason.RATE_LIMITED,
+            provider_status_code=429,
+            retryable=True,
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="transient"):
+        await twilio_job_handler.process_twilio_inbound_media_fetch(db, job)
+
+    assert db.query(MessageMediaLink).filter_by(message_id=message.id).count() == 0
+    assert db.query(MessageReconciliationCase).filter_by(webhook_event_id=event.id).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_transient_inbound_media_delete_failure_retries_job(
+    db,
+    test_org,
+    monkeypatch,
+):
+    event, message, media_sid = _persist_inbound_event(db, test_org)
+    job = _job_for_event(db, test_org.id, event.id)
+    monkeypatch.setattr(
+        twilio_transport,
+        "download_inbound_media",
+        lambda **_kwargs: twilio_transport.TwilioMediaDownloadResult(
+            success=True,
+            media_sid=media_sid,
+            content_type="image/gif",
+            content=GIF_1X1,
+        ),
+    )
+    monkeypatch.setattr(
+        twilio_transport,
+        "delete_inbound_media",
+        lambda **_kwargs: twilio_transport.TwilioMediaDeleteResult(
+            success=False,
+            failure_reason=twilio_transport.TwilioFailureReason.RATE_LIMITED,
+            provider_status_code=429,
+            retryable=True,
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="transient"):
+        await twilio_job_handler.process_twilio_inbound_media_fetch(db, job)
+
+    link = db.query(MessageMediaLink).filter_by(message_id=message.id).one()
+    assert link.provider_deleted_at is None
+    assert link.processing_status == "stored"
+    assert db.query(MessageReconciliationCase).filter_by(webhook_event_id=event.id).count() == 0
+
+
+@pytest.mark.asyncio
 async def test_excessive_inbound_media_count_creates_actionable_case_without_download(
     db, test_org, monkeypatch
 ):

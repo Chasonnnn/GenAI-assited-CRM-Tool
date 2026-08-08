@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from threading import Barrier, Lock, Thread
+from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 ACCOUNT_SID = "AC" + ("1" * 32)
@@ -15,7 +16,7 @@ SENDER = "+14155550199"
 CONTACT = "+14155550110"
 
 
-def _ready_claim(db, test_org):
+def _ready_claim(db, test_org, *, media_asset_ids=None, phi_enabled=False):
     from app.core.encryption import hash_phone
     from app.services import (
         messaging_consent_service,
@@ -25,6 +26,7 @@ def _ready_claim(db, test_org):
 
     settings = twilio_settings_service.get_or_create_settings(db, test_org.id)
     settings.enabled = True
+    settings.phi_enabled = phi_enabled
     settings.account_sid_encrypted = twilio_settings_service.encrypt_credential(ACCOUNT_SID)
     settings.api_key_sid_encrypted = twilio_settings_service.encrypt_credential(API_KEY_SID)
     settings.api_secret_encrypted = twilio_settings_service.encrypt_credential(API_SECRET)
@@ -60,7 +62,7 @@ def _ready_claim(db, test_org):
         source_type="workflow",
         source_id=None,
         template_version_id=None,
-        media_asset_ids=[],
+        media_asset_ids=media_asset_ids or [],
         is_enrollment_confirmation=True,
     )
     claimed = messaging_delivery_service.claim_due_deliveries(
@@ -132,6 +134,126 @@ def test_successful_dispatch_uses_exact_route_and_completes_fenced_attempt(
     assert delivery.provider_message_sid == MESSAGE_SID
     assert delivery.lease_token is None
     assert delivery.attempts[0].outcome == "succeeded"
+
+
+def test_mms_dispatch_uses_existing_short_lived_signed_media_contract(
+    db,
+    test_org,
+    monkeypatch,
+) -> None:
+    from app.db.models import MessageMediaAsset
+    from app.services import (
+        message_content_service,
+        messaging_dispatch_service,
+        twilio_transport,
+    )
+
+    asset = MessageMediaAsset(
+        organization_id=test_org.id,
+        storage_key=f"messaging/{test_org.id}/{uuid4().hex}.png",
+        original_filename="dispatch.png",
+        content_type="image/png",
+        byte_size=8,
+        checksum_sha256=uuid4().hex * 2,
+        scan_status="clean",
+        content_classification="no_phi",
+    )
+    db.add(asset)
+    db.commit()
+    delivery = _ready_claim(db, test_org, media_asset_ids=[asset.id])
+    _allow_sending_hours(monkeypatch)
+    calls: list[dict] = []
+
+    def fake_send(**kwargs):
+        calls.append(kwargs)
+        return twilio_transport.TwilioSendResult(
+            success=True,
+            message_sid=MESSAGE_SID,
+            initial_status="accepted",
+        )
+
+    monkeypatch.setattr(messaging_dispatch_service.twilio_transport, "send_message", fake_send)
+
+    result = messaging_dispatch_service.dispatch_claimed_delivery(
+        db,
+        organization_id=test_org.id,
+        delivery_id=delivery.id,
+        lease_token=delivery.lease_token,
+        lease_generation=delivery.lease_generation,
+        now=datetime(2026, 7, 31, 18, 0, tzinfo=UTC),
+    )
+
+    assert result == "submitted"
+    assert len(calls) == 1
+    assert len(calls[0]["media_urls"]) == 1
+    media_url = urlparse(calls[0]["media_urls"][0])
+    assert f"/messaging/media/{asset.id}/content" == media_url.path
+    query = parse_qs(media_url.query)
+    message_content_service.validate_media_access(
+        asset_id=asset.id,
+        expires_at=int(query["expires"][0]),
+        signature=query["signature"][0],
+        now=datetime(2026, 7, 31, 18, 0, tzinfo=UTC),
+    )
+
+
+def test_dispatch_rechecks_phi_gate_immediately_before_provider_io(
+    db,
+    test_org,
+    monkeypatch,
+) -> None:
+    from app.db.models import MessageMediaAsset
+    from app.services import messaging_dispatch_service, twilio_settings_service
+
+    asset = MessageMediaAsset(
+        organization_id=test_org.id,
+        storage_key=f"messaging/{test_org.id}/{uuid4().hex}.png",
+        original_filename="phi.png",
+        content_type="image/png",
+        byte_size=8,
+        checksum_sha256=uuid4().hex * 2,
+        scan_status="clean",
+        content_classification="phi",
+    )
+    db.add(asset)
+    db.commit()
+    delivery = _ready_claim(
+        db,
+        test_org,
+        media_asset_ids=[asset.id],
+        phi_enabled=True,
+    )
+    settings = twilio_settings_service.get_or_create_settings(db, test_org.id)
+    settings.phi_enabled = False
+    db.commit()
+    _allow_sending_hours(monkeypatch)
+    called = False
+
+    def should_not_send(**_kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("provider I/O is forbidden after PHI messaging is disabled")
+
+    monkeypatch.setattr(
+        messaging_dispatch_service.twilio_transport,
+        "send_message",
+        should_not_send,
+    )
+
+    result = messaging_dispatch_service.dispatch_claimed_delivery(
+        db,
+        organization_id=test_org.id,
+        delivery_id=delivery.id,
+        lease_token=delivery.lease_token,
+        lease_generation=delivery.lease_generation,
+        now=datetime(2026, 7, 31, 18, 0, tzinfo=UTC),
+    )
+
+    assert result == "failed"
+    assert called is False
+    db.refresh(delivery)
+    assert delivery.status == "failed"
+    assert delivery.last_error_type == "phi_messaging_disabled"
 
 
 def test_ambiguous_provider_outcome_requires_reconciliation_and_never_retries(
