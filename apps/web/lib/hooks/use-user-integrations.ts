@@ -46,13 +46,14 @@ const integrationKeys = {
 /**
  * Get list of user's connected integrations.
  */
-export function useUserIntegrations() {
+export function useUserIntegrations(enabled = true) {
     return useQuery({
         queryKey: integrationKeys.list(),
         queryFn: async () => {
             const response = await listUserIntegrations()
             return response.integrations
         },
+        enabled,
     })
 }
 

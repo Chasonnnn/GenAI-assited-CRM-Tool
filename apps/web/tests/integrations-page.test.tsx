@@ -340,8 +340,8 @@ vi.mock('@/components/ui/dialog', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-user-integrations', () => ({
-    useUserIntegrations: () => mockUseUserIntegrations(),
-    useGoogleCalendarStatus: () => mockUseGoogleCalendarStatus(),
+    useUserIntegrations: (enabled?: boolean) => mockUseUserIntegrations(enabled),
+    useGoogleCalendarStatus: (enabled?: boolean) => mockUseGoogleCalendarStatus(enabled),
     useConnectZoom: () => ({ mutate: mockConnectZoom, isPending: false }),
     useConnectGmail: () => ({ mutate: mockConnectGmail, isPending: false }),
     useConnectGoogleCalendar: () => ({ mutate: mockConnectGoogleCalendar, isPending: false }),
@@ -1561,12 +1561,21 @@ describe('IntegrationsPage', () => {
         expect(within(zapierCard as HTMLElement).getByTestId('zapier-mapping-health-card-badge')).toHaveTextContent('Mapping Needs Review')
     })
 
-    it('uses wider card grids across personal, organization, and system integrations', () => {
+    it('keeps personal and organization integration grids in separate views', () => {
         render(<IntegrationsPage />)
 
-        expect(screen.getByTestId('personal-integrations-grid')).toHaveClass('md:grid-cols-2', 'xl:grid-cols-3')
+        expect(screen.queryByTestId('personal-integrations-grid')).not.toBeInTheDocument()
         expect(screen.getByTestId('organization-integrations-grid')).toHaveClass('md:grid-cols-2', 'xl:grid-cols-3')
         expect(screen.getByTestId('system-integrations-grid')).toHaveClass('md:grid-cols-2', 'xl:grid-cols-3')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Personal' }))
+
+        expect(screen.getByTestId('personal-integrations-grid')).toHaveClass('md:grid-cols-2', 'xl:grid-cols-3')
+        expect(screen.queryByTestId('organization-integrations-grid')).not.toBeInTheDocument()
+        expect(screen.queryByTestId('system-integrations-grid')).not.toBeInTheDocument()
+        expect(mockUseUserIntegrations).toHaveBeenLastCalledWith(true)
+        expect(mockUseGoogleCalendarStatus).toHaveBeenLastCalledWith(true)
+        expect(mockUseIntegrationHealth).toHaveBeenLastCalledWith(false)
     })
 
     it('shows healthy mapping badge when recommended zapier mapping is configured', () => {
@@ -2013,6 +2022,8 @@ describe('IntegrationsPage', () => {
 
         render(<IntegrationsPage />)
 
+        fireEvent.click(screen.getByRole('button', { name: 'Personal' }))
+
         const googleCard = screen.getByText('Google Calendar + Meeting').closest('[data-slot="card"]')
         expect(googleCard).not.toBeNull()
         expect(within(googleCard as HTMLElement).getByText(/last sync/i)).toBeInTheDocument()
@@ -2021,7 +2032,7 @@ describe('IntegrationsPage', () => {
         expect(mockSyncGoogleCalendarNow).toHaveBeenCalled()
     })
 
-    it('keeps personal integrations accessible but blocks org configuration without manage_integrations', () => {
+    it('keeps personal integrations accessible and hides organization integrations without manage_integrations', () => {
         mockUseAuth.mockReturnValue({ user: { role: 'case_manager', user_id: 'u2' } })
         mockUseEffectivePermissions.mockReturnValue({
             data: { permissions: [] },
@@ -2032,16 +2043,10 @@ describe('IntegrationsPage', () => {
         expect(screen.getByRole('button', { name: /connect zoom/i })).toBeInTheDocument()
         expect(screen.getByRole('button', { name: /connect gmail/i })).toBeInTheDocument()
         expect(screen.getByRole('button', { name: /connect google calendar/i })).toBeInTheDocument()
-        const messagingCard = screen.getByText('Messaging Delivery').closest('[data-slot="card"]')
-        expect(messagingCard).not.toBeNull()
-        expect(
-            within(messagingCard as HTMLElement).getByRole('button', { name: /admin access required/i })
-        ).toBeDisabled()
-        expect(screen.queryByRole('button', { name: /configure ai/i })).not.toBeInTheDocument()
-        expect(screen.queryByRole('button', { name: /configure email/i })).not.toBeInTheDocument()
-        expect(screen.queryByRole('link', { name: /configure messaging/i })).not.toBeInTheDocument()
-        expect(screen.queryByRole('button', { name: /configure zapier/i })).not.toBeInTheDocument()
-        expect(screen.queryByRole('button', { name: /configure meta/i })).not.toBeInTheDocument()
+        expect(screen.queryByText('Organization Integrations')).not.toBeInTheDocument()
+        expect(screen.queryByText('Messaging Delivery')).not.toBeInTheDocument()
+        expect(screen.queryByText('System Integrations')).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /organization/i })).not.toBeInTheDocument()
     })
 
     it('does not load admin-only organization integration data for personal integration users', () => {
@@ -2063,5 +2068,7 @@ describe('IntegrationsPage', () => {
         expect(mockUseMetaConnectionsQuery).toHaveBeenCalledWith(false)
         expect(mockUseAdminMetaAdAccountsQuery).toHaveBeenCalledWith(false)
         expect(mockUseMetaCrmDatasetSettingsQuery).toHaveBeenCalledWith(false)
+        expect(mockUseUserIntegrations).toHaveBeenCalledWith(true)
+        expect(mockUseGoogleCalendarStatus).toHaveBeenCalledWith(true)
     })
 })

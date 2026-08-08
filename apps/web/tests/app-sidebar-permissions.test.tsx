@@ -315,7 +315,7 @@ describe("AppSidebar permission visibility", () => {
         expect(screen.queryByText("Messages")).not.toBeInTheDocument()
     })
 
-    it("shows Integrations settings for case managers without manage_integrations permission", async () => {
+    it("labels integrations as personal for case managers without manage_integrations permission", async () => {
         mockUseAuth.mockReturnValue({
             user: {
                 user_id: "user-2",
@@ -338,7 +338,7 @@ describe("AppSidebar permission visibility", () => {
         )
 
         await waitFor(() => {
-            expect(screen.getByText("Integrations")).toBeInTheDocument()
+            expect(screen.getByText("My Integrations")).toBeInTheDocument()
         })
     })
 

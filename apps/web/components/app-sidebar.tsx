@@ -668,7 +668,12 @@ export function AppSidebar({ children }: AppSidebarProps) {
         ...(canViewQueues ? [{ title: "Queue Management", url: "/settings/queues" }] : []),
         ...(canViewAudit ? [{ title: "Audit Log", url: "/settings/audit" }] : []),
         ...(canViewCompliance ? [{ title: "Compliance", url: "/settings/compliance" }] : []),
-        ...(canAccessIntegrations ? [{ title: "Integrations", url: "/settings/integrations" }] : []),
+        ...(canAccessIntegrations
+            ? [{
+                title: canViewIntegrations ? "Integrations" : "My Integrations",
+                url: "/settings/integrations",
+            }]
+            : []),
         ...(canViewAlerts ? [{ title: "System Alerts", url: "/settings/alerts" }] : []),
     ]
 

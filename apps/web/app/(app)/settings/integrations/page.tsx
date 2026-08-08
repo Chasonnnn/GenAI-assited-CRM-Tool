@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -5740,18 +5741,28 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
     )
 }
 
+type IntegrationScope = "personal" | "organization"
+
 export default function IntegrationsPage() {
     const { user } = useAuth()
     const isDeveloper = user?.role === "developer"
     const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
     const canManageOrganizationIntegrations =
         isDeveloper || (effectivePermissions?.permissions ?? []).includes("manage_integrations")
-    const organizationIntegrationsEnabled = canManageOrganizationIntegrations
+    const [selectedScope, setSelectedScope] = useState<IntegrationScope | null>(null)
+    const requestedScope = selectedScope
+        ?? (canManageOrganizationIntegrations ? "organization" : "personal")
+    const activeScope = requestedScope === "organization" && !canManageOrganizationIntegrations
+        ? "personal"
+        : requestedScope
+    const organizationIntegrationsEnabled =
+        canManageOrganizationIntegrations && activeScope === "organization"
     const { data: healthData, isLoading, refetch, isFetching } = useIntegrationHealth(
         organizationIntegrationsEnabled
     )
-    const { data: userIntegrations } = useUserIntegrations()
-    const { data: googleCalendarStatus } = useGoogleCalendarStatus(true)
+    const personalIntegrationsEnabled = activeScope === "personal"
+    const { data: userIntegrations } = useUserIntegrations(personalIntegrationsEnabled)
+    const { data: googleCalendarStatus } = useGoogleCalendarStatus(personalIntegrationsEnabled)
     const { data: aiSettings, isLoading: aiSettingsLoading } = useAISettings(
         organizationIntegrationsEnabled
     )
@@ -5887,8 +5898,10 @@ export default function IntegrationsPage() {
     return (
         <div className="flex min-h-dvh flex-col">
             <IntegrationsPageHeader
-                canRefresh={organizationIntegrationsEnabled}
+                activeScope={activeScope}
+                canManageOrganizationIntegrations={canManageOrganizationIntegrations}
                 isFetching={isFetching}
+                onScopeChange={setSelectedScope}
                 onRefresh={() => {
                     if (organizationIntegrationsEnabled) void refetch()
                 }}
@@ -5896,104 +5909,108 @@ export default function IntegrationsPage() {
 
             {/* Main Content */}
             <div className="flex-1 space-y-6 p-6">
-                <PersonalIntegrationsSection
-                    zoomIntegration={zoomIntegration}
-                    gmailIntegration={gmailIntegration}
-                    googleCalendarIntegration={googleCalendarIntegration}
-                    googleCalendarStatus={googleCalendarStatus}
-                    googleLastSyncLabel={googleLastSyncLabel}
-                    googleLastSyncAbsoluteLabel={googleLastSyncAbsoluteLabel}
-                    pendingState={{
-                        zoomConnect: connectZoom.isPending,
-                        gmailConnect: connectGmail.isPending,
-                        googleCalendarConnect: connectGoogleCalendar.isPending,
-                        googleCalendarSync: syncGoogleCalendarNow.isPending,
-                        disconnect: disconnectIntegration.isPending,
-                    }}
-                    onConnectZoom={() => connectZoom.mutate()}
-                    onConnectGmail={() => connectGmail.mutate()}
-                    onConnectGoogleCalendar={() => connectGoogleCalendar.mutate()}
-                    onSyncGoogleCalendar={() => syncGoogleCalendarNow.mutate()}
-                    onDisconnect={(integrationType) => disconnectIntegration.mutate(integrationType)}
-                />
+                {activeScope === "personal" ? (
+                    <PersonalIntegrationsSection
+                        zoomIntegration={zoomIntegration}
+                        gmailIntegration={gmailIntegration}
+                        googleCalendarIntegration={googleCalendarIntegration}
+                        googleCalendarStatus={googleCalendarStatus}
+                        googleLastSyncLabel={googleLastSyncLabel}
+                        googleLastSyncAbsoluteLabel={googleLastSyncAbsoluteLabel}
+                        pendingState={{
+                            zoomConnect: connectZoom.isPending,
+                            gmailConnect: connectGmail.isPending,
+                            googleCalendarConnect: connectGoogleCalendar.isPending,
+                            googleCalendarSync: syncGoogleCalendarNow.isPending,
+                            disconnect: disconnectIntegration.isPending,
+                        }}
+                        onConnectZoom={() => connectZoom.mutate()}
+                        onConnectGmail={() => connectGmail.mutate()}
+                        onConnectGoogleCalendar={() => connectGoogleCalendar.mutate()}
+                        onSyncGoogleCalendar={() => syncGoogleCalendarNow.mutate()}
+                        onDisconnect={(integrationType) => disconnectIntegration.mutate(integrationType)}
+                    />
+                ) : (
+                    <>
+                        <OrganizationIntegrationsSection
+                            canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                            aiSettingsLoading={aiSettingsLoading}
+                            aiSettingsProvider={aiSettings?.provider ?? null}
+                            aiProviderLabel={aiProviderLabel}
+                            aiStatusLabel={aiStatusLabel}
+                            aiStatusVariant={aiStatusVariant}
+                            AiStatusIcon={AiStatusIcon}
+                            resendSettingsLoading={resendSettingsLoading}
+                            emailConfigured={emailConfigured}
+                            emailProviderLabel={emailProviderLabel}
+                            emailDetail={emailDetail}
+                            emailStatusLabel={emailStatusLabel}
+                            emailStatusVariant={emailStatusVariant}
+                            EmailStatusIcon={EmailStatusIcon}
+                            messagingSettingsLoading={twilioSettingsLoading || twilioReadinessLoading}
+                            messagingStatusLabel={messagingStatus.label}
+                            messagingStatusVariant={messagingStatus.variant}
+                            MessagingStatusIcon={MessagingStatusIcon}
+                            messagingDetail={messagingDetail}
+                            zapierSettingsLoading={zapierSettingsLoading}
+                            zapierStatusLabel={zapierStatusLabel}
+                            zapierStatusVariant={zapierStatusVariant}
+                            ZapierStatusIcon={ZapierStatusIcon}
+                            zapierMappingBadgeLabel={zapierMappingBadgeLabel}
+                            zapierMappingBadgeVariant={zapierMappingBadgeVariant}
+                            zapierDetail={zapierDetail}
+                            zapierMappingDetail={zapierMappingDetail}
+                            metaCrmDatasetSettingsLoading={metaCrmDatasetSettingsLoading}
+                            metaStatusLabel={metaStatusLabel}
+                            metaStatusVariant={metaStatusVariant}
+                            MetaStatusIcon={MetaStatusIcon}
+                            metaDetail={metaDetail}
+                            onConfigureAI={() => setAiDialogOpen(true)}
+                            onConfigureEmail={() => setEmailDialogOpen(true)}
+                            onConfigureZapier={() => setZapierDialogOpen(true)}
+                            onConfigureMeta={() => setMetaDialogOpen(true)}
+                        />
 
-                <OrganizationIntegrationsSection
-                    canManageOrganizationIntegrations={canManageOrganizationIntegrations}
-                    aiSettingsLoading={aiSettingsLoading}
-                    aiSettingsProvider={aiSettings?.provider ?? null}
-                    aiProviderLabel={aiProviderLabel}
-                    aiStatusLabel={aiStatusLabel}
-                    aiStatusVariant={aiStatusVariant}
-                    AiStatusIcon={AiStatusIcon}
-                    resendSettingsLoading={resendSettingsLoading}
-                    emailConfigured={emailConfigured}
-                    emailProviderLabel={emailProviderLabel}
-                    emailDetail={emailDetail}
-                    emailStatusLabel={emailStatusLabel}
-                    emailStatusVariant={emailStatusVariant}
-                    EmailStatusIcon={EmailStatusIcon}
-                    messagingSettingsLoading={twilioSettingsLoading || twilioReadinessLoading}
-                    messagingStatusLabel={messagingStatus.label}
-                    messagingStatusVariant={messagingStatus.variant}
-                    MessagingStatusIcon={MessagingStatusIcon}
-                    messagingDetail={messagingDetail}
-                    zapierSettingsLoading={zapierSettingsLoading}
-                    zapierStatusLabel={zapierStatusLabel}
-                    zapierStatusVariant={zapierStatusVariant}
-                    ZapierStatusIcon={ZapierStatusIcon}
-                    zapierMappingBadgeLabel={zapierMappingBadgeLabel}
-                    zapierMappingBadgeVariant={zapierMappingBadgeVariant}
-                    zapierDetail={zapierDetail}
-                    zapierMappingDetail={zapierMappingDetail}
-                    metaCrmDatasetSettingsLoading={metaCrmDatasetSettingsLoading}
-                    metaStatusLabel={metaStatusLabel}
-                    metaStatusVariant={metaStatusVariant}
-                    MetaStatusIcon={MetaStatusIcon}
-                    metaDetail={metaDetail}
-                    onConfigureAI={() => setAiDialogOpen(true)}
-                    onConfigureEmail={() => setEmailDialogOpen(true)}
-                    onConfigureZapier={() => setZapierDialogOpen(true)}
-                    onConfigureMeta={() => setMetaDialogOpen(true)}
-                />
+                        <IntegrationConfigurationDialogs
+                            canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                            aiDialogOpen={aiDialogOpen}
+                            emailDialogOpen={emailDialogOpen}
+                            zapierDialogOpen={zapierDialogOpen}
+                            metaDialogOpen={metaDialogOpen}
+                            aiStatusLabel={aiStatusLabel}
+                            aiStatusVariant={aiStatusVariant}
+                            AiStatusIcon={AiStatusIcon}
+                            emailStatusLabel={emailStatusLabel}
+                            emailStatusVariant={emailStatusVariant}
+                            EmailStatusIcon={EmailStatusIcon}
+                            zapierStatusLabel={zapierStatusLabel}
+                            zapierStatusVariant={zapierStatusVariant}
+                            ZapierStatusIcon={ZapierStatusIcon}
+                            zapierMappingBadgeLabel={zapierMappingBadgeLabel}
+                            zapierMappingBadgeVariant={zapierMappingBadgeVariant}
+                            metaStatusLabel={metaStatusLabel}
+                            metaStatusVariant={metaStatusVariant}
+                            MetaStatusIcon={MetaStatusIcon}
+                            onAiDialogOpenChange={setAiDialogOpen}
+                            onEmailDialogOpenChange={setEmailDialogOpen}
+                            onZapierDialogOpenChange={setZapierDialogOpen}
+                            onMetaDialogOpenChange={setMetaDialogOpen}
+                        />
 
-                <IntegrationConfigurationDialogs
-                    canManageOrganizationIntegrations={canManageOrganizationIntegrations}
-                    aiDialogOpen={aiDialogOpen}
-                    emailDialogOpen={emailDialogOpen}
-                    zapierDialogOpen={zapierDialogOpen}
-                    metaDialogOpen={metaDialogOpen}
-                    aiStatusLabel={aiStatusLabel}
-                    aiStatusVariant={aiStatusVariant}
-                    AiStatusIcon={AiStatusIcon}
-                    emailStatusLabel={emailStatusLabel}
-                    emailStatusVariant={emailStatusVariant}
-                    EmailStatusIcon={EmailStatusIcon}
-                    zapierStatusLabel={zapierStatusLabel}
-                    zapierStatusVariant={zapierStatusVariant}
-                    ZapierStatusIcon={ZapierStatusIcon}
-                    zapierMappingBadgeLabel={zapierMappingBadgeLabel}
-                    zapierMappingBadgeVariant={zapierMappingBadgeVariant}
-                    metaStatusLabel={metaStatusLabel}
-                    metaStatusVariant={metaStatusVariant}
-                    MetaStatusIcon={MetaStatusIcon}
-                    onAiDialogOpenChange={setAiDialogOpen}
-                    onEmailDialogOpenChange={setEmailDialogOpen}
-                    onZapierDialogOpenChange={setZapierDialogOpen}
-                    onMetaDialogOpenChange={setMetaDialogOpen}
-                />
+                        <SystemIntegrationsSection
+                            isLoading={isLoading}
+                            healthData={healthData ?? []}
+                            canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                            metaFormsCount={metaFormsCount}
+                            metaMappedFormsCount={metaMappedFormsCount}
+                            metaAdAccounts={metaAdAccounts}
+                            inboundWebhooksCount={inboundWebhooks.length}
+                            zapierOutboundEnabled={Boolean(zapierSettings?.outbound_enabled)}
+                        />
 
-                <SystemIntegrationsSection
-                    isLoading={isLoading}
-                    healthData={healthData ?? []}
-                    canManageOrganizationIntegrations={canManageOrganizationIntegrations}
-                    metaFormsCount={metaFormsCount}
-                    metaMappedFormsCount={metaMappedFormsCount}
-                    metaAdAccounts={metaAdAccounts}
-                    inboundWebhooksCount={inboundWebhooks.length}
-                    zapierOutboundEnabled={Boolean(zapierSettings?.outbound_enabled)}
-                />
-
-                <IntegrationsHelpCard />
+                        <IntegrationsHelpCard />
+                    </>
+                )}
             </div>
         </div>
     )
@@ -6015,30 +6032,56 @@ const MESSAGING_STATUS_PRESENTATION: Record<
 }
 
 function IntegrationsPageHeader({
-    canRefresh,
+    activeScope,
+    canManageOrganizationIntegrations,
     isFetching,
+    onScopeChange,
     onRefresh,
 }: {
-    canRefresh: boolean
+    activeScope: IntegrationScope
+    canManageOrganizationIntegrations: boolean
     isFetching: boolean
+    onScopeChange: (scope: IntegrationScope) => void
     onRefresh: () => void
 }) {
     return (
         <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex h-16 items-center justify-between px-6">
+            <div className="flex min-h-16 flex-wrap items-center justify-between gap-3 px-6 py-3">
                 <h1 className="text-2xl font-semibold">Integrations</h1>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onRefresh}
-                    disabled={!canRefresh || isFetching}
-                >
-                    <RefreshCwIcon
-                        className={`mr-2 size-4 ${isFetching ? "animate-spin" : ""} motion-reduce:animate-none`}
-                        aria-hidden="true"
-                    />
-                    Refresh
-                </Button>
+                <div className="flex items-center gap-3">
+                    {canManageOrganizationIntegrations ? (
+                        <ToggleGroup
+                            aria-label="Integration scope"
+                            multiple={false}
+                            value={[activeScope]}
+                            onValueChange={(value) => {
+                                const nextScope = value[0]
+                                if (nextScope === "personal" || nextScope === "organization") {
+                                    onScopeChange(nextScope)
+                                }
+                            }}
+                            variant="outline"
+                            size="sm"
+                        >
+                            <ToggleGroupItem value="personal">Personal</ToggleGroupItem>
+                            <ToggleGroupItem value="organization">Organization</ToggleGroupItem>
+                        </ToggleGroup>
+                    ) : null}
+                    {activeScope === "organization" ? (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={onRefresh}
+                            disabled={isFetching}
+                        >
+                            <RefreshCwIcon
+                                className={`mr-2 size-4 ${isFetching ? "animate-spin" : ""} motion-reduce:animate-none`}
+                                aria-hidden="true"
+                            />
+                            Refresh
+                        </Button>
+                    ) : null}
+                </div>
             </div>
         </div>
     )
