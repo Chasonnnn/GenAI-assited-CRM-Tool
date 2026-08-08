@@ -91,6 +91,7 @@ def test_worker_claimed_job_types_exclude_remote_scan_jobs(monkeypatch):
     assert claimed is not None
     assert JobType.ATTACHMENT_SCAN.value not in claimed
     assert JobType.FORM_SUBMISSION_FILE_SCAN.value not in claimed
+    assert JobType.MESSAGE_MEDIA_SCAN.value not in claimed
     assert JobType.SEND_EMAIL.value in claimed
 
 

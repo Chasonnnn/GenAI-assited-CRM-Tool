@@ -22,7 +22,7 @@ function firstSearchParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? null : value ?? null
 }
 
-export default async function LoginPage({ searchParams }: LoginPageProps = {}) {
+export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = searchParams ? await searchParams : {}
   const authError = firstSearchParam(params.error)
   const cookieStore = await cookies()

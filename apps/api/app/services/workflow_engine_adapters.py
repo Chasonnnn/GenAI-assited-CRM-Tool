@@ -29,6 +29,8 @@ from app.db.models import (
     FormSubmission,
     IntakeLead,
     Match,
+    MessageTemplate,
+    MessagingContact,
     Organization,
     PipelineStage,
     Surrogate,
@@ -81,6 +83,7 @@ class WorkflowDomainAdapter(Protocol):
         workflow_owner_id: UUID | None = None,
         trigger_callback: TriggerCallback | None = None,
         workflow_execution_id: UUID | None = None,
+        workflow_action_index: int | None = None,
     ) -> dict: ...
 
 
@@ -244,6 +247,7 @@ class DefaultWorkflowDomainAdapter:
         workflow_owner_id: UUID | None = None,
         trigger_callback: TriggerCallback | None = None,
         workflow_execution_id: UUID | None = None,
+        workflow_action_index: int | None = None,
     ) -> dict:
         """Execute a single action."""
         action_type = action.get("action_type")
@@ -284,6 +288,38 @@ class DefaultWorkflowDomainAdapter:
                     }
                 )
 
+        if action_type == WorkflowActionType.SEND_MESSAGE.value:
+            if entity_type in {"task", "form_submission"}:
+                surrogate_id = getattr(entity, "surrogate_id", None)
+                if not surrogate_id:
+                    return _with_action_type(
+                        {
+                            "success": False,
+                            "error": f"{entity_type.replace('_', ' ').title()} is not linked to a surrogate",
+                            "skipped": True,
+                        }
+                    )
+                action_entity = (
+                    db.query(Surrogate)
+                    .filter(
+                        Surrogate.id == surrogate_id,
+                        Surrogate.organization_id == entity.organization_id,
+                    )
+                    .first()
+                )
+                if action_entity is None:
+                    return _with_action_type(
+                        {"success": False, "error": "Message recipient not found", "skipped": True}
+                    )
+            elif entity_type not in {"surrogate", "intake_lead"}:
+                return _with_action_type(
+                    {
+                        "success": False,
+                        "error": f"Action '{action_type}' does not support '{entity_type}' entities",
+                        "skipped": True,
+                    }
+                )
+
         if action_type in self.INTAKE_LEAD_ONLY_ACTIONS and entity_type != "intake_lead":
             return _with_action_type(
                 {
@@ -313,6 +349,19 @@ class DefaultWorkflowDomainAdapter:
                     workflow_owner_id=workflow_owner_id,
                     workflow_execution_id=workflow_execution_id,
                 )
+                return _with_action_type(result)
+
+            if action_type == WorkflowActionType.SEND_MESSAGE.value:
+                result = self._action_send_message(
+                    db=db,
+                    action=action,
+                    entity=action_entity,
+                    workflow_scope=workflow_scope,
+                    workflow_execution_id=workflow_execution_id,
+                    workflow_action_index=workflow_action_index,
+                )
+                if result.get("success") is False:
+                    return result
                 return _with_action_type(result)
 
             if action_type == WorkflowActionType.CREATE_TASK.value:
@@ -544,6 +593,93 @@ class DefaultWorkflowDomainAdapter:
             "job_ids": job_ids,
             "queued_count": len(job_ids),
             "description": f"Queued {len(job_ids)} email(s)",
+        }
+
+    def _action_send_message(
+        self,
+        db: Session,
+        action: dict,
+        entity: Surrogate | IntakeLead,
+        *,
+        workflow_scope: str,
+        workflow_execution_id: UUID | None,
+        workflow_action_index: int | None,
+    ) -> dict:
+        """Materialize one consent-gated message outbox occurrence."""
+        if workflow_scope != "org":
+            raise ValueError("send_message is only supported for org workflows")
+        if workflow_execution_id is None or workflow_action_index is None:
+            raise ValueError("Workflow messaging requires an execution occurrence")
+        purpose = action.get("purpose")
+        if purpose not in {"operational", "promotional"}:
+            raise ValueError("Message purpose must be operational or promotional")
+        try:
+            template_id = UUID(str(action.get("message_template_version_id")))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Published message template not found") from exc
+        template = (
+            db.query(MessageTemplate)
+            .filter(
+                MessageTemplate.id == template_id,
+                MessageTemplate.organization_id == entity.organization_id,
+                MessageTemplate.status == "published",
+                MessageTemplate.purpose == purpose,
+            )
+            .first()
+        )
+        if template is None:
+            raise ValueError("Published message template not found")
+
+        contact = None
+        if entity.phone_hash:
+            contact = (
+                db.query(MessagingContact)
+                .filter(
+                    MessagingContact.organization_id == entity.organization_id,
+                    MessagingContact.phone_hash == entity.phone_hash,
+                )
+                .first()
+            )
+        if contact is None:
+            return {
+                "success": False,
+                "error": "No consented messaging contact resolved",
+                "skipped": True,
+            }
+
+        if isinstance(entity, Surrogate):
+            variables = self._resolve_email_variables(db, entity)
+        else:
+            org = db.query(Organization).filter(Organization.id == entity.organization_id).first()
+            variables = {
+                "full_name": entity.full_name or "",
+                "email": entity.email or "",
+                "phone": entity.phone or "",
+                "org_name": org.name if org else "",
+            }
+        from app.services import email_service, messaging_delivery_service
+
+        _subject, body = email_service.render_template("", template.body, variables)
+        delivery = messaging_delivery_service.materialize_delivery(
+            db,
+            organization_id=entity.organization_id,
+            contact_id=contact.id,
+            purpose=purpose,
+            body=body,
+            idempotency_key=(
+                f"workflow-message/{workflow_execution_id}/action/{workflow_action_index}"
+            ),
+            source_type="workflow_execution",
+            source_id=workflow_execution_id,
+            template_version_id=template.id,
+            media_asset_ids=[],
+            is_enrollment_confirmation=template.is_enrollment_confirmation,
+        )
+        return {
+            "success": True,
+            "queued": True,
+            "delivery_id": str(delivery.id),
+            "description": "Queued consent-gated message",
         }
 
     def _action_create_task(

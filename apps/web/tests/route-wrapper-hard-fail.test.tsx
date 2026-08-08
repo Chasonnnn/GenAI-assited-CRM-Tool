@@ -5,6 +5,17 @@ const mockNotFound = vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND")
 })
 const mockGetServerRouteResourceStatus = vi.fn()
+const mockFetchServerRouteResource = vi.fn()
+const mockFetchQuery = vi.fn()
+
+vi.mock("@tanstack/react-query", () => ({
+    HydrationBoundary: ({ children }: { children: React.ReactNode }) => children,
+    dehydrate: vi.fn(() => ({ queries: [] })),
+}))
+
+vi.mock("@/lib/server-query-client", () => ({
+    createServerQueryClient: () => ({ fetchQuery: mockFetchQuery }),
+}))
 
 vi.mock("next/navigation", async () => {
     const actual = await vi.importActual("next/navigation")
@@ -15,6 +26,13 @@ vi.mock("next/navigation", async () => {
 })
 
 vi.mock("@/lib/server-route-resource", () => ({
+    ServerRouteResourceError: class ServerRouteResourceError extends Error {
+        constructor(public status: number) {
+            super(`status ${status}`)
+        }
+    },
+    fetchServerRouteResource: (...args: unknown[]) =>
+        mockFetchServerRouteResource(...args),
     getServerRouteResourceStatus: (...args: unknown[]) =>
         mockGetServerRouteResourceStatus(...args),
 }))
@@ -65,6 +83,12 @@ describe("route wrappers", () => {
         mockNotFound.mockClear()
         mockGetServerRouteResourceStatus.mockReset()
         mockGetServerRouteResourceStatus.mockResolvedValue("ok")
+        mockFetchServerRouteResource.mockReset()
+        mockFetchServerRouteResource.mockResolvedValue({ id: "match-1" })
+        mockFetchQuery.mockReset()
+        mockFetchQuery.mockImplementation(async (options: { queryFn: () => Promise<unknown> }) =>
+            options.queryFn(),
+        )
     })
 
     it("campaign detail hard-404s missing campaigns", async () => {
@@ -86,14 +110,27 @@ describe("route wrappers", () => {
         expect(screen.getByText("Form Builder Client")).toBeInTheDocument()
     })
 
-    it("match detail checks the match resource", async () => {
+    it("match detail hydrates the authenticated match resource", async () => {
         const ui = await MatchDetailPage({
             params: Promise.resolve({ id: "match-1" }),
         })
 
         render(ui)
-        expect(mockGetServerRouteResourceStatus).toHaveBeenCalledWith("/matches/match-1")
+        expect(mockFetchServerRouteResource).toHaveBeenCalledWith("/matches/match-1")
+        expect(mockFetchQuery).toHaveBeenCalledOnce()
+        expect(mockGetServerRouteResourceStatus).not.toHaveBeenCalled()
         expect(screen.getByText("Match Client")).toBeInTheDocument()
+    })
+
+    it("match detail keeps server-owned not-found behavior", async () => {
+        const { ServerRouteResourceError } = await import("@/lib/server-route-resource")
+        mockFetchServerRouteResource.mockRejectedValueOnce(
+            new ServerRouteResourceError(404, "/matches/missing"),
+        )
+
+        await expect(
+            MatchDetailPage({ params: Promise.resolve({ id: "missing" }) }),
+        ).rejects.toThrow("NEXT_NOT_FOUND")
     })
 
     it("member detail checks the member resource", async () => {

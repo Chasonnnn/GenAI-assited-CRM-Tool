@@ -28,6 +28,7 @@ from app.db.models import (
     MetaPageMapping,
     Surrogate,
 )
+from app.db.models.meta import MetaFormLegalSnapshot
 from app.services import meta_api, meta_token_service
 from app.types import JsonObject
 
@@ -895,6 +896,14 @@ def _upsert_form(
         db.add(form)
         db.flush()
 
+    _upsert_form_legal_snapshot(
+        db,
+        org_id=org_id,
+        form=form,
+        legal_content=data.get("legal_content"),
+        privacy_policy_url=data.get("privacy_policy_url"),
+    )
+
     # Check for schema change (via hash uniqueness)
     existing_version = db.scalar(
         select(MetaFormVersion).where(
@@ -933,6 +942,82 @@ def _upsert_form(
         form.current_version_id = existing_version.id
 
     return form, version_created
+
+
+def _upsert_form_legal_snapshot(
+    db: Session,
+    *,
+    org_id: UUID,
+    form: MetaForm,
+    legal_content: object,
+    privacy_policy_url: object,
+) -> MetaFormLegalSnapshot | None:
+    """Persist legal copy independently from the form's question-schema version."""
+    if not isinstance(legal_content, (dict, list)) or not legal_content:
+        return None
+
+    normalized_privacy_url = (
+        str(privacy_policy_url).strip()[:1000] if privacy_policy_url is not None else None
+    ) or None
+    evidence_payload = {
+        "legal_content": legal_content,
+        "privacy_policy_url": normalized_privacy_url,
+    }
+    evidence_json = json.dumps(
+        evidence_payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    legal_content_hash = hashlib.sha256(evidence_json.encode()).hexdigest()
+
+    existing = db.scalar(
+        select(MetaFormLegalSnapshot).where(
+            MetaFormLegalSnapshot.form_id == form.id,
+            MetaFormLegalSnapshot.legal_content_hash == legal_content_hash,
+        )
+    )
+    if existing:
+        return existing
+
+    snapshot = MetaFormLegalSnapshot(
+        organization_id=org_id,
+        form_id=form.id,
+        legal_content=legal_content,
+        privacy_policy_url=normalized_privacy_url,
+        legal_content_hash=legal_content_hash,
+        # PostgreSQL now() is transaction-stable; use an application timestamp so
+        # two legal-copy changes observed in one sync retain their true order.
+        detected_at=datetime.now(UTC),
+    )
+    db.add(snapshot)
+    db.flush()
+    return snapshot
+
+
+def get_latest_form_legal_snapshot(
+    db: Session,
+    *,
+    org_id: UUID,
+    form_external_id: str | None,
+) -> MetaFormLegalSnapshot | None:
+    """Resolve the latest observed legal copy for a lead without inventing evidence."""
+    if not form_external_id:
+        return None
+    return db.scalar(
+        select(MetaFormLegalSnapshot)
+        .join(MetaForm, MetaForm.id == MetaFormLegalSnapshot.form_id)
+        .where(
+            MetaFormLegalSnapshot.organization_id == org_id,
+            MetaForm.organization_id == org_id,
+            MetaForm.form_external_id == form_external_id,
+        )
+        .order_by(
+            MetaFormLegalSnapshot.detected_at.desc(),
+            MetaFormLegalSnapshot.id.desc(),
+        )
+        .limit(1)
+    )
 
 
 # =============================================================================

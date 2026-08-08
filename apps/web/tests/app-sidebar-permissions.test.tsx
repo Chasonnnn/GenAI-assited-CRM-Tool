@@ -33,14 +33,18 @@ vi.mock("next/link", () => ({
     default: ({
         children,
         href,
-        prefetch: _prefetch,
+        prefetch,
         ...props
     }: {
         children: ReactNode
         href: string
-        prefetch?: boolean
+        prefetch?: boolean | null
     }) => (
-        <a href={href} {...props}>
+        <a
+            href={href}
+            data-prefetch={prefetch === null ? "auto" : String(prefetch)}
+            {...props}
+        >
             {children}
         </a>
     ),
@@ -249,6 +253,37 @@ describe("AppSidebar permission visibility", () => {
         })
         expect(screen.getByText("Matches")).toBeInTheDocument()
         expect(screen.getByText("Reports")).toBeInTheDocument()
+    })
+
+    it("enables selective prefetch only after navigation intent", async () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: {
+                permissions: [
+                    "view_dashboard",
+                    "view_surrogates",
+                    "view_intended_parents",
+                    "view_matches",
+                    "view_reports",
+                ],
+            },
+        })
+
+        render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        const dashboard = await screen.findByRole("link", { name: "Dashboard" })
+        const reports = screen.getByRole("link", { name: "Reports" })
+
+        expect(dashboard).toHaveAttribute("data-prefetch", "false")
+        expect(reports).toHaveAttribute("data-prefetch", "false")
+
+        fireEvent.mouseEnter(dashboard)
+
+        expect(dashboard).toHaveAttribute("data-prefetch", "auto")
+        expect(reports).toHaveAttribute("data-prefetch", "false")
     })
 
     it("shows Tickets for developer role", async () => {

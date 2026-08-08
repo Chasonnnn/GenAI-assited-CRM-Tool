@@ -68,6 +68,18 @@ const embedForm = {
         text: "I agree to be contacted.",
         privacy_policy_url: "https://www.ewisurrogacy.com/privacy",
     },
+    messaging_consent: {
+        operational: {
+            disclosure: "I agree to receive application and appointment texts. Reply STOP to opt out.",
+            sms_terms_url: "https://www.ewisurrogacy.com/sms-terms",
+            privacy_policy_url: "https://www.ewisurrogacy.com/privacy",
+        },
+        promotional: {
+            disclosure: "I agree to receive promotional texts about surrogacy opportunities. Reply STOP to opt out.",
+            sms_terms_url: "https://www.ewisurrogacy.com/sms-terms",
+            privacy_policy_url: "https://www.ewisurrogacy.com/privacy",
+        },
+    },
     thank_you_config: {},
     embed_theme_json: {},
 }
@@ -162,7 +174,10 @@ describe("EmbedFormPageClient", () => {
         fireEvent.change(screen.getByLabelText(/email/i), {
             target: { value: "embed@example.com" },
         })
-        expect(screen.queryByRole("checkbox")).not.toBeInTheDocument()
+        const smsCheckboxes = screen.getAllByRole("checkbox")
+        expect(smsCheckboxes).toHaveLength(2)
+        expect(smsCheckboxes[0]).not.toBeChecked()
+        expect(smsCheckboxes[1]).not.toBeChecked()
         expect(screen.queryByText("I agree to be contacted.")).not.toBeInTheDocument()
         expect(screen.getByText(/By submitting, you agree/i)).toBeInTheDocument()
         fireEvent.click(screen.getByRole("button", { name: /submit/i }))
@@ -177,6 +192,8 @@ describe("EmbedFormPageClient", () => {
                         full_name: "Embed Lead",
                         email: "embed@example.com",
                     },
+                    sms_operational: false,
+                    sms_promotional: false,
                 }),
             )
         })

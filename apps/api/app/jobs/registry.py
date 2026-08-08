@@ -17,12 +17,14 @@ from app.jobs.handlers import (
     form_submissions,
     imports,
     interviews,
+    message_media,
     meta,
     notifications,
     orgs,
     reminders,
     resend,
     ticketing,
+    twilio,
     webhooks,
     workflows,
     zapier,
@@ -51,6 +53,7 @@ JOB_HANDLERS: Mapping[str, JobHandler] = {
     JobType.INTERVIEW_TRANSCRIPTION.value: interviews.process_interview_transcription,
     JobType.ATTACHMENT_SCAN.value: attachments.process_attachment_scan,
     JobType.FORM_SUBMISSION_FILE_SCAN.value: form_submissions.process_form_submission_file_scan,
+    JobType.MESSAGE_MEDIA_SCAN.value: message_media.process_message_media_scan,
     JobType.WORKFLOW_APPROVAL_EXPIRY.value: workflows.process_workflow_approval_expiry,
     JobType.WORKFLOW_RESUME.value: workflows.process_workflow_resume,
     JobType.META_HIERARCHY_SYNC.value: meta.process_meta_hierarchy_sync,
@@ -71,6 +74,9 @@ JOB_HANDLERS: Mapping[str, JobHandler] = {
     JobType.TICKET_OUTBOUND_SEND.value: ticketing.process_ticket_outbound_send,
     JobType.RESEND_EVENT_RECONCILE.value: resend.process_resend_event_reconcile,
     JobType.RESEND_READINESS_CHECK.value: resend.process_resend_readiness_check,
+    JobType.TWILIO_READINESS_CHECK.value: twilio.process_twilio_readiness_check,
+    JobType.TWILIO_CONSENT_SYNC.value: twilio.process_twilio_consent_sync,
+    JobType.TWILIO_INBOUND_MEDIA_FETCH.value: twilio.process_twilio_inbound_media_fetch,
 }
 
 

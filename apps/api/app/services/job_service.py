@@ -30,6 +30,7 @@ SPECIALIZED_RECOVERY_JOB_TYPES = frozenset(
     {
         JobType.ATTACHMENT_SCAN.value,
         JobType.FORM_SUBMISSION_FILE_SCAN.value,
+        JobType.MESSAGE_MEDIA_SCAN.value,
         JobType.RESEND_EVENT_RECONCILE.value,
     }
 )

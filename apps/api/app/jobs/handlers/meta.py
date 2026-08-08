@@ -4,9 +4,132 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 from uuid import UUID
 
 logger = logging.getLogger(__name__)
+
+_META_SMS_PURPOSE_BY_CHECKBOX_KEY = {
+    "sms_operational": "operational",
+    "sms_promotional": "promotional",
+}
+
+
+def _valid_privacy_policy_url(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    try:
+        parsed = urlsplit(normalized)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            return None
+    except ValueError:
+        return None
+    return normalized
+
+
+def _legal_checkbox_text(legal_content: object, checkbox_key: str) -> str | None:
+    if not isinstance(legal_content, dict):
+        return None
+    custom_disclaimer = legal_content.get("custom_disclaimer")
+    if not isinstance(custom_disclaimer, dict):
+        return None
+    checkboxes = custom_disclaimer.get("checkboxes")
+    if not isinstance(checkboxes, list):
+        return None
+
+    matches: set[str] = set()
+    for checkbox in checkboxes:
+        if not isinstance(checkbox, dict) or checkbox.get("key") != checkbox_key:
+            continue
+        text = checkbox.get("text")
+        if not isinstance(text, str) or not text.strip():
+            return None
+        matches.add(text.strip())
+    if len(matches) != 1:
+        return None
+    return matches.pop()
+
+
+def _project_meta_sms_consent_opt_ins(
+    db,
+    *,
+    organization_id: UUID,
+    meta_lead,
+    legal_snapshot,
+) -> None:
+    """Project explicit Meta SMS checkboxes from their captured legal snapshot."""
+    from app.services import messaging_consent_service
+    from app.utils.normalization import normalize_phone
+
+    if (
+        legal_snapshot is None
+        or meta_lead.organization_id != organization_id
+        or legal_snapshot.organization_id != organization_id
+        or meta_lead.meta_form_legal_snapshot_id != legal_snapshot.id
+    ):
+        return
+
+    occurred_at = meta_lead.meta_created_time
+    if occurred_at is None or occurred_at.tzinfo is None or occurred_at.utcoffset() is None:
+        return
+    privacy_policy_url = _valid_privacy_policy_url(legal_snapshot.privacy_policy_url)
+    if privacy_policy_url is None:
+        return
+
+    field_data = meta_lead.field_data
+    raw_phone = field_data.get("phone") if isinstance(field_data, dict) else None
+    if not isinstance(raw_phone, str):
+        return
+    try:
+        phone = normalize_phone(raw_phone)
+    except ValueError:
+        return
+    if phone is None:
+        return
+
+    responses = meta_lead.custom_disclaimer_responses
+    if not isinstance(responses, list):
+        return
+    projected_keys: set[str] = set()
+    for response in responses:
+        if not isinstance(response, dict) or response.get("is_checked") is not True:
+            continue
+        checkbox_key = response.get("checkbox_key")
+        if (
+            not isinstance(checkbox_key, str)
+            or checkbox_key not in _META_SMS_PURPOSE_BY_CHECKBOX_KEY
+            or checkbox_key in projected_keys
+        ):
+            continue
+        disclosure_text = _legal_checkbox_text(
+            legal_snapshot.legal_content,
+            checkbox_key,
+        )
+        if disclosure_text is None:
+            continue
+
+        messaging_consent_service.record_opt_in(
+            db,
+            organization_id=organization_id,
+            phone=phone,
+            purpose=_META_SMS_PURPOSE_BY_CHECKBOX_KEY[checkbox_key],
+            affirmative=True,
+            disclosure_text=disclosure_text,
+            source="meta_lead_ads",
+            source_reference=f"{meta_lead.meta_lead_id}:{checkbox_key}",
+            occurred_at=occurred_at,
+            idempotency_key=f"meta-lead:{meta_lead.meta_lead_id}:{checkbox_key}",
+            evidence_metadata={
+                "affirmative_action": "meta_custom_disclaimer_checkbox",
+                "checkbox_key": checkbox_key,
+                "legal_snapshot_id": str(legal_snapshot.id),
+                "privacy_policy_url": privacy_policy_url,
+            },
+            meta_lead_id=meta_lead.id,
+            commit=False,
+        )
+        projected_keys.add(checkbox_key)
 
 
 async def process_meta_lead_fetch(db, job) -> None:
@@ -23,6 +146,7 @@ async def process_meta_lead_fetch(db, job) -> None:
     from app.services import (
         meta_api,
         meta_lead_service,
+        meta_sync_service,
         meta_token_service,
     )
 
@@ -94,6 +218,14 @@ async def process_meta_lead_fetch(db, job) -> None:
 
     # Parse Meta timestamp
     meta_created_time = meta_api.parse_meta_timestamp(lead_data.get("created_time"))
+    disclaimer_responses = lead_data.get("custom_disclaimer_responses")
+    if not isinstance(disclaimer_responses, list):
+        disclaimer_responses = None
+    legal_snapshot = meta_sync_service.get_latest_form_legal_snapshot(
+        db,
+        org_id=mapping.organization_id,
+        form_external_id=lead_data.get("form_id"),
+    )
 
     # Store meta lead (handles dedupe)
     meta_lead, store_error = meta_lead_service.store_meta_lead(
@@ -106,10 +238,19 @@ async def process_meta_lead_fetch(db, job) -> None:
         meta_form_id=lead_data.get("form_id"),
         meta_page_id=page_id,
         meta_created_time=meta_created_time,
+        custom_disclaimer_responses=disclaimer_responses,
+        meta_form_legal_snapshot_id=legal_snapshot.id if legal_snapshot else None,
     )
 
     if store_error:
         raise Exception(store_error)
+
+    _project_meta_sms_consent_opt_ins(
+        db,
+        organization_id=mapping.organization_id,
+        meta_lead=meta_lead,
+        legal_snapshot=legal_snapshot,
+    )
 
     # Update success tracking (even for idempotent re-stores)
     mapping.last_success_at = datetime.now(UTC)

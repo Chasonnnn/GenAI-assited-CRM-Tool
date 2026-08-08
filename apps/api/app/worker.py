@@ -42,6 +42,8 @@ from app.services import (
     email_delivery_dispatch,
     email_service,
     job_service,
+    messaging_delivery_service,
+    messaging_dispatch_service,
     scan_claim_recovery_service,
     scan_dispatch_service,
 )
@@ -123,6 +125,25 @@ EMAIL_DELIVERY_MAX_BATCHES_PER_TICK = max(
 EMAIL_DELIVERY_LEASE_SECONDS = max(
     email_delivery_dispatch.MIN_DELIVERY_LEASE_SECONDS,
     int(os.getenv("EMAIL_DELIVERY_LEASE_SECONDS", "120")),
+)
+MESSAGING_DELIVERY_DISPATCH_ENABLED = _env_flag_enabled(
+    os.getenv("MESSAGING_DELIVERY_DISPATCH_ENABLED"),
+    default=False,
+)
+MESSAGING_DELIVERY_BATCH_SIZE = max(
+    1,
+    min(
+        messaging_dispatch_service.MAX_DISPATCH_BATCH_SIZE,
+        int(os.getenv("MESSAGING_DELIVERY_BATCH_SIZE", "10")),
+    ),
+)
+MESSAGING_DELIVERY_MAX_BATCHES_PER_TICK = max(
+    1,
+    min(100, int(os.getenv("MESSAGING_DELIVERY_MAX_BATCHES_PER_TICK", "10"))),
+)
+MESSAGING_DELIVERY_LEASE_SECONDS = max(
+    30,
+    int(os.getenv("MESSAGING_DELIVERY_LEASE_SECONDS", "120")),
 )
 WORKER_CUTOVER_HOLD = _env_flag_enabled(
     os.getenv("WORKER_CUTOVER_HOLD"),
@@ -234,6 +255,7 @@ WORKER_JOB_TYPES = parse_worker_job_types(os.getenv("WORKER_JOB_TYPES"))
 REMOTE_SCAN_JOB_TYPES = {
     JobType.ATTACHMENT_SCAN.value,
     JobType.FORM_SUBMISSION_FILE_SCAN.value,
+    JobType.MESSAGE_MEDIA_SCAN.value,
 }
 
 
@@ -902,7 +924,9 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
     if WORKER_JOB_TYPES is None and claimed_job_types is None:
         job_types_display = "all"
     elif WORKER_JOB_TYPES is None and claimed_job_types is not None:
-        job_types_display = "all-except-attachment_scan,form_submission_file_scan"
+        job_types_display = (
+            "all-except-attachment_scan,form_submission_file_scan,message_media_scan"
+        )
     elif claimed_job_types:
         job_types_display = ",".join(claimed_job_types)
     else:
@@ -922,6 +946,9 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
     last_workflow_approval_expiry_schedule: datetime | None = None
     email_delivery_worker_id = (
         f"{os.getenv('HOSTNAME', 'worker')}:{os.getpid()}:{secrets.token_hex(4)}"
+    )
+    messaging_delivery_worker_id = (
+        f"messaging:{os.getenv('HOSTNAME', 'worker')}:{os.getpid()}:{secrets.token_hex(4)}"
     )
     last_stale_claim_recovery = datetime.min.replace(tzinfo=UTC)
 
@@ -952,6 +979,46 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
                         break
             except Exception:
                 logger.exception("Email delivery batch failed")
+
+        if MESSAGING_DELIVERY_DISPATCH_ENABLED:
+            try:
+                with SessionLocal() as recovery_db:
+                    recovered = messaging_delivery_service.recover_expired_delivery_leases(
+                        recovery_db,
+                        limit=100,
+                    )
+                    if recovered:
+                        logger.warning(
+                            "Messaging delivery leases moved to reconciliation (count=%s)",
+                            recovered,
+                        )
+                for _batch_index in range(MESSAGING_DELIVERY_MAX_BATCHES_PER_TICK):
+                    summary = await messaging_dispatch_service.dispatch_due_delivery_batch(
+                        session_factory=SessionLocal,
+                        worker_id=messaging_delivery_worker_id,
+                        limit=MESSAGING_DELIVERY_BATCH_SIZE,
+                        lease_for=timedelta(seconds=MESSAGING_DELIVERY_LEASE_SECONDS),
+                    )
+                    if summary.claimed:
+                        logger.info(
+                            "Messaging delivery batch processed "
+                            "(claimed=%s submitted=%s retry_scheduled=%s deferred=%s "
+                            "failed=%s cancelled=%s reconciliation_required=%s "
+                            "lease_lost=%s unexpected_errors=%s)",
+                            summary.claimed,
+                            summary.submitted,
+                            summary.retry_scheduled,
+                            summary.deferred,
+                            summary.failed,
+                            summary.cancelled,
+                            summary.reconciliation_required,
+                            summary.lease_lost,
+                            summary.unexpected_errors,
+                        )
+                    if summary.claimed < MESSAGING_DELIVERY_BATCH_SIZE:
+                        break
+            except Exception:
+                logger.exception("Messaging delivery batch failed")
 
         with SessionLocal() as db:
             try:

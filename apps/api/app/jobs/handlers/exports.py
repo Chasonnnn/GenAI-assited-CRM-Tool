@@ -72,6 +72,19 @@ async def process_admin_export(db, job) -> None:
         payload["file_path"] = file_path
         payload["filename"] = filename
 
+    elif export_type == "messaging_zip":
+        export_bytes = admin_export_service.build_messaging_records_zip(
+            db,
+            job.organization_id,
+        )
+        file_path = admin_export_service.store_export_bytes(
+            job.organization_id,
+            filename,
+            export_bytes,
+        )
+        payload["file_path"] = file_path
+        payload["filename"] = filename
+
     else:
         raise Exception(f"Unknown export_type: {export_type}")
 

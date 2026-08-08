@@ -100,16 +100,18 @@ export function useCampaignPreview(id: string | undefined) {
 export function usePreviewFilters() {
     return useMutation({
         mutationFn: ({
+            channel,
             recipientType,
             filterCriteria,
             includeUnsubscribed,
             limit,
         }: {
+            channel: "email" | "messaging";
             recipientType: "case" | "intended_parent";
             filterCriteria: FilterCriteria;
             includeUnsubscribed: boolean;
             limit?: number;
-        }) => previewFilters(recipientType, filterCriteria, includeUnsubscribed, limit),
+        }) => previewFilters(channel, recipientType, filterCriteria, includeUnsubscribed, limit),
     });
 }
 

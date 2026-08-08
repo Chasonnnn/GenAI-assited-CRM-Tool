@@ -148,6 +148,8 @@ def store_meta_lead(
     meta_form_id: str | None = None,
     meta_page_id: str | None = None,
     meta_created_time: datetime | None = None,
+    custom_disclaimer_responses: list | None = None,
+    meta_form_legal_snapshot_id: UUID | None = None,
 ) -> tuple[MetaLead | None, str | None]:
     """
     Store a raw Meta lead.
@@ -181,6 +183,10 @@ def store_meta_lead(
             existing.meta_page_id = meta_page_id
         if meta_created_time is not None:
             existing.meta_created_time = meta_created_time
+        if custom_disclaimer_responses is not None:
+            existing.custom_disclaimer_responses = custom_disclaimer_responses
+        if meta_form_legal_snapshot_id is not None:
+            existing.meta_form_legal_snapshot_id = meta_form_legal_snapshot_id
         db.commit()
         db.refresh(existing)
         return existing, None
@@ -194,6 +200,8 @@ def store_meta_lead(
         field_data_raw=field_data_raw,
         raw_payload=raw_payload,
         meta_created_time=meta_created_time,
+        custom_disclaimer_responses=custom_disclaimer_responses,
+        meta_form_legal_snapshot_id=meta_form_legal_snapshot_id,
     )
     db.add(lead)
     db.commit()

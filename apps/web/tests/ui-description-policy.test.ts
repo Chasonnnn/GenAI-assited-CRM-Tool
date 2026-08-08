@@ -101,7 +101,7 @@ const removalsByFile: Record<string, string[]> = {
 
 describe("UI description policy", () => {
     it("documents the concise UI copy default in the canonical agent policy", () => {
-        const policy = readFileSync(join(process.cwd(), "../../agents.md"), "utf8")
+        const policy = readFileSync(join(process.cwd(), "../../AGENTS.md"), "utf8")
 
         expect(policy).toContain(
             "UI descriptions: Do not add subtitles, helper text, or descriptive copy beneath headings, labels, cards, or settings by default.",

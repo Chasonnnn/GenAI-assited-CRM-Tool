@@ -1,8 +1,15 @@
 import { notFound } from "next/navigation"
 import { Suspense } from "react"
+import { dehydrate, HydrationBoundary } from "@tanstack/react-query"
 
 import MatchDetailPageClient from "./page.client"
-import { getServerRouteResourceStatus } from "@/lib/server-route-resource"
+import type { MatchRead } from "@/lib/api/matches"
+import { matchDetailQueryOptions } from "@/lib/queries/matches"
+import { createServerQueryClient } from "@/lib/server-query-client"
+import {
+    fetchServerRouteResource,
+    ServerRouteResourceError,
+} from "@/lib/server-route-resource"
 
 type PageProps = {
     params: Promise<{ id?: string | string[] }>
@@ -17,17 +24,33 @@ export default async function MatchDetailPage({ params }: PageProps) {
         notFound()
     }
 
-    const status = await getServerRouteResourceStatus(
-        `/matches/${encodeURIComponent(matchId)}`,
-    )
-    if (status === "not_found") {
-        notFound()
+    const resourcePath = `/matches/${encodeURIComponent(matchId)}`
+    const queryClient = createServerQueryClient()
+
+    try {
+        await queryClient.fetchQuery(
+            matchDetailQueryOptions(matchId, () =>
+                fetchServerRouteResource<MatchRead>(resourcePath),
+            ),
+        )
+    } catch (error) {
+        if (error instanceof ServerRouteResourceError && error.status === 404) {
+            notFound()
+        }
+        if (
+            !(error instanceof ServerRouteResourceError) ||
+            ![401, 403].includes(error.status)
+        ) {
+            throw error
+        }
     }
 
     return (
-        <Suspense fallback={<MatchDetailPageSkeleton />}>
-            <MatchDetailPageClient />
-        </Suspense>
+        <HydrationBoundary state={dehydrate(queryClient)}>
+            <Suspense fallback={<MatchDetailPageSkeleton />}>
+                <MatchDetailPageClient />
+            </Suspense>
+        </HydrationBoundary>
     )
 }
 

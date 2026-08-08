@@ -231,6 +231,14 @@ class SendEmailActionConfig(BaseModel):
     recipients: Literal["surrogate", "owner", "creator", "all_admins"] | list[UUID] = "surrogate"
 
 
+class SendMessageActionConfig(BaseModel):
+    """Config for consent-gated Twilio messaging outbox materialization."""
+
+    action_type: Literal["send_message"] = "send_message"
+    purpose: Literal["operational", "promotional"]
+    message_template_version_id: UUID
+
+
 class CreateTaskActionConfig(BaseModel):
     """Config for create_task action."""
 
@@ -313,6 +321,7 @@ class CreateIntakeLeadActionConfig(BaseModel):
 # Union of all action configs
 ActionConfig = (
     SendEmailActionConfig
+    | SendMessageActionConfig
     | CreateTaskActionConfig
     | AssignSurrogateActionConfig
     | SendNotificationActionConfig
@@ -495,6 +504,7 @@ class WorkflowOptions(BaseModel):
     update_fields: list[str]
     email_variables: list[str]
     email_templates: list[dict]  # {id, name}
+    message_templates: list[dict] = []  # {id, name, purpose, version}
     users: list[dict]  # {id, display_name}
     queues: list[dict]  # {id, name}
     statuses: list[dict]  # {id, value, label, is_active}

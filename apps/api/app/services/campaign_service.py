@@ -19,6 +19,11 @@ from app.db.models import (
     EmailTemplate,
     IntendedParent,
     Job,
+    MessageDelivery,
+    MessageTemplate,
+    MessagingConsentState,
+    MessagingContact,
+    MessagingGlobalSuppression,
     Pipeline,
     PipelineStage,
     Surrogate,
@@ -41,6 +46,30 @@ from app.services.email_template_snapshot import (
 from app.utils.pagination import paginate_query_by_offset
 
 CAMPAIGN_SEND_BATCH_SIZE = int(os.getenv("CAMPAIGN_SEND_BATCH_SIZE", "200"))
+
+
+def _load_published_message_template(
+    db: Session,
+    *,
+    org_id: UUID,
+    template_version_id: UUID | None,
+    purpose: str = "promotional",
+    lock: bool = False,
+) -> MessageTemplate:
+    if template_version_id is None:
+        raise ValueError("Messaging campaigns require a message template version")
+    query = db.query(MessageTemplate).filter(
+        MessageTemplate.id == template_version_id,
+        MessageTemplate.organization_id == org_id,
+        MessageTemplate.status == "published",
+        MessageTemplate.purpose == purpose,
+    )
+    if lock:
+        query = query.with_for_update()
+    template = query.first()
+    if template is None:
+        raise ValueError(f"Published {purpose} message template not found")
+    return template
 
 
 def _snapshot_campaign_template(template: EmailTemplate, provider_config) -> dict:
@@ -270,7 +299,10 @@ def list_campaigns(
             (Campaign.id == run_subq.c.campaign_id) & (run_subq.c.rn == 1),
         )
         .filter(Campaign.organization_id == org_id)
-        .options(joinedload(Campaign.email_template))
+        .options(
+            joinedload(Campaign.email_template),
+            joinedload(Campaign.message_template),
+        )
     )
 
     if status:
@@ -291,7 +323,11 @@ def list_campaigns(
             CampaignListItem(
                 id=c.id,
                 name=c.name,
+                channel=c.channel,
                 email_template_name=c.email_template.name if c.email_template else None,
+                message_template_name=(
+                    c.message_template.name if c.message_template else None
+                ),
                 recipient_type=c.recipient_type,
                 status=c.status,
                 scheduled_at=c.scheduled_at,
@@ -314,25 +350,34 @@ def get_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> Campaign | Non
     return (
         db.query(Campaign)
         .filter(Campaign.id == campaign_id, Campaign.organization_id == org_id)
-        .options(joinedload(Campaign.email_template), joinedload(Campaign.created_by))
+        .options(
+            joinedload(Campaign.email_template),
+            joinedload(Campaign.message_template),
+            joinedload(Campaign.created_by),
+        )
         .first()
     )
 
 
 def create_campaign(db: Session, org_id: UUID, user_id: UUID, data: CampaignCreate) -> Campaign:
     """Create a new campaign."""
-    # Verify template exists
-    template = (
-        db.query(EmailTemplate)
-        .filter(
-            EmailTemplate.id == data.email_template_id,
-            EmailTemplate.organization_id == org_id,
+    if data.channel == "email":
+        template = (
+            db.query(EmailTemplate)
+            .filter(
+                EmailTemplate.id == data.email_template_id,
+                EmailTemplate.organization_id == org_id,
+            )
+            .first()
         )
-        .first()
-    )
-
-    if not template:
-        raise ValueError("Email template not found")
+        if not template:
+            raise ValueError("Email template not found")
+    else:
+        _load_published_message_template(
+            db,
+            org_id=org_id,
+            template_version_id=data.message_template_version_id,
+        )
 
     _ensure_future_datetime(data.scheduled_at, "scheduled_at")
 
@@ -340,7 +385,9 @@ def create_campaign(db: Session, org_id: UUID, user_id: UUID, data: CampaignCrea
         organization_id=org_id,
         name=data.name,
         description=data.description,
+        channel=data.channel,
         email_template_id=data.email_template_id,
+        message_template_version_id=data.message_template_version_id,
         recipient_type=data.recipient_type,
         filter_criteria=normalize_filter_criteria(
             db,
@@ -350,7 +397,7 @@ def create_campaign(db: Session, org_id: UUID, user_id: UUID, data: CampaignCrea
         ),
         scheduled_at=data.scheduled_at,
         status=CampaignStatus.DRAFT.value,
-        include_unsubscribed=data.include_unsubscribed,
+        include_unsubscribed=(data.include_unsubscribed if data.channel == "email" else False),
         created_by_user_id=user_id,
     )
     db.add(campaign)
@@ -381,11 +428,32 @@ def update_campaign(
     if not campaign:
         return None
 
+    effective_channel = data.channel or campaign.channel
+    if data.channel is not None and data.channel != campaign.channel:
+        if campaign.status != CampaignStatus.DRAFT.value:
+            raise ValueError("Cannot change channel after campaign is scheduled")
+        if data.channel == "email" and data.email_template_id is None:
+            raise ValueError("Changing to email requires email_template_id")
+        if data.channel == "messaging" and data.message_template_version_id is None:
+            raise ValueError(
+                "Changing to messaging requires message_template_version_id"
+            )
+        campaign.channel = data.channel
+        campaign.email_template_id = None
+        campaign.message_template_version_id = None
+
+    if effective_channel == "messaging" and data.include_unsubscribed:
+        raise ValueError(
+            "include_unsubscribed is not available for messaging campaigns"
+        )
+
     if data.name is not None:
         campaign.name = data.name
     if data.description is not None:
         campaign.description = data.description
     if data.email_template_id is not None:
+        if effective_channel != "email":
+            raise ValueError("Messaging campaigns cannot use email templates")
         if (
             campaign.status == CampaignStatus.SCHEDULED.value
             and data.email_template_id != campaign.email_template_id
@@ -403,6 +471,21 @@ def update_campaign(
         if not template:
             raise ValueError("Email template not found")
         campaign.email_template_id = data.email_template_id
+    if data.message_template_version_id is not None:
+        if effective_channel != "messaging":
+            raise ValueError("Email campaigns cannot use message templates")
+        if (
+            campaign.status == CampaignStatus.SCHEDULED.value
+            and data.message_template_version_id
+            != campaign.message_template_version_id
+        ):
+            raise ValueError("Cannot change message template after campaign is scheduled")
+        _load_published_message_template(
+            db,
+            org_id=org_id,
+            template_version_id=data.message_template_version_id,
+        )
+        campaign.message_template_version_id = data.message_template_version_id
     if data.recipient_type is not None:
         campaign.recipient_type = data.recipient_type
     if data.filter_criteria is not None:
@@ -441,7 +524,9 @@ def update_campaign(
                     pending_job.run_at = campaign.scheduled_at
 
     if data.include_unsubscribed is not None:
-        campaign.include_unsubscribed = data.include_unsubscribed
+        campaign.include_unsubscribed = (
+            data.include_unsubscribed if effective_channel == "email" else False
+        )
 
     db.flush()
     return campaign
@@ -467,16 +552,27 @@ def delete_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> bool:
 # =============================================================================
 
 
-def _build_recipient_query(db: Session, org_id: UUID, recipient_type: str, filter_criteria: dict):
+def _build_recipient_query(
+    db: Session,
+    org_id: UUID,
+    recipient_type: str,
+    filter_criteria: dict,
+    *,
+    channel: str = "email",
+):
     """Build SQLAlchemy query for recipients based on filter criteria."""
     criteria = FilterCriteria(**filter_criteria) if filter_criteria else FilterCriteria()
 
     if recipient_type == "case":
+        recipient_requirement = (
+            and_(Surrogate.email.isnot(None), Surrogate.email != "")
+            if channel == "email"
+            else and_(Surrogate.phone.isnot(None), Surrogate.phone_hash.isnot(None))
+        )
         query = db.query(Surrogate).filter(
             Surrogate.organization_id == org_id,
             Surrogate.is_archived.is_(False),
-            Surrogate.email.isnot(None),
-            Surrogate.email != "",
+            recipient_requirement,
         )
 
         if criteria.stage_ids:
@@ -514,10 +610,17 @@ def _build_recipient_query(db: Session, org_id: UUID, recipient_type: str, filte
         return query
 
     elif recipient_type == "intended_parent":
+        recipient_requirement = (
+            and_(IntendedParent.email.isnot(None), IntendedParent.email != "")
+            if channel == "email"
+            else and_(
+                IntendedParent.phone.isnot(None),
+                IntendedParent.phone_hash.isnot(None),
+            )
+        )
         query = db.query(IntendedParent).filter(
             IntendedParent.organization_id == org_id,
-            IntendedParent.email.isnot(None),
-            IntendedParent.email != "",
+            recipient_requirement,
             IntendedParent.is_archived.is_(False),  # Exclude archived IPs
         )
 
@@ -583,6 +686,59 @@ def _load_existing_recipients(
     return {recipient.entity_id: recipient for recipient in recipients}
 
 
+def _messaging_contact_join_condition(org_id: UUID, recipient_type: str):
+    if recipient_type == "case":
+        return and_(
+            MessagingContact.organization_id == org_id,
+            or_(
+                MessagingContact.surrogate_id == Surrogate.id,
+                MessagingContact.phone_hash == Surrogate.phone_hash,
+            ),
+        )
+    return and_(
+        MessagingContact.organization_id == org_id,
+        MessagingContact.phone_hash == IntendedParent.phone_hash,
+    )
+
+
+def _messaging_recipient_rows_query(
+    db: Session,
+    *,
+    org_id: UUID,
+    recipient_type: str,
+    filter_criteria: dict,
+):
+    base = _build_recipient_query(
+        db,
+        org_id,
+        recipient_type,
+        filter_criteria,
+        channel="messaging",
+    )
+    return (
+        base.add_entity(MessagingContact)
+        .join(
+            MessagingContact,
+            _messaging_contact_join_condition(org_id, recipient_type),
+        )
+        .outerjoin(
+            MessagingConsentState,
+            and_(
+                MessagingConsentState.organization_id == org_id,
+                MessagingConsentState.contact_id == MessagingContact.id,
+                MessagingConsentState.purpose == "promotional",
+            ),
+        )
+        .outerjoin(
+            MessagingGlobalSuppression,
+            and_(
+                MessagingGlobalSuppression.organization_id == org_id,
+                MessagingGlobalSuppression.contact_id == MessagingContact.id,
+            ),
+        )
+    )
+
+
 def preview_recipients(
     db: Session,
     org_id: UUID,
@@ -591,9 +747,75 @@ def preview_recipients(
     limit: int = 50,
     *,
     ignore_opt_out: bool = False,
+    channel: str = "email",
 ) -> CampaignPreviewResponse:
     """Preview recipients matching the filter criteria."""
-    query = _build_recipient_query(db, org_id, recipient_type, filter_criteria)
+    if channel == "messaging":
+        if ignore_opt_out:
+            raise ValueError(
+                "include_unsubscribed is not available for messaging campaigns"
+            )
+        base_query = _build_recipient_query(
+            db,
+            org_id,
+            recipient_type,
+            filter_criteria,
+            channel="messaging",
+        )
+        total_count = base_query.order_by(None).count()
+        rows_query = _messaging_recipient_rows_query(
+            db,
+            org_id=org_id,
+            recipient_type=recipient_type,
+            filter_criteria=filter_criteria,
+        )
+        globally_allowed = or_(
+            MessagingGlobalSuppression.id.is_(None),
+            MessagingGlobalSuppression.active.is_(False),
+        )
+        eligible_query = rows_query.filter(
+            MessagingConsentState.status == "opted_in",
+            globally_allowed,
+        )
+        explicitly_suppressed = rows_query.filter(
+            or_(
+                MessagingConsentState.status == "opted_out",
+                MessagingGlobalSuppression.active.is_(True),
+            )
+        ).order_by(None).count()
+        eligible_count = eligible_query.order_by(None).count()
+        rows = eligible_query.order_by(
+            MessagingContact.phone_last4,
+            MessagingContact.id,
+        ).limit(limit)
+        samples = [
+            RecipientPreview(
+                entity_type=recipient_type,
+                entity_id=entity.id,
+                phone_last4=contact.phone_last4,
+                name=entity.full_name,
+                stage=None,
+            )
+            for entity, contact in rows
+        ]
+        return CampaignPreviewResponse(
+            total_count=total_count,
+            eligible_count=eligible_count,
+            suppressed_count=explicitly_suppressed,
+            unknown_consent_count=max(
+                total_count - eligible_count - explicitly_suppressed,
+                0,
+            ),
+            sample_recipients=samples,
+        )
+
+    query = _build_recipient_query(
+        db,
+        org_id,
+        recipient_type,
+        filter_criteria,
+        channel="email",
+    )
 
     entities, total_count = paginate_query_by_offset(query, offset=0, limit=limit)
 
@@ -644,7 +866,12 @@ def preview_recipients(
                 )
             )
 
-    return CampaignPreviewResponse(total_count=total_count, sample_recipients=recipients[:limit])
+    return CampaignPreviewResponse(
+        total_count=total_count,
+        eligible_count=len(recipients),
+        suppressed_count=max(total_count - len(recipients), 0),
+        sample_recipients=recipients[:limit],
+    )
 
 
 # =============================================================================
@@ -681,26 +908,41 @@ def enqueue_campaign_send(
     ]:
         raise ValueError(f"Cannot send campaign in '{campaign.status}' status")
 
-    # Validate and lock email provider at run creation time
-    try:
-        provider_type, provider_config = email_provider_service.resolve_campaign_provider(
-            db, org_id
-        )
-    except email_provider_service.ConfigurationError as e:
-        raise ValueError(str(e))
+    provider_type: str | None = None
+    template_snapshot: dict | None = None
+    message_template_version_id: UUID | None = None
+    if campaign.channel == "email":
+        try:
+            provider_type, provider_config = email_provider_service.resolve_campaign_provider(
+                db, org_id
+            )
+        except email_provider_service.ConfigurationError as e:
+            raise ValueError(str(e))
 
-    template = (
-        db.query(EmailTemplate)
-        .filter(
-            EmailTemplate.id == campaign.email_template_id,
-            EmailTemplate.organization_id == org_id,
+        template = (
+            db.query(EmailTemplate)
+            .filter(
+                EmailTemplate.id == campaign.email_template_id,
+                EmailTemplate.organization_id == org_id,
+            )
+            .with_for_update()
+            .first()
         )
-        .with_for_update()
-        .first()
-    )
-    if template is None:
-        raise ValueError("Email template not found")
-    template_snapshot = _snapshot_campaign_template(template, provider_config)
+        if template is None:
+            raise ValueError("Email template not found")
+        template_snapshot = _snapshot_campaign_template(template, provider_config)
+    else:
+        if campaign.include_unsubscribed:
+            raise ValueError(
+                "include_unsubscribed is not available for messaging campaigns"
+            )
+        message_template = _load_published_message_template(
+            db,
+            org_id=org_id,
+            template_version_id=campaign.message_template_version_id,
+            lock=True,
+        )
+        message_template_version_id = message_template.id
 
     if send_now:
         # Create run immediately with locked provider
@@ -710,6 +952,7 @@ def enqueue_campaign_send(
             status="running",
             email_provider=provider_type,  # Lock provider at creation
             email_template_snapshot=template_snapshot,
+            message_template_version_id=message_template_version_id,
             total_count=0,
             sent_count=0,
             delivered_count=0,
@@ -751,6 +994,7 @@ def enqueue_campaign_send(
         status="running",
         email_provider=provider_type,  # Lock provider at creation
         email_template_snapshot=template_snapshot,
+        message_template_version_id=message_template_version_id,
         total_count=0,
         sent_count=0,
         delivered_count=0,
@@ -801,6 +1045,10 @@ def enqueue_campaign_retry_failed(
         raise ValueError("Campaign not found")
     if campaign.status == CampaignStatus.CANCELLED.value:
         raise ValueError("Cannot retry a cancelled campaign")
+    if campaign.channel == "messaging":
+        raise ValueError(
+            "Messaging delivery retries are managed by the durable messaging outbox"
+        )
 
     run = (
         db.query(CampaignRun)
@@ -912,8 +1160,32 @@ def cancel_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> bool:
         latest_run.error_message = "cancelled"
         latest_run.completed_at = now
 
-        cancellable_deliveries = (
-            db.query(EmailDelivery, EmailLog, CampaignRecipient)
+        if campaign.channel == "messaging":
+            cancellable_messages = (
+                db.query(MessageDelivery, CampaignRecipient)
+                .join(
+                    CampaignRecipient,
+                    CampaignRecipient.message_delivery_id == MessageDelivery.id,
+                )
+                .filter(
+                    MessageDelivery.organization_id == org_id,
+                    CampaignRecipient.run_id == latest_run.id,
+                    MessageDelivery.status.in_(("pending", "retry_scheduled")),
+                )
+                .with_for_update(of=MessageDelivery)
+                .all()
+            )
+            for delivery, recipient in cancellable_messages:
+                delivery.status = "cancelled"
+                delivery.completed_at = now
+                delivery.last_error_type = "campaign_cancelled"
+                delivery.last_error = "cancelled"
+                recipient.status = CampaignRecipientStatus.SKIPPED.value
+                recipient.error = None
+                recipient.skip_reason = "cancelled"
+        else:
+            cancellable_deliveries = (
+                db.query(EmailDelivery, EmailLog, CampaignRecipient)
             .join(
                 EmailLog,
                 EmailLog.id == EmailDelivery.email_log_id,
@@ -940,18 +1212,18 @@ def cancel_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> bool:
                 ),
             )
             .with_for_update(of=EmailDelivery)
-            .all()
-        )
-        for delivery, email_log, recipient in cancellable_deliveries:
-            delivery.status = EmailDeliveryStatus.CANCELLED.value
-            delivery.completed_at = now
-            delivery.last_error_type = "campaign_cancelled"
-            delivery.last_error = "cancelled"
-            email_log.status = EmailStatus.SKIPPED.value
-            email_log.error = "cancelled"
-            recipient.status = CampaignRecipientStatus.SKIPPED.value
-            recipient.error = None
-            recipient.skip_reason = "cancelled"
+                .all()
+            )
+            for delivery, email_log, recipient in cancellable_deliveries:
+                delivery.status = EmailDeliveryStatus.CANCELLED.value
+                delivery.completed_at = now
+                delivery.last_error_type = "campaign_cancelled"
+                delivery.last_error = "cancelled"
+                email_log.status = EmailStatus.SKIPPED.value
+                email_log.error = "cancelled"
+                recipient.status = CampaignRecipientStatus.SKIPPED.value
+                recipient.error = None
+                recipient.skip_reason = "cancelled"
 
     pending_jobs = (
         db.query(Job)
@@ -1280,6 +1552,105 @@ def project_campaign_recipient_delivery(
     return True
 
 
+def project_campaign_message_delivery(
+    db: Session,
+    *,
+    organization_id: UUID,
+    message_delivery_id: UUID,
+    status: str,
+    provider_message_id: str | None = None,
+    error: str | None = None,
+    occurred_at: datetime | None = None,
+    commit: bool = True,
+) -> bool:
+    """Project a messaging outbox status onto its campaign recipient."""
+    if status not in {
+        "submitted",
+        "delivered",
+        "failed",
+        "cancelled",
+        "reconciliation_required",
+    }:
+        raise ValueError("unsupported campaign message delivery projection status")
+    run_id = (
+        db.query(CampaignRecipient.run_id)
+        .join(CampaignRun, CampaignRun.id == CampaignRecipient.run_id)
+        .filter(
+            CampaignRecipient.message_delivery_id == message_delivery_id,
+            CampaignRun.organization_id == organization_id,
+        )
+        .scalar()
+    )
+    if run_id is None:
+        return False
+    if (
+        _lock_campaign_run_and_campaign(
+            db,
+            organization_id=organization_id,
+            run_id=run_id,
+        )
+        is None
+    ):
+        return False
+    recipient = (
+        db.query(CampaignRecipient)
+        .filter(
+            CampaignRecipient.run_id == run_id,
+            CampaignRecipient.message_delivery_id == message_delivery_id,
+        )
+        .with_for_update(of=CampaignRecipient)
+        .one_or_none()
+    )
+    if recipient is None:
+        return False
+
+    projected_at = occurred_at or datetime.now(UTC)
+    if status == "delivered":
+        recipient.status = CampaignRecipientStatus.DELIVERED.value
+        recipient.sent_at = recipient.sent_at or projected_at
+        recipient.external_message_id = (
+            recipient.external_message_id or provider_message_id
+        )
+        recipient.error = None
+        recipient.skip_reason = None
+    elif status == "submitted" and recipient.status in {
+        CampaignRecipientStatus.PENDING.value,
+        CampaignRecipientStatus.SENT.value,
+    }:
+        recipient.status = CampaignRecipientStatus.SENT.value
+        recipient.sent_at = recipient.sent_at or projected_at
+        recipient.external_message_id = (
+            recipient.external_message_id or provider_message_id
+        )
+        recipient.error = None
+        recipient.skip_reason = None
+    elif status in {"failed", "reconciliation_required"} and recipient.status in {
+        CampaignRecipientStatus.PENDING.value,
+        CampaignRecipientStatus.SENT.value,
+        CampaignRecipientStatus.FAILED.value,
+    }:
+        recipient.status = CampaignRecipientStatus.FAILED.value
+        recipient.error = (error or status)[:500]
+        recipient.skip_reason = None
+    elif status == "cancelled" and recipient.status == CampaignRecipientStatus.PENDING.value:
+        recipient.status = CampaignRecipientStatus.SKIPPED.value
+        recipient.error = None
+        recipient.skip_reason = (error or "cancelled")[:100]
+
+    if not recompute_campaign_run_aggregates(
+        db,
+        organization_id=organization_id,
+        run_id=run_id,
+        commit=False,
+    ):
+        raise RuntimeError("Campaign aggregate projection target is missing")
+    if commit:
+        db.commit()
+    else:
+        db.flush()
+    return True
+
+
 # =============================================================================
 # Runs
 # =============================================================================
@@ -1476,6 +1847,226 @@ def _campaign_run_result(
     return result
 
 
+def _load_messaging_contacts_for_batch(
+    db: Session,
+    *,
+    org_id: UUID,
+    recipient_type: str,
+    recipients: list,
+) -> dict[UUID, MessagingContact]:
+    entity_ids = [entity.id for entity in recipients]
+    phone_hashes = [entity.phone_hash for entity in recipients if entity.phone_hash]
+    if recipient_type == "case":
+        contacts = (
+            db.query(MessagingContact)
+            .filter(
+                MessagingContact.organization_id == org_id,
+                or_(
+                    MessagingContact.surrogate_id.in_(entity_ids),
+                    MessagingContact.phone_hash.in_(phone_hashes),
+                ),
+            )
+            .all()
+        )
+        by_surrogate = {
+            contact.surrogate_id: contact
+            for contact in contacts
+            if contact.surrogate_id is not None
+        }
+    else:
+        contacts = (
+            db.query(MessagingContact)
+            .filter(
+                MessagingContact.organization_id == org_id,
+                MessagingContact.phone_hash.in_(phone_hashes),
+            )
+            .all()
+        )
+        by_surrogate = {}
+    by_phone = {contact.phone_hash: contact for contact in contacts}
+    resolved: dict[UUID, MessagingContact] = {}
+    for entity in recipients:
+        linked_contact = by_surrogate.get(entity.id)
+        if linked_contact is not None and linked_contact.phone_hash == entity.phone_hash:
+            resolved[entity.id] = linked_contact
+            continue
+        fallback_contact = by_phone.get(entity.phone_hash)
+        if fallback_contact is not None:
+            resolved[entity.id] = fallback_contact
+    return resolved
+
+
+def _execute_messaging_campaign_run(
+    db: Session,
+    *,
+    org_id: UUID,
+    campaign: Campaign,
+    run: CampaignRun,
+) -> dict:
+    from app.services import email_service, messaging_delivery_service
+
+    if run.status == "completed":
+        return _campaign_run_result(run)
+    if run.message_template_version_id != campaign.message_template_version_id:
+        raise ValueError("Campaign message template version does not match queued run")
+    template = _load_published_message_template(
+        db,
+        org_id=org_id,
+        template_version_id=run.message_template_version_id,
+    )
+
+    campaign.status = CampaignStatus.SENDING.value
+    run.status = "running"
+    run.started_at = datetime.now(UTC)
+    db.commit()
+
+    recipient_query = _build_recipient_query(
+        db,
+        org_id,
+        campaign.recipient_type,
+        campaign.filter_criteria or {},
+        channel="messaging",
+    )
+    entity_model = Surrogate if campaign.recipient_type == "case" else IntendedParent
+    run.total_count = recipient_query.order_by(None).count()
+    recipient_query = recipient_query.order_by(entity_model.phone_hash, entity_model.id)
+    db.commit()
+
+    batch_size = max(1, CAMPAIGN_SEND_BATCH_SIZE)
+    buffer: list = []
+    seen_contacts: set[UUID] = set()
+
+    def _process_batch(batch: list) -> None:
+        contacts_by_entity = _load_messaging_contacts_for_batch(
+            db,
+            org_id=org_id,
+            recipient_type=campaign.recipient_type,
+            recipients=batch,
+        )
+        existing_by_entity = _load_existing_recipients(
+            db,
+            run.id,
+            campaign.recipient_type,
+            [entity.id for entity in batch],
+        )
+        for entity in batch:
+            existing = existing_by_entity.get(entity.id)
+            contact = contacts_by_entity.get(entity.id)
+            name = entity.full_name or entity.first_name
+            if contact is None:
+                if existing is None:
+                    db.add(
+                        CampaignRecipient(
+                            run_id=run.id,
+                            entity_type=campaign.recipient_type,
+                            entity_id=entity.id,
+                            recipient_email=None,
+                            recipient_name=name,
+                            status=CampaignRecipientStatus.SKIPPED.value,
+                            skip_reason="consent_unknown",
+                        )
+                    )
+                elif existing.message_delivery_id is None:
+                    existing.status = CampaignRecipientStatus.SKIPPED.value
+                    existing.skip_reason = "consent_unknown"
+                continue
+
+            if contact.id in seen_contacts:
+                if existing is None:
+                    db.add(
+                        CampaignRecipient(
+                            run_id=run.id,
+                            entity_type=campaign.recipient_type,
+                            entity_id=entity.id,
+                            recipient_email=None,
+                            recipient_phone_last4=contact.phone_last4,
+                            recipient_name=name,
+                            status=CampaignRecipientStatus.SKIPPED.value,
+                            skip_reason="duplicate_phone",
+                        )
+                    )
+                continue
+            seen_contacts.add(contact.id)
+
+            campaign_recipient = existing
+            if campaign_recipient is None:
+                campaign_recipient = CampaignRecipient(
+                    run_id=run.id,
+                    entity_type=campaign.recipient_type,
+                    entity_id=entity.id,
+                    recipient_email=None,
+                    recipient_phone_last4=contact.phone_last4,
+                    recipient_name=name,
+                    status=CampaignRecipientStatus.PENDING.value,
+                )
+                db.add(campaign_recipient)
+                db.flush()
+            elif campaign_recipient.message_delivery_id is not None or campaign_recipient.status in {
+                CampaignRecipientStatus.SENT.value,
+                CampaignRecipientStatus.DELIVERED.value,
+                CampaignRecipientStatus.SKIPPED.value,
+            }:
+                continue
+
+            if campaign.recipient_type == "case":
+                variables = email_service.build_surrogate_template_variables(db, entity)
+            else:
+                variables = email_service.build_intended_parent_template_variables(db, entity)
+            _subject, body = email_service.render_template("", template.body, variables)
+            try:
+                delivery = messaging_delivery_service.materialize_delivery(
+                    db,
+                    organization_id=org_id,
+                    contact_id=contact.id,
+                    purpose="promotional",
+                    body=body,
+                    idempotency_key=(
+                        f"campaign-message/{campaign_recipient.id}/"
+                        f"v{campaign_recipient.send_revision}"
+                    ),
+                    source_type="campaign_recipient",
+                    source_id=campaign_recipient.id,
+                    template_version_id=template.id,
+                    media_asset_ids=[],
+                    is_enrollment_confirmation=template.is_enrollment_confirmation,
+                    run_at=campaign.scheduled_at,
+                )
+            except (
+                messaging_delivery_service.MessagingConsentBlocked,
+                messaging_delivery_service.MessagingEnrollmentRequired,
+            ) as exc:
+                campaign_recipient.status = CampaignRecipientStatus.SKIPPED.value
+                campaign_recipient.error = None
+                campaign_recipient.skip_reason = str(exc)[:100]
+            except Exception as exc:
+                campaign_recipient.status = CampaignRecipientStatus.FAILED.value
+                campaign_recipient.error = type(exc).__name__[:100]
+                campaign_recipient.skip_reason = None
+            else:
+                campaign_recipient.message_delivery_id = delivery.id
+                campaign_recipient.status = CampaignRecipientStatus.PENDING.value
+                campaign_recipient.error = None
+                campaign_recipient.skip_reason = None
+            db.commit()
+
+    for entity in recipient_query.execution_options(stream_results=True).yield_per(batch_size):
+        buffer.append(entity)
+        if len(buffer) >= batch_size:
+            _process_batch(buffer)
+            buffer = []
+    if buffer:
+        _process_batch(buffer)
+
+    if not recompute_campaign_run_aggregates(
+        db,
+        organization_id=org_id,
+        run_id=run.id,
+        commit=True,
+    ):
+        raise RuntimeError("Campaign aggregate target is missing")
+    return _campaign_run_result(run)
+
+
 def execute_campaign_run(
     db: Session,
     org_id: UUID,
@@ -1506,6 +2097,14 @@ def execute_campaign_run(
         raise Exception(f"Campaign run {run_id} not found")
     if campaign.status == CampaignStatus.CANCELLED.value:
         return _campaign_run_result(run)
+
+    if campaign.channel == "messaging":
+        return _execute_messaging_campaign_run(
+            db,
+            org_id=org_id,
+            campaign=campaign,
+            run=run,
+        )
 
     template = _load_campaign_run_template(
         db,

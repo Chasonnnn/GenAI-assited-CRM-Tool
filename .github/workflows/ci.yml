@@ -3,8 +3,43 @@ name: CI
 on:
   push:
     branches: [main, develop]
+    paths:
+      - 'apps/**'
+      - 'infra/terraform/**'
+      - 'scripts/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'Makefile'
+      - 'mise.toml'
+      - 'mise.lock'
+      - '.dockerignore'
+      - 'zap-baseline.conf'
+      - '.release-please-manifest.json'
+      - 'release-please-config.json'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/release-please.yml'
   pull_request:
     branches: [main, develop]
+    paths:
+      - 'apps/**'
+      - 'infra/terraform/**'
+      - 'scripts/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'Makefile'
+      - 'mise.toml'
+      - 'mise.lock'
+      - '.dockerignore'
+      - 'zap-baseline.conf'
+      - '.release-please-manifest.json'
+      - 'release-please-config.json'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/release-please.yml'
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend-tests:
     name: Backend Tests
@@ -203,6 +238,14 @@ jobs:
       - name: Install dependencies
         working-directory: apps/web
         run: pnpm install --frozen-lockfile
+
+      - name: Restore Next.js incremental build cache
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/apps/web/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('apps/web/pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**/*.js', 'apps/web/**/*.jsx', 'apps/web/**/*.ts', 'apps/web/**/*.tsx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('apps/web/pnpm-lock.yaml') }}-
       
       - name: Run type check
         working-directory: apps/web

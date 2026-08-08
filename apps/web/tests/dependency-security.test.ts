@@ -150,8 +150,22 @@ describe("Dependency security guards", () => {
 
         expect(nextVersion).toBeDefined()
         expect(bundleAnalyzerVersion).toBeDefined()
-        expect(compareVersions(nextVersion!, "16.2.11")).toBeGreaterThanOrEqual(0)
-        expect(compareVersions(bundleAnalyzerVersion!, "16.2.11")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(nextVersion!, "16.3.0")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(bundleAnalyzerVersion!, "16.3.0")).toBeGreaterThanOrEqual(0)
+    })
+
+    it("holds React and TypeScript on the validated compatibility line", () => {
+        const packageJson = JSON.parse(
+            readFileSync(join(process.cwd(), "package.json"), "utf8"),
+        ) as PackageJson
+        const reactVersion = packageJson.dependencies?.react
+        const reactDomVersion = packageJson.dependencies?.["react-dom"]
+        const typescriptVersion = packageJson.devDependencies?.typescript?.replace(/^[^\d]*/, "")
+
+        expect(reactVersion).toBe("19.2.7")
+        expect(reactDomVersion).toBe("19.2.7")
+        expect(typescriptVersion).toBeDefined()
+        expect(compareVersions(typescriptVersion!, "6.1.0")).toBeLessThan(0)
     })
 
     it("resolves only non-vulnerable flatted versions in pnpm-lock.yaml", () => {
