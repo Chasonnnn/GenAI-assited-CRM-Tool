@@ -10,12 +10,44 @@ CI_WORKFLOW = ROOT / ".github/workflows/ci.yml"
 RELEASE_WORKFLOW = ROOT / ".github/workflows/release-please.yml"
 
 
-def test_release_only_pull_requests_run_ci() -> None:
+def _trigger_paths(workflow: str, event: str) -> set[str]:
+    trigger_block = workflow.split("jobs:", 1)[0]
+    event_match = re.search(
+        rf"^  {event}:\n(?P<body>.*?)(?=^  [a-z_]+:|^concurrency:)",
+        trigger_block,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    assert event_match is not None
+    return set(re.findall(r"^      - '([^']+)'$", event_match.group("body"), re.MULTILINE))
+
+
+def test_ci_uses_safe_path_filters_and_cancels_stale_runs() -> None:
     workflow = CI_WORKFLOW.read_text()
     pull_request_trigger = workflow.split("jobs:", 1)[0]
+    expected_paths = {
+        "apps/**",
+        "infra/terraform/**",
+        "scripts/**",
+        "pyproject.toml",
+        "uv.lock",
+        "Makefile",
+        "mise.toml",
+        "mise.lock",
+        ".dockerignore",
+        "zap-baseline.conf",
+        ".release-please-manifest.json",
+        "release-please-config.json",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release-please.yml",
+    }
 
     assert "pull_request:" in pull_request_trigger
     assert "paths-ignore:" not in pull_request_trigger
+    assert _trigger_paths(workflow, "push") == expected_paths
+    assert _trigger_paths(workflow, "pull_request") == expected_paths
+    assert "concurrency:\n" in pull_request_trigger
+    assert "  group: ci-${{ github.workflow }}-${{ github.ref }}" in pull_request_trigger
+    assert "  cancel-in-progress: true" in pull_request_trigger
 
 
 def test_ci_builds_every_production_image_with_deployment_inputs() -> None:

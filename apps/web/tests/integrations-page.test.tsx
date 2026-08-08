@@ -13,6 +13,8 @@ const mockUseUserIntegrations = vi.fn()
 const mockUseGoogleCalendarStatus = vi.fn()
 const mockUseAISettingsQuery = vi.fn()
 const mockUseResendSettingsQuery = vi.fn()
+const mockUseTwilioSettingsQuery = vi.fn()
+const mockUseTwilioReadinessQuery = vi.fn()
 const mockUseZapierSettingsQuery = vi.fn()
 const mockUseMetaFormsQuery = vi.fn()
 const mockUseMetaConnectionsQuery = vi.fn()
@@ -364,6 +366,11 @@ vi.mock('@/lib/hooks/use-resend', () => ({
     useEligibleSenders: () => ({ data: [], isLoading: false }),
 }))
 
+vi.mock('@/lib/hooks/use-twilio', () => ({
+    useTwilioSettings: (enabled?: boolean) => mockUseTwilioSettingsQuery(enabled),
+    useTwilioReadiness: (enabled?: boolean) => mockUseTwilioReadinessQuery(enabled),
+}))
+
 vi.mock('@/lib/hooks/use-zapier', () => ({
     useZapierSettings: (enabled?: boolean) => mockUseZapierSettingsQuery(enabled),
     useCreateZapierInboundWebhook: () => ({ mutateAsync: mockZapierInboundCreate, isPending: false }),
@@ -425,6 +432,8 @@ describe('IntegrationsPage', () => {
         mockUsePipelines.mockReset()
         mockUseAISettingsQuery.mockReset()
         mockUseResendSettingsQuery.mockReset()
+        mockUseTwilioSettingsQuery.mockReset()
+        mockUseTwilioReadinessQuery.mockReset()
         mockUseZapierSettingsQuery.mockReset()
         mockUseMetaFormsQuery.mockReset()
         mockUseMetaConnectionsQuery.mockReset()
@@ -541,6 +550,14 @@ describe('IntegrationsPage', () => {
             data: resendSettingsData,
             isLoading: false,
         }))
+        mockUseTwilioSettingsQuery.mockImplementation(() => ({
+            data: { enabled: true },
+            isLoading: false,
+        }))
+        mockUseTwilioReadinessQuery.mockImplementation(() => ({
+            data: { overall_status: 'degraded' },
+            isLoading: false,
+        }))
         mockUseZapierSettingsQuery.mockImplementation(() => ({
             data: zapierSettingsData,
             isLoading: false,
@@ -624,6 +641,12 @@ describe('IntegrationsPage', () => {
         expect(
             screen.getByRole('link', { name: /view email operations/i })
         ).toHaveAttribute('href', '/settings/integrations/email')
+        expect(screen.getByText('Messaging Delivery')).toBeInTheDocument()
+        expect(screen.getByText('Needs attention')).toBeInTheDocument()
+        expect(screen.queryByText('degraded')).not.toBeInTheDocument()
+        expect(
+            screen.getByRole('link', { name: /configure messaging/i })
+        ).toHaveAttribute('href', '/settings/integrations/messaging')
         expect(screen.getByText('Zapier')).toBeInTheDocument()
         expect(screen.getByRole('button', { name: /configure zapier/i })).toBeInTheDocument()
 
@@ -2009,8 +2032,14 @@ describe('IntegrationsPage', () => {
         expect(screen.getByRole('button', { name: /connect zoom/i })).toBeInTheDocument()
         expect(screen.getByRole('button', { name: /connect gmail/i })).toBeInTheDocument()
         expect(screen.getByRole('button', { name: /connect google calendar/i })).toBeInTheDocument()
+        const messagingCard = screen.getByText('Messaging Delivery').closest('[data-slot="card"]')
+        expect(messagingCard).not.toBeNull()
+        expect(
+            within(messagingCard as HTMLElement).getByRole('button', { name: /admin access required/i })
+        ).toBeDisabled()
         expect(screen.queryByRole('button', { name: /configure ai/i })).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: /configure email/i })).not.toBeInTheDocument()
+        expect(screen.queryByRole('link', { name: /configure messaging/i })).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: /configure zapier/i })).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: /configure meta/i })).not.toBeInTheDocument()
     })
@@ -2026,6 +2055,8 @@ describe('IntegrationsPage', () => {
         expect(mockUseIntegrationHealth).toHaveBeenCalledWith(false)
         expect(mockUseAISettingsQuery).toHaveBeenCalledWith(false)
         expect(mockUseResendSettingsQuery).toHaveBeenCalledWith(false)
+        expect(mockUseTwilioSettingsQuery).toHaveBeenCalledWith(false)
+        expect(mockUseTwilioReadinessQuery).toHaveBeenCalledWith(false)
         expect(mockUseZapierSettingsQuery).toHaveBeenCalledWith(false)
         expect(mockUsePipelines).toHaveBeenCalledWith('surrogate', false)
         expect(mockUseMetaFormsQuery).toHaveBeenCalledWith(false)

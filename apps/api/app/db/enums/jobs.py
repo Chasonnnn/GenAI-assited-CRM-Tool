@@ -37,6 +37,7 @@ class JobType(str, Enum):
     INTERVIEW_TRANSCRIPTION = "interview_transcription"
     ATTACHMENT_SCAN = "attachment_scan"
     FORM_SUBMISSION_FILE_SCAN = "form_submission_file_scan"
+    MESSAGE_MEDIA_SCAN = "message_media_scan"
     WORKFLOW_APPROVAL_EXPIRY = "workflow_approval_expiry"  # Sweep for expired approvals
     WORKFLOW_RESUME = "workflow_resume"  # Resume workflow after approval resolution
     ORG_DELETE = "org_delete"  # Hard delete org after grace period
@@ -55,6 +56,9 @@ class JobType(str, Enum):
     TICKET_OUTBOUND_SEND = "ticket_outbound_send"
     RESEND_EVENT_RECONCILE = "resend_event_reconcile"
     RESEND_READINESS_CHECK = "resend_readiness_check"
+    TWILIO_READINESS_CHECK = "twilio_readiness_check"
+    TWILIO_CONSENT_SYNC = "twilio_consent_sync"
+    TWILIO_INBOUND_MEDIA_FETCH = "twilio_inbound_media_fetch"
 
 
 class JobStatus(str, Enum):

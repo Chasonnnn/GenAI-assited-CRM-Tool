@@ -10,12 +10,13 @@ from uuid import UUID
 from sqlalchemy import select, text
 
 from app.db.enums import JobStatus, JobType
-from app.db.models import Attachment, FormSubmissionFile, Job
+from app.db.models import Attachment, FormSubmissionFile, Job, MessageMediaAsset
 from app.db.session import SessionLocal
 from app.jobs.scan_attachment import (
     get_available_scanner,
     scan_attachment_job,
     scan_form_submission_file_job,
+    scan_message_media_asset_job,
 )
 from app.services import clamav_signature_service, job_service
 
@@ -26,7 +27,9 @@ logger = logging.getLogger(__name__)
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a dedicated malware scan job")
     parser.add_argument(
-        "--scan-type", choices=["attachment", "form_submission_file"], required=True
+        "--scan-type",
+        choices=["attachment", "form_submission_file", "message_media"],
+        required=True,
     )
     parser.add_argument("--resource-id", required=True)
     parser.add_argument("--job-id", required=True)
@@ -47,7 +50,25 @@ def _scan_contract(scan_type: str) -> tuple[str, str]:
         return JobType.ATTACHMENT_SCAN.value, "attachment_id"
     if scan_type == "form_submission_file":
         return JobType.FORM_SUBMISSION_FILE_SCAN.value, "submission_file_id"
+    if scan_type == "message_media":
+        return JobType.MESSAGE_MEDIA_SCAN.value, "media_asset_id"
     raise ValueError(f"Unsupported scan type: {scan_type}")
+
+
+def _scan_model(scan_type: str):
+    if scan_type == "attachment":
+        return Attachment
+    if scan_type == "form_submission_file":
+        return FormSubmissionFile
+    if scan_type == "message_media":
+        return MessageMediaAsset
+    raise ValueError(f"Unsupported scan type: {scan_type}")
+
+
+def _terminal_scan_statuses(scan_type: str) -> frozenset[str]:
+    if scan_type == "message_media":
+        return frozenset({"clean", "quarantined", "rejected"})
+    return frozenset({"clean", "infected", "error"})
 
 
 def _require_current_claim(
@@ -88,7 +109,7 @@ def _resource_scan_status(
     resource_id: UUID,
     organization_id: UUID,
 ) -> str | None:
-    model = Attachment if scan_type == "attachment" else FormSubmissionFile
+    model = _scan_model(scan_type)
     return db.execute(
         select(model.scan_status).where(
             model.id == resource_id,
@@ -179,7 +200,8 @@ def run_scan_job(
             resource_id=resource_id,
             organization_id=job.organization_id,
         )
-        if initial_status not in {"clean", "infected", "error", None}:
+        terminal_statuses = _terminal_scan_statuses(scan_type)
+        if initial_status not in {*terminal_statuses, None}:
             _prepare_scanner()
 
         job, resource_status = _lock_current_claim_and_resource(
@@ -196,11 +218,7 @@ def run_scan_job(
                 claim_token=claim_token,
                 scan_type=scan_type,
             )
-        if resource_status in {
-            "clean",
-            "infected",
-            "error",
-        }:
+        if resource_status in terminal_statuses:
             job_service.complete_claimed_job(
                 db,
                 job_id=job.id,
@@ -210,15 +228,17 @@ def run_scan_job(
 
         if scan_type == "attachment":
             success = scan_attachment_job(resource_id)
-        else:
+        elif scan_type == "form_submission_file":
             success = scan_form_submission_file_job(resource_id)
+        else:
+            success = scan_message_media_asset_job(resource_id)
 
         resource_is_terminal = _resource_scan_status(
             db,
             scan_type=scan_type,
             resource_id=resource_id,
             organization_id=job.organization_id,
-        ) in {"clean", "infected", "error"}
+        ) in terminal_statuses
         if success or resource_is_terminal:
             job_service.complete_claimed_job(
                 db,

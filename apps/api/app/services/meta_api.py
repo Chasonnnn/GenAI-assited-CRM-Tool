@@ -107,7 +107,7 @@ async def fetch_lead_details(
     params = {
         "access_token": access_token,
         "appsecret_proof": proof,
-        "fields": "id,created_time,field_data,form_id,page_id,ad_id",
+        "fields": ("id,created_time,field_data,form_id,page_id,ad_id,custom_disclaimer_responses"),
     }
 
     try:
@@ -541,7 +541,7 @@ async def fetch_ads(
 async def fetch_page_leadgen_forms(
     page_id: str,
     access_token: str,
-    fields: str = "id,name,questions",
+    fields: str = "id,name,questions,legal_content,privacy_policy_url",
     max_pages: int = 20,
 ) -> tuple[list[JsonObject] | None, str | None]:
     """

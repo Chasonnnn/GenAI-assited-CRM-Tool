@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query"
 import { AlertTriangleIcon, CheckCircle2Icon, Loader2Icon, SendIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { PublicFormFieldRenderer, type PublicFormAnswerValue } from "@/components/forms/PublicFormFieldRenderer"
 import {
     getPublicFieldValidationError,
@@ -32,11 +33,14 @@ type EmbedFormState = {
     datePickerOpen: Record<string, boolean>
     isSubmitting: boolean
     isSubmitted: boolean
+    smsOperational: boolean
+    smsPromotional: boolean
     error: string | null
 }
 type EmbedFormAction =
     | { type: "answerChanged"; fieldKey: string; value: PublicFormAnswerValue }
     | { type: "datePickerOpenChanged"; update: React.SetStateAction<Record<string, boolean>> }
+    | { type: "smsConsentChanged"; purpose: "operational" | "promotional"; checked: boolean }
     | { type: "validationFailed"; error: string }
     | { type: "submissionStarted" }
     | { type: "submissionSucceeded" }
@@ -65,6 +69,8 @@ function createInitialEmbedFormState(initialParentOrigin: string | null | undefi
         datePickerOpen: {},
         isSubmitting: false,
         isSubmitted: false,
+        smsOperational: false,
+        smsPromotional: false,
         error: parentOrigin ? null : "This form is not available for this website.",
     }
 }
@@ -128,6 +134,10 @@ function embedFormReducer(state: EmbedFormState, action: EmbedFormAction): Embed
                 datePickerOpen,
             }
         }
+        case "smsConsentChanged":
+            return action.purpose === "operational"
+                ? { ...state, smsOperational: action.checked }
+                : { ...state, smsPromotional: action.checked }
         case "validationFailed":
             return {
                 ...state,
@@ -185,6 +195,8 @@ function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: 
         datePickerOpen,
         isSubmitting,
         isSubmitted,
+        smsOperational,
+        smsPromotional,
         error: localError,
     } = state
     const formQuery = useQuery({
@@ -259,6 +271,8 @@ function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: 
                 idempotency_key: buildIdempotencyKey(),
                 published_version_id: formConfig.published_version_id,
                 answers: asJsonObject(answers),
+                sms_operational: smsOperational,
+                sms_promotional: smsPromotional,
                 attribution: {},
             })
             postEmbedMessageToParent(parentOrigin, {
@@ -339,6 +353,78 @@ function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: 
                             <p className="rounded-md bg-stone-50 px-3 py-2 text-[12px] leading-5 text-stone-500">
                                 {formConfig.form_schema.privacy_notice.trim()}
                             </p>
+                        ) : null}
+
+                        {formConfig.messaging_consent?.operational ? (
+                            <div className="flex items-start gap-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-3">
+                                <Checkbox
+                                    id="sms-operational"
+                                    checked={smsOperational}
+                                    onCheckedChange={(checked) =>
+                                        dispatch({
+                                            type: "smsConsentChanged",
+                                            purpose: "operational",
+                                            checked: checked === true,
+                                        })
+                                    }
+                                    className="mt-0.5"
+                                />
+                                <label htmlFor="sms-operational" className="text-[12px] leading-5 text-stone-600">
+                                    {formConfig.messaging_consent.operational.disclosure}{" "}
+                                    <a
+                                        href={formConfig.messaging_consent.operational.sms_terms_url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="underline underline-offset-2"
+                                    >
+                                        SMS Terms
+                                    </a>{" "}
+                                    <a
+                                        href={formConfig.messaging_consent.operational.privacy_policy_url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="underline underline-offset-2"
+                                    >
+                                        Privacy Policy
+                                    </a>
+                                </label>
+                            </div>
+                        ) : null}
+
+                        {formConfig.messaging_consent?.promotional ? (
+                            <div className="flex items-start gap-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-3">
+                                <Checkbox
+                                    id="sms-promotional"
+                                    checked={smsPromotional}
+                                    onCheckedChange={(checked) =>
+                                        dispatch({
+                                            type: "smsConsentChanged",
+                                            purpose: "promotional",
+                                            checked: checked === true,
+                                        })
+                                    }
+                                    className="mt-0.5"
+                                />
+                                <label htmlFor="sms-promotional" className="text-[12px] leading-5 text-stone-600">
+                                    {formConfig.messaging_consent.promotional.disclosure}{" "}
+                                    <a
+                                        href={formConfig.messaging_consent.promotional.sms_terms_url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="underline underline-offset-2"
+                                    >
+                                        SMS Terms
+                                    </a>{" "}
+                                    <a
+                                        href={formConfig.messaging_consent.promotional.privacy_policy_url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="underline underline-offset-2"
+                                    >
+                                        Privacy Policy
+                                    </a>
+                                </label>
+                            </div>
                         ) : null}
 
                         {error ? (

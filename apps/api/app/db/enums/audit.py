@@ -38,6 +38,7 @@ class AuditEventType(str, Enum):
     DATA_EXPORT_SURROGATES = "data_export_surrogates"
     DATA_EXPORT_ANALYTICS = "data_export_analytics"
     DATA_EXPORT_CONFIG = "data_export_config"
+    DATA_EXPORT_MESSAGING = "data_export_messaging"
     DATA_VIEW_SURROGATE = "data_view_surrogate"
     DATA_VIEW_NOTE = "data_view_note"
     DATA_EMAIL_SENT = "data_email_sent"

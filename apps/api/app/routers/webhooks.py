@@ -15,6 +15,7 @@ from app.core.deps import get_db
 from app.core.rate_limit import limiter
 from app.services import google_calendar_sync_service, ticketing_service
 from app.services.webhooks import get_handler
+from app.services.webhooks import twilio as twilio_webhook_service
 from app.services.webhooks.meta import simulate_meta_webhook as simulate_meta_webhook_handler
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -180,6 +181,39 @@ async def resend_webhook(
 ) -> object:
     handler = get_handler("resend")
     return await handler.handle(request, db, webhook_id=webhook_id)
+
+
+# =============================================================================
+# Twilio Programmable Messaging Webhooks
+# =============================================================================
+
+
+@router.post("/twilio/{webhook_id}/inbound")
+@limiter.limit(f"{settings.RATE_LIMIT_WEBHOOK}/minute")
+async def twilio_inbound_webhook(
+    webhook_id: str,
+    request: Request,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
+    return await twilio_webhook_service.handle_inbound(
+        request,
+        db,
+        webhook_id=webhook_id,
+    )
+
+
+@router.post("/twilio/{webhook_id}/status")
+@limiter.limit(f"{settings.RATE_LIMIT_WEBHOOK}/minute")
+async def twilio_status_webhook(
+    webhook_id: str,
+    request: Request,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
+    return await twilio_webhook_service.handle_status(
+        request,
+        db,
+        webhook_id=webhook_id,
+    )
 
 
 # =============================================================================

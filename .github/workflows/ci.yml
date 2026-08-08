@@ -3,8 +3,43 @@ name: CI
 on:
   push:
     branches: [main, develop]
+    paths:
+      - 'apps/**'
+      - 'infra/terraform/**'
+      - 'scripts/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'Makefile'
+      - 'mise.toml'
+      - 'mise.lock'
+      - '.dockerignore'
+      - 'zap-baseline.conf'
+      - '.release-please-manifest.json'
+      - 'release-please-config.json'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/release-please.yml'
   pull_request:
     branches: [main, develop]
+    paths:
+      - 'apps/**'
+      - 'infra/terraform/**'
+      - 'scripts/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'Makefile'
+      - 'mise.toml'
+      - 'mise.lock'
+      - '.dockerignore'
+      - 'zap-baseline.conf'
+      - '.release-please-manifest.json'
+      - 'release-please-config.json'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/release-please.yml'
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend-tests:
     name: Backend Tests

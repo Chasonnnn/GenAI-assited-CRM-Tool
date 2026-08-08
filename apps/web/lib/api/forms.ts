@@ -332,6 +332,18 @@ export interface FormIntakePublicRead {
     allowed_mime_types?: string[] | null
     campaign_name?: string | null
     event_name?: string | null
+    messaging_consent?: MessagingConsentOptionsRead
+}
+
+export interface MessagingConsentOptionRead {
+    disclosure: string
+    sms_terms_url: string
+    privacy_policy_url: string
+}
+
+export interface MessagingConsentOptionsRead {
+    operational?: MessagingConsentOptionRead | null
+    promotional?: MessagingConsentOptionRead | null
 }
 
 interface FormEmbedConsentRead {
@@ -358,6 +370,8 @@ export interface FormEmbedSubmitPayload {
     published_version_id: string
     answers: JsonObject
     consent?: { accepted: boolean }
+    sms_operational?: boolean
+    sms_promotional?: boolean
     attribution?: Record<string, unknown>
 }
 
@@ -753,7 +767,8 @@ export function submitSharedPublicForm(
     answers: JsonObject,
     files: File[] = [],
     fileFieldKeys?: string[],
-    challengeToken?: string | null
+    challengeToken?: string | null,
+    messagingConsent?: { operational?: boolean; promotional?: boolean },
 ): Promise<FormSubmissionSharedResponse> {
     const formData = new FormData()
     formData.append('answers', JSON.stringify(answers))
@@ -761,6 +776,8 @@ export function submitSharedPublicForm(
     if (fileFieldKeys) {
         formData.append('file_field_keys', JSON.stringify(fileFieldKeys))
     }
+    formData.append('sms_operational', String(messagingConsent?.operational === true))
+    formData.append('sms_promotional', String(messagingConsent?.promotional === true))
     const options = challengeToken ? { headers: { "X-Intake-Challenge": challengeToken } } : undefined
     return api.upload<FormSubmissionSharedResponse>(`/forms/public/intake/${slug}/submit`, formData, options)
 }

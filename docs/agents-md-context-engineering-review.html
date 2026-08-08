@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AGENTS.md Context Engineering Review — Surrogacy Force</title>
+  <style>
+    :root{--ink:#191520;--muted:#696170;--paper:#f6f1e8;--panel:#fffdf8;--purple:#5d3c91;--lav:#e9e0f5;--orange:#e4632c;--green:#176d50;--red:#a43c32;--blue:#27698f;--line:#d9d0c2;--shadow:0 18px 55px rgba(45,32,59,.11)}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:var(--ink);background:radial-gradient(circle at 10% 0,rgba(139,112,183,.16),transparent 34rem),var(--paper);font:16px/1.55 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:var(--purple);text-underline-offset:3px}code,pre{font-family:"SFMono-Regular",Consolas,monospace}.shell{width:min(1160px,calc(100% - 32px));margin:auto}
+    .top{position:sticky;top:0;z-index:10;border-bottom:1px solid rgba(93,60,145,.15);background:rgba(246,241,232,.9);backdrop-filter:blur(16px)}.top .shell{height:58px;display:flex;align-items:center;justify-content:space-between}.brand{font-weight:850;letter-spacing:-.02em}.brand b{color:var(--orange)}nav{display:flex;gap:18px}nav a{font-size:14px;color:var(--muted);text-decoration:none}
+    .hero{padding:76px 0 44px;display:grid;grid-template-columns:1.18fr .82fr;gap:42px;align-items:center}.eyebrow,.kicker{text-transform:uppercase;letter-spacing:.13em;font-size:12px;font-weight:850;color:var(--purple)}.eyebrow:before{content:"";display:inline-block;width:27px;height:3px;margin:0 9px 3px 0;border-radius:5px;background:var(--orange)}h1,h2{font-family:Georgia,"Times New Roman",serif;letter-spacing:-.045em}h1{margin:18px 0;font-size:clamp(48px,7vw,86px);line-height:.97;font-weight:600}h1 em{color:var(--purple);font-weight:500}.lede{max-width:750px;font-size:20px;color:var(--muted)}.verdict{margin-top:25px;padding:13px 17px;border-left:4px solid var(--orange);background:#fff7e9;font-weight:780}
+    .metrics{min-height:400px;padding:30px;border-radius:36px;overflow:hidden;position:relative;background:#241b31;color:#fff;box-shadow:var(--shadow)}.metrics:after{content:"";position:absolute;width:225px;height:225px;right:-68px;bottom:-78px;border:40px solid var(--orange);border-radius:50%}.metrics h3{margin:0 0 26px;color:#d9cbed}.metric{margin:22px 0;position:relative;z-index:1}.metric div:first-child{display:flex;justify-content:space-between;gap:12px;font-size:14px}.track{height:11px;margin-top:8px;border-radius:20px;background:rgba(255,255,255,.13);overflow:hidden}.fill{height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--orange),#ffb46b)}.metrics p{position:relative;z-index:1;color:#cfc3da;font-size:14px}
+    section{padding:45px 0;scroll-margin-top:70px}.head{display:grid;grid-template-columns:165px 1fr;gap:25px;margin-bottom:28px}.head h2{margin:0;font-size:clamp(34px,4.6vw,55px);line-height:1.04}.intro{max-width:820px;color:var(--muted);font-size:18px}
+    .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.tile,.source{padding:21px;border:1px solid var(--line);border-radius:21px;background:var(--panel)}.tile .n{font:700 35px/1 Georgia,serif;color:#9a7cc4}.tile h3{margin:15px 0 7px}.tile p,.source p{margin:0;color:var(--muted);font-size:14px}
+    .flow{margin-top:20px;padding:22px;border-radius:22px;background:var(--lav);display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:12px;align-items:center}.node{padding:15px;border-radius:14px;background:#fff;text-align:center;font-weight:800}.node small{display:block;color:var(--muted);font-weight:500}.arrow{color:var(--orange);font-size:28px;font-weight:900}.sources{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px}.source h3{margin:0 0 8px}
+    .priorities{display:grid;gap:13px}.priority{display:grid;grid-template-columns:145px 1fr auto;gap:20px;align-items:center;padding:20px 23px;border:1px solid var(--line);border-radius:20px;background:var(--panel)}.priority p{margin:4px 0 0;color:var(--muted)}.pill,.tag{padding:6px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.07em;font-size:11px;font-weight:850;white-space:nowrap}.high{background:var(--red);color:#fff}.medium{background:var(--blue);color:#fff}.safe{background:var(--green);color:#fff}
+    .filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}.filter{padding:8px 13px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--muted);cursor:pointer}.filter.active,.filter:hover{background:var(--purple);border-color:var(--purple);color:#fff}.audit{display:grid;gap:15px}.card{overflow:hidden;border:1px solid var(--line);border-radius:21px;background:var(--panel);box-shadow:0 8px 24px rgba(45,32,59,.05)}.card.hidden{display:none}.card header{display:grid;grid-template-columns:62px minmax(190px,.7fr) minmax(280px,1.3fr) auto;gap:17px;align-items:center;padding:20px 23px}.num{font:700 28px/1 Georgia,serif;color:#9a7cc4}.card h3{margin:0;font-size:18px}.card header p{margin:0;color:var(--muted);font-size:14px}.keep{background:#dcefe6;color:#155b43}.compress{background:#e7def2;color:#553383}.move{background:#dfedf6;color:#215c7e}.delete{background:#f8dfda;color:#8a3028}.add{background:#fff0cc;color:#84500e}
+    details{border-top:1px solid var(--line)}summary{padding:12px 23px;color:var(--purple);font-weight:780;cursor:pointer}.compare{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line)}.pane{min-width:0;padding:22px}.pane+.pane{border-left:1px solid var(--line)}.pane h4{margin:0 0 10px;text-transform:uppercase;letter-spacing:.09em;font-size:11px}.current h4{color:var(--red)}.proposed h4{color:var(--green)}.pane p,.pane li{color:var(--muted)}pre{margin:11px 0 0;padding:15px;border-radius:13px;overflow:auto;white-space:pre-wrap;background:#211a2d;color:#faf5ff;font-size:12px;line-height:1.55}.why{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:13px}.why div{padding:13px;border-radius:12px;background:#f5f0e7;font-size:13px}.why div:last-child{background:#fff2e2}.why b{display:block;margin-bottom:3px}.evidence{display:inline-block;padding:5px 8px;border-radius:7px;background:#eee8df;color:#5f5766;font-size:12px}
+    .unknowns{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:850px}.unknown{min-height:165px;padding:21px;border:1px solid var(--line);border-radius:20px;background:var(--panel)}.unknown:nth-child(2),.unknown:nth-child(3){background:var(--lav)}.unknown h3{margin:0 0 8px}.unknown p{margin:0;color:var(--muted)}.unknown b{display:block;margin-top:13px;color:var(--purple)}.examples{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;margin-top:20px}.example{padding:21px;border-radius:21px;background:#241b31;color:#fff}.example small{color:#d7c6e9;text-transform:uppercase;letter-spacing:.09em;font-weight:850}.example h3{margin:9px 0}.example p{margin:0;color:#d8cedf;font-size:14px}.example b{display:block;margin-top:13px;color:#ffb879}
+    .architecture{display:grid;grid-template-columns:.82fr 1.18fr;gap:22px}.layers{display:grid;gap:9px}.layer{padding:17px;border:1px solid var(--line);border-radius:15px;background:var(--panel)}.layer:first-child{background:#281f35;color:#fff}.layer b,.layer small{display:block}.layer small{color:var(--muted)}.layer:first-child small{color:#d3c7dc}
+    .draft-wrap{overflow:hidden;border-radius:22px;box-shadow:var(--shadow)}.draft-bar{padding:15px 19px;background:var(--purple);color:#fff;display:flex;justify-content:space-between}.draft-bar span{color:#e8dcf4;font-size:13px}.draft{max-height:720px;margin:0;border-radius:0;padding:25px;background:#1c1625}.callout{padding:32px;border-radius:28px;background:var(--orange);color:#fff;display:grid;grid-template-columns:.7fr 1.3fr;gap:28px;align-items:center}.callout h2{margin:0;color:#fff;font-size:48px}.callout p{margin:0;color:#fff6ee;font-size:18px}footer{padding:40px 0 60px;color:var(--muted);font-size:14px}footer .shell{padding-top:22px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:20px}
+    @media(max-width:900px){nav{display:none}.hero,.architecture,.callout{grid-template-columns:1fr}.grid4,.examples{grid-template-columns:1fr 1fr}.head{grid-template-columns:1fr;gap:7px}.card header{grid-template-columns:52px 1fr auto}.card header p{grid-column:2/-1}.compare,.sources{grid-template-columns:1fr}.pane+.pane{border-left:0;border-top:1px solid var(--line)}}@media(max-width:620px){.shell{width:calc(100% - 20px)}.hero{padding-top:48px}.grid4,.examples,.unknowns{grid-template-columns:1fr}.flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg);text-align:center}.priority{grid-template-columns:1fr;gap:7px}.pill{justify-self:start}.card header{grid-template-columns:40px 1fr}.tag{grid-column:2;justify-self:start}.why{grid-template-columns:1fr}.draft-bar,footer .shell{flex-direction:column}.callout h2{font-size:39px}}@media print{.top,.filters{display:none}.draft{max-height:none}.card{break-inside:avoid}}
+  </style>
+</head>
+<body>
+  <div class="top"><div class="shell"><div class="brand">SURROGACY FORCE <b>/ CONTEXT REVIEW</b></div><nav><a href="#finding">Finding</a><a href="#audit">Section audit</a><a href="#unknowns">Unknowns</a><a href="#structure">Structure</a><a href="#draft">Draft</a></nav></div></div>
+
+  <main>
+    <div class="shell hero">
+      <div>
+        <div class="eyebrow">Approved review · implemented 2 August 2026</div>
+        <h1>Less instruction.<br><em>More signal.</em></h1>
+        <p class="lede">A section-by-section review of the current <code>AGENTS.md</code>, grounded in Anthropic’s Claude 5 context-engineering guidance and the live Surrogacy Force repository.</p>
+        <div class="verdict">Implemented: safety and product invariants remain; copied documentation, generic examples, stale state, and repeated rules moved out of root context.</div>
+      </div>
+      <aside class="metrics">
+        <h3>Root guidance footprint</h3>
+        <div class="metric"><div><span>Pre-change AGENTS.md</span><b>22.5 KB · 2,025 words</b></div><div class="track"><div class="fill" style="width:100%"></div></div></div>
+        <div class="metric"><div><span>Pre-change CLAUDE.md</span><b>10.9 KB · 542 words</b></div><div class="track"><div class="fill" style="width:49%"></div></div></div>
+        <div class="metric"><div><span>Proposed root guide</span><b>~700–800 words</b></div><div class="track"><div class="fill" style="width:37%;background:linear-gradient(90deg,#b59bdd,#eadff7)"></div></div></div>
+        <p>These totals understate the cognitive cost: both root files also carry separate, generated Next.js documentation indexes.</p>
+      </aside>
+    </div>
+
+    <section id="finding"><div class="shell">
+      <div class="head"><div class="kicker">01 · Finding</div><div><h2>The model is stronger; the invariants are still real.</h2><p class="intro">Spend root-context tokens only where repository inspection cannot safely recover the answer. Safety boundaries and surprising local behavior stay. Obvious framework knowledge and changing facts move to code or focused references.</p></div></div>
+      <div class="grid4">
+        <div class="tile"><div class="n">01</div><h3>Keep invariants</h3><p>PII, secrets, tenant isolation, human review, CSRF, and task-owned process cleanup protect real failure boundaries.</p></div>
+        <div class="tile"><div class="n">02</div><h3>Compress heuristics</h3><p>Testing, quality, Git, and architecture guidance can become short outcome-oriented rules that allow judgment.</p></div>
+        <div class="tile"><div class="n">03</div><h3>Move changing facts</h3><p>Versions, stage flows, environment keys, status, and command details should point to executable sources of truth.</p></div>
+        <div class="tile"><div class="n">04</div><h3>Add decision gates</h3><p>For unfamiliar or irreversible work, surface unknowns and architecture-changing choices before proceeding.</p></div>
+      </div>
+      <div class="flow"><div class="node">Root guide<small>intent + invariants + gotchas</small></div><div class="arrow">→</div><div class="node">Live territory<small>code + tests + manifests</small></div><div class="arrow">→</div><div class="node">Focused references<small>loaded only when needed</small></div></div>
+      <div class="sources">
+        <article class="source"><h3><a href="https://claude.com/blog/the-new-rules-of-context-engineering-for-claude-5-generation-models">The new rules of context engineering</a></h3><p>Applied here: use judgment, prefer interfaces over canned examples, disclose progressively, avoid repetition, and spend repo guidance on gotchas.</p></article>
+        <article class="source"><h3><a href="https://claude.com/blog/a-field-guide-to-claude-fable-finding-your-unknowns">A field guide to Claude Fable 5</a></h3><p>Applied here: distinguish map from territory, do blind-spot passes for unfamiliar work, prototype preference-heavy choices, and surface expensive unknowns early.</p></article>
+      </div>
+    </div></section>
+
+    <section><div class="shell">
+      <div class="head"><div class="kicker">02 · First moves</div><div><h2>Five changes carry most of the value.</h2></div></div>
+      <div class="priorities">
+        <div class="priority"><b>Unify context</b><div><strong>Make one canonical file.</strong><p><code>AGENTS.md</code> claims to be the source of truth, but <code>CLAUDE.md</code> repeats boundaries, commands, TDD, and its own Next.js index.</p></div><span class="pill high">High</span></div>
+        <div class="priority"><b>Remove stale facts</b><div><strong>Point to executable sources.</strong><p>The documented flow uses legacy <code>qualified</code>; code canonicalizes it to <code>pre_qualified</code> and contains newer configurable stages.</p></div><span class="pill high">High</span></div>
+        <div class="priority"><b>Narrow zero tolerance</b><div><strong>Do not expand every task into repo cleanup.</strong><p>Require no new failures from the change; report unrelated pre-existing issues unless they block verification or are in scope.</p></div><span class="pill high">High</span></div>
+        <div class="priority"><b>Split by surface</b><div><strong>Load frontend/backend details only when relevant.</strong><p>Move Next.js and SelectValue guidance to <code>apps/web</code>; tenancy, auth, transactions, and migrations to <code>apps/api</code>.</p></div><span class="pill medium">Medium</span></div>
+        <div class="priority"><b>Protect red lines</b><div><strong>Do not weaken domain safety.</strong><p>Secrets, raw PII, cross-tenant access, unsupervised AI sending, CSRF, and process ownership are concise and product-specific.</p></div><span class="pill safe">Keep</span></div>
+      </div>
+    </div></section>
+
+    <section id="audit"><div class="shell">
+      <div class="head"><div class="kicker">03 · Section audit</div><div><h2>Current → proposed, with reasons and trade-offs.</h2><p class="intro">Filter the recommendations, then expand any row for suggested wording.</p></div></div>
+      <div class="filters" role="group" aria-label="Filter recommendations"><button class="filter active" data-filter="all">All</button><button class="filter" data-filter="keep">Keep</button><button class="filter" data-filter="compress">Compress</button><button class="filter" data-filter="move">Move</button><button class="filter" data-filter="delete">Delete</button><button class="filter" data-filter="add">Add</button></div>
+      <div class="audit">
+
+        <article class="card" data-action="compress"><header><div class="num">00</div><h3>Cross-file source of truth</h3><p><code>AGENTS.md</code> says it is canonical; <code>CLAUDE.md</code> copies much of it and can drift.</p><span class="tag compress">Unify</span></header><details open><summary>Current state and proposal</summary><div class="compare">
+          <div class="pane current"><h4>Current</h4><p>Two independent root files repeat safety, commands, quality, TDD, and generated Next.js indexes.</p><span class="evidence">22,484 bytes + 10,927 bytes</span></div>
+          <div class="pane proposed"><h4>Proposed</h4><p>Keep <code>AGENTS.md</code> canonical. Make <code>CLAUDE.md</code> a symlink; if Windows portability matters, use a tiny adapter.</p><pre>CLAUDE.md → AGENTS.md
+
+Portable fallback:
+Read AGENTS.md as the canonical project guide.
+For UI work, also read docs/layouts.md.</pre><div class="why"><div><b>Reason</b>Removes conflicts and makes edits atomic.</div><div><b>Trade-off</b>Symlinks can be awkward on Windows; a tiny adapter is portable but still relies on indirection.</div></div></div>
+        </div></details></article>
+
+        <article class="card" data-action="compress move"><header><div class="num">01</div><h3>Commands</h3><p>Useful, but long, duplicated, and mixed with a rare baseline-reset recipe.</p><span class="tag compress">Compress + move</span></header><details><summary>Current state and proposal</summary><div class="compare">
+          <div class="pane current"><h4>Current</h4><p>Lists dev, tests, lint, migrations, bootstrap, Docker, psql, utilities, generation, and six cleanup rules. Tests recur later.</p></div>
+          <div class="pane proposed"><h4>Proposed</h4><pre>## Commands and cleanup
+Use pinned runtimes in mise.toml/mise.lock and existing
+package scripts; inspect manifests before adding commands.
+
+Backend: cd apps/api &amp;&amp; uv sync --extra test
+         cd apps/api &amp;&amp; uv run -m pytest -v
+Frontend: cd apps/web &amp;&amp; pnpm run check
+Use pnpm run test:all for cross-cutting/integration work.
+Migrations: follow docs/migration-runbook.md.
+
+Start servers only for active QA. Record PIDs, stop only
+task-owned processes, and report anything left running.</pre><div class="why"><div><b>Reason</b>Manifests and runbooks remain canonical.</div><div><b>Trade-off</b>Rare operations take one extra read—useful friction for resets.</div></div></div>
+        </div></details></article>
+
+        <article class="card" data-action="keep compress"><header><div class="num">02</div><h3>Boundaries</h3><p>The best section, mixed with unbounded and overly absolute language.</p><span class="tag keep">Keep + clarify</span></header><details open><summary>Current state and proposal</summary><div class="compare">
+          <div class="pane current"><h4>Current</h4><p>Five strong red lines, then commands to fix every warning/failure/performance/security issue immediately, accept breaking changes, polish every feature fully, and ignore accessibility unless requested.</p></div>
+          <div class="pane proposed"><h4>Proposed</h4><pre>## Non-negotiables
+- Never commit/expose secrets or log raw PII.
+- Never send AI-authored messages without human review.
+- Scope tenant-owned reads and writes to the authenticated org.
+- Preserve CSRF and centralized authorization.
+- Never cross an irreversible/external-action boundary without
+  explicit authorization.
+
+Do not introduce warnings, failures, security regressions, or
+obvious performance regressions. Report unrelated pre-existing
+issues; fix them only when requested, blocking, or inseparable.
+
+Breaking internal changes need an impact and migration/reset plan.
+Production work includes relevant errors, loading, validation, and
+polish; prototypes are isolated and labeled. Preserve existing
+semantic and keyboard behavior.</pre><div class="why"><div><b>Reason</b>Preserves actual risk controls without turning small work into repo-wide cleanup.</div><div><b>Trade-off</b>“Caused by the change” needs judgment; handoff evidence should name excluded failures.</div></div></div>
+        </div></details></article>
+
+        <article class="card" data-action="move"><header><div class="num">03</div><h3>Tech stack</h3><p>Mostly visible in pinned manifests and prone to becoming a second inventory.</p><span class="tag move">Move to manifests</span></header><details><summary>Current state and proposal</summary><div class="compare">
+          <div class="pane current"><h4>Current</h4><p>Two tables enumerate framework and library choices.</p></div>
+          <div class="pane proposed"><h4>Proposed</h4><pre>Keep only non-obvious architecture choices:
+- TanStack Query owns server state; Zustand owns UI state.
+- Extend customized shadcn/Base UI primitives.
+- Cookie auth uses centralized authorization and CSRF.
+
+Versions: mise.toml / mise.lock
+Dependencies: apps/web/package.json / apps/api/pyproject.toml</pre><div class="why"><div><b>Reason</b>Live manifests are higher fidelity.</div><div><b>Trade-off</b>Less one-glance orientation; three surprising choices retain the useful part.</div></div></div>
+        </div></details></article>
+
+        <article class="card" data-action="delete move"><header><div class="num">04</div><h3>Project structure</h3><p>The model can inspect the actual directory tree faster and more accurately.</p><span class="tag delete">Delete tree</span></header><details><summary>Current state and proposal</summary><div class="compare">
+          <div class="pane current"><h4>Current</h4><p>A 23-line schematic with generic labels such as routers, services, components, hooks, and types.</p></div>
+          <div class="pane proposed"><h4>Proposed</h4><pre>Before changing an unfamiliar surface, inspect callers, tests,
+configuration, and neighboring implementation. Match local idioms.
+
+Backend guidance: apps/api/AGENTS.md
+Frontend guidance: apps/web/AGENTS.md
+Operations/migrations: docs/*runbook.md</pre><div class="why"><div><b>Reason</b>Repository search is the territory; a hand-maintained tree is a lossy map.</div><div><b>Trade-off</b>Nested guidance costs one read but avoids loading irrelevant surface rules.</div></div></div>
+        </div></details></article>
+
+        <article class="card" data-action="compress move"><header><div class="num">05</div><h3>Code style</h3><p>Generic examples can anchor exploration; the SelectValue gotcha is genuinely local.</p><span class="tag compress">Keep gotchas</span></header><details open><summary>Current state and proposal</summary><div class="compare">
+          <div class="pane current"><h4>Current</h4><p>Large Python/TypeScript examples prescribe routers, transactions, fetch, mutations, state, and selects; eight bullets repeat dropdown behavior.</p></div>
+          <div class="pane proposed"><h4>Proposed</h4><pre>Match surrounding naming, comments, transactions, errors, and
+component composition.
+
+Backend: routers stay thin; services own use-case logic and
+transaction boundaries. Use timezone-aware UTC.
+
+Frontend gotcha: Base UI SelectValue may expose a stored id,
+enum, slug, or sentinel. Use one label helper everywhere—trigger,
+chip, badge, summary, and empty state. If one filter leaks a raw
+value, audit siblings and test both trigger and related labels.
+
+Prefer nearby production code or behavior tests over snippets here.</pre><div class="why"><div><b>Reason</b>Retains surprising product behavior while allowing the model to match the real feature area.</div><div><b>Trade-off</b>The model must select a nearby reference; name a stable exemplar later if the team has one.</div></div></div>
+        </div></details></article>
+
+        <article class="card" data-action="keep compress"><header><div class="num">06</div><h3>Testing</h3><p>Bug-first reproduction is high signal; sample test bodies and mandatory subagents are not.</p><span class="tag keep">Keep behavior</span></header><details><summary>Current state and proposal</summary><div class="compare">
+          <div class="pane current"><h4>Current</h4><p>Requires tests first, then repeats backend/frontend examples and commands. Every reported bug mandates subagents.</p></div>
+          <div class="pane proposed"><h4>Proposed</h4><pre>For a reported bug, first add or identify a failing regression
+test. Implement the smallest fix and prove it passes. Update tests
+with behavior changes.
+
+Validate by blast radius:
+- Localized: focused regression + relevant lint/type checks.
+- Cross-cutting: full affected suites.
+- Migration/auth/tenancy/release: invariant + negative tests.
+
+Use parallel agents only when independent work is useful and
+supported; they are not a product invariant.</pre><div class="why"><div><b>Reason</b>Tests are executable specifications; syntax examples age.</div><div><b>Trade-off</b>Proportional checks can be under-scoped; the three tiers provide a decision interface.</div></div></div>
+        </div></details></article>
+
+        <article class="card" data-action="compress keep"><header><div class="num">07</div><h3>Git workflow</h3><p>Keep authority and commit conventions; remove duplicated ceremony.</p><span class="tag compress">Compress</span></header><details><summary>Current state and proposal</summary><div class="compare">
+          <div class="pane current"><h4>Current</h4><p>Branch rule, prefixes, five examples, repeated pre-commit commands, and a PR checklist.</p></div>
+          <div class="pane proposed"><h4>Proposed</h4><pre>Do not create a branch, commit, push, or PR unless requested.
+Work on the current branch unless told otherwise.
+
+Before a requested commit, inspect staged files, include only
+task-owned work, and run appropriate validation. Use feat:, fix:,
+docs:, refactor:, test:, or chore:.
+
+Never merge, release, deploy, send externally, or transform
+production data without explicit authorization.</pre><div class="why"><div><b>Reason</b>Encodes authority and scope—the parts Git cannot reveal.</div><div><b>Trade-off</b>CI and workflow files become the detailed PR gate.</div></div></div>
+        </div></details></article>
+
+        <article class="card" data-action="keep compress move"><header><div class="num">08</div><h3>Multi-tenancy</h3><p>Critical invariant; a precise access contract beats three snippets.</p><span class="tag keep">Keep invariant</span></header><details open><summary>Current state and proposal</summary><div class="compare">
+          <div class="pane current"><h4>Current</h4><p>Every entity has <code>organization_id</code>, every query scopes by org, one user maps to one organization.</p></div>
+          <div class="pane proposed"><h4>Proposed</h4><pre>Every tenant-owned read, write, relationship traversal, export,
+job, and cache key derives scope from authenticated membership—not
+a client-supplied organization id. New access paths need a cross-org
+negative test. Platform-global entities must be explicit.</pre><div class="why"><div><b>Reason</b>Covers indirect access, background work, and caching—not only SQL WHERE clauses.</div><div><b>Trade-off</b>Allows legitimate global entities but requires explicit exemption.</div></div></div>
+        </div></details></article>
+
+        <article class="card" data-action="keep compress move"><header><div class="num">09</div><h3>Authorization</h3><p>Keep the contract; move exact dependency names beside the backend.</p><span class="tag keep">Keep invariant</span></header><details><summary>Current state and proposal</summary><div class="compare">
+          <div class="pane current"><h4>Current</h4><p>Shows centralized dependencies, rejects scattered checks, and gives frontend/backend CSRF examples.</p></div>
+          <div class="pane proposed"><h4>Proposed</h4><pre>Use centralized membership, role, and CSRF dependencies; no ad hoc
+role checks in routers or components. Cookie-authenticated mutations
+keep the repository CSRF contract; browser API calls preserve
+credentials. Add denied and cross-org tests for new protected work.</pre><div class="why"><div><b>Reason</b>The invariant stays visible; exact API names come from live code.</div><div><b>Trade-off</b>Requires inspection before coding, which prevents stale names from spreading.</div></div></div>
+        </div></details></article>
+
+        <article class="card" data-action="delete move"><header><div class="num">10</div><h3>Version numbering</h3><p>Release policy is executable in Release Please configuration and tests.</p><span class="tag delete">Delete table</span></header><details><summary>Current state and proposal</summary><div class="compare">
+          <div class="pane current"><h4>Current</h4><p>Explains SemVer, pre-1.0 behavior, examples, and the current version source.</p></div>
+          <div class="pane proposed"><h4>Proposed</h4><pre>Release policy is defined by release-please-config.json,
+.release-please-manifest.json, and release CI tests. Do not edit
+version values manually unless the workflow requires it.</pre><div class="why"><div><b>Reason</b>Executable configuration beats explanatory duplication.</div><div><b>Trade-off</b>The unusual pre-1.0 behavior takes one file read, only during release work.</div></div></div>
+        </div></details></article>
+
+        <article class="card" data-action="delete move keep"><header><div class="num">11</div><h3>Environment variables</h3><p>Keys belong in example environment files; one security gotcha belongs at root.</p><span class="tag move">Move</span></header><details><summary>Current state and proposal</summary><div class="compare">
+          <div class="pane current"><h4>Current</h4><p>Copies backend/frontend keys into the guide and warns about <code>NEXT_PUBLIC_*</code>.</p></div>
+          <div class="pane proposed"><h4>Proposed</h4><pre>Use apps/api/.env.example as the backend environment contract and
+keep it aligned when configuration changes. Never expose secrets
+through NEXT_PUBLIC_* or commit real environment files.</pre><div class="why"><div><b>Reason</b>One canonical inventory prevents drift.</div><div><b>Trade-off</b>There is no frontend .env.example now; add one separately if frontend keys grow.</div></div></div>
+        </div></details></article>
+
+        <article class="card" data-action="delete move"><header><div class="num">12</div><h3>Domain model and stage flow</h3><p>Important context, but the static copy is already stale relative to configurable code.</p><span class="tag delete">Reference code</span></header><details open><summary>Current state and proposal</summary><div class="compare">
+          <div class="pane current"><h4>Current</h4><p>The fixed flow uses <code>qualified</code>. Live code aliases it to <code>pre_qualified</code> and defines omitted stages including <code>pending_docusign</code>, <code>on_hold</code>, and <code>cold_leads</code>.</p><span class="evidence">AGENTS.md 461–479 vs stage_definitions.py 135–225</span></div>
+          <div class="pane proposed"><h4>Proposed</h4><pre>Pipeline stages are configurable. Treat
+apps/api/app/core/stage_definitions.py and pipeline services as the
+backend source of truth; keep generated frontend constants in sync.
+Do not infer authorization or transition legality from a static list.
+When semantics change, trace API, automation, analytics, and frontend.</pre><div class="why"><div><b>Reason</b>Turns a stale taxonomy into a durable impact warning.</div><div><b>Trade-off</b>The root loses a visual flow; generate one from code if humans need it.</div></div></div>
+        </div></details></article>
+
+        <article class="card" data-action="delete"><header><div class="num">13</div><h3>Current status</h3><p>An undated completed-feature snapshot is high-drift and low-value.</p><span class="tag delete">Delete</span></header><details><summary>Current state and proposal</summary><div class="compare">
+          <div class="pane current"><h4>Current</h4><p>Declares many modules complete and repeats the stack.</p></div>
+          <div class="pane proposed"><h4>Proposed</h4><p>Remove it. Determine capability from routes, tests, UI, issue tracking, and release history. Keep roadmaps as dated planning artifacts, not evergreen context.</p><div class="why"><div><b>Reason</b>“Completed” does not mean current, correct, or in scope.</div><div><b>Trade-off</b>Less instant orientation, but no false confidence.</div></div></div>
+        </div></details></article>
+
+        <article class="card" data-action="move compress"><header><div class="num">14</div><h3>Generated Next.js docs index</h3><p>A valuable routing rule wrapped around an enormous upfront index—twice.</p><span class="tag move">Disclose later</span></header><details open><summary>Current state and proposal</summary><div class="compare">
+          <div class="pane current"><h4>Current</h4><p>Both root files enumerate nearly every local App and Pages Router document, even for non-Next tasks.</p></div>
+          <div class="pane proposed"><h4>Proposed</h4><pre># apps/web/AGENTS.md
+For Next.js work, search .next-docs and read the smallest relevant
+set before coding. Do not rely on remembered Next.js behavior.
+If local docs are missing, regenerate with the repository-approved
+codemod. Do not copy the full index into root context.</pre><div class="why"><div><b>Reason</b>Preserves the crucial local-docs rule without preloading the whole tree.</div><div><b>Trade-off</b>Discovery costs one quick search; non-Next work stops paying for the index.</div></div></div>
+        </div></details></article>
+
+        <article class="card" data-action="add"><header><div class="num">+</div><h3>Working with unknowns</h3><p>Add a small decision interface without turning every edit into a planning ritual.</p><span class="tag add">Add</span></header><details open><summary>Proposed new section</summary><div class="compare">
+          <div class="pane current"><h4>Current gap</h4><p>The guide says which patterns to use, not when the agent should explore, prototype, ask, or pivot after the code differs from the prompt.</p></div>
+          <div class="pane proposed"><h4>Proposed</h4><pre>For routine, reversible, well-scoped work, inspect the local surface
+and proceed with best judgment.
+
+Before unfamiliar, cross-cutting, security-sensitive, preference-heavy,
+or irreversible work, do a blind-spot pass over callers, tests, data,
+operations, and prior patterns. Surface only choices that materially
+change architecture, UX, security, migration, external effects, or scope.
+
+Use a cheap prototype when the user can recognize the answer more
+easily than describe it. If implementation reveals a material deviation,
+choose a conservative reversible path when possible, record it, and
+report it. Ask before crossing authority or irreversibility boundaries.</pre><div class="why"><div><b>Reason</b>Lets a stronger model discover the territory and pivot intelligently.</div><div><b>Trade-off</b>Exploration adds latency; the first sentence exempts routine work.</div></div></div>
+        </div></details></article>
+
+      </div>
+    </div></section>
+
+    <section id="unknowns"><div class="shell">
+      <div class="head"><div class="kicker">04 · Decision model</div><div><h2>Make unknowns visible only when they can change the result.</h2><p class="intro">The four-part lens works as routing, not mandatory ceremony.</p></div></div>
+      <div class="unknowns">
+        <div class="unknown"><h3>Known knowns</h3><p>Requested outcome, explicit constraints, current boundary.</p><b>Action: execute.</b></div>
+        <div class="unknown"><h3>Known unknowns</h3><p>A visibly unresolved decision could change data, interfaces, UX, or external effects.</p><b>Action: investigate, then ask if material.</b></div>
+        <div class="unknown"><h3>Unknown knowns</h3><p>The user has taste or expectations they can recognize but may not specify.</p><b>Action: prototype cheaply.</b></div>
+        <div class="unknown"><h3>Unknown unknowns</h3><p>The task enters unfamiliar, cross-cutting, security-sensitive, or operational territory.</p><b>Action: blind-spot pass before commitment.</b></div>
+      </div>
+      <div class="examples">
+        <article class="example"><small>Routine bug</small><h3>Raw SelectValue label</h3><p>Write the failing trigger/chip test, audit sibling filters because they share the local risk, fix, and run focused checks.</p><b>No interview needed.</b></article>
+        <article class="example"><small>High-impact change</small><h3>New auth provider</h3><p>Trace memberships, cookies, CSRF, callbacks, org scoping, migrations, and logout. Surface choices that alter the session model.</p><b>Blind-spot pass; ask on architecture.</b></article>
+        <article class="example"><small>Preference-heavy UI</small><h3>New editor toolbar</h3><p>Create an isolated HTML prototype with realistic fake data before routes or durable state. Use the reaction to settle layout.</p><b>Prototype before implementation.</b></article>
+      </div>
+    </div></section>
+
+    <section id="structure"><div class="shell">
+      <div class="head"><div class="kicker">05 · Proposed structure</div><div><h2>One small root, with context loaded where work happens.</h2></div></div>
+      <div class="architecture">
+        <div class="layers">
+          <div class="layer"><b>AGENTS.md</b><small>~700–800 words: scope, invariants, unknowns, delivery, routing</small></div>
+          <div class="layer"><b>CLAUDE.md</b><small>Symlink or tiny adapter to the canonical root</small></div>
+          <div class="layer"><b>apps/api/AGENTS.md</b><small>Tenancy, auth/CSRF, transactions, migrations, focused tests</small></div>
+          <div class="layer"><b>apps/web/AGENTS.md</b><small>Local Next docs, state, customized primitives, SelectValue gotcha</small></div>
+          <div class="layer"><b>Code + existing runbooks</b><small>Versions, stages, env keys, release policy, operations</small></div>
+        </div>
+        <div class="priorities">
+          <div class="priority"><b>Keep</b><div><strong>Cannot be inferred safely.</strong><p>Authorization, tenancy, external-send approval, process ownership, and user-specific delivery rules.</p></div><span class="pill safe">Signal</span></div>
+          <div class="priority"><b>Load later</b><div><strong>Relevant to one surface.</strong><p>Next.js docs, migrations, component gotchas, provider operations, and release details.</p></div><span class="pill medium">Focused</span></div>
+          <div class="priority"><b>Discover live</b><div><strong>Higher fidelity in code.</strong><p>Dependencies, directories, status, stages, environment keys, commands, and syntax examples.</p></div><span class="pill high">Territory</span></div>
+        </div>
+      </div>
+    </div></section>
+
+    <section id="draft"><div class="shell">
+      <div class="head"><div class="kicker">06 · Approved draft</div><div><h2>The compact root guide that was implemented.</h2><p class="intro">This approved text is the basis of the new root <code>AGENTS.md</code>; focused backend and frontend guidance now lives beside each application.</p></div></div>
+      <div class="draft-wrap"><div class="draft-bar"><b>APPROVED AGENTS.md</b><span>Approved candidate wording</span></div><pre class="draft"># Surrogacy Force Platform
+
+Multi-tenant operations platform for surrogacy agencies. This root guide
+contains durable invariants and routing. Inspect live code, tests, manifests,
+and nested guidance before changing an unfamiliar surface.
+
+## Priorities
+
+1. Follow the user's requested outcome and scope.
+2. Preserve safety, tenant-isolation, approval, and data-integrity invariants.
+3. Match surrounding code and verify behavior in proportion to risk.
+
+## Working with unknowns
+
+For routine, reversible, well-scoped work, inspect the local surface and
+proceed with best judgment.
+
+Before unfamiliar, cross-cutting, security-sensitive, preference-heavy, or
+irreversible work, do a blind-spot pass over callers, tests, data, operations,
+and prior patterns. Surface only choices that materially change architecture,
+user experience, security, data migration, external effects, or task scope.
+
+Use a cheap prototype or artifact when the user can recognize the right answer
+more easily than describe it. If implementation reveals a material deviation,
+choose the conservative reversible path when possible, record the decision,
+and report it. Ask before crossing authority or irreversibility boundaries.
+
+## Non-negotiables
+
+- Never commit or expose secrets; never log raw PII.
+- Never send AI-authored messages without human review.
+- Every tenant-owned read, write, relationship traversal, export, job, and
+  cache key derives organization scope from authenticated membership—not a
+  client-supplied organization id. New access paths need a cross-org negative
+  test. Platform-global entities must be explicit.
+- Use centralized membership, role, and CSRF dependencies. Cookie-authenticated
+  mutations keep the repository CSRF contract; browser API calls preserve
+  credentials.
+- Never merge, release, deploy, send externally, or irreversibly transform
+  production data without explicit authorization.
+
+## Quality boundary
+
+Do not introduce warnings, test failures, security regressions, or obvious
+performance regressions. Report unrelated pre-existing issues; fix them only
+when requested, blocking verification, or inseparable from the change.
+
+This is an internal product: do not preserve legacy behavior by default.
+Before a breaking API, data, or workflow change, surface its impact and
+migration/reset plan. Match completeness to the requested artifact. Production
+features include relevant loading, error, validation, and polish; prototypes
+must be isolated and labeled. Preserve existing semantic and keyboard behavior;
+treat broader accessibility work as separate scope unless requested.
+
+## Architecture and local gotchas
+
+- Keep FastAPI routers thin. Services own use-case logic and transaction
+  boundaries. Use timezone-aware UTC.
+- TanStack Query owns server state; Zustand owns UI-only state.
+- Extend customized shadcn/Base UI primitives; do not replace the component
+  system in a focused feature change.
+- Shared Base UI SelectValue may expose a stored id, enum, slug, or sentinel.
+  Map it through one label helper everywhere it appears—triggers, chips, badges,
+  summaries, and empty states. When one filter leaks a raw value, audit siblings
+  and test the trigger plus related labels.
+- Pipeline stages are configurable. Treat
+  apps/api/app/core/stage_definitions.py and pipeline services as the source of
+  truth; keep generated frontend constants synchronized. Trace API, automation,
+  analytics, and frontend consumers when stage semantics change.
+- Prefer nearby production code and behavior tests as references. Match local
+  naming, comment density, transaction ownership, errors, and composition.
+
+## Verification
+
+For a reported bug, first add or identify a failing regression test. Then
+implement the smallest fix and prove it passes. Update tests with behavior
+changes.
+
+Validate by blast radius:
+- Localized: focused regression plus relevant lint/type checks.
+- Cross-cutting: full affected suites.
+- Migration, auth, tenancy, or release: invariant and negative tests.
+
+Use parallel agents only when independent work is useful and supported; they
+are not a product invariant.
+
+## Commands and routing
+
+Use repo-pinned runtimes in mise.toml/mise.lock and existing package scripts.
+Inspect manifests before adding commands.
+
+- Backend: &#96;cd apps/api &amp;&amp; uv sync --extra test&#96;, then
+  &#96;cd apps/api &amp;&amp; uv run -m pytest -v&#96;.
+- Frontend: &#96;cd apps/web &amp;&amp; pnpm run check&#96;; use
+  &#96;pnpm run test:all&#96; for cross-cutting or integration changes.
+- Migrations/recovery: &#96;docs/migration-runbook.md&#96;.
+- Runtime versions: &#96;mise.toml&#96;; dependencies: &#96;apps/*&#96; manifests.
+- Environment contract: &#96;apps/api/.env.example&#96;; never put secrets in
+  &#96;NEXT_PUBLIC_*&#96;.
+- Release policy: &#96;release-please-config.json&#96; and release CI tests.
+- Backend guidance: &#96;apps/api/AGENTS.md&#96;.
+- Frontend guidance: &#96;apps/web/AGENTS.md&#96;. For Next.js work, search
+  &#96;.next-docs&#96; and read only relevant local documentation before coding.
+
+## Delivery and cleanup
+
+Do not create a branch, commit, push, or PR unless requested. Work on the
+current branch unless told otherwise. Before a requested commit, inspect staged
+files, include only task-owned work, run appropriate validation, and use
+&#96;feat:&#96;, &#96;fix:&#96;, &#96;docs:&#96;, &#96;refactor:&#96;, &#96;test:&#96;, or &#96;chore:&#96;.
+
+Start local servers only for active QA. Record PIDs, stop only processes started
+for this task, verify they exited, remove temporary QA artifacts, and report any
+service intentionally left running.</pre></div>
+    </div></section>
+
+    <section><div class="shell"><div class="callout"><h2>Recommendation</h2><p>Adopt the simplification in two passes: first unify <code>CLAUDE.md</code> and remove stale/repeated root content; then introduce nested frontend/backend guides only after naming the few gotchas each must carry. Do not weaken safety, tenancy, approval, or cleanup boundaries during the reduction.</p></div></div></section>
+  </main>
+
+  <footer><div class="shell"><div>Review snapshot prepared before implementation. The approved context changes are now applied in the repository.</div><div>Sources: Anthropic articles linked above · Local files and manifests</div></div></footer>
+
+  <script>
+    const buttons=document.querySelectorAll("[data-filter]");
+    const cards=document.querySelectorAll(".card");
+    buttons.forEach(function(button){
+      button.addEventListener("click",function(){
+        buttons.forEach(function(item){item.classList.remove("active")});
+        button.classList.add("active");
+        const filter=button.dataset.filter;
+        cards.forEach(function(card){
+          const actions=(card.dataset.action||"").split(" ");
+          card.classList.toggle("hidden",filter!=="all"&&!actions.includes(filter));
+        });
+      });
+    });
+  </script>
+</body>
+</html>

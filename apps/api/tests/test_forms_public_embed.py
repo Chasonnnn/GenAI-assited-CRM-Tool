@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -17,11 +18,14 @@ from app.db.models import (
     IntakeLead,
     Job,
     LeadAttribution,
+    MessagingConsentState,
+    MessagingContact,
     MetaCrmDatasetEvent,
     Surrogate,
     TrackingEventLog,
     WorkflowExecution,
 )
+from app.db.models.messaging import TwilioSettings
 
 
 @pytest.fixture(autouse=True)
@@ -148,6 +152,109 @@ async def test_embed_public_form_uses_latest_logo_branding_without_republish(
     public_schema = public_res.json()["form_schema"]
     assert public_schema["logo_url"] == logo_url
     assert public_schema["public_title"] == "Become a Surrogate"
+
+
+@pytest.mark.asyncio
+async def test_embed_sms_choices_are_optional_separate_and_snapshotted(authed_client, db, test_org):
+    settings = TwilioSettings(
+        organization_id=test_org.id,
+        enabled=False,
+        legal_messaging_brand="EWI Surrogacy",
+        operational_disclosure=(
+            "I agree to receive application and appointment texts from EWI Surrogacy. "
+            "Message frequency varies. Msg & data rates may apply. Reply STOP to opt out "
+            "or HELP for help."
+        ),
+        promotional_disclosure=(
+            "I agree to receive promotional texts from EWI Surrogacy about surrogacy "
+            "opportunities. Message frequency varies. Msg & data rates may apply. "
+            "Reply STOP to opt out or HELP for help."
+        ),
+        sms_terms_url="https://agency.example/sms-terms",
+        privacy_policy_url="https://agency.example/privacy",
+        support_contact="support@agency.example",
+        expected_frequency="Message frequency varies",
+        counsel_approved_at=datetime.now(UTC),
+    )
+    db.add(settings)
+    db.commit()
+
+    _form_id, link_id, slug = await _create_published_lead_capture_form(authed_client)
+    allowed_origin = "https://www.ewisurrogacy.com"
+    link_res = await authed_client.patch(
+        f"/forms/intake-links/{link_id}",
+        json={
+            "embed_enabled": True,
+            "allowed_embed_origins": [allowed_origin],
+            "tracking_mode": "privacy_safe_lead",
+        },
+    )
+    assert link_res.status_code == 200
+
+    public_res = await authed_client.get(
+        f"/forms/public/embed/{slug}",
+        headers={"origin": allowed_origin},
+    )
+    assert public_res.status_code == 200
+    public_payload = public_res.json()
+    assert public_payload["messaging_consent"]["operational"]["disclosure"].startswith(
+        "I agree to receive application"
+    )
+    assert public_payload["messaging_consent"]["promotional"]["disclosure"].startswith(
+        "I agree to receive promotional"
+    )
+
+    session_res = await authed_client.post(
+        f"/forms/public/embed/{slug}/session",
+        json={"parent_origin": allowed_origin, "attribution": {}},
+    )
+    assert session_res.status_code == 200
+    submit_res = await authed_client.post(
+        f"/forms/public/embed/{slug}/submit",
+        json={
+            "embed_session_token": session_res.json()["session_token"],
+            "idempotency_key": "sms-choice-1",
+            "published_version_id": public_payload["published_version_id"],
+            "answers": {
+                "full_name": "Consent Choice",
+                "email": "consent-choice@example.com",
+                "phone": "+1 555 481 0901",
+            },
+            "sms_operational": True,
+            "sms_promotional": False,
+        },
+    )
+    assert submit_res.status_code == 200
+
+    consent_rows = (
+        db.query(ConsentRecord)
+        .filter(ConsentRecord.form_submission_id == uuid.UUID(submit_res.json()["id"]))
+        .order_by(ConsentRecord.consent_type.asc())
+        .all()
+    )
+    consent_by_type = {row.consent_type: row for row in consent_rows}
+    assert consent_by_type["contact"].accepted is False
+    assert consent_by_type["sms_operational"].accepted is True
+    assert consent_by_type["sms_promotional"].accepted is False
+    assert consent_by_type["sms_operational"].consent_text_hash
+    assert consent_by_type["sms_operational"].privacy_policy_url_snapshot == (
+        "https://agency.example/privacy"
+    )
+    messaging_contact = (
+        db.query(MessagingContact)
+        .filter(MessagingContact.organization_id == test_org.id)
+        .one()
+    )
+    state_by_purpose = {
+        state.purpose: state.status
+        for state in db.query(MessagingConsentState)
+        .filter(MessagingConsentState.contact_id == messaging_contact.id)
+        .all()
+    }
+    assert state_by_purpose == {
+        "operational": "opted_in",
+        "promotional": "unknown",
+    }
 
 
 @pytest.mark.asyncio
@@ -375,7 +482,8 @@ async def test_embed_session_submit_stores_submission_attribution_consent_and_tr
     consent = (
         db.query(ConsentRecord).filter(ConsentRecord.form_submission_id == submission_id).one()
     )
-    assert consent.accepted is True
+    # Omitted contact consent is never manufactured by the server.
+    assert consent.accepted is False
     assert consent.consent_text_snapshot == "I agree to be contacted about my inquiry."
     assert consent.parent_origin == allowed_origin
 

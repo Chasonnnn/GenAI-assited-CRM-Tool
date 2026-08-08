@@ -222,6 +222,9 @@ def get_shared_public_form(
         or form_submission_service.DEFAULT_ALLOWED_FORM_UPLOAD_MIME_TYPES,
         campaign_name=intake_link.campaign_name,
         event_name=intake_link.event_name,
+        messaging_consent=form_intake_service.get_messaging_consent_options(
+            db, intake_link.organization_id
+        ),
     )
 
 
@@ -269,6 +272,9 @@ def get_embed_public_form(
         campaign_name=intake_link.campaign_name,
         event_name=intake_link.event_name,
         tracking_mode=intake_link.tracking_mode,
+        messaging_consent=form_intake_service.get_messaging_consent_options(
+            db, intake_link.organization_id
+        ),
         consent=FormEmbedConsentRead(
             text=intake_link.consent_text,
             privacy_policy_url=intake_link.privacy_policy_url,
@@ -344,7 +350,9 @@ def submit_embed_public_form(
             idempotency_key=body.idempotency_key,
             published_version_id=body.published_version_id,
             answers=body.answers,
-            consent_accepted=True,
+            consent_accepted=bool(body.consent and body.consent.accepted),
+            sms_operational=body.sms_operational,
+            sms_promotional=body.sms_promotional,
             attribution=body.attribution,
         )
     except PermissionError as exc:
@@ -546,6 +554,8 @@ def submit_shared_public_form(
     files: Annotated[list[UploadFile] | None, "fastapi_param"] = File(default=None),
     file_field_keys: Annotated[str | None, "fastapi_param"] = Form(default=None),
     idempotency_key: Annotated[str | None, "fastapi_param"] = Form(default=None),
+    sms_operational: Annotated[bool, "fastapi_param"] = Form(default=False),
+    sms_promotional: Annotated[bool, "fastapi_param"] = Form(default=False),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     if not settings.FORMS_SHARED_INTAKE:
@@ -607,6 +617,8 @@ def submit_shared_public_form(
             source_metadata=source_metadata,
             challenge_token=challenge_token,
             idempotency_key=resolved_idempotency_key,
+            sms_operational=sms_operational,
+            sms_promotional=sms_promotional,
         )
     except form_intake_service.DuplicateApplicantSubmissionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

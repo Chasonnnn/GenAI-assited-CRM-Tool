@@ -80,6 +80,46 @@ META_TRACKING_MODES = {
     TrackingMode.PRIVACY_SAFE_LEAD.value,
     TrackingMode.ENHANCED_MATCH_LEAD.value,
 }
+
+
+def get_messaging_consent_options(
+    db: Session,
+    organization_id: uuid.UUID,
+) -> dict[str, dict[str, str] | None]:
+    """Return only counsel-approved disclosures suitable for public checkboxes."""
+    from app.db.models.messaging import TwilioSettings
+
+    messaging_settings = (
+        db.query(TwilioSettings).filter(TwilioSettings.organization_id == organization_id).first()
+    )
+    common_values = (
+        messaging_settings
+        and messaging_settings.counsel_approved_at
+        and (messaging_settings.legal_messaging_brand or "").strip()
+        and (messaging_settings.sms_terms_url or "").strip()
+        and (messaging_settings.privacy_policy_url or "").strip()
+        and (messaging_settings.support_contact or "").strip()
+        and (messaging_settings.expected_frequency or "").strip()
+    )
+    if not common_values:
+        return {"operational": None, "promotional": None}
+
+    def option(disclosure: str | None) -> dict[str, str] | None:
+        normalized_disclosure = (disclosure or "").strip()
+        if not normalized_disclosure:
+            return None
+        return {
+            "disclosure": normalized_disclosure,
+            "sms_terms_url": str(messaging_settings.sms_terms_url),
+            "privacy_policy_url": str(messaging_settings.privacy_policy_url),
+        }
+
+    return {
+        "operational": option(messaging_settings.operational_disclosure),
+        "promotional": option(messaging_settings.promotional_disclosure),
+    }
+
+
 PRIVACY_SAFE_FIELD_POLICY_MODES = {
     TrackingMode.PRIVACY_SAFE_LEAD.value,
     TrackingMode.ENHANCED_MATCH_LEAD.value,
@@ -1305,6 +1345,8 @@ def create_shared_submission(
     source_metadata: dict[str, Any] | None = None,
     challenge_token: str | None = None,
     idempotency_key: str | None = None,
+    sms_operational: bool = False,
+    sms_promotional: bool = False,
 ) -> tuple[FormSubmission, str]:
     if form.status != FormStatus.PUBLISHED.value:
         raise ValueError("Form is not published")
@@ -1324,6 +1366,13 @@ def create_shared_submission(
         )
         if existing:
             return existing, _normalize_shared_outcome(existing.match_status)
+
+    messaging_consent_options = get_messaging_consent_options(db, link.organization_id)
+    _validate_messaging_consent_choices(
+        options=messaging_consent_options,
+        sms_operational=sms_operational,
+        sms_promotional=sms_promotional,
+    )
 
     schema = form_submission_service.parse_schema(form.published_schema_json)
     form_submission_service._validate_answers(schema, answers)  # type: ignore[attr-defined]
@@ -1345,6 +1394,30 @@ def create_shared_submission(
         match_reason="workflow_pending",
         matched_at=None,
         idempotency_key=normalized_idempotency_key,
+    )
+    metadata = source_metadata or {}
+    client_ip = str(metadata.get("client_ip") or "").strip() or None
+    user_agent = str(metadata.get("user_agent") or "").strip() or None
+    _create_messaging_consent_records(
+        db,
+        link=link,
+        submission=submission,
+        options=messaging_consent_options,
+        sms_operational=sms_operational,
+        sms_promotional=sms_promotional,
+        ip_hash=embed_policy_service.stable_hash(client_ip),
+        user_agent_hash=embed_policy_service.stable_hash(user_agent),
+        parent_origin=None,
+    )
+    _project_messaging_consent_opt_ins(
+        db,
+        link=link,
+        submission=submission,
+        identity=identity,
+        options=messaging_consent_options,
+        sms_operational=sms_operational,
+        sms_promotional=sms_promotional,
+        source="website_intake",
     )
     clear_shared_drafts_for_identity(
         db,
@@ -1470,6 +1543,118 @@ def _create_consent_record(
     return consent
 
 
+def _validate_messaging_consent_choices(
+    *,
+    options: dict[str, dict[str, str] | None],
+    sms_operational: bool,
+    sms_promotional: bool,
+) -> None:
+    if sms_operational and options.get("operational") is None:
+        raise ValueError("Operational SMS consent disclosure is unavailable")
+    if sms_promotional and options.get("promotional") is None:
+        raise ValueError("Promotional SMS consent disclosure is unavailable")
+
+
+def _create_messaging_consent_records(
+    db: Session,
+    *,
+    link: FormIntakeLink,
+    submission: FormSubmission,
+    options: dict[str, dict[str, str] | None],
+    sms_operational: bool,
+    sms_promotional: bool,
+    ip_hash: str | None,
+    user_agent_hash: str | None,
+    parent_origin: str | None,
+) -> None:
+    """Capture raw checkbox facts independently from the current-state projection."""
+    selected = {
+        "operational": sms_operational,
+        "promotional": sms_promotional,
+    }
+    for purpose, accepted in selected.items():
+        option = options.get(purpose)
+        if option is None:
+            continue
+        disclosure = option["disclosure"]
+        record = ConsentRecord(
+            organization_id=link.organization_id,
+            intake_link_id=link.id,
+            form_submission_id=submission.id,
+            consent_type=f"sms_{purpose}",
+            consent_text_snapshot=disclosure,
+            consent_text_hash=embed_policy_service.stable_hash(disclosure),
+            accepted=accepted,
+            ip_hash=ip_hash,
+            user_agent_hash=user_agent_hash,
+            parent_origin=parent_origin,
+            privacy_policy_url_snapshot=option["privacy_policy_url"],
+        )
+        db.add(record)
+    db.flush()
+
+
+def _project_messaging_consent_opt_ins(
+    db: Session,
+    *,
+    link: FormIntakeLink,
+    submission: FormSubmission,
+    identity: dict[str, Any],
+    options: dict[str, dict[str, str] | None],
+    sms_operational: bool,
+    sms_promotional: bool,
+    source: str,
+) -> None:
+    """Project affirmative website choices atomically into the messaging ledger."""
+    selected = {
+        "operational": sms_operational,
+        "promotional": sms_promotional,
+    }
+    if not any(selected.values()):
+        return
+
+    phone = identity.get("phone")
+    if not isinstance(phone, str) or not phone:
+        raise ValueError("A valid phone number is required to enroll in SMS")
+
+    from app.services import messaging_consent_service
+
+    try:
+        for purpose, accepted in selected.items():
+            if not accepted:
+                continue
+            option = options.get(purpose)
+            if option is None:
+                raise ValueError(f"{purpose.title()} SMS consent disclosure is unavailable")
+            disclosure = option["disclosure"]
+            messaging_consent_service.record_opt_in(
+                db,
+                organization_id=link.organization_id,
+                phone=phone,
+                purpose=purpose,
+                affirmative=True,
+                disclosure_text=disclosure,
+                source=source,
+                source_reference=f"form-submission:{submission.id}",
+                occurred_at=submission.submitted_at,
+                idempotency_key=f"form-submission:{submission.id}:sms:{purpose}",
+                evidence_metadata={
+                    "affirmative_action": "checkbox",
+                    "form_id": str(submission.form_id),
+                    "form_submission_id": str(submission.id),
+                    "intake_link_id": str(link.id),
+                    "privacy_policy_url": option["privacy_policy_url"],
+                    "sms_terms_url": option["sms_terms_url"],
+                    "disclosure_hash": embed_policy_service.stable_hash(disclosure),
+                },
+                commit=False,
+            )
+    except Exception:
+        # Both purpose transitions and the form submission belong to one unit of work.
+        db.rollback()
+        raise
+
+
 def _enqueue_privacy_safe_tracking_event(
     db: Session,
     *,
@@ -1576,6 +1761,8 @@ def submit_lead_capture_embed(
     published_version_id: uuid.UUID,
     answers: dict[str, Any],
     consent_accepted: bool,
+    sms_operational: bool,
+    sms_promotional: bool,
     attribution: dict[str, Any] | None,
 ) -> tuple[FormSubmission, str]:
     if not link.embed_enabled:
@@ -1592,6 +1779,13 @@ def submit_lead_capture_embed(
     )
     if existing:
         return existing, _normalize_shared_outcome(existing.match_status)
+
+    messaging_consent_options = get_messaging_consent_options(db, link.organization_id)
+    _validate_messaging_consent_choices(
+        options=messaging_consent_options,
+        sms_operational=sms_operational,
+        sms_promotional=sms_promotional,
+    )
 
     session = embed_policy_service.validate_embed_session(
         db,
@@ -1656,6 +1850,27 @@ def submit_lead_capture_embed(
         submission=submission,
         accepted=consent_accepted,
         session=session,
+    )
+    _create_messaging_consent_records(
+        db,
+        link=link,
+        submission=submission,
+        options=messaging_consent_options,
+        sms_operational=sms_operational,
+        sms_promotional=sms_promotional,
+        ip_hash=session.ip_hash,
+        user_agent_hash=session.user_agent_hash,
+        parent_origin=session.parent_origin,
+    )
+    _project_messaging_consent_opt_ins(
+        db,
+        link=link,
+        submission=submission,
+        identity=identity,
+        options=messaging_consent_options,
+        sms_operational=sms_operational,
+        sms_promotional=sms_promotional,
+        source="website_embed",
     )
     session.consumed_at = datetime.now(UTC)
     if link.tracking_mode in META_TRACKING_MODES:

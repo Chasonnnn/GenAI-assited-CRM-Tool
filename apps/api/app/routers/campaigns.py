@@ -13,6 +13,8 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
+from app.db.enums import Role
+from app.schemas.auth import UserSession
 from app.schemas.campaign import (
     CampaignCreate,
     CampaignListItem,
@@ -38,6 +40,14 @@ router = APIRouter(
     dependencies=[Depends(require_permission(POLICIES["email_templates"].default))],
     prefix="/campaigns",
 )
+
+
+def _require_messaging_operator(session: UserSession) -> None:
+    if session.role not in {Role.ADMIN, Role.DEVELOPER}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Messaging campaigns require an organization admin or developer",
+        )
 
 
 # =============================================================================
@@ -70,6 +80,8 @@ def create_campaign(
     _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
 ):
     """Create a new campaign (draft status)."""
+    if data.channel == "messaging":
+        _require_messaging_operator(session)
     try:
         campaign = campaign_service.create_campaign(
             db, org_id=session.org_id, user_id=session.user_id, data=data
@@ -105,6 +117,11 @@ def update_campaign(
     _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
 ):
     """Update a draft or scheduled campaign."""
+    current = campaign_service.get_campaign(db, session.org_id, campaign_id)
+    if current is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    if current.channel == "messaging" or data.channel == "messaging":
+        _require_messaging_operator(session)
     campaign = campaign_service.update_campaign(
         db, org_id=session.org_id, campaign_id=campaign_id, data=data
     )
@@ -128,6 +145,9 @@ def delete_campaign(
     _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
 ) -> Response:
     """Delete a draft campaign."""
+    campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
+    if campaign is not None and campaign.channel == "messaging":
+        _require_messaging_operator(session)
     deleted = campaign_service.delete_campaign(db, session.org_id, campaign_id)
     if not deleted:
         raise HTTPException(
@@ -156,6 +176,8 @@ def preview_filters(
 
     Returns total count and sample recipients.
     """
+    if data.channel == "messaging":
+        _require_messaging_operator(session)
     # Convert FilterCriteria to dict for service call
     filter_dict = data.filter_criteria.model_dump(exclude_none=True) if data.filter_criteria else {}
 
@@ -166,6 +188,7 @@ def preview_filters(
         filter_criteria=filter_dict,
         limit=limit,
         ignore_opt_out=bool(getattr(data, "include_unsubscribed", False)),
+        channel=data.channel,
     )
 
 
@@ -182,6 +205,8 @@ def preview_recipients(
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    if campaign.channel == "messaging":
+        _require_messaging_operator(session)
 
     return campaign_service.preview_recipients(
         db,
@@ -190,6 +215,7 @@ def preview_recipients(
         filter_criteria=campaign.filter_criteria,
         limit=limit,
         ignore_opt_out=bool(getattr(campaign, "include_unsubscribed", False)),
+        channel=campaign.channel,
     )
 
 
@@ -213,6 +239,12 @@ def send_campaign(
     Returns 202 Accepted as sending happens asynchronously.
     """
     send_now = data.send_now if data else True
+
+    campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
+    if campaign is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    if campaign.channel == "messaging":
+        _require_messaging_operator(session)
 
     try:
         message, run_id, scheduled_at = campaign_service.enqueue_campaign_send(
@@ -243,6 +275,9 @@ def cancel_campaign(
     _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
 ) -> object:
     """Cancel a scheduled or in-progress campaign."""
+    campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
+    if campaign is not None and campaign.channel == "messaging":
+        _require_messaging_operator(session)
     cancelled = campaign_service.cancel_campaign(db, session.org_id, campaign_id)
     if not cancelled:
         raise HTTPException(
@@ -301,6 +336,9 @@ def retry_failed_campaign_run(
     ),
 ):
     """Retry failed recipients for a campaign run."""
+    campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
+    if campaign is not None and campaign.channel == "messaging":
+        _require_messaging_operator(session)
     try:
         message, resolved_run_id, job_id, failed_count = (
             campaign_service.enqueue_campaign_retry_failed(
@@ -423,8 +461,13 @@ def _campaign_to_response(db: Session, campaign) -> CampaignResponse:
         id=campaign.id,
         name=campaign.name,
         description=campaign.description,
+        channel=campaign.channel,
         email_template_id=campaign.email_template_id,
         email_template_name=campaign.email_template.name if campaign.email_template else None,
+        message_template_version_id=campaign.message_template_version_id,
+        message_template_name=(
+            campaign.message_template.name if campaign.message_template else None
+        ),
         recipient_type=campaign.recipient_type,
         filter_criteria=campaign.filter_criteria,
         scheduled_at=campaign.scheduled_at,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 import os
 import re
 import tempfile
@@ -33,6 +34,15 @@ from app.db.models import (
     ExportJob,
     LegalHold,
     Match,
+    MessageDelivery,
+    MessageMediaAsset,
+    MessageMediaLink,
+    MessageWebhookEvent,
+    MessagingConsentEvidence,
+    MessagingConsentState,
+    MessagingContact,
+    MessagingGlobalSuppression,
+    MessagingMessage,
     Surrogate,
     SurrogateActivityLog,
     Task,
@@ -41,7 +51,7 @@ from app.db.models import (
     TicketNote,
     User,
 )
-from app.services import audit_service, job_service
+from app.services import attachment_service, audit_service, job_service
 from app.utils.pagination import PaginationParams, paginate_query
 
 EXPORT_STATUS_PENDING = "pending"
@@ -79,6 +89,8 @@ PERSON_LINKED_DETAIL_KEYS = {
 DATE_REDACTION_FORMAT = "%Y-%m"
 
 CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@")
+
+logger = logging.getLogger(__name__)
 
 
 EMAIL_RE = re.compile(r"([A-Za-z0-9._%+-]+)@([A-Za-z0-9.-]+\.[A-Za-z]{2,})")
@@ -613,6 +625,10 @@ def seed_default_retention_policies(
         ("email_messages", 2557),
         ("email_message_contents", 2557),
         ("email_message_occurrences", 2557),
+        ("messaging_messages", 2557),
+        ("messaging_consent_evidence", 2557),
+        ("messaging_webhook_events", 2557),
+        ("messaging_media_assets", 2557),
     ]
     existing = {policy.entity_type for policy in list_retention_policies(db, org_id)}
     created: list[DataRetentionPolicy] = []
@@ -1049,6 +1065,79 @@ def _build_retention_query(
                 ~EmailMessageOccurrence.id.in_(entity_hold_ids["email_message_occurrence"])
             )
         return query
+    if entity_type == "messaging_messages":
+        query = db.query(MessagingMessage).filter(
+            MessagingMessage.organization_id == org_id,
+            MessagingMessage.created_at < cutoff,
+        )
+        if surrogate_hold_ids:
+            held_contact_ids = select(MessagingContact.id).where(
+                MessagingContact.organization_id == org_id,
+                MessagingContact.surrogate_id.in_(surrogate_hold_ids),
+            )
+            query = query.filter(~MessagingMessage.contact_id.in_(held_contact_ids))
+        if entity_hold_ids.get("messaging_message"):
+            query = query.filter(
+                ~MessagingMessage.id.in_(entity_hold_ids["messaging_message"])
+            )
+        return query
+    if entity_type == "messaging_consent_evidence":
+        backs_consent_state = select(MessagingConsentState.id).where(
+            MessagingConsentState.organization_id == org_id,
+            MessagingConsentState.latest_evidence_id == MessagingConsentEvidence.id,
+        ).exists()
+        backs_global_suppression = select(MessagingGlobalSuppression.id).where(
+            MessagingGlobalSuppression.organization_id == org_id,
+            MessagingGlobalSuppression.latest_evidence_id == MessagingConsentEvidence.id,
+        ).exists()
+        backs_delivery = select(MessageDelivery.id).where(
+            MessageDelivery.organization_id == org_id,
+            MessageDelivery.consent_evidence_id == MessagingConsentEvidence.id,
+        ).exists()
+        query = db.query(MessagingConsentEvidence).filter(
+            MessagingConsentEvidence.organization_id == org_id,
+            MessagingConsentEvidence.created_at < cutoff,
+            ~backs_consent_state,
+            ~backs_global_suppression,
+            ~backs_delivery,
+        )
+        if surrogate_hold_ids:
+            held_contact_ids = select(MessagingContact.id).where(
+                MessagingContact.organization_id == org_id,
+                MessagingContact.surrogate_id.in_(surrogate_hold_ids),
+            )
+            query = query.filter(~MessagingConsentEvidence.contact_id.in_(held_contact_ids))
+        if entity_hold_ids.get("messaging_consent_evidence"):
+            query = query.filter(
+                ~MessagingConsentEvidence.id.in_(
+                    entity_hold_ids["messaging_consent_evidence"]
+                )
+            )
+        return query
+    if entity_type == "messaging_webhook_events":
+        query = db.query(MessageWebhookEvent).filter(
+            MessageWebhookEvent.organization_id == org_id,
+            MessageWebhookEvent.received_at < cutoff,
+        )
+        if entity_hold_ids.get("messaging_webhook_event"):
+            query = query.filter(
+                ~MessageWebhookEvent.id.in_(entity_hold_ids["messaging_webhook_event"])
+            )
+        return query
+    if entity_type == "messaging_media_assets":
+        linked = select(MessageMediaLink.id).where(
+            MessageMediaLink.media_asset_id == MessageMediaAsset.id
+        ).exists()
+        query = db.query(MessageMediaAsset).filter(
+            MessageMediaAsset.organization_id == org_id,
+            MessageMediaAsset.created_at < cutoff,
+            ~linked,
+        )
+        if entity_hold_ids.get("messaging_media_asset"):
+            query = query.filter(
+                ~MessageMediaAsset.id.in_(entity_hold_ids["messaging_media_asset"])
+            )
+        return query
     raise ValueError(f"Unsupported retention entity type: {entity_type}")
 
 
@@ -1075,6 +1164,7 @@ def execute_purge(db: Session, org_id: UUID, user_id: UUID | None) -> list[Purge
         return []
     policies = list_retention_policies(db, org_id)
     results: list[PurgeResult] = []
+    media_storage_keys: list[str] = []
     for policy in policies:
         if not policy.is_active or policy.retention_days == 0:
             continue
@@ -1084,9 +1174,24 @@ def execute_purge(db: Session, org_id: UUID, user_id: UUID | None) -> list[Purge
         )
         count = query.count()
         if count:
+            if policy.entity_type == "messaging_media_assets":
+                media_storage_keys.extend(
+                    key
+                    for (key,) in query.with_entities(MessageMediaAsset.storage_key).all()
+                )
             query.delete(synchronize_session=False)
         results.append(PurgeResult(entity_type=policy.entity_type, count=count))
     db.commit()
+
+    for storage_key in media_storage_keys:
+        try:
+            attachment_service.delete_file(storage_key)
+        except Exception as exc:  # pragma: no cover - backend-specific outage path
+            logger.warning(
+                "Messaging retention could not remove application storage object",
+                exc_info=exc,
+                extra={"organization_id": str(org_id)},
+            )
 
     audit_service.log_compliance_purge_executed(
         db=db,

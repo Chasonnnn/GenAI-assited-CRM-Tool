@@ -253,6 +253,20 @@ async def dispatch_form_submission_file_scan_job(
     )
 
 
+async def dispatch_message_media_scan_job(
+    *,
+    job_id: UUID,
+    media_asset_id: UUID,
+    claim_token: UUID,
+) -> None:
+    await _dispatch_scan_job(
+        scan_type="message_media",
+        resource_id=media_asset_id,
+        job_id=job_id,
+        claim_token=claim_token,
+    )
+
+
 def dispatch_attachment_scan_job_sync(
     *,
     job_id: UUID,
@@ -276,6 +290,20 @@ def dispatch_form_submission_file_scan_job_sync(
     _dispatch_scan_job_sync(
         scan_type="form_submission_file",
         resource_id=submission_file_id,
+        job_id=job_id,
+        claim_token=claim_token,
+    )
+
+
+def dispatch_message_media_scan_job_sync(
+    *,
+    job_id: UUID,
+    media_asset_id: UUID,
+    claim_token: UUID,
+) -> None:
+    _dispatch_scan_job_sync(
+        scan_type="message_media",
+        resource_id=media_asset_id,
         job_id=job_id,
         claim_token=claim_token,
     )

@@ -390,6 +390,49 @@ describe('Shared Intake Public Page', () => {
         ).toBeInTheDocument()
     })
 
+    it('keeps both SMS choices unchecked and optional on hosted intake', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            messaging_consent: {
+                operational: {
+                    disclosure: 'I agree to receive application and appointment texts.',
+                    sms_terms_url: 'https://example.com/sms-terms',
+                    privacy_policy_url: 'https://example.com/privacy',
+                },
+                promotional: {
+                    disclosure: 'I agree to receive promotional opportunity texts.',
+                    sms_terms_url: 'https://example.com/sms-terms',
+                    privacy_policy_url: 'https://example.com/privacy',
+                },
+            },
+        })
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        const operational = screen.getByRole('checkbox', {
+            name: /application and appointment texts/i,
+        })
+        const promotional = screen.getByRole('checkbox', {
+            name: /promotional opportunity texts/i,
+        })
+        expect(operational).not.toBeChecked()
+        expect(promotional).not.toBeChecked()
+
+        fireEvent.click(screen.getByRole('checkbox', { name: /information provided is accurate/i }))
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
+
+        await waitFor(() => {
+            expect(submitSharedPublicForm).toHaveBeenCalledWith(
+                'event-abc',
+                {},
+                [],
+                undefined,
+                undefined,
+                { operational: false, promotional: false },
+            )
+        })
+    })
+
     it('submits visible upload fields with aligned files and field keys', async () => {
         getSharedPublicForm.mockResolvedValue({
             ...baseForm,

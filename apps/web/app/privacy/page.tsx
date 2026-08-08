@@ -126,6 +126,26 @@ export default function PrivacyPage() {
                     </section>
 
                     <section className="space-y-3">
+                        <h2 className="text-xl font-semibold text-zinc-950">Text messaging</h2>
+                        <p>
+                            When you separately choose to receive text messages from an agency, we
+                            process your mobile number, consent record, message content, delivery
+                            status, and opt-out requests to operate that agency&apos;s SMS or MMS
+                            program. Consent for operational messages and consent for promotional
+                            messages are recorded independently and are not inferred from submitting
+                            a general form or providing a phone number.
+                        </p>
+                        <p>
+                            Mobile opt-in data and consent will not be sold or shared with third
+                            parties or affiliates for their own marketing or promotional purposes.
+                            We may disclose it to messaging carriers and service providers only as
+                            necessary to deliver messages, prevent abuse, honor preferences, and
+                            comply with law. You may reply STOP to opt out, HELP for help, or use an
+                            agency-provided preference page.
+                        </p>
+                    </section>
+
+                    <section className="space-y-3">
                         <h2 className="text-xl font-semibold text-zinc-950">Sharing</h2>
                         <p>
                             We share information only as needed to provide and secure Surrogacy

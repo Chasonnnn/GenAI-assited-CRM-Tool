@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import { useQuery } from "@tanstack/react-query"
 import CampaignDetailPage from "../app/(app)/automation/campaigns/[id]/page.client"
 
 const mockPush = vi.fn()
@@ -10,7 +11,11 @@ let mockCampaignData = {
     id: "camp1",
     name: "Test Campaign",
     description: null as string | null,
+    channel: "email" as "email" | "messaging",
     email_template_id: "tmpl1",
+    email_template_name: "Original Template",
+    message_template_version_id: null as string | null,
+    message_template_name: null as string | null,
     recipient_type: "case",
     filter_criteria: {} as Record<string, unknown>,
     scheduled_at: null as string | null,
@@ -21,6 +26,7 @@ let mockCampaignData = {
     updated_at: new Date().toISOString(),
     total_recipients: 10,
     sent_count: 8,
+    delivered_count: 8,
     failed_count: 2,
     skipped_count: 0,
     opened_count: 0,
@@ -87,6 +93,22 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
     }),
 }))
 
+vi.mock("@/lib/api/twilio", () => ({
+    listMessagingTemplates: () => Promise.resolve([
+        {
+            id: "msg-tmpl-1",
+            template_key: "promo-update",
+            version: 1,
+            name: "Promotional Update",
+            purpose: "promotional",
+            body: "A messaging campaign body",
+            status: "published",
+            is_enrollment_confirmation: false,
+            content_classification: "no_phi",
+        },
+    ]),
+}))
+
 vi.mock("@/lib/hooks/use-metadata", () => ({
     useIntendedParentStatuses: () => ({
         data: {
@@ -108,12 +130,38 @@ vi.mock("@/lib/hooks/use-metadata", () => ({
 
 describe("CampaignDetailPage", () => {
     beforeEach(() => {
+        vi.mocked(useQuery).mockImplementation((options) => ({
+            data:
+                Array.isArray(options.queryKey) && options.queryKey[0] === "messaging-templates"
+                    ? [
+                          {
+                              id: "msg-tmpl-1",
+                              template_key: "promo-update",
+                              version: 1,
+                              name: "Promotional Update",
+                              purpose: "promotional",
+                              body: "A messaging campaign body",
+                              status: "published",
+                              is_enrollment_confirmation: false,
+                              content_classification: "no_phi",
+                          },
+                      ]
+                    : null,
+            isLoading: false,
+            error: null,
+            refetch: vi.fn(),
+        // The shared test setup intentionally uses a lightweight React Query mock.
+        }) as never)
         mockSearchParams = new URLSearchParams()
         mockCampaignData = {
             id: "camp1",
             name: "Test Campaign",
             description: null,
+            channel: "email",
             email_template_id: "tmpl1",
+            email_template_name: "Original Template",
+            message_template_version_id: null,
+            message_template_name: null,
             recipient_type: "case",
             filter_criteria: {},
             scheduled_at: null,
@@ -124,6 +172,7 @@ describe("CampaignDetailPage", () => {
             updated_at: new Date().toISOString(),
             total_recipients: 10,
             sent_count: 8,
+            delivered_count: 8,
             failed_count: 2,
             skipped_count: 0,
             opened_count: 0,
@@ -230,6 +279,42 @@ describe("CampaignDetailPage", () => {
 
         await waitFor(() => {
             expect(screen.queryByRole("heading", { name: "Edit Campaign" })).not.toBeInTheDocument()
+        })
+    })
+
+    it("edits messaging campaigns with promotional templates and no unsubscribe bypass", async () => {
+        mockCampaignData = {
+            ...mockCampaignData,
+            channel: "messaging",
+            email_template_id: null,
+            email_template_name: null,
+            message_template_version_id: "msg-tmpl-1",
+            message_template_name: "Promotional Update",
+            status: "draft",
+        }
+
+        render(<CampaignDetailPage />)
+
+        expect(await screen.findByText("Messaging Template")).toBeInTheDocument()
+        expect(await screen.findByText("A messaging campaign body")).toBeInTheDocument()
+        expect(screen.queryByText("Opened")).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: /^edit$/i }))
+        expect(screen.queryByRole("checkbox", { name: /include unsubscribed recipients/i })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: /save changes/i }))
+
+        await waitFor(() => {
+            expect(mockUpdateCampaign).toHaveBeenCalledWith({
+                id: "camp1",
+                data: {
+                    name: "Test Campaign",
+                    description: "",
+                    message_template_version_id: "msg-tmpl-1",
+                    recipient_type: "case",
+                    filter_criteria: {},
+                    include_unsubscribed: false,
+                },
+            })
         })
     })
 })
