@@ -1126,9 +1126,6 @@ function AISettingsCard({
                         </div>
                         <div>
                             <CardTitle className="text-base">AI Assistant</CardTitle>
-                            <CardDescription className="text-xs">
-                                Enable AI-powered features
-                            </CardDescription>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">

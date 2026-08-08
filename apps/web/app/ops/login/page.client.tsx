@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ShieldCheck, AlertCircle } from 'lucide-react';
 import { getAuthApiBase } from '@/lib/auth-utils';
@@ -50,9 +50,6 @@ export default function OpsLoginPageClient() {
                     <CardTitle className="text-2xl font-semibold text-stone-900 dark:text-stone-100">
                         Platform Administration
                     </CardTitle>
-                    <CardDescription className="text-stone-500 dark:text-stone-400">
-                        Sign in to manage agencies and platform operations
-                    </CardDescription>
                 </CardHeader>
 
                 <CardContent className="space-y-4">

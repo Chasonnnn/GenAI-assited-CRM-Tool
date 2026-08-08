@@ -21,19 +21,9 @@ import {
     type MatchListItem,
     type MatchStatus,
 } from '@/lib/api/matches'
+import { matchDetailQueryOptions, matchKeys } from '@/lib/queries/matches'
 
-// =============================================================================
-// Query Keys
-// =============================================================================
-
-export const matchKeys = {
-    all: ['matches'] as const,
-    lists: () => [...matchKeys.all, 'list'] as const,
-    list: (params: ListMatchesParams) => [...matchKeys.lists(), params] as const,
-    details: () => [...matchKeys.all, 'detail'] as const,
-    detail: (id: string) => [...matchKeys.details(), id] as const,
-    stats: () => [...matchKeys.all, 'stats'] as const,
-}
+export { matchDetailQueryOptions, matchKeys } from '@/lib/queries/matches'
 
 // =============================================================================
 // Hooks
@@ -54,8 +44,7 @@ export function useMatches(params: ListMatchesParams = {}) {
  */
 export function useMatch(matchId: string) {
     return useQuery({
-        queryKey: matchKeys.detail(matchId),
-        queryFn: () => getMatch(matchId),
+        ...matchDetailQueryOptions(matchId, () => getMatch(matchId)),
         enabled: !!matchId,
     })
 }

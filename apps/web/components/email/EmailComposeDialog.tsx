@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -581,8 +580,7 @@ function EmailComposeDialogSession({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>Send Email</DialogTitle>
-                    <DialogDescription>Compose and send an email to {surrogateData.full_name}</DialogDescription>
+                    <DialogTitle>Email {surrogateData.full_name}</DialogTitle>
                 </DialogHeader>
 
                 <div className="grid gap-6 py-4">

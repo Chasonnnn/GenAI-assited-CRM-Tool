@@ -393,9 +393,6 @@ function AuditActivityCard({
                 <div className="flex items-center justify-between">
                     <div>
                         <CardTitle>Activity Log</CardTitle>
-                        <CardDescription>
-                            Track all changes and actions in your organization
-                        </CardDescription>
                     </div>
                     <div className="flex items-center gap-4">
                         <Select

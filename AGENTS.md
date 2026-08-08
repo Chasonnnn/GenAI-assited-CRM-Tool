@@ -36,6 +36,7 @@ This is an internal product: do not preserve legacy behavior by default. Before 
 - TanStack Query owns server state; Zustand owns UI-only state.
 - Extend the customized shadcn/Base UI primitives; do not replace the component system in a focused feature change.
 - Shared Base UI `SelectValue` may expose a stored id, enum, slug, or sentinel. Map it through one label helper everywhere it appears—triggers, chips, badges, summaries, and empty states. When one filter leaks a raw value, audit siblings and test the trigger plus related labels.
+- UI descriptions: Do not add subtitles, helper text, or descriptive copy beneath headings, labels, cards, or settings by default. Prefer one concise, self-explanatory heading or label. Only add supporting copy when the user explicitly asks for it or when it is necessary to prevent misunderstanding or error, and never use it to restate the heading.
 - Pipeline stages are configurable. Treat `apps/api/app/core/stage_definitions.py` and pipeline services as the source of truth; keep generated frontend constants synchronized. Trace API, automation, analytics, and frontend consumers when stage semantics change.
 - Prefer nearby production code and behavior tests as references. Match local naming, comment density, transaction ownership, errors, and composition.
 

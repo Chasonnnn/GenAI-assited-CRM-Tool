@@ -773,9 +773,6 @@ function CampaignsPageHeader({ onCreateCampaign }: { onCreateCampaign: () => voi
                     </Button>
                     <div>
                         <h1 className="text-2xl font-semibold">Campaigns</h1>
-                        <p className="text-sm text-muted-foreground">
-                            Send targeted emails to groups of surrogates
-                        </p>
                     </div>
                 </div>
                 <Button onClick={onCreateCampaign}>

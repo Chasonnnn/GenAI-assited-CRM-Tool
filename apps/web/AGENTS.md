@@ -1,6 +1,6 @@
 # Frontend guidance
 
-Read the repository-root `AGENTS.md` first. For visual work, also read `../../docs/layouts.md`.
+Read the repository-root `../../AGENTS.md` first. For visual work, also read `../../docs/layouts.md`.
 
 ## Next.js context
 
@@ -25,3 +25,13 @@ Use the existing scripts in `package.json`:
 - Focused Vitest files while iterating.
 
 For UI changes, verify the actual rendered states that changed, including loading, empty, error, and populated states when applicable. Start the dev server only for active QA, record its PID, and stop it at handoff.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

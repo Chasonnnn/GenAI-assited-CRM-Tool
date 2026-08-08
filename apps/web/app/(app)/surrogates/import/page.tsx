@@ -214,7 +214,6 @@ export default function CSVImportPage() {
                 <div className="flex h-16 items-center justify-between px-6">
                     <div>
                         <h1 className="text-2xl font-semibold">CSV Import</h1>
-                        <p className="text-sm text-muted-foreground">Bulk import surrogates from CSV files</p>
                     </div>
                 </div>
             </div>

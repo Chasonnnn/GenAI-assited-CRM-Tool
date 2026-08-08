@@ -257,7 +257,7 @@ describe('SettingsPage', () => {
         await renderSettingsPage()
         // There are multiple "General" texts (tab + heading), so use getAllByText
         expect(screen.getAllByText('General').length).toBeGreaterThan(0)
-        expect(screen.getByText('Profile and access settings')).toBeDefined()
+        expect(screen.queryByText('Profile and access settings')).not.toBeInTheDocument()
         expect(screen.getByText('v0.16.0')).toBeDefined()
     })
 

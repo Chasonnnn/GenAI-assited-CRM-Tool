@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "@/components/app-link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -75,10 +75,7 @@ export default function MetaFormsPage() {
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="flex h-16 items-center justify-between px-6">
                     <div>
-                        <h1 className="text-2xl font-semibold">Meta Lead Forms</h1>
-                        <p className="text-sm text-muted-foreground">
-                            Map Meta lead forms to surrogate fields.
-                        </p>
+                        <h1 className="text-2xl font-semibold">Meta Lead Form Mapping</h1>
                     </div>
                     <div className="flex items-center gap-2">
                         <Button
@@ -113,7 +110,6 @@ export default function MetaFormsPage() {
                 <Card>
                     <CardHeader>
                         <CardTitle>Forms</CardTitle>
-                        <CardDescription>Choose a form to configure mappings.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         {isLoading ? (
