@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { cookies } from 'next/headers'
 import LoginPage from '../app/login/page'
@@ -23,6 +23,10 @@ async function renderLoginPage(searchParams: LoginSearchParams = {}) {
 }
 
 describe('LoginPage', () => {
+    beforeEach(() => {
+        sessionStorage.clear()
+    })
+
     it('renders the login screen', async () => {
         await renderLoginPage()
 
@@ -87,5 +91,27 @@ describe('LoginPage', () => {
         expect(button).toHaveTextContent('Signing In...')
 
         vi.useRealTimers()
+    })
+
+    it('arms the notification reminder for the app login session', async () => {
+        await renderLoginPage()
+
+        fireEvent.click(screen.getByRole('button', { name: /sign in with google/i }))
+
+        expect(sessionStorage.getItem('notification_login_reminder_pending')).toBe('1')
+    })
+
+    it('does not arm the app notification reminder for ops login', async () => {
+        const locationSpy = vi.spyOn(window, 'location', 'get').mockReturnValue({
+            ...window.location,
+            pathname: '/ops/login',
+            assign: vi.fn(),
+        } as Location)
+        await renderLoginPage()
+
+        fireEvent.click(screen.getByRole('button', { name: /sign in with google/i }))
+
+        expect(sessionStorage.getItem('notification_login_reminder_pending')).toBeNull()
+        locationSpy.mockRestore()
     })
 })
