@@ -1,0 +1,3 @@
+## 2024-06-25 - Eliminating Pipeline Stage Bulk Delete N+1 Query
+**Learning:** During pipeline stage bulk removal, iterating through a list of stages and running a separate `select(func.count(Model.id)).where(Model.stage_id == stage.id)` database query for each generates significant database overhead proportional to the number of stages being deleted.
+**Action:** Always refactor iterative aggregate counts using a single `GROUP BY` query. First, collect all IDs (e.g., `removed_stage_ids`), execute one bulk database query with `.where(Model.stage_id.in_(removed_stage_ids)).group_by(Model.stage_id)`, construct a dictionary mapping `stage_id -> count`, and access this dictionary O(1) in the loop instead of executing N separate database roundtrips.
