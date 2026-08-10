@@ -1,4 +1,4 @@
-"""Admin/developer-only read-only messaging inbox and triage actions."""
+"""Developer-only read-only messaging inbox and triage actions."""
 
 from typing import Annotated, Literal
 from uuid import UUID
@@ -22,7 +22,7 @@ from app.services import messaging_inbox_service
 router = APIRouter(
     prefix="/messaging",
     tags=["messaging-inbox"],
-    dependencies=[Depends(require_roles([Role.ADMIN, Role.DEVELOPER]))],
+    dependencies=[Depends(require_roles([Role.DEVELOPER]))],
 )
 
 

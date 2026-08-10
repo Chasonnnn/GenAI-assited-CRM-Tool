@@ -49,9 +49,9 @@ function EmptyInbox() {
     )
 }
 
-export default function MessagesPageClient() {
+export default function MessagesPageClient({ embedded = false }: { embedded?: boolean }) {
     const { user, isLoading: authLoading } = useAuth()
-    const canAccess = user?.role === "admin" || user?.role === "developer"
+    const canAccess = user?.role === "developer"
     const [readFilter, setReadFilter] = useState<"all" | "unread">("all")
     const [linkFilter, setLinkFilter] = useState<"all" | "unlinked">("all")
     const [purpose, setPurpose] = useState<"all" | MessagingPurpose>("all")
@@ -84,7 +84,7 @@ export default function MessagesPageClient() {
     if (!canAccess) {
         return (
             <div className="p-6">
-                <Card><CardContent className="p-6">Messages are available only to organization admins and developers.</CardContent></Card>
+                <Card><CardContent className="p-6">Tickets are available only to developers.</CardContent></Card>
             </div>
         )
     }
@@ -92,12 +92,10 @@ export default function MessagesPageClient() {
     const detail = detailQuery.data
 
     return (
-        <div className="space-y-6 p-6">
-            <header>
-                <h1 className="text-2xl font-semibold">Messages</h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                    Automated workflow and campaign messages only. This inbox is read-only.
-                </p>
+        <div className={embedded ? "space-y-6" : "space-y-6 p-6"}>
+            <header className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-semibold">SMS/MMS inbox</h2>
+                <Badge variant="secondary">Read-only</Badge>
             </header>
 
             <div className="grid gap-3 md:grid-cols-3">

@@ -22,7 +22,7 @@ const {
 
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => ({
-        user: { user_id: "user-1", role: "admin" },
+        user: { user_id: "user-1", role: "developer" },
         isLoading: false,
     }),
 }))
@@ -169,7 +169,7 @@ describe("MessagesPageClient", () => {
     it("renders a masked read-only inbox with friendly operational history", async () => {
         render(<MessagesPageClient />)
 
-        expect(await screen.findByRole("heading", { name: "Messages" })).toBeInTheDocument()
+        expect(await screen.findByRole("heading", { name: "SMS/MMS inbox" })).toBeInTheDocument()
         expect(screen.getAllByText("••• ••• 0110").length).toBeGreaterThan(0)
         expect(screen.getByText("Please send the appointment details.")).toBeInTheDocument()
         expect(screen.getByText("appointment.png")).toBeInTheDocument()
@@ -179,7 +179,7 @@ describe("MessagesPageClient", () => {
         expect(screen.getByRole("combobox", { name: "Link status" })).toHaveTextContent("All contacts")
         expect(screen.queryByRole("textbox", { name: /message/i })).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: /send/i })).not.toBeInTheDocument()
-        expect(screen.getByText(/Automated workflow and campaign messages only/i)).toBeInTheDocument()
+        expect(screen.getByText("Read-only")).toBeInTheDocument()
     })
 
     it("marks the selected conversation read without exposing a reply action", async () => {

@@ -11,13 +11,13 @@ def _closure_values(callable_object) -> list[object]:
     return [cell.cell_contents for cell in closure]
 
 
-def test_inbox_router_is_admin_developer_only_and_has_no_composer_route() -> None:
+def test_inbox_router_is_developer_only_and_has_no_composer_route() -> None:
     assert router.prefix == "/messaging"
     role_dependency = router.dependencies[0].dependency
     allowed_roles = next(
         value for value in _closure_values(role_dependency) if isinstance(value, list)
     )
-    assert set(allowed_roles) == {Role.ADMIN, Role.DEVELOPER}
+    assert allowed_roles == [Role.DEVELOPER]
 
     paths = {route.path for route in router.routes if isinstance(route, APIRoute)}
     assert paths == {
