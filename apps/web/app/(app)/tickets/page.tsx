@@ -1,10 +1,10 @@
 "use client"
 
 import Link from 'next/link'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from '@/components/ui/toast'
-import { ShieldAlertIcon } from 'lucide-react'
+import { Loader2Icon, ShieldAlertIcon } from 'lucide-react'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -13,9 +13,11 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuth } from '@/lib/auth-context'
 import { useComposeTicket, useTickets } from '@/lib/hooks/use-tickets'
 import type { TicketListParams, TicketPriority, TicketStatus } from '@/lib/api/tickets'
+import MessagesPageClient from '../messages/page.client'
 
 const STATUS_OPTIONS = ['new', 'open', 'pending', 'resolved', 'closed', 'spam'] as const
 const PRIORITY_OPTIONS = ['low', 'normal', 'high', 'urgent'] as const
@@ -49,10 +51,71 @@ function getTicketPriorityLabel(value: TicketPriorityFilter | null | undefined):
 }
 
 export default function TicketsPage() {
-    const { push } = useRouter()
-    const { user } = useAuth()
+    const { user, isLoading } = useAuth()
     const isDeveloper = user?.role === 'developer'
 
+    if (isLoading) {
+        return <TicketsLoadingState />
+    }
+
+    if (!isDeveloper) {
+        return (
+            <div className="p-4 md:p-6">
+                <Alert variant="destructive">
+                    <ShieldAlertIcon className="size-4" aria-hidden="true" />
+                    <AlertDescription>Tickets are available only to developers.</AlertDescription>
+                </Alert>
+            </div>
+        )
+    }
+
+    return (
+        <Suspense fallback={<TicketsLoadingState />}>
+            <DeveloperTicketsWorkspace />
+        </Suspense>
+    )
+}
+
+function TicketsLoadingState() {
+    return (
+        <div className="flex min-h-96 items-center justify-center" aria-label="Loading tickets">
+            <Loader2Icon className="size-7 animate-spin text-muted-foreground" />
+        </div>
+    )
+}
+
+function DeveloperTicketsWorkspace() {
+    const { replace } = useRouter()
+    const searchParams = useSearchParams()
+    const activeView = searchParams.get('view') === 'messages' ? 'messages' : 'email'
+
+    const handleViewChange = (value: string | number) => {
+        replace(value === 'messages' ? '/tickets?view=messages' : '/tickets', { scroll: false })
+    }
+
+    return (
+        <div className="space-y-6 p-4 md:p-6">
+            <header className="flex flex-wrap items-center justify-between gap-3">
+                <h1 className="text-2xl font-semibold">Tickets</h1>
+                <Tabs value={activeView} onValueChange={handleViewChange}>
+                    <TabsList aria-label="Ticket channels">
+                        <TabsTrigger value="email">Email tickets</TabsTrigger>
+                        <TabsTrigger value="messages">SMS/MMS</TabsTrigger>
+                    </TabsList>
+                </Tabs>
+            </header>
+
+            {activeView === 'messages' ? (
+                <MessagesPageClient embedded />
+            ) : (
+                <EmailTicketsView />
+            )}
+        </div>
+    )
+}
+
+function EmailTicketsView() {
+    const { push } = useRouter()
     const [statusFilter, setStatusFilter] = useState<TicketStatusFilter>('all')
     const [priorityFilter, setPriorityFilter] = useState<TicketPriorityFilter>('all')
     const [query, setQuery] = useState('')
@@ -74,19 +137,6 @@ export default function TicketsPage() {
 
     const { data, isLoading } = useTickets(filters)
     const composeMutation = useComposeTicket()
-
-    if (!isDeveloper) {
-        return (
-            <div className="p-4 md:p-6">
-                <Alert variant="destructive">
-                    <ShieldAlertIcon className="size-4" aria-hidden="true" />
-                    <AlertDescription>
-                        Tickets are temporarily available to developers only.
-                    </AlertDescription>
-                </Alert>
-            </div>
-        )
-    }
 
     const handleCompose = async () => {
         const to = composeTo.trim()
@@ -120,10 +170,10 @@ export default function TicketsPage() {
     }
 
     return (
-        <div className="space-y-6 p-4 md:p-6">
+        <>
             <Card>
                 <CardHeader>
-                    <CardTitle>Tickets</CardTitle>
+                    <CardTitle>Email tickets</CardTitle>
                     <CardDescription>Global inbox for inbound and outbound ticket threads.</CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-3 md:grid-cols-5">
@@ -239,6 +289,6 @@ export default function TicketsPage() {
                     )}
                 </CardContent>
             </Card>
-        </div>
+        </>
     )
 }

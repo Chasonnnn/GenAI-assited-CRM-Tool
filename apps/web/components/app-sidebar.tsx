@@ -37,7 +37,6 @@ import {
     HeartHandshake,
     Search,
     PanelLeftIcon,
-    MessageSquareText,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
@@ -67,12 +66,6 @@ const navigation = [
         title: "Tickets",
         url: "/tickets",
         icon: Inbox,
-    },
-    {
-        title: "Messages",
-        url: "/messages",
-        icon: MessageSquareText,
-        adminOnly: true,
     },
     {
         title: "Surrogates",
@@ -613,9 +606,6 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
     const navigationItems = navigation.filter((item) => {
         if (item.url === "/tickets") return canViewTickets
-        if ("adminOnly" in item && item.adminOnly) {
-            return user?.role === "admin" || isDeveloper
-        }
         if ("requiredPermission" in item) {
             return isDeveloper || permissionSet.has(item.requiredPermission)
         }

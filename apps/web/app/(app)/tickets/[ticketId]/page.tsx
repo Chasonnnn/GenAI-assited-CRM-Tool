@@ -62,7 +62,7 @@ export default function TicketDetailPage() {
     const { user } = useAuth()
     const isDeveloper = user?.role === 'developer'
 
-    const { data, isLoading } = useTicket(ticketId)
+    const { data, isLoading } = useTicket(ticketId, { enabled: isDeveloper })
 
     if (!isDeveloper) {
         return (
@@ -70,7 +70,7 @@ export default function TicketDetailPage() {
                 <Alert variant="destructive">
                     <ShieldAlertIcon className="size-4" aria-hidden="true" />
                     <AlertDescription>
-                        Tickets are temporarily available to developers only.
+                        Tickets are available only to developers.
                     </AlertDescription>
                 </Alert>
             </div>

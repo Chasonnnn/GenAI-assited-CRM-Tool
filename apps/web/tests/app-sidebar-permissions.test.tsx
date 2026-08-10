@@ -207,6 +207,7 @@ describe("AppSidebar permission visibility", () => {
             expect(screen.getByText("Dashboard")).toBeInTheDocument()
         })
         expect(screen.queryByText("Tickets")).not.toBeInTheDocument()
+        expect(screen.queryByText("Messages")).not.toBeInTheDocument()
     })
 
     it("hides primary links when the user lacks matching permissions", async () => {
@@ -311,6 +312,7 @@ describe("AppSidebar permission visibility", () => {
         await waitFor(() => {
             expect(screen.getByText("Tickets")).toBeInTheDocument()
         })
+        expect(screen.queryByText("Messages")).not.toBeInTheDocument()
     })
 
     it("shows Integrations settings for case managers without manage_integrations permission", async () => {

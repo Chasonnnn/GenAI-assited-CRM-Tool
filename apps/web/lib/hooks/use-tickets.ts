@@ -22,11 +22,11 @@ export function useTickets(params: TicketListParams = {}, options?: { enabled?: 
     })
 }
 
-export function useTicket(ticketId: string) {
+export function useTicket(ticketId: string, options?: { enabled?: boolean }) {
     return useQuery({
         queryKey: ticketKeys.detail(ticketId),
         queryFn: () => ticketsApi.getTicket(ticketId),
-        enabled: !!ticketId,
+        enabled: !!ticketId && (options?.enabled ?? true),
     })
 }
 
