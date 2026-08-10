@@ -8,8 +8,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
+from app.core.deps import (
+    get_current_session,
+    get_db,
+    require_csrf_header,
+    require_permission,
+    require_roles,
+)
 from app.core.policies import POLICIES
+from app.db.enums import Role
 from app.schemas.auth import UserSession
 from app.schemas.ticketing import (
     TicketComposeRequest,
@@ -29,7 +36,10 @@ from app.services import ticketing_service
 router = APIRouter(
     prefix="/tickets",
     tags=["Tickets"],
-    dependencies=[Depends(require_permission(POLICIES["tickets"].default))],
+    dependencies=[
+        Depends(require_roles([Role.DEVELOPER])),
+        Depends(require_permission(POLICIES["tickets"].default)),
+    ],
 )
 
 

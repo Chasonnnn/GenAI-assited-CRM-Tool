@@ -29,6 +29,13 @@ from app.db.models import (
 )
 from app.services import permission_service
 
+TICKET_PERMISSIONS = {
+    "view_tickets",
+    "edit_tickets",
+    "reply_tickets",
+    "link_ticket_surrogates",
+}
+
 # =============================================================================
 # Fixtures
 # =============================================================================
@@ -485,6 +492,18 @@ def test_developer_only_permission_cannot_be_granted_to_non_developer(
     assert result is False, (
         "Developer-only permission should be denied for non-developers even with override"
     )
+
+
+def test_ticket_permissions_are_developer_only(
+    db, org_a, admin_user, developer_user
+):
+    for permission in TICKET_PERMISSIONS:
+        assert permission_service.check_permission(
+            db, org_a.id, admin_user.id, Role.ADMIN.value, permission
+        ) is False
+        assert permission_service.check_permission(
+            db, org_a.id, developer_user.id, Role.DEVELOPER.value, permission
+        ) is True
 
 
 # =============================================================================
