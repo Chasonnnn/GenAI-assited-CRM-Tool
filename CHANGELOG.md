@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.59](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.58...surrogacy-crm-platform-v0.91.59) (2026-08-10)
+
+
+### Features
+
+* consolidate messaging under tickets ([c44a2f4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c44a2f4cb7ed57681bf04349e378dfe1a2f0c055))
+
+
+### Bug Fixes
+
+* restrict ticket workspace APIs to developers ([5f2f31d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5f2f31d72f9103d7189b63e17db1dc3681bf7892))
+
 ## [0.91.58](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.57...surrogacy-crm-platform-v0.91.58) (2026-08-08)
 
 
