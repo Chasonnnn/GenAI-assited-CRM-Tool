@@ -2064,19 +2064,26 @@ def _ensure_user_sent_mailboxes(db: Session, *, org_id: UUID) -> None:
         )
         .all()
     )
-    for integration in rows:
-        if not integration_has_inbound_scope(integration):
-            continue
 
-        existing = (
+    integration_ids = [row.id for row in rows]
+    existing_mailboxes = {}
+    if integration_ids:
+        existing_rows = (
             db.query(Mailbox)
             .filter(
                 Mailbox.organization_id == org_id,
                 Mailbox.kind == MailboxKind.USER_SENT,
-                Mailbox.user_integration_id == integration.id,
+                Mailbox.user_integration_id.in_(integration_ids),
             )
-            .first()
+            .all()
         )
+        existing_mailboxes = {mb.user_integration_id: mb for mb in existing_rows}
+
+    for integration in rows:
+        if not integration_has_inbound_scope(integration):
+            continue
+
+        existing = existing_mailboxes.get(integration.id)
         if existing:
             existing.email_address = integration.account_email
             existing.updated_at = _now_utc()
