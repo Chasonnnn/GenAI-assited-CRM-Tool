@@ -1440,6 +1440,26 @@ async def send_system_email_campaign(
         for org in db.query(Organization).filter(Organization.id.in_(organization_ids)).all()
     }
 
+    from collections import defaultdict
+
+    all_user_ids = {uid for target in targets for uid in target["user_ids"]}
+    all_org_ids = list(organization_ids)
+
+    # Bulk fetch all relevant users and memberships
+    bulk_rows = (
+        db.query(User, Membership)
+        .join(Membership, Membership.user_id == User.id)
+        .filter(
+            Membership.organization_id.in_(all_org_ids),
+            User.id.in_(all_user_ids),
+        )
+        .all()
+    )
+
+    rows_by_org = defaultdict(list)
+    for user, membership in bulk_rows:
+        rows_by_org[membership.organization_id].append((user, membership))
+
     for target in targets:
         org_id = target["org_id"]
         user_ids = target["user_ids"]
@@ -1454,20 +1474,15 @@ async def send_system_email_campaign(
             )
             continue
 
-        rows = (
-            db.query(User, Membership)
-            .join(Membership, Membership.user_id == User.id)
-            .filter(
-                Membership.organization_id == org_id,
-                User.id.in_(user_ids),
-            )
-            .all()
-        )
-        found_ids = {row[0].id for row in rows}
+        rows = rows_by_org.get(org_id, [])
+        # Filter for requested users in this org
+        target_rows = [(user, membership) for user, membership in rows if user.id in user_ids]
+
+        found_ids = {user.id for user, membership in target_rows}
         missing_ids = [str(uid) for uid in user_ids if uid not in found_ids]
         if missing_ids:
             missing_targets.append({"org_id": str(org_id), "missing_user_ids": missing_ids})
-        recipients.extend([(org_id, user, membership) for user, membership in rows])
+        recipients.extend([(org_id, user, membership) for user, membership in target_rows])
 
     if missing_targets:
         raise MissingTargetsError({"missing_targets": missing_targets})
