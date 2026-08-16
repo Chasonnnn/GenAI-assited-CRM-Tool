@@ -320,6 +320,20 @@ describe("Dependency security guards", () => {
         }
     })
 
+    it("resolves only non-vulnerable nanoid versions in pnpm-lock.yaml", () => {
+        const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
+        const resolvedVersions = Array.from(
+            lockfile.matchAll(/^\s{2}nanoid@(\d+\.\d+\.\d+):/gm),
+            (match) => match[1],
+        )
+
+        expect(resolvedVersions.length).toBeGreaterThan(0)
+
+        for (const resolvedVersion of resolvedVersions) {
+            expect(compareVersions(resolvedVersion, "3.3.18")).toBeGreaterThanOrEqual(0)
+        }
+    })
+
     it("resolves only non-vulnerable @babel/core versions in pnpm-lock.yaml", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
@@ -334,3 +348,17 @@ describe("Dependency security guards", () => {
         }
     })
 })
+
+    it("resolves only non-vulnerable nanoid versions in pnpm-lock.yaml", () => {
+        const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
+        const resolvedVersions = Array.from(
+            lockfile.matchAll(/^\s{2}nanoid@(\d+\.\d+\.\d+):/gm),
+            (match) => match[1],
+        )
+
+        expect(resolvedVersions.length).toBeGreaterThan(0)
+
+        for (const resolvedVersion of resolvedVersions) {
+            expect(compareVersions(resolvedVersion, "3.3.18")).toBeGreaterThanOrEqual(0)
+        }
+    })
