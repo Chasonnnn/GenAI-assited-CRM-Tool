@@ -124,8 +124,7 @@ def get_workflow_options(
         workflow_scope=workflow_scope,
         user_id=session.user_id,
         allow_messaging=(
-            session.role in {Role.ADMIN, Role.DEVELOPER}
-            and workflow_scope != "personal"
+            session.role in {Role.ADMIN, Role.DEVELOPER} and workflow_scope != "personal"
         ),
     )
 

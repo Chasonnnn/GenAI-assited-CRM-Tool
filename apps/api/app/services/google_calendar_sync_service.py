@@ -76,11 +76,24 @@ def schedule_google_calendar_sync_jobs(
     watch_jobs_created = 0
     watch_duplicates_skipped = 0
 
+    all_keys = []
+    for user_id, _, _ in targets:
+        all_keys.append(f"google-calendar-sync:{user_id}:{sync_bucket}")
+        all_keys.append(f"google-tasks-sync:{user_id}:{sync_bucket}")
+        all_keys.append(f"google-calendar-watch-refresh:{user_id}:{watch_bucket}")
+
+    existing_jobs = set()
+    if all_keys:
+        batch_size = 500
+        for i in range(0, len(all_keys), batch_size):
+            batch_keys = all_keys[i : i + batch_size]
+            rows = db.query(Job.idempotency_key).filter(Job.idempotency_key.in_(batch_keys)).all()
+            existing_jobs.update(row[0] for row in rows)
+
     for user_id, org_id, granted_scopes in targets:
         try:
             idempotency_key = f"google-calendar-sync:{user_id}:{sync_bucket}"
-            existing = db.query(Job).filter(Job.idempotency_key == idempotency_key).first()
-            if existing:
+            if idempotency_key in existing_jobs:
                 duplicates_skipped += 1
             else:
                 run_at = now + timedelta(seconds=(UUID(user_id).int % 120))
@@ -110,10 +123,7 @@ def schedule_google_calendar_sync_jobs(
         else:
             try:
                 task_idempotency_key = f"google-tasks-sync:{user_id}:{sync_bucket}"
-                task_existing = (
-                    db.query(Job).filter(Job.idempotency_key == task_idempotency_key).first()
-                )
-                if task_existing:
+                if task_idempotency_key in existing_jobs:
                     task_duplicates_skipped += 1
                 else:
                     task_run_at = now + timedelta(seconds=(UUID(user_id).int % 120))
@@ -140,10 +150,7 @@ def schedule_google_calendar_sync_jobs(
 
         try:
             watch_idempotency_key = f"google-calendar-watch-refresh:{user_id}:{watch_bucket}"
-            watch_existing = (
-                db.query(Job).filter(Job.idempotency_key == watch_idempotency_key).first()
-            )
-            if watch_existing:
+            if watch_idempotency_key in existing_jobs:
                 watch_duplicates_skipped += 1
                 continue
 

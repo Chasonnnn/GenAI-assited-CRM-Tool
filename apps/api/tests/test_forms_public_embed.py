@@ -241,9 +241,7 @@ async def test_embed_sms_choices_are_optional_separate_and_snapshotted(authed_cl
         "https://agency.example/privacy"
     )
     messaging_contact = (
-        db.query(MessagingContact)
-        .filter(MessagingContact.organization_id == test_org.id)
-        .one()
+        db.query(MessagingContact).filter(MessagingContact.organization_id == test_org.id).one()
     )
     state_by_purpose = {
         state.purpose: state.status

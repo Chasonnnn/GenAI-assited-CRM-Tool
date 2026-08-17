@@ -33,14 +33,18 @@ def upgrade() -> None:
         sa.Column("meta_lead_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("surrogate_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column(
-            "created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
         ),
         sa.Column(
-            "updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False
+            "updated_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
         ),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["intake_lead_id"], ["intake_leads.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["meta_lead_id"], ["meta_leads.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["surrogate_id"], ["surrogates.id"], ondelete="SET NULL"),
@@ -94,7 +98,10 @@ def upgrade() -> None:
         sa.Column("occurred_at", sa.TIMESTAMP(timezone=True), nullable=False),
         sa.Column("recorded_by_user_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column(
-            "created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
         ),
         sa.CheckConstraint(
             "purpose IN ('operational', 'promotional', 'all')",
@@ -104,9 +111,7 @@ def upgrade() -> None:
             "action IN ('opt_in', 'opt_out', 'ambiguous_hold', 'restore')",
             name="ck_messaging_consent_evidence_action",
         ),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["contact_id"], ["messaging_contacts.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["recorded_by_user_id"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
@@ -133,11 +138,16 @@ def upgrade() -> None:
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("contact_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("purpose", sa.String(length=20), nullable=False),
-        sa.Column("status", sa.String(length=20), server_default=sa.text("'unknown'"), nullable=False),
+        sa.Column(
+            "status", sa.String(length=20), server_default=sa.text("'unknown'"), nullable=False
+        ),
         sa.Column("latest_evidence_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("effective_at", sa.TIMESTAMP(timezone=True), nullable=True),
         sa.Column(
-            "updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False
+            "updated_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
         ),
         sa.CheckConstraint(
             "purpose IN ('operational', 'promotional')",
@@ -147,9 +157,7 @@ def upgrade() -> None:
             "status IN ('unknown', 'opted_in', 'opted_out')",
             name="ck_messaging_consent_state_status",
         ),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["contact_id"], ["messaging_contacts.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
             ["latest_evidence_id"], ["messaging_consent_evidence.id"], ondelete="SET NULL"
@@ -180,15 +188,16 @@ def upgrade() -> None:
         sa.Column("latest_evidence_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("effective_at", sa.TIMESTAMP(timezone=True), nullable=True),
         sa.Column(
-            "updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False
+            "updated_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
         ),
         sa.CheckConstraint(
             "reason IN ('none', 'global_opt_out', 'ambiguous_hold')",
             name="ck_messaging_global_suppression_reason",
         ),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["contact_id"], ["messaging_contacts.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
             ["latest_evidence_id"], ["messaging_consent_evidence.id"], ondelete="SET NULL"
@@ -211,9 +220,7 @@ def downgrade() -> None:
         table_name="messaging_global_suppressions",
     )
     op.drop_table("messaging_global_suppressions")
-    op.drop_index(
-        "idx_messaging_consent_states_org_status", table_name="messaging_consent_states"
-    )
+    op.drop_index("idx_messaging_consent_states_org_status", table_name="messaging_consent_states")
     op.drop_table("messaging_consent_states")
     op.drop_index(
         "idx_messaging_consent_evidence_timeline",
