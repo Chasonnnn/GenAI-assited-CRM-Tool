@@ -6,7 +6,7 @@ import uuid
 from collections.abc import Iterable
 from datetime import UTC, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.db.models import IntakeLead, MetaLead, Surrogate, TwilioRoute
@@ -671,14 +671,18 @@ def mark_conversation_read(
         conversation_id=conversation_id,
     )
     conversation.unread_count = 0
-    for message in db.scalars(
-        select(MessagingMessage).where(
+
+    # ⚡ Bolt: Replace N+1 iteration with a bulk update for better performance
+    db.execute(
+        update(MessagingMessage)
+        .where(
             MessagingMessage.organization_id == organization_id,
             MessagingMessage.conversation_id == conversation_id,
             MessagingMessage.is_unread.is_(True),
         )
-    ).all():
-        message.is_unread = False
+        .values(is_unread=False)
+    )
+
     conversation.updated_at = datetime.now(UTC)
     db.commit()
     return get_conversation(
