@@ -110,6 +110,7 @@ export function NotificationBell() {
                             size="sm"
                             className="h-auto p-0 text-xs text-muted-foreground hover:text-foreground"
                             onClick={handleMarkAllRead}
+                            aria-label="Mark all notifications as read"
                         >
                             Mark all read
                         </Button>

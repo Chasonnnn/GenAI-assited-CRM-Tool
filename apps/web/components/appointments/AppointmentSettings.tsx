@@ -864,7 +864,7 @@ function AppointmentTypeListItem({
                 {type.auto_approve && (
                     <Badge variant="outline">Auto-approve</Badge>
                 )}
-                <Button variant="ghost" size="sm" onClick={() => onEdit(type)}>
+                <Button variant="ghost" size="sm" onClick={() => onEdit(type)} aria-label={`Edit ${type.name} appointment type`}>
                     Edit
                 </Button>
                 <Button
