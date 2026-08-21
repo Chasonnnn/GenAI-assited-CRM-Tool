@@ -51,13 +51,9 @@ class CampaignCreate(BaseModel):
             if self.email_template_id is None or self.message_template_version_id is not None:
                 raise ValueError("Email campaigns require email_template_id only")
         elif self.message_template_version_id is None or self.email_template_id is not None:
-            raise ValueError(
-                "Messaging campaigns require message_template_version_id only"
-            )
+            raise ValueError("Messaging campaigns require message_template_version_id only")
         if self.channel == "messaging" and self.include_unsubscribed:
-            raise ValueError(
-                "include_unsubscribed is not available for messaging campaigns"
-            )
+            raise ValueError("include_unsubscribed is not available for messaging campaigns")
         return self
 
 
@@ -223,9 +219,7 @@ class PreviewFiltersRequest(BaseModel):
     @model_validator(mode="after")
     def reject_messaging_unsubscribe_bypass(self) -> PreviewFiltersRequest:
         if self.channel == "messaging" and self.include_unsubscribed:
-            raise ValueError(
-                "include_unsubscribed is not available for messaging campaigns"
-            )
+            raise ValueError("include_unsubscribed is not available for messaging campaigns")
         return self
 
 

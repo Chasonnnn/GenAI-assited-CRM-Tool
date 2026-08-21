@@ -233,12 +233,15 @@ def run_scan_job(
         else:
             success = scan_message_media_asset_job(resource_id)
 
-        resource_is_terminal = _resource_scan_status(
-            db,
-            scan_type=scan_type,
-            resource_id=resource_id,
-            organization_id=job.organization_id,
-        ) in terminal_statuses
+        resource_is_terminal = (
+            _resource_scan_status(
+                db,
+                scan_type=scan_type,
+                resource_id=resource_id,
+                organization_id=job.organization_id,
+            )
+            in terminal_statuses
+        )
         if success or resource_is_terminal:
             job_service.complete_claimed_job(
                 db,

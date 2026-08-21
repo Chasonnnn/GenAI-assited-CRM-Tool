@@ -20,15 +20,9 @@ CONSENT_AT = datetime(2026, 7, 31, 12, 0, tzinfo=UTC)
 def _configure_routes(db, test_org, *, consent_status: str = "available"):
     settings = twilio_settings_service.get_or_create_settings(db, test_org.id)
     settings.enabled = True
-    settings.account_sid_encrypted = twilio_settings_service.encrypt_credential(
-        "AC" + "1" * 32
-    )
-    settings.api_key_sid_encrypted = twilio_settings_service.encrypt_credential(
-        "SK" + "2" * 32
-    )
-    settings.api_secret_encrypted = twilio_settings_service.encrypt_credential(
-        "restricted-secret"
-    )
+    settings.account_sid_encrypted = twilio_settings_service.encrypt_credential("AC" + "1" * 32)
+    settings.api_key_sid_encrypted = twilio_settings_service.encrypt_credential("SK" + "2" * 32)
+    settings.api_secret_encrypted = twilio_settings_service.encrypt_credential("restricted-secret")
     for index, route in enumerate(sorted(settings.routes, key=lambda item: item.purpose), 3):
         route.enabled = True
         route.messaging_service_sid_encrypted = twilio_settings_service.encrypt_credential(
@@ -174,9 +168,7 @@ def test_external_reopt_stays_blocked_until_both_provider_items_succeed(db, test
 
 
 @pytest.mark.asyncio
-async def test_external_reopt_success_clears_only_selected_purpose(
-    db, test_org, monkeypatch
-):
+async def test_external_reopt_success_clears_only_selected_purpose(db, test_org, monkeypatch):
     _configure_routes(db, test_org)
     _initial_opt_in(db, test_org)
     _global_stop(db, test_org)
@@ -218,9 +210,7 @@ async def test_external_reopt_success_clears_only_selected_purpose(
 
 
 @pytest.mark.asyncio
-async def test_one_of_two_provider_updates_keeps_external_reopt_blocked(
-    db, test_org, monkeypatch
-):
+async def test_one_of_two_provider_updates_keeps_external_reopt_blocked(db, test_org, monkeypatch):
     _configure_routes(db, test_org)
     _initial_opt_in(db, test_org)
     _global_stop(db, test_org)
@@ -289,13 +279,11 @@ async def test_transient_consent_provider_failure_retries_without_terminal_proje
 
 
 @pytest.mark.asyncio
-async def test_unavailable_or_toll_free_reopt_never_calls_provider(
-    db, test_org, monkeypatch
-):
+async def test_unavailable_or_toll_free_reopt_never_calls_provider(db, test_org, monkeypatch):
     settings = _configure_routes(db, test_org, consent_status="unavailable")
-    next(route for route in settings.routes if route.purpose == "operational").capability_evidence = {
-        "sender_type": "toll_free"
-    }
+    next(
+        route for route in settings.routes if route.purpose == "operational"
+    ).capability_evidence = {"sender_type": "toll_free"}
     db.commit()
     _initial_opt_in(db, test_org)
     _global_stop(db, test_org)

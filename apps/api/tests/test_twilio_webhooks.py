@@ -19,9 +19,7 @@ def _configure_route(db, test_org, purpose: str = "operational"):
     settings = twilio_settings_service.get_or_create_settings(db, test_org.id)
     settings.enabled = True
     settings.account_sid_encrypted = twilio_settings_service.encrypt_credential(ACCOUNT_SID)
-    settings.api_key_sid_encrypted = twilio_settings_service.encrypt_credential(
-        "SK" + ("8" * 32)
-    )
+    settings.api_key_sid_encrypted = twilio_settings_service.encrypt_credential("SK" + ("8" * 32))
     settings.api_secret_encrypted = twilio_settings_service.encrypt_credential(
         "restricted-media-secret"
     )

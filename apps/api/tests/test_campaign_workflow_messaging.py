@@ -277,7 +277,10 @@ def test_messaging_campaign_rejects_stale_contact_after_entity_phone_changes(
     recipient = db.query(CampaignRecipient).filter(CampaignRecipient.run_id == run_id).one()
     assert recipient.status == "skipped"
     assert recipient.skip_reason == "consent_unknown"
-    assert db.query(MessageDelivery).filter(MessageDelivery.organization_id == test_org.id).count() == 0
+    assert (
+        db.query(MessageDelivery).filter(MessageDelivery.organization_id == test_org.id).count()
+        == 0
+    )
 
 
 async def test_messaging_campaign_retry_stays_in_durable_outbox(
@@ -546,4 +549,7 @@ def test_send_message_workflow_rejects_stale_contact_after_entity_phone_changes(
         "error": "No consented messaging contact resolved",
         "skipped": True,
     }
-    assert db.query(MessageDelivery).filter(MessageDelivery.organization_id == test_org.id).count() == 0
+    assert (
+        db.query(MessageDelivery).filter(MessageDelivery.organization_id == test_org.id).count()
+        == 0
+    )
