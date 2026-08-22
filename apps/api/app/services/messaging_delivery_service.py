@@ -710,18 +710,34 @@ def recover_expired_delivery_leases(
     if db.get_bind().dialect.name == "postgresql":
         query = query.with_for_update(skip_locked=True)
     rows = list(db.execute(query).scalars())
+
+    if not rows:
+        return 0
+
+    delivery_ids = [delivery.id for delivery in rows]
+    org_ids = list(set(delivery.organization_id for delivery in rows))
+
+    attempts_query = select(MessageDeliveryAttempt).where(
+        MessageDeliveryAttempt.delivery_id.in_(delivery_ids),
+        MessageDeliveryAttempt.outcome == "in_progress",
+    )
+    attempts = list(db.execute(attempts_query).scalars())
+    attempts_by_delivery_id = {attempt.delivery_id: attempt for attempt in attempts}
+
+    existing_cases_query = select(MessageReconciliationCase.delivery_id).where(
+        MessageReconciliationCase.organization_id.in_(org_ids),
+        MessageReconciliationCase.delivery_id.in_(delivery_ids),
+    )
+    existing_case_delivery_ids = set(db.execute(existing_cases_query).scalars())
+
     for delivery in rows:
-        attempt = db.execute(
-            select(MessageDeliveryAttempt).where(
-                MessageDeliveryAttempt.delivery_id == delivery.id,
-                MessageDeliveryAttempt.attempt_number == delivery.attempt_count,
-            )
-        ).scalar_one_or_none()
-        if attempt is not None and attempt.outcome == "in_progress":
+        attempt = attempts_by_delivery_id.get(delivery.id)
+        if attempt is not None and attempt.attempt_number == delivery.attempt_count:
             attempt.outcome = "lease_expired"
             attempt.error_type = "delivery_lease_expired"
             attempt.error_message = "Provider acceptance could not be determined"
             attempt.completed_at = now
+
         delivery.status = "reconciliation_required"
         delivery.last_error_type = "delivery_lease_expired"
         delivery.last_error = "Provider acceptance could not be determined"
@@ -729,13 +745,8 @@ def recover_expired_delivery_leases(
         delivery.lease_owner = None
         delivery.lease_expires_at = None
         delivery.updated_at = now
-        existing_case = db.execute(
-            select(MessageReconciliationCase.id).where(
-                MessageReconciliationCase.organization_id == delivery.organization_id,
-                MessageReconciliationCase.delivery_id == delivery.id,
-            )
-        ).scalar_one_or_none()
-        if existing_case is None:
+
+        if delivery.id not in existing_case_delivery_ids:
             db.add(
                 MessageReconciliationCase(
                     organization_id=delivery.organization_id,
@@ -745,5 +756,6 @@ def recover_expired_delivery_leases(
                     delivery_id=delivery.id,
                 )
             )
+
     db.commit()
     return len(rows)
