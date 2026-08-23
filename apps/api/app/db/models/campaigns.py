@@ -74,7 +74,9 @@ class Campaign(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    channel: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'email'"))
+    channel: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'email'")
+    )
 
     # Immutable channel template selection. MessageTemplate is already one
     # version per row, while email retains its existing snapshot behavior.

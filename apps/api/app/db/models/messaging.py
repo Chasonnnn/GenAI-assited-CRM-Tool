@@ -43,7 +43,9 @@ class TwilioSettings(Base):
         unique=True,
         nullable=False,
     )
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
 
     account_sid_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     api_key_sid_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -65,15 +67,17 @@ class TwilioSettings(Base):
         Boolean, nullable=False, server_default=text("false")
     )
     twilio_edition: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    baa_verified_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    baa_verified_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     compliance_approved_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
-    phi_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    phi_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
 
-    current_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    current_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("1")
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -86,7 +90,9 @@ class TwilioSettings(Base):
         back_populates="settings", cascade="all, delete-orphan"
     )
 
-    __table_args__ = (CheckConstraint("current_version >= 1", name="ck_twilio_settings_version"),)
+    __table_args__ = (
+        CheckConstraint("current_version >= 1", name="ck_twilio_settings_version"),
+    )
 
 
 class TwilioRoute(Base):
@@ -94,7 +100,9 @@ class TwilioRoute(Base):
 
     __tablename__ = "twilio_routes"
     __table_args__ = (
-        UniqueConstraint("organization_id", "purpose", name="uq_twilio_routes_org_purpose"),
+        UniqueConstraint(
+            "organization_id", "purpose", name="uq_twilio_routes_org_purpose"
+        ),
         CheckConstraint(
             "purpose IN ('operational', 'promotional')",
             name="ck_twilio_routes_purpose",
@@ -128,7 +136,9 @@ class TwilioRoute(Base):
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
     )
     purpose: Mapped[str] = mapped_column(String(20), nullable=False)
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
 
     messaging_service_sid_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     sender_phone_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -165,7 +175,9 @@ class MessagingContact(Base):
 
     __tablename__ = "messaging_contacts"
     __table_args__ = (
-        UniqueConstraint("organization_id", "phone_hash", name="uq_messaging_contacts_org_phone"),
+        UniqueConstraint(
+            "organization_id", "phone_hash", name="uq_messaging_contacts_org_phone"
+        ),
         Index("idx_messaging_contacts_org", "organization_id"),
         Index("idx_messaging_contacts_intake_lead", "organization_id", "intake_lead_id"),
         Index("idx_messaging_contacts_meta_lead", "organization_id", "meta_lead_id"),
@@ -317,7 +329,9 @@ class MessagingConsentState(Base):
     provider_sync_status: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default=text("'not_required'")
     )
-    provider_sync_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    provider_sync_error_code: Mapped[str | None] = mapped_column(
+        String(80), nullable=True
+    )
     provider_sync_requested_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
@@ -339,7 +353,9 @@ class MessagingGlobalSuppression(Base):
 
     __tablename__ = "messaging_global_suppressions"
     __table_args__ = (
-        UniqueConstraint("organization_id", "contact_id", name="uq_messaging_global_suppression"),
+        UniqueConstraint(
+            "organization_id", "contact_id", name="uq_messaging_global_suppression"
+        ),
         CheckConstraint(
             "reason IN ('none', 'global_opt_out', 'ambiguous_hold')",
             name="ck_messaging_global_suppression_reason",
@@ -357,7 +373,9 @@ class MessagingGlobalSuppression(Base):
         UUID(as_uuid=True), ForeignKey("messaging_contacts.id", ondelete="CASCADE"), nullable=False
     )
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
-    reason: Mapped[str] = mapped_column(String(30), nullable=False, server_default=text("'none'"))
+    reason: Mapped[str] = mapped_column(
+        String(30), nullable=False, server_default=text("'none'")
+    )
     latest_evidence_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("messaging_consent_evidence.id", ondelete="SET NULL"),

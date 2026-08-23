@@ -579,7 +579,7 @@ def download_inbound_media(
                 content_type=_safe_content_type(response.headers.get("Content-Type")),
                 content=bytes(buffer),
             )
-    except requests_exceptions.RequestException, ValueError:
+    except (requests_exceptions.RequestException, ValueError):
         return TwilioMediaDownloadResult(
             success=False,
             media_sid=media_sid,

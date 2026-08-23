@@ -325,7 +325,9 @@ def list_campaigns(
                 name=c.name,
                 channel=c.channel,
                 email_template_name=c.email_template.name if c.email_template else None,
-                message_template_name=(c.message_template.name if c.message_template else None),
+                message_template_name=(
+                    c.message_template.name if c.message_template else None
+                ),
                 recipient_type=c.recipient_type,
                 status=c.status,
                 scheduled_at=c.scheduled_at,
@@ -433,13 +435,17 @@ def update_campaign(
         if data.channel == "email" and data.email_template_id is None:
             raise ValueError("Changing to email requires email_template_id")
         if data.channel == "messaging" and data.message_template_version_id is None:
-            raise ValueError("Changing to messaging requires message_template_version_id")
+            raise ValueError(
+                "Changing to messaging requires message_template_version_id"
+            )
         campaign.channel = data.channel
         campaign.email_template_id = None
         campaign.message_template_version_id = None
 
     if effective_channel == "messaging" and data.include_unsubscribed:
-        raise ValueError("include_unsubscribed is not available for messaging campaigns")
+        raise ValueError(
+            "include_unsubscribed is not available for messaging campaigns"
+        )
 
     if data.name is not None:
         campaign.name = data.name
@@ -470,7 +476,8 @@ def update_campaign(
             raise ValueError("Email campaigns cannot use message templates")
         if (
             campaign.status == CampaignStatus.SCHEDULED.value
-            and data.message_template_version_id != campaign.message_template_version_id
+            and data.message_template_version_id
+            != campaign.message_template_version_id
         ):
             raise ValueError("Cannot change message template after campaign is scheduled")
         _load_published_message_template(
@@ -745,7 +752,9 @@ def preview_recipients(
     """Preview recipients matching the filter criteria."""
     if channel == "messaging":
         if ignore_opt_out:
-            raise ValueError("include_unsubscribed is not available for messaging campaigns")
+            raise ValueError(
+                "include_unsubscribed is not available for messaging campaigns"
+            )
         base_query = _build_recipient_query(
             db,
             org_id,
@@ -768,16 +777,12 @@ def preview_recipients(
             MessagingConsentState.status == "opted_in",
             globally_allowed,
         )
-        explicitly_suppressed = (
-            rows_query.filter(
-                or_(
-                    MessagingConsentState.status == "opted_out",
-                    MessagingGlobalSuppression.active.is_(True),
-                )
+        explicitly_suppressed = rows_query.filter(
+            or_(
+                MessagingConsentState.status == "opted_out",
+                MessagingGlobalSuppression.active.is_(True),
             )
-            .order_by(None)
-            .count()
-        )
+        ).order_by(None).count()
         eligible_count = eligible_query.order_by(None).count()
         rows = eligible_query.order_by(
             MessagingContact.phone_last4,
@@ -928,7 +933,9 @@ def enqueue_campaign_send(
         template_snapshot = _snapshot_campaign_template(template, provider_config)
     else:
         if campaign.include_unsubscribed:
-            raise ValueError("include_unsubscribed is not available for messaging campaigns")
+            raise ValueError(
+                "include_unsubscribed is not available for messaging campaigns"
+            )
         message_template = _load_published_message_template(
             db,
             org_id=org_id,
@@ -1039,7 +1046,9 @@ def enqueue_campaign_retry_failed(
     if campaign.status == CampaignStatus.CANCELLED.value:
         raise ValueError("Cannot retry a cancelled campaign")
     if campaign.channel == "messaging":
-        raise ValueError("Messaging delivery retries are managed by the durable messaging outbox")
+        raise ValueError(
+            "Messaging delivery retries are managed by the durable messaging outbox"
+        )
 
     run = (
         db.query(CampaignRun)
@@ -1177,32 +1186,32 @@ def cancel_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> bool:
         else:
             cancellable_deliveries = (
                 db.query(EmailDelivery, EmailLog, CampaignRecipient)
-                .join(
-                    EmailLog,
-                    EmailLog.id == EmailDelivery.email_log_id,
-                )
-                .join(
-                    CampaignRecipient,
-                    or_(
-                        CampaignRecipient.email_log_id == EmailLog.id,
-                        and_(
-                            EmailLog.source_type == "campaign_recipient",
-                            EmailLog.source_id == CampaignRecipient.id,
-                        ),
+            .join(
+                EmailLog,
+                EmailLog.id == EmailDelivery.email_log_id,
+            )
+            .join(
+                CampaignRecipient,
+                or_(
+                    CampaignRecipient.email_log_id == EmailLog.id,
+                    and_(
+                        EmailLog.source_type == "campaign_recipient",
+                        EmailLog.source_id == CampaignRecipient.id,
                     ),
-                )
-                .filter(
-                    EmailDelivery.organization_id == org_id,
-                    EmailLog.organization_id == org_id,
-                    CampaignRecipient.run_id == latest_run.id,
-                    EmailDelivery.status.in_(
-                        [
-                            EmailDeliveryStatus.PENDING.value,
-                            EmailDeliveryStatus.RETRY_SCHEDULED.value,
-                        ]
-                    ),
-                )
-                .with_for_update(of=EmailDelivery)
+                ),
+            )
+            .filter(
+                EmailDelivery.organization_id == org_id,
+                EmailLog.organization_id == org_id,
+                CampaignRecipient.run_id == latest_run.id,
+                EmailDelivery.status.in_(
+                    [
+                        EmailDeliveryStatus.PENDING.value,
+                        EmailDeliveryStatus.RETRY_SCHEDULED.value,
+                    ]
+                ),
+            )
+            .with_for_update(of=EmailDelivery)
                 .all()
             )
             for delivery, email_log, recipient in cancellable_deliveries:
@@ -1599,7 +1608,9 @@ def project_campaign_message_delivery(
     if status == "delivered":
         recipient.status = CampaignRecipientStatus.DELIVERED.value
         recipient.sent_at = recipient.sent_at or projected_at
-        recipient.external_message_id = recipient.external_message_id or provider_message_id
+        recipient.external_message_id = (
+            recipient.external_message_id or provider_message_id
+        )
         recipient.error = None
         recipient.skip_reason = None
     elif status == "submitted" and recipient.status in {
@@ -1608,7 +1619,9 @@ def project_campaign_message_delivery(
     }:
         recipient.status = CampaignRecipientStatus.SENT.value
         recipient.sent_at = recipient.sent_at or projected_at
-        recipient.external_message_id = recipient.external_message_id or provider_message_id
+        recipient.external_message_id = (
+            recipient.external_message_id or provider_message_id
+        )
         recipient.error = None
         recipient.skip_reason = None
     elif status in {"failed", "reconciliation_required"} and recipient.status in {
@@ -1988,15 +2001,11 @@ def _execute_messaging_campaign_run(
                 )
                 db.add(campaign_recipient)
                 db.flush()
-            elif (
-                campaign_recipient.message_delivery_id is not None
-                or campaign_recipient.status
-                in {
-                    CampaignRecipientStatus.SENT.value,
-                    CampaignRecipientStatus.DELIVERED.value,
-                    CampaignRecipientStatus.SKIPPED.value,
-                }
-            ):
+            elif campaign_recipient.message_delivery_id is not None or campaign_recipient.status in {
+                CampaignRecipientStatus.SENT.value,
+                CampaignRecipientStatus.DELIVERED.value,
+                CampaignRecipientStatus.SKIPPED.value,
+            }:
                 continue
 
             if campaign.recipient_type == "case":

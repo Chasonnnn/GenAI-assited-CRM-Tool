@@ -334,10 +334,7 @@ def get_readiness(db: Session, organization_id: uuid.UUID) -> TwilioReadinessRes
                 message=f"MMS capability is required for the {route.purpose} route.",
                 route=route.purpose,
             )
-        if (
-            route.purpose == "operational"
-            and evidence.get("meta_consent_mapping_verified") is not True
-        ):
+        if route.purpose == "operational" and evidence.get("meta_consent_mapping_verified") is not True:
             route_issues.append("Meta consent mapping is not verified.")
             _append_issue(
                 issues,

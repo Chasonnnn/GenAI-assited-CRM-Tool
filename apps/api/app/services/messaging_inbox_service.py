@@ -217,16 +217,13 @@ def _conversation_rows(
         .join(TwilioRoute, TwilioRoute.id == MessagingConversation.route_id)
         .where(*filters)
     )
-    total = (
-        db.scalar(
-            select(func.count())
-            .select_from(MessagingConversation)
-            .join(MessagingContact, MessagingContact.id == MessagingConversation.contact_id)
-            .join(TwilioRoute, TwilioRoute.id == MessagingConversation.route_id)
-            .where(*filters)
-        )
-        or 0
-    )
+    total = db.scalar(
+        select(func.count())
+        .select_from(MessagingConversation)
+        .join(MessagingContact, MessagingContact.id == MessagingConversation.contact_id)
+        .join(TwilioRoute, TwilioRoute.id == MessagingConversation.route_id)
+        .where(*filters)
+    ) or 0
     rows = list(
         db.execute(
             base.order_by(
@@ -418,7 +415,8 @@ def _media_by_message(
                 byte_size=asset.byte_size,
                 scan_status=asset.scan_status,
                 provider_deleted=(
-                    link.provider_deleted_at is not None or asset.provider_deleted_at is not None
+                    link.provider_deleted_at is not None
+                    or asset.provider_deleted_at is not None
                 ),
                 quarantined=asset.scan_status == "quarantined",
             )

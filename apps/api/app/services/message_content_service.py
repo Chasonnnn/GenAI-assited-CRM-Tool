@@ -256,7 +256,9 @@ def create_next_template_version(
         else is_enrollment_confirmation
     )
     next_classification = (
-        latest.content_classification if content_classification is None else content_classification
+        latest.content_classification
+        if content_classification is None
+        else content_classification
     )
     normalized_name, normalized_body = _validate_template_fields(
         name=next_name,
@@ -347,7 +349,9 @@ def _validate_enrollment_disclosure(
     if not _WORD_STOP.search(body):
         missing.append("STOP")
     if missing:
-        raise TemplateDisclosureError("Enrollment confirmation is missing: " + ", ".join(missing))
+        raise TemplateDisclosureError(
+            "Enrollment confirmation is missing: " + ", ".join(missing)
+        )
 
 
 def publish_template(
@@ -483,7 +487,10 @@ def upload_media_assets(
     if content_classification not in _VALID_CLASSIFICATIONS:
         raise MessagingMediaValidationError("Unsupported content classification")
     _require_phi_gate_for_classification(db, organization_id, content_classification)
-    validated_uploads = [(upload, *_validated_media_bytes(upload)) for upload in uploads]
+    validated_uploads = [
+        (upload, *_validated_media_bytes(upload))
+        for upload in uploads
+    ]
 
     assets: list[MessageMediaAsset] = []
     try:
@@ -558,7 +565,9 @@ def list_media_assets(
     *,
     scan_status: str | None = None,
 ) -> list[MessageMediaAsset]:
-    query = select(MessageMediaAsset).where(MessageMediaAsset.organization_id == organization_id)
+    query = select(MessageMediaAsset).where(
+        MessageMediaAsset.organization_id == organization_id
+    )
     if scan_status is not None:
         query = query.where(MessageMediaAsset.scan_status == scan_status)
     return list(db.execute(query.order_by(MessageMediaAsset.created_at.desc())).scalars())
@@ -575,16 +584,16 @@ def mark_media_asset_scanned(
     if scan_result not in _VALID_SCAN_RESULTS:
         raise ValueError("Unsupported messaging media scan result")
     asset = db.execute(
-        select(MessageMediaAsset).where(MessageMediaAsset.id == asset_id).with_for_update()
+        select(MessageMediaAsset)
+        .where(MessageMediaAsset.id == asset_id)
+        .with_for_update()
     ).scalar_one_or_none()
     if asset is None:
         return None
     if asset.scan_status != "pending":
         return asset
     asset.scan_status = scan_result
-    asset.quarantine_reason = (
-        None if scan_result == "clean" else (quarantine_reason or "unsafe")[:120]
-    )
+    asset.quarantine_reason = None if scan_result == "clean" else (quarantine_reason or "unsafe")[:120]
     db.flush()
     return asset
 
@@ -666,10 +675,7 @@ def load_signed_media(
         content = attachment_service.load_file_bytes(asset.storage_key)
     except (FileNotFoundError, OSError) as exc:
         raise MessagingMediaStorageError("Messaging media storage object is unavailable") from exc
-    if (
-        len(content) != asset.byte_size
-        or hashlib.sha256(content).hexdigest() != asset.checksum_sha256
-    ):
+    if len(content) != asset.byte_size or hashlib.sha256(content).hexdigest() != asset.checksum_sha256:
         raise MessagingMediaStorageError("Messaging media storage integrity check failed")
     return MediaContent(asset=asset, content=content)
 
@@ -691,6 +697,4 @@ def pending_media_scan_job(
         .order_by(Job.created_at.desc())
     ).scalars()
     expected = str(asset_id)
-    return next(
-        (job for job in jobs if (job.payload or {}).get("media_asset_id") == expected), None
-    )
+    return next((job for job in jobs if (job.payload or {}).get("media_asset_id") == expected), None)
