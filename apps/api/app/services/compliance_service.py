@@ -1077,23 +1077,33 @@ def _build_retention_query(
             )
             query = query.filter(~MessagingMessage.contact_id.in_(held_contact_ids))
         if entity_hold_ids.get("messaging_message"):
-            query = query.filter(
-                ~MessagingMessage.id.in_(entity_hold_ids["messaging_message"])
-            )
+            query = query.filter(~MessagingMessage.id.in_(entity_hold_ids["messaging_message"]))
         return query
     if entity_type == "messaging_consent_evidence":
-        backs_consent_state = select(MessagingConsentState.id).where(
-            MessagingConsentState.organization_id == org_id,
-            MessagingConsentState.latest_evidence_id == MessagingConsentEvidence.id,
-        ).exists()
-        backs_global_suppression = select(MessagingGlobalSuppression.id).where(
-            MessagingGlobalSuppression.organization_id == org_id,
-            MessagingGlobalSuppression.latest_evidence_id == MessagingConsentEvidence.id,
-        ).exists()
-        backs_delivery = select(MessageDelivery.id).where(
-            MessageDelivery.organization_id == org_id,
-            MessageDelivery.consent_evidence_id == MessagingConsentEvidence.id,
-        ).exists()
+        backs_consent_state = (
+            select(MessagingConsentState.id)
+            .where(
+                MessagingConsentState.organization_id == org_id,
+                MessagingConsentState.latest_evidence_id == MessagingConsentEvidence.id,
+            )
+            .exists()
+        )
+        backs_global_suppression = (
+            select(MessagingGlobalSuppression.id)
+            .where(
+                MessagingGlobalSuppression.organization_id == org_id,
+                MessagingGlobalSuppression.latest_evidence_id == MessagingConsentEvidence.id,
+            )
+            .exists()
+        )
+        backs_delivery = (
+            select(MessageDelivery.id)
+            .where(
+                MessageDelivery.organization_id == org_id,
+                MessageDelivery.consent_evidence_id == MessagingConsentEvidence.id,
+            )
+            .exists()
+        )
         query = db.query(MessagingConsentEvidence).filter(
             MessagingConsentEvidence.organization_id == org_id,
             MessagingConsentEvidence.created_at < cutoff,
@@ -1109,9 +1119,7 @@ def _build_retention_query(
             query = query.filter(~MessagingConsentEvidence.contact_id.in_(held_contact_ids))
         if entity_hold_ids.get("messaging_consent_evidence"):
             query = query.filter(
-                ~MessagingConsentEvidence.id.in_(
-                    entity_hold_ids["messaging_consent_evidence"]
-                )
+                ~MessagingConsentEvidence.id.in_(entity_hold_ids["messaging_consent_evidence"])
             )
         return query
     if entity_type == "messaging_webhook_events":
@@ -1125,9 +1133,11 @@ def _build_retention_query(
             )
         return query
     if entity_type == "messaging_media_assets":
-        linked = select(MessageMediaLink.id).where(
-            MessageMediaLink.media_asset_id == MessageMediaAsset.id
-        ).exists()
+        linked = (
+            select(MessageMediaLink.id)
+            .where(MessageMediaLink.media_asset_id == MessageMediaAsset.id)
+            .exists()
+        )
         query = db.query(MessageMediaAsset).filter(
             MessageMediaAsset.organization_id == org_id,
             MessageMediaAsset.created_at < cutoff,
@@ -1176,8 +1186,7 @@ def execute_purge(db: Session, org_id: UUID, user_id: UUID | None) -> list[Purge
         if count:
             if policy.entity_type == "messaging_media_assets":
                 media_storage_keys.extend(
-                    key
-                    for (key,) in query.with_entities(MessageMediaAsset.storage_key).all()
+                    key for (key,) in query.with_entities(MessageMediaAsset.storage_key).all()
                 )
             query.delete(synchronize_session=False)
         results.append(PurgeResult(entity_type=policy.entity_type, count=count))
