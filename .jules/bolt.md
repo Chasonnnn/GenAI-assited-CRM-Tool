@@ -1,0 +1,3 @@
+## 2026-08-24 - Found and Fixed N+1 DB queries in ticketing_service.py
+**Learning:** This codebase frequently performs database operations in loops when looking up or verifying related entities like deliveries or mailboxes in batches. Using `db.execute().scalar_one_or_none()` or `.first()` inside a loop for things like attempts or existing objects can be heavily optimized using list comprehensions and batch queries.
+**Action:** When working on performance, use AST-parsing script to search for DB lookups like `query` or `execute` nested inside `for` loops. Refactor to perform a single batch lookup before the loop.
