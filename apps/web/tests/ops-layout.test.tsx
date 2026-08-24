@@ -95,6 +95,7 @@ describe("OpsLayout", () => {
 
         renderOpsLayout(queryClient)
         expect(await screen.findByText("admin@surrogacyforce.com")).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Log out" })).toBeInTheDocument()
 
         expect(mockGetPlatformMe).toHaveBeenCalledTimes(1)
         expect(mockGetPlatformStats).toHaveBeenCalledTimes(1)
