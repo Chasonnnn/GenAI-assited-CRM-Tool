@@ -228,16 +228,20 @@ def test_apply_pipeline_draft_counts_removed_stage_entities_with_direct_count(
     db, test_org, test_user
 ):
     pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id, test_user.id)
-    custom_stage = pipeline_service.create_stage(
-        db,
-        pipeline.id,
-        slug=f"cleanup_{uuid.uuid4().hex[:6]}",
-        label="Cleanup",
-        color="#64748b",
-        stage_type="paused",
-        order=999,
-        user_id=test_user.id,
-    )
+    removed_stages = [
+        pipeline_service.create_stage(
+            db,
+            pipeline.id,
+            slug=f"cleanup_{uuid.uuid4().hex[:6]}",
+            label=f"Cleanup {index}",
+            color="#64748b",
+            stage_type="paused",
+            order=999,
+            user_id=test_user.id,
+        )
+        for index in range(2)
+    ]
+    removed_stage_ids = {stage.id for stage in removed_stages}
     db.flush()
 
     draft_stages = [
@@ -253,7 +257,7 @@ def test_apply_pipeline_draft_counts_removed_stage_entities_with_direct_count(
             "semantics": stage.semantics or {},
         }
         for index, stage in enumerate(pipeline_service.get_stages(db, pipeline.id))
-        if stage.id != custom_stage.id
+        if stage.id not in removed_stage_ids
     ]
     statements: list[str] = []
 
@@ -282,8 +286,9 @@ def test_apply_pipeline_draft_counts_removed_stage_entities_with_direct_count(
         if "surrogates" in statement.lower() and "count(" in statement.lower()
     ]
 
-    assert aggregate_statements
-    assert all("from (select" not in statement for statement in aggregate_statements)
+    assert len(aggregate_statements) == 1
+    assert "from (select" not in aggregate_statements[0]
+    assert "group by" in aggregate_statements[0]
 
 
 def test_resolve_stage_color_uses_keyword_presets_for_gray_custom_stages():

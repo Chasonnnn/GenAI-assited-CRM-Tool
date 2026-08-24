@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 from uuid import uuid4
 
+from sqlalchemy import event as sqlalchemy_event
+
 from app.services import ticketing_service
 
 
@@ -334,6 +336,116 @@ def test_process_occurrence_stitch_links_by_existing_gmail_thread(db, test_org, 
         .count()
         == 1
     )
+
+
+def test_process_occurrence_stitch_bulk_resolves_reply_tokens_in_order(
+    db, test_org, monkeypatch
+):
+    from app.db.enums import (
+        EmailDirection,
+        EmailOccurrenceState,
+        LinkConfidence,
+        TicketLinkStatus,
+        TicketPriority,
+        TicketStatus,
+    )
+    from app.db.models import (
+        EmailMessage,
+        EmailMessageContent,
+        EmailMessageOccurrence,
+        Ticket,
+        TicketMessage,
+    )
+
+    mailbox = _make_mailbox(db, org_id=test_org.id, email_address="reply@example.com")
+    first_ticket = Ticket(
+        organization_id=test_org.id,
+        ticket_code="T-REPLY-A",
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.NORMAL,
+        subject="First ticket",
+        subject_norm="First ticket",
+        requester_email="first@example.com",
+        surrogate_link_status=TicketLinkStatus.NEEDS_REVIEW,
+        stitch_reason="new_message",
+        stitch_confidence=LinkConfidence.LOW,
+    )
+    preferred_ticket = Ticket(
+        organization_id=test_org.id,
+        ticket_code="T-REPLY-B",
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.NORMAL,
+        subject="Preferred ticket",
+        subject_norm="Preferred ticket",
+        requester_email="preferred@example.com",
+        surrogate_link_status=TicketLinkStatus.NEEDS_REVIEW,
+        stitch_reason="new_message",
+        stitch_confidence=LinkConfidence.LOW,
+    )
+    db.add_all([first_ticket, preferred_ticket])
+    db.flush()
+    preferred_ticket_id = preferred_ticket.id
+
+    message = EmailMessage(
+        organization_id=test_org.id,
+        direction=EmailDirection.INBOUND,
+        rfc_message_id="<reply-token@example.com>",
+        gmail_thread_id="reply-token-thread",
+        subject_norm="Unrelated subject",
+        fingerprint_sha256="e" * 64,
+        signature_sha256="f" * 64,
+    )
+    db.add(message)
+    db.flush()
+    db.add(
+        EmailMessageContent(
+            organization_id=test_org.id,
+            message_id=message.id,
+            subject="Unrelated subject",
+            subject_norm="Unrelated subject",
+            from_email="sender@example.com",
+            reply_to_emails=[
+                "ticket+missing@example.com",
+                "ticket+t-reply-b@example.com",
+                "ticket+t-reply-a@example.com",
+            ],
+            to_emails=["reply@example.com"],
+            cc_emails=[],
+            headers_json={},
+            body_text="Reply by token.",
+        )
+    )
+    occurrence = EmailMessageOccurrence(
+        organization_id=test_org.id,
+        mailbox_id=mailbox.id,
+        gmail_message_id="reply-token-message",
+        gmail_thread_id="reply-token-thread",
+        message_id=message.id,
+        state=EmailOccurrenceState.PARSED,
+    )
+    db.add(occurrence)
+    db.commit()
+
+    monkeypatch.setattr(ticketing_service, "_enqueue_mailbox_job", lambda *args, **kwargs: uuid4())
+    ticket_code_selects: list[str] = []
+
+    def capture_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
+        normalized = " ".join(statement.lower().split())
+        if normalized.startswith("select") and "lower(tickets.ticket_code)" in normalized:
+            ticket_code_selects.append(normalized)
+
+    engine = db.get_bind()
+    sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        ticketing_service.process_occurrence_stitch(db, occurrence_id=occurrence.id)
+    finally:
+        sqlalchemy_event.remove(engine, "before_cursor_execute", capture_sql)
+
+    db.refresh(occurrence)
+    assert occurrence.ticket_id == preferred_ticket_id
+    linked = db.query(TicketMessage).filter(TicketMessage.message_id == message.id).one()
+    assert linked.stitch_reason == "reply_token"
+    assert len(ticket_code_selects) == 1
 
 
 def test_store_message_attachment_does_not_embed_inbound_filename_in_storage_key(

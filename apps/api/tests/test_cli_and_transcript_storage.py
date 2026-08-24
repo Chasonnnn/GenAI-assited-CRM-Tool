@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 from botocore.exceptions import ClientError
+from sqlalchemy import event as sqlalchemy_event
 
 from app.db.enums import Role
 from app.db.models import Membership, Organization, OrgInvite, User
@@ -285,6 +286,47 @@ def test_cli_backfill_permissions(monkeypatch, db, _cli_db):
     _cli_db.backfill_permissions.callback(dry_run=False)
     assert acme.id in created
     assert beta.id in created
+
+
+def test_cli_backfill_permissions_dry_run_bulk_loads_existing_permissions(
+    db, _cli_db, _echo_log
+):
+    from app.core.permissions import ROLE_DEFAULTS
+    from app.db.models import RolePermission
+
+    acme = _create_org(db, slug="acme")
+    _create_org(db, slug="beta")
+    existing_permission = next(iter(ROLE_DEFAULTS["admin"]))
+    db.add(
+        RolePermission(
+            organization_id=acme.id,
+            role="admin",
+            permission=existing_permission,
+            is_granted=True,
+        )
+    )
+    db.commit()
+
+    permission_selects: list[str] = []
+
+    def capture_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
+        normalized = " ".join(statement.lower().split())
+        if normalized.startswith("select") and "from role_permissions" in normalized:
+            permission_selects.append(normalized)
+
+    engine = db.get_bind()
+    sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        _cli_db.backfill_permissions.callback(dry_run=True)
+    finally:
+        sqlalchemy_event.remove(engine, "before_cursor_execute", capture_sql)
+
+    expected_per_org = sum(
+        len(permissions) for role, permissions in ROLE_DEFAULTS.items() if role != "developer"
+    )
+    assert len(permission_selects) == 1
+    assert f"  acme: would create {expected_per_org - 1} permissions" in _echo_log
+    assert f"  beta: would create {expected_per_org} permissions" in _echo_log
 
 
 def _create_orphaned_matched_records(db, *, org: Organization, user: User):

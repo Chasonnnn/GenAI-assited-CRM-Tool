@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
+from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import text
 
 
@@ -196,6 +198,75 @@ def test_expired_lease_is_quarantined_for_reconciliation_not_resent(db, test_org
     assert delivery.status == "reconciliation_required"
     assert delivery.attempts[0].outcome == "lease_expired"
     assert db.query(MessageReconciliationCase).filter_by(delivery_id=delivery.id).count() == 1
+
+
+def test_expired_lease_recovery_bulk_loads_attempts_and_cases(db, test_org) -> None:
+    from app.db.models.messaging_delivery import MessageReconciliationCase
+    from app.services import messaging_delivery_service
+
+    consent = _consented_contact(db, test_org)
+    bulk_token = uuid4().hex
+    deliveries = [
+        messaging_delivery_service.materialize_delivery(
+            db,
+            organization_id=test_org.id,
+            contact_id=consent.contact_id,
+            purpose="operational",
+            body=f"Enrollment confirmation {index}",
+            idempotency_key=f"workflow:expired-lease:{bulk_token}:{index}",
+            source_type="workflow",
+            source_id=None,
+            template_version_id=None,
+            media_asset_ids=[],
+            is_enrollment_confirmation=(index == 0),
+        )
+        for index in range(2)
+    ]
+    claimed = messaging_delivery_service.claim_due_deliveries(
+        db,
+        worker_id="expired-bulk-worker",
+        lease_for=timedelta(seconds=30),
+        limit=2,
+    )
+    assert {delivery.id for delivery in claimed} == {delivery.id for delivery in deliveries}
+
+    recovery_selects: list[str] = []
+
+    def capture_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
+        normalized = " ".join(statement.lower().split())
+        if normalized.startswith("select") and any(
+            table in normalized
+            for table in (
+                "from message_deliveries",
+                "from message_delivery_attempts",
+                "from message_reconciliation_cases",
+            )
+        ):
+            recovery_selects.append(normalized)
+
+    recovery_time = max(delivery.lease_expires_at for delivery in claimed) + timedelta(seconds=1)
+    engine = db.get_bind()
+    sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        recovered = messaging_delivery_service.recover_expired_delivery_leases(
+            db,
+            now=recovery_time,
+        )
+    finally:
+        sqlalchemy_event.remove(engine, "before_cursor_execute", capture_sql)
+
+    assert recovered == 2
+    assert len(recovery_selects) == 3
+    for delivery in deliveries:
+        db.refresh(delivery)
+        assert delivery.status == "reconciliation_required"
+        assert delivery.attempts[0].outcome == "lease_expired"
+    assert (
+        db.query(MessageReconciliationCase)
+        .filter(MessageReconciliationCase.delivery_id.in_([delivery.id for delivery in deliveries]))
+        .count()
+        == 2
+    )
 
 
 def test_claim_terminalizes_exhausted_delivery_without_blocking_healthy_rows(

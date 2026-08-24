@@ -1439,6 +1439,23 @@ async def send_system_email_campaign(
         org.id: org
         for org in db.query(Organization).filter(Organization.id.in_(organization_ids)).all()
     }
+    requested_user_ids = {
+        user_id for target in targets for user_id in target["user_ids"]
+    }
+    recipient_rows_by_org: dict[UUID, list[tuple[User, Membership]]] = {}
+    if organization_ids and requested_user_ids:
+        for user, membership in (
+            db.query(User, Membership)
+            .join(Membership, Membership.user_id == User.id)
+            .filter(
+                Membership.organization_id.in_(organization_ids),
+                User.id.in_(requested_user_ids),
+            )
+            .all()
+        ):
+            recipient_rows_by_org.setdefault(membership.organization_id, []).append(
+                (user, membership)
+            )
 
     for target in targets:
         org_id = target["org_id"]
@@ -1454,15 +1471,12 @@ async def send_system_email_campaign(
             )
             continue
 
-        rows = (
-            db.query(User, Membership)
-            .join(Membership, Membership.user_id == User.id)
-            .filter(
-                Membership.organization_id == org_id,
-                User.id.in_(user_ids),
-            )
-            .all()
-        )
+        requested_ids = set(user_ids)
+        rows = [
+            row
+            for row in recipient_rows_by_org.get(org_id, [])
+            if row[0].id in requested_ids
+        ]
         found_ids = {row[0].id for row in rows}
         missing_ids = [str(uid) for uid in user_ids if uid not in found_ids]
         if missing_ids:

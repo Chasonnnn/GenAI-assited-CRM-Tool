@@ -76,11 +76,27 @@ def schedule_google_calendar_sync_jobs(
     watch_jobs_created = 0
     watch_duplicates_skipped = 0
 
+    candidate_idempotency_keys: set[str] = set()
+    for user_id, _org_id, granted_scopes in targets:
+        candidate_idempotency_keys.add(f"google-calendar-sync:{user_id}:{sync_bucket}")
+        candidate_idempotency_keys.add(
+            f"google-calendar-watch-refresh:{user_id}:{watch_bucket}"
+        )
+        if not google_tasks_sync_service.scopes_known_to_exclude_google_tasks(granted_scopes):
+            candidate_idempotency_keys.add(f"google-tasks-sync:{user_id}:{sync_bucket}")
+    existing_idempotency_keys: set[str] = set()
+    if candidate_idempotency_keys:
+        existing_idempotency_keys = {
+            key
+            for (key,) in db.query(Job.idempotency_key)
+            .filter(Job.idempotency_key.in_(candidate_idempotency_keys))
+            .all()
+        }
+
     for user_id, org_id, granted_scopes in targets:
         try:
             idempotency_key = f"google-calendar-sync:{user_id}:{sync_bucket}"
-            existing = db.query(Job).filter(Job.idempotency_key == idempotency_key).first()
-            if existing:
+            if idempotency_key in existing_idempotency_keys:
                 duplicates_skipped += 1
             else:
                 run_at = now + timedelta(seconds=(UUID(user_id).int % 120))
@@ -92,6 +108,7 @@ def schedule_google_calendar_sync_jobs(
                     run_at=run_at,
                     idempotency_key=idempotency_key,
                 )
+                existing_idempotency_keys.add(idempotency_key)
                 jobs_created += 1
         except IntegrityError:
             db.rollback()
@@ -110,10 +127,7 @@ def schedule_google_calendar_sync_jobs(
         else:
             try:
                 task_idempotency_key = f"google-tasks-sync:{user_id}:{sync_bucket}"
-                task_existing = (
-                    db.query(Job).filter(Job.idempotency_key == task_idempotency_key).first()
-                )
-                if task_existing:
+                if task_idempotency_key in existing_idempotency_keys:
                     task_duplicates_skipped += 1
                 else:
                     task_run_at = now + timedelta(seconds=(UUID(user_id).int % 120))
@@ -125,6 +139,7 @@ def schedule_google_calendar_sync_jobs(
                         run_at=task_run_at,
                         idempotency_key=task_idempotency_key,
                     )
+                    existing_idempotency_keys.add(task_idempotency_key)
                     task_jobs_created += 1
             except IntegrityError:
                 db.rollback()
@@ -140,10 +155,7 @@ def schedule_google_calendar_sync_jobs(
 
         try:
             watch_idempotency_key = f"google-calendar-watch-refresh:{user_id}:{watch_bucket}"
-            watch_existing = (
-                db.query(Job).filter(Job.idempotency_key == watch_idempotency_key).first()
-            )
-            if watch_existing:
+            if watch_idempotency_key in existing_idempotency_keys:
                 watch_duplicates_skipped += 1
                 continue
 
@@ -156,6 +168,7 @@ def schedule_google_calendar_sync_jobs(
                 run_at=watch_run_at,
                 idempotency_key=watch_idempotency_key,
             )
+            existing_idempotency_keys.add(watch_idempotency_key)
             watch_jobs_created += 1
         except IntegrityError:
             db.rollback()

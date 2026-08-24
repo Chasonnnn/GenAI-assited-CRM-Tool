@@ -1,6 +1,7 @@
 import uuid
 
 import pytest
+from sqlalchemy import event as sqlalchemy_event
 
 
 @pytest.mark.asyncio
@@ -75,10 +76,23 @@ async def test_internal_google_calendar_sync_schedules_jobs_for_connected_users(
     )
     db.commit()
 
-    response = await client.post(
-        "/internal/scheduled/google-calendar-sync",
-        headers={"X-Internal-Secret": "secret"},
-    )
+    job_existence_selects: list[str] = []
+
+    def capture_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
+        normalized = " ".join(statement.lower().split())
+        if normalized.startswith("select") and "where jobs.idempotency_key" in normalized:
+            job_existence_selects.append(normalized)
+
+    engine = db.get_bind()
+    sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        response = await client.post(
+            "/internal/scheduled/google-calendar-sync",
+            headers={"X-Internal-Secret": "secret"},
+        )
+    finally:
+        sqlalchemy_event.remove(engine, "before_cursor_execute", capture_sql)
+
     assert response.status_code == 200
     data = response.json()
     assert data["connected_users"] == 2
@@ -88,6 +102,7 @@ async def test_internal_google_calendar_sync_schedules_jobs_for_connected_users(
     assert data["watch_duplicates_skipped"] == 0
     assert data["task_jobs_created"] == 2
     assert data["task_duplicates_skipped"] == 0
+    assert len(job_existence_selects) == 1
 
     jobs = db.query(Job).filter(Job.job_type == JobType.GOOGLE_CALENDAR_SYNC.value).all()
     assert len(jobs) == 2

@@ -710,13 +710,34 @@ def recover_expired_delivery_leases(
     if db.get_bind().dialect.name == "postgresql":
         query = query.with_for_update(skip_locked=True)
     rows = list(db.execute(query).scalars())
-    for delivery in rows:
-        attempt = db.execute(
+    if not rows:
+        return 0
+
+    delivery_ids = [delivery.id for delivery in rows]
+    organization_ids = {delivery.organization_id for delivery in rows}
+    attempts_by_key = {
+        (attempt.delivery_id, attempt.attempt_number): attempt
+        for attempt in db.execute(
             select(MessageDeliveryAttempt).where(
-                MessageDeliveryAttempt.delivery_id == delivery.id,
-                MessageDeliveryAttempt.attempt_number == delivery.attempt_count,
+                MessageDeliveryAttempt.organization_id.in_(organization_ids),
+                MessageDeliveryAttempt.delivery_id.in_(delivery_ids),
             )
-        ).scalar_one_or_none()
+        ).scalars()
+    }
+    existing_case_keys = set(
+        db.execute(
+            select(
+                MessageReconciliationCase.organization_id,
+                MessageReconciliationCase.delivery_id,
+            ).where(
+                MessageReconciliationCase.organization_id.in_(organization_ids),
+                MessageReconciliationCase.delivery_id.in_(delivery_ids),
+            )
+        ).all()
+    )
+
+    for delivery in rows:
+        attempt = attempts_by_key.get((delivery.id, delivery.attempt_count))
         if attempt is not None and attempt.outcome == "in_progress":
             attempt.outcome = "lease_expired"
             attempt.error_type = "delivery_lease_expired"
@@ -729,13 +750,8 @@ def recover_expired_delivery_leases(
         delivery.lease_owner = None
         delivery.lease_expires_at = None
         delivery.updated_at = now
-        existing_case = db.execute(
-            select(MessageReconciliationCase.id).where(
-                MessageReconciliationCase.organization_id == delivery.organization_id,
-                MessageReconciliationCase.delivery_id == delivery.id,
-            )
-        ).scalar_one_or_none()
-        if existing_case is None:
+        case_key = (delivery.organization_id, delivery.id)
+        if case_key not in existing_case_keys:
             db.add(
                 MessageReconciliationCase(
                     organization_id=delivery.organization_id,
@@ -745,5 +761,6 @@ def recover_expired_delivery_leases(
                     delivery_id=delivery.id,
                 )
             )
+            existing_case_keys.add(case_key)
     db.commit()
     return len(rows)
