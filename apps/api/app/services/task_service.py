@@ -130,9 +130,9 @@ def create_task(
         )
 
     if emit_events:
-        from app.services import dashboard_events
+        from app.services import dashboard_service
 
-        dashboard_events.push_dashboard_stats(db, org_id)
+        dashboard_service.push_dashboard_stats(db, org_id)
 
     return task
 
@@ -230,9 +230,9 @@ def complete_task(
         db.flush()
 
     if commit and emit_events:
-        from app.services import dashboard_events
+        from app.services import dashboard_service
 
-        dashboard_events.push_dashboard_stats(db, task.organization_id)
+        dashboard_service.push_dashboard_stats(db, task.organization_id)
 
     return task
 
@@ -251,9 +251,9 @@ def uncomplete_task(
     db.refresh(task)
     _sync_task_to_google_best_effort(db, task)
     if emit_events:
-        from app.services import dashboard_events
+        from app.services import dashboard_service
 
-        dashboard_events.push_dashboard_stats(db, task.organization_id)
+        dashboard_service.push_dashboard_stats(db, task.organization_id)
     return task
 
 
@@ -271,7 +271,7 @@ def bulk_complete_tasks(
 
     from app.core.deps import is_owner_or_assignee_or_admin
     from app.core.surrogate_access import check_surrogate_access
-    from app.services import dashboard_events, surrogate_service
+    from app.services import dashboard_service, surrogate_service
 
     results: dict = {"completed": 0, "failed": []}
     completed_tasks_to_sync: list[Task] = []
@@ -328,7 +328,7 @@ def bulk_complete_tasks(
     db.commit()
     for completed_task in completed_tasks_to_sync:
         _sync_task_to_google_best_effort(db, completed_task)
-    dashboard_events.push_dashboard_stats(db, session.org_id)
+    dashboard_service.push_dashboard_stats(db, session.org_id)
 
     return BulkCompleteResponse(completed=results["completed"], failed=results["failed"])
 
@@ -356,9 +356,9 @@ def delete_task(
     db.delete(task)
     db.commit()
     if emit_events:
-        from app.services import dashboard_events
+        from app.services import dashboard_service
 
-        dashboard_events.push_dashboard_stats(db, task.organization_id)
+        dashboard_service.push_dashboard_stats(db, task.organization_id)
 
 
 def validate_task_owner(

@@ -53,7 +53,7 @@ def test_task_service_bulk_complete_emits_dashboard(db, test_org, test_user, mon
     from app.db.enums import TaskType
     from app.db.models import Task
     from app.schemas.auth import UserSession
-    from app.services import dashboard_events, task_service
+    from app.services import dashboard_service, task_service
 
     task_1 = Task(
         organization_id=test_org.id,
@@ -87,7 +87,7 @@ def test_task_service_bulk_complete_emits_dashboard(db, test_org, test_user, mon
     def fake_push_stats(_db, _org_id):
         calls["count"] += 1
 
-    monkeypatch.setattr(dashboard_events, "push_dashboard_stats", fake_push_stats)
+    monkeypatch.setattr(dashboard_service, "push_dashboard_stats", fake_push_stats)
 
     result = task_service.bulk_complete_tasks(db, session, [task_1.id, task_2.id])
     assert result.completed == 2
@@ -162,7 +162,7 @@ def test_task_service_list_triggers_google_tasks_pull_for_user(
 
 def test_surrogate_change_status_emits_dashboard(db, test_org, test_user, monkeypatch):
     from app.schemas.surrogate import SurrogateCreate
-    from app.services import dashboard_events, pipeline_service, surrogate_service
+    from app.services import dashboard_service, pipeline_service, surrogate_service
 
     surrogate = surrogate_service.create_surrogate(
         db,
@@ -189,7 +189,7 @@ def test_surrogate_change_status_emits_dashboard(db, test_org, test_user, monkey
     def fake_push_stats(_db, _org_id):
         calls["count"] += 1
 
-    monkeypatch.setattr(dashboard_events, "push_dashboard_stats", fake_push_stats)
+    monkeypatch.setattr(dashboard_service, "push_dashboard_stats", fake_push_stats)
 
     result = surrogate_service.change_status(
         db=db,

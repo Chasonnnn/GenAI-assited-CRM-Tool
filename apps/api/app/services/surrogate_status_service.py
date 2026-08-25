@@ -519,9 +519,9 @@ def change_status(
                 trigger_workflows=trigger_workflows,
             )
             if emit_events:
-                from app.services import dashboard_events
+                from app.services import dashboard_service
 
-                dashboard_events.push_dashboard_stats(db, surrogate.organization_id)
+                dashboard_service.push_dashboard_stats(db, surrogate.organization_id)
             return result
 
     if (is_backdated or is_regression) and not reason:
@@ -555,9 +555,9 @@ def change_status(
                 trigger_workflows=trigger_workflows,
             )
             if emit_events:
-                from app.services import dashboard_events
+                from app.services import dashboard_service
 
-                dashboard_events.push_dashboard_stats(db, surrogate.organization_id)
+                dashboard_service.push_dashboard_stats(db, surrogate.organization_id)
             return result
 
         request = StatusChangeRequest(
@@ -621,9 +621,9 @@ def change_status(
             message="Regression requires admin approval. Request submitted.",
         )
         if emit_events:
-            from app.services import dashboard_events
+            from app.services import dashboard_service
 
-            dashboard_events.push_dashboard_stats(db, surrogate.organization_id)
+            dashboard_service.push_dashboard_stats(db, surrogate.organization_id)
         return result
 
     result = apply_status_change(
@@ -650,9 +650,9 @@ def change_status(
         trigger_workflows=trigger_workflows,
     )
     if emit_events:
-        from app.services import dashboard_events
+        from app.services import dashboard_service
 
-        dashboard_events.push_dashboard_stats(db, surrogate.organization_id)
+        dashboard_service.push_dashboard_stats(db, surrogate.organization_id)
     return result
 
 
