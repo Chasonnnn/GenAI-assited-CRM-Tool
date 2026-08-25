@@ -256,6 +256,7 @@ async def test_org_workflow_queues_resend_outbox_without_provider_io(
     from app.db.enums import EmailDeliveryStatus, EmailStatus, JobType
     from app.db.models import EmailDelivery, EmailLog, EmailTemplate, Job, ResendSettings
     from app.services import resend_transport
+    from app.services.email_template_snapshot import build_snapshot
     from app.worker import process_workflow_email
 
     template = EmailTemplate(
@@ -293,6 +294,11 @@ async def test_org_workflow_queues_resend_outbox_without_provider_io(
         job_type=JobType.WORKFLOW_EMAIL.value,
         payload={
             "template_id": str(template.id),
+            "email_template_snapshot": build_snapshot(
+                template,
+                effective_from_email="Care Team <care@example.com>",
+                include_scope=True,
+            ),
             "recipient_email": "recipient@example.com",
             "variables": {"full_name": "Jordan Smith"},
             "workflow_scope": "org",
@@ -678,6 +684,7 @@ async def test_personal_workflow_stays_on_user_gmail(
     from app.db.enums import JobType
     from app.db.models import EmailDelivery, EmailLog, EmailTemplate, Job, UserIntegration
     from app.services import gmail_service
+    from app.services.email_template_snapshot import build_snapshot
     from app.worker import process_workflow_email
 
     template = EmailTemplate(
@@ -713,6 +720,11 @@ async def test_personal_workflow_stays_on_user_gmail(
         job_type=JobType.WORKFLOW_EMAIL.value,
         payload={
             "template_id": str(template.id),
+            "email_template_snapshot": build_snapshot(
+                template,
+                effective_from_email="workflow-owner@example.com",
+                include_scope=True,
+            ),
             "recipient_email": "recipient@example.com",
             "variables": {},
             "workflow_scope": "personal",
