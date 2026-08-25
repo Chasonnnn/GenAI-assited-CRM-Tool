@@ -257,7 +257,7 @@ def test_retention_preview_includes_ai_tables(db, test_org, test_user):
         organization_id=test_org.id,
         user_id=test_user.id,
         conversation_id=conversation.id,
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         prompt_tokens=1,
         completion_tokens=1,
         total_tokens=2,

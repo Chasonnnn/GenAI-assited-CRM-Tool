@@ -34,7 +34,7 @@ async def test_global_chat_performance_requires_view_reports(db, test_org, test_
         organization_id=test_org.id,
         is_enabled=True,
         provider="gemini",
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         current_version=1,
         consent_accepted_at=datetime.now(UTC),
         consent_accepted_by=test_user.id,
@@ -64,7 +64,7 @@ async def test_global_chat_performance_requires_view_reports(db, test_org, test_
                 prompt_tokens=1,
                 completion_tokens=1,
                 total_tokens=2,
-                model="gemini-3-flash-preview",
+                model="gemini-3.7-flash",
             )
 
     monkeypatch.setattr(

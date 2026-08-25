@@ -30,7 +30,7 @@ def test_ai_workflow_prompt_anonymizes_users(db, test_org, test_user, monkeypatc
         organization_id=test_org.id,
         is_enabled=True,
         provider="gemini",
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         current_version=1,
         anonymize_pii=True,
         consent_accepted_at=datetime.now(UTC),
@@ -60,7 +60,7 @@ def test_ai_workflow_prompt_anonymizes_users(db, test_org, test_user, monkeypatc
                 prompt_tokens=10,
                 completion_tokens=5,
                 total_tokens=15,
-                model="gemini-3-flash-preview",
+                model="gemini-3.7-flash",
             )
 
     monkeypatch.setattr(
@@ -88,7 +88,7 @@ def test_ai_workflow_prompt_filters_templates_by_scope(db, test_org, test_user, 
         organization_id=test_org.id,
         is_enabled=True,
         provider="gemini",
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         current_version=1,
         anonymize_pii=False,
         consent_accepted_at=datetime.now(UTC),
@@ -175,7 +175,7 @@ def test_ai_workflow_prompt_filters_templates_by_scope(db, test_org, test_user, 
                 prompt_tokens=10,
                 completion_tokens=5,
                 total_tokens=15,
-                model="gemini-3-flash-preview",
+                model="gemini-3.7-flash",
             )
 
     monkeypatch.setattr(

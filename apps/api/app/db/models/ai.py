@@ -53,8 +53,8 @@ class AISettings(Base):
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     model: Mapped[str | None] = mapped_column(
         String(50),
-        default="gemini-3-flash-preview",
-        server_default=text("'gemini-3-flash-preview'"),
+        default="gemini-3.7-flash",
+        server_default=text("'gemini-3.7-flash'"),
     )
     # Vertex AI (WIF) configuration
     vertex_project_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

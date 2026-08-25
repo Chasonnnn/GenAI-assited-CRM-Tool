@@ -15,7 +15,7 @@ def _enable_ai(db, org_id, user_id) -> AISettings:
         organization_id=org_id,
         is_enabled=True,
         provider="gemini",
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         current_version=1,
         anonymize_pii=False,
         consent_accepted_at=datetime.now(UTC),
@@ -44,7 +44,7 @@ def test_generate_email_template_does_not_require_unsubscribe(db, test_org, test
                 prompt_tokens=10,
                 completion_tokens=5,
                 total_tokens=15,
-                model="gemini-3-flash-preview",
+                model="gemini-3.7-flash",
             )
 
     monkeypatch.setattr(
@@ -83,7 +83,7 @@ def test_generate_email_template_errors_on_unknown_variables(db, test_org, test_
                 prompt_tokens=10,
                 completion_tokens=5,
                 total_tokens=15,
-                model="gemini-3-flash-preview",
+                model="gemini-3.7-flash",
             )
 
     monkeypatch.setattr(
@@ -124,7 +124,7 @@ def test_generate_email_template_extracts_variables_from_body(db, test_org, test
                 prompt_tokens=10,
                 completion_tokens=5,
                 total_tokens=15,
-                model="gemini-3-flash-preview",
+                model="gemini-3.7-flash",
             )
 
     monkeypatch.setattr(

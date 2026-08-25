@@ -61,12 +61,12 @@ async def test_ai_settings_supports_vertex_wif_config(authed_client: AsyncClient
 
     payload = {
         "provider": "vertex_wif",
-        "model": "gemini-3-flash-preview",
+        "model": "gemini-3.7-flash",
         "is_enabled": False,
         "expected_version": current_version,
         "vertex_wif": {
             "project_id": "demo-project",
-            "location": "us-central1",
+            "location": "us",
             "service_account_email": "vertex-sa@demo-project.iam.gserviceaccount.com",
             "audience": "//iam.googleapis.com/projects/123456789/locations/global/workloadIdentityPools/pool/providers/provider",
         },
@@ -94,11 +94,11 @@ async def test_ai_settings_supports_vertex_api_key_config(authed_client: AsyncCl
 
     payload = {
         "provider": "vertex_api_key",
-        "model": "gemini-3-flash-preview",
+        "model": "gemini-3.7-flash",
         "is_enabled": False,
         "expected_version": current_version,
         "api_key": "vertex-key",
-        "vertex_api_key": {"project_id": "demo-project", "location": "us-central1"},
+        "vertex_api_key": {"project_id": "demo-project", "location": "us"},
     }
 
     response = await authed_client.patch("/ai/settings", json=payload)
@@ -126,9 +126,35 @@ async def test_ai_settings_rejects_unsupported_gemini_models(authed_client: Asyn
         },
     )
     assert response.status_code == 400
-    assert (
-        response.json()["detail"]
-        == "Only gemini-3-flash-preview or gemini-3-pro-preview is supported for this provider."
+    assert response.json()["detail"] == "Only gemini-3.7-flash is supported for this provider."
+
+
+@pytest.mark.asyncio
+async def test_ai_settings_rejects_unsupported_gemini_vertex_location(
+    authed_client: AsyncClient,
+):
+    settings_response = await authed_client.get("/ai/settings")
+    current_version = settings_response.json()["current_version"]
+
+    response = await authed_client.patch(
+        "/ai/settings",
+        json={
+            "provider": "vertex_wif",
+            "model": "gemini-3.7-flash",
+            "is_enabled": False,
+            "expected_version": current_version,
+            "vertex_wif": {
+                "project_id": "demo-project",
+                "location": "us-central1",
+                "service_account_email": "vertex-sa@demo-project.iam.gserviceaccount.com",
+                "audience": "//iam.googleapis.com/projects/123/locations/global/workloadIdentityPools/pool/providers/provider",
+            },
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Vertex AI location must be global, us, or eu for gemini-3.7-flash."
     )
 
 
@@ -173,7 +199,7 @@ async def test_ai_chat_returns_approval_id_per_action(
         organization_id=test_auth.org.id,
         is_enabled=False,  # Avoid consent gating in router
         provider="gemini",
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         current_version=1,
     )
     db.add(ai_settings)
@@ -186,7 +212,7 @@ async def test_ai_chat_returns_approval_id_per_action(
                 prompt_tokens=10,
                 completion_tokens=5,
                 total_tokens=15,
-                model="gemini-3-flash-preview",
+                model="gemini-3.7-flash",
             )
 
     monkeypatch.setattr(
@@ -246,7 +272,7 @@ async def test_ai_chat_starts_new_conversation_when_conversation_id_not_provided
         organization_id=test_auth.org.id,
         is_enabled=False,
         provider="gemini",
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         current_version=1,
     )
     db.add(ai_settings)
@@ -259,7 +285,7 @@ async def test_ai_chat_starts_new_conversation_when_conversation_id_not_provided
                 prompt_tokens=1,
                 completion_tokens=1,
                 total_tokens=2,
-                model="gemini-3-flash-preview",
+                model="gemini-3.7-flash",
             )
 
     monkeypatch.setattr(
@@ -333,7 +359,7 @@ async def test_ai_chat_reuses_conversation_when_conversation_id_is_provided(
         organization_id=test_auth.org.id,
         is_enabled=False,
         provider="gemini",
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         current_version=1,
     )
     db.add(ai_settings)
@@ -346,7 +372,7 @@ async def test_ai_chat_reuses_conversation_when_conversation_id_is_provided(
                 prompt_tokens=1,
                 completion_tokens=1,
                 total_tokens=2,
-                model="gemini-3-flash-preview",
+                model="gemini-3.7-flash",
             )
 
     monkeypatch.setattr(
@@ -414,7 +440,7 @@ async def test_ai_chat_anonymizes_case_messages(
         organization_id=test_auth.org.id,
         is_enabled=False,
         provider="gemini",
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         current_version=1,
         anonymize_pii=True,
     )
@@ -431,7 +457,7 @@ async def test_ai_chat_anonymizes_case_messages(
                 prompt_tokens=1,
                 completion_tokens=1,
                 total_tokens=2,
-                model="gemini-3-flash-preview",
+                model="gemini-3.7-flash",
             )
 
     monkeypatch.setattr(
@@ -478,7 +504,7 @@ async def test_ai_chat_creates_entity_summary(
         organization_id=test_auth.org.id,
         is_enabled=False,
         provider="gemini",
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         current_version=1,
     )
     db.add(ai_settings)
@@ -491,7 +517,7 @@ async def test_ai_chat_creates_entity_summary(
                 prompt_tokens=1,
                 completion_tokens=1,
                 total_tokens=2,
-                model="gemini-3-flash-preview",
+                model="gemini-3.7-flash",
             )
 
     monkeypatch.setattr(
