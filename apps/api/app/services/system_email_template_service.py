@@ -12,44 +12,6 @@ from app.db.models import EmailTemplate, PlatformSystemEmailTemplate
 
 ORG_INVITE_SYSTEM_KEY = "org_invite"
 
-_LEGACY_ORG_INVITE_SUBJECT = "Invitation to join {{org_name}} as {{role_title}}"
-_LEGACY_ORG_INVITE_BODY = """
-<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background-color: #f4f4f5; margin: 0; padding: 20px;">
-  <div style="max-width: 560px; margin: 0 auto; background: white;
-              border-radius: 12px; padding: 40px;">
-    <h1 style="font-size: 24px; font-weight: 600; color: #18181b; margin: 0 0 6px 0;">
-      You're invited to join
-    </h1>
-    <div style="font-size: 20px; font-weight: 600; color: #18181b; margin: 0 0 24px 0;">
-      {{org_name}}
-    </div>
-    <p style="font-size: 16px; color: #3f3f46; line-height: 1.6; margin: 0 0 16px 0;">
-      You've been invited to join
-    </p>
-    <p style="font-size: 16px; color: #3f3f46; line-height: 1.6; margin: 0 0 16px 0;">
-      as <strong>{{role_title}}</strong>.
-    </p>
-    <p style="font-size: 16px; color: #3f3f46; line-height: 1.6; margin: 0 0 32px 0;">
-      Click the button below to accept the invitation and set up your account.
-    </p>
-    <a href="{{invite_url}}" target="_blank"
-       style="display: inline-block; background-color: #18181b; color: white;
-              text-decoration: none; font-weight: 500; font-size: 15px;
-              padding: 12px 24px; border-radius: 8px;">
-      Accept Invitation
-    </a>
-    <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #e4e4e7;
-                color: #666; font-size: 13px;">
-      {{expires_block}}
-      <p style="color: #a1a1aa; font-size: 13px; margin: 8px 0 0 0;">
-        If you didn't expect this invitation, you can safely ignore this email.
-      </p>
-    </div>
-  </div>
-</div>
-""".strip()
-
 _ORG_INVITE_BODY_V1 = """
 <div style="background-color: #f5f5f7; padding: 32px 16px; margin: 0;">
   <span style="display:none; max-height:0; max-width:0; color:transparent; height:0; width:0;">

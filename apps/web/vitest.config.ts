@@ -10,13 +10,11 @@ export default defineConfig({
         alias: {
             '@': path.resolve(__dirname, './'),
         },
-        // Default: unit tests with global mocks
+        // Shared browser polyfills and cleanup.
         setupFiles: ['./tests/setup.ts'],
-        // Exclude integration tests from default run
         exclude: [
             '**/node_modules/**',
             '**/dist/**',
-            '**/integration/**',
         ],
     },
 })

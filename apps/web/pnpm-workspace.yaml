@@ -40,13 +40,12 @@ peerDependencyRules:
 onlyBuiltDependencies:
   - esbuild
   - lightningcss
-  - msw
   - sharp
 
 allowBuilds:
   esbuild: true
   lightningcss: true
-  msw: true
+  msw: false
   sharp: true
 
 minimumReleaseAgeExclude:

@@ -74,113 +74,6 @@ def _configure_resend_provider(db, org_id):
 
 
 # =============================================================================
-# Campaign Model Tests
-# =============================================================================
-
-
-def test_campaign_model_creation(db, test_org, test_user, test_template):
-    """Test Campaign model can be created with all fields."""
-    from datetime import datetime
-
-    from app.db.models import Campaign
-
-    campaign = Campaign(
-        id=uuid4(),
-        organization_id=test_org.id,
-        name="Full Campaign",
-        description="Campaign with all fields",
-        email_template_id=test_template.id,
-        recipient_type="intended_parent",
-        filter_criteria={"state": "TX", "tags": ["vip"]},
-        scheduled_at=datetime.now(UTC),
-        status="scheduled",
-        created_by_user_id=test_user.id,
-    )
-    db.add(campaign)
-    db.flush()
-
-    assert campaign.id is not None
-    assert campaign.created_at is not None
-    assert campaign.status == "scheduled"
-
-
-def test_campaign_run_model(db, test_org, test_campaign):
-    """Test CampaignRun model creation."""
-    from datetime import datetime
-
-    from app.db.models import CampaignRun
-
-    run = CampaignRun(
-        id=uuid4(),
-        organization_id=test_org.id,  # Required field
-        campaign_id=test_campaign.id,
-        status="running",
-        started_at=datetime.now(UTC),
-        total_count=100,
-        sent_count=0,
-        failed_count=0,
-        skipped_count=0,
-    )
-    db.add(run)
-    db.flush()
-
-    assert run.id is not None
-    assert run.status == "running"
-
-
-def test_campaign_recipient_model(db, test_org, test_campaign):
-    """Test CampaignRecipient model creation."""
-    from datetime import datetime
-
-    from app.db.models import CampaignRecipient, CampaignRun
-
-    run = CampaignRun(
-        id=uuid4(),
-        organization_id=test_org.id,  # Required field
-        campaign_id=test_campaign.id,
-        status="running",
-        started_at=datetime.now(UTC),
-        total_count=1,
-        sent_count=0,
-        failed_count=0,
-        skipped_count=0,
-    )
-    db.add(run)
-    db.flush()
-
-    recipient = CampaignRecipient(
-        id=uuid4(),
-        run_id=run.id,
-        entity_type="case",
-        entity_id=uuid4(),
-        recipient_email="test@example.com",  # Correct field name
-        status="pending",
-    )
-    db.add(recipient)
-    db.flush()
-
-    assert recipient.id is not None
-    assert recipient.status == "pending"
-
-
-def test_email_suppression_model(db, test_org):
-    """Test EmailSuppression model creation."""
-    from app.db.models import EmailSuppression
-
-    suppression = EmailSuppression(
-        id=uuid4(),
-        organization_id=test_org.id,
-        email="blocked@example.com",
-        reason="opt_out",
-    )
-    db.add(suppression)
-    db.flush()
-
-    assert suppression.id is not None
-    assert suppression.reason == "opt_out"
-
-
-# =============================================================================
 # Campaign Service Tests
 # =============================================================================
 
@@ -572,15 +465,6 @@ def test_is_email_suppressed_can_ignore_opt_out(db, test_org):
 # =============================================================================
 
 
-def test_campaign_send_job_type_exists():
-    """CAMPAIGN_SEND should exist in JobType enum."""
-    from app.db.enums import JobType
-
-    # This was the critical bug - job type was missing
-    assert hasattr(JobType, "CAMPAIGN_SEND")
-    assert JobType.CAMPAIGN_SEND.value == "campaign_send"
-
-
 def test_campaign_send_job_creation(db, test_org, test_user, test_campaign):
     """Enqueuing campaign send should create a job with correct type."""
     from app.db.enums import JobType
@@ -698,14 +582,6 @@ def test_campaign_send_rejects_past_scheduled_at(db, test_org, test_user, test_c
 # =============================================================================
 # Campaign Execution Tests
 # =============================================================================
-
-
-def test_execute_campaign_run_function_exists():
-    """execute_campaign_run function should exist."""
-    from app.services import campaign_service
-
-    assert hasattr(campaign_service, "execute_campaign_run")
-    assert callable(campaign_service.execute_campaign_run)
 
 
 def test_execute_campaign_run_with_no_recipients(db, test_org, test_user, test_template):

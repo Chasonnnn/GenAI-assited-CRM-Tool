@@ -1,6 +1,6 @@
 import React from 'react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { fireEvent, render as renderWithTestingLibrary, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest'
+import { act, fireEvent, render as renderWithTestingLibrary, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import PublicIntakeFormClient from '../app/intake/[slug]/page.client'
@@ -117,6 +117,10 @@ describe('Shared Intake Public Page', () => {
             surrogate_id: null,
             intake_lead_id: 'lead-1',
         })
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
     })
 
     it('loads shared intake schema without probing a brand-new draft session', async () => {
@@ -597,18 +601,23 @@ describe('Shared Intake Public Page', () => {
         render(<PublicIntakeFormClient slug="event-abc" />)
         await screen.findByRole('heading', { name: 'Event Intake Form' })
 
-        fireEvent.change(screen.getByLabelText(/full name/i), {
-            target: { value: 'Resume Person' },
-        })
-        fireEvent.change(screen.getByLabelText(/dob/i), {
-            target: { value: '1992-08-09' },
-        })
-        fireEvent.change(screen.getByLabelText(/email/i), {
-            target: { value: 'resume@example.com' },
+        vi.useFakeTimers()
+
+        await act(async () => {
+            fireEvent.change(screen.getByLabelText(/full name/i), {
+                target: { value: 'Resume Person' },
+            })
+            fireEvent.change(screen.getByLabelText(/dob/i), {
+                target: { value: '1992-08-09' },
+            })
+            fireEvent.change(screen.getByLabelText(/email/i), {
+                target: { value: 'resume@example.com' },
+            })
+            await vi.advanceTimersByTimeAsync(700)
         })
 
         expect(
-            await screen.findByRole('button', { name: /^continue previous application$/i }),
+            screen.getByRole('button', { name: /^continue previous application$/i }),
         ).toBeInTheDocument()
         fireEvent.click(screen.getByRole('button', { name: /start new/i }))
 
@@ -616,9 +625,12 @@ describe('Shared Intake Public Page', () => {
             target: { value: 'Resume Person ' },
         })
 
-        await new Promise((resolve) => setTimeout(resolve, 900))
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(900)
+        })
         expect(
             screen.queryByRole('button', { name: /^continue previous application$/i }),
         ).not.toBeInTheDocument()
+        vi.useRealTimers()
     })
 })

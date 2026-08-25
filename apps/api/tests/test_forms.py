@@ -110,15 +110,6 @@ async def _create_published_form_and_shared_link(*, authed_client, name: str, sc
     return form_id, link["id"], link["slug"]
 
 
-async def _submit_shared_intake(*, authed_client, slug: str, answers: dict) -> str:
-    submission_res = await authed_client.post(
-        f"/forms/public/intake/{slug}/submit",
-        data={"answers": json.dumps(answers)},
-    )
-    assert submission_res.status_code == 200
-    return submission_res.json()["id"]
-
-
 def _create_auto_match_workflow(*, db, test_org, test_user, form_id: str):
     workflow = AutomationWorkflow(
         id=uuid.uuid4(),

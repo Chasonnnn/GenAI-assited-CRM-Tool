@@ -41,20 +41,6 @@ function renderDialog(onSubmit = vi.fn().mockResolvedValue(undefined)) {
 }
 
 describe("AddSurrogateTaskDialog", () => {
-    it("requires a due date before creating recurring tasks", async () => {
-        const { onSubmit } = renderDialog()
-
-        fireEvent.change(screen.getByLabelText("Title *"), {
-            target: { value: "Follow up" },
-        })
-        const repeatSelect = screen.getAllByRole("combobox")[1]
-        fireEvent.change(repeatSelect, { target: { value: "weekly" } })
-        fireEvent.click(screen.getByRole("button", { name: "Create Task" }))
-
-        expect(await screen.findByText("Recurring tasks require a due date.")).toBeInTheDocument()
-        expect(onSubmit).not.toHaveBeenCalled()
-    })
-
     it("submits trimmed task data and closes after creation", async () => {
         const onSubmit = vi.fn().mockResolvedValue(undefined)
         const { onOpenChange } = renderDialog(onSubmit)

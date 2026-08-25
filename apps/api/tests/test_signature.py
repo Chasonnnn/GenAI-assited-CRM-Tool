@@ -4,7 +4,6 @@ from io import BytesIO
 
 import pytest
 from httpx import AsyncClient
-from PIL import Image
 
 
 @pytest.mark.asyncio
@@ -159,15 +158,6 @@ async def test_signature_phone_validation(authed_client: AsyncClient):
 # =============================================================================
 # Signature Photo Upload/Delete Tests
 # =============================================================================
-
-
-def create_test_image(size=(100, 100), format="PNG") -> BytesIO:
-    """Create a test image file."""
-    img = Image.new("RGB", size, color="blue")
-    buffer = BytesIO()
-    img.save(buffer, format=format)
-    buffer.seek(0)
-    return buffer
 
 
 @pytest.mark.asyncio

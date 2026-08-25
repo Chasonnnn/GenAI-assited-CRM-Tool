@@ -88,6 +88,7 @@ describe("SurrogatesFloatingScrollbar", () => {
     })
 
     afterEach(() => {
+        vi.useRealTimers()
         vi.restoreAllMocks()
     })
 
@@ -141,23 +142,22 @@ describe("SurrogatesFloatingScrollbar", () => {
     })
 
     it("hides after idle with fade-out animation", async () => {
+        vi.useFakeTimers()
         renderSubject()
         const tableContainer = screen.getByTestId("table-container")
         const scrollHost = screen.getByTestId("scroll-host")
         setScrollableMetrics(tableContainer, { clientWidth: 500, scrollWidth: 1200, top: 760, height: 280 })
 
-        await waitFor(() => {
+        act(() => {
             fireEvent.scroll(scrollHost)
-            expect(screen.getByTestId("surrogates-floating-scrollbar")).toBeInTheDocument()
         })
+        expect(screen.getByTestId("surrogates-floating-scrollbar")).toBeInTheDocument()
 
         await act(async () => {
-            await new Promise((resolve) => window.setTimeout(resolve, 1800))
+            await vi.advanceTimersByTimeAsync(1_820)
         })
 
-        await waitFor(() => {
-            expect(screen.queryByTestId("surrogates-floating-scrollbar")).not.toBeInTheDocument()
-        })
+        expect(screen.queryByTestId("surrogates-floating-scrollbar")).not.toBeInTheDocument()
     })
 
     it("does not show when there is no horizontal overflow", async () => {

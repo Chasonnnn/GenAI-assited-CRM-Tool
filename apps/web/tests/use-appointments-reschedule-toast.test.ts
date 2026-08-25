@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@tanstack/react-query")>()
+    return { ...actual, useMutation: vi.fn(), useQueryClient: vi.fn() }
+})
+
 import { ApiError } from '@/lib/api'
 import { useRescheduleAppointment } from '@/lib/hooks/use-appointments'
 

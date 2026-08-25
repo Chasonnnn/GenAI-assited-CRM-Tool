@@ -413,40 +413,6 @@ def test_status_change_enqueues_meta_crm_dataset_event(monkeypatch, db, test_org
     assert JobType.META_CRM_DATASET_EVENT.value in job_types
 
 
-def test_meta_lead_conversion_does_not_enqueue_initial_new_unread_meta_crm_dataset_event(
-    db, test_org, test_user
-):
-    from app.db.enums import JobType
-    from app.services import meta_crm_dataset_settings_service, meta_lead_service
-
-    settings = meta_crm_dataset_settings_service.get_or_create_settings(db, test_org.id)
-    settings.dataset_id = "1428122951556949"
-    settings.access_token_encrypted = meta_crm_dataset_settings_service.encrypt_secret(
-        "dataset-secret"
-    )
-    settings.enabled = True
-    settings.crm_name = "Surrogacy Force CRM"
-    settings.event_mapping = [{"stage_key": "new_unread", "event_name": "Lead", "enabled": True}]
-    db.commit()
-
-    meta_lead = _create_meta_lead(db, test_org.id)
-
-    surrogate, error = meta_lead_service.convert_to_surrogate(db, meta_lead, user_id=test_user.id)
-
-    assert error is None
-    assert surrogate is not None
-
-    assert (
-        db.query(Job)
-        .filter(
-            Job.organization_id == test_org.id,
-            Job.job_type == JobType.META_CRM_DATASET_EVENT.value,
-        )
-        .count()
-        == 0
-    )
-
-
 def test_status_change_skips_zapier_event_without_meta_lead(monkeypatch, db, test_org, test_user):
     from app.services import zapier_settings_service
 

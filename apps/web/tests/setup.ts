@@ -4,28 +4,46 @@ import { cleanup } from '@testing-library/react'
 import * as matchers from '@testing-library/jest-dom/matchers'
 import '@testing-library/jest-dom'
 
-// Mock React Query
-vi.mock('@tanstack/react-query', () => ({
-    useQuery: vi.fn(() => ({
-        data: null,
-        isLoading: false,
-        error: null,
-        refetch: vi.fn(),
-    })),
-    useMutation: vi.fn(() => ({
-        mutateAsync: vi.fn(),
-        isPending: false,
-        error: null,
-    })),
-    useQueryClient: vi.fn(() => ({
-        invalidateQueries: vi.fn(),
-        setQueryData: vi.fn(),
-        getQueryData: vi.fn(),
-        removeQueries: vi.fn(),
-    })),
-    QueryClient: vi.fn(() => ({})),
-    QueryClientProvider: ({ children }: { children: ReactNode }) => children,
-}))
+vi.mock('@testing-library/react', async (importOriginal) => {
+    const testingLibrary = await importOriginal<typeof import('@testing-library/react')>()
+    const React = await import('react')
+    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+
+    function createWrapper(OuterWrapper?: React.ComponentType<{ children: React.ReactNode }>) {
+        const queryClient = new QueryClient({
+            defaultOptions: {
+                queries: { retry: false, gcTime: Infinity },
+                mutations: { retry: false },
+            },
+        })
+
+        return function TestQueryClientWrapper({ children }: { children: React.ReactNode }) {
+            const content = OuterWrapper
+                ? React.createElement(OuterWrapper, null, children)
+                : children
+
+            return React.createElement(QueryClientProvider, { client: queryClient }, content)
+        }
+    }
+
+    return {
+        ...testingLibrary,
+        render: (
+            ui: React.ReactNode,
+            options: Parameters<typeof testingLibrary.render>[1] = {},
+        ) => testingLibrary.render(ui, {
+            ...options,
+            wrapper: createWrapper(options.wrapper),
+        }),
+        renderHook: (
+            callback: Parameters<typeof testingLibrary.renderHook>[0],
+            options: Parameters<typeof testingLibrary.renderHook>[1] = {},
+        ) => testingLibrary.renderHook(callback, {
+            ...options,
+            wrapper: createWrapper(options.wrapper),
+        }),
+    }
+})
 
 vi.mock('@/lib/context/ai-context', () => ({
     AIContextProvider: ({ children }: { children: ReactNode }) => children,

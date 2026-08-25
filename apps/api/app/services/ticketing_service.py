@@ -4112,37 +4112,3 @@ def record_surrogate_outbound_gmail_send(
     db.commit()
     db.refresh(ticket)
     return ticket.id
-
-
-# =============================================================================
-# Compatibility wrapper for surrogate send-email endpoint
-# =============================================================================
-
-
-def compose_surrogate_template_email(
-    db: Session,
-    *,
-    org_id: UUID,
-    actor_user_id: UUID,
-    surrogate_id: UUID,
-    to_email: str,
-    subject: str,
-    body_html: str,
-    idempotency_key: str | None,
-) -> dict:
-    """Route legacy surrogate send-email flow through ticket compose."""
-    body_text = re.sub(r"<[^>]+>", " ", body_html or "")
-    body_text = " ".join(body_text.split()) or "Message"
-    return compose_ticket(
-        db,
-        org_id=org_id,
-        actor_user_id=actor_user_id,
-        to_emails=[to_email],
-        cc_emails=[],
-        subject=subject,
-        body_text=body_text,
-        body_html=body_html,
-        surrogate_id=surrogate_id,
-        queue_id=None,
-        idempotency_key=idempotency_key,
-    )
