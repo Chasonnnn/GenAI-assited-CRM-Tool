@@ -432,18 +432,24 @@ const AI_PROVIDERS = [
     {
         value: "gemini",
         label: "Google Gemini",
-        models: ["gemini-3-flash-preview", "gemini-3-pro-preview"],
+        models: ["gemini-3.7-flash"],
     },
     {
         value: "vertex_api_key",
         label: "Vertex AI (API Key)",
-        models: ["gemini-3-flash-preview", "gemini-3-pro-preview"],
+        models: ["gemini-3.7-flash"],
     },
     {
         value: "vertex_wif",
         label: "Vertex AI (WIF)",
-        models: ["gemini-3-flash-preview", "gemini-3-pro-preview"],
+        models: ["gemini-3.7-flash"],
     },
+] as const
+
+const VERTEX_LOCATIONS = [
+    { value: "global", label: "Global" },
+    { value: "us", label: "United States" },
+    { value: "eu", label: "European Union" },
 ] as const
 
 type AiProvider = (typeof AI_PROVIDERS)[number]["value"]
@@ -816,7 +822,7 @@ function AIConfigurationSectionContent({
         vertexLocation:
             aiSettings?.vertex_wif?.location ||
             aiSettings?.vertex_api_key?.location ||
-            "us-central1",
+            "us",
         vertexAudience: aiSettings?.vertex_wif?.audience || "",
         vertexServiceAccount: aiSettings?.vertex_wif?.service_account_email || "",
         vertexUseExpress:
@@ -1359,14 +1365,23 @@ function VertexApiKeySettings({
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="vertex-location-key">Location (optional)</Label>
-                        <Input
-                            id="vertex-location-key"
+                        <Select
                             value={form.vertexLocation}
-                            onChange={(event) => updateAiForm("vertexLocation", event.target.value)}
-                            placeholder="us-central1"
-                            name="vertex-location-key"
-                            autoComplete="off"
-                        />
+                            onValueChange={(value) => updateAiForm("vertexLocation", value || "us")}
+                        >
+                            <SelectTrigger id="vertex-location-key">
+                                <SelectValue>
+                                    {(value: string | null) => getSelectOptionLabel(VERTEX_LOCATIONS, value)}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                {VERTEX_LOCATIONS.map((location) => (
+                                    <SelectItem key={location.value} value={location.value}>
+                                        {location.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
                 </div>
             ) : null}
@@ -1450,14 +1465,23 @@ function VertexWifSettings({
 
             <div className="space-y-2">
                 <Label htmlFor="vertex-location">Location</Label>
-                <Input
-                    id="vertex-location"
+                <Select
                     value={form.vertexLocation}
-                    onChange={(event) => updateAiForm("vertexLocation", event.target.value)}
-                    placeholder="us-central1"
-                    name="vertex-location"
-                    autoComplete="off"
-                />
+                    onValueChange={(value) => updateAiForm("vertexLocation", value || "us")}
+                >
+                    <SelectTrigger id="vertex-location">
+                        <SelectValue>
+                            {(value: string | null) => getSelectOptionLabel(VERTEX_LOCATIONS, value)}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        {VERTEX_LOCATIONS.map((location) => (
+                            <SelectItem key={location.value} value={location.value}>
+                                {location.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
             </div>
 
             <div className="space-y-2">

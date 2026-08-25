@@ -211,7 +211,7 @@ let metaCrmDatasetEventsData = {
 const aiSettingsData = {
     is_enabled: true,
     provider: 'gemini',
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-3.7-flash',
     api_key_masked: 'sk-****',
     vertex_wif: null,
     vertex_api_key: null,
@@ -662,6 +662,8 @@ describe('IntegrationsPage', () => {
         const dialog = screen.getByRole('dialog')
         expect(within(dialog).getByText('AI Configuration')).toBeInTheDocument()
         expect(within(dialog).getByText('Enabled', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
+        expect(within(dialog).getByText('gemini-3.7-flash')).toBeInTheDocument()
+        expect(within(dialog).queryByText('gemini-3-flash-preview')).not.toBeInTheDocument()
     })
 
     it('keeps the email status clear of the close control on narrow dialogs', () => {
