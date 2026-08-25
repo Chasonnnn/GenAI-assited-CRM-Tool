@@ -268,20 +268,23 @@ def _get_context_for_prompt(
     users_text = "\n".join(users_lines) or "No users available"
 
     # Get pipeline stages
+    # OPTIMIZATION: Fetch stages in a single query rather than iterating and querying each pipeline to prevent N+1 queries.
     pipelines = db.query(Pipeline).filter(Pipeline.organization_id == org_id).all()
+    pipeline_ids = [p.id for p in pipelines]
+    pipeline_names = {p.id: p.name for p in pipelines}
     stages_text = ""
-    for pipeline in pipelines:
+    if pipeline_ids:
         stages = (
             db.query(PipelineStage)
             .filter(
-                PipelineStage.pipeline_id == pipeline.id,
+                PipelineStage.pipeline_id.in_(pipeline_ids),
                 PipelineStage.is_active.is_(True),
             )
-            .order_by(PipelineStage.order)
+            .order_by(PipelineStage.pipeline_id, PipelineStage.order)
             .all()
         )
         for stage in stages:
-            stages_text += f"- {stage.id}: {stage.label} ({pipeline.name})\n"
+            stages_text += f"- {stage.id}: {stage.label} ({pipeline_names.get(stage.pipeline_id, 'Unknown')})\n"
     stages_text = stages_text.strip() or "No stages available"
 
     return {
