@@ -1,0 +1,3 @@
+## 2024-05-24 - Unconstrained Formatter Bleed
+**Learning:** Running `uv run ruff check .` and `uv run ruff format .` across the entire `apps/api` directory modified hundreds of untouched files and exposed legacy Python syntax errors (like `except Exception1, Exception2:`) in unrelated files (e.g., `twilio_transport.py`), causing critical test and syntax regressions that broke the application.
+**Action:** Never run unconstrained formatting tools across the entire codebase. Always target the specific files that were modified during the optimization (e.g., `uv run ruff format apps/api/app/services/messaging_delivery_service.py`).

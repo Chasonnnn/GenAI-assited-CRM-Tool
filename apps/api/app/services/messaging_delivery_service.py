@@ -710,13 +710,30 @@ def recover_expired_delivery_leases(
     if db.get_bind().dialect.name == "postgresql":
         query = query.with_for_update(skip_locked=True)
     rows = list(db.execute(query).scalars())
-    for delivery in rows:
-        attempt = db.execute(
+
+    if not rows:
+        return 0
+
+    delivery_ids = [d.id for d in rows]
+    attempts = list(
+        db.execute(
             select(MessageDeliveryAttempt).where(
-                MessageDeliveryAttempt.delivery_id == delivery.id,
-                MessageDeliveryAttempt.attempt_number == delivery.attempt_count,
+                MessageDeliveryAttempt.delivery_id.in_(delivery_ids)
             )
-        ).scalar_one_or_none()
+        ).scalars()
+    )
+    attempt_map = {(a.delivery_id, a.attempt_number): a for a in attempts}
+
+    existing_cases = set(
+        db.execute(
+            select(MessageReconciliationCase.delivery_id).where(
+                MessageReconciliationCase.delivery_id.in_(delivery_ids)
+            )
+        ).scalars()
+    )
+
+    for delivery in rows:
+        attempt = attempt_map.get((delivery.id, delivery.attempt_count))
         if attempt is not None and attempt.outcome == "in_progress":
             attempt.outcome = "lease_expired"
             attempt.error_type = "delivery_lease_expired"
@@ -729,13 +746,7 @@ def recover_expired_delivery_leases(
         delivery.lease_owner = None
         delivery.lease_expires_at = None
         delivery.updated_at = now
-        existing_case = db.execute(
-            select(MessageReconciliationCase.id).where(
-                MessageReconciliationCase.organization_id == delivery.organization_id,
-                MessageReconciliationCase.delivery_id == delivery.id,
-            )
-        ).scalar_one_or_none()
-        if existing_case is None:
+        if delivery.id not in existing_cases:
             db.add(
                 MessageReconciliationCase(
                     organization_id=delivery.organization_id,
