@@ -523,6 +523,7 @@ async def security_headers_middleware(request: Request, call_next):
     # Mitigate Spectre vulnerabilities
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     response.headers["Cross-Origin-Resource-Policy"] = _resource_policy_for_path(request.url.path)
+    response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
 
     # Content Security Policy
     # In dev, allow unsafe-inline/eval for Swagger UI.
