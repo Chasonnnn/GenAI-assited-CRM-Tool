@@ -428,7 +428,7 @@ jobs:
           SQL
 
       - name: Allow ZAP to write workspace
-        run: chmod -R a+w "$GITHUB_WORKSPACE"
+        run: chmod -f -R a+w "$GITHUB_WORKSPACE" || true
 
       - name: OWASP ZAP baseline (DAST)
         run: |
