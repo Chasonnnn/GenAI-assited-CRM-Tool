@@ -6,6 +6,7 @@ Provides AI-powered summarization for interviews using configured AI provider.
 import json
 import logging
 import re
+from collections import defaultdict
 from uuid import UUID
 
 from sqlalchemy import select
@@ -311,16 +312,23 @@ async def summarize_all_interviews(
             known_names.append(surrogate.full_name)
             known_names.extend(surrogate.full_name.split())
 
+    # Pre-fetch all notes to avoid N+1 queries
+    interview_ids = [i.id for i in interviews]
+    all_notes = db.scalars(
+        select(InterviewNote).where(
+            InterviewNote.interview_id.in_(interview_ids),
+            InterviewNote.organization_id == org_id,
+        )
+    ).all()
+    notes_by_interview = defaultdict(list)
+    for note in all_notes:
+        notes_by_interview[note.interview_id].append(note)
+
     # Build content for all interviews
     interviews_content = []
     for interview in interviews:
         transcript = interview.transcript_text or "No transcript"
-        notes = db.scalars(
-            select(InterviewNote).where(
-                InterviewNote.interview_id == interview.id,
-                InterviewNote.organization_id == org_id,
-            )
-        ).all()
+        notes = notes_by_interview[interview.id]
         notes_text = "\n".join([_strip_html(n.content) for n in notes]) if notes else "No notes"
         if ai_settings.anonymize_pii and pii_mapping:
             _extend_known_names_from_text(known_names, transcript)
