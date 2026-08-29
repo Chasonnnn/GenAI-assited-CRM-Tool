@@ -6,8 +6,19 @@ import json
 import uuid
 from datetime import UTC, datetime
 
+from sqlalchemy import event as sqlalchemy_event
+
 from app.core.encryption import hash_email
-from app.db.models import AISettings, EmailTemplate, EntityNote, PipelineStage, Surrogate, Task
+from app.db.models import (
+    AISettings,
+    EmailTemplate,
+    EntityNote,
+    Organization,
+    Pipeline,
+    PipelineStage,
+    Surrogate,
+    Task,
+)
 from app.services import ai_settings_service
 from app.services.ai_action_executor import (
     ACTION_PERMISSIONS,
@@ -209,6 +220,94 @@ def test_ai_workflow_prompt_filters_templates_by_scope(db, test_org, test_user, 
     assert str(org_template.id) in combined
     assert str(owner_template.id) not in combined
     assert str(other_template.id) not in combined
+
+
+def test_ai_workflow_prompt_loads_tenant_stages_in_one_query(
+    db, test_org, test_user, default_stage
+):
+    from app.services.ai_workflow_service import _get_context_for_prompt
+
+    secondary_pipeline = Pipeline(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name="Secondary Pipeline",
+        is_default=False,
+        current_version=1,
+    )
+    other_org = Organization(
+        id=uuid.uuid4(),
+        name="Other Organization",
+        slug=f"other-org-{uuid.uuid4().hex[:8]}",
+    )
+    other_pipeline = Pipeline(
+        id=uuid.uuid4(),
+        organization_id=other_org.id,
+        name="Other Pipeline",
+        is_default=True,
+        current_version=1,
+    )
+    db.add_all([secondary_pipeline, other_org, other_pipeline])
+    db.flush()
+
+    second_stage = PipelineStage(
+        id=uuid.uuid4(),
+        pipeline_id=secondary_pipeline.id,
+        slug="second",
+        label="Second Stage",
+        color="#334455",
+        stage_type="intake",
+        order=2,
+        is_active=True,
+        is_intake_stage=False,
+    )
+    first_stage = PipelineStage(
+        id=uuid.uuid4(),
+        pipeline_id=secondary_pipeline.id,
+        slug="first",
+        label="First Stage",
+        color="#112233",
+        stage_type="intake",
+        order=1,
+        is_active=True,
+        is_intake_stage=False,
+    )
+    other_stage = PipelineStage(
+        id=uuid.uuid4(),
+        pipeline_id=other_pipeline.id,
+        slug="other",
+        label="Other Tenant Stage",
+        color="#556677",
+        stage_type="intake",
+        order=1,
+        is_active=True,
+        is_intake_stage=False,
+    )
+    db.add_all([second_stage, first_stage, other_stage])
+    db.flush()
+
+    stage_selects: list[str] = []
+
+    def capture_sql(conn, cursor, statement, parameters, context, executemany):  # noqa: ARG001
+        normalized = " ".join(statement.lower().split())
+        if normalized.startswith("select") and " from pipeline_stages " in normalized:
+            stage_selects.append(normalized)
+
+    engine = db.get_bind()
+    sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        prompt_context = _get_context_for_prompt(
+            db,
+            test_org.id,
+            owner_user_id=test_user.id,
+        )
+    finally:
+        sqlalchemy_event.remove(engine, "before_cursor_execute", capture_sql)
+
+    assert len(stage_selects) == 1
+    assert "Other Tenant Stage" not in prompt_context["stages"]
+    assert prompt_context["stages"].index("First Stage") < prompt_context["stages"].index(
+        "Second Stage"
+    )
 
 
 class TestWorkflowValidation:

@@ -269,20 +269,27 @@ def _get_context_for_prompt(
 
     # Get pipeline stages
     pipelines = db.query(Pipeline).filter(Pipeline.organization_id == org_id).all()
-    stages_text = ""
-    for pipeline in pipelines:
+    stages_by_pipeline: dict[UUID, list[PipelineStage]] = {}
+    if pipelines:
         stages = (
             db.query(PipelineStage)
             .filter(
-                PipelineStage.pipeline_id == pipeline.id,
+                PipelineStage.pipeline_id.in_([pipeline.id for pipeline in pipelines]),
                 PipelineStage.is_active.is_(True),
             )
             .order_by(PipelineStage.order)
             .all()
         )
         for stage in stages:
-            stages_text += f"- {stage.id}: {stage.label} ({pipeline.name})\n"
-    stages_text = stages_text.strip() or "No stages available"
+            stages_by_pipeline.setdefault(stage.pipeline_id, []).append(stage)
+    stages_text = (
+        "\n".join(
+            f"- {stage.id}: {stage.label} ({pipeline.name})"
+            for pipeline in pipelines
+            for stage in stages_by_pipeline.get(pipeline.id, [])
+        )
+        or "No stages available"
+    )
 
     return {
         "triggers": triggers_text,

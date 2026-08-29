@@ -7,8 +7,16 @@ from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import event as sqlalchemy_event
 
-from app.db.models import AISettings, Attachment, InterviewAttachment, Surrogate
+from app.db.models import (
+    AISettings,
+    Attachment,
+    InterviewAttachment,
+    InterviewNote,
+    Organization,
+    Surrogate,
+)
 from app.schemas.interview import InterviewCreate, InterviewNoteCreate
 from app.services import (
     ai_settings_service,
@@ -262,3 +270,105 @@ async def test_interview_summary_anonymizes_transcript(
     combined = "\n".join(msg.content for msg in captured)
     assert "Jane Doe" not in combined
     assert "jane.doe@example.com" not in combined
+
+
+@pytest.mark.asyncio
+async def test_summarize_all_interviews_loads_tenant_notes_in_one_query(
+    db, test_org, test_user, test_surrogate, monkeypatch
+):
+    from app.services import ai_interview_service
+
+    first_interview = _create_interview(db, test_org.id, test_surrogate.id, test_user.id)
+    second_interview = _create_interview(db, test_org.id, test_surrogate.id, test_user.id)
+    first_interview.conducted_at = datetime(2026, 1, 1, tzinfo=UTC)
+    second_interview.conducted_at = datetime(2026, 1, 2, tzinfo=UTC)
+
+    first_note = interview_note_service.create_note(
+        db=db,
+        org_id=test_org.id,
+        interview=first_interview,
+        user_id=test_user.id,
+        data=InterviewNoteCreate(content="<p>First tenant note</p>"),
+    )
+    second_note = interview_note_service.create_note(
+        db=db,
+        org_id=test_org.id,
+        interview=second_interview,
+        user_id=test_user.id,
+        data=InterviewNoteCreate(content="<p>Second tenant note</p>"),
+    )
+    other_org = Organization(
+        id=uuid4(),
+        name="Other Organization",
+        slug=f"other-org-{uuid4().hex[:8]}",
+    )
+    db.add(other_org)
+    db.flush()
+    cross_tenant_note = InterviewNote(
+        id=uuid4(),
+        interview_id=first_interview.id,
+        organization_id=other_org.id,
+        content="<p>Cross tenant secret</p>",
+        transcript_version=1,
+        author_user_id=test_user.id,
+    )
+    db.add_all([first_note, second_note, cross_tenant_note])
+
+    settings = AISettings(
+        organization_id=test_org.id,
+        is_enabled=True,
+        provider="gemini",
+        model="gemini-3.7-flash",
+        current_version=1,
+        anonymize_pii=False,
+        consent_accepted_at=datetime.now(UTC),
+        consent_accepted_by=test_user.id,
+        api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
+    )
+    db.add(settings)
+    db.flush()
+
+    captured = []
+
+    class StubProvider:
+        async def chat(self, messages, **kwargs):  # noqa: ARG002
+            captured.extend(messages)
+            return ChatResponse(
+                content=(
+                    '{"overall_summary":"Ok","timeline":[],"recurring_themes":[],'
+                    '"candidate_strengths":[],"areas_of_concern":[],'
+                    '"recommended_actions":[]}'
+                ),
+                prompt_tokens=10,
+                completion_tokens=5,
+                total_tokens=15,
+                model="gemini-3.7-flash",
+            )
+
+    monkeypatch.setattr(
+        ai_interview_service, "get_provider", lambda *_args, **_kwargs: StubProvider()
+    )
+
+    note_selects: list[str] = []
+
+    def capture_sql(conn, cursor, statement, parameters, context, executemany):  # noqa: ARG001
+        normalized = " ".join(statement.lower().split())
+        if normalized.startswith("select") and " from interview_notes " in normalized:
+            note_selects.append(normalized)
+
+    engine = db.get_bind()
+    sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        await ai_interview_service.summarize_all_interviews(
+            db=db,
+            surrogate_id=test_surrogate.id,
+            org_id=test_org.id,
+            user_id=test_user.id,
+        )
+    finally:
+        sqlalchemy_event.remove(engine, "before_cursor_execute", capture_sql)
+
+    assert len(note_selects) == 1
+    combined = "\n".join(message.content for message in captured)
+    assert "Cross tenant secret" not in combined
+    assert combined.index("First tenant note") < combined.index("Second tenant note")
