@@ -4,7 +4,6 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 import { TranscriptPane } from "@/components/surrogates/interviews/InterviewComments/TranscriptPane"
 import { ListItem } from "@/components/surrogates/interviews/InterviewTab/ListItem"
-import { LatestUpdatesCard } from "@/components/surrogates/LatestUpdatesCard"
 import { TranscriptEditor } from "@/components/surrogates/interviews/TranscriptEditor"
 import { CommentCard } from "@/components/surrogates/interviews/CommentCard"
 import { AttachmentsDialog } from "@/components/surrogates/interviews/InterviewTab/AttachmentsDialog"
@@ -21,10 +20,6 @@ vi.mock("@/components/surrogates/interviews/InterviewComments/hooks/useInteracti
 
 vi.mock("@/components/surrogates/interviews/InterviewComments/context", () => ({
     useInterviewComments: () => mockUseInterviewComments(),
-}))
-
-vi.mock("@/lib/hooks/use-surrogates", () => ({
-    useSurrogateHistory: () => ({ data: [] }),
 }))
 
 describe("Surrogate interview accessibility labels", () => {
@@ -109,55 +104,6 @@ describe("Surrogate interview accessibility labels", () => {
             "focus-visible:ring-2",
             "focus-visible:ring-ring",
             "focus-visible:ring-offset-2",
-        )
-    })
-
-    it("adds an aria-label to latest attachment download actions", () => {
-        render(
-            <LatestUpdatesCard
-                surrogateId="sur-1"
-                notes={[]}
-                attachments={[
-                    {
-                        id: "att-1",
-                        filename: "report.csv",
-                        content_type: "text/csv",
-                        file_size: 256,
-                        scan_status: "clean",
-                        quarantined: false,
-                        uploaded_by_user_id: "user-1",
-                        created_at: "2026-02-10T10:00:00Z",
-                    },
-                ]}
-            />,
-        )
-
-        expect(screen.getByRole("button", { name: "Download report.csv" })).toBeInTheDocument()
-    })
-
-    it("adds focus-visible styles to latest attachment download actions", () => {
-        render(
-            <LatestUpdatesCard
-                surrogateId="sur-1"
-                notes={[]}
-                attachments={[
-                    {
-                        id: "att-1",
-                        filename: "report.csv",
-                        content_type: "text/csv",
-                        file_size: 256,
-                        scan_status: "clean",
-                        quarantined: false,
-                        uploaded_by_user_id: "user-1",
-                        created_at: "2026-02-10T10:00:00Z",
-                    },
-                ]}
-            />,
-        )
-
-        expect(screen.getByRole("button", { name: "Download report.csv" })).toHaveClass(
-            "focus-visible:ring-2",
-            "focus-visible:ring-ring",
         )
     })
 

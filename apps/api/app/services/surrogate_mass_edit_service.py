@@ -305,7 +305,7 @@ def apply_stage_change(
     trigger_workflows: bool,
     reason: str | None,
 ) -> SurrogateMassEditStageApplyResponse:
-    from app.services import dashboard_events, surrogate_service, surrogate_status_service
+    from app.services import dashboard_service, surrogate_service, surrogate_status_service
 
     query = _build_base_query(db, org_id, filters)
     needs_age_scan = filters.age_min is not None or filters.age_max is not None
@@ -381,7 +381,7 @@ def apply_stage_change(
 
     # Best-effort dashboard refresh
     try:
-        dashboard_events.push_dashboard_stats(db, org_id)
+        dashboard_service.push_dashboard_stats(db, org_id)
     except Exception:
         pass
 
@@ -402,7 +402,7 @@ def apply_archive_change(
     user_id: UUID,
     reason: str | None,
 ) -> SurrogateMassEditArchiveApplyResponse:
-    from app.services import dashboard_events, surrogate_service
+    from app.services import dashboard_service, surrogate_service
 
     query = _build_base_query(db, org_id, filters)
     needs_age_scan = filters.age_min is not None or filters.age_max is not None
@@ -463,7 +463,7 @@ def apply_archive_change(
             failed.append(SurrogateMassEditArchiveFailure(surrogate_id=sid, reason=str(exc)))
 
     try:
-        dashboard_events.push_dashboard_stats(db, org_id)
+        dashboard_service.push_dashboard_stats(db, org_id)
     except Exception:
         pass
 

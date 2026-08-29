@@ -450,7 +450,7 @@ def accept_match(
     from app.services import (
         activity_service,
         audit_service,
-        dashboard_events,
+        dashboard_service,
         note_service,
         pipeline_service,
         surrogate_service,
@@ -561,7 +561,7 @@ def accept_match(
         raise
 
     db.refresh(match)
-    dashboard_events.push_dashboard_stats(db, org_id)
+    dashboard_service.push_dashboard_stats(db, org_id)
     return match
 
 

@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 
 from alembic import command
@@ -13,7 +14,6 @@ from alembic import command
 API_ROOT = Path(__file__).resolve().parents[1]
 PRE_STUDIO_REVISION = "20260723_0270"
 STUDIO_REVISION = "20260723_0280"
-CURRENT_HEAD_REVISION = "20260804_0040"
 
 ORG_ID = uuid.UUID("10000000-0000-0000-0000-000000000001")
 USER_ID = uuid.UUID("20000000-0000-0000-0000-000000000001")
@@ -648,9 +648,9 @@ def test_template_studio_upgrade_preserves_existing_template_stores(db_engine) -
                 )
                 == 1
             )
-            assert (
-                connection.scalar(text("SELECT version_num FROM alembic_version"))
-                == CURRENT_HEAD_REVISION
+            current_head_revision = ScriptDirectory.from_config(config).get_current_head()
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
+                current_head_revision
             )
         finally:
             transaction.rollback()

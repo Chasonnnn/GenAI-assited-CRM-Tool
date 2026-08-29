@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import { useQuery } from "@tanstack/react-query"
+
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@tanstack/react-query")>()
+    return { ...actual, useQuery: vi.fn() }
+})
+
 import CampaignDetailPage from "../app/(app)/automation/campaigns/[id]/page.client"
 
 const mockPush = vi.fn()

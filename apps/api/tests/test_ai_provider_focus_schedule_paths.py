@@ -58,17 +58,19 @@ def test_ai_provider_helpers_extract_and_usage():
         prompt_tokens=1_000_000,
         completion_tokens=500_000,
         total_tokens=1_500_000,
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
     )
-    assert quote.estimated_cost_usd > 0
+    assert quote.estimated_cost_usd == 2.625
 
 
 class _FakeAioModels:
     def __init__(self):
         self.calls: list[str] = []
+        self.requests: list[dict[str, object]] = []
 
     async def generate_content(self, **kwargs):
         self.calls.append("generate_content")
+        self.requests.append(kwargs)
         return SimpleNamespace(
             text="response-text",
             usage_metadata=SimpleNamespace(
@@ -80,6 +82,7 @@ class _FakeAioModels:
 
     async def generate_content_stream(self, **kwargs):
         self.calls.append("generate_content_stream")
+        self.requests.append(kwargs)
 
         async def _iterator():
             yield SimpleNamespace(text="H")
@@ -104,11 +107,12 @@ class _TestGoogleProvider(ai_provider.GoogleGenAIProvider):
 async def test_google_genai_provider_chat_and_stream():
     fake_models = _FakeAioModels()
     fake_client = SimpleNamespace(aio=SimpleNamespace(models=fake_models))
-    provider = _TestGoogleProvider(fake_client, default_model="gemini-3-flash-preview")
+    provider = _TestGoogleProvider(fake_client, default_model="gemini-3.7-flash")
 
     response = await provider.chat([ChatMessage(role="user", content="hello")], temperature=0.1)
     assert response.content == "response-text"
     assert response.total_tokens == 12
+    assert fake_models.requests[0]["model"] == "gemini-3.7-flash"
 
     chunks = [
         chunk async for chunk in provider.stream_chat([ChatMessage(role="user", content="hello")])
@@ -116,6 +120,7 @@ async def test_google_genai_provider_chat_and_stream():
     assert [chunk.text for chunk in chunks[:-1]] == ["H", "i"]
     assert chunks[-1].is_final is True
     assert chunks[-1].total_tokens == 15
+    assert fake_models.requests[1]["model"] == "gemini-3.7-flash"
 
 
 def test_vertex_wif_credentials_refresh(monkeypatch):
@@ -193,7 +198,7 @@ async def test_vertex_provider_and_factory(monkeypatch):
     )
 
     result = await provider._generate_content(
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         contents=[],
         temperature=0,
         max_tokens=32,
@@ -203,10 +208,12 @@ async def test_vertex_provider_and_factory(monkeypatch):
 
     gemini = ai_provider.get_provider("gemini", "api-key")
     assert isinstance(gemini, ai_provider.GeminiProvider)
+    assert gemini.default_model == "gemini-3.7-flash"
     vertex = ai_provider.get_provider(
         "vertex_api_key", "api-key", project_id="proj", location="us-central1"
     )
     assert isinstance(vertex, ai_provider.VertexAPIKeyProvider)
+    assert vertex.default_model == "gemini-3.7-flash"
     with pytest.raises(ValueError, match="Unknown provider"):
         ai_provider.get_provider("unknown", "api-key")
 

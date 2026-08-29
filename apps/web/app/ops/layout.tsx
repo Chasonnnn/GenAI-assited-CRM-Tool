@@ -152,8 +152,13 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
                         <span className="text-sm text-stone-500 dark:text-stone-400">
                             {user.email}
                         </span>
-                        <Button variant="ghost" size="sm" onClick={logoutFromOps}>
-                            <LogOut className="size-4" />
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={logoutFromOps}
+                            aria-label="Log out"
+                        >
+                            <LogOut className="size-4" aria-hidden="true" />
                         </Button>
                     </div>
                 </div>

@@ -58,7 +58,7 @@ def _create_ai_settings(db, org_id, user_id, *, consent_accepted=True) -> AISett
         organization_id=org_id,
         is_enabled=True,
         provider="gemini",
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         current_version=1,
         consent_accepted_at=datetime.now(UTC) if consent_accepted else None,
         consent_accepted_by=user_id if consent_accepted else None,
@@ -233,7 +233,7 @@ async def test_ai_focus_supports_vertex_wif_without_api_key(
         organization_id=test_org.id,
         is_enabled=True,
         provider="vertex_wif",
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         vertex_project_id="demo-project",
         vertex_location="us-central1",
         vertex_audience="projects/123/locations/global/workloadIdentityPools/pool/providers/provider",
@@ -267,7 +267,7 @@ async def test_ai_focus_supports_vertex_wif_without_api_key(
                 prompt_tokens=1,
                 completion_tokens=1,
                 total_tokens=2,
-                model="gemini-3-flash-preview",
+                model="gemini-3.7-flash",
             )
 
     monkeypatch.setattr(

@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@tanstack/react-query")>()
+    return { ...actual, useQuery: vi.fn(), useMutation: vi.fn(), useQueryClient: vi.fn() }
+})
+
 import WorkflowTemplatesPanel from '../components/automation/workflow-templates-panel'
 
 const { mockApiPost } = vi.hoisted(() => ({

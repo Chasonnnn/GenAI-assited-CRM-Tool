@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { getAuthApiBase } from "@/lib/auth-utils"
+import { armLoginNotificationReminder } from "@/lib/notifications/login-reminder"
 
 type LoginErrorMessage = {
   title: string
@@ -92,6 +93,9 @@ export default function LoginPageClient({
       } catch {
         // Ignore storage errors (private browsing, etc.)
       }
+      if (returnTo === "app") {
+        armLoginNotificationReminder()
+      }
       window.location.assign(url)
     } catch {
       // Ignore navigation errors in non-browser runtimes.
@@ -173,7 +177,7 @@ export default function LoginPageClient({
 
           <Button
             onClick={handleGoogleLogin}
-            className="w-full font-semibold py-6 text-base rounded-full transition-all duration-300 bg-teal-950 text-white hover:bg-teal-900"
+            className="w-full font-semibold py-6 text-base rounded-full transition-colors duration-300 bg-teal-950 text-white hover:bg-teal-900"
             disabled={isRedirecting}
           >
             {isRedirecting ? (

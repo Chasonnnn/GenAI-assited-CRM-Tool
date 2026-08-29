@@ -29,7 +29,6 @@ dependencies = [
     "python-multipart==0.0.31",
     # Auth dependencies
     "httpx==0.28.1",
-    "httpx2==2.0.0",
     "pyjwt==2.13.0",
     "google-auth==2.48.0",
     "google-genai==1.61.0",

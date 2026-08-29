@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import event as sqlalchemy_event
 
 from app.services import ticketing_service
 
@@ -107,6 +108,76 @@ def test_ticketing_watch_helpers(monkeypatch) -> None:
         )
         is False
     )
+
+
+def test_list_mailboxes_bulk_loads_user_sent_mailboxes(db, test_auth):
+    from app.db.enums import MailboxKind, Role
+    from app.db.models import Membership, User, UserIntegration
+
+    second_user_id = uuid4()
+    integration_ids = [uuid4(), uuid4()]
+    second_user = User(
+        id=second_user_id,
+        email=f"mailbox-user-{uuid4().hex[:8]}@example.com",
+        display_name="Mailbox User",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(second_user)
+    db.flush()
+    db.add(
+        Membership(
+            id=uuid4(),
+            user_id=second_user_id,
+            organization_id=test_auth.org.id,
+            role=Role.DEVELOPER,
+            is_active=True,
+        )
+    )
+    db.add_all(
+        [
+            UserIntegration(
+                id=integration_ids[0],
+                user_id=test_auth.user.id,
+                integration_type="gmail",
+                access_token_encrypted="token-1",
+                account_email="owner@example.com",
+                granted_scopes=["https://www.googleapis.com/auth/gmail.readonly"],
+            ),
+            UserIntegration(
+                id=integration_ids[1],
+                user_id=second_user_id,
+                integration_type="gmail",
+                access_token_encrypted="token-2",
+                account_email="user@example.com",
+                granted_scopes=["https://www.googleapis.com/auth/gmail.readonly"],
+            ),
+        ]
+    )
+    db.commit()
+
+    existence_selects: list[str] = []
+
+    def capture_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
+        normalized = " ".join(statement.lower().split())
+        if (
+            normalized.startswith("select")
+            and "from mailboxes" in normalized
+            and "mailboxes.kind =" in normalized
+            and "mailboxes.user_integration_id" in normalized
+        ):
+            existence_selects.append(normalized)
+
+    engine = db.get_bind()
+    sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        mailboxes = ticketing_service.list_mailboxes(db, org_id=test_auth.org.id)
+    finally:
+        sqlalchemy_event.remove(engine, "before_cursor_execute", capture_sql)
+
+    user_sent = [mailbox for mailbox in mailboxes if mailbox.kind == MailboxKind.USER_SENT]
+    assert {mailbox.user_integration_id for mailbox in user_sent} == set(integration_ids)
+    assert len(existence_selects) == 1
 
 
 def test_pause_resume_and_get_mailbox_sync_status(db, test_org):

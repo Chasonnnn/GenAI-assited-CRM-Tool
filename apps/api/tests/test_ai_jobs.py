@@ -18,7 +18,7 @@ async def test_ai_chat_sync_returns_response(
         organization_id=test_org.id,
         is_enabled=True,
         provider="gemini",
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         current_version=1,
         consent_accepted_at=datetime.now(UTC),
         consent_accepted_by=test_user.id,
@@ -34,7 +34,7 @@ async def test_ai_chat_sync_returns_response(
                 prompt_tokens=1,
                 completion_tokens=1,
                 total_tokens=2,
-                model="gemini-3-flash-preview",
+                model="gemini-3.7-flash",
             )
 
     monkeypatch.setattr(
@@ -56,7 +56,7 @@ async def test_ai_chat_async_blocks_when_consent_missing(db, test_org, test_user
         organization_id=test_org.id,
         is_enabled=True,
         provider="gemini",
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         current_version=1,
         consent_accepted_at=None,
         consent_accepted_by=None,
@@ -75,7 +75,7 @@ async def test_ai_chat_async_blocks_when_consent_missing(db, test_org, test_user
                 prompt_tokens=1,
                 completion_tokens=1,
                 total_tokens=2,
-                model="gemini-3-flash-preview",
+                model="gemini-3.7-flash",
             )
 
     monkeypatch.setattr(

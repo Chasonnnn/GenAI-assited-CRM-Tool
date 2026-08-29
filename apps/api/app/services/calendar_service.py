@@ -34,13 +34,6 @@ GOOGLE_CALENDAR_RETRY_MAX_DELAY = 4.0
 # =============================================================================
 
 
-class BusyBlock(TypedDict):
-    """A blocked time period from Google Calendar."""
-
-    start: datetime
-    end: datetime
-
-
 class CalendarEvent(TypedDict):
     """A calendar event."""
 
@@ -341,57 +334,6 @@ async def ensure_google_calendar_watch(
     integration.updated_at = datetime.now(UTC)
     db.commit()
     return True
-
-
-# =============================================================================
-# Freebusy Queries
-# =============================================================================
-
-
-async def get_google_busy_slots(
-    access_token: str,
-    calendar_id: str,
-    time_min: datetime,
-    time_max: datetime,
-) -> list[BusyBlock]:
-    """
-    Get busy time slots from Google Calendar.
-
-    Uses the freebusy API to check availability.
-    """
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://www.googleapis.com/calendar/v3/freeBusy",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "timeMin": time_min.isoformat(),
-                    "timeMax": time_max.isoformat(),
-                    "items": [{"id": calendar_id}],
-                },
-            )
-
-            if response.status_code != 200:
-                return []
-
-            data = response.json()
-            calendars = data.get("calendars", {})
-            calendar_data = calendars.get(calendar_id, {})
-            busy_list = calendar_data.get("busy", [])
-
-            return [
-                BusyBlock(
-                    start=datetime.fromisoformat(b["start"].replace("Z", "+00:00")),
-                    end=datetime.fromisoformat(b["end"].replace("Z", "+00:00")),
-                )
-                for b in busy_list
-            ]
-    except Exception as e:
-        logger.exception(f"Google freebusy query failed for calendar={calendar_id}: {e}")
-        return []
 
 
 # =============================================================================

@@ -153,7 +153,7 @@ async def test_ai_studio_generation_uses_isolated_agents_and_skills(
             organization_id=test_org.id,
             is_enabled=True,
             provider="gemini",
-            model="gemini-3-flash-preview",
+            model="gemini-3.7-flash",
             api_key_encrypted=ai_settings_service.encrypt_api_key("sk-assistant"),
             consent_accepted_at=datetime.now(UTC),
             consent_accepted_by=test_user.id,

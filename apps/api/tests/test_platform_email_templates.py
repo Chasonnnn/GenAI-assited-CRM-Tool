@@ -345,7 +345,7 @@ async def test_platform_system_email_campaign_bulk_loads_organizations_once(
 ):
     from sqlalchemy import event as sqlalchemy_event
 
-    from app.db.models import Membership, User
+    from app.db.models import Membership, Organization, User
     from app.services import (
         platform_email_service,
         platform_service,
@@ -379,6 +379,30 @@ async def test_platform_system_email_campaign_bulk_loads_organizations_once(
             for user in additional_users
         ]
     )
+    second_org = Organization(
+        id=uuid4(),
+        name="Second Campaign Organization",
+        slug=f"second-campaign-org-{uuid4().hex[:8]}",
+    )
+    second_org_user = User(
+        id=uuid4(),
+        email=f"platform-campaign-second-{uuid4().hex[:8]}@test.com",
+        display_name="Second Campaign User",
+        token_version=1,
+        is_active=True,
+    )
+    db.add_all([second_org, second_org_user])
+    db.flush()
+    db.add(
+        Membership(
+            id=uuid4(),
+            user_id=second_org_user.id,
+            organization_id=second_org.id,
+            role=membership_role,
+        )
+    )
+    second_org_id = second_org.id
+    second_org_user_id = second_org_user.id
     recipient_ids = [actor_id, *(user.id for user in additional_users)]
 
     template = system_email_template_service.ensure_system_template(
@@ -410,7 +434,11 @@ async def test_platform_system_email_campaign_bulk_loads_organizations_once(
                 {
                     "org_id": org_id,
                     "user_ids": recipient_ids,
-                }
+                },
+                {
+                    "org_id": second_org_id,
+                    "user_ids": [second_org_user_id],
+                },
             ],
             actor_id=actor_id,
             actor_display_name=actor_display_name,
@@ -425,7 +453,14 @@ async def test_platform_system_email_campaign_bulk_loads_organizations_once(
     ]
     assert len(organization_selects) == 1
     assert "organizations.id in (" in organization_selects[0]
-    assert result["recipients"] == 3
+    recipient_selects = [
+        statement
+        for statement in statements
+        if statement.startswith("select")
+        and "from users join memberships" in statement
+    ]
+    assert len(recipient_selects) == 1
+    assert result["recipients"] == 4
 
 
 @pytest.mark.asyncio

@@ -7,7 +7,6 @@ Provides:
 - HTTPX AsyncClient with proper headers
 """
 
-import asyncio
 import os
 import uuid
 from collections.abc import AsyncGenerator, Generator
@@ -49,17 +48,6 @@ os.environ.setdefault("WIF_OIDC_KEY_ID", "test-wif-key")
 # =============================================================================
 # Configuration
 # =============================================================================
-
-
-@pytest.fixture(scope="session")
-def event_loop() -> Generator:
-    """Create an instance of the default event loop for each test session."""
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
 
 
 # =============================================================================

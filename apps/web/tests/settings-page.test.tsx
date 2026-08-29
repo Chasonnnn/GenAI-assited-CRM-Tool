@@ -11,26 +11,6 @@ vi.mock('next/navigation', () => ({
 const mockUpdateNotificationSettings = vi.fn()
 const mockRollbackPipeline = vi.fn()
 
-const versionModalSpy = vi.fn()
-
-type VersionHistoryModalProps = {
-    open: boolean
-    entityType?: string
-    title?: string
-}
-
-vi.mock('@/components/version-history-modal', () => ({
-    VersionHistoryModal: (props: VersionHistoryModalProps) => {
-        versionModalSpy(props)
-        if (!props.open) return null
-        return (
-            <div data-testid="version-history-modal">
-                {props.entityType}:{props.title}
-            </div>
-        )
-    },
-}))
-
 vi.mock('@/lib/auth-context', () => ({
     useAuth: () => ({
         user: {
@@ -191,7 +171,6 @@ describe('SettingsPage', () => {
             ],
         }
         mockRollbackPipeline.mockReset()
-        versionModalSpy.mockClear()
         mockGetOrgSettings.mockResolvedValue({
             name: 'Test Organization',
             address: '123 Main St',
@@ -271,7 +250,7 @@ describe('SettingsPage', () => {
     it('shows organization branding section in email signature tab', async () => {
         await renderSettingsPage({ tab: 'email-signature' })
 
-        expect(screen.getByText('Organization Branding')).toBeInTheDocument()
+        expect(await screen.findByText('Organization Branding')).toBeInTheDocument()
         expect(screen.queryByText('Organization Info')).not.toBeInTheDocument()
         expect(screen.queryByText('Signature Branding')).not.toBeInTheDocument()
     })

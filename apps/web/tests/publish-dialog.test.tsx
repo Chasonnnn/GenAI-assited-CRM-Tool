@@ -1,6 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { useQuery } from "@tanstack/react-query"
+
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@tanstack/react-query")>()
+    return { ...actual, useQuery: vi.fn() }
+})
+
 import { PublishDialog } from "@/components/ops/templates/PublishDialog"
 
 const organizations = [

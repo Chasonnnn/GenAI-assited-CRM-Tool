@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { afterEach, describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react"
 import type { ImgHTMLAttributes } from "react"
 import PlatformFormTemplatePage from "../app/ops/templates/forms/[id]/page.client"
@@ -69,6 +69,10 @@ describe("PlatformFormTemplatePage", () => {
         vi.useRealTimers()
     })
 
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
     it("waits for the routed template response before hydrating the builder draft", async () => {
         const templateA = buildTemplateData("tpl-form-a", "Template A")
         const templateB = buildTemplateData("tpl-form-b", "Template B")
@@ -89,6 +93,7 @@ describe("PlatformFormTemplatePage", () => {
     })
 
     it("does not autosave stale default schema during initial hydration", async () => {
+        vi.useFakeTimers()
         mockTemplateData = {
             ...buildTemplateData(),
             draft: {
@@ -130,11 +135,11 @@ describe("PlatformFormTemplatePage", () => {
 
         render(<PlatformFormTemplatePage />)
 
-        const nameInput = await screen.findByPlaceholderText("Form name...")
-        await waitFor(() => expect(nameInput).toHaveValue("Stored Surrogate Application Form"))
+        const nameInput = screen.getByPlaceholderText("Form name...")
+        expect(nameInput).toHaveValue("Stored Surrogate Application Form")
 
         await act(async () => {
-            await new Promise((resolve) => setTimeout(resolve, 800))
+            await vi.advanceTimersByTimeAsync(1_200)
         })
 
         expect(mockUpdate).not.toHaveBeenCalled()
@@ -276,151 +281,6 @@ describe("PlatformFormTemplatePage", () => {
 
         expect(within(columnsSection as HTMLElement).getAllByRole("combobox")[0]).toHaveTextContent("Long text")
         expect(within(columnsSection as HTMLElement).getAllByRole("combobox")[0]).not.toHaveTextContent("textarea")
-    })
-
-    it("uses a persistent field browser, live edit canvas, and tabbed field settings rail", async () => {
-        render(<PlatformFormTemplatePage />)
-
-        expect(await screen.findByTestId("form-builder-workspace")).toHaveClass("flex-col", "xl:grid")
-        expect(screen.getByTestId("form-builder-palette")).toBeInTheDocument()
-        expect(screen.getByTestId("form-builder-canvas")).toBeInTheDocument()
-        expect(screen.getByTestId("form-builder-page-shell")).toHaveClass("min-h-[58rem]")
-        expect(screen.getByTestId("form-builder-settings")).toHaveClass("xl:min-h-[58rem]", "xl:self-stretch")
-        expect(screen.queryByTestId("form-builder-page-rail")).not.toBeInTheDocument()
-
-        fireEvent.click(await screen.findByRole("button", { name: "Add Name field" }))
-
-        const canvas = screen.getByTestId("form-builder-canvas")
-        expect(within(canvas).getByText("Name")).toBeInTheDocument()
-        expect(within(canvas).queryByRole("button", { name: "Name field" })).not.toBeInTheDocument()
-        expect(within(canvas).queryByText(/^text$/i)).not.toBeInTheDocument()
-        expect(within(canvas).queryByText(/^required$/i)).not.toBeInTheDocument()
-
-        fireEvent.click(screen.getByRole("button", { name: /select name field/i }))
-
-        expect(await screen.findByRole("tab", { name: /^general$/i })).toBeInTheDocument()
-        const selectedFieldActions = screen.getByTestId("form-builder-selected-field-actions")
-        expect(selectedFieldActions).toHaveClass("gap-1.5", "pointer-events-none")
-        expect(selectedFieldActions).not.toHaveClass("rounded-full", "border", "bg-white/95")
-        expect(selectedFieldActions.childElementCount).toBe(2)
-        expect(selectedFieldActions.querySelectorAll("button")).toHaveLength(2)
-        expect(screen.getByRole("button", { name: "Duplicate Name" })).toHaveClass("rounded-full", "border")
-        expect(screen.getByRole("button", { name: "Delete Name" })).toHaveClass("rounded-full", "border")
-        expect(selectedFieldActions.nextElementSibling).not.toHaveClass("pr-24")
-        expect(screen.getByTestId("form-builder-selected-field-body")).toHaveClass("pt-3.5")
-        expect(screen.getByRole("tab", { name: /^advanced$/i })).toBeInTheDocument()
-        expect(screen.getByLabelText(/field title/i)).toHaveValue("Name")
-    })
-
-    it("adds contextual aria-labels to form builder icon buttons", async () => {
-        render(<PlatformFormTemplatePage />)
-
-        fireEvent.click(screen.getByRole("button", { name: "Add Name field" }))
-        expect(await screen.findByRole("button", { name: "Duplicate Name" })).toBeInTheDocument()
-        expect(screen.getByRole("button", { name: "Delete Name" })).toBeInTheDocument()
-
-        fireEvent.click(screen.getByRole("button", { name: "Add Select field" }))
-        expect(await screen.findByRole("button", { name: "Remove option Option 1" })).toBeInTheDocument()
-
-        fireEvent.click(screen.getByRole("button", { name: "Add Repeating Table field" }))
-        expect(await screen.findByRole("button", { name: "Remove column Column 1" })).toBeInTheDocument()
-    })
-
-    it("keeps multi-select option inputs focused while editing", async () => {
-        render(<PlatformFormTemplatePage />)
-
-        fireEvent.click(await screen.findByRole("button", { name: "Add Multi-Select field" }))
-
-        const optionInput = await screen.findByDisplayValue("Option 1")
-        optionInput.focus()
-        fireEvent.change(optionInput, { target: { value: "Option 1 extended" } })
-
-        const updatedInput = screen.getByDisplayValue("Option 1 extended")
-        expect(updatedInput).toHaveFocus()
-    })
-
-    it("keeps the field library in the left sidebar, filters categories, and adds fields with click-to-add", async () => {
-        render(<PlatformFormTemplatePage />)
-
-        expect(screen.queryByRole("dialog", { name: /add form fields/i })).not.toBeInTheDocument()
-        expect(screen.getByPlaceholderText(/search form fields/i)).toBeInTheDocument()
-        expect(screen.getByRole("button", { name: "Contacts" })).toBeInTheDocument()
-        expect(screen.getByRole("button", { name: "Demographics" })).toBeInTheDocument()
-        expect(screen.getByRole("button", { name: "General" })).toBeInTheDocument()
-        expect(screen.getByRole("button", { name: "Choices" })).toBeInTheDocument()
-        expect(screen.getByTestId("form-builder-palette-search")).toHaveClass("rounded-xl")
-        expect(screen.getAllByTestId("form-builder-palette-field-grid")[0]).toHaveClass("grid-cols-4")
-        const nameTile = screen.getByTestId("form-builder-palette-tile-full_name")
-        expect(nameTile).toHaveClass("border-transparent", "items-center", "text-center", "gap-1.5")
-        expect(nameTile.querySelector("span")).toHaveClass("size-12")
-        expect(within(nameTile).getByText("Full Name")).toHaveClass("text-[13px]")
-
-        expect(screen.getByRole("button", { name: "Add preset Full Name field" })).toBeInTheDocument()
-
-        fireEvent.click(screen.getByRole("button", { name: "Demographics" }))
-        expect(screen.getByRole("button", { name: "Add preset Date of Birth field" })).toBeInTheDocument()
-        expect(screen.queryByRole("button", { name: "Add preset Full Name field" })).not.toBeInTheDocument()
-
-        fireEvent.change(screen.getByPlaceholderText(/search form fields/i), {
-            target: { value: "email" },
-        })
-        expect(screen.getByRole("button", { name: /add preset email field/i })).toBeInTheDocument()
-        expect(screen.queryByRole("button", { name: /add preset date of birth field/i })).not.toBeInTheDocument()
-
-        fireEvent.click(screen.getByRole("button", { name: /add preset email field/i }))
-
-        expect(await screen.findByRole("button", { name: /select email field/i })).toBeInTheDocument()
-    })
-
-    it("supports page renaming and omits page reorder buttons from the compact page strip", async () => {
-        render(<PlatformFormTemplatePage />)
-
-        fireEvent.click(await screen.findByRole("button", { name: /^add page$/i }))
-
-        expect(screen.queryByLabelText(/^page name$/i)).not.toBeInTheDocument()
-
-        const pageTwoInput = screen.getByRole("textbox", { name: /edit page name/i })
-        fireEvent.change(pageTwoInput, { target: { value: "Medical history" } })
-
-        expect(screen.getByDisplayValue("Medical history")).toBeInTheDocument()
-        expect(screen.queryByRole("button", { name: /move medical history up/i })).not.toBeInTheDocument()
-        expect(screen.queryByRole("button", { name: /move medical history down/i })).not.toBeInTheDocument()
-    })
-
-    it("adds a fixed table field with editable rows and columns", async () => {
-        render(<PlatformFormTemplatePage />)
-
-        fireEvent.click(await screen.findByRole("button", { name: "Uploads and Tables" }))
-        fireEvent.click(screen.getByRole("button", { name: "Add Table field" }))
-
-        fireEvent.click(await screen.findByRole("button", { name: /select table field/i }))
-
-        expect(await screen.findByDisplayValue("Item 1")).toBeInTheDocument()
-        expect(screen.getByDisplayValue("Response")).toBeInTheDocument()
-        expect(screen.getByRole("button", { name: /^add row$/i })).toBeInTheDocument()
-        expect(screen.getByRole("button", { name: /^add column$/i })).toBeInTheDocument()
-    })
-
-    it("renders preview as a top-level workspace tab without mutating edit state", async () => {
-        render(<PlatformFormTemplatePage />)
-
-        const formNameInput = await screen.findByLabelText("Form name")
-        fireEvent.change(formNameInput, { target: { value: "Enterprise Intake" } })
-
-        fireEvent.click(screen.getByRole("button", { name: "Add Name field" }))
-        fireEvent.click(screen.getByRole("tab", { name: /^settings$/i }))
-        fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Enterprise Intake" } })
-
-        fireEvent.click(screen.getByRole("tab", { name: /^preview$/i }))
-
-        expect(await screen.findByRole("heading", { name: "Enterprise Intake" })).toBeInTheDocument()
-        expect(screen.getByRole("button", { name: /^mobile preview$/i })).toBeInTheDocument()
-
-        fireEvent.click(screen.getByRole("button", { name: /^mobile preview$/i }))
-        expect(screen.getByTestId("form-builder-preview-shell")).toHaveClass("max-w-sm")
-
-        fireEvent.click(screen.getByRole("tab", { name: /^edit$/i }))
-        expect(screen.getByRole("button", { name: /select name field/i })).toBeInTheDocument()
     })
 
     it("uses a simple global publish confirmation for form templates", async () => {

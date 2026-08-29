@@ -75,7 +75,7 @@ async def test_preview_import_ai_available_requires_consent(
         organization_id=test_org.id,
         is_enabled=True,
         provider="gemini",
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         current_version=1,
         consent_accepted_at=None,
         consent_accepted_by=None,

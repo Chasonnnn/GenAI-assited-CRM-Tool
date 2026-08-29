@@ -1930,32 +1930,18 @@ def apply_pipeline_draft(
         for stage in existing_by_key.values()
         if stage.stage_key in kept_stage_keys and stage.is_active
     }
+    dependency_graph = preview["dependency_graph"]
+    assert isinstance(dependency_graph, dict)
+    entity_counts_by_stage_key = {
+        dependency["stage_key"]: int(dependency.get("surrogate_count") or 0)
+        for dependency in dependency_graph.get("stages", [])
+        if dependency.get("stage_key")
+    }
 
     for stage in removed_stages:
         target_stage_key = remap_by_key.get(stage.stage_key)
         target_stage = target_stage_by_key.get(target_stage_key) if target_stage_key else None
-        if pipeline.entity_type == INTENDED_PARENT_PIPELINE_ENTITY:
-            entity_count = (
-                db.scalar(
-                    select(func.count(IntendedParent.id)).where(
-                        IntendedParent.organization_id == pipeline.organization_id,
-                        IntendedParent.stage_id == stage.id,
-                        IntendedParent.is_archived.is_(False),
-                    )
-                )
-                or 0
-            )
-        else:
-            entity_count = (
-                db.scalar(
-                    select(func.count(Surrogate.id)).where(
-                        Surrogate.organization_id == pipeline.organization_id,
-                        Surrogate.stage_id == stage.id,
-                        Surrogate.is_archived.is_(False),
-                    )
-                )
-                or 0
-            )
+        entity_count = entity_counts_by_stage_key.get(stage.stage_key, 0)
         if entity_count > 0 and target_stage is None:
             raise ValueError(
                 f"Stage '{stage.label}' still has active records and needs a remap target."

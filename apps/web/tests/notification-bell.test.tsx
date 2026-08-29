@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 
 import { NotificationBell } from "@/components/notification-bell"
 
@@ -16,7 +16,11 @@ vi.mock("next/navigation", () => ({
 }))
 
 vi.mock("@/components/ui/dropdown-menu", () => ({
-    DropdownMenu: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    DropdownMenu: ({ children, open }: { children?: ReactNode; open?: boolean }) => (
+        <div data-testid="notification-menu" data-open={String(open)}>
+            {children}
+        </div>
+    ),
     DropdownMenuTrigger: ({
         children,
         ...props
@@ -61,6 +65,7 @@ vi.mock("@/lib/hooks/use-browser-notifications", () => ({
 
 describe("NotificationBell", () => {
     beforeEach(() => {
+        sessionStorage.clear()
         mockPush.mockReset()
         mockMarkReadMutate.mockReset()
         mockMarkAllReadMutate.mockReset()
@@ -140,5 +145,38 @@ describe("NotificationBell", () => {
         render(<NotificationBell />)
 
         expect(screen.getByRole("button", { name: "Notifications (3 unread)" })).toBeInTheDocument()
+    })
+
+    it("opens once after login when unread notifications exist", async () => {
+        sessionStorage.setItem("notification_login_reminder_pending", "1")
+        mockUseUnreadCount.mockReturnValue({ data: { count: 3 }, isLoading: false })
+
+        render(<NotificationBell />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("notification-menu")).toHaveAttribute("data-open", "true")
+        })
+        expect(sessionStorage.getItem("notification_login_reminder_pending")).toBeNull()
+        expect(mockMarkReadMutate).not.toHaveBeenCalled()
+        expect(mockMarkAllReadMutate).not.toHaveBeenCalled()
+    })
+
+    it("consumes the login reminder without opening when there is nothing unread", async () => {
+        sessionStorage.setItem("notification_login_reminder_pending", "1")
+
+        render(<NotificationBell />)
+
+        await waitFor(() => {
+            expect(sessionStorage.getItem("notification_login_reminder_pending")).toBeNull()
+        })
+        expect(screen.getByTestId("notification-menu")).toHaveAttribute("data-open", "false")
+    })
+
+    it("does not open for unread notifications without a fresh login reminder", () => {
+        mockUseUnreadCount.mockReturnValue({ data: { count: 3 }, isLoading: false })
+
+        render(<NotificationBell />)
+
+        expect(screen.getByTestId("notification-menu")).toHaveAttribute("data-open", "false")
     })
 })

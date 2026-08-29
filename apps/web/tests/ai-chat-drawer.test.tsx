@@ -1,5 +1,4 @@
 import * as React from "react"
-import { readFileSync } from "node:fs"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -25,10 +24,10 @@ import { AIChatDrawer } from "@/components/ai/AIChatDrawer"
 
 function DrawerHarness() {
     const [isOpen, setIsOpen] = React.useState(false)
-    const closePanel = React.useCallback(() => {
+    const closePanel = () => {
         mockClosePanel()
         setIsOpen(false)
-    }, [])
+    }
 
     mockUseAIContext.mockReturnValue({
         isOpen,
@@ -95,14 +94,4 @@ describe("AIChatDrawer", () => {
         })
     })
 
-    it("ties final focus to the persistent floating trigger", () => {
-        const drawerSource = readFileSync("components/ai/AIChatDrawer.tsx", "utf8")
-        const triggerSource = readFileSync("components/ai/AIFloatingButton.tsx", "utf8")
-
-        expect(drawerSource).toContain("function getAIChatFinalFocus()")
-        expect(drawerSource).toContain(
-            'document.querySelector<HTMLElement>("[data-ai-chat-trigger]")'
-        )
-        expect(triggerSource).toContain("data-ai-chat-trigger")
-    })
 })

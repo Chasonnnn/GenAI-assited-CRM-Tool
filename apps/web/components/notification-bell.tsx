@@ -4,6 +4,7 @@ import type { Route } from "next"
 import { Bell, BellOff } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { formatDistanceToNow } from "date-fns"
+import { useState, type Dispatch, type SetStateAction } from "react"
 
 import {
     DropdownMenu,
@@ -30,9 +31,34 @@ import { useBrowserNotifications } from "@/lib/hooks/use-browser-notifications"
 import { useBrowserNotificationDelivery } from "@/lib/hooks/use-browser-notification-delivery"
 import type { Notification } from "@/lib/api/notifications"
 import { getNotificationHref } from "@/lib/utils/notification-routing"
+import { useMountEffect } from "@/lib/hooks/use-mount-effect"
+import { consumeLoginNotificationReminder } from "@/lib/notifications/login-reminder"
+
+function OpenLoginNotificationReminder({
+    setOpen,
+}: {
+    setOpen: Dispatch<SetStateAction<boolean>>
+}) {
+    useMountEffect(() => {
+        if (consumeLoginNotificationReminder()) {
+            setOpen(true)
+        }
+    })
+
+    return null
+}
+
+function ConsumeLoginNotificationReminder() {
+    useMountEffect(() => {
+        consumeLoginNotificationReminder()
+    })
+
+    return null
+}
 
 export function NotificationBell() {
     const { push } = useRouter()
+    const [isOpen, setIsOpen] = useState(false)
 
     // Real-time WebSocket connection
     const { isConnected, lastNotification, unreadCount: wsUnreadCount } = useNotificationSocket()
@@ -79,7 +105,14 @@ export function NotificationBell() {
     }
 
     return (
-        <DropdownMenu>
+        <>
+            {!isCountLoading &&
+                (unreadCount > 0 ? (
+                    <OpenLoginNotificationReminder setOpen={setIsOpen} />
+                ) : (
+                    <ConsumeLoginNotificationReminder />
+                ))}
+            <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
             <DropdownMenuTrigger
                 aria-label={triggerLabel}
                 className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "relative")}
@@ -171,6 +204,7 @@ export function NotificationBell() {
                     View all notifications
                 </DropdownMenuItem>
             </DropdownMenuContent>
-        </DropdownMenu>
+            </DropdownMenu>
+        </>
     )
 }

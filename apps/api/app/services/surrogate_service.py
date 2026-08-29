@@ -687,9 +687,9 @@ def create_surrogate(
     workflow_triggers.trigger_surrogate_created(db, surrogate)
 
     if emit_events:
-        from app.services import dashboard_events
+        from app.services import dashboard_service
 
-        dashboard_events.push_dashboard_stats(db, org_id)
+        dashboard_service.push_dashboard_stats(db, org_id)
 
     return surrogate
 
@@ -1158,9 +1158,9 @@ def archive_surrogate(
     db.commit()
 
     if emit_events:
-        from app.services import dashboard_events
+        from app.services import dashboard_service
 
-        dashboard_events.push_dashboard_stats(db, surrogate.organization_id)
+        dashboard_service.push_dashboard_stats(db, surrogate.organization_id)
 
     return surrogate
 
@@ -1227,9 +1227,9 @@ def restore_surrogate(
     db.commit()
 
     if emit_events:
-        from app.services import dashboard_events
+        from app.services import dashboard_service
 
-        dashboard_events.push_dashboard_stats(db, surrogate.organization_id)
+        dashboard_service.push_dashboard_stats(db, surrogate.organization_id)
 
     return surrogate, None
 
@@ -1937,9 +1937,9 @@ def hard_delete_surrogate(
     db.delete(surrogate)
     db.commit()
     if emit_events:
-        from app.services import dashboard_events
+        from app.services import dashboard_service
 
-        dashboard_events.push_dashboard_stats(db, surrogate.organization_id)
+        dashboard_service.push_dashboard_stats(db, surrogate.organization_id)
     return True
 
 

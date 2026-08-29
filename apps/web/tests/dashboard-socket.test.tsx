@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act } from '@testing-library/react'
 import { useQueryClient } from '@tanstack/react-query'
+
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@tanstack/react-query")>()
+    return { ...actual, useQueryClient: vi.fn() }
+})
+
 import { useDashboardSocket } from '@/lib/hooks/use-dashboard-socket'
 import { getWebSocketUrl } from '@/lib/websocket-url'
 
@@ -54,11 +60,14 @@ function DashboardSocketHarness() {
 
 describe('useDashboardSocket', () => {
     let errorSpy: ReturnType<typeof vi.spyOn>
+    const invalidateQueries = vi.fn()
 
     beforeEach(() => {
         MockWebSocket.instances = []
         vi.stubGlobal('WebSocket', MockWebSocket)
         errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        invalidateQueries.mockReset()
+        vi.mocked(useQueryClient).mockReturnValue({ invalidateQueries } as never)
     })
 
     afterEach(() => {
@@ -92,16 +101,11 @@ describe('useDashboardSocket', () => {
             throw new Error('WebSocket instance was not created')
         }
 
-        const queryClient = vi.mocked(useQueryClient).mock.results.at(-1)?.value
-        if (!queryClient) {
-            throw new Error('Query client mock was not initialized')
-        }
-
         act(() => {
             ws.emitMessage(JSON.stringify({ type: 'stats_update', data: { total: 123 } }))
         })
 
-        expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+        expect(invalidateQueries).toHaveBeenCalledWith({
             queryKey: ['surrogates', 'stats'],
             refetchType: 'active',
         })

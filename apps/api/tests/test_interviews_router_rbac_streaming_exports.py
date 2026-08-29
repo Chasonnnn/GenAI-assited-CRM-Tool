@@ -101,7 +101,7 @@ async def test_interview_summarize_stream_endpoint_returns_sse(
         organization_id=test_org.id,
         is_enabled=True,
         provider="gemini",
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         current_version=1,
         anonymize_pii=False,
         consent_accepted_at=datetime.now(UTC),
@@ -119,7 +119,7 @@ async def test_interview_summarize_stream_endpoint_returns_sse(
             self.is_final = is_final
             self.prompt_tokens = prompt_tokens
             self.completion_tokens = completion_tokens
-            self.model = "gemini-3-flash-preview"
+            self.model = "gemini-3.7-flash"
 
     class _Provider:
         async def stream_chat(self, **_kwargs):

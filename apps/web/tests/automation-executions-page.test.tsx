@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { useQuery } from '@tanstack/react-query'
+
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@tanstack/react-query")>()
+    return { ...actual, useQuery: vi.fn() }
+})
+
 import WorkflowExecutionsPage from '../app/(app)/automation/executions/page'
 
 vi.mock('next/navigation', () => ({

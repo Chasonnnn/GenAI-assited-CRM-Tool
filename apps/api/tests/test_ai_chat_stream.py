@@ -14,7 +14,7 @@ def _create_ai_settings(db, org_id, user_id) -> AISettings:
         organization_id=org_id,
         is_enabled=True,
         provider="gemini",
-        model="gemini-3-flash-preview",
+        model="gemini-3.7-flash",
         current_version=1,
         consent_accepted_at=datetime.now(UTC),
         consent_accepted_by=user_id,
@@ -40,14 +40,14 @@ async def test_chat_stream_returns_events(
 
     class StubProvider:
         async def stream_chat(self, messages, **kwargs):  # noqa: ARG002
-            yield ChatStreamChunk(text="Hello", model="gemini-3-flash-preview")
-            yield ChatStreamChunk(text=" world", model="gemini-3-flash-preview")
+            yield ChatStreamChunk(text="Hello", model="gemini-3.7-flash")
+            yield ChatStreamChunk(text=" world", model="gemini-3.7-flash")
             yield ChatStreamChunk(
                 text="",
                 prompt_tokens=1,
                 completion_tokens=2,
                 total_tokens=3,
-                model="gemini-3-flash-preview",
+                model="gemini-3.7-flash",
                 is_final=True,
             )
 

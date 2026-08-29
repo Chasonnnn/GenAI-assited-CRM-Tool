@@ -17,7 +17,8 @@ from uuid import UUID, uuid4
 
 import httpx
 from fastapi import HTTPException
-from sqlalchemy import and_, func, or_, text
+from sqlalchemy import Text, and_, cast, func, or_, text
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -2064,19 +2065,25 @@ def _ensure_user_sent_mailboxes(db: Session, *, org_id: UUID) -> None:
         )
         .all()
     )
-    for integration in rows:
-        if not integration_has_inbound_scope(integration):
-            continue
-
-        existing = (
-            db.query(Mailbox)
+    eligible_integrations = [
+        integration for integration in rows if integration_has_inbound_scope(integration)
+    ]
+    existing_by_integration_id: dict[UUID | None, Mailbox] = {}
+    if eligible_integrations:
+        existing_by_integration_id = {
+            mailbox.user_integration_id: mailbox
+            for mailbox in db.query(Mailbox)
             .filter(
                 Mailbox.organization_id == org_id,
                 Mailbox.kind == MailboxKind.USER_SENT,
-                Mailbox.user_integration_id == integration.id,
+                Mailbox.user_integration_id.in_(
+                    [integration.id for integration in eligible_integrations]
+                ),
             )
-            .first()
-        )
+            .all()
+        }
+    for integration in eligible_integrations:
+        existing = existing_by_integration_id.get(integration.id)
         if existing:
             existing.email_address = integration.account_email
             existing.updated_at = _now_utc()
@@ -3407,21 +3414,27 @@ def process_occurrence_parse(db: Session, *, occurrence_id: UUID) -> None:
 def _find_ticket_by_reply_token(
     db: Session, *, organization_id: UUID, reply_to_emails: list[str]
 ) -> UUID | None:
+    codes: list[str] = []
     for email in reply_to_emails:
         match = _REPLY_TO_TOKEN_RE.match((email or "").strip().lower())
-        if not match:
-            continue
-        code = match.group(1)
-        ticket = (
-            db.query(Ticket)
-            .filter(
-                Ticket.organization_id == organization_id,
-                func.lower(Ticket.ticket_code) == code,
-            )
-            .first()
+        if match:
+            codes.append(match.group(1))
+    if not codes:
+        return None
+
+    ticket_ids_by_code = {
+        code: ticket_id
+        for ticket_id, code in db.query(Ticket.id, func.lower(Ticket.ticket_code))
+        .filter(
+            Ticket.organization_id == organization_id,
+            func.lower(Ticket.ticket_code).in_(codes),
         )
-        if ticket:
-            return ticket.id
+        .all()
+    }
+    for code in codes:
+        ticket_id = ticket_ids_by_code.get(code)
+        if ticket_id is not None:
+            return ticket_id
     return None
 
 
@@ -3627,8 +3640,13 @@ def process_occurrence_stitch(db: Session, *, occurrence_id: UUID) -> None:
         db.commit()
         return
 
-    content = (
-        db.query(EmailMessageContent)
+    content_row = (
+        db.query(
+            EmailMessageContent,
+            cast(EmailMessageContent.reply_to_emails, ARRAY(Text)).label(
+                "reply_to_emails_text"
+            ),
+        )
         .filter(
             EmailMessageContent.organization_id == org_id,
             EmailMessageContent.message_id == occurrence.message_id,
@@ -3636,13 +3654,14 @@ def process_occurrence_stitch(db: Session, *, occurrence_id: UUID) -> None:
         .order_by(EmailMessageContent.content_version.desc(), EmailMessageContent.parsed_at.desc())
         .first()
     )
-    if content is None:
+    if content_row is None:
         occurrence.state = EmailOccurrenceState.FAILED
         occurrence.stitch_error = "missing message content"
         occurrence.updated_at = _now_utc()
         db.add(occurrence)
         db.commit()
         return
+    content, reply_to_emails = content_row
 
     headers_json = content.headers_json or {}
     header_ticket_id = None
@@ -3677,7 +3696,7 @@ def process_occurrence_stitch(db: Session, *, occurrence_id: UUID) -> None:
         reply_ticket_id = _find_ticket_by_reply_token(
             db,
             organization_id=org_id,
-            reply_to_emails=list(content.reply_to_emails or []),
+            reply_to_emails=list(reply_to_emails or []),
         )
         if reply_ticket_id:
             ticket = _ensure_ticket_belongs_to_org(db, org_id, reply_ticket_id)
@@ -4112,37 +4131,3 @@ def record_surrogate_outbound_gmail_send(
     db.commit()
     db.refresh(ticket)
     return ticket.id
-
-
-# =============================================================================
-# Compatibility wrapper for surrogate send-email endpoint
-# =============================================================================
-
-
-def compose_surrogate_template_email(
-    db: Session,
-    *,
-    org_id: UUID,
-    actor_user_id: UUID,
-    surrogate_id: UUID,
-    to_email: str,
-    subject: str,
-    body_html: str,
-    idempotency_key: str | None,
-) -> dict:
-    """Route legacy surrogate send-email flow through ticket compose."""
-    body_text = re.sub(r"<[^>]+>", " ", body_html or "")
-    body_text = " ".join(body_text.split()) or "Message"
-    return compose_ticket(
-        db,
-        org_id=org_id,
-        actor_user_id=actor_user_id,
-        to_emails=[to_email],
-        cc_emails=[],
-        subject=subject,
-        body_text=body_text,
-        body_html=body_html,
-        surrogate_id=surrogate_id,
-        queue_id=None,
-        idempotency_key=idempotency_key,
-    )

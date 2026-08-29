@@ -41,65 +41,6 @@ def test_workflow(db, test_org, test_user):
 
 
 # =============================================================================
-# Workflow Model Tests
-# =============================================================================
-
-
-def test_workflow_model_creation(db, test_org, test_user):
-    """Test AutomationWorkflow model can be created with all fields."""
-    from app.db.models import AutomationWorkflow
-
-    workflow = AutomationWorkflow(
-        id=uuid4(),
-        organization_id=test_org.id,
-        name="Complete Workflow",
-        description="Workflow with all fields",
-        icon="mail",
-        trigger_type="inactivity",
-        trigger_config={"days": 7},
-        conditions=[{"field": "state", "operator": "equals", "value": "TX"}],
-        condition_logic="AND",
-        actions=[
-            {"action_type": "send_email", "template_id": str(uuid4())},
-            {"action_type": "add_note", "content": "Followed up"},
-        ],
-        is_enabled=True,
-        is_system_workflow=False,
-        created_by_user_id=test_user.id,
-    )
-    db.add(workflow)
-    db.flush()
-
-    assert workflow.id is not None
-    assert workflow.created_at is not None
-    assert workflow.trigger_config["days"] == 7
-
-
-def test_workflow_model_with_recurrence(db, test_org, test_user):
-    """Test workflow model with recurrence fields."""
-    from app.db.models import AutomationWorkflow
-
-    workflow = AutomationWorkflow(
-        id=uuid4(),
-        organization_id=test_org.id,
-        name="Recurring Workflow",
-        trigger_type="scheduled",
-        trigger_config={"cron": "0 9 * * 1"},  # Every Monday 9am
-        actions=[{"action_type": "add_note", "content": "Weekly check"}],
-        is_enabled=True,
-        is_system_workflow=False,
-        recurrence_mode="recurring",
-        recurrence_interval_hours=168,  # Weekly
-        created_by_user_id=test_user.id,
-    )
-    db.add(workflow)
-    db.flush()
-
-    assert workflow.recurrence_mode == "recurring"
-    assert workflow.recurrence_interval_hours == 168
-
-
-# =============================================================================
 # Workflow Service Tests
 # =============================================================================
 

@@ -375,8 +375,7 @@ class TestTokens:
         )
         slots = get_available_slots(db, query)
 
-        if not slots:
-            pytest.skip("No available slots for testing")
+        assert slots, "weekday availability fixture should produce booking slots"
 
         appointment_type.meeting_mode = "phone"
         db.commit()
@@ -461,8 +460,7 @@ class TestMeetingModeSelection:
             client_timezone="America/New_York",
         )
         slots = get_available_slots(db, query)
-        if not slots:
-            pytest.skip("No available slots for testing")
+        assert slots, "weekday availability fixture should produce booking slots"
 
         appt = create_booking(
             db=db,
@@ -518,8 +516,7 @@ class TestMeetingModeSelection:
             client_timezone="America/New_York",
         )
         slots = get_available_slots(db, query)
-        if not slots:
-            pytest.skip("No available slots for testing")
+        assert slots, "weekday availability fixture should produce booking slots"
 
         with pytest.raises(ValueError, match="Meeting mode not available"):
             create_booking(
@@ -658,8 +655,7 @@ async def test_manage_reschedule_by_token(
         client_timezone="America/New_York",
     )
     slots = get_available_slots(db, query)
-    if len(slots) < 2:
-        pytest.skip("Not enough available slots for reschedule test")
+    assert len(slots) >= 2, "weekday availability fixture should produce reschedule choices"
 
     initial_slot = slots[0]
     replacement_slot = slots[1]
@@ -859,8 +855,7 @@ async def test_public_booking_accepts_long_idempotency_key(
         client_timezone="America/New_York",
     )
     slots = get_available_slots(db, query)
-    if not slots:
-        pytest.skip("No available slots for testing")
+    assert slots, "weekday availability fixture should produce booking slots"
 
     long_key = f"{'x' * 96}"
     payload = {
@@ -920,8 +915,7 @@ class TestBookingStatus:
         )
         slots = get_available_slots(db, query)
 
-        if not slots:
-            pytest.skip("No available slots for testing")
+        assert slots, "weekday availability fixture should produce booking slots"
 
         appointment_type.meeting_mode = "phone"
         db.commit()
@@ -971,8 +965,7 @@ class TestBookingStatus:
         )
         slots = get_available_slots(db, query)
 
-        if not slots:
-            pytest.skip("No available slots for testing")
+        assert slots, "weekday availability fixture should produce booking slots"
 
         appt = create_booking(
             db=db,
@@ -1024,8 +1017,7 @@ class TestBookingStatus:
         )
         slots = get_available_slots(db, query)
 
-        if not slots:
-            pytest.skip("No available slots for testing")
+        assert slots, "weekday availability fixture should produce booking slots"
 
         appointment_type.meeting_mode = "phone"
         db.commit()
@@ -1127,8 +1119,7 @@ class TestTimezoneHandling:
         )
         slots = get_available_slots(db, query)
 
-        if not slots:
-            pytest.skip("No available slots for testing")
+        assert slots, "weekday availability fixture should produce booking slots"
 
         with pytest.raises(ValueError, match="Invalid client timezone"):
             create_booking(
@@ -1257,8 +1248,7 @@ class TestApprovalConflictCheck:
         )
         slots = get_available_slots(db, query)
 
-        if len(slots) < 1:
-            pytest.skip("No available slots for testing")
+        assert slots, "weekday availability fixture should produce booking slots"
 
         # Create a confirmed appointment at slot 0
         confirmed_appt = Appointment(
@@ -1343,8 +1333,7 @@ class TestTaskTimezoneConflict:
         )
         slots_before = get_available_slots(db, query)
 
-        if not slots_before:
-            pytest.skip("No available slots for testing")
+        assert slots_before, "weekday availability fixture should produce booking slots"
 
         # Add a task at 10:00 AM (user's timezone - America/New_York from availability rules)
         task = Task(
