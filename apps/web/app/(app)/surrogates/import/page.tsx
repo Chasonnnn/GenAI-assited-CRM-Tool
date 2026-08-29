@@ -489,8 +489,9 @@ function ImportActionsMenu({
     return (
         <DropdownMenu>
             <DropdownMenuTrigger
+                aria-label={`Import actions for ${imp.filename}`}
                 render={(props) => (
-                    <Button {...props} variant="ghost" size="icon" disabled={disabled} aria-label={`Import actions for ${imp.filename}`}>
+                    <Button {...props} variant="ghost" size="icon" disabled={disabled}>
                         <MoreHorizontalIcon className="size-4" aria-hidden="true" />
                     </Button>
                 )}
