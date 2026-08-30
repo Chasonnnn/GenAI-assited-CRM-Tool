@@ -2,7 +2,7 @@
  * React Query hooks for Surrogates module.
  */
 
-import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as surrogatesApi from '../api/surrogates';
 import type { SurrogateCreatedDatesParams, SurrogateListParams } from '../api/surrogates';
 
@@ -438,6 +438,17 @@ export function useSurrogateActivity(surrogateId: string, page: number = 1, perP
         queryKey: [...surrogateKeys.activity(surrogateId), { page, perPage }],
         queryFn: () => surrogatesApi.getSurrogateActivity(surrogateId, page, perPage),
         enabled: !!surrogateId,
+    });
+}
+
+export function useInfiniteSurrogateActivity(surrogateId: string) {
+    return useInfiniteQuery({
+        queryKey: [...surrogateKeys.activity(surrogateId), 'infinite'],
+        queryFn: ({ pageParam }) => surrogatesApi.getSurrogateActivity(surrogateId, pageParam, 50),
+        initialPageParam: 1,
+        getNextPageParam: (lastPage) =>
+            lastPage.page < lastPage.pages ? lastPage.page + 1 : undefined,
+        enabled: Boolean(surrogateId),
     });
 }
 

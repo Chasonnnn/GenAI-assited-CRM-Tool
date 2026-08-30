@@ -35,6 +35,8 @@ import {
 } from "@/lib/hooks/use-donors"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
+import { useEntityActivity } from "@/lib/hooks/use-entity-activity"
+import { useTasks } from "@/lib/hooks/use-tasks"
 import { getDonorPipelineEntityType, type Donor } from "@/lib/types/donor"
 
 const DEFAULT_DONORS_LIST_PATH = "/donors"
@@ -78,6 +80,11 @@ function LoadedDonorDetail({ donor, returnTo }: { donor: Donor; returnTo: string
     const archiveDonor = useArchiveDonor()
     const restoreDonor = useRestoreDonor()
     const historyQuery = useDonorHistory(donor.id)
+    const activityQuery = useEntityActivity("donor", donor.id)
+    const tasksQuery = useTasks(
+        { donor_id: donor.id, exclude_approvals: true, per_page: 100 },
+        { enabled: canViewTasks },
+    )
     const pipelineEntityType = getDonorPipelineEntityType(donor.donor_type)
     const pipelineQuery = useDefaultPipeline(pipelineEntityType)
     const stages = getActiveDonorStages(pipelineQuery.data?.stages)
@@ -175,10 +182,29 @@ function LoadedDonorDetail({ donor, returnTo }: { donor: Donor; returnTo: string
                 returnTo={returnTo}
                 stages={stages}
                 history={historyQuery.data ?? []}
-                historyStatus={
-                    historyQuery.isLoading ? "loading" : historyQuery.isError ? "error" : "ready"
+                activities={activityQuery.data?.items ?? []}
+                tasks={tasksQuery.data?.items ?? []}
+                tasksStatus={
+                    !canViewTasks
+                        ? "ready"
+                        : tasksQuery.isLoading
+                          ? "loading"
+                          : tasksQuery.isError
+                            ? "error"
+                            : "ready"
                 }
-                onRetryHistory={() => { void historyQuery.refetch() }}
+                onRetryTasks={() => { void tasksQuery.refetch() }}
+                activityStatus={
+                    historyQuery.isLoading || activityQuery.isLoading || pipelineQuery.isLoading
+                        ? "loading"
+                        : historyQuery.isError || activityQuery.isError || pipelineQuery.isError
+                          ? "error"
+                          : "ready"
+                }
+                onRetryActivity={() => {
+                    void historyQuery.refetch()
+                    void activityQuery.refetch()
+                }}
                 onEdit={openEdit}
                 onChangeStage={openStage}
                 onArchive={() => { void handleArchive() }}

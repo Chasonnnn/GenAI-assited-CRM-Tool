@@ -20,6 +20,7 @@ import type {
     DonorStatusUpdate,
     DonorUpdate,
 } from "@/lib/types/donor"
+import { entityActivityKeys } from "@/lib/hooks/use-entity-activity"
 
 export const donorKeys = {
     all: ["donors"] as const,
@@ -66,8 +67,11 @@ export function useCreateDonor() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: (data: DonorCreate) => createDonor(data),
-        onSuccess: () => {
+        onSuccess: (donor) => {
             void queryClient.invalidateQueries({ queryKey: donorKeys.lists() })
+            void queryClient.invalidateQueries({
+                queryKey: entityActivityKeys.entity("donor", donor.id),
+            })
         },
     })
 }
@@ -79,6 +83,9 @@ export function useUpdateDonor() {
         onSuccess: (donor) => {
             queryClient.setQueryData(donorKeys.detail(donor.id), donor)
             void queryClient.invalidateQueries({ queryKey: donorKeys.lists() })
+            void queryClient.invalidateQueries({
+                queryKey: entityActivityKeys.entity("donor", donor.id),
+            })
         },
     })
 }
@@ -94,6 +101,9 @@ export function useUpdateDonorStatus() {
             }
             void queryClient.invalidateQueries({ queryKey: donorKeys.lists() })
             void queryClient.invalidateQueries({ queryKey: donorKeys.history(id) })
+            void queryClient.invalidateQueries({
+                queryKey: entityActivityKeys.entity("donor", id),
+            })
         },
     })
 }
@@ -105,6 +115,9 @@ export function useArchiveDonor() {
         onSuccess: (donor) => {
             queryClient.setQueryData(donorKeys.detail(donor.id), donor)
             void queryClient.invalidateQueries({ queryKey: donorKeys.lists() })
+            void queryClient.invalidateQueries({
+                queryKey: entityActivityKeys.entity("donor", donor.id),
+            })
         },
     })
 }
@@ -116,6 +129,9 @@ export function useRestoreDonor() {
         onSuccess: (donor) => {
             queryClient.setQueryData(donorKeys.detail(donor.id), donor)
             void queryClient.invalidateQueries({ queryKey: donorKeys.lists() })
+            void queryClient.invalidateQueries({
+                queryKey: entityActivityKeys.entity("donor", donor.id),
+            })
         },
     })
 }
@@ -128,6 +144,9 @@ export function useCreateDonorNote() {
         onSuccess: (_, { donorId }) => {
             void queryClient.invalidateQueries({ queryKey: donorKeys.notes(donorId) })
             void queryClient.invalidateQueries({ queryKey: donorKeys.detail(donorId) })
+            void queryClient.invalidateQueries({
+                queryKey: entityActivityKeys.entity("donor", donorId),
+            })
         },
     })
 }
@@ -140,6 +159,9 @@ export function useDeleteDonorNote() {
         onSuccess: (_, { donorId }) => {
             void queryClient.invalidateQueries({ queryKey: donorKeys.notes(donorId) })
             void queryClient.invalidateQueries({ queryKey: donorKeys.detail(donorId) })
+            void queryClient.invalidateQueries({
+                queryKey: entityActivityKeys.entity("donor", donorId),
+            })
         },
     })
 }

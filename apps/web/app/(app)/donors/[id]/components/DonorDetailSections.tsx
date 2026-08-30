@@ -1,11 +1,9 @@
 "use client"
 
 import {
-    ActivityIcon,
     ArchiveIcon,
     ArchiveRestoreIcon,
     ArrowLeftIcon,
-    ArrowRightIcon,
     CalendarIcon,
     GraduationCapIcon,
     Loader2Icon,
@@ -17,6 +15,7 @@ import {
 } from "lucide-react"
 
 import Link from "@/components/app-link"
+import { EntityActivityTimeline } from "@/components/activity/EntityActivityTimeline"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,6 +31,9 @@ import { DonorNotesSection } from "@/components/donors/DonorNotesSection"
 import { DonorProfilePhoto } from "@/components/donors/DonorProfilePhoto"
 import { DonorTasksSection } from "@/components/donors/DonorTasksSection"
 import type { PipelineStage } from "@/lib/api/pipelines"
+import type { EntityActivity } from "@/lib/api/activity"
+import type { TaskListItem } from "@/lib/api/tasks"
+import { normalizeDonorHistory } from "@/lib/activity-history"
 import { getDonorStageLabel, getDonorStageStyle } from "@/lib/donor-stage-utils"
 import { formatDateTime } from "@/lib/formatters"
 import {
@@ -60,83 +62,17 @@ function DetailRow({
     )
 }
 
-function DonorActivityTimeline({
-    stages,
-    history,
-    historyStatus,
-    onRetry,
-}: {
-    stages: PipelineStage[]
-    history: DonorStatusHistoryItem[]
-    historyStatus: "loading" | "error" | "ready"
-    onRetry: () => void
-}) {
-    return (
-        <Card className="gap-4 py-4">
-            <CardHeader className="px-4 pb-2">
-                <CardTitle className="flex items-center gap-2 text-base">
-                    <ActivityIcon className="size-4" aria-hidden="true" />
-                    <h2>Activity</h2>
-                </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4">
-                {historyStatus === "loading" ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
-                        <Loader2Icon className="size-4 animate-spin" />
-                        Loading activity…
-                    </div>
-                ) : historyStatus === "error" ? (
-                    <div className="space-y-3">
-                        <p className="text-sm text-destructive">Failed to load activity.</p>
-                        <Button variant="outline" size="sm" onClick={onRetry}>Retry</Button>
-                    </div>
-                ) : history.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No activity yet.</p>
-                ) : (
-                    <ol className="space-y-4" aria-label="Donor stage activity">
-                        {history.map((item) => {
-                            const stageColor = stages.find((stage) => stage.id === item.new_stage_id)?.color
-                            return (
-                                <li key={item.id} className="relative border-l border-border/60 pb-4 pl-4 last:pb-0">
-                                    <span
-                                        className="absolute -left-1.5 top-1 size-3 rounded-full border-2 border-background bg-muted-foreground"
-                                        style={stageColor ? { backgroundColor: stageColor } : undefined}
-                                        aria-hidden="true"
-                                    />
-                                    <div className="flex flex-col gap-1">
-                                        <div className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
-                                            {item.old_label_snapshot ? (
-                                                <>
-                                                    <span>{item.old_label_snapshot}</span>
-                                                    <ArrowRightIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
-                                                </>
-                                            ) : null}
-                                            <span>{item.new_label_snapshot}</span>
-                                        </div>
-                                        {item.reason ? (
-                                            <p className="text-sm text-muted-foreground">{item.reason}</p>
-                                        ) : null}
-                                        <time className="text-xs text-muted-foreground" dateTime={item.effective_at}>
-                                            {formatDateTime(item.effective_at, "—")}
-                                        </time>
-                                    </div>
-                                </li>
-                            )
-                        })}
-                    </ol>
-                )}
-            </CardContent>
-        </Card>
-    )
-}
-
 export function DonorDetailSections({
     donor,
     returnTo,
     stages,
     history,
-    historyStatus,
-    onRetryHistory,
+    activities,
+    tasks,
+    tasksStatus,
+    onRetryTasks,
+    activityStatus,
+    onRetryActivity,
     onEdit,
     onChangeStage,
     onArchive,
@@ -150,8 +86,12 @@ export function DonorDetailSections({
     returnTo: string
     stages: PipelineStage[]
     history: DonorStatusHistoryItem[]
-    historyStatus: "loading" | "error" | "ready"
-    onRetryHistory: () => void
+    activities: EntityActivity[]
+    tasks: TaskListItem[]
+    tasksStatus: "loading" | "error" | "ready"
+    onRetryTasks: () => void
+    activityStatus: "loading" | "error" | "ready"
+    onRetryActivity: () => void
     onEdit: () => void
     onChangeStage: () => void
     onArchive: () => void
@@ -287,11 +227,17 @@ export function DonorDetailSections({
                         />
                     </section>
                     <aside className="space-y-6" aria-label="Donor activity">
-                        <DonorActivityTimeline
+                        <EntityActivityTimeline
+                            currentStageId={donor.stage_id}
                             stages={stages}
-                            history={history}
-                            historyStatus={historyStatus}
-                            onRetry={onRetryHistory}
+                            stageHistory={normalizeDonorHistory(history)}
+                            activities={activities}
+                            tasks={tasks}
+                            tasksStatus={tasksStatus}
+                            onRetryTasks={onRetryTasks}
+                            status={activityStatus}
+                            onRetry={onRetryActivity}
+                            historyHref={`/donors/${donor.id}/history?return_to=${encodeURIComponent(returnTo)}`}
                         />
                     </aside>
                 </div>

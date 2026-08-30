@@ -9,7 +9,8 @@ import {
 } from "@/components/intended-parents/intended-parent-form-values"
 import { IntendedParentClinicCard } from "@/components/intended-parents/IntendedParentClinicCard"
 import { TrustInfoCard } from "@/components/intended-parents/TrustInfoCard"
-import { IntendedParentActivityTimeline } from "@/components/intended-parents/IntendedParentActivityTimeline"
+import { EntityActivityTimeline } from "@/components/activity/EntityActivityTimeline"
+import { normalizeIntendedParentHistory } from "@/lib/activity-history"
 import {
     ContactInformationCard,
     EditIntendedParentDialog,
@@ -32,8 +33,8 @@ import {
     useCreateIntendedParentNote,
 } from "@/lib/hooks/use-intended-parents"
 import { useIntendedParentStatuses } from "@/lib/hooks/use-metadata"
+import { useEntityActivity } from "@/lib/hooks/use-entity-activity"
 import { useTasks } from "@/lib/hooks/use-tasks"
-import { useIPAttachments } from "@/lib/hooks/use-attachments"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { ProposeMatchFromIPDialog } from "@/components/matches/ProposeMatchFromIPDialog"
 import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
@@ -152,14 +153,15 @@ export default function IntendedParentDetailPage() {
 
     // Queries
     const { data: ip, isLoading } = useIntendedParent(id)
-    const { data: history } = useIntendedParentHistory(id)
+    const historyQuery = useIntendedParentHistory(id)
+    const activityQuery = useEntityActivity("intended_parent", id)
     const { data: notes } = useIntendedParentNotes(id)
-    const { data: stageOptionsResponse } = useIntendedParentStatuses()
-    const { data: tasksData } = useTasks(
+    const stageOptionsQuery = useIntendedParentStatuses()
+    const stageOptionsResponse = stageOptionsQuery.data
+    const tasksQuery = useTasks(
         { intended_parent_id: id, exclude_approvals: true },
         { enabled: !!id },
     )
-    const { data: attachments } = useIPAttachments(id)
 
     // Mutations
     const updateMutation = useUpdateIntendedParent()
@@ -376,13 +378,28 @@ export default function IntendedParentDetailPage() {
                     </div>
 
                     <div className="space-y-6">
-                        <IntendedParentActivityTimeline
+                        <EntityActivityTimeline
                             currentStageId={ip.stage_id ?? ""}
                             stages={statusStages}
-                            history={history ?? []}
-                            notes={notes ?? []}
-                            attachments={attachments ?? []}
-                            tasks={tasksData?.items ?? []}
+                            stageHistory={normalizeIntendedParentHistory(historyQuery.data ?? [])}
+                            activities={activityQuery.data?.items ?? []}
+                            tasks={tasksQuery.data?.items ?? []}
+                            tasksStatus={
+                                tasksQuery.isLoading ? "loading" : tasksQuery.isError ? "error" : "ready"
+                            }
+                            onRetryTasks={() => { void tasksQuery.refetch() }}
+                            status={
+                                historyQuery.isLoading || activityQuery.isLoading || stageOptionsQuery.isLoading
+                                    ? "loading"
+                                    : historyQuery.isError || activityQuery.isError || stageOptionsQuery.isError
+                                      ? "error"
+                                      : "ready"
+                            }
+                            onRetry={() => {
+                                void historyQuery.refetch()
+                                void activityQuery.refetch()
+                            }}
+                            historyHref={`/intended-parents/${id}/history`}
                         />
                     </div>
                 </div>

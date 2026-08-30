@@ -7,6 +7,7 @@ import { attachmentsApi } from "../api/attachments"
 import { toast } from "@/components/ui/toast"
 import { surrogateKeys } from "./use-surrogates"
 import { donorKeys } from "./use-donors"
+import { entityActivityKeys } from "./use-entity-activity"
 import { openDownloadUrlWithSpreadsheetWarning } from "@/lib/utils/csv-download-warning"
 
 export function useAttachments(surrogateId: string | null) {
@@ -121,6 +122,9 @@ export function useUploadIPAttachment() {
             attachmentsApi.uploadForIP(ipId, file),
         onSuccess: (data, variables) => {
             void queryClient.invalidateQueries({ queryKey: ["ip-attachments", variables.ipId] })
+            void queryClient.invalidateQueries({
+                queryKey: entityActivityKeys.entity("intended_parent", variables.ipId),
+            })
         },
     })
 }
@@ -152,6 +156,9 @@ function invalidateDonorAttachmentSurfaces(
 ) {
     void queryClient.invalidateQueries({ queryKey: donorAttachmentKeys.list(donorId) })
     void queryClient.invalidateQueries({ queryKey: donorKeys.detail(donorId) })
+    void queryClient.invalidateQueries({
+        queryKey: entityActivityKeys.entity("donor", donorId),
+    })
 }
 
 export function useUploadDonorAttachment() {
