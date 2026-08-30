@@ -793,6 +793,7 @@ class GoogleCalendarEventsResponse(BaseModel):
     connected: bool
     events: list[GoogleCalendarEventRead]
     error: str | None = None
+    complete: bool = True
 
 
 @router.get(
@@ -876,6 +877,7 @@ async def get_google_calendar_events(
         connected=result["connected"],
         events=events,
         error=result["error"],
+        complete=result.get("complete", True),
     )
 
 

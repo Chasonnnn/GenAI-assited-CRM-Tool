@@ -471,6 +471,12 @@ def export_surrogate_packet(
             surrogate_name=surrogate_name,
             org_name=org_name,
         )
+    except pdf_export_service.PdfRendererBusyError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc),
+            headers={"Retry-After": "5"},
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

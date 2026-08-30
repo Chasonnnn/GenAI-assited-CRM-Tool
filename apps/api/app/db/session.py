@@ -27,7 +27,10 @@ def create_engine_with_settings(config: Settings):
         )
 
     return create_engine(
-        config.DATABASE_URL.get_secret_value(), connect_args=connect_args, **pool_kwargs
+        config.DATABASE_URL.get_secret_value(),
+        connect_args=connect_args,
+        hide_parameters=True,
+        **pool_kwargs,
     )
 
 

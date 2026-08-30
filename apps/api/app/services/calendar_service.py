@@ -596,12 +596,23 @@ async def get_user_calendar_events_across_calendars(
     """
     integration = oauth_service.get_user_integration(db, user_id, "google_calendar")
     if not integration:
-        return {"connected": False, "events": [], "error": "not_connected"}
+        return {
+            "connected": False,
+            "events": [],
+            "error": "not_connected",
+            "complete": False,
+        }
 
     access_token = await get_google_access_token(db, user_id)
     if not access_token:
-        return {"connected": False, "events": [], "error": "token_expired"}
+        return {
+            "connected": False,
+            "events": [],
+            "error": "token_expired",
+            "complete": False,
+        }
 
+    complete = True
     if calendar_ids:
         ids = calendar_ids
     else:
@@ -614,26 +625,33 @@ async def get_user_calendar_events_across_calendars(
                 type(exc).__name__,
             )
             ids = ["primary"]
+            complete = False
     if not ids:
         ids = ["primary"]
 
     events: list[CalendarEvent] = []
     seen_event_ids: set[str] = set()
     for calendar_id in ids:
-        calendar_events = await get_google_events(
+        snapshot = await _fetch_google_events_snapshot(
             access_token=access_token,
             calendar_id=calendar_id,
             time_min=time_min,
             time_max=time_max,
         )
-        for event in calendar_events:
+        complete = complete and snapshot["complete"]
+        for event in snapshot["events"]:
             event_id = event.get("id")
             if not event_id or event_id in seen_event_ids:
                 continue
             seen_event_ids.add(event_id)
             events.append(event)
 
-    return {"connected": True, "events": events, "error": None}
+    return {
+        "connected": True,
+        "events": events,
+        "error": None if complete else "incomplete",
+        "complete": complete,
+    }
 
 
 async def get_user_calendar_events(

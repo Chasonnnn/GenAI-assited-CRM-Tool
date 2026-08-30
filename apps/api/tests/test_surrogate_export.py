@@ -256,6 +256,30 @@ async def test_surrogate_export_with_submission_sets_header_true(
 
 
 @pytest.mark.asyncio
+async def test_surrogate_export_returns_retryable_503_when_renderer_is_busy(
+    authed_client, db, test_org, test_user, default_stage, monkeypatch
+):
+    surrogate = _create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        default_stage,
+        suffix=uuid.uuid4().hex[:8],
+    )
+
+    def _busy(**_kwargs):
+        raise pdf_export_service.PdfRendererBusyError("PDF renderer is busy; retry shortly")
+
+    monkeypatch.setattr(pdf_export_service, "export_surrogate_packet_pdf", _busy)
+
+    response = await authed_client.get(f"/surrogates/{surrogate.id}/export")
+
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "5"
+    assert response.json() == {"detail": "PDF renderer is busy; retry shortly"}
+
+
+@pytest.mark.asyncio
 async def test_surrogate_export_view_handles_unknown_task_type(
     client, db, test_org, test_user, default_stage
 ):

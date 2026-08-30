@@ -2,11 +2,14 @@
 
 import asyncio
 import base64
+import fcntl
 import html
 import math
 import os
 import re
+import tempfile
 import uuid
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
@@ -41,6 +44,31 @@ CHART_COLORS = [
     "#8b5cf6",  # Violet
 ]
 
+MAX_EMBEDDED_IMAGE_BYTES = 5 * 1024 * 1024
+MAX_EMBEDDED_IMAGE_TOTAL_BYTES = 12 * 1024 * 1024
+PDF_RENDER_LOCK_PATH = Path(tempfile.gettempdir()) / "surrogacy-force-pdf-render.lock"
+
+
+class PdfRendererBusyError(RuntimeError):
+    """Raised when another Chromium PDF render is already active in the container."""
+
+
+@contextmanager
+def _pdf_render_slot():
+    """Limit Chromium PDF rendering to one process in a shared container."""
+    lock_file = PDF_RENDER_LOCK_PATH.open("a+b")
+    try:
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise PdfRendererBusyError("PDF renderer is busy; retry shortly") from exc
+        yield
+    finally:
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        finally:
+            lock_file.close()
+
 
 def _format_stage_label(value: str | None) -> str:
     if not value:
@@ -52,17 +80,24 @@ async def _render_html_to_pdf(html_content: str) -> bytes:
     """Render HTML content to PDF using Playwright."""
     from playwright.async_api import async_playwright
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-        await page.set_content(html_content, wait_until="networkidle")
-        pdf_bytes = await page.pdf(
-            format="Letter",
-            print_background=True,
-            margin={"top": "0.75in", "bottom": "0.75in", "left": "0.75in", "right": "0.75in"},
-        )
-        await browser.close()
-        return pdf_bytes
+    with _pdf_render_slot():
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            try:
+                page = await browser.new_page()
+                await page.set_content(html_content, wait_until="networkidle")
+                return await page.pdf(
+                    format="Letter",
+                    print_background=True,
+                    margin={
+                        "top": "0.75in",
+                        "bottom": "0.75in",
+                        "left": "0.75in",
+                        "right": "0.75in",
+                    },
+                )
+            finally:
+                await browser.close()
 
 
 async def _render_url_to_pdf(
@@ -72,19 +107,26 @@ async def _render_url_to_pdf(
     """Render a URL to PDF using Playwright."""
     from playwright.async_api import async_playwright
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page(viewport={"width": 1280, "height": 720})
-        await page.goto(url, wait_until="networkidle")
-        await page.emulate_media(media="screen")
-        await page.wait_for_selector(wait_selector)
-        pdf_bytes = await page.pdf(
-            format="Letter",
-            print_background=True,
-            margin={"top": "0.75in", "bottom": "0.75in", "left": "0.75in", "right": "0.75in"},
-        )
-        await browser.close()
-        return pdf_bytes
+    with _pdf_render_slot():
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            try:
+                page = await browser.new_page(viewport={"width": 1280, "height": 720})
+                await page.goto(url, wait_until="networkidle")
+                await page.emulate_media(media="screen")
+                await page.wait_for_selector(wait_selector)
+                return await page.pdf(
+                    format="Letter",
+                    print_background=True,
+                    margin={
+                        "top": "0.75in",
+                        "bottom": "0.75in",
+                        "left": "0.75in",
+                        "right": "0.75in",
+                    },
+                )
+            finally:
+                await browser.close()
 
 
 def _merge_pdf_bytes(pdf_documents: list[bytes]) -> bytes:
@@ -769,16 +811,28 @@ def _format_file_size(size_bytes: int) -> str:
 
 def _collect_submission_files(files) -> list[dict[str, Any]]:
     file_entries: list[dict[str, Any]] = []
+    embedded_image_bytes = 0
     for file_record in files:
         if file_record.quarantined:
             continue
         data_url = None
-        if file_record.content_type.startswith("image/"):
+        declared_size = max(int(file_record.file_size or 0), 0)
+        can_embed_image = (
+            file_record.content_type.startswith("image/")
+            and 0 < declared_size <= MAX_EMBEDDED_IMAGE_BYTES
+            and embedded_image_bytes + declared_size <= MAX_EMBEDDED_IMAGE_TOTAL_BYTES
+        )
+        if can_embed_image:
             content, detected_type = _load_file_bytes(file_record.storage_key)
-            if content:
+            if (
+                content
+                and len(content) <= MAX_EMBEDDED_IMAGE_BYTES
+                and embedded_image_bytes + len(content) <= MAX_EMBEDDED_IMAGE_TOTAL_BYTES
+            ):
                 encoded = base64.b64encode(content).decode("ascii")
                 mime = detected_type or file_record.content_type
                 data_url = f"data:{mime};base64,{encoded}"
+                embedded_image_bytes += len(content)
 
         file_entries.append(
             {
@@ -2315,6 +2369,8 @@ def export_journey_pdf(
     loop = asyncio.new_event_loop()
     try:
         pdf_bytes = loop.run_until_complete(_render_html_to_pdf(html_content))
+    except PdfRendererBusyError:
+        raise
     except Exception as exc:
         raise ValueError("Failed to render journey export") from exc
     finally:
@@ -2353,6 +2409,8 @@ def export_surrogate_packet_pdf(
                 wait_selector="[data-case-details-print='ready']",
             )
         )
+    except PdfRendererBusyError:
+        raise
     except Exception as exc:
         raise ValueError("Failed to render case details export") from exc
     finally:

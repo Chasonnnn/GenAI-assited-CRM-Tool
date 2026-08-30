@@ -1091,6 +1091,7 @@ async def test_google_calendar_events_endpoint_fetches_across_calendars(
                 }
             ],
             "error": None,
+            "complete": True,
         }
 
     monkeypatch.setattr(
@@ -1113,10 +1114,77 @@ async def test_google_calendar_events_endpoint_fetches_across_calendars(
     assert called["user_id"] == test_auth.user.id
     assert payload["connected"] is True
     assert payload["error"] is None
+    assert payload["complete"] is True
     assert len(payload["events"]) == 1
     assert payload["events"][0]["id"] == "google_multi_1"
     assert payload["events"][0]["summary"] == "Cross-calendar event"
     assert payload["events"][0]["source"] == "google"
+
+
+@pytest.mark.asyncio
+async def test_google_calendar_events_endpoint_exposes_incomplete_snapshot(
+    authed_client: AsyncClient,
+    monkeypatch,
+):
+    from app.services import calendar_service
+
+    async def incomplete_snapshot(**_kwargs):
+        return {
+            "connected": True,
+            "events": [],
+            "error": "incomplete",
+            "complete": False,
+        }
+
+    monkeypatch.setattr(
+        calendar_service,
+        "get_user_calendar_events_across_calendars",
+        incomplete_snapshot,
+    )
+
+    response = await authed_client.get(
+        "/integrations/google/calendar/events",
+        params={"date_start": "2026-02-01", "date_end": "2026-02-02"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["error"] == "incomplete"
+    assert response.json()["complete"] is False
+
+
+@pytest.mark.asyncio
+async def test_cross_calendar_fetch_preserves_incomplete_event_snapshot(monkeypatch):
+    from app.services import calendar_service
+
+    monkeypatch.setattr(
+        calendar_service.oauth_service,
+        "get_user_integration",
+        lambda *_args: object(),
+    )
+
+    async def access_token(*_args, **_kwargs):
+        return "token"
+
+    async def calendar_ids(*_args, **_kwargs):
+        return ["primary", "secondary"]
+
+    async def snapshot(*, calendar_id, **_kwargs):
+        return {"events": [], "complete": calendar_id != "secondary"}
+
+    monkeypatch.setattr(calendar_service, "get_google_access_token", access_token)
+    monkeypatch.setattr(calendar_service, "list_google_calendar_ids", calendar_ids)
+    monkeypatch.setattr(calendar_service, "_fetch_google_events_snapshot", snapshot)
+
+    result = await calendar_service.get_user_calendar_events_across_calendars(
+        db=object(),
+        user_id=uuid.uuid4(),
+        time_min=datetime(2026, 2, 1, tzinfo=UTC),
+        time_max=datetime(2026, 2, 2, tzinfo=UTC),
+    )
+
+    assert result["events"] == []
+    assert result["error"] == "incomplete"
+    assert result["complete"] is False
 
 
 @pytest.mark.asyncio
