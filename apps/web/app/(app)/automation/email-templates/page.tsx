@@ -571,6 +571,12 @@ function buildTestVariableSample(
             return "S10001"
         case "intended_parent_number":
             return "I10001"
+        case "donor_number":
+            return "D10001"
+        case "donor_type":
+            return "Egg Donor"
+        case "education":
+            return "Bachelor's degree"
         case "status_label":
             return "Pre-Qualified"
         case "state":

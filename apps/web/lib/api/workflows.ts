@@ -24,6 +24,7 @@ export interface Workflow {
     scope: WorkflowScope
     owner_user_id: string | null
     owner_name: string | null
+    subject_type: WorkflowSubjectType
     run_count: number
     last_run_at: string | null
     last_error: string | null
@@ -35,6 +36,15 @@ export interface Workflow {
 }
 
 export type WorkflowScope = 'org' | 'personal'
+
+export type WorkflowSubjectType =
+    | 'surrogate'
+    | 'form_submission'
+    | 'intake_lead'
+    | 'match'
+    | 'appointment'
+    | 'egg_donor'
+    | 'sperm_donor'
 
 export interface WorkflowListItem {
     id: string
@@ -49,6 +59,7 @@ export interface WorkflowListItem {
     scope: WorkflowScope
     owner_user_id: string | null
     owner_name: string | null
+    subject_type: WorkflowSubjectType
     created_at: string
     can_edit?: boolean
 }
@@ -75,6 +86,7 @@ export interface WorkflowCreate {
     actions: ActionConfig[]
     is_enabled?: boolean
     scope?: WorkflowScope
+    subject_type: WorkflowSubjectType
 }
 
 export interface WorkflowUpdate {
@@ -97,6 +109,10 @@ export interface WorkflowExecution {
     event_source: string
     entity_type: string
     entity_id: string
+    subject_type: WorkflowSubjectType | null
+    subject_id: string | null
+    entity_name: string | null
+    entity_number: string | null
     trigger_event: JsonObject
     matched_conditions: boolean
     actions_executed: ActionResult[]
@@ -174,6 +190,7 @@ export interface ListWorkflowsParams {
     enabled_only?: boolean
     trigger_type?: string
     scope?: WorkflowScope | null
+    subject_type?: WorkflowSubjectType
 }
 
 export async function listWorkflows(params?: ListWorkflowsParams): Promise<WorkflowListItem[]> {
@@ -181,6 +198,7 @@ export async function listWorkflows(params?: ListWorkflowsParams): Promise<Workf
     if (params?.enabled_only) searchParams.set("enabled_only", "true")
     if (params?.trigger_type) searchParams.set("trigger_type", params.trigger_type)
     if (params?.scope) searchParams.set("scope", params.scope)
+    if (params?.subject_type) searchParams.set("subject_type", params.subject_type)
 
     const query = searchParams.toString()
     return api.get<WorkflowListItem[]>(`/workflows${query ? `?${query}` : ""}`)
@@ -225,9 +243,13 @@ export async function getWorkflowStats(): Promise<WorkflowStats> {
     return api.get<WorkflowStats>("/workflows/stats")
 }
 
-export async function getWorkflowOptions(workflowScope?: WorkflowScope): Promise<WorkflowOptions> {
+export async function getWorkflowOptions(
+    workflowScope?: WorkflowScope,
+    subjectType: WorkflowSubjectType = "surrogate",
+): Promise<WorkflowOptions> {
     const searchParams = new URLSearchParams()
     if (workflowScope) searchParams.set("workflow_scope", workflowScope)
+    searchParams.set("subject_type", subjectType)
     const query = searchParams.toString()
     return api.get<WorkflowOptions>(`/workflows/options${query ? `?${query}` : ""}`)
 }

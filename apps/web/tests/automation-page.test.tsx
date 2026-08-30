@@ -1,6 +1,6 @@
 import type { PropsWithChildren, ButtonHTMLAttributes, ReactNode } from "react"
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import AutomationPage from '../app/(app)/automation/page.client'
 
 const mockUseAuth = vi.fn()
@@ -27,11 +27,24 @@ vi.mock('next/navigation', () => ({
 
 // Simplify Select and Dialog components for deterministic tests
 vi.mock('@/components/ui/select', () => ({
-    Select: ({ value, onValueChange, children }: PropsWithChildren<{ value?: string; onValueChange: (value: string) => void }>) => (
+    Select: ({
+        value,
+        onValueChange,
+        children,
+        disabled,
+        "aria-label": ariaLabel,
+    }: PropsWithChildren<{
+        value?: string
+        onValueChange: (value: string) => void
+        disabled?: boolean
+        "aria-label"?: string
+    }>) => (
         <select
             data-testid="select"
             value={value ?? ''}
             onChange={(e) => onValueChange(e.target.value)}
+            disabled={disabled}
+            aria-label={ariaLabel}
         >
             <option value="">Select</option>
             {children}
@@ -112,6 +125,12 @@ const mockUseWorkflowOptions = vi.fn()
 const mockUseWorkflowExecutions = vi.fn()
 const mockCreateWorkflow = { mutate: vi.fn(), isPending: false }
 const mockUpdateWorkflow = { mutate: vi.fn(), isPending: false }
+const mockTestWorkflow = { mutate: vi.fn(), isPending: false }
+const mockListDonors = vi.fn()
+
+vi.mock('@/lib/api/donors', () => ({
+    listDonors: (...args: unknown[]) => mockListDonors(...args),
+}))
 
 function getFirstElement<T>(items: T[], message: string): T {
     const item = items[0]
@@ -133,12 +152,12 @@ vi.mock('@/lib/hooks/use-workflows', () => ({
     useWorkflows: (...args: unknown[]) => mockUseWorkflows(...args),
     useWorkflow: () => mockUseWorkflow(),
     useWorkflowStats: () => mockUseWorkflowStats(),
-    useWorkflowOptions: () => mockUseWorkflowOptions(),
+    useWorkflowOptions: (...args: unknown[]) => mockUseWorkflowOptions(...args),
     useWorkflowExecutions: () => mockUseWorkflowExecutions(),
     useCreateWorkflow: () => mockCreateWorkflow,
     useUpdateWorkflow: () => mockUpdateWorkflow,
     useDuplicateWorkflow: () => ({ mutate: vi.fn(), isPending: false }),
-    useTestWorkflow: () => ({ mutate: vi.fn(), isPending: false }),
+    useTestWorkflow: () => mockTestWorkflow,
     useDeleteWorkflow: () => ({ mutate: vi.fn(), isPending: false }),
     useToggleWorkflow: () => ({ mutate: vi.fn(), isPending: false }),
 }))
@@ -195,6 +214,14 @@ describe('AutomationPage', () => {
         mockUseWorkflowExecutions.mockReturnValue({ data: { items: [], total: 0, page: 1, pages: 1 }, isLoading: false })
         mockCreateWorkflow.mutate.mockReset()
         mockUpdateWorkflow.mutate.mockReset()
+        mockTestWorkflow.mutate.mockReset()
+        mockListDonors.mockReset().mockResolvedValue({
+            items: [],
+            total: 0,
+            page: 1,
+            per_page: 5,
+            pages: 0,
+        })
     })
 
     it('renders', () => {
@@ -232,7 +259,7 @@ describe('AutomationPage', () => {
 
         fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Surrogates'), { target: { value: 'Test Workflow' } })
         fireEvent.change(
-            getFirstElement(screen.getAllByTestId('select'), 'Expected a trigger select'),
+            screen.getByRole('combobox', { name: 'Trigger type' }),
             { target: { value: 'surrogate_created' } },
         )
 
@@ -271,7 +298,7 @@ describe('AutomationPage', () => {
             target: { value: 'Conditional Workflow' },
         })
         fireEvent.change(
-            getFirstElement(screen.getAllByTestId('select'), 'Expected a trigger select'),
+            screen.getByRole('combobox', { name: 'Trigger type' }),
             { target: { value: 'surrogate_created' } },
         )
         fireEvent.click(screen.getByRole('button', { name: /next/i }))
@@ -494,10 +521,7 @@ describe('AutomationPage', () => {
             target: { value: 'Task Due Reminder' },
         })
 
-        const triggerSelect = getFirstElement(
-            screen.getAllByTestId('select'),
-            'Expected a trigger select',
-        )
+        const triggerSelect = screen.getByRole('combobox', { name: 'Trigger type' })
         fireEvent.change(triggerSelect, { target: { value: 'scheduled' } })
         fireEvent.change(screen.getByPlaceholderText('0 9 * * 1'), {
             target: { value: '0 8 * * *' },
@@ -560,4 +584,396 @@ describe('AutomationPage', () => {
 
         expect(screen.getByText('Task ID')).toBeInTheDocument()
     })
+
+    it('creates an egg donor workflow from subject-specific options', () => {
+        mockUseWorkflowOptions.mockImplementation(
+            (_scope: string, subjectType: string) => ({
+                data: subjectType === 'egg_donor'
+                    ? {
+                        trigger_types: [
+                            { value: 'donor_created', label: 'Donor Created', description: '' },
+                        ],
+                        action_types: [
+                            { value: 'add_note', label: 'Add Note', description: '' },
+                        ],
+                        action_types_by_trigger: { donor_created: ['add_note'] },
+                        trigger_entity_types: { donor_created: 'egg_donor' },
+                        condition_fields: ['education'],
+                        condition_operators: [],
+                        update_fields: ['education'],
+                        email_variables: [],
+                        email_templates: [],
+                        users: [],
+                        queues: [],
+                        statuses: [],
+                    }
+                    : {
+                        trigger_types: [
+                            { value: 'surrogate_created', label: 'Surrogate Created', description: '' },
+                        ],
+                        action_types: [
+                            { value: 'add_note', label: 'Add Note', description: '' },
+                        ],
+                        action_types_by_trigger: { surrogate_created: ['add_note'] },
+                        trigger_entity_types: { surrogate_created: 'surrogate' },
+                        condition_fields: [],
+                        condition_operators: [],
+                        update_fields: [],
+                        email_variables: [],
+                        email_templates: [],
+                        users: [],
+                        queues: [],
+                        statuses: [],
+                    },
+                isLoading: false,
+            }),
+        )
+
+        renderAutomationPage()
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a create workflow button',
+            ),
+        )
+
+        fireEvent.change(screen.getByRole('combobox', { name: 'Record type' }), {
+            target: { value: 'egg_donor' },
+        })
+        fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Egg Donors'), {
+            target: { value: 'Egg donor welcome' },
+        })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Trigger type' }), {
+            target: { value: 'donor_created' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+        fireEvent.change(screen.getByRole('combobox', { name: 'Action type 1' }), {
+            target: { value: 'add_note' },
+        })
+        fireEvent.change(screen.getByPlaceholderText('Note content'), {
+            target: { value: 'Welcome call requested' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a save workflow button',
+            ),
+        )
+
+        expect(mockUseWorkflowOptions).toHaveBeenCalledWith('personal', 'egg_donor')
+        expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                subject_type: 'egg_donor',
+                trigger_type: 'donor_created',
+            }),
+            expect.any(Object),
+        )
+    })
+
+    it('keeps an existing donor workflow subject visible and immutable', () => {
+        mockUseWorkflows.mockReturnValue({
+            data: [{
+                id: 'workflow-egg',
+                name: 'Egg donor follow-up',
+                description: null,
+                icon: 'activity',
+                subject_type: 'egg_donor',
+                trigger_type: 'donor_created',
+                is_enabled: true,
+                run_count: 0,
+                last_run_at: null,
+                last_error: null,
+                created_at: '2026-08-29T00:00:00Z',
+                can_edit: true,
+            }],
+            isLoading: false,
+        })
+        mockUseWorkflow.mockReturnValue({
+            data: {
+                id: 'workflow-egg',
+                name: 'Egg donor follow-up',
+                description: null,
+                scope: 'personal',
+                subject_type: 'egg_donor',
+                trigger_type: 'donor_created',
+                trigger_config: {},
+                conditions: [],
+                condition_logic: 'AND',
+                actions: [{ action_type: 'add_note', content: 'Call donor' }],
+            },
+            isLoading: false,
+        })
+
+        renderAutomationPage()
+        expect(screen.getByText('Egg Donor')).toBeInTheDocument()
+        fireEvent.click(
+            screen.getByRole('button', { name: 'Actions for workflow Egg donor follow-up' }),
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+
+        const subject = screen.getByLabelText('Record type')
+        expect(subject).toHaveValue('Egg Donor')
+        expect(subject).toBeDisabled()
+    })
+
+    it('tests an egg donor workflow against egg donor records', async () => {
+        mockUseWorkflows.mockReturnValue({
+            data: [{
+                id: 'workflow-egg',
+                name: 'Egg donor follow-up',
+                description: null,
+                icon: 'activity',
+                subject_type: 'egg_donor',
+                trigger_type: 'task_due',
+                is_enabled: true,
+                run_count: 0,
+                last_run_at: null,
+                last_error: null,
+                created_at: '2026-08-29T00:00:00Z',
+                can_edit: true,
+            }],
+            isLoading: false,
+        })
+        mockListDonors.mockResolvedValue({
+            items: [{
+                id: 'donor-egg-1',
+                donor_number: 'D10001',
+                full_name: 'Maya Thompson',
+                status_label: 'New',
+            }],
+            total: 1,
+            page: 1,
+            per_page: 5,
+            pages: 1,
+        })
+
+        renderAutomationPage()
+        fireEvent.click(screen.getByRole('button', { name: /test workflow/i }))
+
+        const donorPicker = screen.getByLabelText('Egg Donor')
+        expect(donorPicker).toHaveAttribute('placeholder', 'Search egg donors')
+        expect(donorPicker).not.toHaveAttribute('list')
+        await waitFor(() => {
+            expect(mockListDonors).toHaveBeenCalledWith(expect.objectContaining({
+                donor_type: 'egg',
+                per_page: 5,
+            }))
+        })
+
+        fireEvent.change(donorPicker, { target: { value: 'Maya' } })
+        expect(screen.getByRole('button', { name: 'Run Test' })).toBeDisabled()
+
+        fireEvent.click(await screen.findByRole('button', { name: /D10001 — Maya Thompson/ }))
+        expect(donorPicker).toHaveValue('D10001 — Maya Thompson')
+        expect(screen.queryByDisplayValue('donor-egg-1')).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Run Test' }))
+
+        expect(mockTestWorkflow.mutate).toHaveBeenCalledWith(
+            {
+                id: 'workflow-egg',
+                entityId: 'donor-egg-1',
+                entityType: 'egg_donor',
+            },
+            expect.any(Object),
+        )
+    })
+
+    it('does not accept a free-form donor UUID in the test workflow picker', () => {
+        mockUseWorkflows.mockReturnValue({
+            data: [{
+                id: 'workflow-egg',
+                name: 'Egg donor follow-up',
+                description: null,
+                icon: 'activity',
+                subject_type: 'egg_donor',
+                trigger_type: 'task_due',
+                is_enabled: true,
+                run_count: 0,
+                last_run_at: null,
+                last_error: null,
+                created_at: '2026-08-29T00:00:00Z',
+                can_edit: true,
+            }],
+            isLoading: false,
+        })
+
+        renderAutomationPage()
+        fireEvent.click(screen.getByRole('button', { name: /test workflow/i }))
+        fireEvent.change(screen.getByLabelText('Egg Donor'), {
+            target: { value: '9a3b51b0-4e20-4ba5-97fa-2721999d3cae' },
+        })
+
+        fireEvent.click(screen.getByRole('button', { name: 'Run Test' }))
+        expect(mockTestWorkflow.mutate).not.toHaveBeenCalled()
+        expect(screen.getByRole('button', { name: 'Run Test' })).toBeDisabled()
+    })
+
+    it('shows exact donor identities in execution history and hides unavailable IDs', () => {
+        mockUseWorkflows.mockReturnValue({
+            data: [{
+                id: 'workflow-egg',
+                name: 'Egg donor follow-up',
+                description: null,
+                icon: 'activity',
+                subject_type: 'egg_donor',
+                trigger_type: 'task_due',
+                is_enabled: true,
+                run_count: 2,
+                last_run_at: '2026-08-29T00:00:00Z',
+                last_error: null,
+                created_at: '2026-08-29T00:00:00Z',
+                can_edit: true,
+            }],
+            isLoading: false,
+        })
+        mockUseWorkflowExecutions.mockReturnValue({
+            data: {
+                items: [
+                    {
+                        id: 'execution-exact',
+                        workflow_id: 'workflow-egg',
+                        event_id: 'event-exact',
+                        depth: 0,
+                        event_source: 'user',
+                        entity_type: 'task',
+                        entity_id: 'task-exact',
+                        subject_type: 'egg_donor',
+                        subject_id: 'donor-private-id',
+                        entity_name: 'Maya Thompson',
+                        entity_number: 'D10001',
+                        trigger_event: {},
+                        matched_conditions: true,
+                        actions_executed: [],
+                        status: 'success',
+                        error_message: null,
+                        duration_ms: 8,
+                        executed_at: '2026-08-29T00:00:00Z',
+                    },
+                    {
+                        id: 'execution-unavailable',
+                        workflow_id: 'workflow-egg',
+                        event_id: 'event-unavailable',
+                        depth: 0,
+                        event_source: 'user',
+                        entity_type: 'task',
+                        entity_id: 'task-unavailable',
+                        subject_type: 'egg_donor',
+                        subject_id: 'donor-hidden-id',
+                        entity_name: null,
+                        entity_number: null,
+                        trigger_event: {},
+                        matched_conditions: true,
+                        actions_executed: [],
+                        status: 'success',
+                        error_message: null,
+                        duration_ms: 5,
+                        executed_at: '2026-08-28T00:00:00Z',
+                    },
+                ],
+                total: 2,
+                page: 1,
+                pages: 1,
+            },
+            isLoading: false,
+        })
+
+        renderAutomationPage()
+        fireEvent.click(
+            screen.getByRole('button', { name: 'Actions for workflow Egg donor follow-up' }),
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'View History' }))
+
+        expect(screen.getByRole('link', { name: 'D10001 — Maya Thompson' })).toHaveAttribute(
+            'href',
+            '/donors/donor-private-id',
+        )
+        expect(screen.getByText('Donor unavailable')).toBeInTheDocument()
+        expect(screen.queryByRole('link', { name: 'Donor unavailable' })).not.toBeInTheDocument()
+        expect(screen.queryByText(/donor-(private|hidden)-id/i)).not.toBeInTheDocument()
+    })
+
+    it('configures the returned assign-donor action without surrogate controls', () => {
+        mockUseWorkflowOptions.mockImplementation(
+            (_scope: string, subjectType: string) => ({
+                data: {
+                    trigger_types: subjectType === 'sperm_donor'
+                        ? [{ value: 'donor_created', label: 'Donor Created', description: '' }]
+                        : [{ value: 'surrogate_created', label: 'Surrogate Created', description: '' }],
+                    action_types: subjectType === 'sperm_donor'
+                        ? [{ value: 'assign_donor', label: 'Assign Donor', description: '' }]
+                        : [{ value: 'assign_surrogate', label: 'Assign Surrogate', description: '' }],
+                    action_types_by_trigger: subjectType === 'sperm_donor'
+                        ? { donor_created: ['assign_donor'] }
+                        : { surrogate_created: ['assign_surrogate'] },
+                    trigger_entity_types: subjectType === 'sperm_donor'
+                        ? { donor_created: 'sperm_donor' }
+                        : { surrogate_created: 'surrogate' },
+                    condition_fields: [],
+                    condition_operators: [],
+                    update_fields: [],
+                    email_variables: [],
+                    email_templates: [],
+                    users: [{ id: 'user-1', display_name: 'Alex Owner' }],
+                    queues: [],
+                    statuses: [],
+                },
+                isLoading: false,
+            }),
+        )
+
+        renderAutomationPage()
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a create workflow button',
+            ),
+        )
+        fireEvent.change(screen.getByRole('combobox', { name: 'Record type' }), {
+            target: { value: 'sperm_donor' },
+        })
+        fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Sperm Donors'), {
+            target: { value: 'Assign sperm donor' },
+        })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Trigger type' }), {
+            target: { value: 'donor_created' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+        fireEvent.change(screen.getByRole('combobox', { name: 'Action type 1' }), {
+            target: { value: 'assign_donor' },
+        })
+
+        expect(screen.getByRole('option', { name: 'Assign Donor' })).toBeInTheDocument()
+        expect(screen.queryByRole('option', { name: 'Assign Surrogate' })).not.toBeInTheDocument()
+        fireEvent.change(screen.getByRole('combobox', { name: 'Assignment owner type' }), {
+            target: { value: 'user' },
+        })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Assignment owner' }), {
+            target: { value: 'user-1' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a save workflow button',
+            ),
+        )
+
+        expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                subject_type: 'sperm_donor',
+                actions: [{
+                    action_type: 'assign_donor',
+                    owner_type: 'user',
+                    owner_id: 'user-1',
+                }],
+            }),
+            expect.any(Object),
+        )
+    })
+
 })

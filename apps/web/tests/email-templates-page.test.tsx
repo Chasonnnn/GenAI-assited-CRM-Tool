@@ -554,6 +554,20 @@ describe("EmailTemplatesPage", () => {
         expect(screen.getByLabelText("{{email}}")).toHaveValue("qa@example.com")
     })
 
+    it("provides donor-specific samples for test sends", async () => {
+        TEMPLATE_DETAIL_BY_ID.tpl_personal_1.body =
+            "<p>{{donor_number}} {{donor_type}} {{education}}</p>"
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Personal Template" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Send test email" }))
+        fireEvent.click(screen.getByRole("button", { name: "Variables (optional)" }))
+
+        expect(await screen.findByLabelText("{{donor_number}}")).toHaveValue("D10001")
+        expect(screen.getByLabelText("{{donor_type}}")).toHaveValue("Egg Donor")
+        expect(screen.getByLabelText("{{education}}")).toHaveValue("Bachelor's degree")
+    })
+
     it("labels organization template action menus with template context", async () => {
         render(<EmailTemplatesPage />)
 
