@@ -66,7 +66,8 @@ import {
     useCreateDonorNote,
     useDeleteDonorNote,
 } from '@/lib/hooks/use-donors'
-import { taskKeys, useCreateTaskBatch } from '@/lib/hooks/use-tasks'
+import { taskKeys, useCreateTaskBatch, useDeleteTask } from '@/lib/hooks/use-tasks'
+import { entityActivityKeys } from '@/lib/hooks/use-entity-activity'
 import { useCreateZoomMeeting, useSendZoomInvite, useSyncGoogleCalendarNow } from '@/lib/hooks/use-user-integrations'
 import { useDeleteWorkflow, useDuplicateWorkflow, useToggleWorkflow, useUpdateWorkflow } from '@/lib/hooks/use-workflows'
 import { useZapierOutboundTest, useZapierTestLead, zapierKeys } from '@/lib/hooks/use-zapier'
@@ -552,6 +553,39 @@ describe('mutation invalidation contracts', () => {
             queryKey: surrogateKeys.activity('surrogate-1'),
         })
         expect(invalidateQueries).toHaveBeenCalledTimes(2)
+    })
+
+    it('refreshes each linked IP and donor activity feed once after batch task creation', () => {
+        useCreateTaskBatch()
+
+        capturedOptions?.onSuccess?.(
+            [
+                { id: 'task-1', intended_parent_id: 'ip-1', donor_id: null },
+                { id: 'task-2', intended_parent_id: 'ip-1', donor_id: null },
+                { id: 'task-3', intended_parent_id: null, donor_id: 'donor-1' },
+                { id: 'task-4', intended_parent_id: null, donor_id: 'donor-1' },
+            ],
+            []
+        )
+
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: taskKeys.lists() })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: entityActivityKeys.entity('intended_parent', 'ip-1'),
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: entityActivityKeys.entity('donor', 'donor-1'),
+        })
+        expect(invalidateQueries).toHaveBeenCalledTimes(3)
+    })
+
+    it('refreshes surrogate activity after task deletion', () => {
+        useDeleteTask()
+
+        capturedOptions?.onSuccess?.({}, 'task-1')
+
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: taskKeys.lists() })
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: entityActivityKeys.all })
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: surrogateKeys.all })
     })
 
     it('refreshes surrogate CRM surfaces after creating bulk AI tasks', () => {

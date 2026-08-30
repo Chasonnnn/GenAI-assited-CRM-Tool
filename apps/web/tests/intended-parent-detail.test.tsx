@@ -8,6 +8,7 @@ const mockUseIntendedParentHistory = vi.fn()
 const mockUseIntendedParentNotes = vi.fn()
 const mockUseTasks = vi.fn()
 const mockUseIPAttachments = vi.fn()
+const mockUseEntityActivity = vi.fn()
 
 vi.mock('next/link', () => ({
     default: ({ children, href }: { children: React.ReactNode; href: string }) => (
@@ -87,6 +88,10 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
     useTasks: (...args: unknown[]) => mockUseTasks(...args),
 }))
 
+vi.mock('@/lib/hooks/use-entity-activity', () => ({
+    useEntityActivity: () => mockUseEntityActivity(),
+}))
+
 vi.mock('@/lib/hooks/use-attachments', () => ({
     useIPAttachments: (...args: unknown[]) => mockUseIPAttachments(...args),
 }))
@@ -99,6 +104,12 @@ describe('IntendedParentDetailPage', () => {
         mockUseIntendedParentNotes.mockReturnValue({ data: [] })
         mockUseTasks.mockReturnValue({ data: { items: [] } })
         mockUseIPAttachments.mockReturnValue({ data: [] })
+        mockUseEntityActivity.mockReturnValue({
+            data: { items: [], total: 0, page: 1, pages: 1 },
+            isLoading: false,
+            isError: false,
+            refetch: vi.fn(),
+        })
         mockUseIntendedParent.mockReturnValue({
             data: {
                 id: 'ip1',
@@ -211,6 +222,34 @@ describe('IntendedParentDetailPage', () => {
     })
 
     it("renders intended-parent activity in the same staged journey format as surrogate details", () => {
+        mockUseEntityActivity.mockReturnValueOnce({
+            data: {
+                items: [
+                    {
+                        id: "note-activity-1",
+                        activity_type: "note_added",
+                        actor_user_id: "user-1",
+                        actor_name: "Test Developer",
+                        details: { preview: "Profile reviewed." },
+                        created_at: "2026-02-25T21:46:00Z",
+                    },
+                    {
+                        id: "attachment-activity-1",
+                        activity_type: "attachment_added",
+                        actor_user_id: "user-1",
+                        actor_name: "Test Developer",
+                        details: { filename: "Legal packet.pdf" },
+                        created_at: "2026-02-26T21:46:00Z",
+                    },
+                ],
+                total: 2,
+                page: 1,
+                pages: 1,
+            },
+            isLoading: false,
+            isError: false,
+            refetch: vi.fn(),
+        })
         mockUseIntendedParentHistory.mockReturnValueOnce({
             data: [
                 {
@@ -241,20 +280,6 @@ describe('IntendedParentDetailPage', () => {
                     author_id: "user-1",
                     content: "<p>Profile reviewed.</p>",
                     created_at: "2026-02-25T21:46:00Z",
-                },
-            ],
-        })
-        mockUseIPAttachments.mockReturnValueOnce({
-            data: [
-                {
-                    id: "attachment-1",
-                    filename: "Legal packet.pdf",
-                    content_type: "application/pdf",
-                    file_size: 2048,
-                    scan_status: "clean",
-                    quarantined: false,
-                    uploaded_by_user_id: "user-1",
-                    created_at: "2026-02-26T21:46:00Z",
                 },
             ],
         })

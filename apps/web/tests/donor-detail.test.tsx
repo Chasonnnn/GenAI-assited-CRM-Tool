@@ -33,6 +33,15 @@ vi.mock("@/lib/hooks/use-permissions", () => ({
     useEffectivePermissions: () => mockUseEffectivePermissions(),
 }))
 
+vi.mock("@/lib/hooks/use-entity-activity", () => ({
+    useEntityActivity: () => ({
+        data: { items: [], total: 0, page: 1, pages: 1 },
+        isLoading: false,
+        isError: false,
+        refetch: vi.fn(),
+    }),
+}))
+
 vi.mock("next/navigation", () => ({
     useParams: () => ({ id: "donor-1" }),
     useSearchParams: () => ({ get: (key: string) => mockDetailSearchParams.get(key) }),
@@ -326,7 +335,7 @@ describe("DonorDetailPage", () => {
         expect(screen.getByText("Screening completed")).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Change Stage" })).toBeInTheDocument()
         expect(screen.getByRole("heading", { name: "Open Tasks" })).toBeInTheDocument()
-        expect(screen.getByText("Review profile photo")).toBeInTheDocument()
+        expect(screen.getAllByText("Review profile photo").length).toBeGreaterThanOrEqual(1)
         expect(screen.getByRole("link", { name: "Egg Donor D10001" })).toHaveAttribute(
             "href",
             "/donors/donor-1",
@@ -616,6 +625,10 @@ describe("DonorDetailPage", () => {
             "href",
             "/donors?type=sperm&stage=sperm-ready&q=maya&page=2",
         )
+        expect(screen.getByRole("link", { name: "View full history →" })).toHaveAttribute(
+            "href",
+            "/donors/donor-1/history?return_to=%2Fdonors%3Ftype%3Dsperm%26stage%3Dsperm-ready%26q%3Dmaya%26page%3D2",
+        )
 
         fireEvent.click(screen.getByRole("button", { name: "Actions for Maya Thompson" }))
         fireEvent.click(await screen.findByRole("menuitem", { name: "Archive" }))
@@ -641,7 +654,7 @@ describe("DonorDetailPage", () => {
         expect(screen.queryByRole("button", { name: "Change Stage" })).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Add Task" })).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Upload donor profile photo" })).not.toBeInTheDocument()
-        expect(screen.getByText("Review profile photo")).toBeInTheDocument()
+        expect(screen.getAllByText("Review profile photo").length).toBeGreaterThanOrEqual(1)
         fireEvent.click(screen.getByRole("button", { name: "Actions for Maya Thompson" }))
         expect(screen.queryByRole("menuitem", { name: "Edit" })).not.toBeInTheDocument()
         fireEvent.click(await screen.findByRole("menuitem", { name: "Restore" }))
