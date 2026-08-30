@@ -8,19 +8,20 @@ This document describes the design decisions, patterns, and features implemented
 2. [Authentication & Authorization](#authentication--authorization)
 3. [Multi-Tenancy](#multi-tenancy)
 4. [Surrogates Module](#surrogates-module)
-5. [Data Normalization](#data-normalization)
-6. [Soft Delete & Archiving](#soft-delete--archiving)
-7. [Status History](#status-history)
-8. [Notes & Tasks](#notes--tasks)
-9. [Pagination & Search](#pagination--search)
-10. [Meta Lead Integration](#meta-lead-integration)
-11. [AI Assistant](#ai-assistant)
-12. [Queue/Ownership System](#queueownership-system-v0900)
-13. [Matches Module](#matches-module-v01400)
-14. [Automation System](#automation-system)
-15. [Form Builder](#form-builder-v01600)
-16. [Global Search](#global-search-v01501)
-17. [GCP Deployment](#gcp-deployment-v01600)
+5. [Donors Module](#donors-module)
+6. [Data Normalization](#data-normalization)
+7. [Soft Delete & Archiving](#soft-delete--archiving)
+8. [Status History](#status-history)
+9. [Notes & Tasks](#notes--tasks)
+10. [Pagination & Search](#pagination--search)
+11. [Meta Lead Integration](#meta-lead-integration)
+12. [AI Assistant](#ai-assistant)
+13. [Queue/Ownership System](#queueownership-system-v0900)
+14. [Matches Module](#matches-module-v01400)
+15. [Automation System](#automation-system)
+16. [Form Builder](#form-builder-v01600)
+17. [Global Search](#global-search-v01501)
+18. [GCP Deployment](#gcp-deployment-v01600)
 
 ---
 
@@ -161,6 +162,31 @@ class CaseSource(str, Enum):
     META = "meta"        # From Meta Lead Ads
     IMPORT = "import"    # Bulk import
 ```
+
+---
+
+## Donors Module
+
+### Record Model
+- One tenant-owned `Donor` model with immutable subtype `egg` or `sperm`
+- Sequential organization-local identifiers: `D10001`, `D10002`, and onward
+- Minimal core fields: name, email, phone, state, education, source, owner, stage, and profile photo
+- Active donor email uniqueness applies across both donor subtypes
+
+### Independent Pipelines
+- Egg donors use the `egg_donor` pipeline, including medical-record review, psychological screening, cycle, and retrieval stages.
+- Sperm donors use the `sperm_donor` pipeline, including semen analysis, medical/genetic screening, availability, collection, and donation stages.
+- Stage configuration, history, workflows, tasks, and analytics retain the exact pipeline entity type; the two pipelines are never collapsed into one donor stage set.
+
+### Intake and Integrations
+- Hosted egg- and sperm-donor forms require a clean profile-picture upload before promotion.
+- Meta form mappings classify every lead as `surrogate`, `egg_donor`, or `sperm_donor`; Meta does not provide the hosted-form profile-photo workflow.
+- Donor tasks support calendar and Google Tasks sync. Donor campaigns are email-only.
+
+### Data Lifecycle
+- Donor records, unconverted donor applications, linked files, workflow output, campaign delivery records, and external storage have retention coverage.
+- Legal holds on a donor or linked child record prevent parent deletion.
+- Admin export/import round-trips profile photos into regenerated tenant-scoped storage keys.
 
 ---
 

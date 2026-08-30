@@ -27,7 +27,9 @@ This runbook defines the staging migration procedure and the idempotency check f
    - `alembic current` should match `alembic heads`.
 4. Run smoke checks:
    - Health endpoint
-   - Core list endpoints (surrogates, intended parents)
+   - Core list endpoints (surrogates, intended parents, egg donors, sperm donors)
+   - Default pipeline settings for both `egg_donor` and `sperm_donor`
+   - Hosted donor-form upload and promotion in a non-production test organization
 5. Record the run in the log below.
 
 ## Rollback
