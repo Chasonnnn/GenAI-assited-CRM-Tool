@@ -5,7 +5,7 @@
 | Area | Decision |
 |---|---|
 | Record model | One organization-owned donor record with immutable `donor_type = egg | sperm`. |
-| Navigation | One developer-only `Donors Beta` module with Egg Donors and Sperm Donors sub-tabs until explicit release approval. |
+| Navigation | One developer-only `Donors (beta)` module with Egg Donors and Sperm Donors sub-tabs until explicit release approval. |
 | Identifier | Organization-local, human-readable donor numbers starting at `D10001`; UUIDs remain internal route and relationship keys. |
 | Pipelines | Egg donors and sperm donors have separate configurable pipelines, stages, semantics, automation triggers, reporting filters, and dashboard views. |
 | Duplicate identity | An active email address can belong to only one donor across both donor types. Archived records do not block a new active record; restoring rechecks uniqueness. |
@@ -85,7 +85,7 @@ Acceptance:
 
 ### 3. Donor User Experience
 
-- Add `Donors Beta` to the main navigation for the developer role only; keep backend donor permissions intact for QA and future rollout.
+- Add `Donors (beta)` to the main navigation for the developer role only; keep backend donor permissions intact for QA and future rollout.
 - Add Egg Donors and Sperm Donors sub-tabs with independent pipeline filters.
 - Match existing list, search, pagination, empty, loading, error, permission, and archive patterns.
 - Display Donor #, name, contact information, state, education, stage, and creation date.
@@ -201,7 +201,7 @@ Acceptance:
 ### 11. Documentation and Release
 
 - Update architecture, application, API, migration, and smoke-test documentation.
-- Keep `Donors Beta` and `Tickets Beta` visibly named in the sidebar and restricted to the developer role until explicit release approval.
+- Keep `Donors (beta)` and `Tickets (beta)` visibly named in the sidebar and restricted to the developer role until explicit release approval.
 - Regenerate and verify the OpenAPI contract and frontend stage constants.
 - Run backend lint, the complete API suite, migration-head/current/check, focused migration reversibility tests, frontend check, React health review, and diff whitespace validation.
 - Perform live Meta, object-storage, email, and Google integration QA only with configured non-production credentials.

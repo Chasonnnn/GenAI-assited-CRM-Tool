@@ -65,7 +65,7 @@ const navigation = [
         icon: Home,
     },
     {
-        title: "Tickets Beta",
+        title: "Tickets (beta)",
         url: "/tickets",
         icon: Inbox,
     },
@@ -81,7 +81,7 @@ const navigation = [
         requiredPermission: "view_intended_parents",
     },
     {
-        title: "Donors Beta",
+        title: "Donors (beta)",
         url: "/donors",
         icon: CircleUserRound,
         requiredPermission: "view_donors",

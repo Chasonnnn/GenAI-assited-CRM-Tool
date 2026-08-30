@@ -206,7 +206,7 @@ describe("AppSidebar permission visibility", () => {
         await waitFor(() => {
             expect(screen.getByText("Dashboard")).toBeInTheDocument()
         })
-        expect(screen.queryByText("Tickets Beta")).not.toBeInTheDocument()
+        expect(screen.queryByText("Tickets (beta)")).not.toBeInTheDocument()
         expect(screen.queryByText("Messages")).not.toBeInTheDocument()
     })
 
@@ -256,7 +256,7 @@ describe("AppSidebar permission visibility", () => {
         expect(screen.getByText("Reports")).toBeInTheDocument()
     })
 
-    it("hides Donors Beta from non-developers even with donor permission", async () => {
+    it("hides Donors (beta) from non-developers even with donor permission", async () => {
         mockUseEffectivePermissions.mockReturnValue({
             data: { permissions: ["view_intended_parents"] },
         })
@@ -268,7 +268,7 @@ describe("AppSidebar permission visibility", () => {
         )
 
         await screen.findByRole("link", { name: "Intended Parents" })
-        expect(screen.queryByRole("link", { name: "Donors Beta" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("link", { name: "Donors (beta)" })).not.toBeInTheDocument()
 
         mockUseEffectivePermissions.mockReturnValue({
             data: { permissions: ["view_intended_parents", "view_donors"] },
@@ -280,7 +280,7 @@ describe("AppSidebar permission visibility", () => {
         )
 
         await screen.findByRole("link", { name: "Intended Parents" })
-        expect(screen.queryByRole("link", { name: "Donors Beta" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("link", { name: "Donors (beta)" })).not.toBeInTheDocument()
     })
 
     it("enables selective prefetch only after navigation intent", async () => {
@@ -314,7 +314,7 @@ describe("AppSidebar permission visibility", () => {
         expect(reports).toHaveAttribute("data-prefetch", "false")
     })
 
-    it("shows Tickets Beta and Donors Beta for developer role", async () => {
+    it("shows Tickets (beta) and Donors (beta) for developer role", async () => {
         mockUseAuth.mockReturnValue({
             user: {
                 user_id: "user-dev",
@@ -337,9 +337,9 @@ describe("AppSidebar permission visibility", () => {
         )
 
         await waitFor(() => {
-            expect(screen.getByText("Tickets Beta")).toBeInTheDocument()
+            expect(screen.getByText("Tickets (beta)")).toBeInTheDocument()
         })
-        expect(screen.getByRole("link", { name: "Donors Beta" })).toHaveAttribute(
+        expect(screen.getByRole("link", { name: "Donors (beta)" })).toHaveAttribute(
             "href",
             "/donors",
         )
