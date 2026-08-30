@@ -117,11 +117,11 @@ import { SignaturePhotoField } from "@/components/email/SignaturePhotoField"
 import { SignaturePreview } from "@/components/email/SignaturePreview"
 import {
     TemplateCard,
-    getTemplateStudioHref,
     type TemplateCardActionKind,
     type TemplateCardControls,
 } from "@/components/email/TemplateCard"
 import { TemplateDraftSection } from "@/components/email/TemplateDraftSection"
+import { getTemplateStudioHref } from "@/components/email/template-studio-route"
 
 // =============================================================================
 // Signature Override Field Component

@@ -1,5 +1,4 @@
 import * as React from "react"
-import type { Route } from "next"
 import {
     CircleCheckIcon,
     CircleOffIcon,
@@ -26,6 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 import { formatDate } from "@/lib/formatters"
+import { getTemplateStudioHref } from "@/components/email/template-studio-route"
 
 export type TemplateCardActionKind =
     | "send_test"
@@ -42,10 +42,6 @@ type TemplateCardActionConfig = { group: TemplateCardActionGroup; label: string 
 export type TemplateCardControls =
     | { kind: "actions"; actions: TemplateCardActionKind[]; onAction: (action: TemplateCardActionKind) => void }
     | { kind: "read_only" }
-
-export function getTemplateStudioHref(template: EmailTemplateListItem): Route {
-    return `/automation/email-templates/${template.scope}/${template.id}` as Route
-}
 
 function getTemplateCardActionConfig(kind: TemplateCardActionKind): TemplateCardActionConfig {
     switch (kind) {
