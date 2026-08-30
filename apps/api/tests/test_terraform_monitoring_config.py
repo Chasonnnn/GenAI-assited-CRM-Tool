@@ -149,3 +149,14 @@ def test_ticketing_logging_metrics_and_alerts_are_configured() -> None:
     )
     assert 'resource "google_monitoring_alert_policy" "ticketing_outbound_failures"' in content
     assert 'resource "google_monitoring_alert_policy" "mailbox_ingestion_failures"' in content
+
+
+def test_runtime_delivery_and_oom_logging_metrics_and_alerts_are_configured() -> None:
+    content = _read("infra/terraform/monitoring.tf")
+
+    assert 'resource "google_logging_metric" "websocket_publish_failures"' in content
+    assert 'jsonPayload.event=\\"ws_event_publish_failed\\"' in content
+    assert 'resource "google_monitoring_alert_policy" "websocket_publish_failures"' in content
+    assert 'resource "google_logging_metric" "api_memory_limit_exceeded"' in content
+    assert 'textPayload:\\"Memory limit of\\"' in content
+    assert 'resource "google_monitoring_alert_policy" "api_memory_limit_exceeded"' in content

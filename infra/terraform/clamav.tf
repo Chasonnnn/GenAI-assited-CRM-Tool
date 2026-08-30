@@ -19,7 +19,7 @@ resource "google_cloud_run_v2_job" "clamav_update" {
         }
 
         dynamic "env" {
-          for_each = local.common_env
+          for_each = local.job_env
           content {
             name  = env.key
             value = env.value
@@ -92,7 +92,7 @@ resource "google_cloud_run_v2_job" "attachment_scan" {
         }
 
         dynamic "env" {
-          for_each = local.common_env
+          for_each = local.job_env
           content {
             name  = env.key
             value = env.value

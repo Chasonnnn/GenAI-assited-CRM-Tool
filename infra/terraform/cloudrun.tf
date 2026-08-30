@@ -71,7 +71,7 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       dynamic "env" {
-        for_each = { for key in sort(local.common_secret_keys) : key => key }
+        for_each = { for key in sort(local.service_secret_keys) : key => key }
         content {
           name = env.value
           value_source {
@@ -244,7 +244,7 @@ resource "google_cloud_run_v2_service" "worker" {
       }
 
       dynamic "env" {
-        for_each = { for key in sort(local.common_secret_keys) : key => key }
+        for_each = { for key in sort(local.service_secret_keys) : key => key }
         content {
           name = env.value
           value_source {
@@ -300,7 +300,7 @@ resource "google_cloud_run_v2_job" "migrate" {
         }
 
         dynamic "env" {
-          for_each = local.common_env
+          for_each = local.job_env
           content {
             name  = env.key
             value = env.value

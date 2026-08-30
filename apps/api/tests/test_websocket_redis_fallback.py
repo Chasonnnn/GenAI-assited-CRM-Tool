@@ -33,6 +33,9 @@ async def test_websocket_send_records_safe_redis_publish_failure(monkeypatch, ca
     assert record.event == "ws_event_publish_failed"
     assert record.channel == websocket.WEBSOCKET_EVENT_CHANNEL
     assert record.error_class == "ConnectionError"
+    assert record.target == "user"
+    assert record.message_type == "task.updated"
+    assert record.user_id
     assert "redis endpoint details" not in record.getMessage()
     assert "hidden" not in record.getMessage()
 

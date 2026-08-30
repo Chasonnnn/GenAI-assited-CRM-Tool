@@ -73,6 +73,10 @@ locals {
     WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED = tostring(var.workflow_approval_expiry_fallback_enabled)
   })
 
+  job_env = merge(local.common_env, {
+    GCP_SERVICE_NAME = var.api_service_name
+  })
+
   common_secret_keys = [
     "DATABASE_URL",
     "REDIS_URL",
@@ -97,15 +101,18 @@ locals {
     "DUO_CLIENT_SECRET",
     "DUO_API_HOST",
     "PLATFORM_RESEND_API_KEY",
-    "PLATFORM_RESEND_WEBHOOK_SECRET",
-    "PLATFORM_RESEND_ADMISSION_GROUP_TOKEN"
+    "PLATFORM_RESEND_WEBHOOK_SECRET"
   ]
+
+  service_secret_keys = concat(local.common_secret_keys, [
+    "PLATFORM_RESEND_ADMISSION_GROUP_TOKEN"
+  ])
 
   billing_secret_keys = [
     "BILLING_SLACK_WEBHOOK_URL"
   ]
 
-  all_secret_keys = concat(local.common_secret_keys, local.billing_secret_keys)
+  all_secret_keys = concat(local.service_secret_keys, local.billing_secret_keys)
 
   billing_export_table = "gcp_billing_export_v1_${replace(var.billing_account_id, "-", "")}"
 }

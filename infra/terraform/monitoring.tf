@@ -159,6 +159,54 @@ resource "google_logging_metric" "mailbox_ingestion_failures" {
   }
 }
 
+resource "google_logging_metric" "websocket_publish_failures" {
+  name   = "websocket_publish_failures"
+  filter = "resource.type=\"cloud_run_revision\" resource.labels.service_name=\"${var.api_service_name}\" jsonPayload.event=\"ws_event_publish_failed\""
+
+  label_extractors = {
+    event        = "EXTRACT(jsonPayload.event)"
+    org_id       = "EXTRACT(jsonPayload.org_id)"
+    user_id      = "EXTRACT(jsonPayload.user_id)"
+    message_type = "EXTRACT(jsonPayload.message_type)"
+  }
+
+  metric_descriptor {
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
+    display_name = "WebSocket backplane publish failures"
+
+    labels {
+      key        = "event"
+      value_type = "STRING"
+    }
+    labels {
+      key        = "org_id"
+      value_type = "STRING"
+    }
+    labels {
+      key        = "user_id"
+      value_type = "STRING"
+    }
+    labels {
+      key        = "message_type"
+      value_type = "STRING"
+    }
+  }
+}
+
+resource "google_logging_metric" "api_memory_limit_exceeded" {
+  name   = "api_memory_limit_exceeded"
+  filter = "resource.type=\"cloud_run_revision\" resource.labels.service_name=\"${var.api_service_name}\" textPayload:\"Memory limit of\" textPayload:\"exceeded with\""
+
+  metric_descriptor {
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
+    display_name = "API Cloud Run memory limit exceeded"
+  }
+}
+
 resource "google_monitoring_alert_policy" "ticketing_outbound_failures" {
   count = local.alerting_enabled ? 1 : 0
 
@@ -195,6 +243,56 @@ resource "google_monitoring_alert_policy" "mailbox_ingestion_failures" {
     display_name = "Mailbox ingestion dead-letter failures > 0 in 5m"
     condition_threshold {
       filter          = "resource.type=\"cloud_run_revision\" metric.type=\"logging.googleapis.com/user/${google_logging_metric.mailbox_ingestion_failures.name}\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "300s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "300s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+}
+
+resource "google_monitoring_alert_policy" "websocket_publish_failures" {
+  count = local.alerting_enabled ? 1 : 0
+
+  display_name          = "WebSocket backplane publish failures"
+  combiner              = "OR"
+  notification_channels = local.alert_notification_channels
+
+  conditions {
+    display_name = "WebSocket backplane publish failures > 0 in 5m"
+    condition_threshold {
+      filter          = "resource.type=\"cloud_run_revision\" metric.type=\"logging.googleapis.com/user/${google_logging_metric.websocket_publish_failures.name}\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "300s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "300s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+}
+
+resource "google_monitoring_alert_policy" "api_memory_limit_exceeded" {
+  count = local.alerting_enabled ? 1 : 0
+
+  display_name          = "API Cloud Run memory limit exceeded"
+  combiner              = "OR"
+  notification_channels = local.alert_notification_channels
+
+  conditions {
+    display_name = "API memory limit exceeded > 0 in 5m"
+    condition_threshold {
+      filter          = "resource.type=\"cloud_run_revision\" metric.type=\"logging.googleapis.com/user/${google_logging_metric.api_memory_limit_exceeded.name}\""
       comparison      = "COMPARISON_GT"
       threshold_value = 0
       duration        = "300s"

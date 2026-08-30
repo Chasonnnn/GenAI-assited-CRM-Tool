@@ -216,12 +216,18 @@ async def _publish_ws_event(event: dict) -> None:
     try:
         await client.publish(WEBSOCKET_EVENT_CHANNEL, json.dumps(event))
     except Exception as exc:
+        message = event.get("message")
+        message_type = message.get("type") if isinstance(message, dict) else None
         logger.warning(
             "ws_event_publish_failed",
             extra={
                 "event": "ws_event_publish_failed",
                 "channel": WEBSOCKET_EVENT_CHANNEL,
                 "error_class": exc.__class__.__name__,
+                "target": event.get("target"),
+                "message_type": message_type,
+                "user_id": event.get("user_id"),
+                "org_id": event.get("org_id"),
             },
         )
 
@@ -310,9 +316,8 @@ async def _listen_channel(channel: str, handler) -> None:
                 extra={
                     "event": "redis_pubsub_failed",
                     "channel": channel,
-                    "error": str(exc),
+                    "error_class": type(exc).__name__,
                 },
-                exc_info=exc,
             )
             await asyncio.sleep(2)
         finally:
@@ -320,7 +325,10 @@ async def _listen_channel(channel: str, handler) -> None:
                 try:
                     await pubsub.close()
                 except Exception as exc:
-                    logger.debug("redis_pubsub_close_failed", exc_info=exc)
+                    logger.debug(
+                        "redis_pubsub_close_failed",
+                        extra={"error_class": type(exc).__name__},
+                    )
 
 
 # Singleton instance

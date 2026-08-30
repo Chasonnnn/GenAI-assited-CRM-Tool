@@ -128,14 +128,15 @@ def test_cloudbuild_resolves_and_deploys_one_digest_image_set() -> None:
     assert '"--image", "$_IMAGE_WORKER"' not in content
 
 
-def test_cloudbuild_preserves_the_resumed_worker_configuration() -> None:
+def test_cloudbuild_preserves_worker_configuration_and_repairs_monitoring_identity() -> None:
     content = _read("cloudbuild/api.yaml")
     worker_update = content.index('gcloud run services update "$_WORKER_SERVICE"')
     api_update = content.index('gcloud run services update "$_API_SERVICE"')
     worker_step = content[worker_update:api_update]
 
     assert '--image "$${worker_image_ref}"' in worker_step
-    assert "--update-env-vars" not in worker_step
+    assert '--update-env-vars "GCP_SERVICE_NAME=$_WORKER_SERVICE"' in worker_step
+    assert worker_step.count("--update-env-vars") == 1
     assert "--remove-env-vars" not in worker_step
     assert "WORKER_CUTOVER_HOLD" not in worker_step
     assert "EMAIL_DELIVERY_DISPATCH_ENABLED" not in worker_step
