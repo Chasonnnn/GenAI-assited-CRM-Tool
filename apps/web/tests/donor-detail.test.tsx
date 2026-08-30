@@ -290,12 +290,16 @@ describe("DonorDetailPage", () => {
         render(<DonorDetailPage />)
 
         const header = screen.getByRole("banner")
+        const layout = header.firstElementChild
+        expect(layout).toHaveClass("flex-col", "sm:flex-row")
         expect(within(header).getByRole("link", { name: "Back to donors" })).toBeInTheDocument()
         expect(within(header).getByRole("heading", { name: "Maya Thompson" })).toBeInTheDocument()
         expect(
             within(header).getByText("D10001 • Egg Donor • maya@example.com"),
         ).toBeInTheDocument()
-        expect(within(header).getByRole("button", { name: "Change Stage" })).toBeInTheDocument()
+        const changeStage = within(header).getByRole("button", { name: "Change Stage" })
+        expect(changeStage).toBeInTheDocument()
+        expect(changeStage.parentElement).toHaveClass("w-full", "sm:w-auto")
 
         fireEvent.click(within(header).getByRole("button", { name: "Actions for Maya Thompson" }))
         expect(await screen.findByRole("menuitem", { name: "Edit" })).toBeInTheDocument()

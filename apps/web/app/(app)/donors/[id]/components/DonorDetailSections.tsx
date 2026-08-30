@@ -122,8 +122,8 @@ export function DonorDetailSections({
     return (
         <div className="flex flex-1 flex-col">
             <header className="border-b border-border bg-background/95 backdrop-blur">
-                <div className="flex min-h-16 items-center justify-between gap-4 px-6 py-2">
-                    <div className="flex min-w-0 items-center gap-4">
+                <div className="flex min-h-16 flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-2">
+                    <div className="flex w-full min-w-0 items-center gap-3 sm:w-auto sm:gap-4">
                         <Link
                             href={returnTo}
                             aria-label="Back to donors"
@@ -140,12 +140,16 @@ export function DonorDetailSections({
                             </p>
                         </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:w-auto sm:shrink-0 sm:flex-nowrap">
                         {!donor.is_archived && canChangeStage ? (
-                            <Button variant="outline" onClick={onChangeStage}>Change Stage</Button>
+                            <Button className="shrink-0" variant="outline" onClick={onChangeStage}>Change Stage</Button>
                         ) : null}
-                        <Badge variant="outline" style={getDonorStageStyle(stages, donor)}>
-                            {getDonorStageLabel(stages, donor)}
+                        <Badge
+                            className="min-w-0 flex-1 sm:flex-none"
+                            variant="outline"
+                            style={getDonorStageStyle(stages, donor)}
+                        >
+                            <span className="truncate">{getDonorStageLabel(stages, donor)}</span>
                         </Badge>
                         {donor.is_archived ? <Badge variant="secondary">Archived</Badge> : null}
                         {hasMenuActions ? (
