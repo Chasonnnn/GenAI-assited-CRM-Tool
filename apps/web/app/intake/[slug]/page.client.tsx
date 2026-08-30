@@ -13,13 +13,8 @@ import {
     ChevronLeftIcon,
     ChevronRightIcon,
     UploadIcon,
-    XIcon,
-    LockIcon,
     Loader2Icon,
-    CheckCircle2Icon,
-    FileTextIcon,
     PencilIcon,
-    AlertTriangleIcon,
 } from "lucide-react"
 import { toast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
@@ -41,12 +36,18 @@ import {
     type FormSchema,
 } from "@/lib/api/forms"
 import { useHostedIntakeAutosave } from "@/lib/hooks/use-hosted-intake-autosave"
-
-type Step = {
-    id: number
-    label: string
-    shortLabel: string
-}
+import { FileUploadZone } from "./components/file-upload-zone"
+import { PrivacyNotice } from "./components/privacy-notice"
+import { ProgressStepper, type Step } from "./components/progress-stepper"
+import { PublicFormErrorState } from "./components/public-form-error-state"
+import { PublicFormLoadingState } from "./components/public-form-loading-state"
+import {
+    publicFormCardClassName,
+    publicFormCardContentClassName,
+    publicFormCardHeaderClassName,
+    publicFormPageClassName,
+} from "./components/public-form-styles"
+import { PublicFormSuccessState } from "./components/public-form-success-state"
 
 type TableRow = Record<string, string | number | null>
 type AnswerValue = string | number | boolean | string[] | TableRow[] | null
@@ -57,10 +58,6 @@ type FormPage = FormSchema["pages"][number]
 type FormField = FormPage["fields"][number]
 
 const PER_FILE_FIELD_MAX = 5
-
-function getUploadFileKey(file: File): string {
-    return `${file.name}:${file.size}:${file.lastModified}`
-}
 
 function getPageKey(page: FormSchema["pages"][number]): string {
     const title = page.title?.trim() || "untitled"
@@ -92,6 +89,7 @@ const isIntakePublicRead = (value: unknown): value is FormIntakePublicRead => {
     if (!value || typeof value !== "object") return false
     const record = value as UnknownRecord
     if (typeof record.form_id !== "string") return false
+    if (typeof record.published_version_id !== "string") return false
     if (typeof record.name !== "string") return false
     if (typeof record.max_file_size_bytes !== "number") return false
     if (typeof record.max_file_count !== "number") return false
@@ -149,13 +147,6 @@ function ReviewValue({
     }
     return <span className="font-medium">{String(value)}</span>
 }
-
-const publicFormPageClassName =
-    "public-form-light min-h-screen bg-gradient-to-b from-stone-50 via-stone-50 to-stone-100/70 text-stone-900"
-const publicFormCardClassName =
-    "gap-0 rounded-lg border border-stone-200/80 bg-white py-0 shadow-[0_18px_45px_rgba(15,23,42,0.06)]"
-const publicFormCardHeaderClassName = "border-b border-stone-100 px-5 py-4 md:px-6"
-const publicFormCardContentClassName = "space-y-5 px-5 py-5 md:px-6 md:py-6"
 
 function formatSavedDateTime(value: string | null): string {
     if (!value) return ""
@@ -285,253 +276,6 @@ function shortenStepLabel(label: string): string {
     if (words.length === 2 && label.length <= 16) return label.replace(/\s*&\s*/g, " ")
     if (words.length === 2) return firstWord
     return secondWord ? `${firstWord} ${secondWord}` : firstWord
-}
-
-// Progress Stepper Component
-function ProgressStepper({
-    currentStep,
-    steps,
-}: {
-    currentStep: number
-    steps: Step[]
-}) {
-    const totalSteps = steps.length
-    const currentLabel = steps[currentStep - 1]?.label ?? ""
-    const progressValue =
-        totalSteps <= 0 ? 0 : Math.round((currentStep / totalSteps) * 100)
-    const maxVisible = 5
-    let start = Math.max(0, currentStep - 1 - Math.floor(maxVisible / 2))
-    let end = start + maxVisible - 1
-    if (end > totalSteps - 1) {
-        end = totalSteps - 1
-        start = Math.max(0, end - maxVisible + 1)
-    }
-    const visibleSteps = steps.slice(start, end + 1)
-
-    return (
-        <div className="space-y-3">
-            <div className="text-center">
-                <div className="text-[11px] font-medium uppercase tracking-[0.22em] text-stone-500">
-                    Step {currentStep} of {totalSteps}
-                </div>
-                <div className="mt-1 text-sm font-semibold text-stone-950">{currentLabel}</div>
-            </div>
-            <progress
-                aria-label="Application progress"
-                value={progressValue}
-                max={100}
-                className="h-1.5 w-full overflow-hidden rounded-full accent-blue-500"
-            >
-                {progressValue}%
-            </progress>
-            <div className="flex items-center justify-between gap-2 text-xs text-stone-500">
-                {start > 0 && <span className="shrink-0 px-1">…</span>}
-                {visibleSteps.map((step) => (
-                    <div key={step.id} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-                        <span
-                            className={cn(
-                                "size-1.5 rounded-full transition-colors",
-                                step.id <= currentStep ? "bg-blue-500" : "bg-stone-300",
-                            )}
-                        />
-                        <span
-                            className={cn(
-                                "max-w-full truncate transition-colors",
-                                step.id === currentStep
-                                    ? "font-semibold text-stone-950"
-                                    : "text-stone-500",
-                            )}
-                        >
-                            {step.shortLabel}
-                        </span>
-                    </div>
-                ))}
-                {end < totalSteps - 1 && <span className="shrink-0 px-1">…</span>}
-            </div>
-        </div>
-    )
-}
-
-// File Upload Zone
-function FileUploadZone({
-    files,
-    onFilesChange,
-    maxFiles = 10,
-    maxFileSizeBytes,
-    allowedMimeTypes,
-}: {
-    files: File[]
-    onFilesChange: (files: File[]) => void
-    maxFiles?: number
-    maxFileSizeBytes?: number | null
-    allowedMimeTypes?: string[] | null
-}) {
-    const [isDragging, setIsDragging] = React.useState(false)
-    const inputRef = React.useRef<HTMLInputElement>(null)
-    const inputId = React.useId()
-
-    const maxSizeBytes = maxFileSizeBytes || 10 * 1024 * 1024
-    const acceptedTypes = allowedMimeTypes && allowedMimeTypes.length > 0 ? allowedMimeTypes : null
-
-    const isAllowedType = (file: File) => {
-        if (!acceptedTypes) return true
-        return acceptedTypes.some((type) => {
-            if (type.endsWith("/*")) {
-                return file.type.startsWith(type.replace("/*", "/"))
-            }
-            return file.type === type
-        })
-    }
-
-    const applyFileLimits = (incomingFiles: File[]) => {
-        const filteredFiles = incomingFiles.filter((file) => {
-            if (!isAllowedType(file)) {
-                toast.error(`File type not allowed: ${file.name}`)
-                return false
-            }
-            if (file.size > maxSizeBytes) {
-                const maxMb = Math.floor(maxSizeBytes / (1024 * 1024))
-                toast.error(`File too large (${file.name}). Max ${maxMb} MB.`)
-                return false
-            }
-            return true
-        })
-
-        const combined = [...files, ...filteredFiles]
-        if (combined.length > maxFiles) {
-            toast.error(`Maximum ${maxFiles} files allowed.`)
-        }
-        onFilesChange(combined.slice(0, maxFiles))
-    }
-
-    const handleDrop = (e: React.DragEvent) => {
-        e.preventDefault()
-        setIsDragging(false)
-        const droppedFiles = Array.from(e.dataTransfer.files)
-        applyFileLimits(droppedFiles)
-    }
-
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const selectedFiles = Array.from(e.target.files || [])
-        applyFileLimits(selectedFiles)
-    }
-
-    const removeFile = (index: number) => {
-        const newFiles = files.filter((_, i) => i !== index)
-        onFilesChange(newFiles)
-    }
-
-    return (
-        <div className="space-y-3">
-            <Button unstyled
-                type="button"
-                onClick={() => inputRef.current?.click()}
-                aria-label="Upload files"
-                onDrop={handleDrop}
-                onDragOver={(e) => {
-                    e.preventDefault()
-                    setIsDragging(true)
-                }}
-                onDragLeave={() => setIsDragging(false)}
-                className={cn(
-                    "flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-6 transition-all",
-                    "hover:border-blue-300 hover:bg-sky-50",
-                    "focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2",
-                    isDragging
-                        ? "border-blue-400 bg-sky-50"
-                        : "border-stone-300 bg-white"
-                )}
-            >
-                <UploadIcon className="size-10 text-stone-400" />
-                <div className="text-center">
-                    <p className="text-sm font-medium text-stone-700">
-                        Drag and drop files here
-                    </p>
-                    <p className="text-sm text-stone-500">
-                        or{" "}
-                        <span className="text-primary underline underline-offset-2">
-                            click to browse
-                        </span>
-                    </p>
-                </div>
-                <p className="text-xs text-stone-400">
-                    Up to {maxFiles} files for this field, {(maxSizeBytes / (1024 * 1024)).toFixed(0)}MB each
-                </p>
-            </Button>
-            <input
-                id={inputId}
-                name="public_form_file_upload"
-                ref={inputRef}
-                type="file"
-                multiple
-                aria-label="Select files to upload"
-                accept={acceptedTypes ? acceptedTypes.join(",") : undefined}
-                onChange={handleFileSelect}
-                className="hidden"
-            />
-
-            {/* File List */}
-            {files.length > 0 && (
-                <div className="space-y-2">
-                    {files.map((file, index) => (
-                        <div
-                            key={getUploadFileKey(file)}
-                            className="flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 p-3"
-                        >
-                            <div className="flex items-center gap-3">
-                                <FileTextIcon className="size-5 text-stone-400" />
-                                <div>
-                                    <p className="text-sm font-medium text-stone-700">
-                                        {file.name}
-                                    </p>
-                                    <p className="text-xs text-stone-500">
-                                        {(file.size / 1024).toFixed(1)} KB
-                                    </p>
-                                </div>
-                            </div>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="size-8"
-                                onClick={() => removeFile(index)}
-                                aria-label={`Remove ${file.name}`}
-                            >
-                                <XIcon className="size-4" />
-                            </Button>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    )
-}
-
-// Privacy Notice
-function PrivacyNotice({ text }: { text?: string | null }) {
-    const notice =
-        text && text.trim().length > 0
-            ? text
-            : "Your information is encrypted and secure"
-    const trimmed = notice.trim()
-    const isUrl = /^https?:\/\//i.test(trimmed) || /^mailto:/i.test(trimmed)
-    return (
-        <div className="flex items-center gap-2 text-xs text-stone-500 mt-6">
-            <LockIcon className="size-4" />
-            {isUrl ? (
-                <a
-                    href={trimmed}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline decoration-dotted underline-offset-2 hover:text-primary"
-                >
-                    View privacy policy
-                </a>
-            ) : (
-                <span className="whitespace-pre-line">{notice}</span>
-            )}
-        </div>
-    )
 }
 
 type PublicApplicationFormProps = {
@@ -1122,7 +866,7 @@ function useHostedIntakeResumeLookup({
 }
 
 // Main Form Component
-export default function PublicApplicationForm({ slug }: PublicApplicationFormProps) {
+function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
     const token = slug
     const isPreview = false
 
@@ -1302,23 +1046,21 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     const maxTotalFiles = formConfig?.max_file_count ?? 10
 
     const updateFileUploads = (fieldKey: string, nextFiles: File[]) => {
-        setFileUploads((prev) => {
-            const otherCount = Object.entries(prev).reduce(
-                (sum, [key, files]) => (key === fieldKey ? sum : sum + files.length),
-                0,
-            )
-            const allowedByTotal = Math.max(0, maxTotalFiles - otherCount)
-            const allowed = Math.min(PER_FILE_FIELD_MAX, allowedByTotal)
-            const trimmed = nextFiles.slice(0, allowed)
-            if (trimmed.length < nextFiles.length) {
-                if (allowedByTotal < PER_FILE_FIELD_MAX) {
-                    toast.error(`Maximum ${maxTotalFiles} files allowed.`)
-                } else {
-                    toast.error(`Maximum ${PER_FILE_FIELD_MAX} files allowed per upload field.`)
-                }
+        const otherCount = Object.entries(fileUploads).reduce(
+            (sum, [key, files]) => (key === fieldKey ? sum : sum + files.length),
+            0,
+        )
+        const allowedByTotal = Math.max(0, maxTotalFiles - otherCount)
+        const allowed = Math.min(PER_FILE_FIELD_MAX, allowedByTotal)
+        const trimmed = nextFiles.slice(0, allowed)
+        if (trimmed.length < nextFiles.length) {
+            if (allowedByTotal < PER_FILE_FIELD_MAX) {
+                toast.error(`Maximum ${maxTotalFiles} files allowed.`)
+            } else {
+                toast.error(`Maximum ${PER_FILE_FIELD_MAX} files allowed per upload field.`)
             }
-            return { ...prev, [fieldKey]: trimmed }
-        })
+        }
+        setFileUploads((prev) => ({ ...prev, [fieldKey]: trimmed }))
     }
 
     const getMaxFilesForField = (fieldKey: string) => {
@@ -1387,7 +1129,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         }
     }
 
-    const handleSubmit = async () => {
+    const handleSubmit = () => {
         if (!agreed) {
             toast.error("Please confirm the agreement before submitting.")
             return
@@ -1417,8 +1159,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         }
 
         setIsSubmitting(true)
-        const finishSubmitting = () => setIsSubmitting(false)
-        try {
+        const submit = async () => {
             const fileEntries = Object.entries(fileUploads).flatMap(([fieldKey, items]) =>
                 items.map((file) => ({ fieldKey, file })),
             )
@@ -1430,26 +1171,26 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                 formConfig?.messaging_consent?.operational
                 || formConfig?.messaging_consent?.promotional,
             )
-            const response = hasMessagingConsent
-                ? await submitSharedPublicForm(
-                    token,
-                    answers,
-                    files,
-                    fileFieldKeys,
-                    undefined,
-                    { operational: smsOperational, promotional: smsPromotional },
-                )
-                : await submitSharedPublicForm(token, answers, files, fileFieldKeys)
+            const response = await submitSharedPublicForm(
+                token,
+                answers,
+                files,
+                fileFieldKeys,
+                undefined,
+                hasMessagingConsent
+                    ? { operational: smsOperational, promotional: smsPromotional }
+                    : undefined,
+                formConfig?.published_version_id,
+            )
             if (draftSessionId) {
                 window.localStorage.removeItem(`intake-draft-session:${token}`)
             }
             setSubmissionOutcome(response.outcome)
             setIsSubmitted(true)
-            finishSubmitting()
-        } catch {
-            toast.error("Failed to submit application. Please try again.")
-            finishSubmitting()
         }
+        void submit()
+            .catch(() => toast.error("Failed to submit application. Please try again."))
+            .finally(() => setIsSubmitting(false))
     }
 
     const goToEditStep = (step: number) => {
@@ -1621,59 +1362,17 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
 
     // Loading state
     if (isLoading) {
-        return (
-            <div className={cn(publicFormPageClassName, "flex items-center justify-center p-4")}>
-                <div className="text-center">
-                    <Loader2Icon className="size-10 animate-spin text-primary mx-auto mb-4" />
-                    <p className="text-stone-600">Loading application form…</p>
-                </div>
-            </div>
-        )
+        return <PublicFormLoadingState />
     }
 
     // Error state
     if (formError) {
-        return (
-            <div className={cn(publicFormPageClassName, "flex items-center justify-center p-4")}>
-                <Card className={cn(publicFormCardClassName, "w-full max-w-md")}>
-                    <CardContent className="px-6 py-8 text-center">
-                        <AlertTriangleIcon className="size-16 text-amber-500 mx-auto mb-4" />
-                        <h1 className="text-xl font-semibold text-stone-900 mb-2">
-                            Form Not Available
-                        </h1>
-                        <p className="text-stone-600">{formError}</p>
-                    </CardContent>
-                </Card>
-            </div>
-        )
+        return <PublicFormErrorState message={formError} />
     }
 
     // Success state
     if (isSubmitted) {
-        const outcomeMessage =
-            submissionOutcome === "linked"
-                ? "Your application is in review. A coordinator will follow up shortly."
-                : submissionOutcome === "ambiguous_review"
-                    ? "Your application is received and queued for verification. Our intake team will contact you soon."
-                    : "Your application has been received and added to intake review. A coordinator will reach out soon."
-
-        return (
-            <div className={cn(publicFormPageClassName, "flex items-center justify-center p-4")}>
-                <Card className={cn(publicFormCardClassName, "w-full max-w-md")}>
-                    <CardContent className="px-6 py-10 text-center">
-                        <div className="mx-auto mb-6 flex size-16 items-center justify-center rounded-full bg-emerald-50">
-                            <CheckCircle2Icon className="size-10 text-emerald-600" />
-                        </div>
-                        <h1 className="text-2xl font-semibold text-stone-900 mb-3">
-                            Application Submitted!
-                        </h1>
-                        <p className="text-stone-600 leading-relaxed">
-                            {outcomeMessage}
-                        </p>
-                    </CardContent>
-                </Card>
-            </div>
-        )
+        return <PublicFormSuccessState outcome={submissionOutcome} />
     }
 
     return (
@@ -2012,4 +1711,8 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             </footer>
         </div>
     )
+}
+
+export default function PublicApplicationForm(props: PublicApplicationFormProps) {
+    return usePublicApplicationFormView(props)
 }
