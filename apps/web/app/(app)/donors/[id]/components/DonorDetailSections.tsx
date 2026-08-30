@@ -143,13 +143,8 @@ export function DonorDetailSections({
     archiveStatus,
     onRestore,
     restoreStatus,
-    canEdit,
-    canArchive,
-    canChangeStage,
-    canViewTasks,
-    canCreateTasks,
+    access,
     currentUserId,
-    canDeleteAnyNote,
 }: {
     donor: Donor
     returnTo: string
@@ -163,14 +158,24 @@ export function DonorDetailSections({
     archiveStatus: "idle" | "pending"
     onRestore: () => void
     restoreStatus: "idle" | "pending"
-    canEdit: boolean
-    canArchive: boolean
-    canChangeStage: boolean
-    canViewTasks: boolean
-    canCreateTasks: boolean
+    access: {
+        edit: boolean
+        archive: boolean
+        changeStage: boolean
+        viewTasks: boolean
+        createTasks: boolean
+        deleteAnyNote: boolean
+    }
     currentUserId: string | null
-    canDeleteAnyNote: boolean
 }) {
+    const {
+        edit: canEdit,
+        archive: canArchive,
+        changeStage: canChangeStage,
+        viewTasks: canViewTasks,
+        createTasks: canCreateTasks,
+        deleteAnyNote: canDeleteAnyNote,
+    } = access
     const isArchiving = archiveStatus === "pending"
     const isRestoring = restoreStatus === "pending"
     const hasMenuActions = donor.is_archived ? canArchive : canEdit || canArchive

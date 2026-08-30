@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useState } from "react"
 import type { Route } from "next"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { AlertCircleIcon, Loader2Icon, SearchXIcon } from "lucide-react"
@@ -185,13 +185,15 @@ function LoadedDonorDetail({ donor, returnTo }: { donor: Donor; returnTo: string
                 archiveStatus={archiveDonor.isPending ? "pending" : "idle"}
                 onRestore={() => { void handleRestore() }}
                 restoreStatus={restoreDonor.isPending ? "pending" : "idle"}
-                canEdit={canEdit}
-                canArchive={canArchive}
-                canChangeStage={canChangeStage}
-                canViewTasks={canViewTasks}
-                canCreateTasks={canCreateTasks}
+                access={{
+                    edit: canEdit,
+                    archive: canArchive,
+                    changeStage: canChangeStage,
+                    viewTasks: canViewTasks,
+                    createTasks: canCreateTasks,
+                    deleteAnyNote: canDeleteAnyNote,
+                }}
                 currentUserId={user?.user_id ?? null}
-                canDeleteAnyNote={canDeleteAnyNote}
             />
 
             <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
@@ -242,7 +244,7 @@ function LoadedDonorDetail({ donor, returnTo }: { donor: Donor; returnTo: string
     )
 }
 
-export default function DonorDetailPage() {
+function DonorDetailPageContent() {
     const params = useParams<{ id: string }>()
     const searchParams = useSearchParams()
     const returnTo = sanitizeDonorReturnTo(searchParams.get("return_to"))
@@ -296,4 +298,19 @@ export default function DonorDetailPage() {
     }
 
     return <LoadedDonorDetail donor={donor} returnTo={returnTo} />
+}
+
+export default function DonorDetailPage() {
+    return (
+        <Suspense
+            fallback={(
+                <div className="flex flex-1 items-center justify-center" role="status">
+                    <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                    <span className="ml-2 text-muted-foreground">Loading donor…</span>
+                </div>
+            )}
+        >
+            <DonorDetailPageContent />
+        </Suspense>
+    )
 }

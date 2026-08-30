@@ -31,6 +31,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/lib/auth-context"
 import type { DonorSortBy } from "@/lib/api/donors"
+import type { PipelineStage } from "@/lib/api/pipelines"
 import { getActiveDonorStages, getDonorStageLabel, getDonorStageStyle } from "@/lib/donor-stage-utils"
 import { isPermissionError } from "@/lib/error-utils"
 import { useDebouncedSearchCommit } from "@/lib/hooks/use-debounced-search-commit"
@@ -44,6 +45,7 @@ import {
     getDonorPipelineEntityType,
     getDonorTypeLabel,
     getDonorTypePluralLabel,
+    type DonorListResponse,
     type DonorType,
 } from "@/lib/types/donor"
 
@@ -227,6 +229,283 @@ function buildDonorsHref(
     if (params.get("type") === "egg") params.delete("type")
     const query = params.toString()
     return (query ? `/donors?${query}` : "/donors") as Route
+}
+
+function DonorListCard({
+    view,
+    onRetry,
+    onClearFilters,
+    onSort,
+}: {
+    view: {
+        donorType: DonorType
+        stages: PipelineStage[]
+        data: DonorListResponse | undefined
+        isLoading: boolean
+        isError: boolean
+        error: unknown
+        isFiltered: boolean
+        currentListHref: string
+        sortBy: DonorSortBy | null
+        sortOrder: "asc" | "desc"
+    }
+    onRetry: () => void
+    onClearFilters: () => void
+    onSort: (column: string) => void
+}) {
+    const {
+        donorType,
+        stages,
+        data,
+        isLoading,
+        isError,
+        error,
+        isFiltered,
+        currentListHref,
+        sortBy,
+        sortOrder,
+    } = view
+    return (
+        <Card className="py-0">
+            <CardContent className="overflow-x-auto p-0">
+                {isLoading ? (
+                    <div className="flex items-center justify-center py-12" role="status">
+                        <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                        <span className="ml-2 text-muted-foreground">Loading…</span>
+                    </div>
+                ) : isPermissionError(error) ? (
+                    <PermissionDeniedState
+                        description="Your account does not have permission to view donors. Ask an admin to update your role or permissions."
+                        onRetry={onRetry}
+                    />
+                ) : isError ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <AlertCircleIcon className="mb-4 size-12 text-destructive" />
+                        <h2 className="text-lg font-medium">Failed to load donors</h2>
+                        <Button variant="outline" size="sm" className="mt-4" onClick={onRetry}>
+                            Retry
+                        </Button>
+                    </div>
+                ) : !data?.items.length ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <UsersIcon className="mb-4 size-12 text-muted-foreground" />
+                        <h2 className="text-lg font-medium">
+                            {isFiltered
+                                ? "No donors match these filters"
+                                : `No ${getDonorTypePluralLabel(donorType).toLowerCase()} yet`}
+                        </h2>
+                        {isFiltered ? (
+                            <Button variant="outline" size="sm" className="mt-4" onClick={onClearFilters}>
+                                Clear filters
+                            </Button>
+                        ) : null}
+                    </div>
+                ) : (
+                    <Table
+                        aria-label={getDonorTypePluralLabel(donorType)}
+                        className="[&_td]:!text-center [&_th]:!text-center"
+                    >
+                        <TableHeader>
+                            <TableRow>
+                                <SortableTableHead column="donor_number" label="Donor #" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
+                                <SortableTableHead column="full_name" label="Name" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
+                                <TableHead>Email</TableHead>
+                                <TableHead>Phone</TableHead>
+                                <SortableTableHead column="state" label="State" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
+                                <SortableTableHead column="education" label="Education" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
+                                <SortableTableHead column="stage" label="Stage" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
+                                <SortableTableHead column="created_at" label="Created" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {data.items.map((donor) => (
+                                <TableRow key={donor.id}>
+                                    <TableCell>
+                                        <Link
+                                            href={`/donors/${donor.id}?${new URLSearchParams({ return_to: currentListHref }).toString()}`}
+                                            className="font-medium text-primary hover:underline"
+                                        >
+                                            {donor.donor_number}
+                                        </Link>
+                                    </TableCell>
+                                    <TableCell className="font-medium">{donor.full_name}</TableCell>
+                                    <TableCell className="text-muted-foreground">{donor.email}</TableCell>
+                                    <TableCell className="text-muted-foreground">{donor.phone || "—"}</TableCell>
+                                    <TableCell className="text-muted-foreground">{donor.state || "—"}</TableCell>
+                                    <TableCell className="text-muted-foreground">{donor.education || "—"}</TableCell>
+                                    <TableCell>
+                                        <div className="flex flex-wrap justify-center gap-1">
+                                            <Badge variant="outline" style={getDonorStageStyle(stages, donor)}>
+                                                {getDonorStageLabel(stages, donor)}
+                                            </Badge>
+                                            {donor.is_archived ? <Badge variant="secondary">Archived</Badge> : null}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell className="text-muted-foreground">{formatCreatedAt(donor.created_at)}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+function CreateDonorDialog({
+    donorType,
+    formValues,
+    open,
+    pending,
+    onOpenChange,
+    onClose,
+    onSubmit,
+    onFieldChange,
+}: {
+    donorType: DonorType
+    formValues: DonorFormValues
+    open: boolean
+    pending: boolean
+    onOpenChange: (open: boolean) => void
+    onClose: () => void
+    onSubmit: () => Promise<void>
+    onFieldChange: (field: keyof DonorFormValues, value: string) => void
+}) {
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-lg">
+                <form action={onSubmit}>
+                    <DialogHeader>
+                        <DialogTitle>New {getDonorTypeLabel(donorType)}</DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <DonorFormFields
+                            values={formValues}
+                            idPrefix="create_donor_"
+                            showDonorType={false}
+                            onChange={onFieldChange}
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+                        <Button
+                            type="submit"
+                            disabled={pending || !formValues.full_name.trim() || !formValues.email.trim()}
+                        >
+                            {pending ? <Loader2Icon className="mr-2 size-4 animate-spin" /> : null}
+                            Create
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+function DonorFiltersPanel({
+    view,
+    onArchivedChange,
+    onDatePresetChange,
+    onCustomDateChange,
+    onStageChange,
+    onSearchChange,
+    onClearAll,
+}: {
+    view: {
+        showArchived: boolean
+        dateRange: DateRangePreset
+        customRange: { from: Date | undefined; to: Date | undefined }
+        stageFilter: string
+        stages: PipelineStage[]
+        search: string
+        isFiltered: boolean
+        chips: Array<{ key: string; label: string; clear: () => void }>
+    }
+    onArchivedChange: (archived: boolean) => void
+    onDatePresetChange: (range: DateRangePreset) => void
+    onCustomDateChange: (range: { from: Date | undefined; to: Date | undefined }) => void
+    onStageChange: (stage: string) => void
+    onSearchChange: (value: string) => void
+    onClearAll: () => void
+}) {
+    const { showArchived, dateRange, customRange, stageFilter, stages, search, isFiltered, chips } = view
+    return (
+        <>
+            <div className="flex flex-col gap-4 md:flex-row md:items-center">
+                <Select
+                    value={showArchived ? "archived" : "active"}
+                    onValueChange={(value) => onArchivedChange(value === "archived")}
+                >
+                    <SelectTrigger aria-label="Record status" className="w-full md:w-[180px]">
+                        <SelectValue>
+                            {(value: string | null) => value === "archived" ? "Archived Donors" : "Active Donors"}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="active">Active Donors</SelectItem>
+                        <SelectItem value="archived">Archived Donors</SelectItem>
+                    </SelectContent>
+                </Select>
+                <DateRangePicker
+                    preset={dateRange}
+                    customRange={customRange}
+                    ariaLabel="Created date range"
+                    onPresetChange={onDatePresetChange}
+                    onCustomRangeChange={onCustomDateChange}
+                    className="w-full md:w-auto"
+                />
+                <Select value={stageFilter} onValueChange={(value) => value && onStageChange(value)}>
+                    <SelectTrigger aria-label="Stage" className="w-full md:w-[180px]">
+                        <SelectValue placeholder="All Stages">
+                            {(value: string | null) =>
+                                value === "all" || !value
+                                    ? "All Stages"
+                                    : stages.find((stage) => stage.id === value)?.label ?? "Stage unavailable"}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All Stages</SelectItem>
+                        {stages.map((stage) => (
+                            <SelectItem key={stage.id} value={stage.id}>{stage.label}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <div className="flex-1" />
+                <div className="relative w-full max-w-sm">
+                    <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        type="search"
+                        aria-label="Search donors"
+                        placeholder="Search name, number, email, phone…"
+                        className="pl-9"
+                        value={search}
+                        onChange={(event) => onSearchChange(event.target.value)}
+                    />
+                </div>
+            </div>
+
+            {isFiltered ? (
+                <div className="flex flex-wrap items-center gap-2">
+                    {chips.map((chip) => (
+                        <Button
+                            key={chip.key}
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            aria-label={`Remove filter: ${chip.label}`}
+                            onClick={chip.clear}
+                        >
+                            {chip.label}
+                            <XIcon className="size-3" aria-hidden="true" />
+                        </Button>
+                    ))}
+                    <Button variant="ghost" size="sm" onClick={onClearAll} aria-label="Reset filters">
+                        Reset
+                    </Button>
+                </div>
+            ) : null}
+        </>
+    )
 }
 
 export default function DonorsPageClient() {
@@ -418,174 +697,50 @@ export default function DonorsPageClient() {
                         <TabsTrigger value="sperm">Sperm Donors</TabsTrigger>
                     </TabsList>
                     <TabsContent value={donorType} className="space-y-6">
-                <div className="flex flex-col gap-4 md:flex-row md:items-center">
-                    <Select
-                        value={showArchived ? "archived" : "active"}
-                        onValueChange={(value) => setUrl({ archived: value === "archived", page: 1 })}
-                    >
-                        <SelectTrigger aria-label="Record status" className="w-full md:w-[180px]">
-                            <SelectValue>
-                                {(value: string | null) => value === "archived" ? "Archived Donors" : "Active Donors"}
-                            </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="active">Active Donors</SelectItem>
-                            <SelectItem value="archived">Archived Donors</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <DateRangePicker
-                        preset={dateRange}
-                        customRange={customRange}
-                        ariaLabel="Created date range"
-                        onPresetChange={(range) => setUrl({
-                            range,
-                            ...(range === "custom" ? { rangeDates: customRange } : {}),
-                            page: 1,
-                        })}
-                        onCustomRangeChange={(rangeDates) => setUrl({
-                            range: "custom",
-                            rangeDates,
-                            page: 1,
-                        })}
-                        className="w-full md:w-auto"
-                    />
-                    <Select
-                        value={stageFilter}
-                        onValueChange={(value) => value && setUrl({ stage: value, page: 1 })}
-                    >
-                        <SelectTrigger aria-label="Stage" className="w-full md:w-[180px]">
-                            <SelectValue placeholder="All Stages">
-                                {(value: string | null) =>
-                                    value === "all" || !value
-                                        ? "All Stages"
-                                        : stages.find((stage) => stage.id === value)?.label ?? "Stage unavailable"}
-                            </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Stages</SelectItem>
-                            {stages.map((stage) => (
-                                <SelectItem key={stage.id} value={stage.id}>{stage.label}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <div className="flex-1" />
-                    <div className="relative w-full max-w-sm">
-                        <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            type="search"
-                            aria-label="Search donors"
-                            placeholder="Search name, number, email, phone…"
-                            className="pl-9"
-                            value={search}
-                            onChange={(event) => handleSearchChange(event.target.value)}
-                        />
-                    </div>
-                </div>
+                <DonorFiltersPanel
+                    view={{
+                        showArchived,
+                        dateRange,
+                        customRange,
+                        stageFilter,
+                        stages,
+                        search,
+                        isFiltered,
+                        chips: filterChips,
+                    }}
+                    onArchivedChange={(archived) => setUrl({ archived, page: 1 })}
+                    onDatePresetChange={(range) => setUrl({
+                        range,
+                        ...(range === "custom" ? { rangeDates: customRange } : {}),
+                        page: 1,
+                    })}
+                    onCustomDateChange={(rangeDates) => setUrl({
+                        range: "custom",
+                        rangeDates,
+                        page: 1,
+                    })}
+                    onStageChange={(stage) => setUrl({ stage, page: 1 })}
+                    onSearchChange={handleSearchChange}
+                    onClearAll={clearAllFilters}
+                />
 
-                {isFiltered ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                        {filterChips.map((chip) => (
-                            <Button
-                                key={chip.key}
-                                variant="outline"
-                                size="sm"
-                                className="gap-2"
-                                aria-label={`Remove filter: ${chip.label}`}
-                                onClick={chip.clear}
-                            >
-                                {chip.label}
-                                <XIcon className="size-3" aria-hidden="true" />
-                            </Button>
-                        ))}
-                        <Button variant="ghost" size="sm" onClick={clearAllFilters} aria-label="Reset filters">
-                            Reset
-                        </Button>
-                    </div>
-                ) : null}
-
-                <Card className="py-0">
-                    <CardContent className="overflow-x-auto p-0">
-                        {donorsQuery.isLoading ? (
-                            <div className="flex items-center justify-center py-12" role="status">
-                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                                <span className="ml-2 text-muted-foreground">Loading…</span>
-                            </div>
-                        ) : isPermissionError(donorsQuery.error) ? (
-                            <PermissionDeniedState
-                                description="Your account does not have permission to view donors. Ask an admin to update your role or permissions."
-                                onRetry={() => { void donorsQuery.refetch() }}
-                            />
-                        ) : donorsQuery.isError ? (
-                            <div className="flex flex-col items-center justify-center py-12 text-center">
-                                <AlertCircleIcon className="mb-4 size-12 text-destructive" />
-                                <h2 className="text-lg font-medium">Failed to load donors</h2>
-                                <Button variant="outline" size="sm" className="mt-4" onClick={() => { void donorsQuery.refetch() }}>
-                                    Retry
-                                </Button>
-                            </div>
-                        ) : !data?.items.length ? (
-                            <div className="flex flex-col items-center justify-center py-12 text-center">
-                                <UsersIcon className="mb-4 size-12 text-muted-foreground" />
-                                <h2 className="text-lg font-medium">
-                                    {isFiltered ? "No donors match these filters" : `No ${getDonorTypePluralLabel(donorType).toLowerCase()} yet`}
-                                </h2>
-                                {isFiltered ? (
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="mt-4"
-                                        onClick={clearAllFilters}
-                                    >
-                                        Clear filters
-                                    </Button>
-                                ) : null}
-                            </div>
-                        ) : (
-                            <Table aria-label={getDonorTypePluralLabel(donorType)} className="[&_td]:!text-center [&_th]:!text-center">
-                                <TableHeader>
-                                    <TableRow>
-                                        <SortableTableHead column="donor_number" label="Donor #" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <SortableTableHead column="full_name" label="Name" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <TableHead>Email</TableHead>
-                                        <TableHead>Phone</TableHead>
-                                        <SortableTableHead column="state" label="State" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <SortableTableHead column="education" label="Education" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <SortableTableHead column="stage" label="Stage" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <SortableTableHead column="created_at" label="Created" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {data.items.map((donor) => (
-                                        <TableRow key={donor.id}>
-                                            <TableCell>
-                                                <Link
-                                                    href={`/donors/${donor.id}?${new URLSearchParams({ return_to: currentListHref }).toString()}`}
-                                                    className="font-medium text-primary hover:underline"
-                                                >
-                                                    {donor.donor_number}
-                                                </Link>
-                                            </TableCell>
-                                            <TableCell className="font-medium">{donor.full_name}</TableCell>
-                                            <TableCell className="text-muted-foreground">{donor.email}</TableCell>
-                                            <TableCell className="text-muted-foreground">{donor.phone || "—"}</TableCell>
-                                            <TableCell className="text-muted-foreground">{donor.state || "—"}</TableCell>
-                                            <TableCell className="text-muted-foreground">{donor.education || "—"}</TableCell>
-                                            <TableCell>
-                                                <div className="flex flex-wrap justify-center gap-1">
-                                                    <Badge variant="outline" style={getDonorStageStyle(stages, donor)}>
-                                                        {getDonorStageLabel(stages, donor)}
-                                                    </Badge>
-                                                    {donor.is_archived ? <Badge variant="secondary">Archived</Badge> : null}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-muted-foreground">{formatCreatedAt(donor.created_at)}</TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        )}
-                    </CardContent>
-                </Card>
+                <DonorListCard
+                    view={{
+                        donorType,
+                        stages,
+                        data,
+                        isLoading: donorsQuery.isLoading,
+                        isError: donorsQuery.isError,
+                        error: donorsQuery.error,
+                        isFiltered,
+                        currentListHref,
+                        sortBy,
+                        sortOrder,
+                    }}
+                    onRetry={() => { void donorsQuery.refetch() }}
+                    onClearFilters={clearAllFilters}
+                    onSort={handleSort}
+                />
 
                 {data && data.total > data.per_page ? (
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -604,47 +759,21 @@ export default function DonorsPageClient() {
                 </Tabs>
             </div>
 
-            <Dialog
+            <CreateDonorDialog
+                donorType={donorType}
+                formValues={formValues}
                 open={isCreateOpen}
+                pending={createDonor.isPending}
                 onOpenChange={(open) => {
                     if (open) setIsCreateOpen(true)
                     else closeCreateDialog()
                 }}
-            >
-                <DialogContent className="max-w-lg">
-                    <form action={handleCreate}>
-                        <DialogHeader>
-                            <DialogTitle>New {getDonorTypeLabel(donorType)}</DialogTitle>
-                        </DialogHeader>
-                        <div className="py-4">
-                            <DonorFormFields
-                                values={formValues}
-                                idPrefix="create_donor_"
-                                showDonorType={false}
-                                onChange={(field, value) => {
-                                    setFormValues((current) => ({ ...current, [field]: value }))
-                                }}
-                            />
-                        </div>
-                        <DialogFooter>
-                            <Button type="button" variant="outline" onClick={closeCreateDialog}>
-                                Cancel
-                            </Button>
-                            <Button
-                                type="submit"
-                                disabled={
-                                    createDonor.isPending ||
-                                    !formValues.full_name.trim() ||
-                                    !formValues.email.trim()
-                                }
-                            >
-                                {createDonor.isPending ? <Loader2Icon className="mr-2 size-4 animate-spin" /> : null}
-                                Create
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
+                onClose={closeCreateDialog}
+                onSubmit={handleCreate}
+                onFieldChange={(field, value) => {
+                    setFormValues((current) => ({ ...current, [field]: value }))
+                }}
+            />
         </div>
     )
 }
