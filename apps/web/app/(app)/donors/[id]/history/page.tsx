@@ -1,6 +1,7 @@
 "use client"
 
 import { useParams, useSearchParams } from "next/navigation"
+import { Suspense } from "react"
 
 import { EntityActivityHistory } from "@/components/activity/EntityActivityHistory"
 
@@ -14,7 +15,7 @@ function sanitizeReturnTo(value: string | null): string {
     return DEFAULT_DONORS_LIST_PATH
 }
 
-export default function DonorActivityHistoryPage() {
+function DonorActivityHistoryContent() {
     const { id } = useParams<{ id: string }>()
     const searchParams = useSearchParams()
     const returnTo = sanitizeReturnTo(searchParams.get("return_to"))
@@ -24,5 +25,13 @@ export default function DonorActivityHistoryPage() {
             entityId={id}
             backHref={`/donors/${id}?return_to=${encodeURIComponent(returnTo)}`}
         />
+    )
+}
+
+export default function DonorActivityHistoryPage() {
+    return (
+        <Suspense fallback={<div role="status">Loading activity history…</div>}>
+            <DonorActivityHistoryContent />
+        </Suspense>
     )
 }
