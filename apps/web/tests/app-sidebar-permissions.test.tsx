@@ -206,7 +206,7 @@ describe("AppSidebar permission visibility", () => {
         await waitFor(() => {
             expect(screen.getByText("Dashboard")).toBeInTheDocument()
         })
-        expect(screen.queryByText("Tickets")).not.toBeInTheDocument()
+        expect(screen.queryByText("Tickets Beta")).not.toBeInTheDocument()
         expect(screen.queryByText("Messages")).not.toBeInTheDocument()
     })
 
@@ -256,6 +256,33 @@ describe("AppSidebar permission visibility", () => {
         expect(screen.getByText("Reports")).toBeInTheDocument()
     })
 
+    it("hides Donors Beta from non-developers even with donor permission", async () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["view_intended_parents"] },
+        })
+
+        const view = render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        await screen.findByRole("link", { name: "Intended Parents" })
+        expect(screen.queryByRole("link", { name: "Donors Beta" })).not.toBeInTheDocument()
+
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["view_intended_parents", "view_donors"] },
+        })
+        view.rerender(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        await screen.findByRole("link", { name: "Intended Parents" })
+        expect(screen.queryByRole("link", { name: "Donors Beta" })).not.toBeInTheDocument()
+    })
+
     it("enables selective prefetch only after navigation intent", async () => {
         mockUseEffectivePermissions.mockReturnValue({
             data: {
@@ -287,7 +314,7 @@ describe("AppSidebar permission visibility", () => {
         expect(reports).toHaveAttribute("data-prefetch", "false")
     })
 
-    it("shows Tickets for developer role", async () => {
+    it("shows Tickets Beta and Donors Beta for developer role", async () => {
         mockUseAuth.mockReturnValue({
             user: {
                 user_id: "user-dev",
@@ -310,8 +337,12 @@ describe("AppSidebar permission visibility", () => {
         )
 
         await waitFor(() => {
-            expect(screen.getByText("Tickets")).toBeInTheDocument()
+            expect(screen.getByText("Tickets Beta")).toBeInTheDocument()
         })
+        expect(screen.getByRole("link", { name: "Donors Beta" })).toHaveAttribute(
+            "href",
+            "/donors",
+        )
         expect(screen.queryByText("Messages")).not.toBeInTheDocument()
     })
 

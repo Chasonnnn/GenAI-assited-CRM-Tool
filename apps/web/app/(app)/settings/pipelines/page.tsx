@@ -195,6 +195,16 @@ const PIPELINE_ENTITY_OPTIONS: Array<{
         label: "Intended Parents",
         description: "Stage behavior and matching semantics for intended parents.",
     },
+    {
+        value: "egg_donor",
+        label: "Egg Donors",
+        description: "Screening, matching, cycle, and retrieval stages for egg donors.",
+    },
+    {
+        value: "sperm_donor",
+        label: "Sperm Donors",
+        description: "Screening, availability, collection, and donation stages for sperm donors.",
+    },
 ]
 
 const IMPACT_LABELS: Record<ImpactArea, string> = {
@@ -298,12 +308,25 @@ function getVisibleCapabilityLabels(entityType: PipelineEntityType) {
             ].includes(capability.key),
         )
     }
+    if (entityType === "egg_donor" || entityType === "sperm_donor") {
+        return CAPABILITY_LABELS.filter((capability) =>
+            ["counts_as_contacted", "eligible_for_matching", "locks_match_state"].includes(
+                capability.key,
+            ),
+        )
+    }
     return CAPABILITY_LABELS
 }
 
 function getEntityRecordLabel(entityType: PipelineEntityType, count: number) {
     if (entityType === "intended_parent") {
         return `${count} active record${count === 1 ? "" : "s"}`
+    }
+    if (entityType === "egg_donor") {
+        return `${count} active egg donor${count === 1 ? "" : "s"}`
+    }
+    if (entityType === "sperm_donor") {
+        return `${count} active sperm donor${count === 1 ? "" : "s"}`
     }
     return `${count} active surrogate${count === 1 ? "" : "s"}`
 }
@@ -314,6 +337,19 @@ function getEntityLabel(entityType: string | null | undefined) {
 
 function getEntityDescription(entityType: PipelineEntityType) {
     return PIPELINE_ENTITY_OPTIONS.find((option) => option.value === entityType)?.description
+}
+
+function getPipelineIntroDescription(entityType: PipelineEntityType) {
+    if (entityType === "surrogate") {
+        return "Configure per-org stage identity, category, behavior, journey mappings, and analytics funnel from one versioned draft."
+    }
+    if (entityType === "egg_donor") {
+        return "Configure egg-donor stage identity, category, and stage semantics from one versioned draft."
+    }
+    if (entityType === "sperm_donor") {
+        return "Configure sperm-donor stage identity, category, and stage semantics from one versioned draft."
+    }
+    return "Configure intended-parent stage identity, category, and stage semantics from one versioned draft."
 }
 
 function getIntendedParentStageSemantics(stage: StageSemanticInput | null | undefined): StageSemantics {
@@ -351,7 +387,7 @@ function getStageSemanticsForEntity(
         return getStageSemantics(stage)
     }
     const base = getIntendedParentStageSemantics(stage)
-    return {
+    const merged = {
         ...base,
         ...stage?.semantics,
         capabilities: {
@@ -359,6 +395,14 @@ function getStageSemanticsForEntity(
             ...(stage?.semantics?.capabilities ?? {}),
         },
     }
+    if (
+        (entityType === "egg_donor" || entityType === "sperm_donor") &&
+        normalizeStageKey(stage?.stage_key ?? stage?.slug ?? null) === "on_hold" &&
+        stage?.semantics?.pause_behavior == null
+    ) {
+        return { ...merged, pause_behavior: "none" }
+    }
+    return merged
 }
 
 function normalizeEditableStage(
@@ -439,6 +483,7 @@ function getBehaviorPreset(
 ): BehaviorPreset {
     const semantics = stage.semantics
     if (semantics.pause_behavior === "resume_previous_stage") return "pause"
+    if (stage.category === "paused" && semantics.requires_reason_on_enter) return "pause"
     if (semantics.terminal_outcome === "lost") return "terminal_lost"
     if (semantics.terminal_outcome === "disqualified") return "terminal_disqualified"
     if (semantics.capabilities.requires_delivery_details) return "delivery"
@@ -477,10 +522,18 @@ function buildPresetSemantics(
         requires_reason_on_enter: false,
     }
 
-    if (entityType === "intended_parent") {
+    if (entityType !== "surrogate") {
         switch (preset) {
             case "intake":
                 return reset
+            case "contacted":
+                return {
+                    ...reset,
+                    capabilities: {
+                        ...reset.capabilities,
+                        counts_as_contacted: true,
+                    },
+                }
             case "match_candidate":
                 return {
                     ...reset,
@@ -498,6 +551,7 @@ function buildPresetSemantics(
                     },
                 }
             case "delivery":
+                if (entityType !== "intended_parent") return deepClone(stage.semantics)
                 return {
                     ...reset,
                     capabilities: {
@@ -509,7 +563,10 @@ function buildPresetSemantics(
             case "pause":
                 return {
                     ...reset,
-                    pause_behavior: "resume_previous_stage",
+                    pause_behavior:
+                        entityType === "egg_donor" || entityType === "sperm_donor"
+                            ? "none"
+                            : "resume_previous_stage",
                     requires_reason_on_enter: true,
                 }
             case "terminal_lost":
@@ -647,6 +704,16 @@ function getPresetOptions(
             { value: "custom", label: "Custom" },
         ]
     }
+    if (
+        (entityType === "egg_donor" || entityType === "sperm_donor") &&
+        stage.category === "post_approval"
+    ) {
+        return [
+            { value: "match_candidate", label: "Available to match" },
+            { value: "matched", label: "Matched" },
+            { value: "custom", label: "Custom" },
+        ]
+    }
     if (stage.category === "post_approval") {
         return [
             { value: "match_candidate", label: "Match candidate" },
@@ -659,6 +726,13 @@ function getPresetOptions(
     if (entityType === "intended_parent") {
         return [
             { value: "intake", label: "Intake" },
+            { value: "custom", label: "Custom" },
+        ]
+    }
+    if (entityType === "egg_donor" || entityType === "sperm_donor") {
+        return [
+            { value: "intake", label: "Intake" },
+            { value: "contacted", label: "Contacted" },
             { value: "custom", label: "Custom" },
         ]
     }
@@ -1950,14 +2024,12 @@ function DeleteStageDialog({
     )
 }
 
-function PipelinePageIntro({ showSurrogateEditors }: { showSurrogateEditors: boolean }) {
+function PipelinePageIntro({ entityType }: { entityType: PipelineEntityType }) {
     return (
         <div className="max-w-3xl">
             <h1 className="text-2xl font-semibold">Pipeline Settings</h1>
             <p className="text-sm text-muted-foreground">
-                {showSurrogateEditors
-                    ? "Configure per-org stage identity, category, behavior, journey mappings, and analytics funnel from one versioned draft."
-                    : "Configure intended-parent stage identity, category, and stage semantics from one versioned draft."}
+                {getPipelineIntroDescription(entityType)}
             </p>
         </div>
     )
@@ -2300,7 +2372,7 @@ function usePipelineSettingsEditor() {
     const dependencyGraphQuery = usePipelineDependencyGraph(defaultPipeline?.id || null, entityType)
     const applyDraft = useApplyPipelineDraft()
     const rollbackPipeline = useRollbackPipeline()
-    const recommendedDraft = useRecommendedPipelineDraft()
+    const recommendedDraft = useRecommendedPipelineDraft(defaultPipeline?.id || null, entityType)
     const editorContextKey = `${entityType}:${defaultPipeline?.id ?? "none"}:${pipeline?.current_version ?? 0}`
 
     const [draftOverride, setDraftOverride] = useState<ScopedEditorState<PipelineDraftState> | null>(null)
@@ -2467,25 +2539,20 @@ function usePipelineSettingsEditor() {
 
     const handleResetToRecommended = async () => {
         if (!pipeline) return
-        try {
-            const recommended = await recommendedDraft.mutateAsync({
-                id: pipeline.id,
-                entityType,
-            })
-            const nextDraft = buildDraft(
-                {
-                    name: recommended.name,
-                    stages: recommended.stages as PipelineStage[],
-                    feature_config: recommended.feature_config,
-                },
-                entityType,
-            )
-            if (!nextDraft) return
-            nextDraft.remaps = buildRecommendedDraftRemaps(pipeline.stages, nextDraft.stages)
-            setScopedDraft(nextDraft)
-        } catch {
-            // Hook toasts surface the error.
-        }
+        const { data: recommended } = await recommendedDraft.refetch()
+        if (!recommended) return
+
+        const nextDraft = buildDraft(
+            {
+                name: recommended.name,
+                stages: recommended.stages as PipelineStage[],
+                feature_config: recommended.feature_config,
+            },
+            entityType,
+        )
+        if (!nextDraft) return
+        nextDraft.remaps = buildRecommendedDraftRemaps(pipeline.stages, nextDraft.stages)
+        setScopedDraft(nextDraft)
     }
 
     const handleSave = async () => {
@@ -2552,7 +2619,7 @@ function usePipelineSettingsEditor() {
         entityLabel,
         showSurrogateEditors,
         hasChanges,
-        isResetPending: recommendedDraft.isPending,
+        isResetPending: recommendedDraft.isFetching,
         isSaving: applyDraft.isPending,
         isPreviewLoading: previewQuery.isLoading,
         setDeleteStageState: setScopedDeleteStageState,
@@ -2619,7 +2686,7 @@ export default function PipelinesSettingsPage() {
 
     return (
         <div className="mx-auto flex max-w-6xl flex-1 flex-col gap-6 p-6">
-            <PipelinePageIntro showSurrogateEditors={showSurrogateEditors} />
+            <PipelinePageIntro entityType={entityType} />
 
             <DeleteStageDialog
                 entityType={entityType}

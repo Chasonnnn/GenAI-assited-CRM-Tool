@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { attachmentsApi } from "../api/attachments"
 import { toast } from "@/components/ui/toast"
 import { surrogateKeys } from "./use-surrogates"
+import { donorKeys } from "./use-donors"
 import { openDownloadUrlWithSpreadsheetWarning } from "@/lib/utils/csv-download-warning"
 
 export function useAttachments(surrogateId: string | null) {
@@ -120,6 +121,68 @@ export function useUploadIPAttachment() {
             attachmentsApi.uploadForIP(ipId, file),
         onSuccess: (data, variables) => {
             void queryClient.invalidateQueries({ queryKey: ["ip-attachments", variables.ipId] })
+        },
+    })
+}
+
+export const donorAttachmentKeys = {
+    all: ["donor-attachments"] as const,
+    list: (donorId: string) => [...donorAttachmentKeys.all, donorId] as const,
+}
+
+export function useDonorAttachments(donorId: string | null) {
+    return useQuery({
+        queryKey: donorAttachmentKeys.list(donorId ?? ""),
+        queryFn: () => attachmentsApi.listForDonor(donorId!),
+        enabled: Boolean(donorId),
+    })
+}
+
+export function useAttachmentPreviewUrl(attachmentId: string | null) {
+    return useQuery({
+        queryKey: ["attachments", "download-url", attachmentId ?? ""],
+        queryFn: () => attachmentsApi.getDownloadUrl(attachmentId!),
+        enabled: Boolean(attachmentId),
+    })
+}
+
+function invalidateDonorAttachmentSurfaces(
+    queryClient: ReturnType<typeof useQueryClient>,
+    donorId: string,
+) {
+    void queryClient.invalidateQueries({ queryKey: donorAttachmentKeys.list(donorId) })
+    void queryClient.invalidateQueries({ queryKey: donorKeys.detail(donorId) })
+}
+
+export function useUploadDonorAttachment() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ donorId, file }: { donorId: string; file: File }) =>
+            attachmentsApi.uploadForDonor(donorId, file),
+        onSuccess: (_, variables) => {
+            invalidateDonorAttachmentSurfaces(queryClient, variables.donorId)
+        },
+    })
+}
+
+export function useUploadDonorProfilePhoto() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ donorId, file }: { donorId: string; file: File }) =>
+            attachmentsApi.uploadDonorProfilePhoto(donorId, file),
+        onSuccess: (_, variables) => {
+            invalidateDonorAttachmentSurfaces(queryClient, variables.donorId)
+        },
+    })
+}
+
+export function useDeleteDonorAttachment() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ attachmentId }: { attachmentId: string; donorId: string }) =>
+            attachmentsApi.delete(attachmentId),
+        onSuccess: (_, variables) => {
+            invalidateDonorAttachmentSurfaces(queryClient, variables.donorId)
         },
     })
 }

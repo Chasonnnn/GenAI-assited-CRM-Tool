@@ -5,13 +5,14 @@
 import api from '../api';
 
 export interface SearchResult {
-    entity_type: "surrogate" | "note" | "attachment" | "intended_parent"
+    entity_type: "surrogate" | "note" | "attachment" | "intended_parent" | "donor"
     entity_id: string
     title: string
     snippet: string
     rank: number
     surrogate_id: string | null
     surrogate_name: string | null
+    donor_id?: string | null
 }
 
 export interface SearchResponse {
@@ -36,7 +37,7 @@ export interface SearchParams {
 }
 
 /**
- * Global search across surrogates, notes, attachments, and intended parents.
+ * Global search across surrogates, notes, attachments, intended parents, and donors.
  */
 export function globalSearch(params: SearchParams): Promise<SearchResponse> {
     const searchParams = new URLSearchParams();

@@ -16,21 +16,30 @@ import {
     LockIcon,
 } from "lucide-react"
 import Link from "@/components/app-link"
-import { useSurrogatesByStatus } from "@/lib/hooks/use-analytics"
+import { useDonorsByStatus, useSurrogatesByStatus } from "@/lib/hooks/use-analytics"
 import { useSurrogateStats } from "@/lib/hooks/use-surrogates"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
+import { useAuth } from "@/lib/auth-context"
 import { useDashboardFilters } from "../context/dashboard-filters"
-import { formatLocalDate } from "@/lib/utils/date"
 import { ApiError } from "@/lib/api"
 import { buildStageChartData, type StageChartBuildResult } from "./stage-chart-utils"
 
 type ViewMode = "count" | "percent"
+type PipelineSubject = "surrogate" | "egg" | "sperm"
 type StageChartDatum = StageChartBuildResult["data"][number]
 
 type StageDistributionChartProps = {
     chartData: StageChartDatum[]
     viewMode: ViewMode
+    subjectPlural: string
     onBarClick: (data: { stage_id: string | null }) => void
+}
+
+const PIPELINE_SUBJECT_LABELS: Record<PipelineSubject, string> = {
+    surrogate: "Surrogates",
+    egg: "Egg Donors",
+    sperm: "Sperm Donors",
 }
 
 const STAGE_CHART_SKELETON_KEYS = [
@@ -80,13 +89,14 @@ const StageDistributionChart = dynamic<StageDistributionChartProps>(
             function StageDistributionChartComponent({
                 chartData,
                 viewMode,
+                subjectPlural,
                 onBarClick,
             }: StageDistributionChartProps) {
                 return (
                     <ChartContainer
                         config={{
                             count: {
-                                label: "Surrogates",
+                                label: subjectPlural,
                                 color: "var(--primary)",
                             },
                         }}
@@ -159,7 +169,7 @@ const StageDistributionChart = dynamic<StageDistributionChartProps>(
                                                 {data.groupedCount ? ` (${data.groupedCount} stages)` : ""}
                                             </p>
                                             <p className="text-sm text-muted-foreground">
-                                                {data.count.toLocaleString()} surrogates ({data.percent}%)
+                                                {data.count.toLocaleString()} {subjectPlural.toLowerCase()} ({data.percent}%)
                                             </p>
                                             {data.groupedCount ? (
                                                 <p className="text-xs text-muted-foreground mt-1">
@@ -222,20 +232,46 @@ const StageDistributionChart = dynamic<StageDistributionChartProps>(
 
 export function StageChart() {
     const { push } = useRouter()
+    const { user } = useAuth()
     const { filters, getDateParams, resetFilters, hasActiveFilters } = useDashboardFilters()
     const [viewMode, setViewMode] = useState<ViewMode>("count")
+    const [selectedSubject, setSelectedSubject] = useState<PipelineSubject>("surrogate")
+    const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
+    const isDeveloper = user?.role === "developer"
+    const canViewDonors = isDeveloper
+        || (permissionsQuery.data?.permissions ?? []).includes("view_donors")
+    const subject = canViewDonors ? selectedSubject : "surrogate"
 
     const dateParams = getDateParams()
     const statusParams = {
         ...dateParams,
         ...(filters.assigneeId ? { owner_id: filters.assigneeId } : {}),
     }
-    const { data: statusData, isLoading, isError, error, refetch } = useSurrogatesByStatus(statusParams)
+    const surrogateStatusQuery = useSurrogatesByStatus(statusParams)
+    const eggStatusQuery = useDonorsByStatus(
+        { donor_type: "egg", ...statusParams },
+        { enabled: canViewDonors && subject === "egg", surface: "dashboard" },
+    )
+    const spermStatusQuery = useDonorsByStatus(
+        { donor_type: "sperm", ...statusParams },
+        { enabled: canViewDonors && subject === "sperm", surface: "dashboard" },
+    )
+    const statusQuery = subject === "egg"
+        ? eggStatusQuery
+        : subject === "sperm"
+            ? spermStatusQuery
+            : surrogateStatusQuery
+    const { data: statusData, isLoading, isError, error, refetch } = statusQuery
     const orgStatsQuery = useSurrogateStats()
-    const { data: pipeline } = useDefaultPipeline()
+    const surrogatePipelineQuery = useDefaultPipeline()
+    const eggPipelineQuery = useDefaultPipeline("egg_donor", canViewDonors)
+    const spermPipelineQuery = useDefaultPipeline("sperm_donor", canViewDonors)
+    const pipeline = subject === "egg"
+        ? eggPipelineQuery.data
+        : subject === "sperm"
+            ? spermPipelineQuery.data
+            : surrogatePipelineQuery.data
     const isRestricted = error instanceof ApiError && error.status === 403
-    const orgTotal = orgStatsQuery.data?.total
-    const hasOrgSurrogates = (orgTotal ?? 0) > 0
 
     // Build stage color map from pipeline (NOT from API)
     const stageColorMap = pipeline?.stages
@@ -244,25 +280,30 @@ export function StageChart() {
 
     // Transform and sort data by order
     const { data: chartData, total: totalCount } = buildStageChartData(statusData, stageColorMap)
+    const subjectPlural = PIPELINE_SUBJECT_LABELS[subject]
+    const orgTotal = subject === "surrogate" ? orgStatsQuery.data?.total : totalCount
+    const hasOrgRecords = (orgTotal ?? 0) > 0
 
     const buildStageUrl = (stageId: string) => {
         const params = new URLSearchParams()
+        if (subject === "egg" || subject === "sperm") {
+            params.set("type", subject)
+        }
         params.set("stage", stageId)
 
         // Include current date filters
         if (filters.dateRange !== "all") {
             params.set("range", filters.dateRange)
-        }
-        if (filters.dateRange === "custom" && filters.customRange.from) {
-            params.set("from", formatLocalDate(filters.customRange.from))
-            if (filters.customRange.to) {
-                params.set("to", formatLocalDate(filters.customRange.to))
-            }
+            if (dateParams.from_date) params.set("from", dateParams.from_date)
+            if (dateParams.to_date) params.set("to", dateParams.to_date)
         }
         if (filters.assigneeId) {
             params.set("owner_id", filters.assigneeId)
         }
 
+        if (subject === "egg" || subject === "sperm") {
+            return `/donors?${params.toString()}`
+        }
         return `/surrogates?${params.toString()}`
     }
 
@@ -280,28 +321,50 @@ export function StageChart() {
     return (
         <Card className="h-full flex flex-col gap-0 p-0">
             <CardHeader className="p-6 pb-0 gap-0">
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                     <CardTitle className="text-base font-semibold">Pipeline Distribution</CardTitle>
-                    <ToggleGroup
-                        value={[viewMode]}
-                        aria-label="Pipeline distribution view mode"
-                        onValueChange={(value) => {
-                            const nextValue = Array.isArray(value) ? value[0] : value
-                            if (nextValue === "count" || nextValue === "percent") {
-                                setViewMode(nextValue)
-                            }
-                        }}
-                        variant="outline"
-                        size="sm"
-                        spacing={0}
-                        className="h-8"
-                    >
-                        <ToggleGroupItem value="count" className="h-8">Count</ToggleGroupItem>
-                        <ToggleGroupItem value="percent" className="h-8">%</ToggleGroupItem>
-                    </ToggleGroup>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {canViewDonors && (
+                            <ToggleGroup
+                                value={[subject]}
+                                aria-label="Pipeline subject"
+                                onValueChange={(value) => {
+                                    const nextValue = Array.isArray(value) ? value[0] : value
+                                    if (nextValue === "surrogate" || nextValue === "egg" || nextValue === "sperm") {
+                                        setSelectedSubject(nextValue)
+                                    }
+                                }}
+                                variant="outline"
+                                size="sm"
+                                spacing={0}
+                                className="h-8"
+                            >
+                                <ToggleGroupItem value="surrogate" className="h-8">Surrogates</ToggleGroupItem>
+                                <ToggleGroupItem value="egg" className="h-8">Egg Donors</ToggleGroupItem>
+                                <ToggleGroupItem value="sperm" className="h-8">Sperm Donors</ToggleGroupItem>
+                            </ToggleGroup>
+                        )}
+                        <ToggleGroup
+                            value={[viewMode]}
+                            aria-label="Pipeline distribution view mode"
+                            onValueChange={(value) => {
+                                const nextValue = Array.isArray(value) ? value[0] : value
+                                if (nextValue === "count" || nextValue === "percent") {
+                                    setViewMode(nextValue)
+                                }
+                            }}
+                            variant="outline"
+                            size="sm"
+                            spacing={0}
+                            className="h-8"
+                        >
+                            <ToggleGroupItem value="count" className="h-8">Count</ToggleGroupItem>
+                            <ToggleGroupItem value="percent" className="h-8">%</ToggleGroupItem>
+                        </ToggleGroup>
+                    </div>
                 </div>
                 <CardDescription className="text-sm text-muted-foreground mb-4">
-                    {totalCount.toLocaleString()} surrogates in pipeline
+                    {totalCount.toLocaleString()} {subjectPlural.toLowerCase()} in pipeline
                 </CardDescription>
             </CardHeader>
             <CardContent className="px-4 pb-6 pt-0 flex-1">
@@ -337,23 +400,23 @@ export function StageChart() {
                             Retry
                         </Button>
                     </div>
-                ) : chartData.length === 0 ? (
+                ) : totalCount === 0 || chartData.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-[320px] text-center">
                         <PieChartIcon className="size-12 text-muted-foreground/50 mb-4" />
                         {orgTotal === 0 ? (
                             <>
-                                <h4 className="font-medium text-foreground">No surrogates yet</h4>
-                                <p className="text-sm text-muted-foreground mt-1 mb-4">
-                                    Add your first surrogate to see the distribution.
-                                </p>
-                                <Link href="/surrogates?new=true" className={buttonVariants({ size: "sm" })}>
+                                <h4 className="font-medium text-foreground">No {subjectPlural.toLowerCase()} yet</h4>
+                                <Link
+                                    href={subject === "surrogate" ? "/surrogates?new=true" : `/donors?type=${subject}&new=true`}
+                                    className={`${buttonVariants({ size: "sm" })} mt-4`}
+                                >
                                     <PlusIcon className="size-4 mr-2" />
-                                    Add Surrogate
+                                    Add {subject === "surrogate" ? "Surrogate" : "Donor"}
                                 </Link>
                             </>
                         ) : hasActiveFilters ? (
                             <>
-                                <h4 className="font-medium text-foreground">No surrogates match your filters</h4>
+                                <h4 className="font-medium text-foreground">No {subjectPlural.toLowerCase()} match your filters</h4>
                                 <p className="text-sm text-muted-foreground mt-1 mb-4">
                                     Try adjusting or clearing filters to see results.
                                 </p>
@@ -361,7 +424,7 @@ export function StageChart() {
                                     Reset filters
                                 </Button>
                             </>
-                        ) : hasOrgSurrogates ? (
+                        ) : hasOrgRecords ? (
                             <>
                                 <h4 className="font-medium text-foreground">Analytics unavailable</h4>
                                 <p className="text-sm text-muted-foreground mt-1">
@@ -370,13 +433,13 @@ export function StageChart() {
                             </>
                         ) : (
                             <>
-                                <h4 className="font-medium text-foreground">No surrogates yet</h4>
-                                <p className="text-sm text-muted-foreground mt-1 mb-4">
-                                    Add your first surrogate to see the distribution.
-                                </p>
-                                <Link href="/surrogates?new=true" className={buttonVariants({ size: "sm" })}>
+                                <h4 className="font-medium text-foreground">No {subjectPlural.toLowerCase()} yet</h4>
+                                <Link
+                                    href={subject === "surrogate" ? "/surrogates?new=true" : `/donors?type=${subject}&new=true`}
+                                    className={`${buttonVariants({ size: "sm" })} mt-4`}
+                                >
                                     <PlusIcon className="size-4 mr-2" />
-                                    Add Surrogate
+                                    Add {subject === "surrogate" ? "Surrogate" : "Donor"}
                                 </Link>
                             </>
                         )}
@@ -386,6 +449,7 @@ export function StageChart() {
                         <StageDistributionChart
                             chartData={chartData}
                             viewMode={viewMode}
+                            subjectPlural={subjectPlural}
                             onBarClick={handleBarClick}
                         />
                         <div className="sr-only" aria-label="Pipeline stage links">
@@ -393,7 +457,7 @@ export function StageChart() {
                                 {stageLinkEntries.map((entry) => (
                                     <li key={entry.stage_id}>
                                         <Link href={buildStageUrl(entry.stage_id)}>
-                                            View {entry.status} surrogates
+                                            View {entry.status} {subjectPlural.toLowerCase()}
                                         </Link>
                                     </li>
                                 ))}

@@ -62,7 +62,10 @@ type PlatformChartDatum = {
 type AdChartDatum = {
     ad: string
     leads: number
+    converted: number
     surrogates: number
+    eggDonors: number
+    spermDonors: number
     fill: string | undefined
 }
 
@@ -99,6 +102,11 @@ const USD_INTEGER_FORMATTER = new Intl.NumberFormat("en-US", {
 })
 
 const INTEGER_FORMATTER = new Intl.NumberFormat("en-US")
+const TREND_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+})
 
 // Format helpers
 const formatCurrency = (value: number | null) => {
@@ -251,7 +259,7 @@ const MetaSpendChartCanvas = dynamic<MetaSpendChartCanvasProps>(
                     <ChartContainer
                         config={{
                             leads: { label: "Leads", color: CHART_COLORS.primary },
-                            surrogates: { label: "Surrogates", color: CHART_COLORS.accent },
+                            converted: { label: "Converted", color: CHART_COLORS.accent },
                         }}
                         className="h-[220px] w-full"
                     >
@@ -270,12 +278,14 @@ const MetaSpendChartCanvas = dynamic<MetaSpendChartCanvasProps>(
                                             <p className="font-medium truncate max-w-[220px]">{d.ad}</p>
                                             <p className="text-muted-foreground">Leads: {formatNumber(d.leads)}</p>
                                             <p className="text-muted-foreground">Surrogates: {formatNumber(d.surrogates)}</p>
+                                            <p className="text-muted-foreground">Egg donors: {formatNumber(d.eggDonors)}</p>
+                                            <p className="text-muted-foreground">Sperm donors: {formatNumber(d.spermDonors)}</p>
                                         </div>
                                     )
                                 }}
                             />
                             <Bar dataKey="leads" fill={CHART_COLORS.primary} radius={[0, 4, 4, 0]} />
-                            <Bar dataKey="surrogates" fill={CHART_COLORS.accent} radius={[0, 4, 4, 0]} />
+                            <Bar dataKey="converted" fill={CHART_COLORS.accent} radius={[0, 4, 4, 0]} />
                         </BarChart>
                     </ChartContainer>
                 )
@@ -572,8 +582,12 @@ function FormPerformanceTable({
         form_external_id: string
         form_name: string
         mapping_status: string
+        lead_kind: "surrogate" | "egg_donor" | "sperm_donor" | "unknown"
         lead_count: number
         surrogate_count: number
+        egg_donor_count: number
+        sperm_donor_count: number
+        converted_count: number
         qualified_count: number
         conversion_rate: number
         qualified_rate: number
@@ -614,12 +628,14 @@ function FormPerformanceTable({
                 <thead>
                     <tr className="border-b border-border/50 bg-muted/30">
                         <th className="px-4 py-3 text-left font-medium text-muted-foreground">Form</th>
+                        <th className="px-4 py-3 text-left font-medium text-muted-foreground">Type</th>
                         <th className="px-4 py-3 text-left font-medium text-muted-foreground">Mapping</th>
                         <th className="px-4 py-3 text-right font-medium text-muted-foreground">Leads</th>
-                        <th className="px-4 py-3 text-right font-medium text-muted-foreground">Surrogates</th>
-                        <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden sm:table-cell">Qualified</th>
+                        <th className="px-4 py-3 text-right font-medium text-muted-foreground">Converted</th>
+                        <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden lg:table-cell">Surrogates</th>
+                        <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden lg:table-cell">Egg</th>
+                        <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden lg:table-cell">Sperm</th>
                         <th className="px-4 py-3 text-right font-medium text-muted-foreground">Conv. %</th>
-                        <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden md:table-cell">Qual. %</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -633,6 +649,17 @@ function FormPerformanceTable({
                         >
                             <td className="px-4 py-3">
                                 <p className="font-medium truncate max-w-[200px]">{form.form_name}</p>
+                            </td>
+                            <td className="px-4 py-3">
+                                <Badge variant="outline" className="text-xs">
+                                    {form.lead_kind === "egg_donor"
+                                        ? "Egg Donor"
+                                        : form.lead_kind === "sperm_donor"
+                                          ? "Sperm Donor"
+                                          : form.lead_kind === "surrogate"
+                                            ? "Surrogate"
+                                            : "Unknown"}
+                                </Badge>
                             </td>
                             <td className="px-4 py-3">
                                 <Badge
@@ -652,10 +679,16 @@ function FormPerformanceTable({
                                 {formatNumber(form.lead_count)}
                             </td>
                             <td className="px-4 py-3 text-right">
+                                {formatNumber(form.converted_count)}
+                            </td>
+                            <td className="px-4 py-3 text-right hidden lg:table-cell">
                                 {formatNumber(form.surrogate_count)}
                             </td>
-                            <td className="px-4 py-3 text-right text-emerald-600 hidden sm:table-cell">
-                                {formatNumber(form.qualified_count)}
+                            <td className="px-4 py-3 text-right hidden lg:table-cell">
+                                {formatNumber(form.egg_donor_count)}
+                            </td>
+                            <td className="px-4 py-3 text-right hidden lg:table-cell">
+                                {formatNumber(form.sperm_donor_count)}
                             </td>
                             <td className="px-4 py-3 text-right">
                                 <span className={cn(
@@ -663,14 +696,6 @@ function FormPerformanceTable({
                                     form.conversion_rate >= 80 ? "text-emerald-600" : form.conversion_rate < 50 ? "text-amber-600" : ""
                                 )}>
                                     {formatPercent(form.conversion_rate)}
-                                </span>
-                            </td>
-                            <td className="px-4 py-3 text-right hidden md:table-cell">
-                                <span className={cn(
-                                    "font-medium",
-                                    form.qualified_rate >= 30 ? "text-emerald-600" : form.qualified_rate < 10 ? "text-amber-600" : ""
-                                )}>
-                                    {formatPercent(form.qualified_rate)}
                                 </span>
                             </td>
                         </tr>
@@ -705,7 +730,7 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
 
     const trendChartData = trend
         ? trend.map(point => ({
-            date: new Date(point.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+            date: TREND_DATE_FORMATTER.format(new Date(point.date)),
             spend: point.spend,
             leads: point.leads,
         }))
@@ -724,7 +749,10 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
         ? ads.slice(0, 8).map((item, idx) => ({
             ad: item.ad_name,
             leads: item.lead_count,
+            converted: item.converted_count,
             surrogates: item.surrogate_count,
+            eggDonors: item.egg_donor_count,
+            spermDonors: item.sperm_donor_count,
             fill: BREAKDOWN_COLORS[idx % BREAKDOWN_COLORS.length],
         }))
         : []

@@ -94,7 +94,7 @@ describe("Search debounce and query options", () => {
         render(<SearchCommandDialog open onOpenChange={vi.fn()} />)
 
         fireEvent.change(
-            screen.getByPlaceholderText("Search surrogates, intended parents, notes, files"),
+            screen.getByPlaceholderText("Search surrogates, intended parents, donors, notes, files"),
             { target: { value: "Sur" } }
         )
 
@@ -113,7 +113,7 @@ describe("Search debounce and query options", () => {
         render(<SearchPage />)
 
         fireEvent.change(
-            screen.getByPlaceholderText("Search surrogates, intended parents, notes, files"),
+            screen.getByPlaceholderText("Search surrogates, intended parents, donors, notes, files"),
             { target: { value: "Parent" } }
         )
 
@@ -126,5 +126,81 @@ describe("Search debounce and query options", () => {
         const placeholderData = queryOptions.placeholderData as (previous: unknown) => unknown
         const previous = { query: "Par", total: 2, results: [{ id: "x" }, { id: "y" }] }
         expect(placeholderData(previous)).toBe(previous)
+    })
+
+    it("renders donor results with the existing donor detail route", () => {
+        mockUseQuery.mockReturnValue({
+            data: {
+                query: "Avery",
+                total: 1,
+                results: [
+                    {
+                        entity_type: "donor",
+                        entity_id: "donor-1",
+                        title: "Avery Searchable",
+                        snippet: "Egg donor · D12001",
+                        rank: 0.5,
+                        surrogate_id: null,
+                        surrogate_name: null,
+                        donor_id: null,
+                    },
+                ],
+            },
+            isLoading: false,
+            isError: false,
+        })
+
+        render(<SearchPage />)
+
+        expect(screen.getByRole("link", { name: /Avery Searchable/ })).toHaveAttribute(
+            "href",
+            "/donors/donor-1"
+        )
+        expect(screen.getByText("Donor")).toBeInTheDocument()
+        expect(screen.getByText("Egg donor · D12001")).toBeInTheDocument()
+    })
+
+    it("routes donor note and file results back to the donor detail", () => {
+        mockUseQuery.mockReturnValue({
+            data: {
+                query: "screening",
+                total: 2,
+                results: [
+                    {
+                        entity_type: "note",
+                        entity_id: "note-1",
+                        title: "Note on Avery Searchable",
+                        snippet: "Screening complete",
+                        rank: 0.5,
+                        surrogate_id: null,
+                        surrogate_name: null,
+                        donor_id: "donor-1",
+                    },
+                    {
+                        entity_type: "attachment",
+                        entity_id: "attachment-1",
+                        title: "screening-report.pdf",
+                        snippet: "",
+                        rank: 0.5,
+                        surrogate_id: null,
+                        surrogate_name: null,
+                        donor_id: "donor-1",
+                    },
+                ],
+            },
+            isLoading: false,
+            isError: false,
+        })
+
+        render(<SearchPage />)
+
+        expect(screen.getByRole("link", { name: /Note on Avery Searchable/ })).toHaveAttribute(
+            "href",
+            "/donors/donor-1",
+        )
+        expect(screen.getByRole("link", { name: /screening-report.pdf/ })).toHaveAttribute(
+            "href",
+            "/donors/donor-1",
+        )
     })
 })

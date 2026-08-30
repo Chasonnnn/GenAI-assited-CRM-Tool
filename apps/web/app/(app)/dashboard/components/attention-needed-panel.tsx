@@ -27,6 +27,7 @@ import {
 import {
     useAttention,
     useUpcoming,
+    type StuckDonor,
     type UpcomingTask,
     type UpcomingMeeting,
 } from "@/lib/hooks/use-dashboard"
@@ -34,6 +35,8 @@ import type { DynamicSurrogateFilter } from "@/lib/api/surrogates"
 import { ATTENTION_STUCK_DAYS } from "@/lib/api/dashboard"
 import { useDashboardFilters } from "../context/dashboard-filters"
 import { formatLocalDate } from "@/lib/utils/date"
+import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 
 type UpcomingItem = (UpcomingTask & { type: "task" }) | (UpcomingMeeting & { type: "meeting" })
 
@@ -41,9 +44,34 @@ const MAX_UPCOMING_ITEMS = 5
 const OVERDUE_COLLAPSE_THRESHOLD = 3
 const MY_TASKS_HREF = "/tasks?filter=my_tasks"
 const COUNT_BADGE_CLASS = "h-5 min-w-5 rounded-full px-2 text-[10px] font-medium"
+const DONOR_TYPES = ["egg", "sperm"] as const
+
+type AttentionItemsStatus = "loading" | "error" | "empty" | "ready"
+
+type AttentionItemCounts = {
+    unreached: number
+    overdue: number
+    stuck: number
+}
+
+type AttentionItemHrefs = {
+    unreached: string
+    overdue: string
+    stuck: string
+}
+
+type DonorAttentionItems = {
+    counts: Record<(typeof DONOR_TYPES)[number], number>
+    donors: StuckDonor[]
+    hrefs: Record<(typeof DONOR_TYPES)[number], string>
+}
 
 export function AttentionNeededPanel() {
+    const { user } = useAuth()
     const { filters } = useDashboardFilters()
+    const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
+    const canViewDonors = user?.role === "developer"
+        || (permissionsQuery.data?.permissions ?? []).includes("view_donors")
     const assigneeId = filters.assigneeId || undefined
     const { data, isLoading, isError, refetch } = useAttention({
         assignee_id: filters.assigneeId,
@@ -59,8 +87,56 @@ export function AttentionNeededPanel() {
     const unreachedCount = data?.unreached_count ?? 0
     const overdueCount = data?.overdue_count ?? 0
     const stuckCount = data?.stuck_count ?? 0
-    const attentionTotal = unreachedCount + overdueCount + stuckCount
+    const stuckDonors = canViewDonors ? data?.stuck_donors ?? [] : []
+    const stuckDonorCounts = {
+        egg: canViewDonors
+            ? data?.stuck_donor_counts?.egg
+                ?? stuckDonors.filter((donor) => donor.donor_type === "egg").length
+            : 0,
+        sperm: canViewDonors
+            ? data?.stuck_donor_counts?.sperm
+                ?? stuckDonors.filter((donor) => donor.donor_type === "sperm").length
+            : 0,
+    }
+    const stuckDonorCount = stuckDonorCounts.egg + stuckDonorCounts.sperm
+    const attentionTotal = unreachedCount + overdueCount + stuckCount + stuckDonorCount
     const hasAttentionItems = attentionTotal > 0
+    const attentionStatus: AttentionItemsStatus = isLoading
+        ? "loading"
+        : isError
+            ? "error"
+            : hasAttentionItems && data
+                ? "ready"
+                : "empty"
+    const attentionCounts: AttentionItemCounts = {
+        unreached: unreachedCount,
+        overdue: overdueCount,
+        stuck: stuckCount,
+    }
+    const attentionHrefs: AttentionItemHrefs = {
+        unreached: buildSurrogatesHref({
+            dynamicFilter: "attention_unreached",
+            ...(assigneeId ? { assigneeId } : {}),
+        }),
+        overdue: buildTaskHref({
+            ...(assigneeId ? { assigneeId } : {}),
+            focus: "overdue",
+        }),
+        stuck: buildSurrogatesHref({
+            dynamicFilter: "attention_stuck",
+            ...(assigneeId ? { assigneeId } : {}),
+        }),
+    }
+    const donorAttention: DonorAttentionItems | null = canViewDonors
+        ? {
+            counts: stuckDonorCounts,
+            donors: stuckDonors,
+            hrefs: {
+                egg: buildDonorAttentionHref("egg", assigneeId),
+                sperm: buildDonorAttentionHref("sperm", assigneeId),
+            },
+        }
+        : null
 
     const { todayItems, tomorrowItems, thisWeekItems, overdueItems } = upcomingData
         ? groupItemsByDate(upcomingData.tasks, upcomingData.meetings)
@@ -98,26 +174,11 @@ export function AttentionNeededPanel() {
                                 current === "attention" ? "upcoming" : "attention"
                             ))
                         }}
-                        isLoading={isLoading}
-                        isError={isError}
-                        hasAttentionItems={hasAttentionItems}
-                        dataAvailable={Boolean(data)}
-                        totalCount={data?.total_count ?? attentionTotal}
-                        unreachedCount={unreachedCount}
-                        overdueCount={overdueCount}
-                        stuckCount={stuckCount}
-                        unreachedHref={buildSurrogatesHref({
-                            dynamicFilter: "attention_unreached",
-                            ...(assigneeId ? { assigneeId } : {}),
-                        })}
-                        overdueHref={buildTaskHref({
-                            ...(assigneeId ? { assigneeId } : {}),
-                            focus: "overdue",
-                        })}
-                        stuckHref={buildSurrogatesHref({
-                            dynamicFilter: "attention_stuck",
-                            ...(assigneeId ? { assigneeId } : {}),
-                        })}
+                        status={attentionStatus}
+                        totalCount={attentionTotal}
+                        counts={attentionCounts}
+                        hrefs={attentionHrefs}
+                        donorAttention={donorAttention}
                         onRetry={() => refetch()}
                     />
 
@@ -160,6 +221,33 @@ function buildSurrogatesHref({
     params.set("dynamic_filter", dynamicFilter)
     if (assigneeId) params.set("owner_id", assigneeId)
     return `/surrogates${params.toString() ? `?${params.toString()}` : ""}`
+}
+
+function buildDonorAttentionHref(
+    donorType: "egg" | "sperm",
+    assigneeId?: string,
+) {
+    const params = new URLSearchParams()
+    params.set("type", donorType)
+    params.set("dynamic_filter", "attention_stuck")
+    if (assigneeId) params.set("owner_id", assigneeId)
+    return `/donors?${params.toString()}`
+}
+
+function buildStuckDonorHref({
+    donorType,
+    count,
+    donors,
+    listHref,
+}: {
+    donorType: "egg" | "sperm"
+    count: number
+    donors: StuckDonor[]
+    listHref: string
+}) {
+    if (count !== 1) return listHref
+    const donor = donors.find((item) => item.donor_type === donorType)
+    return donor ? `/donors/${donor.id}` : listHref
 }
 
 function buildUpcomingSections({
@@ -254,13 +342,11 @@ function AttentionPanelSectionHeader({
 }
 
 function AttentionViewAllPopover({
-    unreachedHref,
-    overdueHref,
-    stuckHref,
+    hrefs,
+    donorAttention,
 }: {
-    unreachedHref: string
-    overdueHref: string
-    stuckHref: string
+    hrefs: AttentionItemHrefs
+    donorAttention: DonorAttentionItems | null
 }) {
     return (
         <Popover>
@@ -278,21 +364,39 @@ function AttentionViewAllPopover({
             <PopoverContent align="end" className="w-56 p-2">
                 <div className="space-y-1">
                     <Link
-                        href={unreachedHref}
+                        href={hrefs.unreached}
                         className="flex items-center justify-between rounded-md p-2 text-sm hover:bg-muted"
                     >
                         <span>Unreached leads</span>
                         <ChevronRightIcon className="size-4 text-muted-foreground" />
                     </Link>
+                    {donorAttention && (
+                        <>
+                            <Link
+                                href={donorAttention.hrefs.egg}
+                                className="flex items-center justify-between rounded-md p-2 text-sm hover:bg-muted"
+                            >
+                                <span>Stuck egg donors</span>
+                                <ChevronRightIcon className="size-4 text-muted-foreground" />
+                            </Link>
+                            <Link
+                                href={donorAttention.hrefs.sperm}
+                                className="flex items-center justify-between rounded-md p-2 text-sm hover:bg-muted"
+                            >
+                                <span>Stuck sperm donors</span>
+                                <ChevronRightIcon className="size-4 text-muted-foreground" />
+                            </Link>
+                        </>
+                    )}
                     <Link
-                        href={overdueHref}
+                        href={hrefs.overdue}
                         className="flex items-center justify-between rounded-md p-2 text-sm hover:bg-muted"
                     >
                         <span>Overdue tasks</span>
                         <ChevronRightIcon className="size-4 text-muted-foreground" />
                     </Link>
                     <Link
-                        href={stuckHref}
+                        href={hrefs.stuck}
                         className="flex items-center justify-between rounded-md p-2 text-sm hover:bg-muted"
                     >
                         <span>Stuck surrogates</span>
@@ -307,35 +411,23 @@ function AttentionViewAllPopover({
 function AttentionItemsSection({
     open,
     onToggle,
-    isLoading,
-    isError,
-    hasAttentionItems,
-    dataAvailable,
+    status,
     totalCount,
-    unreachedCount,
-    overdueCount,
-    stuckCount,
-    unreachedHref,
-    overdueHref,
-    stuckHref,
+    counts,
+    hrefs,
+    donorAttention,
     onRetry,
 }: {
     open: boolean
     onToggle: () => void
-    isLoading: boolean
-    isError: boolean
-    hasAttentionItems: boolean
-    dataAvailable: boolean
+    status: AttentionItemsStatus
     totalCount: number
-    unreachedCount: number
-    overdueCount: number
-    stuckCount: number
-    unreachedHref: string
-    overdueHref: string
-    stuckHref: string
+    counts: AttentionItemCounts
+    hrefs: AttentionItemHrefs
+    donorAttention: DonorAttentionItems | null
     onRetry: () => void
 }) {
-    const badge = !isLoading && !isError && hasAttentionItems ? (
+    const badge = status === "ready" ? (
         <Badge variant="secondary" className={COUNT_BADGE_CLASS}>
             {totalCount}
         </Badge>
@@ -350,9 +442,8 @@ function AttentionItemsSection({
                 badge={badge}
                 action={
                     <AttentionViewAllPopover
-                        unreachedHref={unreachedHref}
-                        overdueHref={overdueHref}
-                        stuckHref={stuckHref}
+                        hrefs={hrefs}
+                        donorAttention={donorAttention}
                     />
                 }
             />
@@ -363,16 +454,10 @@ function AttentionItemsSection({
                     </div>
                     <div className="flex-1 min-h-0 overflow-auto">
                         <AttentionItemsContent
-                            isLoading={isLoading}
-                            isError={isError}
-                            hasAttentionItems={hasAttentionItems}
-                            dataAvailable={dataAvailable}
-                            unreachedCount={unreachedCount}
-                            overdueCount={overdueCount}
-                            stuckCount={stuckCount}
-                            unreachedHref={unreachedHref}
-                            overdueHref={overdueHref}
-                            stuckHref={stuckHref}
+                            status={status}
+                            counts={counts}
+                            hrefs={hrefs}
+                            donorAttention={donorAttention}
                             onRetry={onRetry}
                         />
                     </div>
@@ -383,35 +468,23 @@ function AttentionItemsSection({
 }
 
 function AttentionItemsContent({
-    isLoading,
-    isError,
-    hasAttentionItems,
-    dataAvailable,
-    unreachedCount,
-    overdueCount,
-    stuckCount,
-    unreachedHref,
-    overdueHref,
-    stuckHref,
+    status,
+    counts,
+    hrefs,
+    donorAttention,
     onRetry,
 }: {
-    isLoading: boolean
-    isError: boolean
-    hasAttentionItems: boolean
-    dataAvailable: boolean
-    unreachedCount: number
-    overdueCount: number
-    stuckCount: number
-    unreachedHref: string
-    overdueHref: string
-    stuckHref: string
+    status: AttentionItemsStatus
+    counts: AttentionItemCounts
+    hrefs: AttentionItemHrefs
+    donorAttention: DonorAttentionItems | null
     onRetry: () => void
 }) {
-    if (isLoading) {
+    if (status === "loading") {
         return <AttentionItemsSkeleton />
     }
 
-    if (isError) {
+    if (status === "error") {
         return (
             <div className="flex flex-col items-center justify-center py-6 gap-3">
                 <AlertCircleIcon className="size-8 text-destructive" />
@@ -423,50 +496,74 @@ function AttentionItemsContent({
         )
     }
 
-    if (!hasAttentionItems || !dataAvailable) {
+    if (status === "empty") {
         return <AttentionItemsEmptyState />
     }
 
     return (
         <div className="space-y-3">
-            {unreachedCount > 0 && (
+            {counts.unreached > 0 && (
                 <AttentionItem
                     icon={<PhoneOffIcon className="size-4" />}
                     iconBg="bg-amber-500/10"
                     iconColor="text-amber-600"
                     title="Unreached leads (7+ days)"
                     description="No contact or activity in 7+ days"
-                    count={unreachedCount}
-                    href={unreachedHref}
+                    count={counts.unreached}
+                    href={hrefs.unreached}
                     countBadgeClass={COUNT_BADGE_CLASS}
                 />
             )}
 
-            {overdueCount > 0 && (
+            {counts.overdue > 0 && (
                 <AttentionItem
                     icon={<ClockIcon className="size-4" />}
                     iconBg="bg-red-500/10"
                     iconColor="text-red-600"
                     title="Overdue tasks"
                     description="Past due date"
-                    count={overdueCount}
-                    href={overdueHref}
+                    count={counts.overdue}
+                    href={hrefs.overdue}
                     countBadgeClass={COUNT_BADGE_CLASS}
                 />
             )}
 
-            {stuckCount > 0 && (
+            {counts.stuck > 0 && (
                 <AttentionItem
                     icon={<PauseCircleIcon className="size-4" />}
                     iconBg="bg-orange-500/10"
                     iconColor="text-orange-600"
                     title={`Stuck surrogates (${ATTENTION_STUCK_DAYS}+ days)`}
                     description={`In stage for ${ATTENTION_STUCK_DAYS}+ days`}
-                    count={stuckCount}
-                    href={stuckHref}
+                    count={counts.stuck}
+                    href={hrefs.stuck}
                     countBadgeClass={COUNT_BADGE_CLASS}
                 />
             )}
+
+            {donorAttention && DONOR_TYPES.map((donorType) => {
+                const count = donorAttention.counts[donorType]
+                if (count === 0) return null
+                const label = donorType === "egg" ? "egg donors" : "sperm donors"
+                return (
+                    <AttentionItem
+                        key={donorType}
+                        icon={<PauseCircleIcon className="size-4" />}
+                        iconBg="bg-violet-500/10"
+                        iconColor="text-violet-600"
+                        title={`Stuck ${label} (${ATTENTION_STUCK_DAYS}+ days)`}
+                        description={`In stage for ${ATTENTION_STUCK_DAYS}+ days`}
+                        count={count}
+                        href={buildStuckDonorHref({
+                            donorType,
+                            count,
+                            donors: donorAttention.donors,
+                            listHref: donorAttention.hrefs[donorType],
+                        })}
+                        countBadgeClass={COUNT_BADGE_CLASS}
+                    />
+                )
+            })}
         </div>
     )
 }
@@ -796,6 +893,14 @@ function UpcomingItemRow({
                             <span className="text-muted-foreground/60">•</span>
                             <span className="text-muted-foreground">
                                 {item.surrogate_number || "View Surrogate"}
+                            </span>
+                        </>
+                    )}
+                    {item.type === "task" && item.donor_id && (
+                        <>
+                            <span className="text-muted-foreground/60">•</span>
+                            <span className="text-muted-foreground">
+                                {item.donor_number || "View Donor"}
                             </span>
                         </>
                     )}

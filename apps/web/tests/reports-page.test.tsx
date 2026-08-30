@@ -17,7 +17,14 @@ vi.mock('next/dynamic', () => ({
 import ReportsPage from '../app/(app)/reports/page'
 
 vi.mock('@/lib/auth-context', () => ({
-    useAuth: () => ({ user: { ai_enabled: true } }),
+    useAuth: () => ({ user: { ai_enabled: true, user_id: 'user-1', role: 'admin' } }),
+}))
+
+vi.mock('@/lib/hooks/use-permissions', () => ({
+    useEffectivePermissions: () => ({
+        data: { permissions: ['view_reports', 'view_donors'] },
+        isLoading: false,
+    }),
 }))
 
 vi.mock('@/lib/hooks/use-pipelines', () => ({
@@ -147,6 +154,28 @@ vi.mock('@/lib/hooks/use-analytics', () => ({
         },
         isLoading: false,
     }),
+    useDonorAnalyticsSummary: () => ({
+        data: {
+            donor_type: 'egg',
+            total_donors: 7,
+            new_this_period: 2,
+            qualification_rate: 25,
+            qualification_stage_key: 'ready_to_match',
+            avg_time_to_qualification_hours: 96,
+        },
+        isLoading: false,
+        isError: false,
+    }),
+    useDonorsByStatus: () => ({
+        data: [{ status: 'New', stage_id: 'stage-1', count: 7, order: 1 }],
+        isLoading: false,
+        isError: false,
+    }),
+    useDonorsTrend: () => ({
+        data: [{ date: '2025-01-01', count: 2 }],
+        isLoading: false,
+        isError: false,
+    }),
 }))
 
 describe('ReportsPage', () => {
@@ -160,5 +189,9 @@ describe('ReportsPage', () => {
         expect(screen.getByText('Reports')).toBeInTheDocument()
         expect(screen.getByText('42')).toBeInTheDocument()
         expect(screen.getAllByText('$1,000').length).toBeGreaterThan(0)
+        expect(screen.getByRole('heading', { name: 'Donors' })).toBeInTheDocument()
+        expect(screen.getByText('Egg Donors by Stage')).toBeInTheDocument()
+        expect(screen.getByText('Egg Donors Creation Trend')).toBeInTheDocument()
+        expect(screen.getAllByText('7').length).toBeGreaterThan(0)
     })
 })

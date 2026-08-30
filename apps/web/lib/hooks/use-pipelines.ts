@@ -49,10 +49,14 @@ export function usePipelines(entityType: PipelineEntityType = 'surrogate', enabl
     });
 }
 
-export function useDefaultPipeline(entityType: PipelineEntityType = 'surrogate') {
+export function useDefaultPipeline(
+    entityType: PipelineEntityType = 'surrogate',
+    enabled = true,
+) {
     return useQuery({
         queryKey: pipelineKeys.default(entityType),
         queryFn: () => pipelinesApi.getDefaultPipeline(entityType),
+        enabled,
     });
 }
 
@@ -196,15 +200,14 @@ export function useRollbackPipeline() {
     });
 }
 
-export function useRecommendedPipelineDraft() {
-    return useMutation({
-        mutationFn: ({
-            id,
-            entityType = 'surrogate',
-        }: {
-            id: string;
-            entityType?: PipelineEntityType;
-        }) => pipelinesApi.getRecommendedPipelineDraft(id, entityType),
+export function useRecommendedPipelineDraft(
+    id: string | null,
+    entityType: PipelineEntityType = 'surrogate',
+) {
+    return useQuery({
+        queryKey: pipelineKeys.recommendedDraft(id || '', entityType),
+        queryFn: () => pipelinesApi.getRecommendedPipelineDraft(id!, entityType),
+        enabled: false,
     });
 }
 

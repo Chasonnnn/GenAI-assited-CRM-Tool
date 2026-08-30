@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { TrendingUpIcon, SparklesIcon, UsersIcon, CheckCircle2Icon, Loader2Icon, AlertCircleIcon, MegaphoneIcon, DollarSignIcon } from "lucide-react"
 import { useAnalyticsSummary, useSurrogatesByStatus, useSurrogatesByAssignee, useSurrogatesTrend, useMetaPerformance, useFunnelCompare, useSurrogatesByStateCompare, useCampaigns, useSpendTotals, usePerformanceByUser } from "@/lib/hooks/use-analytics"
 import { TeamPerformanceTable } from "@/components/reports/TeamPerformanceTable"
+import { DonorAnalyticsSection } from "@/components/reports/DonorAnalyticsSection"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/lib/auth-context"
@@ -354,7 +355,7 @@ function ReportsQuickStatsGrid({
 }: ReportsQuickStatsGridProps) {
     return (
         <div className="grid gap-4 md:grid-cols-4">
-            <Card className="animate-in fade-in-50 duration-500">
+            <Card className="animate-in fade-in-50 transition-opacity duration-500">
                 <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Total Surrogates</CardTitle>
                     <TrendingUpIcon className="size-4 text-muted-foreground" />
@@ -376,7 +377,7 @@ function ReportsQuickStatsGrid({
                 </CardContent>
             </Card>
 
-            <Card className="animate-in fade-in-50 duration-500 delay-100">
+            <Card className="animate-in fade-in-50 transition-opacity duration-500 delay-100">
                 <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">New This Period</CardTitle>
                     <UsersIcon className="size-4 text-muted-foreground" />
@@ -398,7 +399,7 @@ function ReportsQuickStatsGrid({
                 </CardContent>
             </Card>
 
-            <Card className="animate-in fade-in-50 duration-500 delay-200">
+            <Card className="animate-in fade-in-50 transition-opacity duration-500 delay-200">
                 <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Qualification Rate</CardTitle>
                     <CheckCircle2Icon className="size-4 text-muted-foreground" />
@@ -420,7 +421,7 @@ function ReportsQuickStatsGrid({
                 </CardContent>
             </Card>
 
-            <Card className="animate-in fade-in-50 duration-500 delay-300">
+            <Card className="animate-in fade-in-50 transition-opacity duration-500 delay-300">
                 <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Meta Funnel</CardTitle>
                     <MegaphoneIcon className="size-4 text-muted-foreground" />
@@ -451,7 +452,7 @@ function ReportsQuickStatsGrid({
                 </CardContent>
             </Card>
 
-            <Card className="animate-in fade-in-50 duration-500 delay-400">
+            <Card className="animate-in fade-in-50 transition-opacity duration-500 delay-400">
                 <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Ad Spend</CardTitle>
                     <DollarSignIcon className="size-4 text-muted-foreground" />
@@ -483,7 +484,7 @@ function ReportsQuickStatsGrid({
             </Card>
 
             {aiEnabled && (
-                <Card className="animate-in fade-in-50 duration-500 delay-500">
+                <Card className="animate-in fade-in-50 transition-opacity duration-500 delay-500">
                     <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">AI Usage</CardTitle>
                         <SparklesIcon className="size-4 text-muted-foreground" />
@@ -503,7 +504,7 @@ type ReportsAiSummaryCardProps = {
 
 function ReportsAiSummaryCard({ insightSummary }: ReportsAiSummaryCardProps) {
     return (
-        <Card className="animate-in fade-in-50 duration-500">
+        <Card className="animate-in fade-in-50 transition-opacity duration-500">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <SparklesIcon className="size-4 text-muted-foreground" />
@@ -811,6 +812,8 @@ export default function ReportsPage() {
                         title="Surrogates by State"
                     />
                 </div>
+
+                <DonorAnalyticsSection dateParams={dateParams} />
 
                 {/* Meta Spend Analytics Dashboard */}
                 <div className="mt-8">

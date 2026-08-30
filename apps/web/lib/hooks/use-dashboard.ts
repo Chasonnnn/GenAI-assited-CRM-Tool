@@ -16,6 +16,7 @@ import {
     type UnreachedLead,
     type OverdueTaskItem,
     type StuckSurrogate,
+    type StuckDonor,
 } from '@/lib/api/dashboard'
 
 // =============================================================================
@@ -67,5 +68,6 @@ export type {
     UnreachedLead,
     OverdueTaskItem,
     StuckSurrogate,
+    StuckDonor,
     GetAttentionParams,
 }

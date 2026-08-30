@@ -32,6 +32,17 @@ export interface TrendPoint {
     count: number;
 }
 
+export type DonorType = 'egg' | 'sperm';
+
+export interface DonorAnalyticsSummary {
+    donor_type: DonorType;
+    total_donors: number;
+    new_this_period: number;
+    qualification_rate: number;
+    qualification_stage_key: string | null;
+    avg_time_to_qualification_hours: number | null;
+}
+
 export interface MetaPerformance {
     leads_received: number;
     leads_qualified: number;
@@ -58,6 +69,31 @@ export interface TrendParams extends DateRangeParams {
     pipeline_id?: string;
     owner_id?: string;
     timezone?: string;
+}
+
+export interface DonorAnalyticsParams extends TrendParams {
+    donor_type: DonorType;
+    state?: string;
+    include_archived?: boolean;
+}
+
+function buildDonorAnalyticsSearchParams(
+    params: DonorAnalyticsParams,
+    { includeTrendFilters = false }: { includeTrendFilters?: boolean } = {},
+) {
+    const searchParams = new URLSearchParams();
+    searchParams.set('donor_type', params.donor_type);
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+    if (includeTrendFilters && params.period) searchParams.set('period', params.period);
+    if (params.pipeline_id) searchParams.set('pipeline_id', params.pipeline_id);
+    if (params.owner_id) searchParams.set('owner_id', params.owner_id);
+    if (includeTrendFilters && params.timezone) searchParams.set('timezone', params.timezone);
+    if (params.state) searchParams.set('state', params.state);
+    if (params.include_archived !== undefined) {
+        searchParams.set('include_archived', params.include_archived.toString());
+    }
+    return searchParams;
 }
 
 // API Functions
@@ -96,6 +132,36 @@ export async function getSurrogatesTrend(params: TrendParams = {}): Promise<Tren
 
     const query = searchParams.toString();
     return api.get<TrendPoint[]>(`/analytics/surrogates/trend${query ? `?${query}` : ''}`);
+}
+
+export async function getDonorAnalyticsSummary(
+    params: DonorAnalyticsParams,
+): Promise<DonorAnalyticsSummary> {
+    const query = buildDonorAnalyticsSearchParams(params).toString();
+    return api.get<DonorAnalyticsSummary>(`/analytics/donors/summary?${query}`);
+}
+
+export async function getDonorsByStatus(
+    params: DonorAnalyticsParams,
+): Promise<StatusCount[]> {
+    const query = buildDonorAnalyticsSearchParams(params).toString();
+    return api.get<StatusCount[]>(`/analytics/donors/by-status?${query}`);
+}
+
+export async function getDashboardDonorsByStatus(
+    params: DonorAnalyticsParams,
+): Promise<StatusCount[]> {
+    const query = buildDonorAnalyticsSearchParams(params).toString();
+    return api.get<StatusCount[]>(`/dashboard/donors/by-status?${query}`);
+}
+
+export async function getDonorsTrend(
+    params: DonorAnalyticsParams,
+): Promise<TrendPoint[]> {
+    const query = buildDonorAnalyticsSearchParams(params, {
+        includeTrendFilters: true,
+    }).toString();
+    return api.get<TrendPoint[]>(`/analytics/donors/trend?${query}`);
 }
 
 export async function getMetaPerformance(params: DateRangeParams = {}): Promise<MetaPerformance> {
@@ -356,8 +422,12 @@ export interface FormPerformance {
     form_external_id: string;
     form_name: string;
     mapping_status: string;
+    lead_kind: "surrogate" | "egg_donor" | "sperm_donor" | "unknown";
     lead_count: number;
     surrogate_count: number;
+    egg_donor_count: number;
+    sperm_donor_count: number;
+    converted_count: number;
     qualified_count: number;
     conversion_rate: number;
     qualified_rate: number;
@@ -373,6 +443,9 @@ export interface MetaAdPerformanceItem {
     ad_name: string;
     lead_count: number;
     surrogate_count: number;
+    egg_donor_count: number;
+    sperm_donor_count: number;
+    converted_count: number;
     conversion_rate: number;
 }
 
