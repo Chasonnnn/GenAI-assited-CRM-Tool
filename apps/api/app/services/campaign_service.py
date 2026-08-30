@@ -2235,7 +2235,6 @@ def _execute_messaging_campaign_run(
             except (
                 messaging_delivery_service.MessagingConsentBlocked,
                 messaging_delivery_service.MessagingEnrollmentRequired,
-                messaging_delivery_service.MessagingRouteNotReady,
             ) as exc:
                 campaign_recipient.status = CampaignRecipientStatus.SKIPPED.value
                 campaign_recipient.error = None
