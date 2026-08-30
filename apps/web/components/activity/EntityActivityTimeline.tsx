@@ -730,6 +730,237 @@ function TaskRow({ task, isOverdue = false }: { task: TaskListItem; isOverdue?: 
     )
 }
 
+function ActivityTimelineStageList({
+    stages,
+    openStageIds,
+    onStageToggle,
+}: {
+    stages: StageGroup[]
+    openStageIds: Set<string>
+    onStageToggle: (stageId: string, isOpen: boolean) => void
+}) {
+    return (
+        <div className="space-y-0">
+            {stages.map((stage) => {
+                const hasContent = stage.activityCount > 0 || stage.isBackdated
+                const showStageEntryRow =
+                    !!stage.rawDate &&
+                    (stage.isBackdated ||
+                        stage.activityCount > 0 ||
+                        (stage.isCurrent && !!stage.transitionLabel) ||
+                        (stage.isTerminal && !!stage.transitionLabel))
+                const stageEntryTitle =
+                    (stage.isTerminal && stage.transitionLabel) || "Entered stage"
+                const stageEntryLabel = stage.date
+
+                if (!hasContent && !stage.isCurrent) {
+                    return (
+                        <div
+                            key={stage.id}
+                            data-testid={`timeline-stage-row-${stage.id}`}
+                            className={STAGE_ROW_CLASS}
+                        >
+                            <span className="size-4" aria-hidden="true" />
+                            <div
+                                className={cn(
+                                    "size-2 rounded-full",
+                                    stage.isUpcoming && "bg-muted-foreground/30"
+                                )}
+                                style={
+                                    !stage.isUpcoming
+                                        ? { backgroundColor: stage.color }
+                                        : undefined
+                                }
+                            />
+                            <div className={STAGE_ROW_LABEL_CLASS}>
+                                <span className="truncate text-sm text-muted-foreground">
+                                    {stage.label}
+                                </span>
+                            </div>
+                            <span
+                                data-testid={`timeline-stage-meta-${stage.id}`}
+                                className={cn(STAGE_ROW_META_CLASS, "opacity-0")}
+                                aria-hidden="true"
+                            >
+                                --
+                            </span>
+                        </div>
+                    )
+                }
+
+                return (
+                    <Collapsible
+                        key={stage.id}
+                        open={openStageIds.has(stage.id)}
+                        onOpenChange={(open) => onStageToggle(stage.id, open)}
+                    >
+                        <CollapsibleTrigger
+                            data-testid={`timeline-stage-row-${stage.id}`}
+                            className={cn("group hover:bg-muted/50", STAGE_ROW_CLASS)}
+                        >
+                            <ChevronRightIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+                            <div
+                                className={cn(
+                                    "rounded-full",
+                                    stage.isCurrent ? "size-2.5" : "size-2",
+                                    stage.isUpcoming && "bg-muted-foreground/30"
+                                )}
+                                style={
+                                    !stage.isUpcoming
+                                        ? {
+                                              backgroundColor: stage.color,
+                                              boxShadow: stage.isCurrent
+                                                  ? `0 0 0 2px hsl(var(--background)), 0 0 0 4px ${stage.color}40`
+                                                  : undefined,
+                                          }
+                                        : undefined
+                                }
+                            />
+                            <div className={STAGE_ROW_LABEL_CLASS}>
+                                <span
+                                    className={cn(
+                                        "truncate text-sm font-medium",
+                                        !stage.isCurrent && "text-muted-foreground"
+                                    )}
+                                >
+                                    {stage.label}
+                                </span>
+                                {stage.activityCount > 0 ? (
+                                    <Badge variant="secondary" className="shrink-0 text-xs">
+                                        {stage.activityCount}
+                                    </Badge>
+                                ) : null}
+                            </div>
+                            <span
+                                data-testid={`timeline-stage-meta-${stage.id}`}
+                                className={cn(
+                                    STAGE_ROW_META_CLASS,
+                                    stage.isUpcoming && "opacity-0"
+                                )}
+                                aria-hidden={stage.isUpcoming ? "true" : undefined}
+                            >
+                                {stage.isUpcoming ? "—" : stage.date || "—"}
+                            </span>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                            <div className="ml-6 border-l border-border/50 pl-4">
+                                {showStageEntryRow && stageEntryLabel ? (
+                                    <StageEntryRow
+                                        entryTitle={stageEntryTitle}
+                                        entryLabel={stageEntryLabel}
+                                        isBackdated={stage.isBackdated}
+                                        reason={stage.reason}
+                                    />
+                                ) : null}
+                                {stage.activities.length > 0 ? (
+                                    stage.activities.map((item) => (
+                                        <ActivityRow key={item.id} item={item} />
+                                    ))
+                                ) : !showStageEntryRow ? (
+                                    <div className="py-2 text-xs italic text-muted-foreground/60">
+                                        No activity in this stage.
+                                    </div>
+                                ) : null}
+                            </div>
+                        </CollapsibleContent>
+                    </Collapsible>
+                )
+            })}
+        </div>
+    )
+}
+
+function ActivityTimelineNextSteps({
+    status,
+    overdueTasks,
+    upcomingTasks,
+    onRetry,
+}: {
+    status: "loading" | "error" | "ready"
+    overdueTasks: TaskListItem[]
+    upcomingTasks: TaskListItem[]
+    onRetry?: (() => void) | undefined
+}) {
+    if (status === "loading") {
+        return (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
+                <Loader2Icon className="size-3.5 animate-spin" aria-hidden="true" />
+                Loading next steps…
+            </div>
+        )
+    }
+    if (status === "error") {
+        return (
+            <div className="space-y-2" role="alert">
+                <p className="text-xs text-destructive">Failed to load next steps.</p>
+                {onRetry ? (
+                    <Button variant="outline" size="sm" onClick={onRetry}>
+                        Retry next steps
+                    </Button>
+                ) : null}
+            </div>
+        )
+    }
+    if (overdueTasks.length === 0 && upcomingTasks.length === 0) return null
+
+    return (
+        <>
+            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                Next Steps
+                <div className="flex-1 border-t border-dashed border-border/50" />
+            </div>
+            <div className="space-y-3">
+                {overdueTasks.length > 0 ? (
+                    <div className="space-y-1">
+                        <span className="text-xs font-medium text-red-600">Overdue</span>
+                        {overdueTasks.map((task) => (
+                            <TaskRow key={task.id} task={task} isOverdue />
+                        ))}
+                    </div>
+                ) : null}
+                {upcomingTasks.length > 0 ? (
+                    <div className="space-y-1">
+                        <span className="text-xs font-medium text-muted-foreground">Upcoming</span>
+                        {upcomingTasks.map((task) => (
+                            <TaskRow key={task.id} task={task} />
+                        ))}
+                    </div>
+                ) : null}
+            </div>
+        </>
+    )
+}
+
+function ActivityTimelineLinks({
+    historyHref,
+    notesHref,
+}: {
+    historyHref?: string | undefined
+    notesHref?: string | undefined
+}) {
+    if (!historyHref && !notesHref) return null
+    return (
+        <div className="flex gap-3 pt-2">
+            {historyHref ? (
+                <Link
+                    href={historyHref}
+                    className="text-xs text-primary underline-offset-4 hover:underline"
+                >
+                    View full history &rarr;
+                </Link>
+            ) : null}
+            {notesHref ? (
+                <Link
+                    href={notesHref}
+                    className="text-xs text-primary underline-offset-4 hover:underline"
+                >
+                    Notes &amp; Attachments &rarr;
+                </Link>
+            ) : null}
+        </div>
+    )
+}
+
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -894,214 +1125,18 @@ export function EntityActivityTimeline({
                 </div>
             </CardHeader>
             <CardContent className="px-4 space-y-4">
-                {/* Stage Timeline */}
-                <div className="space-y-0">
-                    {visibleStages.map((stage) => {
-                        // hasContent = has activity OR is backdated (backdated stages always get full row)
-                        const hasContent = stage.activityCount > 0 || stage.isBackdated
-                        // Show stage entry row when backdated, has activities, or current terminal transition exists.
-                        const showStageEntryRow =
-                            !!stage.rawDate &&
-                            (stage.isBackdated ||
-                                stage.activityCount > 0 ||
-                                (stage.isCurrent && !!stage.transitionLabel) ||
-                                (stage.isTerminal && !!stage.transitionLabel))
-                        const stageEntryTitle =
-                            (stage.isTerminal && stage.transitionLabel) || "Entered stage"
-                        const stageEntryLabel = stage.date
-
-                        // Empty non-current stages without content: minimal row (no chevron, no timestamp)
-                        if (!hasContent && !stage.isCurrent) {
-                            return (
-                                <div
-                                    key={stage.id}
-                                    data-testid={`timeline-stage-row-${stage.id}`}
-                                    className={STAGE_ROW_CLASS}
-                                >
-                                    <span className="size-4" aria-hidden="true" />
-                                    <div
-                                        className={cn(
-                                            "size-2 rounded-full",
-                                            stage.isUpcoming && "bg-muted-foreground/30"
-                                        )}
-                                        style={
-                                            !stage.isUpcoming
-                                                ? { backgroundColor: stage.color }
-                                                : undefined
-                                        }
-                                    />
-                                    <div className={STAGE_ROW_LABEL_CLASS}>
-                                        <span className="truncate text-sm text-muted-foreground">
-                                            {stage.label}
-                                        </span>
-                                    </div>
-                                    <span
-                                        data-testid={`timeline-stage-meta-${stage.id}`}
-                                        className={cn(STAGE_ROW_META_CLASS, "opacity-0")}
-                                        aria-hidden="true"
-                                    >
-                                        --
-                                    </span>
-                                </div>
-                            )
-                        }
-
-                        // Full collapsible row (current stage, has activity, or backdated)
-                        return (
-                            <Collapsible
-                                key={stage.id}
-                                open={openStageIds.has(stage.id)}
-                                onOpenChange={(open) => handleStageToggle(stage.id, open)}
-                            >
-                                {/* Stage Header */}
-                                <CollapsibleTrigger
-                                    data-testid={`timeline-stage-row-${stage.id}`}
-                                    className={cn("group hover:bg-muted/50", STAGE_ROW_CLASS)}
-                                >
-                                    <ChevronRightIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
-                                    <div
-                                        className={cn(
-                                            "rounded-full",
-                                            stage.isCurrent ? "size-2.5" : "size-2",
-                                            stage.isUpcoming && "bg-muted-foreground/30"
-                                        )}
-                                        style={
-                                            !stage.isUpcoming
-                                                ? {
-                                                      backgroundColor: stage.color,
-                                                      boxShadow: stage.isCurrent
-                                                          ? `0 0 0 2px hsl(var(--background)), 0 0 0 4px ${stage.color}40`
-                                                          : undefined,
-                                                  }
-                                                : undefined
-                                        }
-                                    />
-                                    <div className={STAGE_ROW_LABEL_CLASS}>
-                                        <span
-                                            className={cn(
-                                                "truncate text-sm font-medium",
-                                                !stage.isCurrent && "text-muted-foreground"
-                                            )}
-                                        >
-                                            {stage.label}
-                                        </span>
-                                        {stage.activityCount > 0 && (
-                                            <Badge variant="secondary" className="shrink-0 text-xs">
-                                                {stage.activityCount}
-                                            </Badge>
-                                        )}
-                                    </div>
-                                    <span
-                                        data-testid={`timeline-stage-meta-${stage.id}`}
-                                        className={cn(
-                                            STAGE_ROW_META_CLASS,
-                                            stage.isUpcoming && "opacity-0"
-                                        )}
-                                        aria-hidden={stage.isUpcoming ? "true" : undefined}
-                                    >
-                                        {stage.isUpcoming ? "—" : stage.date || "—"}
-                                    </span>
-                                </CollapsibleTrigger>
-
-                                {/* Stage Details */}
-                                <CollapsibleContent>
-                                    <div className="ml-6 pl-4 border-l border-border/50">
-                                        {showStageEntryRow && stageEntryLabel && (
-                                            <StageEntryRow
-                                                entryTitle={stageEntryTitle}
-                                                entryLabel={stageEntryLabel}
-                                                isBackdated={stage.isBackdated}
-                                                reason={stage.reason}
-                                            />
-                                        )}
-                                        {stage.activities.length > 0 ? (
-                                            stage.activities.map((item) => (
-                                                <ActivityRow key={item.id} item={item} />
-                                            ))
-                                        ) : (
-                                            !showStageEntryRow && (
-                                                <div className="py-2 text-xs text-muted-foreground/60 italic">
-                                                    No activity in this stage.
-                                                </div>
-                                            )
-                                        )}
-                                    </div>
-                                </CollapsibleContent>
-                            </Collapsible>
-                        )
-                    })}
-                </div>
-
-                {/* Next Steps Section */}
-                {tasksStatus === "loading" ? (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
-                        <Loader2Icon className="size-3.5 animate-spin" aria-hidden="true" />
-                        Loading next steps…
-                    </div>
-                ) : tasksStatus === "error" ? (
-                    <div className="space-y-2" role="alert">
-                        <p className="text-xs text-destructive">Failed to load next steps.</p>
-                        {onRetryTasks ? (
-                            <Button variant="outline" size="sm" onClick={onRetryTasks}>
-                                Retry next steps
-                            </Button>
-                        ) : null}
-                    </div>
-                ) : (overdueTasks.length > 0 || upcomingTasks.length > 0) && (
-                    <>
-                        <div className="text-xs font-medium text-muted-foreground flex items-center gap-2">
-                            Next Steps
-                            <div className="flex-1 border-t border-dashed border-border/50" />
-                        </div>
-                        <div className="space-y-3">
-                            {/* Overdue subsection */}
-                            {overdueTasks.length > 0 && (
-                                <div className="space-y-1">
-                                    <span className="text-xs font-medium text-red-600">
-                                        Overdue
-                                    </span>
-                                    {overdueTasks.map((task) => (
-                                        <TaskRow key={task.id} task={task} isOverdue />
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Upcoming subsection */}
-                            {upcomingTasks.length > 0 && (
-                                <div className="space-y-1">
-                                    <span className="text-xs font-medium text-muted-foreground">
-                                        Upcoming
-                                    </span>
-                                    {upcomingTasks.map((task) => (
-                                        <TaskRow key={task.id} task={task} />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </>
-                )}
-
-                {/* Deep links to relevant tabs */}
-                {historyHref || notesHref ? (
-                    <div className="flex gap-3 pt-2">
-                        {historyHref ? (
-                            <Link
-                                href={historyHref}
-                                className="text-xs text-primary hover:underline underline-offset-4"
-                            >
-                                View full history &rarr;
-                            </Link>
-                        ) : null}
-                        {notesHref ? (
-                            <Link
-                                href={notesHref}
-                                className="text-xs text-primary hover:underline underline-offset-4"
-                            >
-                                Notes &amp; Attachments &rarr;
-                            </Link>
-                        ) : null}
-                    </div>
-                ) : null}
+                <ActivityTimelineStageList
+                    stages={visibleStages}
+                    openStageIds={openStageIds}
+                    onStageToggle={handleStageToggle}
+                />
+                <ActivityTimelineNextSteps
+                    status={tasksStatus}
+                    overdueTasks={overdueTasks}
+                    upcomingTasks={upcomingTasks}
+                    onRetry={onRetryTasks}
+                />
+                <ActivityTimelineLinks historyHref={historyHref} notesHref={notesHref} />
             </CardContent>
         </Card>
     )
