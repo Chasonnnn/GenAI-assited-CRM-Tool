@@ -60,6 +60,10 @@ class MessagingMediaBlocked(ValueError):
     """An outbound media asset is unsafe or unavailable."""
 
 
+class MessagingRouteNotReady(ValueError):
+    """The purpose-bound route is not authorized to queue or send."""
+
+
 class MessagingLeaseLost(RuntimeError):
     """A stale delivery worker attempted to mutate a newer lease generation."""
 
@@ -423,6 +427,15 @@ def materialize_delivery(
     route = next((item for item in settings.routes if item.purpose == purpose), None)
     if route is None:
         raise RuntimeError("Purpose-bound Twilio route is missing")
+    from app.services import twilio_readiness_service
+
+    route_blockers = twilio_readiness_service.route_send_blockers(
+        settings,
+        route,
+        requires_mms=bool(media_asset_ids),
+    )
+    if route_blockers:
+        raise MessagingRouteNotReady(route_blockers[0][0])
 
     assets: list[MessageMediaAsset] = []
     if media_asset_ids:

@@ -221,6 +221,18 @@ async def test_readiness_worker_persists_sanitized_provider_snapshot(
                 "messaging_services": True,
                 "webhook_validation": True,
             },
+            route_capabilities={
+                purpose: {
+                    "service_verified": True,
+                    "sender_in_pool": True,
+                    "sms": True,
+                    "mms": True,
+                    "a2p_status": "VERIFIED",
+                    "inbound_webhook_matches": True,
+                    "status_callback_matches": True,
+                }
+                for purpose in ("operational", "promotional")
+            },
             error=None,
             warning=None,
         ),
@@ -243,21 +255,22 @@ async def test_readiness_worker_persists_sanitized_provider_snapshot(
     assert payload["provider"]["credentials_valid"] is True
     assert payload["provider"]["account_status"] == "active"
     assert payload["provider"]["status"] == "ready"
+    for purpose in ("operational", "promotional"):
+        route = next(item for item in settings.routes if item.purpose == purpose)
+        assert route.a2p_status == "approved"
+        assert route.capability_evidence["provider"]["sender_in_pool"] is True
+        assert route.capability_evidence["provider"]["account_active"] is True
+        assert route.capability_evidence["provider"]["mms"] is True
     assert payload["overall_status"] == "blocked"
     assert {
         "legal_messaging_brand_missing",
-        "messaging_disclosures_missing",
+        "operational_disclosure_missing",
+        "promotional_disclosure_missing",
         "public_legal_urls_missing",
         "counsel_approval_missing",
         "messaging_dispatch_worker_disabled",
-        "media_scanning_disabled",
         "operational_consent_api_unavailable",
         "promotional_consent_api_unavailable",
-        "operational_sender_not_10dlc",
-        "promotional_sender_not_10dlc",
-        "operational_mms_unverified",
-        "promotional_mms_unverified",
-        "meta_consent_mapping_unverified",
     }.issubset({issue["code"] for issue in payload["issues"]})
 
     settings.legal_messaging_brand = "Example Agency"

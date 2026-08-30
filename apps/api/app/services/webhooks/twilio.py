@@ -155,6 +155,15 @@ def _apply_inbound_consent_first(
 ) -> MessagingContact:
     body = str(fields.get("Body") or "")
     opt_out_type = str(fields.get("OptOutType") or "").upper()
+    if opt_out_type in {"STOP", "START", "HELP"}:
+        evidence = dict(route.capability_evidence or {})
+        evidence["advanced_opt_out"] = {
+            "source": "twilio_opt_out_type",
+            "verified_at": datetime.now(UTC).isoformat(),
+        }
+        route.capability_evidence = evidence
+        route.advanced_opt_out_status = "verified"
+        route.updated_at = datetime.now(UTC)
     phone = str(fields.get("From") or "")
     common = {
         "organization_id": route.organization_id,

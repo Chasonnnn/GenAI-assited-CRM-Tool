@@ -43,12 +43,14 @@ def test_configuration(
         "messaging_services": False,
         "webhook_validation": bool(auth_token),
     }
+    route_capabilities: dict[str, dict[str, bool | str | None]] = {}
     if not (account_sid and api_key_sid and api_secret):
         return TwilioSettingsTestResponse(
             valid=False,
             account_status=None,
             twilio_edition=settings.twilio_edition,
             capabilities=capabilities,
+            route_capabilities=route_capabilities,
             error="Twilio REST credentials are not configured.",
             warning=None,
         )
@@ -72,11 +74,78 @@ def test_configuration(
                 )
             else:
                 service_sid = None
-            if not service_sid:
+            if route_override is not None and route_override.sender_phone_e164 is not None:
+                sender = route_override.sender_phone_e164
+            elif route.sender_phone_encrypted:
+                sender = twilio_settings_service.decrypt_credential(route.sender_phone_encrypted)
+            else:
+                sender = None
+            if not service_sid or not sender:
                 route_statuses[route.purpose] = "not_configured"
+                route_capabilities[route.purpose] = {
+                    "service_verified": False,
+                    "sender_in_pool": False,
+                    "sms": False,
+                    "mms": False,
+                    "a2p_status": None,
+                    "inbound_webhook_matches": False,
+                    "status_callback_matches": False,
+                }
                 continue
-            fetched = client.messaging.v1.services(service_sid).fetch()
-            route_statuses[route.purpose] = "verified" if fetched.sid == service_sid else "mismatch"
+            service_context = client.messaging.v1.services(service_sid)
+            fetched = service_context.fetch()
+            service_verified = fetched.sid == service_sid
+            sender_resource = next(
+                (
+                    item
+                    for item in service_context.phone_numbers.list(limit=1000)
+                    if item.phone_number == sender
+                ),
+                None,
+            )
+            sender_capabilities = {
+                str(item).upper() for item in (getattr(sender_resource, "capabilities", None) or [])
+            }
+            campaign_statuses = {
+                str(item.campaign_status).upper()
+                for item in service_context.us_app_to_person.list(limit=20)
+                if getattr(item, "campaign_status", None)
+            }
+            a2p_status = (
+                "VERIFIED"
+                if "VERIFIED" in campaign_statuses
+                else (sorted(campaign_statuses)[0] if campaign_statuses else "UNCONFIGURED")
+            )
+            inbound_url = twilio_settings_service.route_webhook_url(route.webhook_id, "inbound")
+            status_url = twilio_settings_service.route_webhook_url(route.webhook_id, "status")
+            route_capabilities[route.purpose] = {
+                "service_verified": service_verified,
+                "sender_in_pool": sender_resource is not None,
+                "sms": "SMS" in sender_capabilities,
+                "mms": "MMS" in sender_capabilities,
+                "sender_type": (
+                    "10dlc" if sender.startswith("+1") and a2p_status == "VERIFIED" else "unknown"
+                ),
+                "a2p_status": a2p_status,
+                "inbound_webhook_matches": (
+                    fetched.inbound_request_url == inbound_url
+                    and str(fetched.inbound_method).upper() == "POST"
+                    and not bool(fetched.use_inbound_webhook_on_number)
+                ),
+                "status_callback_matches": fetched.status_callback == status_url,
+            }
+            route_statuses[route.purpose] = (
+                "verified"
+                if all(
+                    (
+                        service_verified,
+                        sender_resource is not None,
+                        "SMS" in sender_capabilities,
+                        a2p_status == "VERIFIED",
+                    )
+                )
+                else "mismatch"
+            )
         capabilities["messaging_services"] = bool(route_statuses) and all(
             status == "verified" for status in route_statuses.values()
         )
@@ -86,6 +155,7 @@ def test_configuration(
             account_status=None,
             twilio_edition=settings.twilio_edition,
             capabilities=capabilities,
+            route_capabilities=route_capabilities,
             error=_sanitized_error_code(exc),
             warning=None,
         )
@@ -95,6 +165,7 @@ def test_configuration(
         account_status=account_status,
         twilio_edition=settings.twilio_edition,
         capabilities=capabilities,
+        route_capabilities=route_capabilities,
         error=None,
         warning=(
             None

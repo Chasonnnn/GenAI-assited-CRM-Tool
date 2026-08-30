@@ -119,18 +119,18 @@ def test_messaging_retention_preserves_evidence_backing_active_consent_state(
     assert query.count() == 0
 
 
-def test_messaging_media_purge_removes_application_storage(
+def test_messaging_media_purge_schedules_durable_application_storage_removal(
     db,
     test_org,
     test_user,
-    monkeypatch,
 ):
-    from app.db.models import MessageMediaAsset
-    from app.services import attachment_service
+    from app.db.enums import JobType
+    from app.db.models import Job, MessageMediaAsset
 
+    storage_key = f"messaging/{test_org.id}/expired-image.png"
     asset = MessageMediaAsset(
         organization_id=test_org.id,
-        storage_key="messaging/expired-image.png",
+        storage_key=storage_key,
         original_filename="expired-image.png",
         content_type="image/png",
         byte_size=8,
@@ -142,12 +142,18 @@ def test_messaging_media_purge_removes_application_storage(
     db.add(asset)
     db.commit()
     asset_id = asset.id
-    deleted_keys: list[str] = []
-    monkeypatch.setattr(attachment_service, "delete_file", deleted_keys.append)
     compliance_service.seed_default_retention_policies(db, test_org.id)
 
     results = compliance_service.execute_purge(db, test_org.id, test_user.id)
 
     assert next(item.count for item in results if item.entity_type == "messaging_media_assets") == 1
     assert db.get(MessageMediaAsset, asset_id) is None
-    assert deleted_keys == ["messaging/expired-image.png"]
+    cleanup_job = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.STORAGE_DELETE.value,
+        )
+        .one()
+    )
+    assert cleanup_job.payload == {"storage_keys": [storage_key]}

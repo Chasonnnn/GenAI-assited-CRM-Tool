@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
 from sqlalchemy import func, select
@@ -28,6 +28,8 @@ from app.schemas.twilio import (
     TwilioRouteReadiness,
 )
 from app.services import twilio_provider_service, twilio_settings_service
+
+PROVIDER_EVIDENCE_MAX_AGE = timedelta(hours=24)
 
 
 def _enabled_env(name: str) -> bool:
@@ -58,71 +60,120 @@ def _append_issue(
     )
 
 
-def _append_activation_issues(
+def route_send_blockers(
     settings: TwilioSettings,
-    issues: list[TwilioReadinessIssue],
-) -> None:
+    route,
+    *,
+    requires_mms: bool = False,
+    now: datetime | None = None,
+) -> list[tuple[str, str]]:
+    """Return the authoritative no-send reasons for one purpose-bound route."""
+    now = now or datetime.now(UTC)
+    blockers: list[tuple[str, str]] = []
+
+    def block(code: str, message: str) -> None:
+        blockers.append((code, message))
+
     if not settings.enabled:
-        return
-    if not settings.legal_messaging_brand:
-        _append_issue(
-            issues,
-            code="legal_messaging_brand_missing",
-            message="The organization's legal messaging brand is required.",
+        block("twilio_disabled", "Twilio messaging is disabled for this organization.")
+    if not route.enabled:
+        block(f"{route.purpose}_route_disabled", f"The {route.purpose} route is disabled.")
+    if not (
+        settings.account_sid_encrypted
+        and settings.api_key_sid_encrypted
+        and settings.api_secret_encrypted
+        and settings.auth_token_encrypted
+    ):
+        block("twilio_credentials_missing", "Twilio REST and webhook credentials are required.")
+    if not (route.messaging_service_sid_encrypted and route.sender_phone_encrypted):
+        block(
+            f"{route.purpose}_route_missing",
+            f"The {route.purpose} Messaging Service and sender are required.",
         )
-    if not settings.operational_disclosure or not settings.promotional_disclosure:
-        _append_issue(
-            issues,
-            code="messaging_disclosures_missing",
-            message="Counsel-approved operational and promotional disclosures are required.",
+    if not settings.legal_messaging_brand:
+        block("legal_messaging_brand_missing", "The legal messaging brand is required.")
+    disclosure = (
+        settings.operational_disclosure
+        if route.purpose == "operational"
+        else settings.promotional_disclosure
+    )
+    if not disclosure:
+        block(
+            f"{route.purpose}_disclosure_missing",
+            f"The {route.purpose} consent disclosure is required.",
         )
     if not (
         _is_public_https_url(settings.sms_terms_url)
         and _is_public_https_url(settings.privacy_policy_url)
     ):
-        _append_issue(
-            issues,
-            code="public_legal_urls_missing",
-            message="Public HTTPS SMS Terms and Privacy URLs are required.",
-        )
+        block("public_legal_urls_missing", "Public HTTPS SMS Terms and Privacy URLs are required.")
     if not settings.support_contact:
-        _append_issue(
-            issues,
-            code="support_contact_missing",
-            message="A messaging support contact is required.",
-        )
+        block("support_contact_missing", "A messaging support contact is required.")
     if not settings.expected_frequency:
-        _append_issue(
-            issues,
-            code="expected_frequency_missing",
-            message="Expected message frequency is required.",
-        )
+        block("expected_frequency_missing", "Expected message frequency is required.")
     if settings.counsel_approved_at is None:
-        _append_issue(
-            issues,
-            code="counsel_approval_missing",
-            message="Counsel approval must be recorded before activation.",
-        )
+        block("counsel_approval_missing", "Counsel approval must be recorded before activation.")
     if not _enabled_env("MESSAGING_DELIVERY_DISPATCH_ENABLED"):
-        _append_issue(
-            issues,
-            code="messaging_dispatch_worker_disabled",
-            message="The durable messaging dispatch worker is disabled.",
+        block("messaging_dispatch_worker_disabled", "The messaging dispatch worker is disabled.")
+    if route.advanced_opt_out_status != "verified":
+        block(
+            f"{route.purpose}_advanced_opt_out_unverified",
+            "Advanced Opt-Out has not been proven by a signed Twilio OptOutType webhook.",
         )
-    if not app_settings.ATTACHMENT_SCAN_ENABLED:
-        _append_issue(
-            issues,
-            code="media_scanning_disabled",
-            message="Attachment scanning must be enabled for MMS.",
+    if route.consent_management_status != "available":
+        block(
+            f"{route.purpose}_consent_api_unavailable",
+            "Consent Management API access has not been proven by a successful synchronized upsert.",
         )
+
+    evidence = route.capability_evidence or {}
+    provider = evidence.get("provider") if isinstance(evidence.get("provider"), dict) else {}
+    checked_at = provider.get("checked_at")
+    try:
+        checked = datetime.fromisoformat(str(checked_at)) if checked_at else None
+        if checked is not None and checked.tzinfo is None:
+            checked = checked.replace(tzinfo=UTC)
+    except ValueError:
+        checked = None
+    if (
+        checked is None
+        or now - checked.astimezone(UTC) > PROVIDER_EVIDENCE_MAX_AGE
+        or provider.get("settings_version") != settings.current_version
+    ):
+        block(
+            f"{route.purpose}_provider_evidence_stale",
+            "A fresh, version-matched Twilio readiness check is required.",
+        )
+    else:
+        required_provider_facts = {
+            "account_active": "The Twilio account is not active.",
+            "service_verified": "Messaging Service could not be verified.",
+            "sender_in_pool": "The exact sender is not in the Messaging Service sender pool.",
+            "sms": "The exact sender is not SMS capable.",
+            "inbound_webhook_matches": "The Messaging Service inbound webhook does not match.",
+            "status_callback_matches": "The Messaging Service status callback does not match.",
+        }
+        for fact, message in required_provider_facts.items():
+            if provider.get(fact) is not True:
+                block(f"{route.purpose}_{fact}_unverified", message)
+        if str(provider.get("a2p_status") or "").upper() != "VERIFIED":
+            block(
+                f"{route.purpose}_a2p_unverified",
+                "The Twilio A2P campaign is not VERIFIED.",
+            )
+        if requires_mms and provider.get("mms") is not True:
+            block(f"{route.purpose}_mms_unverified", "The exact sender is not MMS capable.")
+        if requires_mms and not app_settings.ATTACHMENT_SCAN_ENABLED:
+            block("media_scanning_disabled", "Attachment scanning must be enabled for MMS.")
+
     if settings.phi_enabled and not (
         settings.twilio_edition and settings.baa_verified_at and settings.compliance_approved_at
     ):
-        _append_issue(
-            issues,
-            code="phi_gate_incomplete",
-            message="PHI messaging requires an eligible Twilio Edition, BAA, and compliance approval.",
+        block(
+            "phi_gate_incomplete",
+            "PHI messaging requires an eligible Twilio Edition, BAA, and compliance approval.",
         )
+    return blockers
 
 
 def _readiness_snapshot(settings: TwilioSettings) -> dict | None:
@@ -157,6 +208,7 @@ def refresh_readiness(
         "credentials_valid": result.valid,
         "account_status": result.account_status,
         "capabilities": result.capabilities,
+        "route_capabilities": result.route_capabilities,
         "error_code": result.error,
         "warning": result.warning,
     }
@@ -175,6 +227,20 @@ def refresh_readiness(
     for route in current.routes:
         evidence = dict(route.capability_evidence or {})
         evidence["readiness"] = snapshot
+        provider_evidence = result.route_capabilities.get(route.purpose)
+        if provider_evidence is not None:
+            evidence["provider"] = {
+                **provider_evidence,
+                "account_active": result.account_status == "active",
+                "checked_at": checked_at,
+                "settings_version": expected_settings_version,
+            }
+            provider_a2p_status = str(provider_evidence.get("a2p_status") or "").upper()
+            route.a2p_status = (
+                "approved"
+                if provider_a2p_status == "VERIFIED"
+                else ("rejected" if provider_a2p_status == "FAILED" else "pending")
+            )
         route.capability_evidence = evidence
         route.updated_at = datetime.now(UTC)
     db.commit()
@@ -271,8 +337,6 @@ def get_readiness(db: Session, organization_id: uuid.UUID) -> TwilioReadinessRes
             )
         )
 
-    _append_activation_issues(settings, issues)
-
     snapshot = _readiness_snapshot(settings)
     credentials_valid = bool(snapshot and snapshot.get("credentials_valid"))
     checked_at = str(snapshot.get("checked_at")) if snapshot else None
@@ -294,67 +358,36 @@ def get_readiness(db: Session, organization_id: uuid.UUID) -> TwilioReadinessRes
                 can_receive=False,
                 issues=["Messaging Service and sender are not configured."],
             )
-            issues.append(
-                TwilioReadinessIssue(
-                    code=f"{route.purpose}_route_missing",
-                    severity="error",
+            code = f"{route.purpose}_route_missing"
+            if code not in {issue.code for issue in issues}:
+                _append_issue(
+                    issues,
+                    code=code,
                     message=f"The {route.purpose} Messaging Service and sender are required.",
                     route=route.purpose,
                 )
-            )
             continue
-
-        route_issues: list[str] = []
-        if route.a2p_status != "approved":
-            route_issues.append("A2P registration is not approved.")
-        if route.advanced_opt_out_status != "verified":
-            route_issues.append("Advanced Opt-Out is not verified.")
-        if route.consent_management_status != "available":
-            route_issues.append("Consent Management API access is not verified.")
-            _append_issue(
-                issues,
-                code=f"{route.purpose}_consent_api_unavailable",
-                message=f"Consent Management API access is required for the {route.purpose} route.",
-                route=route.purpose,
-            )
         evidence = route.capability_evidence or {}
-        if evidence.get("sender_type") != "10dlc":
-            route_issues.append("The exact sender is not verified as US 10DLC.")
-            _append_issue(
-                issues,
-                code=f"{route.purpose}_sender_not_10dlc",
-                message=f"The {route.purpose} sender must be a registered US 10DLC number.",
-                route=route.purpose,
-            )
-        if evidence.get("mms") is not True:
-            route_issues.append("MMS capability is not verified.")
-            _append_issue(
-                issues,
-                code=f"{route.purpose}_mms_unverified",
-                message=f"MMS capability is required for the {route.purpose} route.",
-                route=route.purpose,
-            )
-        if route.purpose == "operational" and evidence.get("meta_consent_mapping_verified") is not True:
-            route_issues.append("Meta consent mapping is not verified.")
-            _append_issue(
-                issues,
-                code="meta_consent_mapping_unverified",
-                message="Meta form consent mappings must be verified before activation.",
-                route=route.purpose,
-            )
-        if snapshot is None:
-            route_issues.append("Provider readiness has not been checked.")
-        elif not credentials_valid:
-            route_issues.append("Provider credentials or Messaging Service validation failed.")
-        route_status = (
-            "ready" if not route_issues and route.enabled and settings.enabled else "blocked"
-        )
+        provider = evidence.get("provider") if isinstance(evidence.get("provider"), dict) else {}
+        blockers = route_send_blockers(settings, route)
+        route_issues = [message for _, message in blockers]
+        existing_issue_codes = {issue.code for issue in issues}
+        for code, message in blockers:
+            if code == "twilio_disabled" or code in existing_issue_codes:
+                continue
+            _append_issue(issues, code=code, message=message, route=route.purpose)
+            existing_issue_codes.add(code)
+        route_status = "ready" if not blockers else ("not_configured" if not configured else "blocked")
         route_readiness[route.purpose] = TwilioRouteReadiness(
             status=route_status,
             can_send_sms=route_status == "ready",
-            can_send_mms=route_status == "ready"
-            and bool((route.capability_evidence or {}).get("mms")),
-            can_receive=route.enabled and credentials_valid,
+            can_send_mms=route_status == "ready" and provider.get("mms") is True,
+            can_receive=(
+                route.enabled
+                and credentials_valid
+                and provider.get("sender_in_pool") is True
+                and provider.get("inbound_webhook_matches") is True
+            ),
             issues=route_issues,
         )
 
@@ -399,15 +432,17 @@ def get_readiness(db: Session, organization_id: uuid.UUID) -> TwilioReadinessRes
             account_status=account_status,
             checked_at=checked_at,
             capabilities=TwilioProviderCapabilities(
-                send_sms=credentials_valid,
-                send_mms=credentials_valid
-                and any(
-                    bool((route.capability_evidence or {}).get("mms")) for route in settings.routes
-                ),
-                receive_sms=credentials_valid,
-                receive_mms=credentials_valid
-                and any(
-                    bool((route.capability_evidence or {}).get("mms")) for route in settings.routes
+                send_sms=any(route.can_send_sms for route in route_readiness.values()),
+                send_mms=any(route.can_send_mms for route in route_readiness.values()),
+                receive_sms=any(route.can_receive for route in route_readiness.values()),
+                receive_mms=any(
+                    route.can_receive
+                    and (
+                        ((settings_route.capability_evidence or {}).get("provider") or {}).get("mms")
+                        is True
+                    )
+                    for settings_route in settings.routes
+                    for route in [route_readiness[settings_route.purpose]]
                 ),
                 status_callbacks=credentials_valid
                 and bool(provider_capability_evidence.get("webhook_validation")),

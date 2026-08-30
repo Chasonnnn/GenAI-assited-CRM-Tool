@@ -922,6 +922,12 @@ class DefaultWorkflowDomainAdapter:
                 media_asset_ids=[],
                 is_enrollment_confirmation=template.is_enrollment_confirmation,
             )
+        except messaging_delivery_service.MessagingRouteNotReady as exc:
+            return {
+                "success": False,
+                "error": str(exc),
+                "skipped": True,
+            }
         return {
             "success": True,
             "queued": True,

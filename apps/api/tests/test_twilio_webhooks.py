@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
 from twilio.request_validator import RequestValidator
 
 ACCOUNT_SID = "AC" + ("1" * 32)
@@ -11,6 +12,11 @@ SERVICE_SID = "MG" + ("2" * 32)
 AUTH_TOKEN = "primary-auth-token-for-webhooks"
 SENDER = "+14155550199"
 CONTACT = "+14155550110"
+
+
+@pytest.fixture(autouse=True)
+def _enable_messaging_dispatch(monkeypatch):
+    monkeypatch.setenv("MESSAGING_DELIVERY_DISPATCH_ENABLED", "true")
 
 
 def _configure_route(db, test_org, purpose: str = "operational"):
@@ -26,6 +32,14 @@ def _configure_route(db, test_org, purpose: str = "operational"):
         "restricted-media-secret"
     )
     settings.auth_token_encrypted = twilio_settings_service.encrypt_credential(AUTH_TOKEN)
+    settings.legal_messaging_brand = "EWI Surrogacy"
+    settings.operational_disclosure = "Operational SMS disclosure"
+    settings.promotional_disclosure = "Promotional SMS disclosure"
+    settings.sms_terms_url = "https://example.org/sms-terms"
+    settings.privacy_policy_url = "https://example.org/privacy"
+    settings.support_contact = "support@example.org"
+    settings.expected_frequency = "Message frequency varies"
+    settings.counsel_approved_at = datetime.now(UTC)
     route = next(item for item in settings.routes if item.purpose == purpose)
     route.enabled = True
     route.messaging_service_sid_encrypted = twilio_settings_service.encrypt_credential(SERVICE_SID)
@@ -34,6 +48,23 @@ def _configure_route(db, test_org, purpose: str = "operational"):
 
     route.sender_phone_hash = hash_phone(SENDER)
     route.sender_phone_last4 = SENDER[-4:]
+    route.a2p_status = "approved"
+    route.advanced_opt_out_status = "verified"
+    route.consent_management_status = "available"
+    route.capability_evidence = {
+        "provider": {
+            "account_active": True,
+            "service_verified": True,
+            "sender_in_pool": True,
+            "sms": True,
+            "mms": True,
+            "a2p_status": "VERIFIED",
+            "inbound_webhook_matches": True,
+            "status_callback_matches": True,
+            "checked_at": datetime.now(UTC).isoformat(),
+            "settings_version": settings.current_version,
+        },
+    }
     db.commit()
     return route
 
@@ -54,6 +85,8 @@ async def test_inbound_stop_validates_exact_url_and_applies_suppression_before_p
     from app.db.models.messaging_delivery import MessageWebhookEvent, MessagingMessage
 
     route = _configure_route(db, test_org)
+    route.advanced_opt_out_status = "unconfigured"
+    db.commit()
     path = f"/webhooks/twilio/{route.webhook_id}/inbound"
     url = f"{app_settings.API_BASE_URL.rstrip('/')}{path}"
     data = {
@@ -82,6 +115,9 @@ async def test_inbound_stop_validates_exact_url_and_applies_suppression_before_p
         .one()
     )
     assert suppression.active is True
+    db.refresh(route)
+    assert route.advanced_opt_out_status == "verified"
+    assert route.capability_evidence["advanced_opt_out"]["source"] == "twilio_opt_out_type"
     assert db.query(MessagingMessage).filter_by(organization_id=test_org.id).count() == 1
     assert db.query(MessageWebhookEvent).filter_by(organization_id=test_org.id).count() == 1
 

@@ -177,7 +177,7 @@ def test_external_reopt_stays_blocked_until_both_provider_items_succeed(db, test
 async def test_external_reopt_success_clears_only_selected_purpose(
     db, test_org, monkeypatch
 ):
-    _configure_routes(db, test_org)
+    _configure_routes(db, test_org, consent_status="unknown")
     _initial_opt_in(db, test_org)
     _global_stop(db, test_org)
     pending = _external_reopt(db, test_org)
@@ -215,6 +215,13 @@ async def test_external_reopt_success_clears_only_selected_purpose(
     assert calls[0]["status"] == "opt-in"
     assert calls[0]["source"] == "website"
     assert calls[0]["contact_id"] == PHONE
+    route = next(
+        item
+        for item in twilio_settings_service.get_or_create_settings(db, test_org.id).routes
+        if item.purpose == "operational"
+    )
+    assert route.consent_management_status == "available"
+    assert route.capability_evidence["consent_management"]["source"] == "successful_upsert"
 
 
 @pytest.mark.asyncio

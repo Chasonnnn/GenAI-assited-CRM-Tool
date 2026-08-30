@@ -396,24 +396,21 @@ def dispatch_claimed_delivery(
         )
         return "deferred_sending_hours"
 
-    required_configuration = (
-        settings.enabled,
-        route.enabled,
-        route.a2p_status == "approved",
-        route.advanced_opt_out_status == "verified",
-        bool(settings.account_sid_encrypted),
-        bool(settings.api_key_sid_encrypted),
-        bool(settings.api_secret_encrypted),
-        bool(route.messaging_service_sid_encrypted),
-        bool(route.sender_phone_encrypted),
+    from app.services import twilio_readiness_service
+
+    route_blockers = twilio_readiness_service.route_send_blockers(
+        settings,
+        route,
+        requires_mms=bool(delivery.message.media_links),
+        now=now,
     )
-    if not all(required_configuration):
+    if route_blockers:
         _defer(
             db,
             delivery,
             run_at=now + timedelta(minutes=15),
             error_type="twilio_route_not_ready",
-            reason="Purpose-bound Twilio route is not ready",
+            reason=f"Purpose-bound Twilio route is not ready: {route_blockers[0][0]}",
         )
         return "deferred_route_not_ready"
 

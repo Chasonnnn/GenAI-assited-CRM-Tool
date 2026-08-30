@@ -16,7 +16,15 @@ SENDER = "+14155550199"
 CONTACT = "+14155550110"
 
 
-def _ready_claim(db, test_org, *, media_asset_ids=None, phi_enabled=False):
+def _ready_claim(
+    db,
+    test_org,
+    monkeypatch,
+    *,
+    media_asset_ids=None,
+    phi_enabled=False,
+    fully_ready=True,
+):
     from app.core.encryption import hash_phone
     from app.services import (
         messaging_consent_service,
@@ -30,6 +38,7 @@ def _ready_claim(db, test_org, *, media_asset_ids=None, phi_enabled=False):
     settings.account_sid_encrypted = twilio_settings_service.encrypt_credential(ACCOUNT_SID)
     settings.api_key_sid_encrypted = twilio_settings_service.encrypt_credential(API_KEY_SID)
     settings.api_secret_encrypted = twilio_settings_service.encrypt_credential(API_SECRET)
+    settings.auth_token_encrypted = twilio_settings_service.encrypt_credential("auth-token")
     route = next(item for item in settings.routes if item.purpose == "operational")
     route.enabled = True
     route.messaging_service_sid_encrypted = twilio_settings_service.encrypt_credential(SERVICE_SID)
@@ -38,6 +47,34 @@ def _ready_claim(db, test_org, *, media_asset_ids=None, phi_enabled=False):
     route.sender_phone_last4 = SENDER[-4:]
     route.a2p_status = "approved"
     route.advanced_opt_out_status = "verified"
+    settings.legal_messaging_brand = "EWI Surrogacy"
+    settings.operational_disclosure = "Operational SMS disclosure"
+    settings.promotional_disclosure = "Promotional SMS disclosure"
+    settings.sms_terms_url = "https://example.org/sms-terms"
+    settings.privacy_policy_url = "https://example.org/privacy"
+    settings.support_contact = "support@example.org"
+    settings.expected_frequency = "Message frequency varies"
+    settings.counsel_approved_at = datetime(2026, 7, 30, 12, 0, tzinfo=UTC)
+    if phi_enabled:
+        settings.twilio_edition = "hipaa_eligible"
+        settings.baa_verified_at = datetime(2026, 7, 30, 12, 0, tzinfo=UTC)
+        settings.compliance_approved_at = datetime(2026, 7, 30, 12, 0, tzinfo=UTC)
+    route.consent_management_status = "available"
+    route.capability_evidence = {
+        "provider": {
+            "account_active": True,
+            "service_verified": True,
+            "sender_in_pool": True,
+            "sms": True,
+            "mms": True,
+            "a2p_status": "VERIFIED",
+            "inbound_webhook_matches": True,
+            "status_callback_matches": True,
+            "checked_at": datetime.now(UTC).isoformat(),
+            "settings_version": settings.current_version,
+        },
+    }
+    monkeypatch.setenv("MESSAGING_DELIVERY_DISPATCH_ENABLED", "true")
     db.commit()
     consent = messaging_consent_service.record_opt_in(
         db,
@@ -71,6 +108,9 @@ def _ready_claim(db, test_org, *, media_asset_ids=None, phi_enabled=False):
         limit=1,
     )
     assert [item.id for item in claimed] == [delivery.id]
+    if not fully_ready:
+        settings.legal_messaging_brand = None
+        db.commit()
     return claimed[0]
 
 
@@ -80,7 +120,6 @@ def _allow_sending_hours(monkeypatch):
         RecipientTimezone,
         SendingWindowDecision,
     )
-
     monkeypatch.setattr(
         messaging_dispatch_service.messaging_sending_hours,
         "resolve_recipient_timezone",
@@ -93,6 +132,74 @@ def _allow_sending_hours(monkeypatch):
     )
 
 
+def test_dispatch_refuses_route_that_readiness_reports_blocked(
+    db,
+    test_org,
+    monkeypatch,
+) -> None:
+    from app.services import messaging_dispatch_service
+
+    delivery = _ready_claim(db, test_org, monkeypatch, fully_ready=False)
+    _allow_sending_hours(monkeypatch)
+    monkeypatch.setattr(
+        messaging_dispatch_service.twilio_transport,
+        "send_message",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("A readiness-blocked route must not reach Twilio")
+        ),
+    )
+
+    result = messaging_dispatch_service.dispatch_claimed_delivery(
+        db,
+        organization_id=test_org.id,
+        delivery_id=delivery.id,
+        lease_token=delivery.lease_token,
+        lease_generation=delivery.lease_generation,
+        now=datetime(2026, 7, 31, 19, 0, tzinfo=UTC),
+    )
+
+    assert result == "deferred_route_not_ready"
+
+
+def test_dispatch_refuses_inactive_twilio_account(
+    db,
+    test_org,
+    monkeypatch,
+) -> None:
+    from app.db.models import TwilioRoute
+    from app.services import messaging_dispatch_service
+
+    delivery = _ready_claim(db, test_org, monkeypatch)
+    route = db.query(TwilioRoute).filter(TwilioRoute.id == delivery.route_id).one()
+    route.capability_evidence = {
+        **route.capability_evidence,
+        "provider": {
+            **route.capability_evidence["provider"],
+            "account_active": False,
+        },
+    }
+    db.commit()
+    _allow_sending_hours(monkeypatch)
+    monkeypatch.setattr(
+        messaging_dispatch_service.twilio_transport,
+        "send_message",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("An inactive Twilio account must not reach provider I/O")
+        ),
+    )
+
+    result = messaging_dispatch_service.dispatch_claimed_delivery(
+        db,
+        organization_id=test_org.id,
+        delivery_id=delivery.id,
+        lease_token=delivery.lease_token,
+        lease_generation=delivery.lease_generation,
+        now=datetime(2026, 7, 31, 19, 0, tzinfo=UTC),
+    )
+
+    assert result == "deferred_route_not_ready"
+
+
 def test_successful_dispatch_uses_exact_route_and_completes_fenced_attempt(
     db,
     test_org,
@@ -100,7 +207,7 @@ def test_successful_dispatch_uses_exact_route_and_completes_fenced_attempt(
 ) -> None:
     from app.services import messaging_dispatch_service, twilio_transport
 
-    delivery = _ready_claim(db, test_org)
+    delivery = _ready_claim(db, test_org, monkeypatch)
     _allow_sending_hours(monkeypatch)
     calls: list[dict] = []
 
@@ -160,7 +267,7 @@ def test_mms_dispatch_uses_existing_short_lived_signed_media_contract(
     )
     db.add(asset)
     db.commit()
-    delivery = _ready_claim(db, test_org, media_asset_ids=[asset.id])
+    delivery = _ready_claim(db, test_org, monkeypatch, media_asset_ids=[asset.id])
     _allow_sending_hours(monkeypatch)
     calls: list[dict] = []
 
@@ -220,6 +327,7 @@ def test_dispatch_rechecks_phi_gate_immediately_before_provider_io(
     delivery = _ready_claim(
         db,
         test_org,
+        monkeypatch,
         media_asset_ids=[asset.id],
         phi_enabled=True,
     )
@@ -264,7 +372,7 @@ def test_ambiguous_provider_outcome_requires_reconciliation_and_never_retries(
     from app.db.models.messaging_delivery import MessageReconciliationCase
     from app.services import messaging_dispatch_service, twilio_transport
 
-    delivery = _ready_claim(db, test_org)
+    delivery = _ready_claim(db, test_org, monkeypatch)
     _allow_sending_hours(monkeypatch)
     calls = 0
 
@@ -301,7 +409,7 @@ def test_stop_after_claim_cancels_before_provider_io(db, test_org, monkeypatch) 
         twilio_transport,
     )
 
-    delivery = _ready_claim(db, test_org)
+    delivery = _ready_claim(db, test_org, monkeypatch)
     _allow_sending_hours(monkeypatch)
     messaging_consent_service.record_global_stop(
         db,
@@ -344,7 +452,7 @@ def test_21610_adds_local_global_suppression(db, test_org, monkeypatch) -> None:
     from app.db.models import MessagingGlobalSuppression
     from app.services import messaging_dispatch_service, twilio_transport
 
-    delivery = _ready_claim(db, test_org)
+    delivery = _ready_claim(db, test_org, monkeypatch)
     _allow_sending_hours(monkeypatch)
     monkeypatch.setattr(
         messaging_dispatch_service.twilio_transport,
@@ -380,7 +488,7 @@ def test_ambiguous_timezone_defers_without_provider_io(db, test_org, monkeypatch
     from app.services import messaging_dispatch_service
     from app.services.messaging_sending_hours import RecipientTimezone
 
-    delivery = _ready_claim(db, test_org)
+    delivery = _ready_claim(db, test_org, monkeypatch)
     monkeypatch.setattr(
         messaging_dispatch_service.messaging_sending_hours,
         "resolve_recipient_timezone",
