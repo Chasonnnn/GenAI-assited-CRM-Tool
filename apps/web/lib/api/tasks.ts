@@ -31,7 +31,11 @@ export interface TaskListItem {
     task_type: TaskType;
     surrogate_id: string | null;
     intended_parent_id: string | null;
+    donor_id: string | null;
     surrogate_number: string | null;
+    donor_number: string | null;
+    donor_type: 'egg' | 'sperm' | null;
+    donor_name: string | null;
     owner_type: 'user' | 'queue';
     owner_id: string;
     owner_name: string | null;
@@ -80,6 +84,7 @@ export interface TaskListParams {
     owner_id?: string;
     surrogate_id?: string;
     intended_parent_id?: string;
+    donor_id?: string;
     pipeline_id?: string;
     is_completed?: boolean;
     task_type?: TaskType;
@@ -96,8 +101,9 @@ export interface TaskCreatePayload {
     description?: string;
     task_type?: TaskType;
     match_id?: string;
-    surrogate_id?: string;
-    intended_parent_id?: string;
+    surrogate_id?: string | null;
+    intended_parent_id?: string | null;
+    donor_id?: string | null;
     owner_type?: 'user' | 'queue';
     owner_id?: string;
     due_date?: string;
@@ -105,8 +111,20 @@ export interface TaskCreatePayload {
     duration_minutes?: number;
 }
 
-// Update task payload
-export type TaskUpdatePayload = Partial<TaskCreatePayload>;
+// Update task payload. Explicit nulls clear optional values and linked records.
+export interface TaskUpdatePayload {
+    title?: string | null;
+    description?: string | null;
+    task_type?: TaskType | null;
+    surrogate_id?: string | null;
+    intended_parent_id?: string | null;
+    donor_id?: string | null;
+    owner_type?: 'user' | 'queue' | null;
+    owner_id?: string | null;
+    due_date?: string | null;
+    due_time?: string | null;
+    duration_minutes?: number | null;
+}
 
 /**
  * List tasks with filters and pagination.
@@ -120,6 +138,7 @@ export function getTasks(params: TaskListParams = {}): Promise<TaskListResponse>
     if (params.owner_id) searchParams.set('owner_id', params.owner_id);
     if (params.surrogate_id) searchParams.set('surrogate_id', params.surrogate_id);
     if (params.intended_parent_id) searchParams.set('intended_parent_id', params.intended_parent_id);
+    if (params.donor_id) searchParams.set('donor_id', params.donor_id);
     if (params.pipeline_id) searchParams.set('pipeline_id', params.pipeline_id);
     if (params.is_completed !== undefined) searchParams.set('is_completed', String(params.is_completed));
     if (params.task_type) searchParams.set('task_type', params.task_type);

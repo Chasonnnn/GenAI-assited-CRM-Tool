@@ -16,7 +16,10 @@ import {
 } from '@/lib/hooks/use-appointments'
 import {
     useAttachmentDownloadUrl,
+    useDeleteDonorAttachment,
     useDownloadAttachment,
+    useUploadDonorAttachment,
+    useUploadDonorProfilePhoto,
 } from '@/lib/hooks/use-attachments'
 import { useCancelCampaign, useSendCampaign } from '@/lib/hooks/use-campaigns'
 import { complianceKeys, useExecutePurge } from '@/lib/hooks/use-compliance'
@@ -38,6 +41,7 @@ import {
     useRotateFormIntakeLink,
     useSendFormIntakeLink,
     useUpdateSubmissionAnswers,
+    useUploadFormLogo,
     useUploadSubmissionFile,
 } from '@/lib/hooks/use-forms'
 import {
@@ -57,6 +61,11 @@ import {
 } from '@/lib/hooks/use-import'
 import { useCreateBulkTasks } from '@/lib/hooks/use-schedule-parser'
 import { surrogateKeys } from '@/lib/hooks/use-surrogates'
+import {
+    donorKeys,
+    useCreateDonorNote,
+    useDeleteDonorNote,
+} from '@/lib/hooks/use-donors'
 import { taskKeys, useCreateTaskBatch } from '@/lib/hooks/use-tasks'
 import { useCreateZoomMeeting, useSendZoomInvite, useSyncGoogleCalendarNow } from '@/lib/hooks/use-user-integrations'
 import { useDeleteWorkflow, useDuplicateWorkflow, useToggleWorkflow, useUpdateWorkflow } from '@/lib/hooks/use-workflows'
@@ -158,6 +167,37 @@ describe('mutation invalidation contracts', () => {
             queryKey: ['audit', 'list'],
         })
     })
+
+    it.each([
+        [useUploadDonorAttachment, { donorId: 'donor-1', file: new File(['x'], 'file.pdf') }],
+        [useUploadDonorProfilePhoto, { donorId: 'donor-1', file: new File(['x'], 'photo.jpg') }],
+        [useDeleteDonorAttachment, { donorId: 'donor-1', attachmentId: 'attachment-1' }],
+    ])('refreshes donor detail and attachment queries after donor attachment changes', (useHook, variables) => {
+        useHook()
+        capturedOptions?.onSuccess?.({}, variables)
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['donor-attachments', 'donor-1'],
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: donorKeys.detail('donor-1'),
+        })
+    })
+
+    it.each([useCreateDonorNote, useDeleteDonorNote])(
+        'refreshes donor notes and detail after donor note mutations',
+        (useHook) => {
+            useHook()
+            capturedOptions?.onSuccess?.({}, { donorId: 'donor-1', noteId: 'note-1' })
+
+            expect(invalidateQueries).toHaveBeenCalledWith({
+                queryKey: donorKeys.notes('donor-1'),
+            })
+            expect(invalidateQueries).toHaveBeenCalledWith({
+                queryKey: donorKeys.detail('donor-1'),
+            })
+        },
+    )
 
     it('refreshes the manage appointment cache after self-service reschedule', () => {
         useRescheduleByManageToken()
@@ -717,6 +757,15 @@ describe('mutation invalidation contracts', () => {
         expect(invalidateQueries).toHaveBeenCalledWith({
             queryKey: formKeys.submissionLists('form-1'),
             exact: false,
+        })
+    })
+
+    it('refreshes form lists after a form logo is uploaded', () => {
+        useUploadFormLogo()
+        capturedOptions?.onSuccess?.({}, new File(["logo"], "logo.png", { type: "image/png" }))
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: formKeys.lists(),
         })
     })
 

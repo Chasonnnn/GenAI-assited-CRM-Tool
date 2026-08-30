@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "@/components/app-link"
+import { TaskRelatedRecordLinks } from "@/components/tasks/TaskRelatedRecordLinks"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { ApprovalTaskActions } from "@/components/tasks/ApprovalTaskActions"
@@ -259,14 +260,7 @@ export function TasksApprovalsSection({
                                             </p>
                                         )}
                                         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                            {approval.surrogate_id && (
-                                                <Link
-                                                    href={`/surrogates/${approval.surrogate_id}`}
-                                                    className="hover:text-foreground hover:underline"
-                                                >
-                                                    Surrogate #{approval.surrogate_number}
-                                                </Link>
-                                            )}
+                                            <TaskRelatedRecordLinks task={approval} />
                                             {approval.due_at && (
                                                 <ApprovalDueTime dueAt={approval.due_at} />
                                             )}

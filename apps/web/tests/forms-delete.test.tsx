@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import FormsListPage from "../app/(app)/automation/forms/page"
 
 const mockPush = vi.fn()
+const mockCreateForm = vi.fn()
 const mockDeleteForm = vi.fn()
 const mockDeleteTemplate = vi.fn()
 let mockForms: Array<{
@@ -11,6 +12,7 @@ let mockForms: Array<{
     status: string
     created_at: string
     updated_at: string
+    lead_kind?: "surrogate" | "egg_donor" | "sperm_donor"
 }> = []
 let mockTemplates: Array<{
     id: string
@@ -36,7 +38,7 @@ vi.mock("@/lib/hooks/use-forms", () => ({
         data: mockForms,
         isLoading: false,
     }),
-    useCreateForm: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useCreateForm: () => ({ mutateAsync: mockCreateForm, isPending: false }),
     useDeleteForm: () => ({ mutateAsync: mockDeleteForm, isPending: false }),
     useDeleteFormTemplate: () => ({ mutateAsync: mockDeleteTemplate, isPending: false }),
     useFormTemplates: () => ({ data: mockTemplates, isLoading: false }),
@@ -47,6 +49,7 @@ describe("FormsListPage delete", () => {
     beforeEach(() => {
         vi.useRealTimers()
         mockPush.mockReset()
+        mockCreateForm.mockReset()
         mockDeleteForm.mockReset()
         mockDeleteTemplate.mockReset()
         mockForms = [
@@ -124,5 +127,41 @@ describe("FormsListPage delete", () => {
 
         expect(screen.getByText(`Saved ${expectedTime}`)).toBeInTheDocument()
         expect(screen.queryByText(/Updated -/i)).not.toBeInTheDocument()
+    })
+
+    it("creates and labels an egg donor form", async () => {
+        mockForms = [
+            {
+                id: "form-donor",
+                name: "Egg Donor Application",
+                status: "draft",
+                lead_kind: "egg_donor",
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            },
+        ]
+        mockCreateForm.mockResolvedValue({ id: "created-donor" })
+
+        render(<FormsListPage />)
+
+        expect(screen.getByText("Egg Donor")).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Create Form" }))
+        fireEvent.change(screen.getByLabelText("Form Name *"), {
+            target: { value: "New Egg Donor Form" },
+        })
+        const leadTypeSelect = screen.getByRole("combobox", { name: "Lead Type" })
+        fireEvent.mouseDown(leadTypeSelect)
+        const eggDonorOption = await screen.findByRole("option", { name: "Egg Donor" })
+        fireEvent.mouseMove(eggDonorOption)
+        fireEvent.click(eggDonorOption)
+        fireEvent.click(screen.getAllByRole("button", { name: "Create Form" }).at(-1)!)
+
+        await waitFor(() =>
+            expect(mockCreateForm).toHaveBeenCalledWith({
+                name: "New Egg Donor Form",
+                lead_kind: "egg_donor",
+            }),
+        )
+        expect(mockPush).toHaveBeenCalledWith("/automation/forms/created-donor")
     })
 })

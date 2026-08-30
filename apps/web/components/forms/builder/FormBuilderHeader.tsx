@@ -21,6 +21,7 @@ type FormBuilderHeaderProps = {
     isSaving: boolean
     autoSaveLabel: string | null
     autoSaveTone?: "default" | "error"
+    contextBadgeLabel?: string
     onBack: () => void
     onFormNameChange: (value: string) => void
     onSave: () => void
@@ -37,6 +38,7 @@ export function FormBuilderHeader({
     isSaving,
     autoSaveLabel,
     autoSaveTone = "default",
+    contextBadgeLabel,
     onBack,
     onFormNameChange,
     onSave,
@@ -65,6 +67,11 @@ export function FormBuilderHeader({
                 <Badge variant={isPublished ? "default" : "secondary"} className="h-5 rounded-full px-2 text-[11px]">
                     {isPublished ? "Published" : "Draft"}
                 </Badge>
+                {contextBadgeLabel ? (
+                    <Badge variant="outline" className="h-5 rounded-full px-2 text-[11px]">
+                        {contextBadgeLabel}
+                    </Badge>
+                ) : null}
             </div>
 
             <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">

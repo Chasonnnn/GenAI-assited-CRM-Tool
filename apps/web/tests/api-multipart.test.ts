@@ -86,6 +86,9 @@ describe('multipart requests', () => {
             { full_name: 'Hosted Applicant' },
             [identityFile, insuranceFile],
             ['identity_upload', 'insurance_upload'],
+            undefined,
+            undefined,
+            'version-1',
         )
 
         const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit
@@ -98,5 +101,6 @@ describe('multipart requests', () => {
         expect(formData.get('file_field_keys')).toBe(
             JSON.stringify(['identity_upload', 'insurance_upload']),
         )
+        expect(formData.get('published_version_id')).toBe('version-1')
     })
 })

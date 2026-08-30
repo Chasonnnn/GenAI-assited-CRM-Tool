@@ -21,6 +21,7 @@ import {
     addSuppression,
     removeSuppression,
     type CampaignCreate,
+    type CampaignRecipientType,
     type CampaignUpdate,
     type FilterCriteria,
 } from "@/lib/api/campaigns";
@@ -107,7 +108,7 @@ export function usePreviewFilters() {
             limit,
         }: {
             channel: "email" | "messaging";
-            recipientType: "case" | "intended_parent";
+            recipientType: CampaignRecipientType;
             filterCriteria: FilterCriteria;
             includeUnsubscribed: boolean;
             limit?: number;

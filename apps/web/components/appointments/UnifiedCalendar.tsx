@@ -13,6 +13,7 @@
 import { useRef, useState } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { TaskRelatedRecordLinks } from "@/components/tasks/TaskRelatedRecordLinks"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -50,6 +51,7 @@ import {
     LinkIcon,
     XIcon,
 } from "lucide-react"
+import type { UnifiedCalendarTaskFilter } from "@/lib/hooks/use-unified-calendar-data"
 import { useUpdateAppointmentLink } from "@/lib/hooks/use-appointments"
 import { useUnifiedCalendarData } from "@/lib/hooks/use-unified-calendar-data"
 import { useAuth } from "@/lib/auth-context"
@@ -122,7 +124,7 @@ type ViewType = "month" | "week" | "day"
 // Task Item Component
 // =============================================================================
 
-function TaskItem({
+export function TaskItem({
     task,
     compact = false,
     onClick,
@@ -145,51 +147,48 @@ function TaskItem({
 
         if (clickable) {
             return (
-                <Button unstyled
-                    type="button"
-                    onClick={handleTaskClick}
-                    className="flex w-full items-center gap-1.5 rounded-md border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-left text-[11px] font-medium text-purple-950 transition-opacity hover:opacity-90 dark:text-purple-100"
-                >
-                    {compactContent}
-                </Button>
+                <div className="w-full rounded-md border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-[11px] text-purple-950 dark:text-purple-100">
+                    <Button unstyled type="button" onClick={handleTaskClick} className="flex w-full items-center gap-1.5 text-left font-medium transition-opacity hover:opacity-90">
+                        {compactContent}
+                    </Button>
+                    <TaskRelatedRecordLinks task={task} className="text-[10px] text-muted-foreground" />
+                </div>
             )
         }
 
         return (
-            <div className="flex w-full items-center gap-1.5 rounded-md border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-left text-[11px] font-medium text-purple-950 dark:text-purple-100">
-                {compactContent}
+            <div className="w-full rounded-md border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-left text-[11px] text-purple-950 dark:text-purple-100">
+                <div className="flex items-center gap-1.5 font-medium">{compactContent}</div>
+                <TaskRelatedRecordLinks task={task} className="text-[10px] text-muted-foreground" />
             </div>
         )
     }
 
     const fullContent = (
-        <>
+        <div className="min-w-0 flex-1">
             <p className="font-medium text-sm truncate flex items-center gap-1">
                 <CheckSquareIcon className="size-3" />
                 {task.title}
             </p>
             {time && <p className="text-xs text-muted-foreground">{time}</p>}
-            {task.surrogate_number && (
-                <p className="text-xs text-muted-foreground">Surrogate #{task.surrogate_number}</p>
-            )}
-        </>
+        </div>
     )
 
     if (clickable) {
         return (
-            <Button unstyled
-                type="button"
-                onClick={handleTaskClick}
-                className="w-full rounded-lg border border-purple-500/20 bg-muted/50 p-2 text-left shadow-[inset_3px_0_0_rgb(168_85_247)] hover:bg-muted"
-            >
-                {fullContent}
-            </Button>
+            <div className="w-full rounded-lg border border-purple-500/20 bg-muted/50 p-2 text-left shadow-[inset_3px_0_0_rgb(168_85_247)] hover:bg-muted">
+                <Button unstyled type="button" onClick={handleTaskClick} className="w-full text-left">
+                    {fullContent}
+                </Button>
+                <TaskRelatedRecordLinks task={task} className="text-xs text-muted-foreground" />
+            </div>
         )
     }
 
     return (
         <div className="w-full rounded-lg border border-purple-500/20 bg-muted/50 p-2 text-left shadow-[inset_3px_0_0_rgb(168_85_247)]">
             {fullContent}
+            <TaskRelatedRecordLinks task={task} className="text-xs text-muted-foreground" />
         </div>
     )
 }
@@ -1742,7 +1741,7 @@ export function UnifiedCalendar({
     includeGoogleEvents = true,
     onTaskClick,
 }: {
-    taskFilter?: { my_tasks?: boolean; surrogate_id?: string }
+    taskFilter?: UnifiedCalendarTaskFilter
     includeAppointments?: boolean
     includeGoogleEvents?: boolean
     onTaskClick?: (task: TaskListItem) => void

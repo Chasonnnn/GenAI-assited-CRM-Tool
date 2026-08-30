@@ -13,6 +13,8 @@ import type { TaskListItem } from "@/lib/api/tasks"
 export type UnifiedCalendarTaskFilter = {
     my_tasks?: boolean
     surrogate_id?: string
+    intended_parent_id?: string
+    donor_id?: string
 }
 
 export type UnifiedCalendarDateRange = {
@@ -77,6 +79,10 @@ export function useUnifiedCalendarData({
         exclude_approvals: true,
         ...(taskFilter?.my_tasks ? { my_tasks: true } : {}),
         ...(taskFilter?.surrogate_id ? { surrogate_id: taskFilter.surrogate_id } : {}),
+        ...(taskFilter?.intended_parent_id
+            ? { intended_parent_id: taskFilter.intended_parent_id }
+            : {}),
+        ...(taskFilter?.donor_id ? { donor_id: taskFilter.donor_id } : {}),
     }
     const { data: tasksData, isLoading: tasksLoading } = useTasks(taskParams)
     const tasks = tasksData?.items || []

@@ -161,7 +161,7 @@ export function useBulkCompleteTasks() {
     return useMutation({
         mutationFn: tasksApi.bulkCompleteTasks,
         onSuccess: () => {
-            // Invalidate all task list queries (covers both surrogate_id and intended_parent_id)
+            // Invalidate every task list, including related-record filtered lists.
             void queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
             // Also invalidate dashboard stats since pending_tasks count changes
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });

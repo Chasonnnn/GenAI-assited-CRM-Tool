@@ -54,6 +54,7 @@ export function AutomationFormBuilderScreen({
                 isSaving={controller.state.isSaving}
                 autoSaveLabel={controller.autoSaveLabel}
                 autoSaveTone={controller.state.autoSaveStatus === "error" ? "error" : "default"}
+                contextBadgeLabel={controller.formLeadKindLabel}
                 onBack={controller.onBack}
                 onFormNameChange={controller.onFormNameChange}
                 onSave={controller.handleSave}
@@ -75,6 +76,15 @@ export function AutomationFormBuilderScreen({
                     },
                 ]}
             />
+
+            {controller.publishValidationMessage ? (
+                <div
+                    role="alert"
+                    className="border-b border-destructive/30 bg-destructive/10 px-6 py-2 text-sm text-destructive"
+                >
+                    {controller.publishValidationMessage}
+                </div>
+            ) : null}
 
             {controller.state.workspaceTab === "edit" ? (
                 <FormBuilderWorkspace {...controller.workspaceProps} />

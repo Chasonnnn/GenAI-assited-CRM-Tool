@@ -25,6 +25,13 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import type { TaskRecurrence } from "@/lib/utils/task-recurrence"
+import { TaskRelatedRecordPicker } from "@/components/tasks/TaskRelatedRecordPicker"
+import {
+    getTaskRelatedRecordSelection,
+    toTaskRelatedRecordPayload,
+    type TaskRelatedRecordFields,
+    type TaskRelatedRecordSelection,
+} from "@/lib/task-related-record"
 
 export interface TaskFormData {
     title: string
@@ -34,6 +41,9 @@ export interface TaskFormData {
     due_time?: string
     recurrence: TaskRecurrence
     repeat_until?: string
+    surrogate_id: string | null
+    intended_parent_id: string | null
+    donor_id: string | null
 }
 
 interface AddTaskDialogProps {
@@ -41,6 +51,7 @@ interface AddTaskDialogProps {
     onOpenChange: (open: boolean) => void
     onSubmit: (data: TaskFormData) => Promise<void>
     isPending: boolean
+    initialRelatedRecord?: TaskRelatedRecordFields
 }
 
 const TASK_TYPES = [
@@ -63,6 +74,7 @@ type TaskDialogFormState = {
     recurrence: TaskRecurrence
     repeatUntil: string
     error: string
+    relatedRecord: TaskRelatedRecordSelection
 }
 
 type TaskDialogFormTextField =
@@ -77,9 +89,12 @@ type TaskDialogFormAction =
     | { type: "taskType"; value: TaskFormData["task_type"] }
     | { type: "recurrence"; value: TaskRecurrence }
     | { type: "validationError"; value: string }
-    | { type: "reset" }
+    | { type: "relatedRecord"; value: TaskRelatedRecordSelection }
+    | { type: "reset"; relatedRecord: TaskRelatedRecordSelection }
 
-function createInitialTaskDialogFormState(): TaskDialogFormState {
+function createInitialTaskDialogFormState(
+    initialRelatedRecord?: TaskRelatedRecordFields,
+): TaskDialogFormState {
     return {
         title: "",
         description: "",
@@ -89,6 +104,7 @@ function createInitialTaskDialogFormState(): TaskDialogFormState {
         recurrence: "none",
         repeatUntil: "",
         error: "",
+        relatedRecord: getTaskRelatedRecordSelection(initialRelatedRecord ?? {}),
     }
 }
 
@@ -105,8 +121,12 @@ function taskDialogFormReducer(
             return { ...state, recurrence: action.value }
         case "validationError":
             return { ...state, error: action.value }
+        case "relatedRecord":
+            return { ...state, relatedRecord: action.value }
         case "reset":
-            return createInitialTaskDialogFormState()
+            return createInitialTaskDialogFormState(
+                toTaskRelatedRecordPayload(action.relatedRecord),
+            )
         default:
             return state
     }
@@ -117,13 +137,16 @@ export function AddTaskDialog({
     onOpenChange,
     onSubmit,
     isPending,
+    initialRelatedRecord,
 }: AddTaskDialogProps) {
     const [formState, dispatchForm] = useReducer(
         taskDialogFormReducer,
-        createInitialTaskDialogFormState()
+        initialRelatedRecord,
+        createInitialTaskDialogFormState,
     )
-    const { title, description, taskType, dueDate, dueTime, recurrence, repeatUntil, error } =
+    const { title, description, taskType, dueDate, dueTime, recurrence, repeatUntil, error, relatedRecord } =
         formState
+    const initialRelatedRecordSelection = getTaskRelatedRecordSelection(initialRelatedRecord ?? {})
 
     const handleSubmit = async () => {
         if (!title.trim()) return
@@ -162,15 +185,16 @@ export function AddTaskDialog({
             ...(dueDate ? { due_date: dueDate } : {}),
             ...(dueTime ? { due_time: dueTime } : {}),
             ...(repeatUntil ? { repeat_until: repeatUntil } : {}),
+            ...toTaskRelatedRecordPayload(relatedRecord),
         })
 
-        dispatchForm({ type: "reset" })
+        dispatchForm({ type: "reset", relatedRecord: initialRelatedRecordSelection })
         onOpenChange(false)
     }
 
     const handleClose = (isOpen: boolean) => {
         if (!isOpen) {
-            dispatchForm({ type: "reset" })
+            dispatchForm({ type: "reset", relatedRecord: initialRelatedRecordSelection })
         }
         onOpenChange(isOpen)
     }
@@ -297,6 +321,12 @@ export function AddTaskDialog({
                             </SelectContent>
                         </Select>
                     </div>
+
+                    <TaskRelatedRecordPicker
+                        value={relatedRecord}
+                        {...(initialRelatedRecord ? { currentRecord: initialRelatedRecord } : {})}
+                        onValueChange={(value) => dispatchForm({ type: "relatedRecord", value })}
+                    />
 
                     {recurrence !== "none" && (
                         <div className="space-y-2">

@@ -1,6 +1,18 @@
 import { describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen } from "@testing-library/react"
 
+const { getSubmissionFileDownloadUrlMock } = vi.hoisted(() => ({
+    getSubmissionFileDownloadUrlMock: vi.fn(),
+}))
+
+vi.mock("@/lib/api/forms", async () => {
+    const actual = await vi.importActual<typeof import("@/lib/api/forms")>("@/lib/api/forms")
+    return {
+        ...actual,
+        getSubmissionFileDownloadUrl: getSubmissionFileDownloadUrlMock,
+    }
+})
+
 import { AutomationFormSubmissionsPanel } from "@/components/forms/builder/AutomationFormSubmissionsPanel"
 import type { FormSubmissionRead, MatchCandidateRead } from "@/lib/api/forms"
 
@@ -9,6 +21,8 @@ function makeSubmission(overrides: Partial<FormSubmissionRead>): FormSubmissionR
         id: "submission-1",
         form_id: "form-1",
         surrogate_id: null,
+        donor_id: null,
+        lead_kind: "surrogate",
         status: "pending_review",
         submitted_at: "2026-07-05T15:00:00Z",
         reviewed_at: null,
@@ -178,5 +192,223 @@ describe("AutomationFormSubmissionsPanel", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Link Candidate" }))
         expect(onResolveSubmissionToSurrogate).toHaveBeenCalledWith("sub-ambiguous", "sur-candidate")
+    })
+
+    it("routes donor review and retry actions through intake-lead behavior", () => {
+        const donorSubmission = makeSubmission({
+            id: "sub-donor-review",
+            lead_kind: "sperm_donor",
+            match_status: "ambiguous_review",
+        })
+        const onResolveSubmissionToLead = vi.fn()
+        const onRetrySubmissionMatch = vi.fn()
+
+        render(
+            <AutomationFormSubmissionsPanel
+                formId="form-1"
+                pendingSubmissionHistory={[donorSubmission]}
+                processedSubmissionHistory={[]}
+                ambiguousSubmissions={[donorSubmission]}
+                leadQueueSubmissions={[]}
+                visibleSubmissionHistory={[donorSubmission]}
+                submissionHistoryFilter="all"
+                selectedQueueSubmissionId={null}
+                selectedMatchCandidates={[]}
+                isSubmissionHistoryLoading={false}
+                isMatchCandidatesLoading={false}
+                retrySubmissionMatchPending={false}
+                resolveSubmissionMatchPending={false}
+                promoteIntakeLeadPending={false}
+                manualSurrogateId=""
+                resolveReviewNotes=""
+                readAnswerValue={(submission, keys) => {
+                    const answers = submission.answers as Record<string, unknown>
+                    const value = keys.map((key) => answers[key]).find(Boolean)
+                    return typeof value === "string" ? value : "—"
+                }}
+                formatSubmissionDateTime={(isoString) => isoString}
+                submissionOutcomeLabel={() => "Needs Review"}
+                submissionOutcomeBadgeClass={() => "outcome-class"}
+                submissionReviewLabel={() => "Pending Review"}
+                submissionReviewBadgeClass={() => "review-class"}
+                onOpenApprovalQueue={vi.fn()}
+                onSubmissionHistoryFilterChange={vi.fn()}
+                onSelectQueueSubmission={vi.fn()}
+                onManualSurrogateIdChange={vi.fn()}
+                onResolveReviewNotesChange={vi.fn()}
+                onLinkByManualSurrogateId={vi.fn()}
+                onResolveSubmissionToSurrogate={vi.fn()}
+                onResolveSubmissionToLead={onResolveSubmissionToLead}
+                onRetrySubmissionMatch={onRetrySubmissionMatch}
+                onPromoteLeadFromSubmission={vi.fn()}
+            />,
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "Create Intake Lead" }))
+        expect(onResolveSubmissionToLead).toHaveBeenCalledWith("sub-donor-review")
+
+        fireEvent.click(screen.getByRole("button", { name: "Reprocess" }))
+        expect(onRetrySubmissionMatch).toHaveBeenCalledWith(
+            donorSubmission,
+            {
+                unlinkSurrogate: false,
+                rerunAutoMatch: true,
+                createIntakeLeadIfUnmatched: true,
+            },
+            "Submission reprocessed",
+        )
+        expect(screen.queryByRole("button", { name: "Review Candidates" })).not.toBeInTheDocument()
+    })
+
+    it("labels donor review records, previews only a clean image, and links the converted donor", async () => {
+        getSubmissionFileDownloadUrlMock.mockResolvedValue({
+            download_url: "https://files.example.test/profile.jpg",
+            filename: "profile.jpg",
+        })
+        const donorSubmission = makeSubmission({
+            id: "sub-donor",
+            lead_kind: "egg_donor",
+            donor_id: "donor-1",
+            donor_number: "D10001",
+            surrogate_id: null,
+            match_status: "linked",
+            answers: {
+                full_name: "Alex Donor",
+                email: "alex@example.com",
+                phone: "555-0101",
+                state: "New York",
+                education: "Bachelor's degree",
+            },
+            files: [
+                {
+                    id: "photo-1",
+                    filename: "profile.jpg",
+                    content_type: "image/jpeg",
+                    file_size: 1200,
+                    quarantined: false,
+                    scan_status: "clean",
+                    field_key: "profile_photo",
+                },
+                {
+                    id: "photo-pending",
+                    filename: "pending.jpg",
+                    content_type: "image/jpeg",
+                    file_size: 1300,
+                    quarantined: true,
+                    scan_status: "pending",
+                    field_key: "profile_photo",
+                },
+            ],
+        })
+
+        render(
+            <AutomationFormSubmissionsPanel
+                formId="form-1"
+                pendingSubmissionHistory={[]}
+                processedSubmissionHistory={[donorSubmission]}
+                ambiguousSubmissions={[]}
+                leadQueueSubmissions={[]}
+                visibleSubmissionHistory={[donorSubmission]}
+                submissionHistoryFilter="all"
+                selectedQueueSubmissionId={null}
+                selectedMatchCandidates={[]}
+                isSubmissionHistoryLoading={false}
+                isMatchCandidatesLoading={false}
+                retrySubmissionMatchPending={false}
+                resolveSubmissionMatchPending={false}
+                promoteIntakeLeadPending={false}
+                manualSurrogateId=""
+                resolveReviewNotes=""
+                readAnswerValue={(submission, keys) => {
+                    const answers = submission.answers as Record<string, unknown>
+                    const value = keys.map((key) => answers[key]).find(Boolean)
+                    return typeof value === "string" ? value : "—"
+                }}
+                formatSubmissionDateTime={(isoString) => isoString}
+                submissionOutcomeLabel={() => "Matched"}
+                submissionOutcomeBadgeClass={() => "outcome-class"}
+                submissionReviewLabel={() => "Pending Review"}
+                submissionReviewBadgeClass={() => "review-class"}
+                onOpenApprovalQueue={vi.fn()}
+                onSubmissionHistoryFilterChange={vi.fn()}
+                onSelectQueueSubmission={vi.fn()}
+                onManualSurrogateIdChange={vi.fn()}
+                onResolveReviewNotesChange={vi.fn()}
+                onLinkByManualSurrogateId={vi.fn()}
+                onResolveSubmissionToSurrogate={vi.fn()}
+                onResolveSubmissionToLead={vi.fn()}
+                onRetrySubmissionMatch={vi.fn()}
+                onPromoteLeadFromSubmission={vi.fn()}
+            />,
+        )
+
+        expect(screen.getByText("Egg Donor")).toBeInTheDocument()
+        expect(screen.getByText("Bachelor's degree")).toBeInTheDocument()
+        expect(screen.getByText("New York")).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Open donor D10001" })).toHaveAttribute(
+            "href",
+            "/donors/donor-1",
+        )
+        expect(screen.getByText("D10001")).toBeInTheDocument()
+        expect(await screen.findByRole("img", { name: "Egg donor profile photo" })).toHaveAttribute(
+            "src",
+            "https://files.example.test/profile.jpg",
+        )
+        expect(getSubmissionFileDownloadUrlMock).toHaveBeenCalledTimes(1)
+        expect(getSubmissionFileDownloadUrlMock).toHaveBeenCalledWith("sub-donor", "photo-1")
+        expect(screen.queryByRole("button", { name: "Re-run Auto-Match" })).not.toBeInTheDocument()
+    })
+
+    it("never exposes a raw donor UUID when the display number is unavailable", () => {
+        const donorSubmission = makeSubmission({
+            id: "sub-donor-missing",
+            lead_kind: "sperm_donor",
+            donor_id: "donor-internal-uuid",
+            donor_number: null,
+            surrogate_id: null,
+            match_status: "linked",
+            files: [],
+        })
+
+        render(
+            <AutomationFormSubmissionsPanel
+                formId="form-1"
+                pendingSubmissionHistory={[]}
+                processedSubmissionHistory={[donorSubmission]}
+                ambiguousSubmissions={[]}
+                leadQueueSubmissions={[]}
+                visibleSubmissionHistory={[donorSubmission]}
+                submissionHistoryFilter="all"
+                selectedQueueSubmissionId={null}
+                selectedMatchCandidates={[]}
+                isSubmissionHistoryLoading={false}
+                isMatchCandidatesLoading={false}
+                retrySubmissionMatchPending={false}
+                resolveSubmissionMatchPending={false}
+                promoteIntakeLeadPending={false}
+                manualSurrogateId=""
+                resolveReviewNotes=""
+                readAnswerValue={() => "—"}
+                formatSubmissionDateTime={(isoString) => isoString}
+                submissionOutcomeLabel={() => "Matched"}
+                submissionOutcomeBadgeClass={() => "outcome-class"}
+                submissionReviewLabel={() => "Pending Review"}
+                submissionReviewBadgeClass={() => "review-class"}
+                onOpenApprovalQueue={vi.fn()}
+                onSubmissionHistoryFilterChange={vi.fn()}
+                onSelectQueueSubmission={vi.fn()}
+                onManualSurrogateIdChange={vi.fn()}
+                onResolveReviewNotesChange={vi.fn()}
+                onLinkByManualSurrogateId={vi.fn()}
+                onResolveSubmissionToSurrogate={vi.fn()}
+                onResolveSubmissionToLead={vi.fn()}
+                onRetrySubmissionMatch={vi.fn()}
+                onPromoteLeadFromSubmission={vi.fn()}
+            />,
+        )
+
+        expect(screen.getByText("Donor record unavailable")).toBeInTheDocument()
+        expect(screen.queryByText("donor-internal-uuid")).not.toBeInTheDocument()
+        expect(screen.queryByRole("link", { name: /open donor/i })).not.toBeInTheDocument()
     })
 })

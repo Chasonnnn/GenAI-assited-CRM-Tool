@@ -14,11 +14,15 @@ const mockReplace = vi.fn()
 const mockUseForm = vi.fn()
 const mockFormSubmissions = vi.fn()
 const mockCreateForm = vi.fn()
+const mockUpdateForm = vi.fn()
 const mockSetFormMappings = vi.fn()
 const mockPublishForm = vi.fn()
+const mockPromoteIntakeLead = vi.fn()
 const mockRefetchIntakeLinks = vi.fn()
-const { toastError } = vi.hoisted(() => ({
+const { toastError, toastSuccess, useFormMappingOptionsMock } = vi.hoisted(() => ({
     toastError: vi.fn(),
+    toastSuccess: vi.fn(),
+    useFormMappingOptionsMock: vi.fn(),
 }))
 const navigationState = vi.hoisted(() => ({
     formId: "new",
@@ -45,7 +49,7 @@ vi.mock("qrcode.react", () => ({
 
 vi.mock("@/components/ui/toast", () => ({
     toast: {
-        success: vi.fn(),
+        success: toastSuccess,
         error: toastError,
     },
 }))
@@ -59,7 +63,7 @@ vi.mock("@/lib/auth-context", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-form-mapping-options", () => ({
-    useFormMappingOptions: () => ({ data: [] }),
+    useFormMappingOptions: (leadKind: string) => useFormMappingOptionsMock(leadKind),
 }))
 
 vi.mock("@/lib/hooks/use-email-templates", () => ({
@@ -84,10 +88,10 @@ vi.mock("@/lib/hooks/use-forms", () => ({
     useSetFormMappings: () => ({ mutateAsync: mockSetFormMappings, isPending: false }),
     useSetDefaultSurrogateApplicationForm: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useSubmissionMatchCandidates: () => ({ data: [], isLoading: false }),
-    usePromoteIntakeLead: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    usePromoteIntakeLead: () => ({ mutateAsync: mockPromoteIntakeLead, isPending: false }),
     useUpdateFormDeliverySettings: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useUpdateFormIntakeLink: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useUpdateForm: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useUpdateForm: () => ({ mutateAsync: mockUpdateForm, isPending: false }),
     useUploadFormLogo: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
@@ -99,10 +103,27 @@ describe("FormBuilderPage", () => {
         mockUseForm.mockReset()
         mockFormSubmissions.mockReset()
         mockCreateForm.mockReset()
+        mockUpdateForm.mockReset()
         mockSetFormMappings.mockReset()
         mockPublishForm.mockReset()
+        mockPromoteIntakeLead.mockReset()
         mockRefetchIntakeLinks.mockReset()
         toastError.mockReset()
+        toastSuccess.mockReset()
+        useFormMappingOptionsMock.mockReset()
+        useFormMappingOptionsMock.mockImplementation((leadKind: string) => ({
+            data:
+                leadKind === "surrogate"
+                    ? []
+                    : [
+                          { value: "full_name", label: "Full Name", is_critical: true },
+                          { value: "email", label: "Email", is_critical: true },
+                          { value: "phone", label: "Phone" },
+                          { value: "state", label: "State" },
+                          { value: "education", label: "Education" },
+                          { value: "profile_photo", label: "Profile Photo", is_critical: true },
+                      ],
+        }))
         mockUseForm.mockReturnValue({ data: undefined, isLoading: false })
         mockFormSubmissions.mockReturnValue({
             data: [],
@@ -115,7 +136,18 @@ describe("FormBuilderPage", () => {
             status: "draft",
             updated_at: "2026-07-16T00:00:00Z",
         })
+        mockUpdateForm.mockResolvedValue({
+            id: "form-1",
+            status: "draft",
+            updated_at: "2026-07-16T00:00:00Z",
+        })
         mockSetFormMappings.mockResolvedValue([])
+        mockPromoteIntakeLead.mockResolvedValue({
+            intake_lead_id: "lead-1",
+            surrogate_id: "surrogate-1",
+            donor_id: null,
+            linked_submission_count: 1,
+        })
         mockPublishForm.mockResolvedValue({
             id: "form-1",
             status: "published",
@@ -187,6 +219,7 @@ describe("FormBuilderPage", () => {
             name,
             status: "draft",
             purpose: "surrogate_application",
+            lead_kind: "surrogate",
             created_at: "2026-07-16T00:00:00Z",
             updated_at: "2026-07-16T00:00:00Z",
             description: null,
@@ -229,6 +262,7 @@ describe("FormBuilderPage", () => {
 
         expect(toastError).toHaveBeenCalledWith(expect.stringContaining("Date of Birth"))
         expect(toastError).toHaveBeenCalledWith(expect.stringContaining("Phone"))
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
         expect(screen.queryByRole("alertdialog", { name: /publish form/i })).not.toBeInTheDocument()
     })
 
@@ -260,6 +294,7 @@ describe("FormBuilderPage", () => {
             name: "Surrogate Application",
             status: "draft",
             purpose: "surrogate_application",
+            lead_kind: "surrogate",
             created_at: "2026-07-16T00:00:00Z",
             updated_at: "2026-07-16T00:00:00Z",
             description: null,
@@ -276,6 +311,8 @@ describe("FormBuilderPage", () => {
             id: "submission-1",
             form_id: "form-1",
             surrogate_id: null,
+            donor_id: null,
+            lead_kind: "surrogate",
             status: "pending_review",
             submitted_at: "2026-07-16T00:00:00Z",
             reviewed_at: null,
@@ -307,6 +344,9 @@ describe("FormBuilderPage", () => {
 
         render(<FormBuilderPage />)
 
+        fireEvent.click(screen.getByRole("tab", { name: /^settings$/i }))
+        expect(screen.getByRole("combobox", { name: "Lead Type" })).toBeDisabled()
+
         fireEvent.click(screen.getByRole("tab", { name: /^submissions$/i }))
         fireEvent.click(await screen.findByRole("button", { name: "Review Candidates" }))
         fireEvent.change(screen.getByLabelText("Reviewer notes"), {
@@ -318,6 +358,166 @@ describe("FormBuilderPage", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Review Candidates" }))
 
         expect(screen.getByLabelText("Reviewer notes")).toHaveValue("")
+    })
+
+    it("keeps donor drafts unchanged and reports the required profile photo at publish", async () => {
+        const donorForm: FormRead = {
+            id: "form-donor",
+            name: "Egg Donor Application",
+            status: "draft",
+            purpose: "lead_capture",
+            lead_kind: "egg_donor",
+            created_at: "2026-08-29T00:00:00Z",
+            updated_at: "2026-08-29T00:00:00Z",
+            description: null,
+            form_schema: {
+                pages: [{ title: "Application", fields: [] }],
+            },
+            published_schema: null,
+            max_file_size_bytes: 10 * 1024 * 1024,
+            max_file_count: 10,
+            allowed_mime_types: null,
+            default_application_email_template_id: null,
+        }
+
+        navigationState.formId = donorForm.id
+        mockUseForm.mockReturnValue({ data: donorForm, isLoading: false })
+        mockUpdateForm.mockResolvedValue(donorForm)
+
+        render(<FormBuilderPage />)
+
+        expect((await screen.findAllByText("Profile Photo")).length).toBeGreaterThan(0)
+        expect(useFormMappingOptionsMock).toHaveBeenCalledWith("egg_donor")
+        expect(screen.getAllByText("Egg Donor").length).toBeGreaterThan(0)
+
+        fireEvent.click(screen.getByRole("button", { name: "Save" }))
+        await vi.waitFor(() =>
+            expect(mockUpdateForm).toHaveBeenCalledWith({
+                formId: "form-donor",
+                payload: expect.objectContaining({
+                    lead_kind: "egg_donor",
+                    allowed_mime_types: ["image/jpeg", "image/png"],
+                }),
+            }),
+        )
+
+        expect(screen.queryByRole("button", { name: /select profile photo field/i })).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Browse Fields" }))
+        const fieldDialog = await screen.findByRole("dialog", { name: "Add form fields" })
+        expect(within(fieldDialog).getByRole("button", { name: "Donor Details" })).toBeInTheDocument()
+        expect(within(fieldDialog).getByRole("button", { name: "Add preset Education field" })).toBeInTheDocument()
+        expect(within(fieldDialog).queryByRole("button", { name: "Eligibility" })).not.toBeInTheDocument()
+        fireEvent.click(within(fieldDialog).getByRole("button", { name: "Close" }))
+        await vi.waitFor(() =>
+            expect(screen.queryByRole("dialog", { name: "Add form fields" })).not.toBeInTheDocument(),
+        )
+
+        expect(screen.getByRole("button", { name: "Contacts" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Donor Details" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Demographics" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Eligibility" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Add preset Date of Birth field" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Add preset Surrogate Experience field" })).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Donor Details" }))
+        expect(screen.getByRole("button", { name: "Add preset Education field" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Add preset Profile Photo field" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Add preset Education field" }))
+        fireEvent.click(await screen.findByRole("button", { name: /select education field/i }))
+        fireEvent.click(screen.getByRole("tab", { name: /^advanced$/i }))
+        const mappingSection = screen.getByText("Mapping").closest("section")
+        const mappingSelect = within(mappingSection as HTMLElement).getByRole("combobox")
+        expect(mappingSelect).toHaveTextContent("Education")
+        fireEvent.mouseDown(mappingSelect)
+        expect(await screen.findByRole("option", { name: "Profile Photo" })).toBeInTheDocument()
+        expect(screen.queryByRole("option", { name: "Date of Birth" })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("option", { name: "Education" }))
+
+        fireEvent.click(screen.getByRole("button", { name: /^publish$/i }))
+
+        const error = await screen.findByRole("alert")
+        expect(error).toHaveTextContent("Full Name")
+        expect(error).toHaveTextContent("Email")
+        expect(error).toHaveTextContent("Profile Photo")
+        expect(screen.queryByRole("alertdialog", { name: /publish form/i })).not.toBeInTheDocument()
+    })
+
+    it("promotes a donor intake lead through the shared promotion route behavior", async () => {
+        const donorForm: FormRead = {
+            id: "form-donor",
+            name: "Sperm Donor Application",
+            status: "published",
+            purpose: "lead_capture",
+            lead_kind: "sperm_donor",
+            created_at: "2026-08-29T00:00:00Z",
+            updated_at: "2026-08-29T00:00:00Z",
+            description: null,
+            form_schema: { pages: [{ title: "Application", fields: [] }] },
+            published_schema: null,
+            max_file_size_bytes: 10 * 1024 * 1024,
+            max_file_count: 10,
+            allowed_mime_types: ["image/png", "image/jpeg"],
+            default_application_email_template_id: null,
+        }
+        const submission: FormSubmissionRead = {
+            id: "submission-donor",
+            form_id: donorForm.id,
+            surrogate_id: null,
+            donor_id: null,
+            lead_kind: "sperm_donor",
+            status: "pending_review",
+            submitted_at: "2026-08-29T00:00:00Z",
+            reviewed_at: null,
+            reviewed_by_user_id: null,
+            review_notes: null,
+            answers: { full_name: "Sam Donor", email: "sam@example.com" },
+            schema_snapshot: null,
+            source_mode: "shared",
+            intake_link_id: "link-1",
+            intake_lead_id: "lead-donor",
+            match_status: "lead_created",
+            match_reason: null,
+            matched_at: null,
+            files: [],
+        }
+        mockPromoteIntakeLead.mockResolvedValue({
+            intake_lead_id: "lead-donor",
+            surrogate_id: null,
+            donor_id: "donor-1",
+            linked_submission_count: 1,
+        })
+        navigationState.formId = donorForm.id
+        mockUseForm.mockReturnValue({ data: donorForm, isLoading: false })
+        mockFormSubmissions.mockImplementation(
+            (_formId: string | null, params: ListFormSubmissionsParams = {}) => ({
+                data: params.match_status === "lead_created" ? [submission] : [],
+                refetch: vi.fn(),
+                isLoading: false,
+            }),
+        )
+
+        render(<FormBuilderPage />)
+        expect(screen.getByRole("button", { name: "Add preset Education field" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Eligibility" })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("tab", { name: /^submissions$/i }))
+        fireEvent.click(await screen.findByRole("button", { name: "Promote to Sperm Donor" }))
+
+        expect(mockPromoteIntakeLead).toHaveBeenCalledWith({
+            leadId: "lead-donor",
+            payload: {},
+        })
+        await vi.waitFor(() =>
+            expect(toastSuccess).toHaveBeenCalledWith("Intake lead promoted to sperm donor"),
+        )
+
+        mockPromoteIntakeLead.mockRejectedValueOnce(
+            new Error("Missing permission: donors.edit"),
+        )
+        fireEvent.click(screen.getByRole("button", { name: "Promote to Sperm Donor" }))
+        await vi.waitFor(() =>
+            expect(toastError).toHaveBeenCalledWith("Missing permission: donors.edit"),
+        )
     })
 
     it("renders human-readable labels for inspector dropdown triggers", async () => {

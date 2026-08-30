@@ -6,7 +6,11 @@ import { QRCodeSVG } from "qrcode.react"
 import { CopyIcon, DownloadIcon, LinkIcon, Loader2Icon, QrCodeIcon } from "lucide-react"
 
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
-import type { FormIntakeLinkRead, FormPurpose } from "@/lib/api/forms"
+import type { FormIntakeLinkRead, FormLeadKind, FormPurpose } from "@/lib/api/forms"
+import {
+    FORM_LEAD_KIND_LABELS,
+    FORM_LEAD_KIND_OPTIONS,
+} from "@/lib/forms/form-lead-kind"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,6 +30,8 @@ type AutomationFormSettingsPanelProps = {
     formName: string
     formDescription: string
     formPurpose: FormPurpose
+    formLeadKind: FormLeadKind
+    formLeadKindChangeDisabled: boolean
     publicEyebrow: string
     publicTitle: string
     publicSubtitle: string
@@ -48,6 +54,7 @@ type AutomationFormSettingsPanelProps = {
     onFormNameChange: (value: string) => void
     onFormDescriptionChange: (value: string) => void
     onFormPurposeChange: (value: FormPurpose) => void
+    onFormLeadKindChange: (value: FormLeadKind) => void
     onPublicEyebrowChange: (value: string) => void
     onPublicTitleChange: (value: string) => void
     onPublicSubtitleChange: (value: string) => void
@@ -86,10 +93,13 @@ function FormIdentitySection({ settings }: { settings: AutomationFormSettingsPan
         formName,
         formDescription,
         formPurpose,
+        formLeadKind,
+        formLeadKindChangeDisabled,
         privacyNotice,
         onFormNameChange,
         onFormDescriptionChange,
         onFormPurposeChange,
+        onFormLeadKindChange,
         onPrivacyNoticeChange,
     } = settings
 
@@ -113,6 +123,32 @@ function FormIdentitySection({ settings }: { settings: AutomationFormSettingsPan
                     rows={3}
                     placeholder="Describe the purpose of this form for your team"
                 />
+            </div>
+
+            <div className="space-y-2">
+                <Label htmlFor="settings-form-lead-kind">Lead Type</Label>
+                <Select
+                    value={formLeadKind}
+                    onValueChange={(value) => onFormLeadKindChange(value as FormLeadKind)}
+                    disabled={formLeadKindChangeDisabled}
+                >
+                    <SelectTrigger id="settings-form-lead-kind">
+                        <SelectValue placeholder="Select lead type">
+                            {(value: string | null) =>
+                                FORM_LEAD_KIND_LABELS[(value as FormLeadKind | null) ?? "surrogate"] ??
+                                value ??
+                                "Select lead type"
+                            }
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        {FORM_LEAD_KIND_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
             </div>
 
             <div className="space-y-2">
@@ -254,6 +290,7 @@ function SharedDeliverySection({
         defaultTemplateId,
         emailTemplates,
         formPurpose,
+        formLeadKind,
         isDefaultSurrogateApplication,
         isPublished,
         setDefaultSurrogateApplicationPending,
@@ -298,49 +335,51 @@ function SharedDeliverySection({
                     Shared intake email sends use this template by default.
                 </p>
             </div>
-            <div className="space-y-2 rounded-md border border-stone-200 p-3 dark:border-stone-800">
-                <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium">Default shared-send form</p>
-                        {isDefaultSurrogateApplication && (
-                            <Badge variant="secondary" className="text-[11px]">
-                                Active
-                            </Badge>
-                        )}
+            {formLeadKind === "surrogate" ? (
+                <div className="space-y-2 rounded-md border border-stone-200 p-3 dark:border-stone-800">
+                    <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium">Default shared-send form</p>
+                            {isDefaultSurrogateApplication && (
+                                <Badge variant="secondary" className="text-[11px]">
+                                    Active
+                                </Badge>
+                            )}
+                        </div>
+                        <p className="text-xs text-stone-500">
+                            Exactly one published surrogate application form can be the default for shared intake sends.
+                        </p>
                     </div>
-                    <p className="text-xs text-stone-500">
-                        Exactly one published surrogate application form can be the default for shared intake sends.
-                    </p>
-                </div>
-                <Button
-                    type="button"
-                    variant={isDefaultSurrogateApplication ? "secondary" : "outline"}
-                    size="sm"
-                    className="w-full justify-center sm:w-auto"
-                    onClick={onSetDefaultSurrogateApplication}
-                    disabled={
-                        isDefaultSurrogateApplication ||
-                        setDefaultSurrogateApplicationPending ||
-                        !isPublished ||
-                        formPurpose !== "surrogate_application"
-                    }
-                >
-                    {setDefaultSurrogateApplicationPending && (
-                        <Loader2Icon className="mr-2 size-3 animate-spin" />
+                    <Button
+                        type="button"
+                        variant={isDefaultSurrogateApplication ? "secondary" : "outline"}
+                        size="sm"
+                        className="w-full justify-center sm:w-auto"
+                        onClick={onSetDefaultSurrogateApplication}
+                        disabled={
+                            isDefaultSurrogateApplication ||
+                            setDefaultSurrogateApplicationPending ||
+                            !isPublished ||
+                            formPurpose !== "surrogate_application"
+                        }
+                    >
+                        {setDefaultSurrogateApplicationPending && (
+                            <Loader2Icon className="mr-2 size-3 animate-spin" />
+                        )}
+                        {isDefaultSurrogateApplication ? "Default Active" : "Set as Default"}
+                    </Button>
+                    {formPurpose !== "surrogate_application" && (
+                        <p className="text-xs text-amber-600">
+                            Change purpose to <code>surrogate_application</code> to set as default.
+                        </p>
                     )}
-                    {isDefaultSurrogateApplication ? "Default Active" : "Set as Default"}
-                </Button>
-                {formPurpose !== "surrogate_application" && (
-                    <p className="text-xs text-amber-600">
-                        Change purpose to <code>surrogate_application</code> to set as default.
-                    </p>
-                )}
-                {!isPublished && (
-                    <p className="text-xs text-amber-600">
-                        Publish this form before setting it as default.
-                    </p>
-                )}
-            </div>
+                    {!isPublished && (
+                        <p className="text-xs text-amber-600">
+                            Publish this form before setting it as default.
+                        </p>
+                    )}
+                </div>
+            ) : null}
         </div>
     )
 }

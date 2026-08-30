@@ -58,6 +58,7 @@ interface ZapierTestLeadResponse {
     duplicate: boolean;
     meta_lead_id: string;
     surrogate_id?: string | null;
+    donor_id?: string | null;
     message?: string | null;
 }
 

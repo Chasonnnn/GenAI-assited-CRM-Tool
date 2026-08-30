@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useSyncExternalStore } from "react"
 import { useRouter } from "next/navigation"
 import {
     ArrowLeftIcon,
@@ -29,6 +29,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useCurrentMinuteTimestamp } from "@/components/ui/use-current-minute-timestamp"
 import {
     Dialog,
     DialogContent,
@@ -45,14 +46,26 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ApiError } from "@/lib/api"
 import {
     listFormIntakeLinks,
     type FormIntakeLinkRead,
+    type FormLeadKind,
     type FormSummary,
     type FormTemplateLibraryItem,
 } from "@/lib/api/forms"
+import {
+    FORM_LEAD_KIND_LABELS,
+    FORM_LEAD_KIND_OPTIONS,
+} from "@/lib/forms/form-lead-kind"
 import {
     useCreateForm,
     useDeleteForm,
@@ -66,21 +79,41 @@ import { parseDateInput } from "@/lib/utils/date"
 type FormsTab = "forms" | "templates"
 type DeleteTarget = { id: string; name: string }
 
-function formatRelativeTime(dateString: string): string {
+let browserTimeZoneSnapshot: string | null = null
+
+function subscribeBrowserTimeZone() {
+    return () => undefined
+}
+
+function getBrowserTimeZoneSnapshot() {
+    if (browserTimeZoneSnapshot) return browserTimeZoneSnapshot
+    try {
+        browserTimeZoneSnapshot = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+    } catch {
+        browserTimeZoneSnapshot = "UTC"
+    }
+    return browserTimeZoneSnapshot
+}
+
+function getServerTimeZoneSnapshot() {
+    return null
+}
+
+function formatRelativeTime(dateString: string, nowTimestamp: number, timeZone: string): string {
     const date = parseDateInput(dateString)
-    const now = new Date()
     if (Number.isNaN(date.getTime())) {
         return "Updated recently"
     }
 
-    if (date.getTime() > now.getTime()) {
+    if (date.getTime() > nowTimestamp) {
         return `Saved ${date.toLocaleTimeString("en-US", {
             hour: "numeric",
             minute: "2-digit",
+            timeZone,
         })}`
     }
 
-    const diffMs = now.getTime() - date.getTime()
+    const diffMs = nowTimestamp - date.getTime()
     const diffMins = Math.floor(diffMs / 60000)
     const diffHours = Math.floor(diffMs / 3600000)
     const diffDays = Math.floor(diffMs / 86400000)
@@ -89,6 +122,18 @@ function formatRelativeTime(dateString: string): string {
     if (diffHours < 24) return `Updated ${diffHours}h ago`
     if (diffDays === 1) return "Updated Yesterday"
     return `Updated ${diffDays}d ago`
+}
+
+function FormRelativeTime({ dateString }: { dateString: string }) {
+    const nowTimestamp = useCurrentMinuteTimestamp()
+    const timeZone = useSyncExternalStore(
+        subscribeBrowserTimeZone,
+        getBrowserTimeZoneSnapshot,
+        getServerTimeZoneSnapshot,
+    )
+
+    if (nowTimestamp === null || timeZone === null) return "Updated recently"
+    return formatRelativeTime(dateString, nowTimestamp, timeZone)
 }
 
 const statusVariant = (status: string) => {
@@ -148,6 +193,18 @@ const downloadBlob = (blob: Blob, filename: string) => {
     anchor.click()
     anchor.remove()
     URL.revokeObjectURL(downloadUrl)
+}
+
+async function runWithPendingState(
+    setPending: (pending: boolean) => void,
+    action: () => Promise<void>,
+) {
+    setPending(true)
+    try {
+        await action()
+    } finally {
+        setPending(false)
+    }
 }
 
 function FormsPageHeader({
@@ -359,6 +416,9 @@ function FormCard({
                             >
                                 {statusLabel(form.status)}
                             </Badge>
+                            <Badge variant="outline" className="ml-1 mt-1 text-xs">
+                                {FORM_LEAD_KIND_LABELS[form.lead_kind ?? "surrogate"]}
+                            </Badge>
                         </div>
                     </div>
                     <DropdownMenu>
@@ -411,7 +471,9 @@ function FormCard({
                 </div>
             </CardHeader>
             <CardContent className="pt-0">
-                <p className="text-xs text-muted-foreground">{formatRelativeTime(form.updated_at)}</p>
+                <p className="text-xs text-muted-foreground">
+                    <FormRelativeTime dateString={form.updated_at} />
+                </p>
             </CardContent>
         </Card>
     )
@@ -544,7 +606,7 @@ function FormTemplateCard({
                     {template.description || "No description provided."}
                 </p>
                 <p className="mt-2 text-xs text-muted-foreground">
-                    {formatRelativeTime(template.updated_at)}
+                    <FormRelativeTime dateString={template.updated_at} />
                 </p>
             </CardContent>
         </Card>
@@ -558,6 +620,8 @@ function CreateFormDialog({
     onFormNameChange,
     formDescription,
     onFormDescriptionChange,
+    formLeadKind,
+    onFormLeadKindChange,
     isCreating,
     onCreate,
 }: {
@@ -567,6 +631,8 @@ function CreateFormDialog({
     onFormNameChange: (value: string) => void
     formDescription: string
     onFormDescriptionChange: (value: string) => void
+    formLeadKind: FormLeadKind
+    onFormLeadKindChange: (value: FormLeadKind) => void
     isCreating: boolean
     onCreate: () => void
 }) {
@@ -588,6 +654,30 @@ function CreateFormDialog({
                             value={formName}
                             onChange={(event) => onFormNameChange(event.target.value)}
                         />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="form-lead-kind">Lead Type</Label>
+                        <Select
+                            value={formLeadKind}
+                            onValueChange={(value) => onFormLeadKindChange(value as FormLeadKind)}
+                        >
+                            <SelectTrigger id="form-lead-kind">
+                                <SelectValue placeholder="Select lead type">
+                                    {(value: string | null) =>
+                                        FORM_LEAD_KIND_LABELS[
+                                            (value as FormLeadKind | null) ?? "surrogate"
+                                        ] ?? value ?? "Select lead type"
+                                    }
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                {FORM_LEAD_KIND_OPTIONS.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="form-description">Description (optional)</Label>
@@ -748,6 +838,7 @@ export default function FormsListPage() {
     const [showCreateModal, setShowCreateModal] = useState(false)
     const [formName, setFormName] = useState("")
     const [formDescription, setFormDescription] = useState("")
+    const [formLeadKind, setFormLeadKind] = useState<FormLeadKind>("surrogate")
     const [activeTab, setActiveTab] = useState<FormsTab>("forms")
     const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null)
     const [formToDelete, setFormToDelete] = useState<DeleteTarget | null>(null)
@@ -763,11 +854,13 @@ export default function FormsListPage() {
             const description = formDescription.trim()
             const newForm = await createFormMutation.mutateAsync({
                 name: formName.trim(),
+                lead_kind: formLeadKind,
                 ...(description ? { description } : {}),
             })
             setShowCreateModal(false)
             setFormName("")
             setFormDescription("")
+            setFormLeadKind("surrogate")
             push(`/automation/forms/${newForm.id}`)
         } catch {
             // Error handling is done by React Query
@@ -834,42 +927,37 @@ export default function FormsListPage() {
 
         setShareTargetForm({ id: form.id, name: form.name })
         setShareLink(null)
-        setIsPreparingShare(true)
-        const finishSharePreparation = () => setIsPreparingShare(false)
-
-        try {
-            const links = await listFormIntakeLinks(form.id, true)
-            const selected = pickShareLink(links)
-            if (!selected?.intake_url) {
-                toast.error("No shared link is available yet for this form.")
-                finishSharePreparation()
-                return
+        await runWithPendingState(setIsPreparingShare, async () => {
+            try {
+                const links = await listFormIntakeLinks(form.id, true)
+                const selected = pickShareLink(links)
+                if (!selected?.intake_url) {
+                    toast.error("No shared link is available yet for this form.")
+                    return
+                }
+                setShareLink(selected)
+            } catch (error) {
+                const message =
+                    error instanceof ApiError
+                        ? error.message
+                        : "Failed to prepare share link. Please try again."
+                toast.error(message)
             }
-            setShareLink(selected)
-            finishSharePreparation()
-        } catch (error) {
-            const message =
-                error instanceof ApiError
-                    ? error.message
-                    : "Failed to prepare share link. Please try again."
-            toast.error(message)
-            finishSharePreparation()
-        }
+        })
     }
 
     const handleCopyShareLink = async () => {
-        if (!shareLink?.intake_url) return
-        setIsShareActionPending(true)
-        const finishShareAction = () => setIsShareActionPending(false)
-        try {
-            await navigator.clipboard.writeText(shareLink.intake_url)
-            toast.success("Application link copied")
-            resetSharePrompt()
-            finishShareAction()
-        } catch {
-            toast.error("Failed to copy link")
-            finishShareAction()
-        }
+        const intakeUrl = shareLink?.intake_url
+        if (!intakeUrl) return
+        await runWithPendingState(setIsShareActionPending, async () => {
+            try {
+                await navigator.clipboard.writeText(intakeUrl)
+                toast.success("Application link copied")
+                resetSharePrompt()
+            } catch {
+                toast.error("Failed to copy link")
+            }
+        })
     }
 
     const buildShareQrFilename = () => {
@@ -886,51 +974,42 @@ export default function FormsListPage() {
         const markup = getShareQrSvgMarkup()
         if (!markup) return
 
-        setIsShareActionPending(true)
-        const svgBlob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" })
-        const svgUrl = URL.createObjectURL(svgBlob)
-        const finishShareAction = () => {
-            URL.revokeObjectURL(svgUrl)
-            setIsShareActionPending(false)
-        }
-        try {
-            const image = new Image()
-            image.crossOrigin = "anonymous"
+        await runWithPendingState(setIsShareActionPending, async () => {
+            try {
+                const image = new Image()
+                image.crossOrigin = "anonymous"
 
-            await new Promise<void>((resolve, reject) => {
-                image.onload = () => resolve()
-                image.onerror = () => reject(new Error("Failed to render QR image"))
-                image.src = svgUrl
-            })
+                await new Promise<void>((resolve, reject) => {
+                    image.onload = () => resolve()
+                    image.onerror = () => reject(new Error("Failed to render QR image"))
+                    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`
+                })
 
-            const canvas = document.createElement("canvas")
-            canvas.width = image.width || 120
-            canvas.height = image.height || 120
-            const context = canvas.getContext("2d")
-            if (!context) {
-                toast.error("Could not prepare QR download")
-                finishShareAction()
-                return
+                const canvas = document.createElement("canvas")
+                canvas.width = image.width || 120
+                canvas.height = image.height || 120
+                const context = canvas.getContext("2d")
+                if (!context) {
+                    toast.error("Could not prepare QR download")
+                    return
+                }
+                context.drawImage(image, 0, 0)
+
+                const blob = await new Promise<Blob | null>((resolve) =>
+                    canvas.toBlob((result) => resolve(result), "image/png"),
+                )
+                if (!blob) {
+                    toast.error("Could not generate QR code")
+                    return
+                }
+
+                downloadBlob(blob, buildShareQrFilename())
+                toast.success("QR code downloaded")
+                resetSharePrompt()
+            } catch {
+                toast.error("Failed to download QR code")
             }
-            context.drawImage(image, 0, 0)
-
-            const blob = await new Promise<Blob | null>((resolve) =>
-                canvas.toBlob((result) => resolve(result), "image/png"),
-            )
-            if (!blob) {
-                toast.error("Could not generate QR code")
-                finishShareAction()
-                return
-            }
-
-            downloadBlob(blob, buildShareQrFilename())
-            toast.success("QR code downloaded")
-            resetSharePrompt()
-            finishShareAction()
-        } catch {
-            toast.error("Failed to download QR code")
-            finishShareAction()
-        }
+        })
     }
 
     return (
@@ -978,6 +1057,8 @@ export default function FormsListPage() {
                 onFormNameChange={setFormName}
                 formDescription={formDescription}
                 onFormDescriptionChange={setFormDescription}
+                formLeadKind={formLeadKind}
+                onFormLeadKindChange={setFormLeadKind}
                 isCreating={createFormMutation.isPending}
                 onCreate={() => void handleCreate()}
             />

@@ -11,15 +11,15 @@ import {
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
-    ALL_BUILDER_FIELD_GROUPS,
-    CUSTOM_FIELD_GROUPS,
-    PRESET_FIELD_GROUPS,
+    getBuilderFieldGroupsForLeadKind,
     type BuilderLibraryCategory,
     type BuilderPaletteField,
 } from "@/lib/forms/form-builder-library"
+import type { FormLeadKind } from "@/lib/api/forms"
 import { cn } from "@/lib/utils"
 
 type FieldLibraryDialogProps = {
+    leadKind: FormLeadKind
     open: boolean
     activeCategory: BuilderLibraryCategory
     search: string
@@ -37,11 +37,6 @@ type LibrarySection = {
 }
 
 const ALL_CATEGORY_ID = "all"
-const FIELD_LIBRARY_CATEGORIES: Array<{ id: BuilderLibraryCategory; label: string }> = [
-    { id: ALL_CATEGORY_ID, label: "All" },
-    ...PRESET_FIELD_GROUPS.map((group) => ({ id: group.id, label: group.label })),
-    ...CUSTOM_FIELD_GROUPS.map((group) => ({ id: group.id, label: group.label })),
-]
 
 function escapeRegExp(value: string) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
@@ -91,6 +86,7 @@ function FieldTile({
 }
 
 export function FieldLibraryDialog({
+    leadKind,
     open,
     activeCategory,
     search,
@@ -100,16 +96,24 @@ export function FieldLibraryDialog({
     onInsertField,
 }: FieldLibraryDialogProps) {
     const normalizedSearch = search.trim().toLowerCase()
-
-    const categories = FIELD_LIBRARY_CATEGORIES
+    const { presetGroups, allGroups } = getBuilderFieldGroupsForLeadKind(leadKind)
+    const presetGroupIds = new Set(presetGroups.map((group) => group.id))
+    const categories: Array<{ id: BuilderLibraryCategory; label: string }> = [
+        { id: ALL_CATEGORY_ID, label: "All" },
+        ...allGroups.map((group) => ({ id: group.id, label: group.label })),
+    ]
+    const resolvedActiveCategory =
+        activeCategory === ALL_CATEGORY_ID || allGroups.some((group) => group.id === activeCategory)
+            ? activeCategory
+            : ALL_CATEGORY_ID
 
     const searchPattern = normalizedSearch ? new RegExp(escapeRegExp(normalizedSearch), "i") : null
     const sourceGroups =
         normalizedSearch
-            ? ALL_BUILDER_FIELD_GROUPS
-            : activeCategory === ALL_CATEGORY_ID
-            ? ALL_BUILDER_FIELD_GROUPS
-            : ALL_BUILDER_FIELD_GROUPS.filter((group) => group.id === activeCategory)
+            ? allGroups
+            : resolvedActiveCategory === ALL_CATEGORY_ID
+            ? allGroups
+            : allGroups.filter((group) => group.id === resolvedActiveCategory)
 
     const visibleSections: LibrarySection[] = []
 
@@ -124,7 +128,7 @@ export function FieldLibraryDialog({
         visibleSections.push({
             id: group.id,
             label: group.label,
-            isPreset: PRESET_FIELD_GROUPS.some((presetGroup) => presetGroup.id === group.id),
+            isPreset: presetGroupIds.has(group.id),
             fields,
         })
     }
@@ -145,7 +149,7 @@ export function FieldLibraryDialog({
                                 aria-label="Field categories"
                             >
                                 {categories.map((category) => {
-                                    const isActive = activeCategory === category.id
+                                    const isActive = resolvedActiveCategory === category.id
 
                                     return (
                                         <Button unstyled

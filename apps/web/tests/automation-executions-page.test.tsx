@@ -93,4 +93,78 @@ describe('WorkflowExecutionsPage', () => {
         expect(screen.getByText('800ms')).toBeInTheDocument()
         expect(screen.getByText(/workflow email bounced via resend webhook/i)).toBeInTheDocument()
     })
+
+    it('routes donor executions through their donor subject context', () => {
+        const donorExecution = {
+            ...mockExecution,
+            id: 'exec-donor-1',
+            workflow_name: 'Egg donor follow-up',
+            entity_type: 'task',
+            entity_id: 'task-12345678',
+            subject_type: 'egg_donor',
+            subject_id: 'donor-12345678',
+            entity_name: 'Maya Thompson',
+            entity_number: 'D10001',
+        }
+        ;(useQuery as ReturnType<typeof vi.fn>).mockImplementation(({ queryKey }) => {
+            if (queryKey[0] === 'workflow-executions') {
+                return { data: { items: [donorExecution], total: 1 }, isLoading: false, error: null }
+            }
+            if (queryKey[0] === 'workflow-execution-stats') {
+                return {
+                    data: { total_24h: 1, success_rate: 1, failed_24h: 0, avg_duration_ms: 1200 },
+                    isLoading: false,
+                    error: null,
+                }
+            }
+            if (queryKey[0] === 'workflows-list') {
+                return { data: [], isLoading: false, error: null }
+            }
+            return { data: null, isLoading: false, error: null }
+        })
+
+        render(<WorkflowExecutionsPage />)
+
+        expect(screen.getByRole('link', { name: 'D10001 — Maya Thompson' })).toHaveAttribute(
+            'href',
+            '/donors/donor-12345678',
+        )
+        expect(screen.queryByText(/donor-12345678/i)).not.toBeInTheDocument()
+    })
+
+    it('does not expose or link an unavailable donor identity', () => {
+        const donorExecution = {
+            ...mockExecution,
+            id: 'exec-donor-unavailable',
+            workflow_name: 'Egg donor follow-up',
+            entity_type: 'task',
+            entity_id: 'task-12345678',
+            subject_type: 'egg_donor',
+            subject_id: 'donor-secret-uuid',
+            entity_name: null,
+            entity_number: null,
+        }
+        ;(useQuery as ReturnType<typeof vi.fn>).mockImplementation(({ queryKey }) => {
+            if (queryKey[0] === 'workflow-executions') {
+                return { data: { items: [donorExecution], total: 1 }, isLoading: false, error: null }
+            }
+            if (queryKey[0] === 'workflow-execution-stats') {
+                return {
+                    data: { total_24h: 1, success_rate: 1, failed_24h: 0, avg_duration_ms: 1200 },
+                    isLoading: false,
+                    error: null,
+                }
+            }
+            if (queryKey[0] === 'workflows-list') {
+                return { data: [], isLoading: false, error: null }
+            }
+            return { data: null, isLoading: false, error: null }
+        })
+
+        render(<WorkflowExecutionsPage />)
+
+        expect(screen.getByText('Donor unavailable')).toBeInTheDocument()
+        expect(screen.queryByRole('link', { name: 'Donor unavailable' })).not.toBeInTheDocument()
+        expect(screen.queryByText(/donor-secret/i)).not.toBeInTheDocument()
+    })
 })

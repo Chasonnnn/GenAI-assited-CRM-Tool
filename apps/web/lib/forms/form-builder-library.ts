@@ -1,4 +1,4 @@
-import type { FieldType, FormFieldValidation } from "@/lib/api/forms"
+import type { FieldType, FormFieldValidation, FormLeadKind } from "@/lib/api/forms"
 import type { LucideIcon } from "lucide-react"
 import {
     CalendarIcon,
@@ -35,50 +35,74 @@ export type BuilderPaletteGroup = {
 
 export type BuilderLibraryCategory = "all" | string
 
+const CONTACT_FIELD_GROUP: BuilderPaletteGroup = {
+    id: "contacts",
+    label: "Contacts",
+    fields: [
+        {
+            key: "full_name",
+            label: "Full Name",
+            type: "text",
+            icon: TypeIcon,
+            required: true,
+            surrogateFieldMapping: "full_name",
+        },
+        {
+            key: "email",
+            label: "Email",
+            type: "email",
+            icon: MailIcon,
+            required: true,
+            surrogateFieldMapping: "email",
+        },
+        {
+            key: "phone",
+            label: "Phone",
+            type: "phone",
+            icon: PhoneIcon,
+            required: true,
+            surrogateFieldMapping: "phone",
+        },
+        {
+            key: "state",
+            label: "State",
+            type: "text",
+            icon: HomeIcon,
+            helperText: "Use the 2-letter state code, e.g. CA.",
+            surrogateFieldMapping: "state",
+            validation: {
+                min_length: 2,
+                max_length: 2,
+                pattern: "^[A-Za-z]{2}$",
+            },
+        },
+    ],
+}
+
+const DONOR_DETAILS_FIELD_GROUP: BuilderPaletteGroup = {
+    id: "donor-details",
+    label: "Donor Details",
+    fields: [
+        {
+            key: "education",
+            label: "Education",
+            type: "text",
+            icon: TypeIcon,
+            surrogateFieldMapping: "education",
+        },
+        {
+            key: "profile_photo",
+            label: "Profile Photo",
+            type: "file",
+            icon: FileIcon,
+            required: true,
+            surrogateFieldMapping: "profile_photo",
+        },
+    ],
+}
+
 export const PRESET_FIELD_GROUPS: BuilderPaletteGroup[] = [
-    {
-        id: "contacts",
-        label: "Contacts",
-        fields: [
-            {
-                key: "full_name",
-                label: "Full Name",
-                type: "text",
-                icon: TypeIcon,
-                required: true,
-                surrogateFieldMapping: "full_name",
-            },
-            {
-                key: "email",
-                label: "Email",
-                type: "email",
-                icon: MailIcon,
-                required: true,
-                surrogateFieldMapping: "email",
-            },
-            {
-                key: "phone",
-                label: "Phone",
-                type: "phone",
-                icon: PhoneIcon,
-                required: true,
-                surrogateFieldMapping: "phone",
-            },
-            {
-                key: "state",
-                label: "State",
-                type: "text",
-                icon: HomeIcon,
-                helperText: "Use the 2-letter state code, e.g. CA.",
-                surrogateFieldMapping: "state",
-                validation: {
-                    min_length: 2,
-                    max_length: 2,
-                    pattern: "^[A-Za-z]{2}$",
-                },
-            },
-        ],
-    },
+    CONTACT_FIELD_GROUP,
     {
         id: "demographics",
         label: "Demographics",
@@ -200,6 +224,11 @@ export const PRESET_FIELD_GROUPS: BuilderPaletteGroup[] = [
     },
 ]
 
+export const DONOR_PRESET_FIELD_GROUPS: BuilderPaletteGroup[] = [
+    CONTACT_FIELD_GROUP,
+    DONOR_DETAILS_FIELD_GROUP,
+]
+
 export const CUSTOM_FIELD_GROUPS: BuilderPaletteGroup[] = [
     {
         id: "general",
@@ -256,6 +285,19 @@ export const ALL_BUILDER_FIELD_GROUPS: BuilderPaletteGroup[] = [
     ...PRESET_FIELD_GROUPS,
     ...CUSTOM_FIELD_GROUPS,
 ]
+
+export function getBuilderFieldGroupsForLeadKind(leadKind: FormLeadKind): {
+    presetGroups: BuilderPaletteGroup[]
+    allGroups: BuilderPaletteGroup[]
+} {
+    const presetGroups = leadKind === "egg_donor" || leadKind === "sperm_donor"
+        ? DONOR_PRESET_FIELD_GROUPS
+        : PRESET_FIELD_GROUPS
+    return {
+        presetGroups,
+        allGroups: [...presetGroups, ...CUSTOM_FIELD_GROUPS],
+    }
+}
 
 const FIELD_TYPE_LABELS: Record<FieldType, string> = {
     text: "Text",

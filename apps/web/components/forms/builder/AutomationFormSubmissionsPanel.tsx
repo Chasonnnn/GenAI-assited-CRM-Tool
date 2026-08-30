@@ -1,6 +1,17 @@
 "use client"
 
-import type { MatchCandidateRead, FormSubmissionRead } from "@/lib/api/forms"
+import Image from "next/image"
+import Link from "next/link"
+import type { Route } from "next"
+import { useQuery } from "@tanstack/react-query"
+
+import {
+    getSubmissionFileDownloadUrl,
+    type FormLeadKind,
+    type FormSubmissionRead,
+    type MatchCandidateRead,
+} from "@/lib/api/forms"
+import { FORM_LEAD_KIND_LABELS, isDonorFormLeadKind } from "@/lib/forms/form-lead-kind"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -61,9 +72,49 @@ type SubmissionIdentity = {
     dateOfBirth: string
     phone: string
     email: string
+    state: string
+    education: string
 }
 
 type SubmissionIdentityReader = AutomationFormSubmissionsPanelProps["readAnswerValue"]
+
+function donorPhotoAlt(leadKind: FormLeadKind): string {
+    const label = FORM_LEAD_KIND_LABELS[leadKind].replace("Donor", "donor")
+    return `${label} profile photo`
+}
+
+function DonorProfilePhotoPreview({ submission }: { submission: FormSubmissionRead }) {
+    const cleanImages = submission.files.filter(
+        (file) =>
+            file.content_type.startsWith("image/") &&
+            file.scan_status === "clean" &&
+            !file.quarantined,
+    )
+    const photo =
+        cleanImages.find((file) => file.field_key === "profile_photo") ?? cleanImages[0]
+    const photoQuery = useQuery({
+        queryKey: ["forms", "submission-photo", submission.id, photo?.id ?? "missing"],
+        queryFn: () => getSubmissionFileDownloadUrl(submission.id, photo!.id),
+        enabled: isDonorFormLeadKind(submission.lead_kind) && Boolean(photo),
+        staleTime: 4 * 60 * 1000,
+    })
+
+    if (!isDonorFormLeadKind(submission.lead_kind) || !photo) return null
+    if (!photoQuery.data?.download_url) {
+        return <div className="size-16 rounded-md border bg-muted/30" aria-label="Profile photo unavailable" />
+    }
+    return (
+        <Image
+            src={photoQuery.data.download_url}
+            alt={donorPhotoAlt(submission.lead_kind)}
+            width={64}
+            height={64}
+            unoptimized
+            referrerPolicy="no-referrer"
+            className="size-16 rounded-md border object-cover"
+        />
+    )
+}
 
 function readSubmissionIdentity(
     submission: FormSubmissionRead,
@@ -74,6 +125,8 @@ function readSubmissionIdentity(
         dateOfBirth: readAnswerValue(submission, ["date_of_birth", "dob"]),
         phone: readAnswerValue(submission, ["phone", "phone_number", "mobile_phone"]),
         email: readAnswerValue(submission, ["email", "email_address"]),
+        state: readAnswerValue(submission, ["state", "residence_state"]),
+        education: readAnswerValue(submission, ["education", "education_level"]),
     }
 }
 
@@ -87,7 +140,7 @@ function WorkflowApprovalCard({
             <CardContent className="flex flex-col gap-3 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
                 <div className="space-y-1">
                     <p className="font-medium text-stone-900 dark:text-stone-100">
-                        Workflow approvals for auto-match and lead creation
+                        Workflow approvals for submission routing and lead creation
                     </p>
                     <p className="text-stone-600 dark:text-stone-400">
                         Approval-gated workflow actions appear in the shared approval queue.
@@ -142,15 +195,28 @@ function SubmissionMetricsGrid({
 
 function SubmissionIdentityGrid({
     identity,
+    submission,
 }: {
     identity: SubmissionIdentity
+    submission: FormSubmissionRead
 }) {
+    const isDonor = isDonorFormLeadKind(submission.lead_kind)
     return (
-        <div className="grid gap-1 sm:grid-cols-2">
-            <div><span className="font-medium">Name:</span> {identity.fullName}</div>
-            <div><span className="font-medium">DOB:</span> {identity.dateOfBirth}</div>
-            <div><span className="font-medium">Phone:</span> {identity.phone}</div>
-            <div><span className="font-medium">Email:</span> {identity.email}</div>
+        <div className="flex items-start gap-3">
+            <DonorProfilePhotoPreview submission={submission} />
+            <div className="grid min-w-0 flex-1 gap-1 sm:grid-cols-2">
+                <div><span className="font-medium">Name:</span> {identity.fullName}</div>
+                {isDonor ? (
+                    <div><span className="font-medium">Education:</span> {identity.education}</div>
+                ) : (
+                    <div><span className="font-medium">DOB:</span> {identity.dateOfBirth}</div>
+                )}
+                <div><span className="font-medium">Phone:</span> {identity.phone}</div>
+                <div><span className="font-medium">Email:</span> {identity.email}</div>
+                {isDonor ? (
+                    <div><span className="font-medium">State:</span> {identity.state}</div>
+                ) : null}
+            </div>
         </div>
     )
 }
@@ -174,17 +240,32 @@ function AmbiguousSubmissionCard({
 
     return (
         <div className="space-y-2 rounded-lg border border-stone-200 p-3 text-sm">
-            <SubmissionIdentityGrid identity={identity} />
+            <Badge variant="outline">{FORM_LEAD_KIND_LABELS[submission.lead_kind]}</Badge>
+            <SubmissionIdentityGrid identity={identity} submission={submission} />
             <div className="flex flex-wrap gap-2">
                 <Button
                     type="button"
                     size="sm"
                     variant={isSelected ? "default" : "outline"}
-                    onClick={() => onSelectQueueSubmission(isSelected ? null : submission.id)}
+                    disabled={
+                        isDonorFormLeadKind(submission.lead_kind) &&
+                        resolveSubmissionMatchPending
+                    }
+                    onClick={() => {
+                        if (isDonorFormLeadKind(submission.lead_kind)) {
+                            void onResolveSubmissionToLead(submission.id)
+                            return
+                        }
+                        onSelectQueueSubmission(isSelected ? null : submission.id)
+                    }}
                 >
-                    {isSelected ? "Hide Candidates" : "Review Candidates"}
+                    {isDonorFormLeadKind(submission.lead_kind)
+                        ? "Create Intake Lead"
+                        : isSelected
+                            ? "Hide Candidates"
+                            : "Review Candidates"}
                 </Button>
-                <Button
+                {!isDonorFormLeadKind(submission.lead_kind) ? <Button
                     type="button"
                     size="sm"
                     variant="outline"
@@ -193,6 +274,7 @@ function AmbiguousSubmissionCard({
                 >
                     Keep As Lead
                 </Button>
+                : null}
             </div>
         </div>
     )
@@ -258,7 +340,8 @@ function LeadPromotionSubmissionCard({
 
     return (
         <div className="space-y-2 rounded-lg border border-stone-200 p-3 text-sm">
-            <SubmissionIdentityGrid identity={identity} />
+            <Badge variant="outline">{FORM_LEAD_KIND_LABELS[submission.lead_kind]}</Badge>
+            <SubmissionIdentityGrid identity={identity} submission={submission} />
             <div className="flex flex-wrap gap-2">
                 <Button
                     type="button"
@@ -267,7 +350,9 @@ function LeadPromotionSubmissionCard({
                     disabled={promoteIntakeLeadPending || !submission.intake_lead_id}
                     onClick={() => void onPromoteLeadFromSubmission(submission)}
                 >
-                    Promote Lead
+                    {isDonorFormLeadKind(submission.lead_kind)
+                        ? `Promote to ${FORM_LEAD_KIND_LABELS[submission.lead_kind]}`
+                        : "Promote Lead"}
                 </Button>
             </div>
         </div>
@@ -417,24 +502,56 @@ function SubmissionHistoryIdentityGrid({
     const fullName = readAnswerValue(submission, ["full_name", "name"])
     const email = readAnswerValue(submission, ["email", "email_address"])
     const phone = readAnswerValue(submission, ["phone", "phone_number", "mobile_phone"])
+    const isDonor = isDonorFormLeadKind(submission.lead_kind)
+    const state = readAnswerValue(submission, ["state", "residence_state"])
+    const education = readAnswerValue(submission, ["education", "education_level"])
 
     return (
         <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
             <div><span className="font-medium">Name:</span> {fullName}</div>
             <div><span className="font-medium">Email:</span> {email}</div>
             <div><span className="font-medium">Phone:</span> {phone}</div>
+            {isDonor ? (
+                <div><span className="font-medium">Education:</span> {education}</div>
+            ) : null}
+            {isDonor ? (
+                <div><span className="font-medium">State:</span> {state}</div>
+            ) : null}
             <div>
                 <span className="font-medium">Submitted:</span>{" "}
                 {formatSubmissionDateTime(submission.submitted_at)}
             </div>
             <div>
-                <span className="font-medium">Surrogate:</span>{" "}
-                {submission.surrogate_id ? submission.surrogate_id : "—"}
+                <span className="font-medium">Record:</span>{" "}
+                {submission.donor_id && submission.donor_number ? (
+                    <Link
+                        href={`/donors/${submission.donor_id}` as Route}
+                        aria-label={`Open donor ${submission.donor_number}`}
+                        className="text-primary hover:underline"
+                    >
+                        {submission.donor_number}
+                    </Link>
+                ) : submission.donor_id ? (
+                    <span className="text-muted-foreground">Donor record unavailable</span>
+                ) : submission.surrogate_id ? (
+                    <Link
+                        href={`/surrogates/${submission.surrogate_id}` as Route}
+                        aria-label={`Open surrogate ${submission.surrogate_id}`}
+                        className="text-primary hover:underline"
+                    >
+                        {submission.surrogate_id}
+                    </Link>
+                ) : "—"}
             </div>
             <div>
                 <span className="font-medium">Lead:</span>{" "}
                 {submission.intake_lead_id ? submission.intake_lead_id : "—"}
             </div>
+            {isDonor ? (
+                <div className="sm:col-span-2 lg:col-span-3">
+                    <DonorProfilePhotoPreview submission={submission} />
+                </div>
+            ) : null}
         </div>
     )
 }
@@ -457,6 +574,7 @@ function SubmissionHistoryBadges({
     return (
         <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">Shared</Badge>
+            <Badge variant="outline">{FORM_LEAD_KIND_LABELS[submission.lead_kind]}</Badge>
             <Badge variant="outline" className={submissionOutcomeBadgeClass(submission)}>
                 {submissionOutcomeLabel(submission)}
             </Badge>
@@ -480,8 +598,12 @@ function SubmissionHistoryActions({
 }) {
     const canReviewCandidates =
         submission.source_mode === "shared" &&
-        submission.match_status === "ambiguous_review"
-    const canReprocess = submission.source_mode === "shared"
+        submission.match_status === "ambiguous_review" &&
+        !isDonorFormLeadKind(submission.lead_kind)
+    const canReprocess =
+        submission.source_mode === "shared" &&
+        (!isDonorFormLeadKind(submission.lead_kind) || !submission.donor_id)
+    const isDonor = isDonorFormLeadKind(submission.lead_kind)
 
     return (
         <div className="flex flex-wrap justify-end gap-2">
@@ -505,14 +627,15 @@ function SubmissionHistoryActions({
                         void onRetrySubmissionMatch(
                             submission,
                             {
-                                unlinkSurrogate: Boolean(submission.surrogate_id),
+                                unlinkSurrogate: isDonor ? false : Boolean(submission.surrogate_id),
                                 rerunAutoMatch: true,
+                                ...(isDonor ? { createIntakeLeadIfUnmatched: true } : {}),
                             },
-                            "Auto-match re-run complete",
+                            isDonor ? "Submission reprocessed" : "Auto-match re-run complete",
                         )
                     }
                 >
-                    Re-run Auto-Match
+                    {isDonor ? "Reprocess" : "Re-run Auto-Match"}
                 </Button>
             )}
             {submission.surrogate_id && (
@@ -545,7 +668,7 @@ function SubmissionHistoryActions({
                         void onRetrySubmissionMatch(
                             submission,
                             {
-                                unlinkSurrogate: Boolean(submission.surrogate_id),
+                                unlinkSurrogate: isDonor ? false : Boolean(submission.surrogate_id),
                                 unlinkIntakeLead: true,
                                 rerunAutoMatch: true,
                                 createIntakeLeadIfUnmatched: true,

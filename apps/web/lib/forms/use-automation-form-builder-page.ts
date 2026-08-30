@@ -6,16 +6,27 @@ import { useParams, useRouter } from "next/navigation"
 import { toast } from "@/components/ui/toast"
 
 import { useAuth } from "@/lib/auth-context"
-import { DEFAULT_FORM_SURROGATE_FIELD_OPTIONS } from "@/lib/api/forms"
+import {
+    DEFAULT_FORM_DONOR_FIELD_OPTIONS,
+    DEFAULT_FORM_SURROGATE_FIELD_OPTIONS,
+} from "@/lib/api/forms"
 import type {
     FormCreatePayload,
     FormIntakeLinkRead,
+    FormLeadKind,
     FormPurpose,
     FormRead,
     FormSubmissionRead,
     FormSurrogateFieldOption,
     TrackingMode,
 } from "@/lib/api/forms"
+import {
+    FORM_LEAD_KIND_LABELS,
+    getDonorPublishValidationMessage,
+    isDonorFormLeadKind,
+    normalizePaletteFieldForLeadKind,
+    normalizePagesForLeadKind,
+} from "@/lib/forms/form-lead-kind"
 import {
     FALLBACK_FORM_PAGE,
     buildFormSchema,
@@ -57,6 +68,7 @@ type AutomationDraftValues = Pick<
     | "allowedMimeTypesText"
     | "defaultTemplateId"
     | "formDescription"
+    | "formLeadKind"
     | "formName"
     | "formPurpose"
     | "logoUrl"
@@ -133,10 +145,16 @@ function buildAutomationDraftPayload(pages: BuilderPages, state: AutomationDraft
         const trimmedEntry = entry.trim()
         if (trimmedEntry) allowedMimeTypes.push(trimmedEntry)
     }
+    if (isDonorFormLeadKind(state.formLeadKind)) {
+        for (const imageMimeType of ["image/jpeg", "image/png"]) {
+            if (!allowedMimeTypes.includes(imageMimeType)) allowedMimeTypes.push(imageMimeType)
+        }
+    }
     return {
         name: state.formName.trim(),
         description: state.formDescription.trim() || null,
         purpose: state.formPurpose,
+        lead_kind: state.formLeadKind,
         form_schema: buildFormSchema(pages, {
             publicEyebrow: state.publicEyebrow,
             publicTitle: state.publicTitle,
@@ -323,10 +341,12 @@ export function useAutomationFormBuilderPage() {
     const isNewForm = id === "new"
     const formId = isNewForm ? null : id
     const formKey = formId ?? "new"
+    const { state, patchState, resetForForm, hydrateFromForm } =
+        useAutomationFormBuilderState(formKey, isNewForm)
 
     const { data: formData, isLoading: isFormLoading } = useForm(formId)
     const { data: mappingData, isLoading: isMappingsLoading } = useFormMappings(formId)
-    const { data: mappingOptionsData } = useFormMappingOptions()
+    const { data: mappingOptionsData } = useFormMappingOptions(state.formLeadKind)
     const {
         data: intakeLinks = [],
         refetch: refetchIntakeLinks,
@@ -370,8 +390,6 @@ export function useAutomationFormBuilderPage() {
     })
 
     const logoInputRef = useRef<HTMLInputElement>(null)
-    const { state, patchState, resetForForm, hydrateFromForm } =
-        useAutomationFormBuilderState(formKey, isNewForm)
     const {
         pages,
         activePage,
@@ -424,10 +442,12 @@ export function useAutomationFormBuilderPage() {
     const isDefaultSurrogateApplication = Boolean(formData?.is_default_surrogate_application)
     const resolvedLogoUrl =
         state.logoUrl && state.logoUrl.startsWith("/") && apiBaseUrl ? `${apiBaseUrl}${state.logoUrl}` : state.logoUrl
-    const surrogateFieldMappings =
+    const fieldMappings =
         mappingOptionsData && mappingOptionsData.length > 0
             ? mappingOptionsData
-            : DEFAULT_FORM_SURROGATE_FIELD_OPTIONS
+            : isDonorFormLeadKind(state.formLeadKind)
+                ? DEFAULT_FORM_DONOR_FIELD_OPTIONS
+                : DEFAULT_FORM_SURROGATE_FIELD_OPTIONS
 
     if (state.formKey !== formKey) {
         resetForForm(formKey, isNewForm)
@@ -445,7 +465,12 @@ export function useAutomationFormBuilderPage() {
         const schema = formData.form_schema || formData.published_schema
 
         hydrateFromForm({ form: formData, orgLogoPath })
-        resetDocument(schema ? schemaToPages(schema, mappingMap) : [FALLBACK_FORM_PAGE])
+        resetDocument(
+            normalizePagesForLeadKind(
+                schema ? schemaToPages(schema, mappingMap) : [FALLBACK_FORM_PAGE],
+                formData.lead_kind ?? "surrogate",
+            ),
+        )
     }
 
     const draftPayload = buildAutomationDraftPayload(pages, state)
@@ -534,6 +559,7 @@ export function useAutomationFormBuilderPage() {
                 allowedMimeTypesText: state.allowedMimeTypesText,
                 defaultTemplateId: state.defaultTemplateId,
                 formDescription: state.formDescription,
+                formLeadKind: state.formLeadKind,
                 formName: state.formName,
                 formPurpose: state.formPurpose,
                 logoUrl: state.logoUrl,
@@ -631,7 +657,10 @@ export function useAutomationFormBuilderPage() {
             toast.error("Save the form first")
             return
         }
-        if (state.formPurpose !== "surrogate_application") {
+        if (
+            state.formLeadKind !== "surrogate" ||
+            state.formPurpose !== "surrogate_application"
+        ) {
             toast.error("Only surrogate application forms can be set as default")
             return
         }
@@ -647,21 +676,34 @@ export function useAutomationFormBuilderPage() {
         }
     }
 
-    const hasMissingCriticalMappings = () => {
+    const getPublishValidationMessage = () => {
+        const donorValidationMessage = getDonorPublishValidationMessage(
+            pages,
+            state.formLeadKind,
+        )
+        if (donorValidationMessage) return donorValidationMessage
+
         const missingCriticalMappings =
             state.formPurpose === "lead_capture"
-                ? getMissingLeadCaptureMappings(pages, surrogateFieldMappings)
-                : getMissingCriticalMappings(pages, surrogateFieldMappings)
+                ? getMissingLeadCaptureMappings(pages, fieldMappings)
+                : getMissingCriticalMappings(pages, fieldMappings)
         if (missingCriticalMappings.length === 0) {
-            return false
+            return null
         }
 
         const missingLabels = missingCriticalMappings.map((mapping) => mapping.label).join(", ")
-        toast.error(`Add or map required identity fields before publishing: ${missingLabels}.`)
+        return `Add or map required identity fields before publishing: ${missingLabels}.`
+    }
+
+    const hasMissingCriticalMappings = () => {
+        const message = getPublishValidationMessage()
+        if (!message) return false
+        toast.error(message)
         return true
     }
 
     const handlePublish = () => {
+        patchState({ publishValidationAttempted: true })
         if (!state.formName.trim()) {
             toast.error("Form name is required")
             return
@@ -724,6 +766,7 @@ export function useAutomationFormBuilderPage() {
             patchState({
                 showPublishDialog: false,
                 showSharePrompt: (intakeLinkResult.data || []).length > 0,
+                publishValidationAttempted: false,
             })
             toast.success("Form published")
             finishPublishing()
@@ -809,9 +852,6 @@ export function useAutomationFormBuilderPage() {
         const markup = getQrSvgMarkup()
         if (!markup) return
 
-        const svgBlob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" })
-        const svgUrl = URL.createObjectURL(svgBlob)
-        const revokeSvgUrl = () => URL.revokeObjectURL(svgUrl)
         try {
             const image = new Image()
             image.crossOrigin = "anonymous"
@@ -819,7 +859,7 @@ export function useAutomationFormBuilderPage() {
             await new Promise<void>((resolve, reject) => {
                 image.onload = () => resolve()
                 image.onerror = () => reject(new Error("Failed to render QR image"))
-                image.src = svgUrl
+                image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`
             })
 
             const canvas = document.createElement("canvas")
@@ -828,7 +868,6 @@ export function useAutomationFormBuilderPage() {
             const context = canvas.getContext("2d")
             if (!context) {
                 toast.error("Could not prepare PNG download")
-                revokeSvgUrl()
                 return
             }
             context.drawImage(image, 0, 0)
@@ -838,13 +877,10 @@ export function useAutomationFormBuilderPage() {
             )
             if (!blob) {
                 toast.error("Could not generate PNG")
-                revokeSvgUrl()
                 return
             }
             downloadBlob(blob, buildQrFilename(selectedQrLink, "png"))
-            revokeSvgUrl()
         } catch {
-            revokeSvgUrl()
             toast.error("Failed to download PNG")
         }
     }
@@ -906,14 +942,17 @@ export function useAutomationFormBuilderPage() {
             return
         }
         try {
-            await promoteIntakeLeadMutation.mutateAsync({
+            const result = await promoteIntakeLeadMutation.mutateAsync({
                 leadId: submission.intake_lead_id,
                 payload: {},
             })
-            toast.success("Intake lead promoted to surrogate")
+            const promotedKind = result.donor_id
+                ? FORM_LEAD_KIND_LABELS[submission.lead_kind].toLowerCase()
+                : "surrogate"
+            toast.success(`Intake lead promoted to ${promotedKind}`)
             await refreshSubmissionQueues()
-        } catch {
-            toast.error("Failed to promote intake lead")
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to promote intake lead")
         }
     }
 
@@ -962,6 +1001,22 @@ export function useAutomationFormBuilderPage() {
     }
 
     const autoSaveLabel = getAutoSaveLabel(state, isDirty)
+    const publishValidationMessage = state.publishValidationAttempted
+        ? getDonorPublishValidationMessage(pages, state.formLeadKind)
+        : null
+
+    const handleLeadKindChange = (value: FormLeadKind) => {
+        resetDocument(normalizePagesForLeadKind(pages, value))
+        patchState({
+            formLeadKind: value,
+            fieldLibraryCategory: "all",
+            fieldLibrarySearch: "",
+            publishValidationAttempted: false,
+            selectedQueueSubmissionId: null,
+            manualSurrogateId: "",
+            resolveReviewNotes: "",
+        })
+    }
 
     const workspaceDocument = {
         pages,
@@ -976,7 +1031,8 @@ export function useAutomationFormBuilderPage() {
         requestDeletePage,
         handleAddPage,
         handleDuplicatePage,
-        handleDragStart,
+        handleDragStart: (field: Parameters<typeof handleDragStart>[0]) =>
+            handleDragStart(normalizePaletteFieldForLeadKind(field, state.formLeadKind)),
         handleFieldDragStart,
         handleDragOver,
         handleCanvasDragOver,
@@ -984,7 +1040,8 @@ export function useAutomationFormBuilderPage() {
         handleDrop,
         handleDropOnField,
         handleDragEnd,
-        handleInsertField,
+        handleInsertField: (field: Parameters<typeof handleInsertField>[0]) =>
+            handleInsertField(normalizePaletteFieldForLeadKind(field, state.formLeadKind)),
         handleUpdateField,
         handleDuplicateField,
         handleDeleteField,
@@ -1013,9 +1070,10 @@ export function useAutomationFormBuilderPage() {
         patchState,
         autoSaveLabel,
         workspaceProps: {
+            leadKind: state.formLeadKind,
             desktopCanvasWidthClass: "max-w-[min(100%,72rem)]",
             canvasFrameClass: "rounded-[24px] border border-stone-200 bg-white p-4 sm:p-5",
-            mappingOptions: surrogateFieldMappings,
+            mappingOptions: fieldMappings,
             publicEyebrow: state.publicEyebrow,
             publicTitle: state.publicTitle,
             publicSubtitle: state.publicSubtitle,
@@ -1043,6 +1101,13 @@ export function useAutomationFormBuilderPage() {
             formName: state.formName,
             formDescription: state.formDescription,
             formPurpose: state.formPurpose,
+            formLeadKind: state.formLeadKind,
+            formLeadKindChangeDisabled:
+                !isNewForm &&
+                (isSubmissionHistoryLoading ||
+                    ambiguousSubmissions.length > 0 ||
+                    leadQueueSubmissions.length > 0 ||
+                    submissionHistory.length > 0),
             publicEyebrow: state.publicEyebrow,
             publicTitle: state.publicTitle,
             publicSubtitle: state.publicSubtitle,
@@ -1067,6 +1132,7 @@ export function useAutomationFormBuilderPage() {
             onFormNameChange: (value: string) => patchState({ formName: value }),
             onFormDescriptionChange: (value: string) => patchState({ formDescription: value }),
             onFormPurposeChange: (value: FormPurpose) => patchState({ formPurpose: value }),
+            onFormLeadKindChange: handleLeadKindChange,
             onPublicEyebrowChange: (value: string) => patchState({ publicEyebrow: value }),
             onPublicTitleChange: (value: string) => patchState({ publicTitle: value }),
             onPublicSubtitleChange: (value: string) => patchState({ publicSubtitle: value }),
@@ -1129,6 +1195,8 @@ export function useAutomationFormBuilderPage() {
             onPromoteLeadFromSubmission: handlePromoteLeadFromSubmission,
         },
         onBack: () => router.push("/automation/forms"),
+        formLeadKindLabel: FORM_LEAD_KIND_LABELS[state.formLeadKind],
+        publishValidationMessage,
         onFormNameChange: (value: string) => patchState({ formName: value }),
         onWorkspaceTabChange: handleWorkspaceTabChange,
         onShareDialogOpenChange: (open: boolean) => patchState({ showSharePrompt: open }),

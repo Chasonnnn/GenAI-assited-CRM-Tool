@@ -52,6 +52,8 @@ interface Execution {
     workflow_name: string
     entity_type: string
     entity_id: string
+    subject_type?: string | null
+    subject_id?: string | null
     entity_name?: string | null
     entity_number?: string | null
     action_count: number
@@ -156,20 +158,40 @@ async function fetchWorkflows(): Promise<{ id: string; name: string }[]> {
     return api.get<{ id: string; name: string }[]>("/workflows")
 }
 
-function getEntityLink(entityType: string, entityId: string): string | null {
-    switch (entityType.toLowerCase()) {
+function getEntityLink(execution: Execution): string | null {
+    if (
+        (execution.subject_type === "egg_donor" || execution.subject_type === "sperm_donor") &&
+        execution.subject_id &&
+        getDonorIdentityLabel(execution)
+    ) {
+        return `/donors/${execution.subject_id}`
+    }
+
+    switch (execution.entity_type.toLowerCase()) {
         case "surrogate":
-            return `/surrogates/${entityId}`
+            return `/surrogates/${execution.entity_id}`
         case "intended_parent":
-            return `/intended-parents/${entityId}`
+            return `/intended-parents/${execution.entity_id}`
         case "match":
-            return `/intended-parents/matches/${entityId}`
+            return `/intended-parents/matches/${execution.entity_id}`
         default:
             return null
     }
 }
 
+function getDonorIdentityLabel(execution: Execution): string | null {
+    const name = execution.entity_name?.trim()
+    const number = execution.entity_number?.trim()
+    if (number && name) return `${number} — ${name}`
+    return number || name || null
+}
+
 function formatEntityLabel(execution: Execution): string {
+    const isDonorSubject =
+        execution.subject_type === "egg_donor" || execution.subject_type === "sperm_donor"
+    if (isDonorSubject) {
+        return getDonorIdentityLabel(execution) ?? "Donor unavailable"
+    }
     if (execution.entity_type.toLowerCase() === "surrogate") {
         const name = execution.entity_name?.trim()
         const number = execution.entity_number?.trim()
@@ -551,7 +573,7 @@ function WorkflowExecutionsTable({
                             executions.map((execution) => {
                                 const StatusIcon = statusConfig[execution.status]?.icon || AlertCircleIcon
                                 const isExpanded = expandedRows.has(execution.id)
-                                const entityLink = getEntityLink(execution.entity_type, execution.entity_id)
+                                const entityLink = getEntityLink(execution)
 
                                 return (
                                     <Fragment key={execution.id}>

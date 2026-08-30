@@ -8,6 +8,7 @@ import type { JsonObject } from '../types/json'
 
 type FormStatus = 'draft' | 'published' | 'archived'
 export type FormPurpose = 'surrogate_application' | 'lead_capture' | 'event_intake' | 'other'
+export type FormLeadKind = 'surrogate' | 'egg_donor' | 'sperm_donor'
 type FormSubmissionStatus = 'pending_review' | 'approved' | 'rejected'
 type FormLinkMode = 'shared'
 type SharedSubmissionOutcome = 'workflow_pending' | 'linked' | 'ambiguous_review' | 'lead_created'
@@ -127,6 +128,7 @@ export interface FormSummary {
     name: string
     status: FormStatus
     purpose?: FormPurpose
+    lead_kind: FormLeadKind
     is_default_surrogate_application?: boolean
     created_at: string
     updated_at: string
@@ -146,6 +148,7 @@ export interface FormCreatePayload {
     name: string
     description?: string | null
     purpose?: FormPurpose
+    lead_kind?: FormLeadKind
     form_schema?: FormSchema | null
     max_file_size_bytes?: number | null
     max_file_count?: number | null
@@ -157,6 +160,7 @@ export interface FormUpdatePayload {
     name?: string | null
     description?: string | null
     purpose?: FormPurpose | null
+    lead_kind?: FormLeadKind | null
     form_schema?: FormSchema | null
     max_file_size_bytes?: number | null
     max_file_count?: number | null
@@ -201,6 +205,15 @@ export const DEFAULT_FORM_SURROGATE_FIELD_OPTIONS: FormSurrogateFieldOption[] = 
     { value: "is_priority", label: "Priority" },
 ]
 
+export const DEFAULT_FORM_DONOR_FIELD_OPTIONS: FormSurrogateFieldOption[] = [
+    { value: "full_name", label: "Full Name", is_critical: true },
+    { value: "email", label: "Email", is_critical: true },
+    { value: "phone", label: "Phone" },
+    { value: "state", label: "State" },
+    { value: "education", label: "Education" },
+    { value: "profile_photo", label: "Profile Photo", is_critical: true },
+]
+
 export interface FormSubmissionFileRead {
     id: string
     filename: string
@@ -215,6 +228,9 @@ export interface FormSubmissionRead {
     id: string
     form_id: string
     surrogate_id?: string | null
+    donor_id?: string | null
+    donor_number?: string | null
+    lead_kind: FormLeadKind
     status: FormSubmissionStatus
     submitted_at: string
     reviewed_at?: string | null
@@ -318,12 +334,14 @@ export interface FormSubmissionSharedResponse {
     status: FormSubmissionStatus
     outcome: SharedSubmissionOutcome
     surrogate_id?: string | null
+    donor_id?: string | null
     intake_lead_id?: string | null
 }
 
 export interface FormIntakePublicRead {
     form_id: string
     intake_link_id: string
+    published_version_id: string
     name: string
     description?: string | null
     form_schema: FormSchema
@@ -425,7 +443,9 @@ export interface IntakeLeadRead {
     phone?: string | null
     date_of_birth?: string | null
     status: string
+    lead_type: FormLeadKind
     promoted_surrogate_id?: string | null
+    promoted_donor_id?: string | null
     created_at: string
     updated_at: string
     promoted_at?: string | null
@@ -439,7 +459,8 @@ export interface PromoteIntakeLeadPayload {
 
 export interface PromoteIntakeLeadResponse {
     intake_lead_id: string
-    surrogate_id: string
+    surrogate_id?: string | null
+    donor_id?: string | null
     linked_submission_count: number
 }
 
@@ -562,9 +583,13 @@ function normalizeFormMappingOptions(payload: unknown): FormSurrogateFieldOption
     return normalized
 }
 
-export async function listFormMappingOptions(): Promise<FormSurrogateFieldOption[]> {
+export async function listFormMappingOptions(
+    leadKind: FormLeadKind = "surrogate",
+): Promise<FormSurrogateFieldOption[]> {
     try {
-        const response = await api.get<unknown>("/forms/mapping-options")
+        const response = await api.get<unknown>(
+            `/forms/mapping-options?lead_kind=${encodeURIComponent(leadKind)}`,
+        )
         return normalizeFormMappingOptions(response)
     } catch {
         return []
@@ -769,12 +794,16 @@ export function submitSharedPublicForm(
     fileFieldKeys?: string[],
     challengeToken?: string | null,
     messagingConsent?: { operational?: boolean; promotional?: boolean },
+    publishedVersionId?: string | null,
 ): Promise<FormSubmissionSharedResponse> {
     const formData = new FormData()
     formData.append('answers', JSON.stringify(answers))
     files.forEach((file) => formData.append('files', file))
     if (fileFieldKeys) {
         formData.append('file_field_keys', JSON.stringify(fileFieldKeys))
+    }
+    if (publishedVersionId) {
+        formData.append('published_version_id', publishedVersionId)
     }
     formData.append('sms_operational', String(messagingConsent?.operational === true))
     formData.append('sms_promotional', String(messagingConsent?.promotional === true))

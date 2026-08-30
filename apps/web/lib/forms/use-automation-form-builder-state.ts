@@ -2,7 +2,7 @@
 
 import { useReducer, useState } from "react"
 
-import type { FormPurpose, FormRead } from "@/lib/api/forms"
+import type { FormLeadKind, FormPurpose, FormRead } from "@/lib/api/forms"
 import { schemaToMetadata } from "@/lib/forms/form-builder-document"
 
 type WorkspaceTab = "edit" | "preview" | "settings" | "submissions"
@@ -17,6 +17,7 @@ type AutomationBuilderState = {
     formName: string
     formDescription: string
     formPurpose: FormPurpose
+    formLeadKind: FormLeadKind
     publicEyebrow: string
     publicTitle: string
     publicSubtitle: string
@@ -38,6 +39,7 @@ type AutomationBuilderState = {
     isPublished: boolean
     isSaving: boolean
     isPublishing: boolean
+    publishValidationAttempted: boolean
     useOrgLogo: boolean
     customLogoUrl: string
     previewDevice: PreviewDevice
@@ -66,6 +68,7 @@ const buildInitialState = (formKey: string, isNewForm: boolean): AutomationBuild
     formName: isNewForm ? "" : "Surrogate Application Form",
     formDescription: "",
     formPurpose: "surrogate_application",
+    formLeadKind: "surrogate",
     publicEyebrow: "",
     publicTitle: "",
     publicSubtitle: "",
@@ -87,6 +90,7 @@ const buildInitialState = (formKey: string, isNewForm: boolean): AutomationBuild
     isPublished: false,
     isSaving: false,
     isPublishing: false,
+    publishValidationAttempted: false,
     useOrgLogo: false,
     customLogoUrl: "",
     previewDevice: "desktop",
@@ -115,6 +119,7 @@ function reducer(state: AutomationBuilderState, action: AutomationBuilderAction)
                 formName: action.payload.form.name,
                 formDescription: action.payload.form.description ?? "",
                 formPurpose: action.payload.form.purpose ?? "surrogate_application",
+                formLeadKind: action.payload.form.lead_kind ?? "surrogate",
                 publicEyebrow: metadata.publicEyebrow,
                 publicTitle: metadata.publicTitle,
                 publicSubtitle: metadata.publicSubtitle,

@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { FormField, FormFieldValidation, FormSurrogateFieldOption } from "@/lib/api/forms"
+import type { FormField, FormFieldValidation, FormLeadKind, FormSurrogateFieldOption } from "@/lib/api/forms"
 import {
     getBuilderOptionLabel,
     getBuilderOptionValue,
@@ -80,6 +80,7 @@ type WorkspaceDocument = {
 }
 
 type FormBuilderWorkspaceProps = {
+    leadKind: FormLeadKind
     desktopCanvasWidthClass: string
     canvasFrameClass: string
     mappingOptions: FormSurrogateFieldOption[]
@@ -523,7 +524,72 @@ function EditCanvas({
     )
 }
 
-function FieldInspector({
+function FieldInspectorEmptyState({
+    currentPage,
+    settingsPanelClass,
+}: {
+    currentPage: BuilderFormPage
+    settingsPanelClass: string
+}) {
+    return (
+        <aside data-testid="form-builder-settings" aria-label="Form builder settings" className={settingsPanelClass}>
+            <div className="flex min-h-full flex-col gap-4">
+                <div className="rounded-2xl border border-border/70 bg-background p-4">
+                    <div className="flex items-start gap-3">
+                        <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                            <Layers2Icon className="size-5" />
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-1">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                                Current page
+                            </p>
+                            <h3 className="text-base font-semibold text-foreground">
+                                {currentPage.name || "Current page"}
+                            </h3>
+                            <p className="text-sm text-muted-foreground">
+                                {currentPage.fields.length} {currentPage.fields.length === 1 ? "field" : "fields"} on this page.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <InspectorSection title="Edit guidance" description="Select a field to edit it.">
+                    <p className="text-sm text-muted-foreground">
+                        The canvas shows the live form layout. Field details appear here when selected.
+                    </p>
+                </InspectorSection>
+            </div>
+        </aside>
+    )
+}
+
+function SelectedFieldSummary({ field }: { field: BuilderFormField }) {
+    return (
+        <div className="rounded-2xl border border-border/70 bg-background p-4">
+            <div className="flex items-start gap-3">
+                <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Settings2Icon className="size-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        Selected field
+                    </p>
+                    <h3 className="mt-1 truncate text-base font-semibold text-foreground">
+                        {field.label || "Untitled field"}
+                    </h3>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        <Badge variant="outline">{getBuilderFieldTypeLabel(field.type)}</Badge>
+                        {field.required ? <Badge variant="secondary">Required</Badge> : null}
+                        {field.surrogateFieldMapping ? <Badge variant="secondary">Mapped</Badge> : null}
+                        {field.showIf ? <Badge variant="secondary">Conditional</Badge> : null}
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+function useFieldInspectorView({
     currentPage,
     selectedFieldData,
     mappingOptions,
@@ -584,62 +650,13 @@ function FieldInspector({
     const mappingLabelMap = new Map(mappingOptions.map((mapping) => [mapping.value, mapping.label] as const))
 
     if (!selectedFieldData) {
-        return (
-            <aside data-testid="form-builder-settings" aria-label="Form builder settings" className={settingsPanelClass}>
-                <div className="flex min-h-full flex-col gap-4">
-                    <div className="rounded-2xl border border-border/70 bg-background p-4">
-                        <div className="flex items-start gap-3">
-                            <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                                <Layers2Icon className="size-5" />
-                            </div>
-                            <div className="min-w-0 flex-1 space-y-1">
-                                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                                    Current page
-                                </p>
-                                <h3 className="text-base font-semibold text-foreground">
-                                    {currentPage.name || "Current page"}
-                                </h3>
-                                <p className="text-sm text-muted-foreground">
-                                    {currentPage.fields.length} {currentPage.fields.length === 1 ? "field" : "fields"} on this page.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <InspectorSection title="Edit guidance" description="Select a field to edit it.">
-                        <p className="text-sm text-muted-foreground">
-                            The canvas shows the live form layout. Field details appear here when selected.
-                        </p>
-                    </InspectorSection>
-                </div>
-            </aside>
-        )
+        return <FieldInspectorEmptyState currentPage={currentPage} settingsPanelClass={settingsPanelClass} />
     }
 
     return (
         <aside data-testid="form-builder-settings" aria-label="Form builder settings" className={settingsPanelClass}>
             <div className="flex min-h-full flex-col gap-4">
-                <div className="rounded-2xl border border-border/70 bg-background p-4">
-                    <div className="flex items-start gap-3">
-                        <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                            <Settings2Icon className="size-5" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                                Selected field
-                            </p>
-                            <h3 className="mt-1 truncate text-base font-semibold text-foreground">
-                                {selectedFieldData.label || "Untitled field"}
-                            </h3>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                                <Badge variant="outline">{getBuilderFieldTypeLabel(selectedFieldData.type)}</Badge>
-                                {selectedFieldData.required ? <Badge variant="secondary">Required</Badge> : null}
-                                {selectedFieldData.surrogateFieldMapping ? <Badge variant="secondary">Mapped</Badge> : null}
-                                {selectedFieldData.showIf ? <Badge variant="secondary">Conditional</Badge> : null}
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <SelectedFieldSummary field={selectedFieldData} />
 
                 <Tabs
                     value={activeTab}
@@ -1096,7 +1113,7 @@ function FieldInspector({
                             </InspectorSection>
                         ) : null}
 
-                        <InspectorSection title="Mapping" description="Connect this field to a surrogate record field.">
+                        <InspectorSection title="Mapping" description="Connect this field to a CRM record field.">
                             <Select
                                 value={selectedFieldData.surrogateFieldMapping || "none"}
                                 onValueChange={(value) => onMappingChange(selectedFieldData.id, value)}
@@ -1127,7 +1144,12 @@ function FieldInspector({
     )
 }
 
+function FieldInspector(props: Parameters<typeof useFieldInspectorView>[0]) {
+    return useFieldInspectorView(props)
+}
+
 export function FormBuilderWorkspace({
+    leadKind,
     desktopCanvasWidthClass,
     canvasFrameClass,
     mappingOptions,
@@ -1148,6 +1170,7 @@ export function FormBuilderWorkspace({
             className="flex min-h-0 flex-1 flex-col overflow-y-auto xl:grid xl:grid-cols-[clamp(21rem,32vw,31rem)_minmax(0,1fr)] xl:overflow-hidden"
         >
             <FormBuilderPalette
+                leadKind={leadKind}
                 className="hidden xl:block"
                 activeCategory={fieldLibraryCategory}
                 search={fieldLibrarySearch}
@@ -1217,6 +1240,7 @@ export function FormBuilderWorkspace({
             </div>
 
             <FieldLibraryDialog
+                leadKind={leadKind}
                 open={fieldLibraryOpen}
                 activeCategory={fieldLibraryCategory}
                 search={fieldLibrarySearch}

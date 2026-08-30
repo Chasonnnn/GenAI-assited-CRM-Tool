@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { fireEvent, render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import MetaFormMappingPage from "../app/(app)/settings/integrations/meta/forms/[id]/page"
 
 const mockPush = vi.fn()
@@ -43,6 +43,7 @@ describe("MetaFormMappingPage", () => {
                     mapping_version_id: "version-1",
                     mapping_updated_at: null,
                     mapping_updated_by_name: null,
+                    lead_kind: "surrogate",
                     is_active: true,
                     synced_at: "2026-03-08T00:00:00Z",
                     unconverted_leads: 1,
@@ -402,10 +403,37 @@ describe("MetaFormMappingPage", () => {
                     custom_field_key: "favorite_color",
                 }),
             ]),
+            lead_kind: "surrogate",
             unknown_column_behavior: "warn",
         })
         expect(mutateAsync.mock.calls[0][0].column_mappings).not.toEqual(
             expect.arrayContaining([expect.objectContaining({ csv_column: "hobby" })])
+        )
+    })
+
+    it("saves whether a Meta form creates surrogates, egg donors, or sperm donors", async () => {
+        const mutateAsync = vi.fn().mockResolvedValue({ success: true })
+        mockUseUpdateMetaFormMapping.mockReturnValue({
+            mutateAsync,
+            isPending: false,
+        })
+
+        render(<MetaFormMappingPage />)
+
+        const leadType = screen.getByRole("combobox", { name: /lead type/i })
+        expect(leadType).toHaveTextContent("Surrogate")
+        fireEvent.mouseDown(leadType)
+        const eggDonorOption = await screen.findByRole("option", { name: "Egg donor" })
+        fireEvent.mouseMove(eggDonorOption)
+        fireEvent.click(eggDonorOption)
+        expect(screen.getByText("Profile photo follow-up required")).toBeInTheDocument()
+        expect(screen.getByText(/Meta lead forms do not send file uploads/i)).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: /save mapping/i }))
+
+        await waitFor(() =>
+            expect(mutateAsync).toHaveBeenCalledWith(
+                expect.objectContaining({ lead_kind: "egg_donor" })
+            )
         )
     })
 })

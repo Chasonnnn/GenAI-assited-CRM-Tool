@@ -5,15 +5,15 @@ import { Button } from "@/components/ui/button"
 import { Command, CommandInput } from "@/components/ui/command"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
-    ALL_BUILDER_FIELD_GROUPS,
-    CUSTOM_FIELD_GROUPS,
-    PRESET_FIELD_GROUPS,
+    getBuilderFieldGroupsForLeadKind,
     type BuilderLibraryCategory,
     type BuilderPaletteField,
 } from "@/lib/forms/form-builder-library"
+import type { FormLeadKind } from "@/lib/api/forms"
 import { cn } from "@/lib/utils"
 
 type FormBuilderPaletteProps = {
+    leadKind: FormLeadKind
     activeCategory: BuilderLibraryCategory
     search: string
     onCategoryChange: (value: BuilderLibraryCategory) => void
@@ -32,12 +32,6 @@ type VisibleSection = {
 }
 
 const ALL_CATEGORY_ID = "all"
-const PRESET_FIELD_GROUP_IDS = new Set(PRESET_FIELD_GROUPS.map((group) => group.id))
-const FORM_BUILDER_PALETTE_CATEGORIES: Array<{ id: BuilderLibraryCategory; label: string }> = [
-    { id: ALL_CATEGORY_ID, label: "All" },
-    ...PRESET_FIELD_GROUPS.map((group) => ({ id: group.id, label: group.label })),
-    ...CUSTOM_FIELD_GROUPS.map((group) => ({ id: group.id, label: group.label })),
-]
 
 function buildTileTestId(field: BuilderPaletteField) {
     return `form-builder-palette-tile-${field.key}`
@@ -94,6 +88,7 @@ function PaletteFieldTile({
 }
 
 export function FormBuilderPalette({
+    leadKind,
     activeCategory,
     search,
     onCategoryChange,
@@ -104,25 +99,33 @@ export function FormBuilderPalette({
     className,
 }: FormBuilderPaletteProps) {
     const normalizedSearch = search.trim().toLowerCase()
-
-    const categories = FORM_BUILDER_PALETTE_CATEGORIES
+    const { presetGroups, allGroups } = getBuilderFieldGroupsForLeadKind(leadKind)
+    const presetGroupIds = new Set(presetGroups.map((group) => group.id))
+    const categories: Array<{ id: BuilderLibraryCategory; label: string }> = [
+        { id: ALL_CATEGORY_ID, label: "All" },
+        ...allGroups.map((group) => ({ id: group.id, label: group.label })),
+    ]
+    const resolvedActiveCategory =
+        activeCategory === ALL_CATEGORY_ID || allGroups.some((group) => group.id === activeCategory)
+            ? activeCategory
+            : ALL_CATEGORY_ID
 
     const searchPattern = normalizedSearch
         ? new RegExp(escapeRegExp(normalizedSearch), "i")
         : null
     const sourceGroups =
         normalizedSearch
-            ? ALL_BUILDER_FIELD_GROUPS
-            : activeCategory === ALL_CATEGORY_ID
-            ? ALL_BUILDER_FIELD_GROUPS
-            : ALL_BUILDER_FIELD_GROUPS.filter((group) => group.id === activeCategory)
+            ? allGroups
+            : resolvedActiveCategory === ALL_CATEGORY_ID
+            ? allGroups
+            : allGroups.filter((group) => group.id === resolvedActiveCategory)
 
     const visibleSections: VisibleSection[] = []
     for (const group of sourceGroups) {
         const section = {
             id: group.id,
             label: group.label,
-            isPreset: PRESET_FIELD_GROUP_IDS.has(group.id),
+            isPreset: presetGroupIds.has(group.id),
             fields: group.fields.filter((field) => {
                 if (!searchPattern) return true
                 return searchPattern.test(`${field.label} ${field.key}`)
@@ -150,7 +153,7 @@ export function FormBuilderPalette({
                         <ScrollArea className="h-full">
                             <nav className="space-y-1 p-2.5" aria-label="Field categories">
                                 {categories.map((category) => {
-                                    const isActive = activeCategory === category.id
+                                    const isActive = resolvedActiveCategory === category.id
 
                                     return (
                                         <Button unstyled

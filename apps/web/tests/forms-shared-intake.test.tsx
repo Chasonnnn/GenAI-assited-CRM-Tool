@@ -53,6 +53,7 @@ vi.mock('@/components/ui/toast', () => ({
 const baseForm = {
     form_id: 'form-1',
     intake_link_id: 'link-1',
+    published_version_id: 'version-1',
     name: 'Shared Intake',
     description: 'Event application form',
     form_schema: {
@@ -386,6 +387,9 @@ describe('Shared Intake Public Page', () => {
                 {},
                 [],
                 undefined,
+                undefined,
+                undefined,
+                'version-1',
             )
         })
 
@@ -433,6 +437,7 @@ describe('Shared Intake Public Page', () => {
                 undefined,
                 undefined,
                 { operational: false, promotional: false },
+                'version-1',
             )
         })
     })
@@ -488,6 +493,70 @@ describe('Shared Intake Public Page', () => {
                 {},
                 [identityFile, insuranceFile],
                 ['identity_upload', 'insurance_upload'],
+                undefined,
+                undefined,
+                'version-1',
+            )
+        })
+    })
+
+    it('requires and submits the donor profile image with its mapped field key', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            allowed_mime_types: ['image/png', 'image/jpeg'],
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Donor Application',
+                        fields: [
+                            { key: 'full_name', label: 'Full Name', type: 'text', required: true },
+                            { key: 'email', label: 'Email', type: 'email', required: true },
+                            {
+                                key: 'profile_photo',
+                                label: 'Profile Photo',
+                                type: 'file',
+                                required: true,
+                            },
+                        ],
+                    },
+                ],
+            },
+        })
+        const photo = new File(['photo'], 'profile.jpg', { type: 'image/jpeg' })
+        const { container } = render(<PublicIntakeFormClient slug="donor-form" />)
+
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        fireEvent.change(screen.getByLabelText(/full name/i), {
+            target: { value: 'Dana Donor' },
+        })
+        fireEvent.change(screen.getByLabelText(/email/i), {
+            target: { value: 'dana@example.com' },
+        })
+        const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement
+        expect(fileInput).toHaveAttribute('accept', 'image/png,image/jpeg')
+
+        fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+        expect(submitSharedPublicForm).not.toHaveBeenCalled()
+        expect(await screen.findByRole('button', { name: 'Submit Application' })).toBeDisabled()
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+
+        const activeFileInput = container.querySelector('input[type="file"]') as HTMLInputElement
+        fireEvent.change(activeFileInput, { target: { files: [photo] } })
+
+        fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+        fireEvent.click(screen.getByRole('checkbox'))
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
+
+        await waitFor(() => {
+            expect(submitSharedPublicForm).toHaveBeenCalledWith(
+                'donor-form',
+                { full_name: 'Dana Donor', email: 'dana@example.com' },
+                [photo],
+                ['profile_photo'],
+                undefined,
+                undefined,
+                'version-1',
             )
         })
     })
