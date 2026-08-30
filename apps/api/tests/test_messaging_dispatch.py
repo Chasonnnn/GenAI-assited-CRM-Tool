@@ -29,6 +29,7 @@ def _ready_claim(
     from app.services import (
         messaging_consent_service,
         messaging_delivery_service,
+        twilio_readiness_service,
         twilio_settings_service,
     )
 
@@ -75,6 +76,12 @@ def _ready_claim(
         },
     }
     monkeypatch.setenv("MESSAGING_DELIVERY_DISPATCH_ENABLED", "true")
+    if media_asset_ids:
+        monkeypatch.setattr(
+            twilio_readiness_service.app_settings,
+            "ATTACHMENT_SCAN_ENABLED",
+            True,
+        )
     db.commit()
     consent = messaging_consent_service.record_opt_in(
         db,
