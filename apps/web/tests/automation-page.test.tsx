@@ -976,4 +976,88 @@ describe('AutomationPage', () => {
         )
     })
 
+    it('configures a returned donor messaging action with mandatory approval', () => {
+        mockUseWorkflowOptions.mockImplementation(
+            (_scope: string, subjectType: string) => ({
+                data: {
+                    trigger_types: subjectType === 'egg_donor'
+                        ? [{ value: 'donor_created', label: 'Donor Created', description: '' }]
+                        : [{ value: 'surrogate_created', label: 'Surrogate Created', description: '' }],
+                    action_types: [{ value: 'send_message', label: 'Send SMS/MMS', description: '' }],
+                    action_types_by_trigger: subjectType === 'egg_donor'
+                        ? { donor_created: ['send_message'] }
+                        : { surrogate_created: ['send_message'] },
+                    trigger_entity_types: subjectType === 'egg_donor'
+                        ? { donor_created: 'egg_donor' }
+                        : { surrogate_created: 'surrogate' },
+                    condition_fields: [],
+                    condition_operators: [],
+                    update_fields: [],
+                    email_variables: [],
+                    email_templates: [],
+                    message_templates: [{
+                        id: 'message-template-1',
+                        name: 'Screening reminder',
+                        purpose: 'operational',
+                        version: 2,
+                    }],
+                    users: [],
+                    queues: [],
+                    statuses: [],
+                },
+                isLoading: false,
+            }),
+        )
+
+        renderAutomationPage()
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a create workflow button',
+            ),
+        )
+        fireEvent.change(screen.getByRole('combobox', { name: 'Record type' }), {
+            target: { value: 'egg_donor' },
+        })
+        fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Egg Donors'), {
+            target: { value: 'Egg donor SMS reminder' },
+        })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Trigger type' }), {
+            target: { value: 'donor_created' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+        fireEvent.change(screen.getByRole('combobox', { name: 'Action type 1' }), {
+            target: { value: 'send_message' },
+        })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Message purpose' }), {
+            target: { value: 'operational' },
+        })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Message template' }), {
+            target: { value: 'message-template-1' },
+        })
+        expect(screen.getByRole('switch', { name: 'Requires Approval' }))
+            .toHaveAttribute('aria-disabled', 'true')
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a save workflow button',
+            ),
+        )
+        expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                subject_type: 'egg_donor',
+                actions: [{
+                    action_type: 'send_message',
+                    purpose: 'operational',
+                    message_template_version_id: 'message-template-1',
+                    requires_approval: true,
+                }],
+            }),
+            expect.any(Object),
+        )
+    })
+
 })

@@ -56,10 +56,6 @@ export interface TwilioSettings {
 export interface TwilioRouteSettingsUpdate {
     messaging_service_sid?: string
     sender_phone_e164?: string
-    a2p_status?: string
-    advanced_opt_out_status?: string
-    consent_management_status?: string
-    capability_evidence?: Record<string, unknown> | null
     enabled?: boolean
 }
 
@@ -94,7 +90,7 @@ export interface TwilioCredentialTestRequest {
     routes?: Partial<
         Record<
             TwilioMessagingPurpose,
-            { messaging_service_sid?: string }
+            { messaging_service_sid?: string; sender_phone_e164?: string }
         >
     >
 }
@@ -104,6 +100,9 @@ export interface TwilioCredentialTestResponse {
     account_status: string | null
     twilio_edition: string | null
     capabilities: Record<string, boolean>
+    route_capabilities: Partial<
+        Record<TwilioMessagingPurpose, Record<string, boolean | string | null>>
+    >
     error: string | null
     warning: string | null
 }

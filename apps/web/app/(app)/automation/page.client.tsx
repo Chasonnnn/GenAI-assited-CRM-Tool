@@ -832,6 +832,12 @@ function getActionValidationError(action: ActionConfig): string | null {
     ) {
         return "Select at least one email recipient."
     }
+    if (action.action_type === "send_message" && !action.purpose) {
+        return "Select a message purpose for all messaging actions."
+    }
+    if (action.action_type === "send_message" && !action.message_template_version_id) {
+        return "Select a message template for all messaging actions."
+    }
     if (action.action_type === "create_task" && !title.trim()) {
         return "Task actions need a title."
     }
@@ -989,6 +995,7 @@ function useAutomationPageView({
         : actionTypeOptions
     const userOptions = options?.users ?? []
     const queueOptions = options?.queues ?? []
+    const messageTemplates = options?.message_templates ?? []
     const emailRecipientOptions = isDonorSubject(subjectType)
         ? [
             { value: "donor", label: "Donor" },
@@ -1367,7 +1374,8 @@ function useAutomationPageView({
     const updateActionType = (index: number, actionType: string) => {
         updateAction(index, {
             action_type: actionType,
-            ...(isDonorSubject(subjectType) && actionType === "send_email"
+            ...(isDonorSubject(subjectType) &&
+            (actionType === "send_email" || actionType === "send_message")
                 ? { requires_approval: true }
                 : {}),
         })
@@ -2267,6 +2275,73 @@ function useAutomationPageView({
                                                         )}
                                                     </div>
                                                 )}
+                                                {action.action_type === "send_message" && (
+                                                    <div className="space-y-3">
+                                                        <Select
+                                                            aria-label="Message purpose"
+                                                            value={typeof action.purpose === "string" ? action.purpose : ""}
+                                                            onValueChange={(value) => {
+                                                                if (!value) return
+                                                                updateAction(index, {
+                                                                    purpose: value,
+                                                                    message_template_version_id: "",
+                                                                })
+                                                            }}
+                                                        >
+                                                            <SelectTrigger aria-label="Message purpose">
+                                                                <SelectValue placeholder="Message purpose">
+                                                                    {(value: string | null) => {
+                                                                        if (value === "operational") return "Operational"
+                                                                        if (value === "promotional") return "Promotional"
+                                                                        return "Message purpose"
+                                                                    }}
+                                                                </SelectValue>
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="operational">Operational</SelectItem>
+                                                                <SelectItem value="promotional">Promotional</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <Select
+                                                            aria-label="Message template"
+                                                            value={
+                                                                typeof action.message_template_version_id === "string"
+                                                                    ? action.message_template_version_id
+                                                                    : ""
+                                                            }
+                                                            onValueChange={(value) =>
+                                                                value && updateAction(index, {
+                                                                    message_template_version_id: value,
+                                                                })
+                                                            }
+                                                        >
+                                                            <SelectTrigger aria-label="Message template">
+                                                                <SelectValue placeholder="Message template">
+                                                                    {(value: string | null) => {
+                                                                        if (!value) return "Message template"
+                                                                        const template = messageTemplates.find(
+                                                                            (candidate) => candidate.id === value,
+                                                                        )
+                                                                        return template
+                                                                            ? `${template.name} v${template.version}`
+                                                                            : "Unknown template"
+                                                                    }}
+                                                                </SelectValue>
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {messageTemplates.flatMap((template) =>
+                                                                    template.purpose === action.purpose
+                                                                        ? [
+                                                                            <SelectItem key={template.id} value={template.id}>
+                                                                                {template.name} v{template.version}
+                                                                            </SelectItem>,
+                                                                        ]
+                                                                        : [],
+                                                                )}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                )}
                                                 {action.action_type === "create_task" && (
                                                     <div className="space-y-3">
                                                         <Input
@@ -2565,7 +2640,8 @@ function useAutomationPageView({
                                                             onCheckedChange={(checked) => updateAction(index, { requires_approval: checked })}
                                                             disabled={
                                                                 isDonorSubject(subjectType) &&
-                                                                action.action_type === "send_email"
+                                                                (action.action_type === "send_email" ||
+                                                                    action.action_type === "send_message")
                                                             }
                                                         />
                                                     </div>
