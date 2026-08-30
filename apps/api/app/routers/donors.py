@@ -12,8 +12,10 @@ from app.core.deps import (
     require_csrf_header,
     require_permission,
 )
+from app.core.permissions import PermissionKey
 from app.core.policies import POLICIES
 from app.db.enums import AuditEventType, EntityType, Role
+from app.schemas.activity import EntityActivityRead, EntityActivityResponse
 from app.schemas.auth import UserSession
 from app.schemas.donor import (
     DonorCreate,
@@ -28,7 +30,9 @@ from app.schemas.entity_note import EntityNoteCreate, EntityNoteListItem, Entity
 from app.services import (
     audit_service,
     donor_service,
+    entity_activity_service,
     note_service,
+    permission_service,
     phi_access_service,
     user_service,
 )
@@ -326,6 +330,87 @@ def get_donor_history(
     ]
 
 
+@router.get("/{donor_id}/activity", response_model=EntityActivityResponse)
+def get_donor_activity(
+    donor_id: UUID,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(get_current_session)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    per_page: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> EntityActivityResponse:
+    donor = _get_or_404(db, session.org_id, donor_id)
+    can_view_task_previews = permission_service.check_permission(
+        db,
+        session.org_id,
+        session.user_id,
+        session.role.value,
+        PermissionKey.TASKS_VIEW.value,
+    )
+    items, total = entity_activity_service.list_entity_activity(
+        db,
+        org_id=session.org_id,
+        entity_type="donor",
+        entity_id=donor.id,
+        page=page,
+        per_page=per_page,
+        include_note_previews=True,
+        include_task_previews=can_view_task_previews,
+    )
+    note_preview_count = sum(
+        1
+        for item in items
+        if item["activity_type"] in {"note_added", "note_deleted"}
+        and isinstance(item["details"], dict)
+        and "preview" in item["details"]
+    )
+    task_preview_count = sum(
+        1
+        for item in items
+        if item["activity_type"].startswith("task_")
+        and isinstance(item["details"], dict)
+        and "title" in item["details"]
+    )
+    if note_preview_count:
+        audit_service.log_event(
+            db=db,
+            org_id=session.org_id,
+            event_type=AuditEventType.DATA_VIEW_NOTE,
+            actor_user_id=session.user_id,
+            target_type="donor",
+            target_id=donor.id,
+            details={"view": "activity", "notes_count": note_preview_count},
+            request=request,
+        )
+        audit_service.log_phi_access(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            target_type="donor",
+            target_id=donor.id,
+            request=request,
+            details={"view": "activity_notes", "notes_count": note_preview_count},
+        )
+    if task_preview_count:
+        audit_service.log_phi_access(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            target_type="donor",
+            target_id=donor.id,
+            request=request,
+            details={"view": "activity_tasks", "tasks_count": task_preview_count},
+        )
+    if note_preview_count or task_preview_count:
+        db.commit()
+    return EntityActivityResponse(
+        items=[EntityActivityRead(**item) for item in items],
+        total=total,
+        page=page,
+        pages=(total + per_page - 1) // per_page if total else 1,
+    )
+
+
 @router.get("/{donor_id}/notes", response_model=list[EntityNoteListItem])
 def list_donor_notes(
     donor_id: UUID,
@@ -408,5 +493,5 @@ def delete_donor_note(
         Role.DEVELOPER,
     ):
         raise HTTPException(status_code=403, detail="Not authorized to delete this note")
-    note_service.delete_note(db, note)
+    note_service.delete_note(db, note, actor_user_id=session.user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

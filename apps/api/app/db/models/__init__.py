@@ -1,5 +1,6 @@
 """SQLAlchemy ORM models for the application."""
 
+from app.db.models.activity import EntityActivityLog
 from app.db.models.ai import (
     AIActionApproval,
     AIBulkTaskRequest,
@@ -225,6 +226,7 @@ __all__ = [
     "ResendWebhookEvent",
     "UnsubscribeToken",
     "EntityNote",
+    "EntityActivityLog",
     "EntityVersion",
     "ExportJob",
     "Form",

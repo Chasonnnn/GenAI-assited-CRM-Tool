@@ -2165,6 +2165,8 @@ def list_surrogate_activity(
     surrogate_id: UUID,
     page: int,
     per_page: int,
+    *,
+    include_note_previews: bool = True,
 ) -> tuple[list[dict], int]:
     """List activity log items for a case."""
     from app.db.models import (
@@ -2386,6 +2388,12 @@ def list_surrogate_activity(
         details = activity.details
         if isinstance(details, dict):
             details = dict(details)
+
+            if not include_note_previews and activity.activity_type in {
+                SurrogateActivityType.NOTE_ADDED.value,
+                SurrogateActivityType.NOTE_DELETED.value,
+            }:
+                details.pop("preview", None)
 
             to_queue_id = details.get("to_queue_id")
             to_queue_name = queue_name_by_id.get(str(to_queue_id)) if to_queue_id else None

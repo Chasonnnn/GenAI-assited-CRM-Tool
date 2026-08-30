@@ -20,6 +20,33 @@ from app.utils.normalization import escape_like_string, normalize_identifier, no
 from app.utils.pagination import paginate_query_by_offset
 
 
+def _log_intended_parent_match_activity(
+    db: Session,
+    *,
+    org_id: UUID,
+    intended_parent_id: UUID,
+    match_id: UUID,
+    surrogate_id: UUID,
+    activity_type: str,
+    actor_user_id: UUID | None,
+) -> None:
+    """Mirror applicable match lifecycle events into the Intended Parent feed."""
+    from app.services import entity_activity_service
+
+    entity_activity_service.record_activity(
+        db,
+        org_id=org_id,
+        entity_type="intended_parent",
+        entity_id=intended_parent_id,
+        activity_type=activity_type,
+        actor_user_id=actor_user_id,
+        details={
+            "match_id": str(match_id),
+            "surrogate_id": str(surrogate_id),
+        },
+    )
+
+
 def generate_match_number(db: Session, org_id: UUID) -> str:
     """
     Generate next sequential match number for org (M10001+).
@@ -381,6 +408,15 @@ def create_match(
             "intended_parent_id": str(intended_parent_id),
         },
     )
+    _log_intended_parent_match_activity(
+        db,
+        org_id=org_id,
+        intended_parent_id=intended_parent_id,
+        match_id=match.id,
+        surrogate_id=surrogate_id,
+        activity_type="match_proposed",
+        actor_user_id=proposed_by_user_id,
+    )
 
     audit_service.log_event(
         db=db,
@@ -426,6 +462,15 @@ def mark_match_reviewing_if_needed(
                 "match_id": str(match.id),
                 "intended_parent_id": str(match.intended_parent_id),
             },
+        )
+        _log_intended_parent_match_activity(
+            db,
+            org_id=org_id,
+            intended_parent_id=match.intended_parent_id,
+            match_id=match.id,
+            surrogate_id=match.surrogate_id,
+            activity_type="match_reviewing",
+            actor_user_id=actor_user_id,
         )
 
         db.commit()
@@ -516,6 +561,7 @@ def accept_match(
                     reason="Match accepted",
                     effective_at=datetime.now(UTC),
                     recorded_at=datetime.now(UTC),
+                    commit=False,
                 )
 
     other_matches = list_pending_matches_for_surrogate(
@@ -526,6 +572,15 @@ def accept_match(
     for other in other_matches:
         other.status = MatchStatus.CANCELLED.value
         other.updated_at = datetime.now(UTC)
+        _log_intended_parent_match_activity(
+            db,
+            org_id=org_id,
+            intended_parent_id=other.intended_parent_id,
+            match_id=other.id,
+            surrogate_id=other.surrogate_id,
+            activity_type="match_cancelled",
+            actor_user_id=actor_user_id,
+        )
 
     activity_service.log_activity(
         db=db,
@@ -538,6 +593,15 @@ def accept_match(
             "intended_parent_id": str(match.intended_parent_id),
             "cancelled_matches": len(other_matches),
         },
+    )
+    _log_intended_parent_match_activity(
+        db,
+        org_id=org_id,
+        intended_parent_id=match.intended_parent_id,
+        match_id=match.id,
+        surrogate_id=match.surrogate_id,
+        activity_type="match_accepted",
+        actor_user_id=actor_user_id,
     )
 
     audit_service.log_event(
@@ -601,6 +665,15 @@ def reject_match(
             "rejection_reason": rejection_reason,
         },
     )
+    _log_intended_parent_match_activity(
+        db,
+        org_id=org_id,
+        intended_parent_id=match.intended_parent_id,
+        match_id=match.id,
+        surrogate_id=match.surrogate_id,
+        activity_type="match_rejected",
+        actor_user_id=actor_user_id,
+    )
 
     audit_service.log_event(
         db=db,
@@ -662,6 +735,15 @@ def request_cancel_match(
 
     match.status = MatchStatus.CANCEL_PENDING.value
     match.updated_at = now
+    _log_intended_parent_match_activity(
+        db,
+        org_id=org_id,
+        intended_parent_id=match.intended_parent_id,
+        match_id=match.id,
+        surrogate_id=match.surrogate_id,
+        activity_type="match_cancel_requested",
+        actor_user_id=actor_user_id,
+    )
 
     db.commit()
     db.refresh(match)
@@ -713,6 +795,15 @@ def cancel_match(
             "match_id": str(match.id),
             "intended_parent_id": str(match.intended_parent_id),
         },
+    )
+    _log_intended_parent_match_activity(
+        db,
+        org_id=org_id,
+        intended_parent_id=match.intended_parent_id,
+        match_id=match.id,
+        surrogate_id=match.surrogate_id,
+        activity_type="match_cancelled",
+        actor_user_id=actor_user_id,
     )
 
     audit_service.log_event(

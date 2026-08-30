@@ -32,6 +32,32 @@ def get_request(db: Session, request_id: UUID, org_id: UUID) -> StatusChangeRequ
     )
 
 
+def _log_entity_request_resolution(
+    db: Session,
+    *,
+    request: StatusChangeRequest,
+    org_id: UUID,
+    actor_user_id: UUID,
+    activity_type: str,
+) -> None:
+    if request.entity_type not in {"intended_parent", "donor"}:
+        return
+    from app.services import entity_activity_service
+
+    entity_activity_service.record_activity(
+        db,
+        org_id=org_id,
+        entity_type=request.entity_type,
+        entity_id=request.entity_id,
+        activity_type=activity_type,
+        actor_user_id=actor_user_id,
+        details={
+            "status_request_id": str(request.id),
+            "target_stage_id": str(request.target_stage_id) if request.target_stage_id else None,
+        },
+    )
+
+
 def get_pending_requests(
     db: Session,
     org_id: UUID,
@@ -206,6 +232,7 @@ def approve_request(
             approved_by_user_id=admin_user_id,
             approved_at=now,
             requested_at=request.requested_at,
+            commit=False,
         )
     elif request.entity_type == "donor":
         donor = (
@@ -339,6 +366,7 @@ def approve_request(
             approved_by_user_id=admin_user_id,
             approved_at=now,
             requested_at=request.requested_at,
+            commit=False,
         )
 
         match.status = MatchStatus.CANCELLED.value
@@ -356,6 +384,20 @@ def approve_request(
                 "intended_parent_id": str(match.intended_parent_id),
             },
         )
+        from app.services import entity_activity_service
+
+        entity_activity_service.record_activity(
+            db,
+            org_id=org_id,
+            entity_type="intended_parent",
+            entity_id=match.intended_parent_id,
+            activity_type="match_cancelled",
+            actor_user_id=admin_user_id,
+            details={
+                "match_id": str(match.id),
+                "surrogate_id": str(match.surrogate_id),
+            },
+        )
     else:
         raise ValueError(f"Unknown entity type: {request.entity_type}")
 
@@ -363,6 +405,13 @@ def approve_request(
     request.status = "approved"
     request.approved_by_user_id = admin_user_id
     request.approved_at = now
+    _log_entity_request_resolution(
+        db,
+        request=request,
+        org_id=org_id,
+        actor_user_id=admin_user_id,
+        activity_type="status_change_approved",
+    )
 
     try:
         db.commit()
@@ -469,6 +518,13 @@ def reject_request(
     request.status = "rejected"
     request.rejected_by_user_id = admin_user_id
     request.rejected_at = now
+    _log_entity_request_resolution(
+        db,
+        request=request,
+        org_id=org_id,
+        actor_user_id=admin_user_id,
+        activity_type="status_change_rejected",
+    )
 
     if request.entity_type == "match":
         match = (
@@ -622,6 +678,13 @@ def cancel_request(
     request.status = "cancelled"
     request.cancelled_by_user_id = user_id
     request.cancelled_at = now
+    _log_entity_request_resolution(
+        db,
+        request=request,
+        org_id=org_id,
+        actor_user_id=user_id,
+        activity_type="status_change_request_cancelled",
+    )
 
     if request.entity_type == "match":
         match = (

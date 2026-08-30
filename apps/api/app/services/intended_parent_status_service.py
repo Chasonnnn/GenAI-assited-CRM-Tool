@@ -182,6 +182,22 @@ def change_status(
             status="pending",
         )
         db.add(request)
+        db.flush()
+        from app.services import entity_activity_service
+
+        entity_activity_service.record_activity(
+            db,
+            org_id=ip.organization_id,
+            entity_type="intended_parent",
+            entity_id=ip.id,
+            activity_type="status_change_requested",
+            actor_user_id=user_id,
+            details={
+                "status_request_id": str(request.id),
+                "target_stage_id": str(new_stage.id),
+            },
+            occurred_at=now,
+        )
         try:
             db.commit()
         except IntegrityError:
@@ -235,6 +251,7 @@ def apply_status_change(
     approved_by_user_id: UUID | None = None,
     approved_at: datetime | None = None,
     requested_at: datetime | None = None,
+    commit: bool = True,
 ) -> StatusChangeResult:
     """Apply a stage change to an intended parent."""
     ip.stage_id = new_stage.id
@@ -244,11 +261,14 @@ def apply_status_change(
 
     history = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
+        organization_id=ip.organization_id,
         changed_by_user_id=user_id,
         old_stage_id=old_stage.id if old_stage else None,
         new_stage_id=new_stage.id,
         old_status=old_stage.stage_key if old_stage else None,
         new_status=new_stage.stage_key,
+        old_label_snapshot=old_stage.label if old_stage else None,
+        new_label_snapshot=new_stage.label,
         reason=reason,
         changed_at=effective_at,
         effective_at=effective_at,
@@ -260,8 +280,11 @@ def apply_status_change(
         approved_at=approved_at,
     )
     db.add(history)
-    db.commit()
-    db.refresh(ip)
+    if commit:
+        db.commit()
+        db.refresh(ip)
+    else:
+        db.flush()
 
     return StatusChangeResult(
         status="applied",

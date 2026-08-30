@@ -478,7 +478,12 @@ def uncomplete_task(
             detail="Workflow approvals must be resolved via /tasks/{id}/resolve",
         )
 
-    task = task_service.uncomplete_task(db, task, emit_events=True)
+    task = task_service.uncomplete_task(
+        db,
+        task,
+        user_id=session.user_id,
+        emit_events=True,
+    )
     audit_service.log_event(
         db=db,
         org_id=session.org_id,
@@ -589,7 +594,12 @@ def delete_task(
         request=request,
     )
 
-    task_service.delete_task(db, task, emit_events=True)
+    task_service.delete_task(
+        db,
+        task,
+        actor_user_id=session.user_id,
+        emit_events=True,
+    )
     db.commit()
     return None
 

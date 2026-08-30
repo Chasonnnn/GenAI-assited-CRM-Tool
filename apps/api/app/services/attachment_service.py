@@ -24,6 +24,38 @@ from app.services import audit_service, job_service, storage_client
 logger = logging.getLogger(__name__)
 
 
+def _record_shared_entity_activity(
+    db: Session,
+    attachment: Attachment,
+    activity_type: str,
+    actor_user_id: uuid.UUID | None,
+    *,
+    occurred_at: datetime | None = None,
+) -> None:
+    entity_type = (
+        "donor"
+        if attachment.donor_id
+        else "intended_parent"
+        if attachment.intended_parent_id
+        else None
+    )
+    entity_id = attachment.donor_id or attachment.intended_parent_id
+    if entity_type is None or entity_id is None:
+        return
+    from app.services import entity_activity_service
+
+    entity_activity_service.record_activity(
+        db,
+        org_id=attachment.organization_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        activity_type=activity_type,
+        actor_user_id=actor_user_id,
+        details={"attachment_id": str(attachment.id)},
+        occurred_at=occurred_at,
+    )
+
+
 class AttachmentStorageError(RuntimeError):
     """Raised when attachment storage fails."""
 
@@ -533,6 +565,13 @@ def upload_attachment(
     )
     db.add(attachment)
 
+    _record_shared_entity_activity(
+        db,
+        attachment,
+        "attachment_added",
+        user_id,
+    )
+
     # Audit log
     audit_service.log_event(
         db=db,
@@ -859,6 +898,13 @@ def soft_delete_attachment(
 
     attachment.deleted_at = datetime.now(UTC)
     attachment.deleted_by_user_id = user_id
+    _record_shared_entity_activity(
+        db,
+        attachment,
+        "attachment_deleted",
+        user_id,
+        occurred_at=attachment.deleted_at,
+    )
     if attachment.donor_id:
         donor = (
             db.query(Donor)

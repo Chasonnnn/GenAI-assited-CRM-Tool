@@ -876,6 +876,7 @@ def _create_ip_status_history(
     created_at: datetime,
     target_status: str,
     stage_ids_by_key: dict[str, UUID],
+    stage_labels_by_key: dict[str, str],
 ) -> None:
     now = datetime.now(UTC)
     path = _build_ip_status_path(target_status)
@@ -888,11 +889,14 @@ def _create_ip_status_history(
         db.add(
             IntendedParentStatusHistory(
                 intended_parent_id=intended_parent.id,
+                organization_id=intended_parent.organization_id,
                 changed_by_user_id=actor_user_id,
                 old_stage_id=stage_ids_by_key.get(previous) if previous else None,
                 new_stage_id=stage_ids_by_key.get(status),
                 old_status=previous,
                 new_status=status,
+                old_label_snapshot=stage_labels_by_key.get(previous) if previous else None,
+                new_label_snapshot=stage_labels_by_key[status],
                 reason="Seeded status progression",
                 changed_at=effective_at,
                 effective_at=effective_at,
@@ -924,12 +928,13 @@ def create_intended_parents(
         owner_id,
         entity_type="intended_parent",
     )
-    ip_stage_ids_by_key = {
-        stage.stage_key: stage.id
-        for stage in db.query(PipelineStage)
+    ip_stages = (
+        db.query(PipelineStage)
         .filter(PipelineStage.pipeline_id == ip_pipeline.id, PipelineStage.is_active.is_(True))
         .all()
-    }
+    )
+    ip_stage_ids_by_key = {stage.stage_key: stage.id for stage in ip_stages}
+    ip_stage_labels_by_key = {stage.stage_key: stage.label for stage in ip_stages}
     targets = _build_ip_targets(count)
     next_number = get_next_intended_parent_number(db, org_id)
     created_ips: list[IntendedParent] = []
@@ -984,6 +989,7 @@ def create_intended_parents(
             created_at=created_at,
             target_status=target_status,
             stage_ids_by_key=ip_stage_ids_by_key,
+            stage_labels_by_key=ip_stage_labels_by_key,
         )
         created_ips.append(intended_parent)
 

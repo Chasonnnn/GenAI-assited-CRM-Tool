@@ -25,7 +25,12 @@ from app.db.models import (
     StatusChangeRequest,
 )
 from app.schemas.donor import DonorCreate, DonorUpdate
-from app.services import audit_service, dashboard_service, pipeline_semantics_service
+from app.services import (
+    audit_service,
+    dashboard_service,
+    entity_activity_service,
+    pipeline_semantics_service,
+)
 from app.utils.datetime_parsing import (
     normalize_effective_at,
     parse_created_from_filter,
@@ -607,6 +612,15 @@ def create_donor(
             },
             request=request,
         )
+        entity_activity_service.record_activity(
+            db,
+            org_id=org_id,
+            entity_type="donor",
+            entity_id=donor.id,
+            activity_type="record_created",
+            actor_user_id=user_id,
+            occurred_at=now,
+        )
         if commit:
             db.commit()
         else:
@@ -685,6 +699,32 @@ def update_donor(
             details={"updated_fields": sorted(updates)},
             request=request,
         )
+        entity_activity_service.record_activity(
+            db,
+            org_id=donor.organization_id,
+            entity_type="donor",
+            entity_id=donor.id,
+            activity_type="info_edited",
+            actor_user_id=user_id,
+            details={"changed_fields": sorted(updates)},
+            occurred_at=donor.updated_at,
+        )
+        if (old_owner_type, old_owner_id) != (donor.owner_type, donor.owner_id):
+            entity_activity_service.record_activity(
+                db,
+                org_id=donor.organization_id,
+                entity_type="donor",
+                entity_id=donor.id,
+                activity_type="assigned" if donor.owner_id else "unassigned",
+                actor_user_id=user_id,
+                details={
+                    "from_owner_type": old_owner_type,
+                    "from_owner_id": str(old_owner_id) if old_owner_id else None,
+                    "to_owner_type": donor.owner_type,
+                    "to_owner_id": str(donor.owner_id) if donor.owner_id else None,
+                },
+                occurred_at=donor.updated_at,
+            )
         db.commit()
         refreshed = get_donor(db, donor.organization_id, donor.id) or donor
         if emit_workflow_events:
@@ -774,6 +814,15 @@ def archive_donor(
             details={"donor_type": donor.donor_type},
             request=request,
         )
+        entity_activity_service.record_activity(
+            db,
+            org_id=donor.organization_id,
+            entity_type="donor",
+            entity_id=donor.id,
+            activity_type="archived",
+            actor_user_id=user_id,
+            occurred_at=now,
+        )
         db.commit()
         return get_donor(db, donor.organization_id, donor.id) or donor
     except Exception:
@@ -824,6 +873,15 @@ def restore_donor(
             target_id=donor.id,
             details={"donor_type": donor.donor_type},
             request=request,
+        )
+        entity_activity_service.record_activity(
+            db,
+            org_id=donor.organization_id,
+            entity_type="donor",
+            entity_id=donor.id,
+            activity_type="restored",
+            actor_user_id=user_id,
+            occurred_at=now,
         )
         db.commit()
         return get_donor(db, donor.organization_id, donor.id) or donor
@@ -946,6 +1004,22 @@ def change_status(
             status="pending",
         )
         db.add(status_request)
+        db.flush()
+        from app.services import entity_activity_service
+
+        entity_activity_service.record_activity(
+            db,
+            org_id=donor.organization_id,
+            entity_type="donor",
+            entity_id=donor.id,
+            activity_type="status_change_requested",
+            actor_user_id=user_id,
+            details={
+                "status_request_id": str(status_request.id),
+                "target_stage_id": str(target.id),
+            },
+            occurred_at=now,
+        )
         try:
             db.commit()
         except IntegrityError as exc:

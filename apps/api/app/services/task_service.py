@@ -38,6 +38,34 @@ from app.utils.pagination import paginate_query_by_offset
 logger = logging.getLogger(__name__)
 
 
+def _record_shared_entity_activity(
+    db: Session,
+    task: Task,
+    activity_type: str,
+    actor_user_id: UUID | None,
+    *,
+    occurred_at: datetime | None = None,
+) -> None:
+    entity_type = (
+        "donor" if task.donor_id else "intended_parent" if task.intended_parent_id else None
+    )
+    entity_id = task.donor_id or task.intended_parent_id
+    if entity_type is None or entity_id is None:
+        return
+    from app.services import entity_activity_service
+
+    entity_activity_service.record_activity(
+        db,
+        org_id=task.organization_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        activity_type=activity_type,
+        actor_user_id=actor_user_id,
+        details={"task_id": str(task.id)},
+        occurred_at=occurred_at,
+    )
+
+
 def user_can_view_donors(
     db: Session,
     org_id: UUID,
@@ -72,9 +100,7 @@ def validate_task_subject_ids(
     carry both sides of a match.
     """
     if donor_id and (surrogate_id or intended_parent_id):
-        raise ValueError(
-            "donor_id cannot be combined with surrogate_id or intended_parent_id"
-        )
+        raise ValueError("donor_id cannot be combined with surrogate_id or intended_parent_id")
 
 
 def _lock_active_donor_for_task(db: Session, org_id: UUID, donor_id: UUID) -> Donor:
@@ -230,6 +256,8 @@ def create_task(
         duration_minutes=data.duration_minutes,
     )
     db.add(task)
+    db.flush()
+    _record_shared_entity_activity(db, task, "task_created", user_id)
     db.commit()
     db.refresh(task)
 
@@ -355,8 +383,7 @@ def update_task(
             source_task_id=task.id,
             google_task_id=task.google_task_id,
             google_task_list_id=(
-                task.google_task_list_id
-                or google_tasks_cleanup_service.GOOGLE_DEFAULT_TASKLIST_ID
+                task.google_task_list_id or google_tasks_cleanup_service.GOOGLE_DEFAULT_TASKLIST_ID
             ),
         )
         task.google_task_id = None
@@ -382,6 +409,7 @@ def update_task(
             value = value.value
         setattr(task, field, value)
 
+    _record_shared_entity_activity(db, task, "task_updated", actor_user_id)
     db.commit()
     db.refresh(task)
 
@@ -428,6 +456,13 @@ def complete_task(
     task.is_completed = True
     task.completed_at = datetime.now(UTC)
     task.completed_by_user_id = user_id
+    _record_shared_entity_activity(
+        db,
+        task,
+        "task_completed",
+        user_id,
+        occurred_at=task.completed_at,
+    )
 
     if commit:
         db.commit()
@@ -448,12 +483,21 @@ def uncomplete_task(
     db: Session,
     task: Task,
     *,
+    user_id: UUID | None = None,
     emit_events: bool = False,
 ) -> Task:
     """Mark task as not completed."""
+    occurred_at = datetime.now(UTC)
     task.is_completed = False
     task.completed_at = None
     task.completed_by_user_id = None
+    _record_shared_entity_activity(
+        db,
+        task,
+        "task_uncompleted",
+        user_id,
+        occurred_at=occurred_at,
+    )
     db.commit()
     db.refresh(task)
     _sync_task_to_google_best_effort(db, task)
@@ -517,9 +561,7 @@ def bulk_complete_tasks(
                 )
                 donor = donor_service.get_donor(db, session.org_id, task.donor_id)
                 if not can_view_donors or not donor:
-                    results["failed"].append(
-                        {"task_id": str(task_id), "reason": "Not authorized"}
-                    )
+                    results["failed"].append({"task_id": str(task_id), "reason": "Not authorized"})
                     continue
 
             if not is_owner_or_assignee_or_admin(
@@ -619,9 +661,11 @@ def delete_task(
     db: Session,
     task: Task,
     *,
+    actor_user_id: UUID | None = None,
     emit_events: bool = False,
 ) -> None:
     """Delete a task."""
+    _record_shared_entity_activity(db, task, "task_deleted", actor_user_id)
     if task.donor_id:
         from app.services import google_tasks_cleanup_service
 
@@ -1190,10 +1234,7 @@ def count_pending_tasks(
     ]
     if not can_view_donors:
         filters.append(Task.donor_id.is_(None))
-    return (
-        db.scalar(select(func.count(Task.id)).where(*filters))
-        or 0
-    )
+    return db.scalar(select(func.count(Task.id)).where(*filters)) or 0
 
 
 def count_overdue_tasks(
@@ -1213,10 +1254,7 @@ def count_overdue_tasks(
     ]
     if not can_view_donors:
         filters.append(Task.donor_id.is_(None))
-    return (
-        db.scalar(select(func.count(Task.id)).where(*filters))
-        or 0
-    )
+    return db.scalar(select(func.count(Task.id)).where(*filters)) or 0
 
 
 def list_open_tasks_for_surrogate(
