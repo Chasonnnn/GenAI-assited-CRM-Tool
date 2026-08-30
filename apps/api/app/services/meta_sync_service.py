@@ -374,18 +374,26 @@ def link_surrogates_to_campaigns(db: Session, org_id: UUID) -> int:
     surrogates = db.scalars(surrogates_query).all()
     updated = 0
 
-    for surrogate in surrogates:
-        # Find the ad
-        ad = db.scalar(
-            select(MetaAd).where(
-                MetaAd.organization_id == org_id,
-                MetaAd.ad_external_id == surrogate.meta_ad_external_id,
-            )
-        )
-        if ad:
-            surrogate.meta_campaign_external_id = ad.campaign_external_id
-            surrogate.meta_adset_external_id = ad.adset_external_id
-            updated += 1
+    if surrogates:
+        ad_external_ids = list({s.meta_ad_external_id for s in surrogates if s.meta_ad_external_id})
+        if ad_external_ids:
+            # ⚡ Bolt Optimization: Fix N+1 Query
+            # Replaced individual querying in a loop (O(N) queries) with a single bulk fetch using `.in_()`
+            # and an in-memory dictionary for O(1) lookup. This dramatically reduces database latency
+            # when processing large batches of surrogates.
+            ads = db.scalars(
+                select(MetaAd).where(
+                    MetaAd.organization_id == org_id, MetaAd.ad_external_id.in_(ad_external_ids)
+                )
+            ).all()
+            ad_map = {ad.ad_external_id: ad for ad in ads}
+
+            for surrogate in surrogates:
+                ad = ad_map.get(surrogate.meta_ad_external_id)
+                if ad:
+                    surrogate.meta_campaign_external_id = ad.campaign_external_id
+                    surrogate.meta_adset_external_id = ad.adset_external_id
+                    updated += 1
 
     if updated > 0:
         db.commit()
