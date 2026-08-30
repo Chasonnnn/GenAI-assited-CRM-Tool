@@ -135,6 +135,12 @@ variable "workflow_sweep_fallback_enabled" {
   default     = true
 }
 
+variable "messaging_delivery_dispatch_enabled" {
+  description = "Enable Twilio delivery materialization and worker dispatch after readiness is verified."
+  type        = bool
+  default     = false
+}
+
 variable "workflow_maintenance_fallback_enabled" {
   description = "Enable inactivity and task workflow sweeps after a candidate-count canary."
   type        = bool
