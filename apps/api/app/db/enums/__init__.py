@@ -17,6 +17,7 @@ from app.db.enums.defaults import (
     DEFAULT_SURROGATE_STATUS,
     DEFAULT_TASK_TYPE,
 )
+from app.db.enums.donors import DonorType
 from app.db.enums.email import (
     EmailDeliveryAttemptOutcome,
     EmailDeliveryStatus,
@@ -29,6 +30,7 @@ from app.db.enums.email import (
 from app.db.enums.entities import EntityType
 from app.db.enums.forms import (
     FieldSensitivity,
+    FormLeadKind,
     FormLinkMode,
     FormPurpose,
     FormStatus,
@@ -111,6 +113,7 @@ __all__ = [
     "DEFAULT_SURROGATE_SOURCE",
     "DEFAULT_SURROGATE_STATUS",
     "DEFAULT_TASK_TYPE",
+    "DonorType",
     "EmailStatus",
     "EmailDeliveryAttemptOutcome",
     "EmailDeliveryStatus",
@@ -121,6 +124,7 @@ __all__ = [
     "EmailDirection",
     "EmailOccurrenceState",
     "FieldSensitivity",
+    "FormLeadKind",
     "FormPurpose",
     "FormStatus",
     "FormSubmissionStatus",

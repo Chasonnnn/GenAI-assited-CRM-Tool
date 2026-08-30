@@ -36,6 +36,7 @@ class AuditEventType(str, Enum):
 
     # Data operations
     DATA_EXPORT_SURROGATES = "data_export_surrogates"
+    DATA_EXPORT_DONORS = "data_export_donors"
     DATA_EXPORT_ANALYTICS = "data_export_analytics"
     DATA_EXPORT_CONFIG = "data_export_config"
     DATA_EXPORT_MESSAGING = "data_export_messaging"
@@ -97,6 +98,12 @@ class AuditEventType(str, Enum):
     INTENDED_PARENT_ARCHIVED = "intended_parent_archived"
     INTENDED_PARENT_RESTORED = "intended_parent_restored"
     INTENDED_PARENT_DELETED = "intended_parent_deleted"
+
+    DONOR_CREATED = "donor_created"
+    DONOR_UPDATED = "donor_updated"
+    DONOR_STATUS_CHANGED = "donor_status_changed"
+    DONOR_ARCHIVED = "donor_archived"
+    DONOR_RESTORED = "donor_restored"
 
     TASK_CREATED = "task_created"
     TASK_UPDATED = "task_updated"

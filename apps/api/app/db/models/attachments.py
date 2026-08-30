@@ -6,14 +6,14 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, text
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, Integer, String, text
 from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
 if TYPE_CHECKING:
-    from app.db.models import EmailLogAttachment, Organization, Surrogate, User
+    from app.db.models import Donor, EmailLogAttachment, Organization, Surrogate, User
 
 
 class Attachment(Base):
@@ -37,6 +37,11 @@ class Attachment(Base):
             postgresql_where=text("deleted_at IS NULL AND quarantined = FALSE"),
         ),
         Index("idx_attachments_intended_parent", "intended_parent_id"),
+        Index("idx_attachments_donor", "donor_id"),
+        CheckConstraint(
+            "donor_id IS NULL OR (surrogate_id IS NULL AND intended_parent_id IS NULL)",
+            name="ck_attachments_donor_subject_exclusive",
+        ),
         # GIN index for full-text search
         Index(
             "ix_attachments_search_vector",
@@ -60,6 +65,9 @@ class Attachment(Base):
         UUID(as_uuid=True),
         ForeignKey("intended_parents.id", ondelete="CASCADE"),
         nullable=True,
+    )
+    donor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("donors.id", ondelete="CASCADE"), nullable=True
     )
     uploaded_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -93,6 +101,7 @@ class Attachment(Base):
     # Relationships
     organization: Mapped[Organization] = relationship()
     surrogate: Mapped[Surrogate] = relationship()
+    donor: Mapped[Donor | None] = relationship(foreign_keys=[donor_id])
     uploaded_by: Mapped[User | None] = relationship(foreign_keys=[uploaded_by_user_id])
     deleted_by: Mapped[User | None] = relationship(foreign_keys=[deleted_by_user_id])
     email_log_links: Mapped[list[EmailLogAttachment]] = relationship(back_populates="attachment")

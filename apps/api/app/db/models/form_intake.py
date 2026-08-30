@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     TIMESTAMP,
     Boolean,
+    CheckConstraint,
     Date,
     ForeignKey,
     Index,
@@ -22,11 +23,11 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.db.enums import IntakeLeadStatus, TrackingMode
+from app.db.enums import FormLeadKind, IntakeLeadStatus, TrackingMode
 from app.db.types import EncryptedDate, EncryptedString
 
 if TYPE_CHECKING:
-    from app.db.models import Form, FormSubmission, Organization, Surrogate, User
+    from app.db.models import Donor, Form, FormSubmission, Organization, Surrogate, User
 
 
 class FormIntakeLink(Base):
@@ -153,6 +154,11 @@ class PublishedIntakeVersion(Base):
     thank_you_config_snapshot_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
     tracking_mode_snapshot: Mapped[str] = mapped_column(String(30), nullable=False)
     tracking_policy_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    lead_kind_snapshot: Mapped[str] = mapped_column(
+        String(20),
+        server_default=text(f"'{FormLeadKind.SURROGATE.value}'"),
+        nullable=False,
+    )
     embed_theme_snapshot_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
     published_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -176,6 +182,15 @@ class IntakeLead(Base):
         Index("idx_intake_leads_status", "organization_id", "status"),
         Index("idx_intake_leads_email_hash", "organization_id", "email_hash"),
         Index("idx_intake_leads_phone_hash", "organization_id", "phone_hash"),
+        Index("idx_intake_leads_promoted_donor", "promoted_donor_id"),
+        CheckConstraint(
+            "lead_type IN ('surrogate', 'egg_donor', 'sperm_donor')",
+            name="ck_intake_leads_lead_type",
+        ),
+        CheckConstraint(
+            "promoted_surrogate_id IS NULL OR promoted_donor_id IS NULL",
+            name="ck_intake_leads_single_promoted_subject",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -231,6 +246,11 @@ class IntakeLead(Base):
         ForeignKey("surrogates.id", ondelete="SET NULL"),
         nullable=True,
     )
+    promoted_donor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("donors.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     source_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -255,6 +275,7 @@ class IntakeLead(Base):
     promoted_surrogate: Mapped[Surrogate | None] = relationship(
         foreign_keys=[promoted_surrogate_id]
     )
+    promoted_donor: Mapped[Donor | None] = relationship(foreign_keys=[promoted_donor_id])
 
 
 class LeadAttribution(Base):

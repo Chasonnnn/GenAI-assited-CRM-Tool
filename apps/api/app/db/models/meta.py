@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -112,6 +113,15 @@ class MetaLead(Base):
         UniqueConstraint("organization_id", "meta_lead_id", name="uq_meta_lead"),
         Index("idx_meta_leads_status", "organization_id", "status"),
         Index("idx_meta_leads_legal_snapshot", "meta_form_legal_snapshot_id"),
+        Index("idx_meta_leads_converted_donor", "converted_donor_id"),
+        CheckConstraint(
+            "lead_kind IS NULL OR lead_kind IN ('surrogate', 'egg_donor', 'sperm_donor')",
+            name="ck_meta_leads_lead_kind",
+        ),
+        CheckConstraint(
+            "converted_surrogate_id IS NULL OR converted_donor_id IS NULL",
+            name="ck_meta_leads_single_converted_subject",
+        ),
         Index(
             "idx_meta_unconverted",
             "organization_id",
@@ -132,6 +142,9 @@ class MetaLead(Base):
     meta_lead_id: Mapped[str] = mapped_column(String(100), nullable=False)
     meta_form_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     meta_page_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Immutable effective target captured once the form has an approved mapping.
+    # Null means the lead arrived before its form was classified.
+    lead_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Data storage
     field_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -156,6 +169,11 @@ class MetaLead(Base):
     converted_surrogate_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("surrogates.id", ondelete="SET NULL", use_alter=True),
+        nullable=True,
+    )
+    converted_donor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("donors.id", ondelete="SET NULL", use_alter=True),
         nullable=True,
     )
     conversion_error: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -600,6 +618,10 @@ class MetaForm(Base):
     __table_args__ = (
         UniqueConstraint("organization_id", "page_id", "form_external_id", name="uq_meta_form"),
         Index("idx_meta_form_page", "organization_id", "page_id"),
+        CheckConstraint(
+            "lead_kind IN ('surrogate', 'egg_donor', 'sperm_donor')",
+            name="ck_meta_forms_lead_kind",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -639,6 +661,9 @@ class MetaForm(Base):
     )  # unmapped, mapped, outdated
     unknown_column_behavior: Mapped[str] = mapped_column(
         String(20), server_default=text("'metadata'"), nullable=False
+    )
+    lead_kind: Mapped[str] = mapped_column(
+        String(20), server_default=text("'surrogate'"), nullable=False
     )
     mapping_updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

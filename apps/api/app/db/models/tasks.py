@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -27,7 +28,7 @@ from app.db.enums import (
 )
 
 if TYPE_CHECKING:
-    from app.db.models import Surrogate, User
+    from app.db.models import Donor, Surrogate, User
 
 
 class Task(Base):
@@ -67,6 +68,11 @@ class Task(Base):
             postgresql_where=text("is_completed = FALSE"),
         ),
         Index("idx_tasks_intended_parent", "intended_parent_id"),
+        Index("idx_tasks_donor", "donor_id"),
+        CheckConstraint(
+            "donor_id IS NULL OR (surrogate_id IS NULL AND intended_parent_id IS NULL)",
+            name="ck_tasks_donor_subject_exclusive",
+        ),
         Index(
             "idx_task_wf_approval_unique",
             "workflow_execution_id",
@@ -100,6 +106,9 @@ class Task(Base):
         UUID(as_uuid=True),
         ForeignKey("intended_parents.id", ondelete="CASCADE"),
         nullable=True,
+    )
+    donor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("donors.id", ondelete="CASCADE"), nullable=True
     )
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
@@ -177,6 +186,7 @@ class Task(Base):
 
     # Relationships
     surrogate: Mapped[Surrogate | None] = relationship(foreign_keys=[surrogate_id])
+    donor: Mapped[Donor | None] = relationship(foreign_keys=[donor_id])
     created_by: Mapped[User] = relationship(foreign_keys=[created_by_user_id])
     completed_by: Mapped[User | None] = relationship(foreign_keys=[completed_by_user_id])
     workflow_triggered_by: Mapped[User | None] = relationship(

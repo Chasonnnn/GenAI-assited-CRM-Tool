@@ -3,14 +3,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from app.utils.presentation import humanize_identifier
 
 SURROGATE_PIPELINE_ENTITY = "surrogate"
 INTENDED_PARENT_PIPELINE_ENTITY = "intended_parent"
+EGG_DONOR_PIPELINE_ENTITY = "egg_donor"
+SPERM_DONOR_PIPELINE_ENTITY = "sperm_donor"
+PipelineEntityType = Literal["surrogate", "intended_parent", "egg_donor", "sperm_donor"]
+DONOR_PIPELINE_ENTITY_TYPES = {
+    EGG_DONOR_PIPELINE_ENTITY,
+    SPERM_DONOR_PIPELINE_ENTITY,
+}
 VALID_PIPELINE_ENTITY_TYPES = {
     SURROGATE_PIPELINE_ENTITY,
     INTENDED_PARENT_PIPELINE_ENTITY,
+    *DONOR_PIPELINE_ENTITY_TYPES,
 }
 
 
@@ -20,6 +29,13 @@ SYSTEM_STAGE_LOCKED_FIELDS = (
     "color",
     "category",
     "stage_type",
+    "semantics",
+    "is_active",
+    "delete",
+    "duplicate",
+)
+
+DONOR_SYSTEM_STAGE_LOCKED_FIELDS = (
     "semantics",
     "is_active",
     "delete",
@@ -71,6 +87,39 @@ INTENDED_PARENT_DEFAULT_COLORS = {
     "delivered": "#14B8A6",
 }
 
+# Kept as separate maps so each donor pipeline can evolve independently.
+EGG_DONOR_DEFAULT_COLORS = {
+    "new": "#3B82F6",
+    "contacted": "#06B6D4",
+    "pre_screening": "#8B5CF6",
+    "application_submitted": "#A855F7",
+    "medical_records_review": "#F59E0B",
+    "psychological_screening": "#D97706",
+    "ready_to_match": "#0EA5E9",
+    "matched": "#6366F1",
+    "cycle_in_progress": "#14B8A6",
+    "retrieval_complete": "#10B981",
+    "on_hold": "#B4536A",
+    "disqualified": "#EF4444",
+    "closed": "#64748B",
+}
+
+SPERM_DONOR_DEFAULT_COLORS = {
+    "new": "#3B82F6",
+    "contacted": "#06B6D4",
+    "pre_screening": "#8B5CF6",
+    "application_submitted": "#A855F7",
+    "semen_analysis": "#F59E0B",
+    "medical_genetic_screening": "#D97706",
+    "available": "#0EA5E9",
+    "matched": "#6366F1",
+    "collection_in_progress": "#14B8A6",
+    "donation_complete": "#10B981",
+    "on_hold": "#B4536A",
+    "disqualified": "#EF4444",
+    "closed": "#64748B",
+}
+
 SURROGATE_STAGE_TYPE_MAP = {
     "new_unread": "intake",
     "contacted": "intake",
@@ -105,6 +154,38 @@ INTENDED_PARENT_STAGE_TYPE_MAP = {
     "delivered": "post_approval",
 }
 
+EGG_DONOR_STAGE_TYPE_MAP = {
+    "new": "intake",
+    "contacted": "intake",
+    "pre_screening": "intake",
+    "application_submitted": "intake",
+    "medical_records_review": "intake",
+    "psychological_screening": "intake",
+    "ready_to_match": "post_approval",
+    "matched": "post_approval",
+    "cycle_in_progress": "post_approval",
+    "retrieval_complete": "post_approval",
+    "on_hold": "paused",
+    "disqualified": "terminal",
+    "closed": "terminal",
+}
+
+SPERM_DONOR_STAGE_TYPE_MAP = {
+    "new": "intake",
+    "contacted": "intake",
+    "pre_screening": "intake",
+    "application_submitted": "intake",
+    "semen_analysis": "intake",
+    "medical_genetic_screening": "intake",
+    "available": "post_approval",
+    "matched": "post_approval",
+    "collection_in_progress": "post_approval",
+    "donation_complete": "post_approval",
+    "on_hold": "paused",
+    "disqualified": "terminal",
+    "closed": "terminal",
+}
+
 # Backward-compatible surrogate aggregate used by legacy generators and tests.
 STAGE_TYPE_MAP = dict(SURROGATE_STAGE_TYPE_MAP)
 
@@ -125,11 +206,32 @@ INTENDED_PARENT_LABEL_OVERRIDES = {
     "ready_to_match": "Ready to Match",
 }
 
+EGG_DONOR_LABEL_OVERRIDES = {
+    "pre_screening": "Pre-Screening",
+    "medical_records_review": "Medical Records Review",
+    "psychological_screening": "Psychological Screening",
+    "ready_to_match": "Ready to Match",
+    "cycle_in_progress": "Cycle in Progress",
+    "retrieval_complete": "Retrieval Complete",
+    "on_hold": "On-Hold",
+}
+
+SPERM_DONOR_LABEL_OVERRIDES = {
+    "pre_screening": "Pre-Screening",
+    "semen_analysis": "Semen Analysis",
+    "medical_genetic_screening": "Medical & Genetic Screening",
+    "collection_in_progress": "Collection in Progress",
+    "donation_complete": "Donation Complete",
+    "on_hold": "On-Hold",
+}
+
 # Backward-compatible aggregate used by integrations/export code paths that only
 # need a friendly label lookup and do not care about pipeline entity scoping.
 LABEL_OVERRIDES = {
     **SURROGATE_LABEL_OVERRIDES,
     **INTENDED_PARENT_LABEL_OVERRIDES,
+    **EGG_DONOR_LABEL_OVERRIDES,
+    **SPERM_DONOR_LABEL_OVERRIDES,
 }
 
 LEGACY_STAGE_KEY_ALIASES = {
@@ -189,6 +291,30 @@ PROTECTED_SYSTEM_STAGES_BY_ENTITY = {
             lock_reason="This is a protected system stage used by platform workflows.",
         ),
     },
+    EGG_DONOR_PIPELINE_ENTITY: {
+        "new": ProtectedSystemStageDefinition(
+            system_role="intake_entry",
+            lock_reason="This is a protected system stage used by platform workflows.",
+            locked_fields=DONOR_SYSTEM_STAGE_LOCKED_FIELDS,
+        ),
+        "closed": ProtectedSystemStageDefinition(
+            system_role="completed",
+            lock_reason="This is a protected system stage used by platform workflows.",
+            locked_fields=DONOR_SYSTEM_STAGE_LOCKED_FIELDS,
+        ),
+    },
+    SPERM_DONOR_PIPELINE_ENTITY: {
+        "new": ProtectedSystemStageDefinition(
+            system_role="intake_entry",
+            lock_reason="This is a protected system stage used by platform workflows.",
+            locked_fields=DONOR_SYSTEM_STAGE_LOCKED_FIELDS,
+        ),
+        "closed": ProtectedSystemStageDefinition(
+            system_role="completed",
+            lock_reason="This is a protected system stage used by platform workflows.",
+            locked_fields=DONOR_SYSTEM_STAGE_LOCKED_FIELDS,
+        ),
+    },
 }
 
 REQUIRED_SYSTEM_STAGE_KEYS_BY_ENTITY = {
@@ -229,6 +355,36 @@ DEFAULT_STAGE_ORDER_BY_ENTITY = {
         "matched",
         "delivered",
     ],
+    EGG_DONOR_PIPELINE_ENTITY: [
+        "new",
+        "contacted",
+        "pre_screening",
+        "application_submitted",
+        "medical_records_review",
+        "psychological_screening",
+        "ready_to_match",
+        "matched",
+        "cycle_in_progress",
+        "retrieval_complete",
+        "on_hold",
+        "disqualified",
+        "closed",
+    ],
+    SPERM_DONOR_PIPELINE_ENTITY: [
+        "new",
+        "contacted",
+        "pre_screening",
+        "application_submitted",
+        "semen_analysis",
+        "medical_genetic_screening",
+        "available",
+        "matched",
+        "collection_in_progress",
+        "donation_complete",
+        "on_hold",
+        "disqualified",
+        "closed",
+    ],
 }
 
 # Backward-compatible export used by legacy surrogate-stage tests and callers.
@@ -236,10 +392,12 @@ DEFAULT_STAGE_ORDER = DEFAULT_STAGE_ORDER_BY_ENTITY[SURROGATE_PIPELINE_ENTITY]
 
 
 def normalize_pipeline_entity_type(value: str | None) -> str:
-    normalized = str(value or "").strip().lower()
+    if value is None:
+        return SURROGATE_PIPELINE_ENTITY
+    normalized = str(value).strip().lower()
     if normalized in VALID_PIPELINE_ENTITY_TYPES:
         return normalized
-    return SURROGATE_PIPELINE_ENTITY
+    raise ValueError(f"Unsupported pipeline entity type: {value}")
 
 
 def get_required_semantic_stage_keys(entity_type: str | None = None) -> set[str]:
@@ -331,10 +489,20 @@ def get_default_stage_defs(entity_type: str | None = None) -> list[dict[str, obj
         colors = INTENDED_PARENT_DEFAULT_COLORS
         stage_type_map = INTENDED_PARENT_STAGE_TYPE_MAP
         label_overrides = INTENDED_PARENT_LABEL_OVERRIDES
-    else:
+    elif normalized_entity_type == EGG_DONOR_PIPELINE_ENTITY:
+        colors = EGG_DONOR_DEFAULT_COLORS
+        stage_type_map = EGG_DONOR_STAGE_TYPE_MAP
+        label_overrides = EGG_DONOR_LABEL_OVERRIDES
+    elif normalized_entity_type == SPERM_DONOR_PIPELINE_ENTITY:
+        colors = SPERM_DONOR_DEFAULT_COLORS
+        stage_type_map = SPERM_DONOR_STAGE_TYPE_MAP
+        label_overrides = SPERM_DONOR_LABEL_OVERRIDES
+    elif normalized_entity_type == SURROGATE_PIPELINE_ENTITY:
         colors = SURROGATE_DEFAULT_COLORS
         stage_type_map = SURROGATE_STAGE_TYPE_MAP
         label_overrides = SURROGATE_LABEL_OVERRIDES
+    else:  # pragma: no cover - normalize_pipeline_entity_type rejects this branch
+        raise ValueError(f"Unsupported pipeline entity type: {normalized_entity_type}")
 
     stages: list[dict[str, object]] = []
     for order, slug in enumerate(stage_order, start=1):

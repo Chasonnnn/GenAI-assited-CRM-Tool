@@ -1,8 +1,15 @@
+import pytest
+
 from app.core.stage_definitions import (
     DEFAULT_STAGE_ORDER,
+    DEFAULT_STAGE_ORDER_BY_ENTITY,
+    EGG_DONOR_PIPELINE_ENTITY,
+    SPERM_DONOR_PIPELINE_ENTITY,
     STAGE_TYPE_MAP,
+    VALID_PIPELINE_ENTITY_TYPES,
     get_default_stage_defs,
     get_protected_system_stage_keys,
+    normalize_pipeline_entity_type,
 )
 from app.schemas.pipeline_semantics import default_pipeline_feature_config, default_stage_semantics
 
@@ -16,6 +23,11 @@ def test_application_submitted_before_interview_scheduled() -> None:
 def test_default_stage_defs_follow_default_order() -> None:
     stage_defs = get_default_stage_defs()
     assert [stage["slug"] for stage in stage_defs] == DEFAULT_STAGE_ORDER
+
+
+def test_every_default_pipeline_has_unique_stage_keys() -> None:
+    for entity_type, stage_keys in DEFAULT_STAGE_ORDER_BY_ENTITY.items():
+        assert len(stage_keys) == len(set(stage_keys)), entity_type
 
 
 def test_on_hold_stage_is_positioned_before_terminal_outcomes() -> None:
@@ -136,3 +148,100 @@ def test_cold_leads_is_not_a_protected_surrogate_system_stage() -> None:
 
     assert "cold_leads" not in protected_stage_keys
     assert {"lost", "disqualified"}.issubset(protected_stage_keys)
+
+
+def test_egg_donor_pipeline_defaults_follow_the_operational_lifecycle() -> None:
+    assert [stage["stage_key"] for stage in get_default_stage_defs(EGG_DONOR_PIPELINE_ENTITY)] == [
+        "new",
+        "contacted",
+        "pre_screening",
+        "application_submitted",
+        "medical_records_review",
+        "psychological_screening",
+        "ready_to_match",
+        "matched",
+        "cycle_in_progress",
+        "retrieval_complete",
+        "on_hold",
+        "disqualified",
+        "closed",
+    ]
+
+
+def test_sperm_donor_pipeline_defaults_follow_the_operational_lifecycle() -> None:
+    assert [
+        stage["stage_key"] for stage in get_default_stage_defs(SPERM_DONOR_PIPELINE_ENTITY)
+    ] == [
+        "new",
+        "contacted",
+        "pre_screening",
+        "application_submitted",
+        "semen_analysis",
+        "medical_genetic_screening",
+        "available",
+        "matched",
+        "collection_in_progress",
+        "donation_complete",
+        "on_hold",
+        "disqualified",
+        "closed",
+    ]
+
+
+def test_donor_defaults_keep_target_specific_labels_categories_and_system_anchors() -> None:
+    egg_defs = {
+        stage["stage_key"]: stage for stage in get_default_stage_defs(EGG_DONOR_PIPELINE_ENTITY)
+    }
+    sperm_defs = {
+        stage["stage_key"]: stage
+        for stage in get_default_stage_defs(SPERM_DONOR_PIPELINE_ENTITY)
+    }
+
+    assert egg_defs["medical_records_review"]["label"] == "Medical Records Review"
+    assert egg_defs["cycle_in_progress"]["stage_type"] == "post_approval"
+    assert sperm_defs["medical_genetic_screening"]["label"] == "Medical & Genetic Screening"
+    assert sperm_defs["available"]["stage_type"] == "post_approval"
+    assert egg_defs["on_hold"]["stage_type"] == "paused"
+    assert sperm_defs["disqualified"]["stage_type"] == "terminal"
+    assert get_protected_system_stage_keys(EGG_DONOR_PIPELINE_ENTITY) == {"new", "closed"}
+    assert get_protected_system_stage_keys(SPERM_DONOR_PIPELINE_ENTITY) == {"new", "closed"}
+
+
+def test_donor_default_semantics_are_target_specific_and_not_surrogate_fallbacks() -> None:
+    egg_ready = default_stage_semantics(
+        "ready_to_match", "post_approval", EGG_DONOR_PIPELINE_ENTITY
+    )
+    sperm_available = default_stage_semantics(
+        "available", "post_approval", SPERM_DONOR_PIPELINE_ENTITY
+    )
+    sperm_ready = default_stage_semantics(
+        "ready_to_match", "post_approval", SPERM_DONOR_PIPELINE_ENTITY
+    )
+
+    assert egg_ready["capabilities"]["eligible_for_matching"] is True
+    assert sperm_available["capabilities"]["eligible_for_matching"] is True
+    assert sperm_ready["capabilities"]["eligible_for_matching"] is False
+    assert egg_ready["capabilities"]["shows_pregnancy_tracking"] is False
+    assert sperm_available["suggestion_profile_key"] is None
+
+
+def test_donor_pipeline_default_definitions_are_independent() -> None:
+    egg_defs = get_default_stage_defs(EGG_DONOR_PIPELINE_ENTITY)
+    sperm_defs = get_default_stage_defs(SPERM_DONOR_PIPELINE_ENTITY)
+
+    assert egg_defs != sperm_defs
+    assert egg_defs is not sperm_defs
+    assert egg_defs[0] is not sperm_defs[0]
+
+
+def test_pipeline_entity_normalization_fails_closed_for_non_empty_unknown_types() -> None:
+    assert VALID_PIPELINE_ENTITY_TYPES == {
+        "surrogate",
+        "intended_parent",
+        "egg_donor",
+        "sperm_donor",
+    }
+    assert normalize_pipeline_entity_type(None) == "surrogate"
+
+    with pytest.raises(ValueError, match="Unsupported pipeline entity type"):
+        normalize_pipeline_entity_type("egg-donor")
