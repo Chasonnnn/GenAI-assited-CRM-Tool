@@ -1,7 +1,7 @@
 """Surrogate service - business logic for surrogate operations."""
 
 import logging
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
@@ -37,6 +37,7 @@ from app.schemas.surrogate import (
     mask_ssn_last4,
 )
 from app.services.surrogate_status_service import StatusChangeResult
+from app.utils.datetime_parsing import parse_created_from_filter, parse_created_to_filter
 from app.utils.normalization import (
     escape_like_string,
     extract_email_domain,
@@ -309,23 +310,6 @@ def build_lead_intake_warnings(db: Session, surrogate: Surrogate) -> list[dict[s
         )
 
     return warnings
-
-
-def _parse_created_to_filter(value: str) -> tuple[datetime, bool]:
-    """Parse created_to value.
-
-    Returns:
-        (parsed_datetime, is_date_only)
-    """
-    normalized = value.strip()
-    # Date-only values are interpreted as an inclusive day on the API surface.
-    # Convert to exclusive next-day midnight for stable DB filtering.
-    if "T" not in normalized:
-        parsed_date = date.fromisoformat(normalized)
-        return datetime.combine(parsed_date + timedelta(days=1), time(0, 0, 0)), True
-
-    parsed_datetime = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
-    return parsed_datetime, False
 
 
 def generate_surrogate_number(db: Session, org_id: UUID) -> str:
@@ -1675,14 +1659,14 @@ def list_surrogates(
     # Date range filter
     if created_from:
         try:
-            from_date = datetime.fromisoformat(created_from.replace("Z", "+00:00"))
+            from_date = parse_created_from_filter(created_from)
             filter_clauses.append(Surrogate.created_at >= from_date)
         except ValueError, AttributeError:
             logger.debug("surrogate_filter_invalid_created_at")
 
     if created_to:
         try:
-            to_date, is_date_only = _parse_created_to_filter(created_to)
+            to_date, is_date_only = parse_created_to_filter(created_to)
             if is_date_only:
                 filter_clauses.append(Surrogate.created_at < to_date)
             else:

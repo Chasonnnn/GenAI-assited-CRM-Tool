@@ -330,6 +330,28 @@ def get_version_history(
     )
 
 
+def get_verified_version_payload(
+    db: Session,
+    org_id: UUID,
+    entity_type: str,
+    entity_id: UUID,
+    version: int,
+) -> tuple[JsonObject | None, str | None]:
+    """Load and verify one immutable version payload without creating a new version."""
+    target = get_version(db, org_id, entity_type, entity_id, version)
+    if not target:
+        return None, f"Version {version} not found"
+
+    try:
+        payload = decrypt_payload(target.payload_encrypted)
+        if not verify_checksum(target.payload_encrypted, target.checksum):
+            return None, "Checksum verification failed - data may be corrupted"
+    except Exception as exc:
+        return None, f"Failed to decrypt version: {exc}"
+
+    return payload, None
+
+
 def rollback_to_version(
     db: Session,
     org_id: UUID,
@@ -346,17 +368,15 @@ def rollback_to_version(
     Returns:
         (new_version, error) - error is set if rollback failed
     """
-    target = get_version(db, org_id, entity_type, entity_id, target_version)
-    if not target:
-        return None, f"Version {target_version} not found"
-
-    # Decrypt and verify old payload
-    try:
-        payload = decrypt_payload(target.payload_encrypted)
-        if not verify_checksum(target.payload_encrypted, target.checksum):
-            return None, "Checksum verification failed - data may be corrupted"
-    except Exception as e:
-        return None, f"Failed to decrypt version: {e}"
+    payload, error = get_verified_version_payload(
+        db,
+        org_id,
+        entity_type,
+        entity_id,
+        target_version,
+    )
+    if error or payload is None:
+        return None, error or "Version payload is unavailable"
 
     # Create new version with old payload
     new_version = create_version(

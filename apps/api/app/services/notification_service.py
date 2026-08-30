@@ -11,23 +11,143 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import anyio
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.websocket import send_ws_to_user
 from app.db.enums import NotificationType, OwnerType, Role
 from app.db.models import (
     Attachment,
+    Donor,
+    FormSubmission,
+    IntakeLead,
     IntendedParent,
     Match,
     Membership,
     Notification,
     StatusChangeRequest,
     Surrogate,
+    Task,
     UserNotificationSettings,
 )
 
 logger = logging.getLogger(__name__)
+
+DONOR_NOTIFICATION_ENTITY_TYPES = frozenset(
+    {"donor", "egg_donor", "sperm_donor", "donor_task"}
+)
+
+
+def _visible_without_donor_access():
+    """Keep donor-linked notifications out of list, count, and mutation queries."""
+    return and_(
+        or_(
+            Notification.entity_type.is_(None),
+            Notification.entity_type.notin_(DONOR_NOTIFICATION_ENTITY_TYPES),
+        ),
+        or_(
+            Notification.entity_type.is_(None),
+            Notification.entity_type != "task",
+            exists()
+            .where(
+                Task.id == Notification.entity_id,
+                Task.organization_id == Notification.organization_id,
+                Task.donor_id.is_(None),
+            )
+            .correlate(Notification),
+        ),
+        or_(
+            Notification.entity_type.is_(None),
+            Notification.entity_type != "form_submission",
+            exists()
+            .where(
+                FormSubmission.id == Notification.entity_id,
+                FormSubmission.organization_id == Notification.organization_id,
+                FormSubmission.lead_kind.notin_({"egg_donor", "sperm_donor"}),
+            )
+            .correlate(Notification),
+        ),
+        or_(
+            Notification.entity_type.is_(None),
+            Notification.entity_type != "intake_lead",
+            exists()
+            .where(
+                IntakeLead.id == Notification.entity_id,
+                IntakeLead.organization_id == Notification.organization_id,
+                IntakeLead.lead_type.notin_({"egg_donor", "sperm_donor"}),
+            )
+            .correlate(Notification),
+        ),
+    )
+
+
+def _notification_target_is_donor_related(
+    db: Session,
+    org_id: UUID,
+    entity_type: str | None,
+    entity_id: UUID | None,
+) -> bool | None:
+    """Return donor linkage, or None when a protected target is invalid."""
+    if entity_type is None:
+        return False
+    if entity_type in {"donor", "egg_donor", "sperm_donor"}:
+        if not entity_id:
+            return None
+        donor = (
+            db.query(Donor.id)
+            .filter(Donor.id == entity_id, Donor.organization_id == org_id)
+            .first()
+        )
+        return True if donor else None
+    if entity_type in {"task", "donor_task"}:
+        if not entity_id:
+            return None
+        from app.services import task_service
+
+        task = (
+            db.query(Task.donor_id)
+            .filter(
+                Task.id == entity_id,
+                Task.organization_id == org_id,
+                task_service.task_subjects_belong_to_org(org_id),
+            )
+            .first()
+        )
+        if task is None:
+            return None
+        return entity_type == "donor_task" or task.donor_id is not None
+    if entity_type == "form_submission":
+        if not entity_id:
+            return None
+        submission = (
+            db.query(FormSubmission.lead_kind)
+            .filter(
+                FormSubmission.id == entity_id,
+                FormSubmission.organization_id == org_id,
+            )
+            .first()
+        )
+        if submission is None:
+            return None
+        return submission.lead_kind in {"egg_donor", "sperm_donor"}
+    if entity_type == "intake_lead":
+        if not entity_id:
+            return None
+        lead = (
+            db.query(IntakeLead.lead_type)
+            .filter(IntakeLead.id == entity_id, IntakeLead.organization_id == org_id)
+            .first()
+        )
+        if lead is None:
+            return None
+        return lead.lead_type in {"egg_donor", "sperm_donor"}
+    return False
+
+
+def _user_can_view_donors(db: Session, org_id: UUID, user_id: UUID) -> bool:
+    from app.services import task_service
+
+    return task_service.user_can_view_donors(db, org_id, user_id)
 
 # =============================================================================
 # Notification Settings
@@ -171,6 +291,17 @@ def create_notification(
     Dedupes by dedupe_key + org_id + user_id within a time window
     (or forever when dedupe_window_hours is None).
     """
+    donor_related = _notification_target_is_donor_related(
+        db,
+        org_id,
+        entity_type,
+        entity_id,
+    )
+    if donor_related is None:
+        return None
+    if donor_related and not _user_can_view_donors(db, org_id, user_id):
+        return None
+
     # Check dedupe (scoped by org and user for safety)
     if dedupe_key:
         query = db.query(Notification).filter(
@@ -237,6 +368,8 @@ def get_notifications(
         Notification.user_id == user_id,
         Notification.organization_id == org_id,
     )
+    if not _user_can_view_donors(db, org_id, user_id):
+        query = query.filter(_visible_without_donor_access())
 
     if unread_only:
         query = query.filter(Notification.read_at.is_(None))
@@ -279,6 +412,8 @@ def get_unread_count(
         Notification.organization_id == org_id,
         Notification.read_at.is_(None),
     )
+    if not _user_can_view_donors(db, org_id, user_id):
+        stmt = stmt.where(_visible_without_donor_access())
     return db.scalar(stmt) or 0
 
 
@@ -289,15 +424,17 @@ def mark_read(
     org_id: UUID,
 ) -> Notification | None:
     """Mark a notification as read (scoped by org for tenant isolation)."""
-    notification = (
+    query = (
         db.query(Notification)
         .filter(
             Notification.id == notification_id,
             Notification.user_id == user_id,
             Notification.organization_id == org_id,
         )
-        .first()
     )
+    if not _user_can_view_donors(db, org_id, user_id):
+        query = query.filter(_visible_without_donor_access())
+    notification = query.first()
 
     if notification and not notification.read_at:
         notification.read_at = datetime.now(UTC)
@@ -315,15 +452,17 @@ def mark_all_read(
     org_id: UUID,
 ) -> int:
     """Mark all notifications as read. Returns count updated."""
-    count = (
+    query = (
         db.query(Notification)
         .filter(
             Notification.user_id == user_id,
             Notification.organization_id == org_id,
             Notification.read_at.is_(None),
         )
-        .update({"read_at": datetime.now(UTC)})
     )
+    if not _user_can_view_donors(db, org_id, user_id):
+        query = query.filter(_visible_without_donor_access())
+    count = query.update({"read_at": datetime.now(UTC)}, synchronize_session=False)
     db.commit()
     unread_count = get_unread_count(db, user_id, org_id)
     _schedule_ws_send(_send_ws_count_update(user_id, unread_count))
@@ -604,6 +743,72 @@ def notify_ip_status_change_request_pending(
         )
 
 
+def notify_donor_status_change_request_pending(
+    db: Session,
+    request: StatusChangeRequest,
+    donor: Donor,
+    target_stage_label: str,
+    current_stage_label: str,
+    requester_name: str,
+) -> None:
+    """Notify donor-visible approvers that a regression request is pending."""
+    from app.services import permission_service
+
+    memberships = (
+        db.query(Membership)
+        .filter(
+            Membership.organization_id == donor.organization_id,
+            Membership.is_active.is_(True),
+        )
+        .all()
+    )
+    donor_type_label = "Egg Donor" if donor.donor_type == "egg" else "Sperm Donor"
+
+    for membership in memberships:
+        role_str = membership.role.value if hasattr(membership.role, "value") else membership.role
+        can_approve = permission_service.check_permission(
+            db,
+            donor.organization_id,
+            membership.user_id,
+            role_str,
+            "approve_status_change_requests",
+        )
+        can_view_donor = permission_service.check_permission(
+            db,
+            donor.organization_id,
+            membership.user_id,
+            role_str,
+            "view_donors",
+        )
+        if not can_approve or not can_view_donor:
+            continue
+        if not should_notify(
+            db,
+            membership.user_id,
+            donor.organization_id,
+            "workflow_approvals",
+        ):
+            continue
+
+        create_notification(
+            db=db,
+            org_id=donor.organization_id,
+            user_id=membership.user_id,
+            type=NotificationType.STATUS_CHANGE_REQUESTED,
+            title=(
+                f"Stage regression approval needed for {donor_type_label} "
+                f"#{donor.donor_number}"
+            ),
+            body=(
+                f"{requester_name} requested {current_stage_label} → "
+                f"{target_stage_label} for {donor.full_name}"
+            ),
+            entity_type="donor",
+            entity_id=donor.id,
+            dedupe_key=f"status_change_request:{request.id}:{membership.user_id}",
+        )
+
+
 def notify_match_cancel_request_pending(
     db: Session,
     request: StatusChangeRequest,
@@ -735,6 +940,58 @@ def notify_ip_status_change_request_resolved(
     )
 
 
+def notify_donor_status_change_request_resolved(
+    db: Session,
+    request: StatusChangeRequest,
+    donor: Donor,
+    approved: bool,
+    resolver_name: str,
+    reason: str | None = None,
+) -> None:
+    """Notify an authorized donor requester when a regression request is resolved."""
+    if not request.requested_by_user_id:
+        return
+    if not _user_can_view_donors(
+        db,
+        donor.organization_id,
+        request.requested_by_user_id,
+    ):
+        return
+    if not should_notify(
+        db,
+        request.requested_by_user_id,
+        donor.organization_id,
+        "status_change_decisions",
+    ):
+        return
+
+    status_label = "approved" if approved else "rejected"
+    notification_type = (
+        NotificationType.STATUS_CHANGE_APPROVED
+        if approved
+        else NotificationType.STATUS_CHANGE_REJECTED
+    )
+    body = f"{resolver_name} {status_label} your stage regression request"
+    if reason:
+        body = f"{body}: {reason}"
+    donor_type_label = "Egg Donor" if donor.donor_type == "egg" else "Sperm Donor"
+
+    create_notification(
+        db=db,
+        org_id=donor.organization_id,
+        user_id=request.requested_by_user_id,
+        type=notification_type,
+        title=(
+            f"Stage regression {status_label} for {donor_type_label} "
+            f"#{donor.donor_number}"
+        ),
+        body=body,
+        entity_type="donor",
+        entity_id=donor.id,
+        dedupe_key=f"status_change_request:{request.id}:{status_label}",
+    )
+
+
 def notify_match_cancel_request_resolved(
     db: Session,
     request: StatusChangeRequest,
@@ -774,6 +1031,13 @@ def notify_match_cancel_request_resolved(
     )
 
 
+def _donor_task_subject(donor_number: str | None, donor_type: str | None) -> str | None:
+    if not donor_number:
+        return None
+    label = {"egg": "Egg donor", "sperm": "Sperm donor"}.get(donor_type, "Donor")
+    return f"{label} #{donor_number}"
+
+
 def notify_task_assigned(
     db: Session,
     task_id: UUID,
@@ -782,6 +1046,8 @@ def notify_task_assigned(
     assignee_id: UUID,
     actor_name: str,
     surrogate_number: str | None = None,
+    donor_number: str | None = None,
+    donor_type: str | None = None,
 ) -> None:
     """Notify user when a task is assigned to them."""
     if not assignee_id:
@@ -794,6 +1060,8 @@ def notify_task_assigned(
     body = f"{actor_name} assigned you a task"
     if surrogate_number:
         body += f" for surrogate #{surrogate_number}"
+    elif donor_subject := _donor_task_subject(donor_number, donor_type):
+        body += f" for {donor_subject}"
 
     dedupe_key = f"task_assigned:{task_id}:{assignee_id}"
     create_notification(
@@ -803,7 +1071,7 @@ def notify_task_assigned(
         type=NotificationType.TASK_ASSIGNED,
         title=title,
         body=body,
-        entity_type="task",
+        entity_type="donor_task" if donor_number and not surrogate_number else "task",
         entity_id=task_id,
         dedupe_key=dedupe_key,
     )
@@ -816,6 +1084,8 @@ def notify_workflow_approval_requested(
     org_id: UUID,
     assignee_id: UUID,
     surrogate_number: str | None = None,
+    donor_number: str | None = None,
+    donor_type: str | None = None,
 ) -> None:
     """Notify user when a workflow approval is requested."""
     if not assignee_id:
@@ -828,6 +1098,8 @@ def notify_workflow_approval_requested(
     body = "A workflow action requires your approval"
     if surrogate_number:
         body += f" for surrogate #{surrogate_number}"
+    elif donor_subject := _donor_task_subject(donor_number, donor_type):
+        body += f" for {donor_subject}"
 
     dedupe_key = f"workflow_approval:{task_id}:{assignee_id}"
     create_notification(
@@ -837,7 +1109,7 @@ def notify_workflow_approval_requested(
         type=NotificationType.WORKFLOW_APPROVAL_REQUESTED,
         title=title,
         body=body,
-        entity_type="task",
+        entity_type="donor_task" if donor_number and not surrogate_number else "task",
         entity_id=task_id,
         dedupe_key=dedupe_key,
     )
@@ -851,6 +1123,8 @@ def notify_task_due_soon(
     assignee_id: UUID,
     due_date: str,
     surrogate_number: str | None = None,
+    donor_number: str | None = None,
+    donor_type: str | None = None,
 ) -> None:
     """Notify user when a task is due soon (within 24h). One-time notification."""
     if not assignee_id:
@@ -864,6 +1138,8 @@ def notify_task_due_soon(
     body = f"Due: {due_date}"
     if surrogate_number:
         body += f" (Surrogate #{surrogate_number})"
+    elif donor_subject := _donor_task_subject(donor_number, donor_type):
+        body += f" ({donor_subject})"
 
     # One-time dedupe (no time bucket - dedupe forever)
     dedupe_key = f"task:{task_id}:due_soon"
@@ -874,7 +1150,7 @@ def notify_task_due_soon(
         type=NotificationType.TASK_DUE_SOON,
         title=title,
         body=body,
-        entity_type="task",
+        entity_type="donor_task" if donor_number and not surrogate_number else "task",
         entity_id=task_id,
         dedupe_key=dedupe_key,
         dedupe_window_hours=None,
@@ -889,6 +1165,8 @@ def notify_task_overdue(
     assignee_id: UUID,
     due_date: str,
     surrogate_number: str | None = None,
+    donor_number: str | None = None,
+    donor_type: str | None = None,
 ) -> None:
     """Notify user when a task is overdue. One-time notification."""
     if not assignee_id:
@@ -902,6 +1180,8 @@ def notify_task_overdue(
     body = f"Was due: {due_date}"
     if surrogate_number:
         body += f" (Surrogate #{surrogate_number})"
+    elif donor_subject := _donor_task_subject(donor_number, donor_type):
+        body += f" ({donor_subject})"
 
     # One-time dedupe (no time bucket - dedupe forever)
     dedupe_key = f"task:{task_id}:overdue"
@@ -912,7 +1192,7 @@ def notify_task_overdue(
         type=NotificationType.TASK_OVERDUE,
         title=title,
         body=body,
-        entity_type="task",
+        entity_type="donor_task" if donor_number and not surrogate_number else "task",
         entity_id=task_id,
         dedupe_key=dedupe_key,
         dedupe_window_hours=None,

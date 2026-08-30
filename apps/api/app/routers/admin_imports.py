@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -13,7 +13,7 @@ from app.core.permissions import PermissionKey as P
 from app.core.rate_limit import limiter
 from app.db.enums import AuditEventType
 from app.schemas.auth import UserSession
-from app.services import admin_import_service, audit_service
+from app.services import admin_import_service, audit_service, permission_service
 
 csrf_header_dependency = require_csrf_header
 
@@ -27,6 +27,21 @@ def _ensure_dev_env() -> None:
         raise HTTPException(status_code=403, detail="Admin imports are only available in dev mode.")
 
 
+def _require_donor_import_access(db: Session, session: UserSession) -> None:
+    role = getattr(session.role, "value", session.role)
+    if not permission_service.check_permission(
+        db,
+        session.org_id,
+        session.user_id,
+        role,
+        P.DONORS_EDIT.value,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Missing permission: {P.DONORS_EDIT.value}",
+        )
+
+
 @router.post("/all")
 @limiter.limit(ADMIN_IMPORT_LIMIT)
 async def import_all(
@@ -35,49 +50,72 @@ async def import_all(
         description="Organization config ZIP"
     ),
     surrogates_csv: Annotated[UploadFile, "fastapi_param"] = File(description="Surrogates CSV"),
+    donors_csv: Annotated[UploadFile, "fastapi_param"] = File(description="Donors CSV"),
     session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(P.ADMIN_IMPORTS_MANAGE)
     ),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
 ) -> object:
-    """Import org config + surrogates into an empty org."""
+    """Import org config plus surrogate and donor records into an empty org."""
     _ensure_dev_env()
+    _require_donor_import_access(db, session)
 
     if not config_zip.filename or not config_zip.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="config_zip must be a .zip file")
     if not surrogates_csv.filename or not surrogates_csv.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="surrogates_csv must be a .csv file")
+    if not donors_csv.filename or not donors_csv.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="donors_csv must be a .csv file")
 
     config_content = await config_zip.read()
     surrogates_content = await surrogates_csv.read()
+    donors_content = await donors_csv.read()
 
     try:
         config_counts = admin_import_service.import_org_config_zip(
-            db, session.org_id, config_content
+            db,
+            session.org_id,
+            config_content,
+            commit=False,
         )
         surrogates_count = admin_import_service.import_surrogates_csv(
-            db, session.org_id, surrogates_content
+            db,
+            session.org_id,
+            surrogates_content,
+            commit=False,
         )
+        donors_count = admin_import_service.import_donors_csv(
+            db,
+            session.org_id,
+            donors_content,
+            actor_user_id=session.user_id,
+            commit=False,
+        )
+        audit_service.log_event(
+            db=db,
+            org_id=session.org_id,
+            event_type=AuditEventType.DATA_IMPORT_COMPLETED,
+            actor_user_id=session.user_id,
+            details={
+                "import": "org_config_surrogates_and_donors",
+                "surrogates": surrogates_count,
+                "donors": donors_count,
+            },
+        )
+        db.commit()
     except ValueError as exc:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    audit_service.log_event(
-        db=db,
-        org_id=session.org_id,
-        event_type=AuditEventType.DATA_IMPORT_COMPLETED,
-        actor_user_id=session.user_id,
-        details={
-            "import": "org_config_and_surrogates",
-            "surrogates": surrogates_count,
-        },
-    )
-    db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
     return {
         "status": "completed",
         "config": config_counts,
         "surrogates_imported": surrogates_count,
+        "donors_imported": donors_count,
     }
 
 
@@ -107,7 +145,11 @@ async def import_config(
             db, session.org_id, config_content
         )
     except ValueError as exc:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise
 
     audit_service.log_event(
         db=db,
@@ -145,7 +187,11 @@ async def import_surrogates(
             db, session.org_id, surrogates_content
         )
     except ValueError as exc:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise
 
     audit_service.log_event(
         db=db,
@@ -157,3 +203,47 @@ async def import_surrogates(
     db.commit()
 
     return {"status": "completed", "surrogates_imported": surrogates_count}
+
+
+@router.post("/donors")
+@limiter.limit(ADMIN_IMPORT_LIMIT)
+async def import_donors(
+    request: Request,
+    donors_csv: Annotated[UploadFile, "fastapi_param"] = File(description="Donors CSV"),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.ADMIN_IMPORTS_MANAGE)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+) -> object:
+    """Import donor CSV into an empty org after donor pipelines are restored."""
+    _ensure_dev_env()
+    _require_donor_import_access(db, session)
+
+    if not donors_csv.filename or not donors_csv.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="donors_csv must be a .csv file")
+
+    try:
+        donors_count = admin_import_service.import_donors_csv(
+            db,
+            session.org_id,
+            await donors_csv.read(),
+            actor_user_id=session.user_id,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise
+
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.DATA_IMPORT_COMPLETED,
+        actor_user_id=session.user_id,
+        details={"import": "donors_csv", "donors": donors_count},
+    )
+    db.commit()
+
+    return {"status": "completed", "donors_imported": donors_count}

@@ -55,6 +55,7 @@ from app.routers import (
     custom_fields,
     dashboard,
     dev,
+    donors,
     email_operations,
     email_template_draft_tests,
     email_template_drafts,
@@ -341,6 +342,11 @@ def _resource_policy_for_path(path: str) -> str:
     if path.startswith("/forms/public/"):
         return "cross-origin"
     if path.startswith("/ai/studio/assets/"):
+        return "cross-origin"
+    # Local attachment media is rendered by the web app from the API origin.
+    # The route remains authenticated; this only permits the authorized image
+    # response to render when web and API use different development ports.
+    if path.startswith("/attachments/local/"):
         return "cross-origin"
     if path.startswith("/settings/organization/signature/logo/local/"):
         return "cross-origin"
@@ -648,6 +654,9 @@ app.include_router(journey.export_router)  # Token-auth export view
 
 # Intended Parents module
 app.include_router(intended_parents.router)
+
+# Donors module
+app.include_router(donors.router)
 
 # Notifications (user-scoped)
 app.include_router(notifications.router)

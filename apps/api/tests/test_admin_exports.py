@@ -1,3 +1,4 @@
+import csv
 import io
 import json
 import uuid
@@ -15,10 +16,12 @@ from app.core.security import create_session_token
 from app.db.enums import OwnerType, Role, SurrogateSource
 from app.db.models import (
     AppointmentType,
+    AutomationWorkflow,
     AvailabilityOverride,
     AvailabilityRule,
     BookingLink,
     DataRetentionPolicy,
+    DonorStatusHistory,
     Form,
     FormFieldMapping,
     FormLogo,
@@ -28,6 +31,8 @@ from app.db.models import (
     MessagingConversation,
     MessagingMessage,
     OrgCounter,
+    Pipeline,
+    PipelineStage,
     Surrogate,
     TwilioRoute,
     TwilioSettings,
@@ -35,7 +40,8 @@ from app.db.models import (
     WorkflowTemplate,
 )
 from app.main import app
-from app.services import admin_export_service, job_service
+from app.schemas.donor import DonorCreate
+from app.services import admin_export_service, donor_service, job_service
 from app.utils.normalization import normalize_email
 from app.worker import process_admin_export
 
@@ -202,6 +208,131 @@ class TestAdminExports:
         assert "surrogate_number" in download.text.splitlines()[0]
 
     @pytest.mark.asyncio
+    async def test_donors_export_csv(self, authed_client, db, test_org, test_user):
+        donor = donor_service.create_donor(
+            db,
+            test_org.id,
+            test_user.id,
+            DonorCreate(
+                donor_type="egg",
+                full_name="Export Egg Donor",
+                email="export-egg@example.com",
+                education="Bachelor's degree",
+            ),
+        )
+        initial_history = (
+            db.query(DonorStatusHistory)
+            .filter(DonorStatusHistory.donor_id == donor.id)
+            .one()
+        )
+        initial_at = datetime(2026, 8, 27, 10, 15, tzinfo=UTC)
+        initial_history.effective_at = initial_at
+        initial_history.recorded_at = initial_at
+        contacted_stage = (
+            db.query(PipelineStage)
+            .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
+            .filter(
+                Pipeline.organization_id == test_org.id,
+                Pipeline.entity_type == "egg_donor",
+                PipelineStage.stage_key == "contacted",
+            )
+            .one()
+        )
+        transition_id = uuid.uuid4()
+        transition_at = datetime(2026, 8, 28, 14, 30, tzinfo=UTC)
+        db.add(
+            DonorStatusHistory(
+                id=transition_id,
+                donor_id=donor.id,
+                organization_id=test_org.id,
+                changed_by_user_id=test_user.id,
+                old_stage_id=donor.stage_id,
+                new_stage_id=contacted_stage.id,
+                old_status="new",
+                new_status="contacted",
+                old_label_snapshot="New",
+                new_label_snapshot="Contacted",
+                reason="Client approved outreach",
+                effective_at=transition_at,
+                recorded_at=transition_at,
+            )
+        )
+        donor.stage_id = contacted_stage.id
+        db.commit()
+
+        response = await authed_client.post("/admin/exports/donors")
+        assert response.status_code == 202
+        job_id = response.json()["job_id"]
+
+        job = job_service.get_job(db, uuid.UUID(job_id), test_org.id)
+        assert job is not None
+        await process_admin_export(db, job)
+        job_service.mark_job_completed(db, job)
+
+        download = await authed_client.get(f"/admin/exports/jobs/{job_id}/file")
+        assert download.status_code == 200
+        assert download.headers["content-type"].startswith("text/csv")
+        row = next(csv.DictReader(io.StringIO(download.text)))
+        assert row["donor_number"] == donor.donor_number
+        assert row["full_name"] == "Export Egg Donor"
+        assert row["education"] == "Bachelor's degree"
+        history_payload = json.loads(row["status_history_json"])
+        assert history_payload["version"] == 1
+        assert [event["id"] for event in history_payload["events"]] == [
+            str(initial_history.id),
+            str(transition_id),
+        ]
+        transition = history_payload["events"][1]
+        assert transition["changed_by_email"] == test_user.email
+        assert transition["old_stage_key"] == "new"
+        assert transition["new_stage_key"] == "contacted"
+        assert transition["old_label_snapshot"] == "New"
+        assert transition["new_label_snapshot"] == "Contacted"
+        assert transition["reason"] == "Client approved outreach"
+        assert transition["effective_at"] == transition_at.isoformat()
+        assert transition["recorded_at"] == transition_at.isoformat()
+
+    @pytest.mark.asyncio
+    async def test_donor_export_rechecks_donor_view_for_request_and_download(
+        self,
+        authed_client,
+        db,
+        test_org,
+        test_user,
+        monkeypatch,
+    ):
+        created = await authed_client.post("/admin/exports/donors")
+        assert created.status_code == 202, created.text
+        job_id = uuid.UUID(created.json()["job_id"])
+        job = job_service.get_job(db, job_id, test_org.id)
+        assert job is not None
+        await process_admin_export(db, job)
+        job_service.mark_job_completed(db, job)
+
+        from app.services import permission_service
+
+        original_check_permission = permission_service.check_permission
+
+        def deny_donor_view(db, org_id, user_id, role, permission):
+            if permission == "view_donors":
+                return False
+            return original_check_permission(db, org_id, user_id, role, permission)
+
+        monkeypatch.setattr(permission_service, "check_permission", deny_donor_view)
+
+        requested_after_revoke = await authed_client.post("/admin/exports/donors")
+        job_status = await authed_client.get(f"/admin/exports/jobs/{job_id}")
+        download = await authed_client.get(f"/admin/exports/jobs/{job_id}/download")
+        file_download = await authed_client.get(f"/admin/exports/jobs/{job_id}/file")
+        surrogate_export = await authed_client.post("/admin/exports/surrogates")
+
+        assert requested_after_revoke.status_code == 403
+        assert job_status.status_code == 403
+        assert download.status_code == 403
+        assert file_download.status_code == 403
+        assert surrogate_export.status_code == 202, surrogate_export.text
+
+    @pytest.mark.asyncio
     async def test_surrogates_export_csv_escapes_formula(
         self, authed_client, db, test_org, test_user, default_stage
     ):
@@ -283,6 +414,9 @@ class TestAdminExports:
         workflow_template_id = uuid.uuid4()
         retention_policy_id = uuid.uuid4()
         legal_hold_id = uuid.uuid4()
+        donor_pipeline_id = uuid.uuid4()
+        donor_stage_id = uuid.uuid4()
+        donor_workflow_id = uuid.uuid4()
 
         form = Form(
             id=form_id,
@@ -290,6 +424,8 @@ class TestAdminExports:
             name="Test Form",
             description="Intake form",
             status="draft",
+            purpose="other",
+            lead_kind="egg_donor",
             schema_json={"title": "Draft"},
             published_schema_json={"title": "Published"},
             max_file_size_bytes=1048576,
@@ -302,6 +438,36 @@ class TestAdminExports:
         )
         db.add(form)
         db.flush()
+
+        donor_pipeline = Pipeline(
+            id=donor_pipeline_id,
+            organization_id=test_org.id,
+            entity_type="egg_donor",
+            name="Egg Donors",
+            is_default=True,
+            feature_config={"requires_profile_photo": True},
+        )
+        donor_stage = PipelineStage(
+            id=donor_stage_id,
+            pipeline_id=donor_pipeline_id,
+            stage_key="egg_donor.new",
+            slug="new",
+            label="New",
+            color="#2563EB",
+            order=1,
+            stage_type="active",
+            semantics={"analytics_bucket": "egg_new"},
+            is_intake_stage=True,
+            allowed_next_slugs=["contacted"],
+        )
+        donor_workflow = AutomationWorkflow(
+            id=donor_workflow_id,
+            organization_id=test_org.id,
+            name="Egg donor welcome",
+            trigger_type="donor_created",
+            subject_type="egg_donor",
+            actions=[],
+        )
 
         logo = FormLogo(
             id=logo_id,
@@ -424,6 +590,9 @@ class TestAdminExports:
                 retention_policy,
                 legal_hold,
                 org_counter,
+                donor_pipeline,
+                donor_stage,
+                donor_workflow,
             ]
         )
         db.commit()
@@ -454,6 +623,28 @@ class TestAdminExports:
 
             forms_payload = json.loads(archive.read("forms.json"))
             assert forms_payload and forms_payload[0]["name"] == "Test Form"
+            assert forms_payload[0]["purpose"] == "other"
+            assert forms_payload[0]["lead_kind"] == "egg_donor"
+            assert "default_application_email_template_id" in forms_payload[0]
+
+            pipelines_payload = json.loads(archive.read("pipelines.json"))
+            exported_pipeline = next(
+                item for item in pipelines_payload if item["id"] == str(donor_pipeline_id)
+            )
+            assert exported_pipeline["entity_type"] == "egg_donor"
+            assert exported_pipeline["feature_config"] == {"requires_profile_photo": True}
+            assert exported_pipeline["stages"][0]["stage_key"] == "egg_donor.new"
+            assert exported_pipeline["stages"][0]["semantics"] == {
+                "analytics_bucket": "egg_new"
+            }
+            assert exported_pipeline["stages"][0]["is_intake_stage"] is True
+            assert exported_pipeline["stages"][0]["allowed_next_slugs"] == ["contacted"]
+
+            workflows_payload = json.loads(archive.read("workflows.json"))
+            exported_workflow = next(
+                item for item in workflows_payload if item["id"] == str(donor_workflow_id)
+            )
+            assert exported_workflow["subject_type"] == "egg_donor"
 
     @pytest.mark.asyncio
     async def test_analytics_export_zip(self, authed_client, db, test_org):

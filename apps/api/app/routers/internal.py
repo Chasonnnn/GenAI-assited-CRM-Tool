@@ -446,6 +446,23 @@ def task_notifications_sweep(x_internal_secret: Annotated[str, "fastapi_param"] 
     tasks_overdue = 0
     notifications_created = 0
 
+    def task_subject_metadata(task) -> tuple[str | None, str | None, str | None]:
+        surrogate = getattr(task, "surrogate", None) or getattr(task, "case", None)
+        donor = getattr(task, "donor", None)
+        if surrogate and getattr(surrogate, "organization_id", task.organization_id) != (
+            task.organization_id
+        ):
+            surrogate = None
+        if donor and getattr(donor, "organization_id", task.organization_id) != (
+            task.organization_id
+        ):
+            donor = None
+        return (
+            surrogate.surrogate_number if surrogate else None,
+            donor.donor_number if donor else None,
+            donor.donor_type if donor else None,
+        )
+
     with SessionLocal() as db:
         orgs = org_service.list_orgs(db)
         for org in orgs:
@@ -467,6 +484,7 @@ def task_notifications_sweep(x_internal_secret: Annotated[str, "fastapi_param"] 
 
             for task in due_soon_tasks:
                 tasks_due_soon += 1
+                surrogate_number, donor_number, donor_type = task_subject_metadata(task)
                 notification_service.notify_task_due_soon(
                     db=db,
                     task_id=task.id,
@@ -474,7 +492,9 @@ def task_notifications_sweep(x_internal_secret: Annotated[str, "fastapi_param"] 
                     org_id=task.organization_id,
                     assignee_id=task.owner_id,
                     due_date=task.due_date.strftime("%Y-%m-%d"),
-                    surrogate_number=task.case.surrogate_number if task.case else None,
+                    surrogate_number=surrogate_number,
+                    donor_number=donor_number,
+                    donor_type=donor_type,
                 )
                 notifications_created += 1
 
@@ -487,6 +507,7 @@ def task_notifications_sweep(x_internal_secret: Annotated[str, "fastapi_param"] 
 
             for task in overdue_tasks:
                 tasks_overdue += 1
+                surrogate_number, donor_number, donor_type = task_subject_metadata(task)
                 notification_service.notify_task_overdue(
                     db=db,
                     task_id=task.id,
@@ -494,7 +515,9 @@ def task_notifications_sweep(x_internal_secret: Annotated[str, "fastapi_param"] 
                     org_id=task.organization_id,
                     assignee_id=task.owner_id,
                     due_date=task.due_date.strftime("%Y-%m-%d"),
-                    surrogate_number=task.case.surrogate_number if task.case else None,
+                    surrogate_number=surrogate_number,
+                    donor_number=donor_number,
+                    donor_type=donor_type,
                 )
                 notifications_created += 1
 

@@ -623,13 +623,17 @@ def remove_member(
         reason="removed_from_org",
         request=request,
     )
-    permission_service.deprovision_member(
-        db,
-        session.org_id,
-        membership,
-        user,
-        actor_user_id=session.user_id,
-    )
+    try:
+        permission_service.deprovision_member(
+            db,
+            session.org_id,
+            membership,
+            user,
+            actor_user_id=session.user_id,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     db.commit()
 
     return {"removed": True, "user_id": str(user.id)}

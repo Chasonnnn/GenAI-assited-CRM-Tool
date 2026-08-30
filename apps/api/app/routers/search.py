@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import get_current_session, get_db, require_permission
+from app.core.deps import get_current_session, get_db, require_any_permissions
+from app.core.permissions import PermissionKey as P
 from app.core.policies import POLICIES
 from app.core.rate_limit import limiter
 from app.schemas.auth import UserSession
@@ -15,7 +16,18 @@ from app.services import search_service
 router = APIRouter(
     prefix="/search",
     tags=["Search"],
-    dependencies=[Depends(require_permission(POLICIES["surrogates"].default))],
+    dependencies=[
+        Depends(
+            require_any_permissions(
+                [
+                    POLICIES["surrogates"].default,
+                    P.SURROGATES_VIEW_NOTES,
+                    POLICIES["intended_parents"].default,
+                    POLICIES["donors"].default,
+                ]
+            )
+        )
+    ],
 )
 
 
@@ -27,7 +39,7 @@ def global_search(
         min_length=1, max_length=200, description="Search query"
     ),
     types: Annotated[str, "fastapi_param"] = Query(
-        "case,note,attachment,intended_parent",
+        "case,note,attachment,intended_parent,donor",
         description="Comma-separated entity types to search",
     ),
     limit: Annotated[int, "fastapi_param"] = Query(20, ge=1, le=100, description="Max results"),
@@ -36,11 +48,11 @@ def global_search(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> object:
     """
-    Global search across surrogates, notes, attachments, and intended parents.
+    Global search across surrogates, notes, attachments, intended parents, and donors.
 
     Results are:
     - Org-scoped to the current user's organization
-    - Permission-gated (notes require view_surrogate_notes, IPs require view_intended_parents)
+    - Permission-gated by entity type
     - Ranked by relevance
     - Include highlighted snippets
 

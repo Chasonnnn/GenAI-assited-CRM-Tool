@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import csv
+import hashlib
 import io
 import json
 import os
@@ -16,18 +18,20 @@ from uuid import UUID
 
 from sqlalchemy import and_
 from sqlalchemy import inspect as sa_inspect
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.core.config import settings
 from app.db.enums import OwnerType
 from app.db.models import (
     AISettings,
     AppointmentType,
+    Attachment,
     AutomationWorkflow,
     AvailabilityOverride,
     AvailabilityRule,
     BookingLink,
     DataRetentionPolicy,
+    Donor,
     EmailTemplate,
     Form,
     FormFieldMapping,
@@ -63,12 +67,14 @@ from app.db.models import (
     UserPermissionOverride,
     WorkflowTemplate,
 )
-from app.services import ai_usage_service, analytics_service
+from app.services import ai_usage_service, analytics_service, attachment_service
 
 CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@")
+MAX_DONOR_STATUS_HISTORY_JSON_BYTES = 1_048_576
 
 EXPORT_TYPE_FILENAMES = {
     "surrogates_csv": "surrogates_export",
+    "donors_csv": "donors_export",
     "org_config_zip": "org_config_export",
     "analytics_zip": "analytics_export",
     "messaging_zip": "messaging_records_export",
@@ -143,6 +149,26 @@ def store_surrogates_csv(db: Session, org_id: UUID, filename: str) -> str:
     return os.path.relpath(file_path, os.path.abspath(settings.EXPORT_LOCAL_DIR))
 
 
+def store_donors_csv(db: Session, org_id: UUID, filename: str) -> str:
+    """Store streamed donors CSV and return file path/key."""
+    if settings.EXPORT_STORAGE_BACKEND == "s3":
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = os.path.join(temp_dir, filename)
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
+                for row in stream_donors_csv(db, org_id):
+                    f.write(row)
+            key = _build_admin_export_key(org_id, filename)
+            _upload_to_s3(file_path, key)
+            return key
+
+    export_dir = _ensure_admin_export_dir(org_id)
+    file_path = os.path.join(export_dir, filename)
+    with open(file_path, "w", newline="", encoding="utf-8") as f:
+        for row in stream_donors_csv(db, org_id):
+            f.write(row)
+    return os.path.relpath(file_path, os.path.abspath(settings.EXPORT_LOCAL_DIR))
+
+
 def resolve_admin_export_path(file_path: str) -> str:
     """Resolve local admin export path from stored relative path."""
     base_dir = os.path.abspath(settings.EXPORT_LOCAL_DIR)
@@ -159,7 +185,7 @@ def resolve_admin_export_path(file_path: str) -> str:
 def build_export_filename(export_type: str) -> str:
     """Build a timestamped filename for admin exports."""
     prefix = EXPORT_TYPE_FILENAMES.get(export_type, "admin_export")
-    extension = "csv" if export_type == "surrogates_csv" else "zip"
+    extension = "csv" if export_type.endswith("_csv") else "zip"
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     return f"{prefix}_{timestamp}.{extension}"
 
@@ -453,6 +479,281 @@ def stream_surrogates_csv(db: Session, org_id: UUID) -> Iterator[str]:
         )
 
 
+def _serialize_donor_status_history(
+    donor: Donor,
+    *,
+    org_id: UUID,
+    stage_details: dict[UUID, dict[str, Any]],
+    actor_emails: dict[UUID, str],
+) -> str:
+    def stage_reference(
+        stage_id: UUID | None,
+        stable_key: str | None,
+    ) -> dict[str, Any]:
+        if stage_id is None:
+            return {
+                "stage_id": None,
+                "pipeline_id": None,
+                "pipeline_name": None,
+                "stage_key": stable_key,
+            }
+        detail = stage_details.get(stage_id)
+        if detail is None or detail["entity_type"] != donor.pipeline_entity_type:
+            raise ValueError(f"Status history stage mismatch for donor {donor.id}")
+        return {
+            "stage_id": str(stage_id),
+            "pipeline_id": str(detail["pipeline_id"]),
+            "pipeline_name": detail["pipeline_name"],
+            "stage_key": detail["stage_key"],
+        }
+
+    history_payload: list[dict[str, Any]] = []
+    for history in sorted(
+        donor.status_history,
+        key=lambda item: (item.recorded_at, item.effective_at, item.id),
+    ):
+        if history.organization_id != org_id:
+            raise ValueError(f"Status history organization mismatch for donor {donor.id}")
+        old_stage = stage_reference(history.old_stage_id, history.old_status)
+        new_stage = stage_reference(history.new_stage_id, history.new_status)
+        history_payload.append(
+            {
+                "id": str(history.id),
+                "changed_by_user_id": str(history.changed_by_user_id)
+                if history.changed_by_user_id
+                else None,
+                "changed_by_email": actor_emails.get(history.changed_by_user_id),
+                "old_stage_id": old_stage["stage_id"],
+                "old_pipeline_id": old_stage["pipeline_id"],
+                "old_pipeline_name": old_stage["pipeline_name"],
+                "old_stage_key": old_stage["stage_key"],
+                "new_stage_id": new_stage["stage_id"],
+                "new_pipeline_id": new_stage["pipeline_id"],
+                "new_pipeline_name": new_stage["pipeline_name"],
+                "new_stage_key": new_stage["stage_key"],
+                "old_status": history.old_status,
+                "new_status": history.new_status,
+                "old_label_snapshot": history.old_label_snapshot,
+                "new_label_snapshot": history.new_label_snapshot,
+                "reason": history.reason,
+                "effective_at": history.effective_at.isoformat(),
+                "recorded_at": history.recorded_at.isoformat(),
+            }
+        )
+    status_history_json = json.dumps(
+        {"version": 1, "events": history_payload},
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    if len(status_history_json.encode("utf-8")) > MAX_DONOR_STATUS_HISTORY_JSON_BYTES:
+        raise ValueError(f"Status history export exceeds the limit for donor {donor.id}")
+    return status_history_json
+
+
+def stream_donors_csv(db: Session, org_id: UUID) -> Iterator[str]:
+    """Stream every donor owned by one organization with exact subtype stages."""
+    owner_membership = aliased(Membership)
+    owner_user = aliased(User)
+    owner_queue = aliased(Queue)
+    profile_photo = aliased(Attachment)
+    photo_uploader_membership = aliased(Membership)
+    photo_uploader = aliased(User)
+    stage_details = {
+        stage_id: {
+            "pipeline_id": pipeline_id,
+            "pipeline_name": pipeline_name,
+            "entity_type": entity_type,
+            "stage_key": stage_key,
+            "stage_slug": stage_slug,
+            "stage_label": stage_label,
+            "stage_order": stage_order,
+        }
+        for (
+            stage_id,
+            pipeline_id,
+            pipeline_name,
+            entity_type,
+            stage_key,
+            stage_slug,
+            stage_label,
+            stage_order,
+        ) in db.query(
+            PipelineStage.id,
+            Pipeline.id,
+            Pipeline.name,
+            Pipeline.entity_type,
+            PipelineStage.stage_key,
+            PipelineStage.slug,
+            PipelineStage.label,
+            PipelineStage.order,
+        )
+        .join(Pipeline, PipelineStage.pipeline_id == Pipeline.id)
+        .filter(Pipeline.organization_id == org_id)
+        .all()
+    }
+    actor_emails = {
+        user_id: email
+        for user_id, email in db.query(User.id, User.email)
+        .join(Membership, Membership.user_id == User.id)
+        .filter(Membership.organization_id == org_id)
+        .all()
+    }
+    headers = [
+        "id",
+        "donor_number",
+        "organization_id",
+        "donor_type",
+        "status_label",
+        "stage_id",
+        "stage_key",
+        "stage_slug",
+        "stage_label",
+        "stage_order",
+        "status_history_json",
+        "source",
+        "owner_type",
+        "owner_id",
+        "owner_name",
+        "owner_email",
+        "owner_queue_name",
+        "full_name",
+        "email",
+        "phone",
+        "state",
+        "education",
+        "profile_photo_attachment_id",
+        "profile_photo_filename",
+        "profile_photo_content_type",
+        "profile_photo_file_size",
+        "profile_photo_checksum_sha256",
+        "profile_photo_scan_status",
+        "profile_photo_scanned_at",
+        "profile_photo_quarantined",
+        "profile_photo_created_at",
+        "profile_photo_uploaded_by_user_id",
+        "profile_photo_uploaded_by_email",
+        "profile_photo_bytes_base64",
+        "is_archived",
+        "archived_at",
+        "created_at",
+        "updated_at",
+    ]
+    yield _write_csv_row(headers)
+
+    query = (
+        db.query(Donor, owner_user, owner_queue, profile_photo, photo_uploader)
+        .options(selectinload(Donor.status_history))
+        .outerjoin(
+            owner_membership,
+            and_(
+                Donor.owner_type == OwnerType.USER.value,
+                Donor.owner_id == owner_membership.user_id,
+                owner_membership.organization_id == org_id,
+            ),
+        )
+        .outerjoin(
+            owner_user,
+            owner_user.id == owner_membership.user_id,
+        )
+        .outerjoin(
+            owner_queue,
+            and_(
+                Donor.owner_type == OwnerType.QUEUE.value,
+                Donor.owner_id == owner_queue.id,
+                owner_queue.organization_id == org_id,
+            ),
+        )
+        .outerjoin(
+            profile_photo,
+            and_(
+                Donor.profile_photo_attachment_id == profile_photo.id,
+                profile_photo.organization_id == org_id,
+                profile_photo.donor_id == Donor.id,
+                profile_photo.deleted_at.is_(None),
+            ),
+        )
+        .outerjoin(
+            photo_uploader_membership,
+            and_(
+                profile_photo.uploaded_by_user_id == photo_uploader_membership.user_id,
+                photo_uploader_membership.organization_id == org_id,
+            ),
+        )
+        .outerjoin(photo_uploader, photo_uploader.id == photo_uploader_membership.user_id)
+        .filter(Donor.organization_id == org_id)
+        .order_by(Donor.created_at.asc(), Donor.id.asc())
+    )
+    for (
+        donor,
+        owner_user_row,
+        owner_queue_row,
+        profile_photo_row,
+        photo_uploader_row,
+    ) in query.yield_per(500):
+        stage = stage_details.get(donor.stage_id)
+        if stage is None or stage["entity_type"] != donor.pipeline_entity_type:
+            raise ValueError(f"Current stage mismatch for donor {donor.id}")
+        if donor.profile_photo_attachment_id is not None and profile_photo_row is None:
+            raise ValueError(f"Profile photo is unavailable for donor {donor.id}")
+        status_history_json = _serialize_donor_status_history(
+            donor,
+            org_id=org_id,
+            stage_details=stage_details,
+            actor_emails=actor_emails,
+        )
+        photo_bytes_base64 = None
+        if profile_photo_row is not None:
+            photo_bytes = attachment_service.load_file_bytes(profile_photo_row.storage_key)
+            if len(photo_bytes) != profile_photo_row.file_size:
+                raise ValueError(f"Profile photo size check failed for donor {donor.id}")
+            if hashlib.sha256(photo_bytes).hexdigest() != profile_photo_row.checksum_sha256:
+                raise ValueError(f"Profile photo checksum check failed for donor {donor.id}")
+            photo_bytes_base64 = base64.b64encode(photo_bytes).decode("ascii")
+        yield _write_csv_row(
+            [
+                donor.id,
+                donor.donor_number,
+                donor.organization_id,
+                donor.donor_type,
+                stage["stage_label"],
+                donor.stage_id,
+                stage["stage_key"],
+                stage["stage_slug"],
+                stage["stage_label"],
+                stage["stage_order"],
+                status_history_json,
+                donor.source,
+                donor.owner_type,
+                donor.owner_id,
+                owner_user_row.display_name if owner_user_row else None,
+                owner_user_row.email if owner_user_row else None,
+                owner_queue_row.name if owner_queue_row else None,
+                donor.full_name,
+                donor.email,
+                donor.phone,
+                donor.state,
+                donor.education,
+                donor.profile_photo_attachment_id,
+                profile_photo_row.filename if profile_photo_row else None,
+                profile_photo_row.content_type if profile_photo_row else None,
+                profile_photo_row.file_size if profile_photo_row else None,
+                profile_photo_row.checksum_sha256 if profile_photo_row else None,
+                profile_photo_row.scan_status if profile_photo_row else None,
+                profile_photo_row.scanned_at if profile_photo_row else None,
+                profile_photo_row.quarantined if profile_photo_row else None,
+                profile_photo_row.created_at if profile_photo_row else None,
+                photo_uploader_row.id if photo_uploader_row else None,
+                photo_uploader_row.email if photo_uploader_row else None,
+                photo_bytes_base64,
+                donor.is_archived,
+                donor.archived_at,
+                donor.created_at,
+                donor.updated_at,
+            ]
+        )
+
+
 def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
     org = db.query(Organization).filter(Organization.id == org_id).first()
 
@@ -480,19 +781,25 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             {
                 "id": str(pipeline.id),
                 "name": pipeline.name,
+                "entity_type": pipeline.entity_type,
                 "is_default": pipeline.is_default,
                 "current_version": pipeline.current_version,
+                "feature_config": pipeline.feature_config,
                 "created_at": pipeline.created_at,
                 "updated_at": pipeline.updated_at,
                 "stages": [
                     {
                         "id": str(stage.id),
+                        "stage_key": stage.stage_key,
                         "slug": stage.slug,
                         "label": stage.label,
                         "color": stage.color,
                         "order": stage.order,
                         "stage_type": stage.stage_type,
+                        "semantics": stage.semantics,
                         "is_active": stage.is_active,
+                        "is_intake_stage": stage.is_intake_stage,
+                        "allowed_next_slugs": stage.allowed_next_slugs,
                         "deleted_at": stage.deleted_at,
                         "created_at": stage.created_at,
                         "updated_at": stage.updated_at,
@@ -541,6 +848,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "icon": w.icon,
             "schema_version": w.schema_version,
             "trigger_type": w.trigger_type,
+            "subject_type": w.subject_type,
             "trigger_config": w.trigger_config,
             "conditions": w.conditions,
             "condition_logic": w.condition_logic,
@@ -577,11 +885,18 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "name": form.name,
             "description": form.description,
             "status": form.status,
+            "purpose": form.purpose,
+            "lead_kind": form.lead_kind,
             "schema_json": form.schema_json,
             "published_schema_json": form.published_schema_json,
             "max_file_size_bytes": form.max_file_size_bytes,
             "max_file_count": form.max_file_count,
             "allowed_mime_types": form.allowed_mime_types,
+            "default_application_email_template_id": str(
+                form.default_application_email_template_id
+            )
+            if form.default_application_email_template_id
+            else None,
             "created_by_user_id": str(form.created_by_user_id) if form.created_by_user_id else None,
             "updated_by_user_id": str(form.updated_by_user_id) if form.updated_by_user_id else None,
             "created_at": form.created_at,

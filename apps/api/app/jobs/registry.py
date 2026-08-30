@@ -23,6 +23,7 @@ from app.jobs.handlers import (
     orgs,
     reminders,
     resend,
+    storage,
     ticketing,
     twilio,
     webhooks,
@@ -47,6 +48,7 @@ JOB_HANDLERS: Mapping[str, JobHandler] = {
     JobType.EXPORT_GENERATION.value: exports.process_export_generation,
     JobType.ADMIN_EXPORT.value: exports.process_admin_export,
     JobType.DATA_PURGE.value: data_purge.process_data_purge,
+    JobType.STORAGE_DELETE.value: storage.process_storage_delete,
     JobType.CAMPAIGN_SEND.value: campaigns.process_campaign_send,
     JobType.AI_CHAT.value: ai.process_ai_chat,
     JobType.CONTACT_REMINDER_CHECK.value: contact_reminders.process_contact_reminder_check,
@@ -63,6 +65,10 @@ JOB_HANDLERS: Mapping[str, JobHandler] = {
     JobType.ZAPIER_STAGE_EVENT.value: zapier.process_zapier_stage_event,
     JobType.GOOGLE_CALENDAR_SYNC.value: appointments.process_google_calendar_sync,
     JobType.GOOGLE_TASKS_SYNC.value: appointments.process_google_tasks_sync,
+    JobType.GOOGLE_TASK_CREATION_RECONCILE.value: (
+        appointments.process_google_task_creation_reconcile
+    ),
+    JobType.GOOGLE_TASK_REMOTE_DELETE.value: appointments.process_google_task_remote_delete,
     JobType.GOOGLE_CALENDAR_WATCH_REFRESH.value: appointments.process_google_calendar_watch_refresh,
     JobType.MAILBOX_BACKFILL.value: ticketing.process_mailbox_backfill,
     JobType.MAILBOX_HISTORY_SYNC.value: ticketing.process_mailbox_history_sync,

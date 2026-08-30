@@ -7,6 +7,12 @@ from uuid import UUID
 from pydantic import BaseModel, Field, model_validator
 
 CampaignChannel = Literal["email", "messaging"]
+CampaignRecipientType = Literal[
+    "case",
+    "intended_parent",
+    "egg_donor",
+    "sperm_donor",
+]
 
 # =============================================================================
 # Filter Criteria
@@ -40,7 +46,7 @@ class CampaignCreate(BaseModel):
     channel: CampaignChannel = "email"
     email_template_id: UUID | None = None
     message_template_version_id: UUID | None = None
-    recipient_type: str = Field(default="case", pattern="^(case|intended_parent)$")
+    recipient_type: CampaignRecipientType = "case"
     filter_criteria: FilterCriteria = Field(default_factory=FilterCriteria)
     scheduled_at: datetime | None = None
     include_unsubscribed: bool = False
@@ -51,13 +57,9 @@ class CampaignCreate(BaseModel):
             if self.email_template_id is None or self.message_template_version_id is not None:
                 raise ValueError("Email campaigns require email_template_id only")
         elif self.message_template_version_id is None or self.email_template_id is not None:
-            raise ValueError(
-                "Messaging campaigns require message_template_version_id only"
-            )
+            raise ValueError("Messaging campaigns require message_template_version_id only")
         if self.channel == "messaging" and self.include_unsubscribed:
-            raise ValueError(
-                "include_unsubscribed is not available for messaging campaigns"
-            )
+            raise ValueError("include_unsubscribed is not available for messaging campaigns")
         return self
 
 
@@ -69,7 +71,7 @@ class CampaignUpdate(BaseModel):
     channel: CampaignChannel | None = None
     email_template_id: UUID | None = None
     message_template_version_id: UUID | None = None
-    recipient_type: str | None = Field(None, pattern="^(case|intended_parent)$")
+    recipient_type: CampaignRecipientType | None = None
     filter_criteria: FilterCriteria | None = None
     scheduled_at: datetime | None = None
     include_unsubscribed: bool | None = None
@@ -86,7 +88,7 @@ class CampaignResponse(BaseModel):
     email_template_name: str | None = None
     message_template_version_id: UUID | None = None
     message_template_name: str | None = None
-    recipient_type: str
+    recipient_type: CampaignRecipientType
     filter_criteria: dict
     scheduled_at: datetime | None
     status: str
@@ -116,7 +118,7 @@ class CampaignListItem(BaseModel):
     channel: CampaignChannel
     email_template_name: str | None = None
     message_template_name: str | None = None
-    recipient_type: str
+    recipient_type: CampaignRecipientType
     status: str
     scheduled_at: datetime | None
     include_unsubscribed: bool = False
@@ -172,7 +174,7 @@ class CampaignRecipientResponse(BaseModel):
     """Campaign recipient response."""
 
     id: UUID
-    entity_type: str
+    entity_type: CampaignRecipientType
     entity_id: UUID
     recipient_email: str | None
     recipient_phone_last4: str | None = None
@@ -194,7 +196,7 @@ class CampaignRecipientResponse(BaseModel):
 class RecipientPreview(BaseModel):
     """Preview of a recipient matching the filter."""
 
-    entity_type: str
+    entity_type: CampaignRecipientType
     entity_id: UUID
     email: str | None = None
     phone_last4: str | None = None
@@ -216,16 +218,14 @@ class PreviewFiltersRequest(BaseModel):
     """Request to preview recipients matching filter criteria."""
 
     channel: CampaignChannel = "email"
-    recipient_type: str = Field(pattern="^(case|intended_parent)$")
+    recipient_type: CampaignRecipientType
     filter_criteria: FilterCriteria = Field(default_factory=FilterCriteria)
     include_unsubscribed: bool = False
 
     @model_validator(mode="after")
     def reject_messaging_unsubscribe_bypass(self) -> PreviewFiltersRequest:
         if self.channel == "messaging" and self.include_unsubscribed:
-            raise ValueError(
-                "include_unsubscribed is not available for messaging campaigns"
-            )
+            raise ValueError("include_unsubscribed is not available for messaging campaigns")
         return self
 
 

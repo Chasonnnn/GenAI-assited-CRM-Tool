@@ -23,6 +23,7 @@ from app.services import (
     audit_service,
     compliance_service,
     job_service,
+    permission_service,
 )
 
 router = APIRouter(prefix="/admin/exports", tags=["Admin - Exports"])
@@ -30,6 +31,7 @@ ADMIN_EXPORT_LIMIT = f"{settings.RATE_LIMIT_ADMIN_EXPORTS}/minute"
 
 EXPORT_EVENT_MAP = {
     "surrogates_csv": AuditEventType.DATA_EXPORT_SURROGATES,
+    "donors_csv": AuditEventType.DATA_EXPORT_DONORS,
     "org_config_zip": AuditEventType.DATA_EXPORT_CONFIG,
     "analytics_zip": AuditEventType.DATA_EXPORT_ANALYTICS,
 }
@@ -61,6 +63,27 @@ def _build_job_response(job) -> AdminExportJobResponse:
         completed_at=job.completed_at,
         error=job.last_error,
     )
+
+
+def _require_export_subject_access(
+    db: Session,
+    session: UserSession,
+    export_type: str | None,
+) -> None:
+    if export_type != "donors_csv":
+        return
+    role = getattr(session.role, "value", session.role)
+    if not permission_service.check_permission(
+        db,
+        session.org_id,
+        session.user_id,
+        role,
+        P.DONORS_VIEW.value,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Missing permission: {P.DONORS_VIEW.value}",
+        )
 
 
 def _schedule_export_job(
@@ -115,6 +138,26 @@ def export_surrogates(
     """Queue a surrogates export (CSV)."""
     filename = admin_export_service.build_export_filename("surrogates_csv")
     return _schedule_export_job(db, session, "surrogates_csv", filename)
+
+
+@router.post(
+    "/donors",
+    response_model=AdminExportJobResponse,
+    status_code=202,
+    dependencies=[Depends(require_csrf_header)],
+)
+@limiter.limit(ADMIN_EXPORT_LIMIT)
+def export_donors(
+    request: Request,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.ADMIN_EXPORTS_MANAGE)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> AdminExportJobResponse:
+    """Queue an organization-scoped donor export (CSV)."""
+    _require_export_subject_access(db, session, "donors_csv")
+    filename = admin_export_service.build_export_filename("donors_csv")
+    return _schedule_export_job(db, session, "donors_csv", filename)
 
 
 @router.post(
@@ -179,6 +222,7 @@ def get_export_job(
     job = job_service.get_job(db, job_id, session.org_id)
     if not job or job.job_type != JobType.ADMIN_EXPORT.value:
         raise HTTPException(status_code=404, detail="Export job not found")
+    _require_export_subject_access(db, session, (job.payload or {}).get("export_type"))
     return _build_job_response(job)
 
 
@@ -195,6 +239,7 @@ def download_export(
     job = job_service.get_job(db, job_id, session.org_id)
     if not job or job.job_type != JobType.ADMIN_EXPORT.value:
         raise HTTPException(status_code=404, detail="Export job not found")
+    _require_export_subject_access(db, session, (job.payload or {}).get("export_type"))
     if job.status != JobStatus.COMPLETED.value:
         raise HTTPException(status_code=409, detail="Export not ready")
 
@@ -240,6 +285,7 @@ def download_export_file(
     job = job_service.get_job(db, job_id, session.org_id)
     if not job or job.job_type != JobType.ADMIN_EXPORT.value:
         raise HTTPException(status_code=404, detail="Export job not found")
+    _require_export_subject_access(db, session, (job.payload or {}).get("export_type"))
     if job.status != JobStatus.COMPLETED.value:
         raise HTTPException(status_code=409, detail="Export not ready")
 
@@ -256,7 +302,7 @@ def download_export_file(
         raise HTTPException(status_code=404, detail="Export file missing") from exc
     if not os.path.exists(resolved_path):
         raise HTTPException(status_code=404, detail="Export file missing")
-    media_type = "text/csv" if export_type == "surrogates_csv" else "application/zip"
+    media_type = "text/csv" if export_type.endswith("_csv") else "application/zip"
 
     return FileResponse(
         resolved_path,

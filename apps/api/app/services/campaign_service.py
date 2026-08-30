@@ -9,12 +9,18 @@ from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY, SURROGATE_PIPELINE_ENTITY
+from app.core.stage_definitions import (
+    EGG_DONOR_PIPELINE_ENTITY,
+    INTENDED_PARENT_PIPELINE_ENTITY,
+    SPERM_DONOR_PIPELINE_ENTITY,
+    SURROGATE_PIPELINE_ENTITY,
+)
 from app.db.enums import CampaignRecipientStatus, CampaignStatus, EmailStatus, JobStatus, JobType
 from app.db.models import (
     Campaign,
     CampaignRecipient,
     CampaignRun,
+    Donor,
     EmailSuppression,
     EmailTemplate,
     IntendedParent,
@@ -46,6 +52,80 @@ from app.services.email_template_snapshot import (
 from app.utils.pagination import paginate_query_by_offset
 
 CAMPAIGN_SEND_BATCH_SIZE = int(os.getenv("CAMPAIGN_SEND_BATCH_SIZE", "200"))
+
+DONOR_RECIPIENT_TYPES = {
+    EGG_DONOR_PIPELINE_ENTITY: "egg",
+    SPERM_DONOR_PIPELINE_ENTITY: "sperm",
+}
+RECIPIENT_PIPELINE_ENTITY_TYPES = {
+    "case": SURROGATE_PIPELINE_ENTITY,
+    "intended_parent": INTENDED_PARENT_PIPELINE_ENTITY,
+    EGG_DONOR_PIPELINE_ENTITY: EGG_DONOR_PIPELINE_ENTITY,
+    SPERM_DONOR_PIPELINE_ENTITY: SPERM_DONOR_PIPELINE_ENTITY,
+}
+
+DONOR_MESSAGING_UNAVAILABLE = (
+    "Messaging campaigns are not available for donors until donor consent identities are linked"
+)
+DONOR_LAUNCH_SNAPSHOT_VERSION = 1
+
+
+def _ensure_supported_campaign_channel(channel: str, recipient_type: str) -> None:
+    if channel == "messaging" and recipient_type in DONOR_RECIPIENT_TYPES:
+        raise ValueError(DONOR_MESSAGING_UNAVAILABLE)
+
+
+def _recipient_entity_model(recipient_type: str):
+    if recipient_type == "case":
+        return Surrogate
+    if recipient_type == "intended_parent":
+        return IntendedParent
+    if recipient_type in DONOR_RECIPIENT_TYPES:
+        return Donor
+    raise ValueError(f"Unknown recipient type: {recipient_type}")
+
+
+def _build_recipient_template_variables(db: Session, recipient_type: str, entity):
+    from app.services import email_service
+
+    if recipient_type == "case":
+        return email_service.build_surrogate_template_variables(db, entity)
+    if recipient_type == "intended_parent":
+        return email_service.build_intended_parent_template_variables(db, entity)
+    if recipient_type in DONOR_RECIPIENT_TYPES:
+        return email_service.build_donor_template_variables(db, entity)
+    raise ValueError(f"Unknown recipient type: {recipient_type}")
+
+
+def _build_donor_launch_snapshot(
+    *,
+    recipient_email: str,
+    recipient_name: str,
+    subject: str,
+    body: str,
+) -> dict:
+    """Capture the exact donor identity and rendered content approved at launch."""
+    return {
+        "version": DONOR_LAUNCH_SNAPSHOT_VERSION,
+        "recipient_email": recipient_email,
+        "recipient_name": recipient_name,
+        "subject": subject,
+        "body": body,
+    }
+
+
+def _parse_donor_launch_snapshot(value: dict | None) -> dict | None:
+    """Validate a persisted donor launch snapshot before any retry can send it."""
+    if value is None:
+        return None
+    if not isinstance(value, dict) or value.get("version") != DONOR_LAUNCH_SNAPSHOT_VERSION:
+        raise ValueError("invalid_donor_launch_snapshot")
+    for key in ("recipient_email", "recipient_name", "subject", "body"):
+        if not isinstance(value.get(key), str):
+            raise ValueError("invalid_donor_launch_snapshot")
+    if not value["recipient_email"].strip():
+        raise ValueError("invalid_donor_launch_snapshot")
+    return value
 
 
 def _load_published_message_template(
@@ -135,7 +215,7 @@ def normalize_filter_criteria(
     recipient_type: str,
     criteria: dict | FilterCriteria | None,
 ) -> dict:
-    """Persist surrogate stage filters in stage-id/key form so slug edits stay safe."""
+    """Persist stage filters in stage-id/key form so slug edits stay safe."""
     payload = (
         criteria.model_dump(mode="json")
         if isinstance(criteria, FilterCriteria)
@@ -143,29 +223,46 @@ def normalize_filter_criteria(
     )
     normalized = FilterCriteria.model_validate(payload).model_dump(mode="json", exclude_none=True)
 
-    if recipient_type not in {"case", "intended_parent"}:
+    pipeline_entity_type = RECIPIENT_PIPELINE_ENTITY_TYPES.get(recipient_type)
+    if pipeline_entity_type is None:
         return normalized
 
     from app.services import pipeline_service
 
     stage_ids: list[UUID] = []
     raw_stage_ids = normalized.get("stage_ids") or []
+    donor_recipient = recipient_type in DONOR_RECIPIENT_TYPES
     for value in raw_stage_ids:
         try:
             stage_id = UUID(str(value))
         except ValueError:
             continue
-        stage = pipeline_service.get_stage_by_id(db, stage_id)
-        if stage and stage.is_active:
+        if donor_recipient:
+            stage = (
+                db.query(PipelineStage)
+                .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
+                .filter(
+                    PipelineStage.id == stage_id,
+                    PipelineStage.is_active.is_(True),
+                    Pipeline.organization_id == org_id,
+                    Pipeline.entity_type == pipeline_entity_type,
+                    Pipeline.is_default.is_(True),
+                )
+                .first()
+            )
+            if stage is None:
+                raise ValueError(
+                    f"Stage filter not found in {recipient_type.replace('_', ' ')} pipeline"
+                )
+        else:
+            stage = pipeline_service.get_stage_by_id(db, stage_id)
+        if stage and stage.is_active and stage_id not in stage_ids:
             stage_ids.append(stage.id)
 
     stage_refs = [
         *[str(value) for value in normalized.get("stage_keys") or []],
         *[str(value) for value in normalized.get("stage_slugs") or []],
     ]
-    pipeline_entity_type = (
-        SURROGATE_PIPELINE_ENTITY if recipient_type == "case" else INTENDED_PARENT_PIPELINE_ENTITY
-    )
     default_pipeline_id = (
         db.query(Pipeline.id)
         .filter(
@@ -182,13 +279,39 @@ def normalize_filter_criteria(
         pipeline_id=default_pipeline_id,
         entity_type=pipeline_entity_type,
     )
+    if donor_recipient and stage_refs:
+        for stage_ref in stage_refs:
+            if not pipeline_service.get_stage_ids_by_keys_or_slugs(
+                db,
+                org_id,
+                [stage_ref],
+                pipeline_id=default_pipeline_id,
+                entity_type=pipeline_entity_type,
+            ):
+                raise ValueError(
+                    f"Stage filter not found in {recipient_type.replace('_', ' ')} pipeline"
+                )
     for stage_id in resolved_ids:
         if stage_id not in stage_ids:
             stage_ids.append(stage_id)
 
     stage_keys: list[str] = []
     for stage_id in stage_ids:
-        stage = pipeline_service.get_stage_by_id(db, stage_id)
+        if donor_recipient:
+            stage = (
+                db.query(PipelineStage)
+                .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
+                .filter(
+                    PipelineStage.id == stage_id,
+                    PipelineStage.is_active.is_(True),
+                    Pipeline.organization_id == org_id,
+                    Pipeline.entity_type == pipeline_entity_type,
+                    Pipeline.is_default.is_(True),
+                )
+                .first()
+            )
+        else:
+            stage = pipeline_service.get_stage_by_id(db, stage_id)
         if stage and stage.is_active and stage.stage_key and stage.stage_key not in stage_keys:
             stage_keys.append(stage.stage_key)
 
@@ -204,7 +327,7 @@ def remap_campaign_stage_references(
     campaign: Campaign,
     remap_by_key: dict[str, str | None],
 ) -> None:
-    if campaign.recipient_type not in {"case", "intended_parent"}:
+    if campaign.recipient_type not in RECIPIENT_PIPELINE_ENTITY_TYPES:
         return
 
     from app.services import pipeline_service
@@ -253,6 +376,7 @@ def list_campaigns(
     status: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    exclude_recipient_types: set[str] | None = None,
 ) -> tuple[list[CampaignListItem], int]:
     """List campaigns for an organization with optimized run stats query."""
     # Base query for count
@@ -260,6 +384,8 @@ def list_campaigns(
 
     if status:
         base_query = base_query.filter(Campaign.status == status)
+    if exclude_recipient_types:
+        base_query = base_query.filter(~Campaign.recipient_type.in_(exclude_recipient_types))
 
     # Subquery: Get latest run per campaign using window function
     # This avoids N+1 queries by fetching all latest runs in one query
@@ -307,6 +433,8 @@ def list_campaigns(
 
     if status:
         query = query.filter(Campaign.status == status)
+    if exclude_recipient_types:
+        query = query.filter(~Campaign.recipient_type.in_(exclude_recipient_types))
 
     rows, total = paginate_query_by_offset(
         query.order_by(Campaign.created_at.desc()),
@@ -325,9 +453,7 @@ def list_campaigns(
                 name=c.name,
                 channel=c.channel,
                 email_template_name=c.email_template.name if c.email_template else None,
-                message_template_name=(
-                    c.message_template.name if c.message_template else None
-                ),
+                message_template_name=(c.message_template.name if c.message_template else None),
                 recipient_type=c.recipient_type,
                 status=c.status,
                 scheduled_at=c.scheduled_at,
@@ -361,6 +487,7 @@ def get_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> Campaign | Non
 
 def create_campaign(db: Session, org_id: UUID, user_id: UUID, data: CampaignCreate) -> Campaign:
     """Create a new campaign."""
+    _ensure_supported_campaign_channel(data.channel, data.recipient_type)
     if data.channel == "email":
         template = (
             db.query(EmailTemplate)
@@ -429,23 +556,21 @@ def update_campaign(
         return None
 
     effective_channel = data.channel or campaign.channel
+    effective_recipient_type = data.recipient_type or campaign.recipient_type
+    _ensure_supported_campaign_channel(effective_channel, effective_recipient_type)
     if data.channel is not None and data.channel != campaign.channel:
         if campaign.status != CampaignStatus.DRAFT.value:
             raise ValueError("Cannot change channel after campaign is scheduled")
         if data.channel == "email" and data.email_template_id is None:
             raise ValueError("Changing to email requires email_template_id")
         if data.channel == "messaging" and data.message_template_version_id is None:
-            raise ValueError(
-                "Changing to messaging requires message_template_version_id"
-            )
+            raise ValueError("Changing to messaging requires message_template_version_id")
         campaign.channel = data.channel
         campaign.email_template_id = None
         campaign.message_template_version_id = None
 
     if effective_channel == "messaging" and data.include_unsubscribed:
-        raise ValueError(
-            "include_unsubscribed is not available for messaging campaigns"
-        )
+        raise ValueError("include_unsubscribed is not available for messaging campaigns")
 
     if data.name is not None:
         campaign.name = data.name
@@ -476,8 +601,7 @@ def update_campaign(
             raise ValueError("Email campaigns cannot use message templates")
         if (
             campaign.status == CampaignStatus.SCHEDULED.value
-            and data.message_template_version_id
-            != campaign.message_template_version_id
+            and data.message_template_version_id != campaign.message_template_version_id
         ):
             raise ValueError("Cannot change message template after campaign is scheduled")
         _load_published_message_template(
@@ -488,6 +612,13 @@ def update_campaign(
         campaign.message_template_version_id = data.message_template_version_id
     if data.recipient_type is not None:
         campaign.recipient_type = data.recipient_type
+        if data.filter_criteria is None:
+            campaign.filter_criteria = normalize_filter_criteria(
+                db,
+                org_id,
+                data.recipient_type,
+                campaign.filter_criteria,
+            )
     if data.filter_criteria is not None:
         campaign.filter_criteria = normalize_filter_criteria(
             db,
@@ -652,6 +783,62 @@ def _build_recipient_query(
 
         return query
 
+    elif recipient_type in DONOR_RECIPIENT_TYPES:
+        donor_type = DONOR_RECIPIENT_TYPES[recipient_type]
+        recipient_requirement = (
+            and_(Donor.email.isnot(None), Donor.email != "")
+            if channel == "email"
+            else and_(Donor.phone.isnot(None), Donor.phone_hash.isnot(None))
+        )
+        query = db.query(Donor).filter(
+            Donor.organization_id == org_id,
+            Donor.donor_type == donor_type,
+            Donor.is_archived.is_(False),
+            recipient_requirement,
+        )
+
+        if criteria.stage_ids:
+            query = query.filter(Donor.stage_id.in_(criteria.stage_ids))
+
+        stage_refs = [
+            *(criteria.stage_keys or []),
+            *(criteria.stage_slugs or []),
+        ]
+        if stage_refs:
+            from app.services import pipeline_service
+
+            default_pipeline_id = (
+                db.query(Pipeline.id)
+                .filter(
+                    Pipeline.organization_id == org_id,
+                    Pipeline.entity_type == recipient_type,
+                    Pipeline.is_default.is_(True),
+                )
+                .scalar()
+            )
+            resolved_stage_ids = pipeline_service.get_stage_ids_by_keys_or_slugs(
+                db,
+                org_id,
+                stage_refs,
+                pipeline_id=default_pipeline_id,
+                entity_type=recipient_type,
+            )
+            query = query.filter(Donor.stage_id.in_(resolved_stage_ids))
+
+        if criteria.states:
+            query = query.filter(Donor.state.in_(criteria.states))
+
+        if criteria.created_after:
+            query = query.filter(Donor.created_at >= criteria.created_after)
+
+        if criteria.created_before:
+            query = query.filter(Donor.created_at <= criteria.created_before)
+
+        if criteria.source:
+            query = query.filter(Donor.source == criteria.source)
+
+        return query
+
     raise ValueError(f"Unknown recipient type: {recipient_type}")
 
 
@@ -695,10 +882,17 @@ def _messaging_contact_join_condition(org_id: UUID, recipient_type: str):
                 MessagingContact.phone_hash == Surrogate.phone_hash,
             ),
         )
-    return and_(
-        MessagingContact.organization_id == org_id,
-        MessagingContact.phone_hash == IntendedParent.phone_hash,
-    )
+    if recipient_type == "intended_parent":
+        return and_(
+            MessagingContact.organization_id == org_id,
+            MessagingContact.phone_hash == IntendedParent.phone_hash,
+        )
+    if recipient_type in DONOR_RECIPIENT_TYPES:
+        return and_(
+            MessagingContact.organization_id == org_id,
+            MessagingContact.phone_hash == Donor.phone_hash,
+        )
+    raise ValueError(f"Unknown recipient type: {recipient_type}")
 
 
 def _messaging_recipient_rows_query(
@@ -750,11 +944,10 @@ def preview_recipients(
     channel: str = "email",
 ) -> CampaignPreviewResponse:
     """Preview recipients matching the filter criteria."""
+    _ensure_supported_campaign_channel(channel, recipient_type)
     if channel == "messaging":
         if ignore_opt_out:
-            raise ValueError(
-                "include_unsubscribed is not available for messaging campaigns"
-            )
+            raise ValueError("include_unsubscribed is not available for messaging campaigns")
         base_query = _build_recipient_query(
             db,
             org_id,
@@ -777,33 +970,51 @@ def preview_recipients(
             MessagingConsentState.status == "opted_in",
             globally_allowed,
         )
-        explicitly_suppressed = rows_query.filter(
-            or_(
-                MessagingConsentState.status == "opted_out",
-                MessagingGlobalSuppression.active.is_(True),
+        explicitly_suppressed = (
+            rows_query.filter(
+                or_(
+                    MessagingConsentState.status == "opted_out",
+                    MessagingGlobalSuppression.active.is_(True),
+                )
             )
-        ).order_by(None).count()
-        eligible_count = eligible_query.order_by(None).count()
+            .order_by(None)
+            .count()
+        )
+        eligible_entity_count = eligible_query.order_by(None).count()
+        eligible_count = (
+            eligible_query.with_entities(func.count(func.distinct(MessagingContact.id)))
+            .order_by(None)
+            .scalar()
+            or 0
+        )
+        duplicate_count = max(eligible_entity_count - eligible_count, 0)
+        samples: list[RecipientPreview] = []
+        sampled_contact_ids: set[UUID] = set()
         rows = eligible_query.order_by(
             MessagingContact.phone_last4,
             MessagingContact.id,
-        ).limit(limit)
-        samples = [
-            RecipientPreview(
-                entity_type=recipient_type,
-                entity_id=entity.id,
-                phone_last4=contact.phone_last4,
-                name=entity.full_name,
-                stage=None,
+        ).yield_per(max(limit, 1))
+        for entity, contact in rows:
+            if contact.id in sampled_contact_ids:
+                continue
+            sampled_contact_ids.add(contact.id)
+            samples.append(
+                RecipientPreview(
+                    entity_type=recipient_type,
+                    entity_id=entity.id,
+                    phone_last4=contact.phone_last4,
+                    name=entity.full_name,
+                    stage=None,
+                )
             )
-            for entity, contact in rows
-        ]
+            if len(samples) >= limit:
+                break
         return CampaignPreviewResponse(
             total_count=total_count,
             eligible_count=eligible_count,
-            suppressed_count=explicitly_suppressed,
+            suppressed_count=explicitly_suppressed + duplicate_count,
             unknown_consent_count=max(
-                total_count - eligible_count - explicitly_suppressed,
+                total_count - eligible_entity_count - explicitly_suppressed,
                 0,
             ),
             sample_recipients=samples,
@@ -829,7 +1040,7 @@ def preview_recipients(
     suppressed = {row[0].lower() for row in suppression_rows if row[0]}
 
     stage_labels: dict[UUID, str] = {}
-    if recipient_type in {"case", "intended_parent"}:
+    if recipient_type in RECIPIENT_PIPELINE_ENTITY_TYPES:
         stage_ids = {entity.stage_id for entity in entities if entity.stage_id}
         if stage_ids:
             stage_rows = (
@@ -845,26 +1056,15 @@ def preview_recipients(
         if email in suppressed:
             continue  # Skip suppressed
 
-        if recipient_type == "case":
-            recipients.append(
-                RecipientPreview(
-                    entity_type="case",
-                    entity_id=entity.id,
-                    email=entity.email,
-                    name=entity.full_name,
-                    stage=stage_labels.get(entity.stage_id),
-                )
+        recipients.append(
+            RecipientPreview(
+                entity_type=recipient_type,
+                entity_id=entity.id,
+                email=entity.email,
+                name=entity.full_name,
+                stage=stage_labels.get(entity.stage_id),
             )
-        else:
-            recipients.append(
-                RecipientPreview(
-                    entity_type="intended_parent",
-                    entity_id=entity.id,
-                    email=entity.email,
-                    name=entity.full_name,
-                    stage=stage_labels.get(entity.stage_id),
-                )
-            )
+        )
 
     return CampaignPreviewResponse(
         total_count=total_count,
@@ -902,6 +1102,8 @@ def enqueue_campaign_send(
     if not campaign:
         raise ValueError("Campaign not found")
 
+    _ensure_supported_campaign_channel(campaign.channel, campaign.recipient_type)
+
     if campaign.status not in [
         CampaignStatus.DRAFT.value,
         CampaignStatus.SCHEDULED.value,
@@ -933,9 +1135,7 @@ def enqueue_campaign_send(
         template_snapshot = _snapshot_campaign_template(template, provider_config)
     else:
         if campaign.include_unsubscribed:
-            raise ValueError(
-                "include_unsubscribed is not available for messaging campaigns"
-            )
+            raise ValueError("include_unsubscribed is not available for messaging campaigns")
         message_template = _load_published_message_template(
             db,
             org_id=org_id,
@@ -1046,9 +1246,7 @@ def enqueue_campaign_retry_failed(
     if campaign.status == CampaignStatus.CANCELLED.value:
         raise ValueError("Cannot retry a cancelled campaign")
     if campaign.channel == "messaging":
-        raise ValueError(
-            "Messaging delivery retries are managed by the durable messaging outbox"
-        )
+        raise ValueError("Messaging delivery retries are managed by the durable messaging outbox")
 
     run = (
         db.query(CampaignRun)
@@ -1066,6 +1264,7 @@ def enqueue_campaign_retry_failed(
         db.scalar(
             select(func.count(CampaignRecipient.id)).where(
                 CampaignRecipient.run_id == run_id,
+                CampaignRecipient.entity_type == campaign.recipient_type,
                 CampaignRecipient.status == CampaignRecipientStatus.FAILED.value,
             )
         )
@@ -1186,32 +1385,32 @@ def cancel_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> bool:
         else:
             cancellable_deliveries = (
                 db.query(EmailDelivery, EmailLog, CampaignRecipient)
-            .join(
-                EmailLog,
-                EmailLog.id == EmailDelivery.email_log_id,
-            )
-            .join(
-                CampaignRecipient,
-                or_(
-                    CampaignRecipient.email_log_id == EmailLog.id,
-                    and_(
-                        EmailLog.source_type == "campaign_recipient",
-                        EmailLog.source_id == CampaignRecipient.id,
+                .join(
+                    EmailLog,
+                    EmailLog.id == EmailDelivery.email_log_id,
+                )
+                .join(
+                    CampaignRecipient,
+                    or_(
+                        CampaignRecipient.email_log_id == EmailLog.id,
+                        and_(
+                            EmailLog.source_type == "campaign_recipient",
+                            EmailLog.source_id == CampaignRecipient.id,
+                        ),
                     ),
-                ),
-            )
-            .filter(
-                EmailDelivery.organization_id == org_id,
-                EmailLog.organization_id == org_id,
-                CampaignRecipient.run_id == latest_run.id,
-                EmailDelivery.status.in_(
-                    [
-                        EmailDeliveryStatus.PENDING.value,
-                        EmailDeliveryStatus.RETRY_SCHEDULED.value,
-                    ]
-                ),
-            )
-            .with_for_update(of=EmailDelivery)
+                )
+                .filter(
+                    EmailDelivery.organization_id == org_id,
+                    EmailLog.organization_id == org_id,
+                    CampaignRecipient.run_id == latest_run.id,
+                    EmailDelivery.status.in_(
+                        [
+                            EmailDeliveryStatus.PENDING.value,
+                            EmailDeliveryStatus.RETRY_SCHEDULED.value,
+                        ]
+                    ),
+                )
+                .with_for_update(of=EmailDelivery)
                 .all()
             )
             for delivery, email_log, recipient in cancellable_deliveries:
@@ -1608,9 +1807,7 @@ def project_campaign_message_delivery(
     if status == "delivered":
         recipient.status = CampaignRecipientStatus.DELIVERED.value
         recipient.sent_at = recipient.sent_at or projected_at
-        recipient.external_message_id = (
-            recipient.external_message_id or provider_message_id
-        )
+        recipient.external_message_id = recipient.external_message_id or provider_message_id
         recipient.error = None
         recipient.skip_reason = None
     elif status == "submitted" and recipient.status in {
@@ -1619,9 +1816,7 @@ def project_campaign_message_delivery(
     }:
         recipient.status = CampaignRecipientStatus.SENT.value
         recipient.sent_at = recipient.sent_at or projected_at
-        recipient.external_message_id = (
-            recipient.external_message_id or provider_message_id
-        )
+        recipient.external_message_id = recipient.external_message_id or provider_message_id
         recipient.error = None
         recipient.skip_reason = None
     elif status in {"failed", "reconciliation_required"} and recipient.status in {
@@ -1905,6 +2100,7 @@ def _execute_messaging_campaign_run(
 ) -> dict:
     from app.services import email_service, messaging_delivery_service
 
+    _ensure_supported_campaign_channel(campaign.channel, campaign.recipient_type)
     if run.status == "completed":
         return _campaign_run_result(run)
     if run.message_template_version_id != campaign.message_template_version_id:
@@ -1927,7 +2123,7 @@ def _execute_messaging_campaign_run(
         campaign.filter_criteria or {},
         channel="messaging",
     )
-    entity_model = Surrogate if campaign.recipient_type == "case" else IntendedParent
+    entity_model = _recipient_entity_model(campaign.recipient_type)
     run.total_count = recipient_query.order_by(None).count()
     recipient_query = recipient_query.order_by(entity_model.phone_hash, entity_model.id)
     db.commit()
@@ -1952,7 +2148,7 @@ def _execute_messaging_campaign_run(
         for entity in batch:
             existing = existing_by_entity.get(entity.id)
             contact = contacts_by_entity.get(entity.id)
-            name = entity.full_name or entity.first_name
+            name = entity.full_name or getattr(entity, "first_name", "")
             if contact is None:
                 if existing is None:
                     db.add(
@@ -2001,17 +2197,22 @@ def _execute_messaging_campaign_run(
                 )
                 db.add(campaign_recipient)
                 db.flush()
-            elif campaign_recipient.message_delivery_id is not None or campaign_recipient.status in {
-                CampaignRecipientStatus.SENT.value,
-                CampaignRecipientStatus.DELIVERED.value,
-                CampaignRecipientStatus.SKIPPED.value,
-            }:
+            elif (
+                campaign_recipient.message_delivery_id is not None
+                or campaign_recipient.status
+                in {
+                    CampaignRecipientStatus.SENT.value,
+                    CampaignRecipientStatus.DELIVERED.value,
+                    CampaignRecipientStatus.SKIPPED.value,
+                }
+            ):
                 continue
 
-            if campaign.recipient_type == "case":
-                variables = email_service.build_surrogate_template_variables(db, entity)
-            else:
-                variables = email_service.build_intended_parent_template_variables(db, entity)
+            variables = _build_recipient_template_variables(
+                db,
+                campaign.recipient_type,
+                entity,
+            )
             _subject, body = email_service.render_template("", template.body, variables)
             try:
                 delivery = messaging_delivery_service.materialize_delivery(
@@ -2034,6 +2235,7 @@ def _execute_messaging_campaign_run(
             except (
                 messaging_delivery_service.MessagingConsentBlocked,
                 messaging_delivery_service.MessagingEnrollmentRequired,
+                messaging_delivery_service.MessagingRouteNotReady,
             ) as exc:
                 campaign_recipient.status = CampaignRecipientStatus.SKIPPED.value
                 campaign_recipient.error = None
@@ -2098,6 +2300,8 @@ def execute_campaign_run(
     if campaign.status == CampaignStatus.CANCELLED.value:
         return _campaign_run_result(run)
 
+    _ensure_supported_campaign_channel(campaign.channel, campaign.recipient_type)
+
     if campaign.channel == "messaging":
         return _execute_messaging_campaign_run(
             db,
@@ -2130,12 +2334,9 @@ def execute_campaign_run(
     recipient_query = _build_recipient_query(
         db, org_id, campaign.recipient_type, campaign.filter_criteria or {}
     )
-    if campaign.recipient_type == "case":
-        email_col = Surrogate.email
-        id_col = Surrogate.id
-    else:
-        email_col = IntendedParent.email
-        id_col = IntendedParent.id
+    entity_model = _recipient_entity_model(campaign.recipient_type)
+    email_col = entity_model.email
+    id_col = entity_model.id
 
     run.total_count = recipient_query.order_by(None).count()
     recipient_query = recipient_query.order_by(func.lower(email_col), id_col)
@@ -2201,15 +2402,9 @@ def execute_campaign_run(
         )
 
         for recipient in batch:
-            # Get email and name
-            if campaign.recipient_type == "case":
-                email = recipient.email
-                name = recipient.full_name or recipient.first_name
-                entity_id = recipient.id
-            else:  # intended_parent
-                email = recipient.email
-                name = recipient.full_name or recipient.first_name
-                entity_id = recipient.id
+            email = recipient.email
+            name = recipient.full_name or getattr(recipient, "first_name", "")
+            entity_id = recipient.id
 
             if not email:
                 continue
@@ -2234,10 +2429,11 @@ def execute_campaign_run(
             seen_emails[email_norm] = None
 
             # Build email from template with shared variable builder
-            if campaign.recipient_type == "case":
-                variables = email_service.build_surrogate_template_variables(db, recipient)
-            else:
-                variables = email_service.build_intended_parent_template_variables(db, recipient)
+            variables = _build_recipient_template_variables(
+                db,
+                campaign.recipient_type,
+                recipient,
+            )
 
             from app.services import email_composition_service
 
@@ -2256,6 +2452,14 @@ def execute_campaign_run(
                 scope="org",
                 portal_base_url=portal_base_url,
             )
+            donor_launch_snapshot = None
+            if campaign.recipient_type in DONOR_RECIPIENT_TYPES:
+                donor_launch_snapshot = _build_donor_launch_snapshot(
+                    recipient_email=email,
+                    recipient_name=name,
+                    subject=subject,
+                    body=body,
+                )
 
             # Create recipient record
             cr = existing
@@ -2268,6 +2472,7 @@ def execute_campaign_run(
                     entity_id=entity_id,
                     recipient_email=email,
                     recipient_name=name,
+                    donor_launch_snapshot=donor_launch_snapshot,
                     status=CampaignRecipientStatus.PENDING.value,
                     tracking_token=tracking_service.generate_tracking_token(),
                 )
@@ -2287,6 +2492,9 @@ def execute_campaign_run(
                 from app.services import tracking_service
 
                 cr.tracking_token = tracking_service.generate_tracking_token()
+
+            if donor_launch_snapshot is not None and cr.donor_launch_snapshot is None:
+                cr.donor_launch_snapshot = donor_launch_snapshot
 
             # Inject tracking pixel and wrap links
             # Skip internal tracking for Resend (uses webhooks instead)
@@ -2395,6 +2603,7 @@ def retry_failed_campaign_run(
         db.query(CampaignRecipient)
         .filter(
             CampaignRecipient.run_id == run_id,
+            CampaignRecipient.entity_type == campaign.recipient_type,
             CampaignRecipient.status == CampaignRecipientStatus.FAILED.value,
         )
         .order_by(func.lower(CampaignRecipient.recipient_email), CampaignRecipient.id)
@@ -2422,7 +2631,7 @@ def retry_failed_campaign_run(
             if recipient.entity_id is not None
         )
     )
-    entities_by_id: dict[UUID, Surrogate | IntendedParent] = {}
+    entities_by_id: dict[UUID, Surrogate | IntendedParent | Donor] = {}
     entity_batch_size = max(1, CAMPAIGN_SEND_BATCH_SIZE)
     for offset in range(0, len(entity_ids), entity_batch_size):
         entity_id_batch = entity_ids[offset : offset + entity_batch_size]
@@ -2434,7 +2643,7 @@ def retry_failed_campaign_run(
                     Surrogate.is_archived.is_(False),
                 )
             ).all()
-        else:
+        elif campaign.recipient_type == "intended_parent":
             entities = db.scalars(
                 select(IntendedParent).where(
                     IntendedParent.organization_id == org_id,
@@ -2442,12 +2651,23 @@ def retry_failed_campaign_run(
                     IntendedParent.is_archived.is_(False),
                 )
             ).all()
+        elif campaign.recipient_type in DONOR_RECIPIENT_TYPES:
+            entities = db.scalars(
+                select(Donor).where(
+                    Donor.organization_id == org_id,
+                    Donor.id.in_(entity_id_batch),
+                    Donor.donor_type == DONOR_RECIPIENT_TYPES[campaign.recipient_type],
+                    Donor.is_archived.is_(False),
+                )
+            ).all()
+        else:
+            raise ValueError(f"Unknown recipient type: {campaign.recipient_type}")
         entities_by_id.update((entity.id, entity) for entity in entities)
 
     for recipient in failed_recipients:
         entity = entities_by_id.get(recipient.entity_id)
 
-        if not entity or not getattr(entity, "email", None):
+        if not entity:
             recipient.status = CampaignRecipientStatus.SKIPPED.value
             recipient.skip_reason = "missing_recipient"
             recipient.error = None
@@ -2455,7 +2675,23 @@ def retry_failed_campaign_run(
             skipped_count += 1
             continue
 
-        email = entity.email
+        donor_launch_snapshot = None
+        if campaign.recipient_type in DONOR_RECIPIENT_TYPES:
+            try:
+                donor_launch_snapshot = _parse_donor_launch_snapshot(
+                    recipient.donor_launch_snapshot
+                )
+            except ValueError:
+                recipient.error = "invalid_donor_launch_snapshot"
+                recipient.skip_reason = None
+                recipient.external_message_id = None
+                continue
+
+        email = (
+            donor_launch_snapshot["recipient_email"]
+            if donor_launch_snapshot is not None
+            else getattr(entity, "email", None)
+        )
         email_norm = email.strip().lower() if email else ""
         if not email_norm:
             recipient.status = CampaignRecipientStatus.SKIPPED.value
@@ -2484,31 +2720,45 @@ def retry_failed_campaign_run(
 
         seen_emails[email_norm] = None
 
-        recipient.recipient_email = email
-        recipient.recipient_name = getattr(entity, "full_name", None) or ""
-
-        if campaign.recipient_type == "case":
-            variables = email_service.build_surrogate_template_variables(db, entity)
+        if donor_launch_snapshot is not None:
+            recipient.recipient_email = donor_launch_snapshot["recipient_email"]
+            recipient.recipient_name = donor_launch_snapshot["recipient_name"]
+            subject = donor_launch_snapshot["subject"]
+            body = donor_launch_snapshot["body"]
         else:
-            variables = email_service.build_intended_parent_template_variables(db, entity)
+            recipient.recipient_email = email
+            recipient.recipient_name = getattr(entity, "full_name", None) or ""
 
-        from app.services import email_composition_service
+            variables = _build_recipient_template_variables(
+                db,
+                campaign.recipient_type,
+                entity,
+            )
 
-        cleaned_body_template = email_composition_service.strip_legacy_unsubscribe_placeholders(
-            template.body
-        )
-        subject, body = email_service.render_template(
-            template.subject, cleaned_body_template, variables
-        )
+            from app.services import email_composition_service
 
-        body = email_composition_service.compose_template_email_html(
-            db=db,
-            org_id=org_id,
-            recipient_email=email,
-            rendered_body_html=body,
-            scope="org",
-            portal_base_url=portal_base_url,
-        )
+            cleaned_body_template = (
+                email_composition_service.strip_legacy_unsubscribe_placeholders(template.body)
+            )
+            subject, body = email_service.render_template(
+                template.subject, cleaned_body_template, variables
+            )
+
+            body = email_composition_service.compose_template_email_html(
+                db=db,
+                org_id=org_id,
+                recipient_email=email,
+                rendered_body_html=body,
+                scope="org",
+                portal_base_url=portal_base_url,
+            )
+            if campaign.recipient_type in DONOR_RECIPIENT_TYPES:
+                recipient.donor_launch_snapshot = _build_donor_launch_snapshot(
+                    recipient_email=email,
+                    recipient_name=recipient.recipient_name,
+                    subject=subject,
+                    body=body,
+                )
 
         if run.email_provider == "resend":
             tracked_body = body
@@ -2548,6 +2798,7 @@ def retry_failed_campaign_run(
             recipient.external_message_id = None
             continue
 
+        recipient.email_log_id = email_log.id
         if email_log.status == EmailStatus.SKIPPED.value:
             recipient.status = CampaignRecipientStatus.SKIPPED.value
             recipient.skip_reason = "suppressed"
@@ -2559,7 +2810,6 @@ def retry_failed_campaign_run(
         recipient.status = CampaignRecipientStatus.PENDING.value
         recipient.error = None
         recipient.skip_reason = None
-        recipient.email_log_id = email_log.id
         retried_count += 1
 
     if not recompute_campaign_run_aggregates(

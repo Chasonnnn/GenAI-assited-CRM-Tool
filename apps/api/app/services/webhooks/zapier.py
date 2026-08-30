@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.db.models import MetaLead, Organization
+from app.db.models import Donor, MetaLead, Organization, Surrogate
 from app.services import (
     meta_api,
     meta_form_mapping_service,
@@ -455,11 +455,17 @@ def _ensure_form_identifier(payload: Any, webhook_id: str) -> Any:
     return payload
 
 
-def _build_status_message(status: str, duplicate: bool, surrogate_id: str | None) -> str:
+def _build_status_message(
+    status: str,
+    duplicate: bool,
+    subject_id: str | None,
+    *,
+    subject_label: str = "surrogate",
+) -> str:
     if duplicate:
         return "Duplicate lead received; existing record retained."
-    if status == "converted" and surrogate_id:
-        return "Webhook received. Lead converted into a surrogate."
+    if status == "converted" and subject_id:
+        return f"Webhook received. Lead converted into a {subject_label}."
     if status == "awaiting_mapping":
         return "Webhook received. Lead stored; mapping is required before conversion."
     if status == "stored":
@@ -618,16 +624,23 @@ def process_zapier_payload(
     if error:
         raise HTTPException(status_code=500, detail=error)
 
-    status, surrogate = meta_lead_service.process_stored_meta_lead(db, meta_lead)
+    status, subject = meta_lead_service.process_stored_meta_lead(db, meta_lead)
 
-    surrogate_id = str(surrogate.id) if surrogate else None
-    message = _build_status_message(status, duplicate, surrogate_id)
+    surrogate_id = str(subject.id) if isinstance(subject, Surrogate) else None
+    donor_id = str(subject.id) if isinstance(subject, Donor) else None
+    message = _build_status_message(
+        status,
+        duplicate,
+        donor_id or surrogate_id,
+        subject_label="donor" if donor_id else "surrogate",
+    )
 
     return {
         "status": status,
         "duplicate": duplicate,
         "meta_lead_id": str(meta_lead.id),
         "surrogate_id": surrogate_id,
+        "donor_id": donor_id,
         "message": message,
     }
 

@@ -187,3 +187,38 @@ async def test_google_tasks_sync_job_handler_invokes_reconciler(db, test_auth, m
 
     assert called["user_id"] == test_auth.user.id
     assert called["org_id"] == test_auth.org.id
+
+
+@pytest.mark.asyncio
+async def test_google_tasks_sync_job_rejects_user_outside_exact_active_membership(
+    db,
+    test_auth,
+    monkeypatch,
+):
+    from app.jobs.handlers import appointments as appointments_handler
+
+    called = False
+
+    async def fake_sync_google_tasks_for_user_async(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        return 0
+
+    monkeypatch.setattr(
+        "app.services.google_tasks_sync_service.sync_google_tasks_for_user_async",
+        fake_sync_google_tasks_for_user_async,
+    )
+    job = type(
+        "Job",
+        (),
+        {
+            "id": uuid.uuid4(),
+            "organization_id": uuid.uuid4(),
+            "payload": {"user_id": str(test_auth.user.id)},
+        },
+    )()
+
+    with pytest.raises(ValueError, match="no active membership"):
+        await appointments_handler.process_google_tasks_sync(db, job)
+
+    assert called is False

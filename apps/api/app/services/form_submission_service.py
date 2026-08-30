@@ -22,6 +22,7 @@ from app.db.enums import (
     SurrogateActivityType,
 )
 from app.db.models import (
+    Donor,
     Form,
     FormFieldMapping,
     FormSubmission,
@@ -212,6 +213,26 @@ def list_form_submissions(
     if limit and limit > 0:
         query = query.limit(limit)
     return query.all()
+
+
+def get_donor_numbers_for_submissions(
+    db: Session,
+    org_id: uuid.UUID,
+    submissions: list[FormSubmission],
+) -> dict[uuid.UUID, str]:
+    """Resolve linked donor display identifiers without cross-organization traversal."""
+    donor_ids = {submission.donor_id for submission in submissions if submission.donor_id}
+    if not donor_ids:
+        return {}
+    return {
+        donor_id: donor_number
+        for donor_id, donor_number in db.query(Donor.id, Donor.donor_number)
+        .filter(
+            Donor.organization_id == org_id,
+            Donor.id.in_(donor_ids),
+        )
+        .all()
+    }
 
 
 def get_submission_by_surrogate(
@@ -571,6 +592,7 @@ def soft_delete_submission_file(
         details={
             "submission_id": str(submission.id),
             "surrogate_id": str(submission.surrogate_id),
+            "donor_id": str(submission.donor_id) if submission.donor_id else None,
             "filename": filename,
         },
     )
@@ -602,7 +624,8 @@ def get_submission_file_download_url(
         target_type="form_submission_file",
         target_id=file_record.id,
         details={
-            "surrogate_id": str(submission.surrogate_id),
+            "surrogate_id": str(submission.surrogate_id) if submission.surrogate_id else None,
+            "donor_id": str(submission.donor_id) if submission.donor_id else None,
             "submission_id": str(submission.id),
             "file_ext": ext,
             "file_size": file_record.file_size,

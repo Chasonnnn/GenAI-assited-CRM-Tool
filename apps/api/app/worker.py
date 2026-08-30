@@ -172,9 +172,16 @@ if WORKER_STALE_CLAIM_REAPER_INTERVAL_SECONDS <= 0:
 if WORKER_STALE_CLAIM_REAPER_BATCH_SIZE <= 0:
     raise RuntimeError("WORKER_STALE_CLAIM_REAPER_BATCH_SIZE must be positive")
 
-# This local-only sweep is idempotent: task state transitions are guarded, resume
-# jobs are uniquely keyed, and its notification has a stable dedupe key.
-WORKER_STALE_CLAIM_RETRY_SAFE_JOB_TYPES = frozenset({JobType.WORKFLOW_APPROVAL_EXPIRY.value})
+# These handlers are safe to replay after an uncertain worker outcome. Workflow
+# approval transitions are guarded, and remote cleanup/reconciliation is idempotent.
+WORKER_STALE_CLAIM_RETRY_SAFE_JOB_TYPES = frozenset(
+    {
+        JobType.WORKFLOW_APPROVAL_EXPIRY.value,
+        JobType.GOOGLE_TASK_REMOTE_DELETE.value,
+        JobType.GOOGLE_TASK_CREATION_RECONCILE.value,
+        JobType.STORAGE_DELETE.value,
+    }
+)
 
 
 class _ClaimHeartbeat:

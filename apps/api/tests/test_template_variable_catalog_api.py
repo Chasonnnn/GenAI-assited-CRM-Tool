@@ -18,6 +18,7 @@ async def test_org_email_template_variables_endpoint(authed_client):
     assert "appointment_reschedule_url" in names
     assert "appointment_cancel_url" in names
     assert "unsubscribe_url" in names
+    assert {"donor_number", "donor_type", "education"} <= names
 
 
 @pytest.mark.asyncio
@@ -49,6 +50,7 @@ async def test_platform_email_template_variables_endpoint_platform_admin(
     assert "appointment_reschedule_url" in names
     assert "appointment_cancel_url" in names
     assert "unsubscribe_url" in names
+    assert {"donor_number", "donor_type", "education"} <= names
 
 
 @pytest.mark.asyncio

@@ -68,6 +68,21 @@ def list_org_email_template_variables() -> list[TemplateVariableDefinition]:
             category="Case",
         ),
         TemplateVariableDefinition(
+            name="donor_number",
+            description="Donor number",
+            category="Donor",
+        ),
+        TemplateVariableDefinition(
+            name="donor_type",
+            description="Donor type",
+            category="Donor",
+        ),
+        TemplateVariableDefinition(
+            name="education",
+            description="Donor education",
+            category="Donor",
+        ),
+        TemplateVariableDefinition(
             name="status_label",
             description="Current status",
             category="Case",

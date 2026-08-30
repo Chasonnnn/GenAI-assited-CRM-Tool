@@ -1,7 +1,7 @@
 """Intended Parent service - business logic for IP CRUD and status management."""
 
 import logging
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import TypedDict
 from uuid import UUID
@@ -15,6 +15,7 @@ from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 from app.db.enums import IntendedParentStatus, Role
 from app.db.models import IntendedParent, IntendedParentStatusHistory
 from app.schemas.auth import UserSession
+from app.utils.datetime_parsing import parse_created_from_filter, parse_created_to_filter
 from app.utils.normalization import (
     escape_like_string,
     extract_email_domain,
@@ -31,20 +32,6 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Query Helpers
 # =============================================================================
-
-
-def _parse_created_before_filter(value: str) -> tuple[datetime, bool]:
-    """Parse created_before value.
-
-    Returns:
-        (parsed_datetime, is_date_only)
-    """
-    normalized = value.strip()
-    if "T" not in normalized:
-        parsed_date = date.fromisoformat(normalized)
-        return datetime.combine(parsed_date + timedelta(days=1), time(0, 0, 0)), True
-    parsed_datetime = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
-    return parsed_datetime, False
 
 
 def _build_intended_parent_query(
@@ -122,13 +109,13 @@ def _build_intended_parent_query(
     # Created date range filter (ISO format)
     if created_after:
         try:
-            after_date = datetime.fromisoformat(created_after.replace("Z", "+00:00"))
+            after_date = parse_created_from_filter(created_after)
             query = query.filter(IntendedParent.created_at >= after_date)
         except ValueError, AttributeError:
             logger.debug("ip_filter_invalid_created_after")
     if created_before:
         try:
-            before_date, is_date_only = _parse_created_before_filter(created_before)
+            before_date, is_date_only = parse_created_to_filter(created_before)
             if is_date_only:
                 query = query.filter(IntendedParent.created_at < before_date)
             else:

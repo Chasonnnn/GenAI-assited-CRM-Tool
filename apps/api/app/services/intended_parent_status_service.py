@@ -1,9 +1,8 @@
 """Intended parent stage change helpers (apply + request + history + notifications)."""
 
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TypedDict
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -19,6 +18,7 @@ from app.db.models import (
     StatusChangeRequest,
     User,
 )
+from app.utils.datetime_parsing import normalize_effective_at
 
 
 class StatusChangeResult(TypedDict):
@@ -47,35 +47,6 @@ def _get_org_timezone(db: Session, org_id: UUID) -> str:
         select(Organization.timezone).where(Organization.id == org_id)
     ).scalar_one_or_none()
     return result or "America/Los_Angeles"
-
-
-def _normalize_effective_at(
-    effective_at: datetime | None,
-    org_timezone_str: str,
-) -> datetime:
-    now = datetime.now(UTC)
-
-    if effective_at is None:
-        return now
-
-    org_tz = ZoneInfo(org_timezone_str)
-    if effective_at.tzinfo is None:
-        effective_at = effective_at.replace(tzinfo=org_tz)
-    else:
-        effective_at = effective_at.astimezone(org_tz)
-
-    if effective_at.time() == time(0, 0, 0):
-        today_org = now.astimezone(org_tz).date()
-        effective_date = effective_at.date()
-
-        if effective_date == today_org:
-            return now
-        if effective_date < today_org:
-            noon = datetime.combine(effective_date, time(12, 0, 0)).replace(tzinfo=org_tz)
-            return noon.astimezone(UTC)
-        return effective_at.astimezone(UTC)
-
-    return effective_at.astimezone(UTC)
 
 
 def get_default_pipeline_stage(
@@ -135,7 +106,7 @@ def change_status(
 
     now = datetime.now(UTC)
     org_tz_str = _get_org_timezone(db, ip.organization_id)
-    normalized_effective_at = _normalize_effective_at(effective_at, org_tz_str)
+    normalized_effective_at = normalize_effective_at(effective_at, org_tz_str)
 
     is_backdated = (now - normalized_effective_at).total_seconds() > 1
     is_regression = new_stage.order < current_stage.order

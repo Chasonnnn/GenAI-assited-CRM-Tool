@@ -30,7 +30,7 @@ from app.schemas.campaign import (
     SuppressionCreate,
     SuppressionResponse,
 )
-from app.services import campaign_service
+from app.services import campaign_service, permission_service
 
 csrf_header_dependency = require_csrf_header
 
@@ -40,6 +40,34 @@ router = APIRouter(
     dependencies=[Depends(require_permission(POLICIES["email_templates"].default))],
     prefix="/campaigns",
 )
+
+DONOR_RECIPIENT_TYPES = {"egg_donor", "sperm_donor"}
+
+
+def _require_donor_recipient_access(
+    db: Session,
+    session: UserSession,
+    recipient_type: str,
+    *,
+    require_write: bool = False,
+) -> None:
+    """Require donor access before reading or mutating a donor campaign."""
+    if recipient_type not in DONOR_RECIPIENT_TYPES:
+        return
+    permission = (
+        POLICIES["donors"].actions["edit"]
+        if require_write
+        else POLICIES["donors"].default
+    )
+    role = getattr(session.role, "value", session.role)
+    if not permission_service.check_permission(
+        db,
+        session.org_id,
+        session.user_id,
+        role,
+        permission.value,
+    ):
+        raise HTTPException(status_code=403, detail=f"Missing permission: {permission.value}")
 
 
 def _require_messaging_operator(session: UserSession) -> None:
@@ -64,8 +92,21 @@ def list_campaigns(
     session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """List campaigns for the organization."""
+    role = getattr(session.role, "value", session.role)
+    can_view_donors = permission_service.check_permission(
+        db,
+        session.org_id,
+        session.user_id,
+        role,
+        POLICIES["donors"].default.value,
+    )
     campaigns, total = campaign_service.list_campaigns(
-        db, org_id=session.org_id, status=status, limit=limit, offset=offset
+        db,
+        org_id=session.org_id,
+        status=status,
+        limit=limit,
+        offset=offset,
+        exclude_recipient_types=None if can_view_donors else DONOR_RECIPIENT_TYPES,
     )
     return campaigns
 
@@ -82,6 +123,12 @@ def create_campaign(
     """Create a new campaign (draft status)."""
     if data.channel == "messaging":
         _require_messaging_operator(session)
+    _require_donor_recipient_access(
+        db,
+        session,
+        data.recipient_type,
+        require_write=True,
+    )
     try:
         campaign = campaign_service.create_campaign(
             db, org_id=session.org_id, user_id=session.user_id, data=data
@@ -102,6 +149,7 @@ def get_campaign(
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    _require_donor_recipient_access(db, session, campaign.recipient_type)
 
     return _campaign_to_response(db, campaign)
 
@@ -122,9 +170,25 @@ def update_campaign(
         raise HTTPException(status_code=404, detail="Campaign not found")
     if current.channel == "messaging" or data.channel == "messaging":
         _require_messaging_operator(session)
-    campaign = campaign_service.update_campaign(
-        db, org_id=session.org_id, campaign_id=campaign_id, data=data
+    _require_donor_recipient_access(
+        db,
+        session,
+        current.recipient_type,
+        require_write=True,
     )
+    if data.recipient_type is not None:
+        _require_donor_recipient_access(
+            db,
+            session,
+            data.recipient_type,
+            require_write=True,
+        )
+    try:
+        campaign = campaign_service.update_campaign(
+            db, org_id=session.org_id, campaign_id=campaign_id, data=data
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not campaign:
         raise HTTPException(
             status_code=400,
@@ -148,6 +212,13 @@ def delete_campaign(
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
     if campaign is not None and campaign.channel == "messaging":
         _require_messaging_operator(session)
+    if campaign is not None:
+        _require_donor_recipient_access(
+            db,
+            session,
+            campaign.recipient_type,
+            require_write=True,
+        )
     deleted = campaign_service.delete_campaign(db, session.org_id, campaign_id)
     if not deleted:
         raise HTTPException(
@@ -178,6 +249,7 @@ def preview_filters(
     """
     if data.channel == "messaging":
         _require_messaging_operator(session)
+    _require_donor_recipient_access(db, session, data.recipient_type)
     # Convert FilterCriteria to dict for service call
     filter_dict = data.filter_criteria.model_dump(exclude_none=True) if data.filter_criteria else {}
 
@@ -207,6 +279,7 @@ def preview_recipients(
         raise HTTPException(status_code=404, detail="Campaign not found")
     if campaign.channel == "messaging":
         _require_messaging_operator(session)
+    _require_donor_recipient_access(db, session, campaign.recipient_type)
 
     return campaign_service.preview_recipients(
         db,
@@ -245,6 +318,12 @@ def send_campaign(
         raise HTTPException(status_code=404, detail="Campaign not found")
     if campaign.channel == "messaging":
         _require_messaging_operator(session)
+    _require_donor_recipient_access(
+        db,
+        session,
+        campaign.recipient_type,
+        require_write=True,
+    )
 
     try:
         message, run_id, scheduled_at = campaign_service.enqueue_campaign_send(
@@ -278,6 +357,13 @@ def cancel_campaign(
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
     if campaign is not None and campaign.channel == "messaging":
         _require_messaging_operator(session)
+    if campaign is not None:
+        _require_donor_recipient_access(
+            db,
+            session,
+            campaign.recipient_type,
+            require_write=True,
+        )
     cancelled = campaign_service.cancel_campaign(db, session.org_id, campaign_id)
     if not cancelled:
         raise HTTPException(
@@ -301,6 +387,10 @@ def list_campaign_runs(
     session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """List execution history for a campaign."""
+    campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
+    if campaign is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    _require_donor_recipient_access(db, session, campaign.recipient_type)
     return campaign_service.list_campaign_runs(
         db, org_id=session.org_id, campaign_id=campaign_id, limit=limit
     )
@@ -317,6 +407,10 @@ def get_campaign_run(
     run = campaign_service.get_campaign_run(db, session.org_id, run_id)
     if not run or run.campaign_id != campaign_id:
         raise HTTPException(status_code=404, detail="Run not found")
+    campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
+    if campaign is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    _require_donor_recipient_access(db, session, campaign.recipient_type)
 
     return CampaignRunResponse.model_validate(run)
 
@@ -339,6 +433,13 @@ def retry_failed_campaign_run(
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
     if campaign is not None and campaign.channel == "messaging":
         _require_messaging_operator(session)
+    if campaign is not None:
+        _require_donor_recipient_access(
+            db,
+            session,
+            campaign.recipient_type,
+            require_write=True,
+        )
     try:
         message, resolved_run_id, job_id, failed_count = (
             campaign_service.enqueue_campaign_retry_failed(
@@ -377,6 +478,10 @@ def list_run_recipients(
     run = campaign_service.get_campaign_run(db, session.org_id, run_id)
     if not run or run.campaign_id != campaign_id:
         raise HTTPException(status_code=404, detail="Run not found")
+    campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
+    if campaign is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    _require_donor_recipient_access(db, session, campaign.recipient_type)
 
     recipients = campaign_service.list_run_recipients(
         db=db,

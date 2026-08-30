@@ -301,6 +301,7 @@ async def process_meta_lead_reprocess_form(db, job) -> None:
         db,
         job.organization_id,
         leads,
+        lead_kind=form.lead_kind or "surrogate",
     )
 
     for lead in leads:
@@ -313,11 +314,10 @@ async def process_meta_lead_reprocess_form(db, job) -> None:
             continue
         lead.status = "stored"
         db.commit()
-        surrogate, error = meta_lead_service.convert_to_surrogate_with_mapping(
-            db=db,
-            meta_lead=lead,
-            mapping_rules=form.mapping_rules or [],
-            unknown_column_behavior=form.unknown_column_behavior or "metadata",
+        subject, error = meta_lead_service.convert_with_form_mapping(
+            db,
+            lead,
+            form,
             user_id=None,
         )
         if error:
@@ -328,7 +328,10 @@ async def process_meta_lead_reprocess_form(db, job) -> None:
 
         lead.status = "converted"
         db.commit()
-        logger.info(f"Reprocessed lead {lead.meta_lead_id} to {surrogate.surrogate_number}")
+        subject_number = getattr(subject, "donor_number", None) or getattr(
+            subject, "surrogate_number", None
+        )
+        logger.info("Reprocessed lead %s to %s", lead.meta_lead_id, subject_number)
 
 
 async def process_meta_capi_event(db, job) -> None:

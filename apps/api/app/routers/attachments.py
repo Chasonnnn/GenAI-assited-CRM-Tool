@@ -18,7 +18,14 @@ from app.core.policies import POLICIES
 from app.core.surrogate_access import can_modify_surrogate, check_surrogate_access
 from app.db.enums import Role
 from app.schemas.auth import UserSession
-from app.services import activity_service, attachment_service, ip_service, surrogate_service
+from app.services import (
+    activity_service,
+    attachment_service,
+    donor_service,
+    ip_service,
+    permission_service,
+    surrogate_service,
+)
 from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
 
 csrf_header_dependency = require_csrf_header
@@ -237,6 +244,187 @@ def _get_ip_with_access(db: Session, ip_id: UUID, session: UserSession):
     return ip
 
 
+def _get_donor_with_access(
+    db: Session,
+    donor_id: UUID,
+    session: UserSession,
+    *,
+    require_write: bool = False,
+):
+    """Get a donor with organization and entity-specific permission checks."""
+    permission = POLICIES["donors"].actions["edit"] if require_write else POLICIES["donors"].default
+    if not permission_service.check_permission(
+        db,
+        session.org_id,
+        session.user_id,
+        session.role.value,
+        permission.value,
+    ):
+        raise HTTPException(status_code=403, detail=f"Missing permission: {permission.value}")
+    donor = donor_service.get_donor(db, session.org_id, donor_id)
+    if not donor:
+        raise HTTPException(status_code=404, detail="Donor not found")
+    return donor
+
+
+def _attachment_read(attachment) -> AttachmentRead:
+    return AttachmentRead(
+        id=str(attachment.id),
+        filename=attachment.filename,
+        content_type=attachment.content_type,
+        file_size=attachment.file_size,
+        scan_status=attachment.scan_status,
+        quarantined=attachment.quarantined,
+        uploaded_by_user_id=str(attachment.uploaded_by_user_id)
+        if attachment.uploaded_by_user_id
+        else None,
+        created_at=attachment.created_at.isoformat(),
+    )
+
+
+async def _upload_donor_file(
+    *,
+    donor,
+    file: UploadFile,
+    request: Request,
+    db: Session,
+    session: UserSession,
+    set_as_profile_photo: bool,
+) -> AttachmentRead:
+    if content_length_exceeds_limit(
+        request.headers.get("content-length"),
+        max_size_bytes=attachment_service.MAX_FILE_SIZE_BYTES,
+    ):
+        max_mb = attachment_service.MAX_FILE_SIZE_BYTES / (1024 * 1024)
+        raise HTTPException(status_code=400, detail=f"File size exceeds {max_mb:.0f} MB limit")
+
+    file_size = await get_upload_file_size(file)
+    if file_size > attachment_service.MAX_FILE_SIZE_BYTES:
+        max_mb = attachment_service.MAX_FILE_SIZE_BYTES / (1024 * 1024)
+        raise HTTPException(status_code=400, detail=f"File size exceeds {max_mb:.0f} MB limit")
+    file.file.seek(0)
+
+    try:
+        attachment = attachment_service.upload_attachment(
+            db=db,
+            org_id=donor.organization_id,
+            donor_id=donor.id,
+            user_id=session.user_id,
+            filename=file.filename or "untitled",
+            content_type=file.content_type or "application/octet-stream",
+            file=file.file,
+            file_size=file_size,
+            allowed_extensions={"png", "jpg", "jpeg"} if set_as_profile_photo else None,
+            allowed_mime_types={"image/png", "image/jpeg"} if set_as_profile_photo else None,
+        )
+        if set_as_profile_photo:
+            attachment_service.set_donor_profile_photo(
+                db,
+                donor=donor,
+                attachment=attachment,
+                user_id=session.user_id,
+            )
+        db.commit()
+        if attachment.scan_status != "clean":
+            attachment_service.dispatch_attachment_scan_if_needed(
+                db=db,
+                org_id=donor.organization_id,
+                attachment_id=attachment.id,
+            )
+        else:
+            from app.services import workflow_triggers
+
+            workflow_triggers.trigger_document_uploaded(db, attachment)
+        return _attachment_read(attachment)
+    except attachment_service.AttachmentStorageError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/donors/{donor_id}/attachments", response_model=list[AttachmentRead])
+def list_donor_attachments(
+    donor_id: UUID,
+    request: Request,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["donors"].default)
+    ),
+    type: str | None = None,
+):
+    """List active donor attachments."""
+    donor = _get_donor_with_access(db, donor_id, session)
+    attachments = attachment_service.list_attachments(
+        db=db,
+        org_id=donor.organization_id,
+        donor_id=donor.id,
+        include_quarantined=False,
+        content_type_prefix="image/" if type == "image" else None,
+    )
+    from app.services import audit_service
+
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="donor_attachments",
+        target_id=donor.id,
+        request=request,
+        details={"count": len(attachments)},
+    )
+    db.commit()
+    return [_attachment_read(attachment) for attachment in attachments]
+
+
+@router.post("/donors/{donor_id}/attachments", response_model=AttachmentRead)
+async def upload_donor_attachment(
+    donor_id: UUID,
+    file: Annotated[UploadFile, File()],
+    request: Request,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["donors"].actions["edit"])
+    ),
+    _: Annotated[str, "fastapi_param"] = Depends(csrf_header_dependency),
+):
+    """Upload a donor attachment."""
+    donor = _get_donor_with_access(db, donor_id, session, require_write=True)
+    return await _upload_donor_file(
+        donor=donor,
+        file=file,
+        request=request,
+        db=db,
+        session=session,
+        set_as_profile_photo=False,
+    )
+
+
+@router.post("/donors/{donor_id}/profile-photo", response_model=AttachmentRead)
+async def upload_donor_profile_photo(
+    donor_id: UUID,
+    file: Annotated[UploadFile, File()],
+    request: Request,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["donors"].actions["edit"])
+    ),
+    _: Annotated[str, "fastapi_param"] = Depends(csrf_header_dependency),
+):
+    """Upload and designate a donor profile image."""
+    donor = _get_donor_with_access(db, donor_id, session, require_write=True)
+    return await _upload_donor_file(
+        donor=donor,
+        file=file,
+        request=request,
+        db=db,
+        session=session,
+        set_as_profile_photo=True,
+    )
+
+
 @router.get("/intended-parents/{ip_id}/attachments", response_model=list[AttachmentRead])
 def list_ip_attachments(
     ip_id: UUID,
@@ -361,6 +549,7 @@ def download_attachment(
             [
                 POLICIES["surrogates"].default,
                 POLICIES["intended_parents"].default,
+                POLICIES["donors"].default,
             ]
         )
     ),
@@ -381,6 +570,8 @@ def download_attachment(
     elif attachment.intended_parent_id:
         # IP attachments use org-wide access (already verified by get_attachment org_id filter)
         _get_ip_with_access(db, attachment.intended_parent_id, session)
+    elif attachment.donor_id:
+        _get_donor_with_access(db, attachment.donor_id, session)
 
     if attachment.scan_status in ("infected", "error"):
         detail = (
@@ -414,6 +605,7 @@ def download_attachment(
             "intended_parent_id": str(attachment.intended_parent_id)
             if attachment.intended_parent_id
             else None,
+            "donor_id": str(attachment.donor_id) if attachment.donor_id else None,
         },
     )
     db.commit()
@@ -439,6 +631,7 @@ def delete_attachment(
             [
                 POLICIES["surrogates"].actions["edit"],
                 POLICIES["intended_parents"].actions["edit"],
+                POLICIES["donors"].actions["edit"],
             ]
         )
     ),
@@ -466,6 +659,10 @@ def delete_attachment(
         surrogate = _get_surrogate_with_access(
             db, attachment.surrogate_id, session, require_write=True
         )
+    elif attachment.intended_parent_id:
+        _get_ip_with_access(db, attachment.intended_parent_id, session)
+    elif attachment.donor_id:
+        _get_donor_with_access(db, attachment.donor_id, session, require_write=True)
 
     # Capture filename before deletion for activity log
     filename = attachment.filename
@@ -505,6 +702,7 @@ def download_local_attachment(
             [
                 POLICIES["surrogates"].default,
                 POLICIES["intended_parents"].default,
+                POLICIES["donors"].default,
             ]
         )
     ),
@@ -539,6 +737,8 @@ def download_local_attachment(
         _get_surrogate_with_access(db, attachment.surrogate_id, session)
     elif attachment.intended_parent_id:
         _get_ip_with_access(db, attachment.intended_parent_id, session)
+    elif attachment.donor_id:
+        _get_donor_with_access(db, attachment.donor_id, session)
 
     from app.services import audit_service
 
@@ -553,6 +753,7 @@ def download_local_attachment(
             "intended_parent_id": str(attachment.intended_parent_id)
             if attachment.intended_parent_id
             else None,
+            "donor_id": str(attachment.donor_id) if attachment.donor_id else None,
             "storage": "local",
         },
     )

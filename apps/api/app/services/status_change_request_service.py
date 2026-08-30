@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db.enums import MatchStatus, Role, SurrogateActivityType
 from app.db.models import (
+    Donor,
     IntendedParent,
     Match,
     Pipeline,
@@ -37,13 +38,15 @@ def get_pending_requests(
     entity_type: str | None = None,
     page: int = 1,
     per_page: int = 20,
+    *,
+    include_donor_requests: bool = True,
 ) -> tuple[list[StatusChangeRequest], int]:
     """
     Get pending status change requests for an organization.
 
     Args:
         org_id: Organization ID
-        entity_type: Optional filter by entity type ('surrogate' or 'intended_parent')
+        entity_type: Optional filter by request entity type
         page: Page number
         per_page: Items per page
 
@@ -57,6 +60,8 @@ def get_pending_requests(
 
     if entity_type:
         query = query.filter(StatusChangeRequest.entity_type == entity_type)
+    if not include_donor_requests:
+        query = query.filter(StatusChangeRequest.entity_type != "donor")
 
     requests, total = paginate_query(
         query.order_by(StatusChangeRequest.requested_at.desc()),
@@ -93,13 +98,22 @@ def approve_request(
     """
     from app.services import (
         activity_service,
+        donor_service,
         intended_parent_status_service,
         match_service,
         pipeline_service,
         surrogate_status_service,
     )
 
-    request = get_request(db, request_id, org_id)
+    request = (
+        db.query(StatusChangeRequest)
+        .filter(
+            StatusChangeRequest.id == request_id,
+            StatusChangeRequest.organization_id == org_id,
+        )
+        .with_for_update()
+        .first()
+    )
     if not request:
         raise ValueError("Request not found")
 
@@ -112,6 +126,7 @@ def approve_request(
         raise ValueError("Only admins can approve status change requests")
 
     now = datetime.now(UTC)
+    donor_stage_event: tuple[Donor, PipelineStage, PipelineStage] | None = None
 
     if request.entity_type == "surrogate":
         # Get surrogate
@@ -192,6 +207,59 @@ def approve_request(
             approved_at=now,
             requested_at=request.requested_at,
         )
+    elif request.entity_type == "donor":
+        donor = (
+            db.query(Donor)
+            .filter(
+                Donor.id == request.entity_id,
+                Donor.organization_id == org_id,
+            )
+            .with_for_update()
+            .first()
+        )
+        if not donor:
+            raise ValueError("Donor not found")
+        if donor.is_archived:
+            raise ValueError("Cannot approve a stage change for an archived donor")
+        if not request.target_stage_id:
+            raise ValueError("Target stage not found")
+        target_stage = (
+            db.query(PipelineStage)
+            .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
+            .filter(
+                PipelineStage.id == request.target_stage_id,
+                PipelineStage.is_active.is_(True),
+                Pipeline.organization_id == org_id,
+                Pipeline.entity_type == donor_service.donor_pipeline_entity_type(donor.donor_type),
+                Pipeline.is_default.is_(True),
+            )
+            .first()
+        )
+        if not target_stage:
+            raise ValueError("Target stage not found")
+        old_stage = donor.stage
+        if old_stage.id == target_stage.id:
+            raise ValueError("Donor is already in the requested target stage")
+        result = donor_service.apply_status_change(
+            db,
+            donor=donor,
+            old_stage=old_stage,
+            new_stage=target_stage,
+            user_id=request.requested_by_user_id,
+            reason=request.reason,
+            effective_at=request.effective_at,
+            recorded_at=now,
+            request_id=request.id,
+            requested_at=request.requested_at,
+            approved_by_user_id=admin_user_id,
+            approved_at=now,
+            emit_workflow_events=False,
+            commit=False,
+        )
+        changed_donor = result["donor"]
+        if changed_donor is None:
+            raise ValueError("Donor stage change was not applied")
+        donor_stage_event = (changed_donor, old_stage, target_stage)
     elif request.entity_type == "match":
         match = match_service.get_match(db, request.entity_id, org_id)
         if not match:
@@ -296,14 +364,27 @@ def approve_request(
     request.approved_by_user_id = admin_user_id
     request.approved_at = now
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(request)
+    admin_user = db.query(User).filter(User.id == admin_user_id).first()
+    resolver_name = admin_user.display_name if admin_user else "Admin"
+
+    if donor_stage_event:
+        changed_donor, old_stage, target_stage = donor_stage_event
+        donor_service.dispatch_stage_changed_workflow(
+            db,
+            donor=changed_donor,
+            old_stage=old_stage,
+            new_stage=target_stage,
+        )
 
     from app.services import notification_facade
 
     if request.entity_type == "surrogate":
-        admin_user = db.query(User).filter(User.id == admin_user_id).first()
-        resolver_name = admin_user.display_name if admin_user else "Admin"
         notification_facade.notify_status_change_request_resolved(
             db=db,
             request=request,
@@ -312,8 +393,6 @@ def approve_request(
             resolver_name=resolver_name,
         )
     elif request.entity_type == "intended_parent":
-        admin_user = db.query(User).filter(User.id == admin_user_id).first()
-        resolver_name = admin_user.display_name if admin_user else "Admin"
         notification_facade.notify_ip_status_change_request_resolved(
             db=db,
             request=request,
@@ -321,9 +400,15 @@ def approve_request(
             approved=True,
             resolver_name=resolver_name,
         )
+    elif request.entity_type == "donor":
+        donor_service.dispatch_status_request_resolved_notification(
+            db,
+            donor=donor,
+            status_request=request,
+            approved=True,
+            resolver_name=resolver_name,
+        )
     elif request.entity_type == "match":
-        admin_user = db.query(User).filter(User.id == admin_user_id).first()
-        resolver_name = admin_user.display_name if admin_user else "Admin"
         notification_facade.notify_match_cancel_request_resolved(
             db=db,
             request=request,
@@ -359,7 +444,15 @@ def reject_request(
     Raises:
         ValueError: If request not found, not pending, or user not authorized
     """
-    request = get_request(db, request_id, org_id)
+    request = (
+        db.query(StatusChangeRequest)
+        .filter(
+            StatusChangeRequest.id == request_id,
+            StatusChangeRequest.organization_id == org_id,
+        )
+        .with_for_update()
+        .first()
+    )
     if not request:
         raise ValueError("Request not found")
 
@@ -391,8 +484,14 @@ def reject_request(
             match.updated_at = now
             db.add(match)
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(request)
+    admin_user = db.query(User).filter(User.id == admin_user_id).first()
+    resolver_name = admin_user.display_name if admin_user else "Admin"
 
     if request.entity_type == "surrogate":
         surrogate = (
@@ -406,8 +505,6 @@ def reject_request(
         if surrogate:
             from app.services import notification_facade
 
-            admin_user = db.query(User).filter(User.id == admin_user_id).first()
-            resolver_name = admin_user.display_name if admin_user else "Admin"
             notification_facade.notify_status_change_request_resolved(
                 db=db,
                 request=request,
@@ -428,12 +525,30 @@ def reject_request(
         if intended_parent:
             from app.services import notification_facade
 
-            admin_user = db.query(User).filter(User.id == admin_user_id).first()
-            resolver_name = admin_user.display_name if admin_user else "Admin"
             notification_facade.notify_ip_status_change_request_resolved(
                 db=db,
                 request=request,
                 intended_parent=intended_parent,
+                approved=False,
+                resolver_name=resolver_name,
+                reason=reason,
+            )
+    elif request.entity_type == "donor":
+        donor = (
+            db.query(Donor)
+            .filter(
+                Donor.id == request.entity_id,
+                Donor.organization_id == org_id,
+            )
+            .first()
+        )
+        if donor:
+            from app.services import donor_service
+
+            donor_service.dispatch_status_request_resolved_notification(
+                db,
+                donor=donor,
+                status_request=request,
                 approved=False,
                 resolver_name=resolver_name,
                 reason=reason,
@@ -450,8 +565,6 @@ def reject_request(
         if match:
             from app.services import notification_facade
 
-            admin_user = db.query(User).filter(User.id == admin_user_id).first()
-            resolver_name = admin_user.display_name if admin_user else "Admin"
             notification_facade.notify_match_cancel_request_resolved(
                 db=db,
                 request=request,
@@ -486,7 +599,15 @@ def cancel_request(
     Raises:
         ValueError: If request not found, not pending, or user not the requester
     """
-    request = get_request(db, request_id, org_id)
+    request = (
+        db.query(StatusChangeRequest)
+        .filter(
+            StatusChangeRequest.id == request_id,
+            StatusChangeRequest.organization_id == org_id,
+        )
+        .with_for_update()
+        .first()
+    )
     if not request:
         raise ValueError("Request not found")
 
@@ -516,7 +637,11 @@ def cancel_request(
             match.updated_at = now
             db.add(match)
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(request)
 
     return request
@@ -603,6 +728,32 @@ def get_request_with_details(
                     .filter(
                         PipelineStage.id == request.target_stage_id,
                         Pipeline.organization_id == org_id,
+                    )
+                    .first()
+                )
+                if target_stage:
+                    result["target_stage_label"] = target_stage.label
+    elif request.entity_type == "donor":
+        donor = (
+            db.query(Donor)
+            .filter(
+                Donor.id == request.entity_id,
+                Donor.organization_id == org_id,
+            )
+            .first()
+        )
+        if donor:
+            result["entity_name"] = donor.full_name
+            result["entity_number"] = donor.donor_number
+            result["current_stage_label"] = donor.status_label
+            if request.target_stage_id:
+                target_stage = (
+                    db.query(PipelineStage)
+                    .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
+                    .filter(
+                        PipelineStage.id == request.target_stage_id,
+                        Pipeline.organization_id == org_id,
+                        Pipeline.entity_type == f"{donor.donor_type}_donor",
                     )
                     .first()
                 )

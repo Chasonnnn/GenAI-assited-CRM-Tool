@@ -193,7 +193,12 @@ async def test_worker_periodically_recovers_stale_claims_before_claiming(monkeyp
     await worker.worker_loop(stop_event)
 
     assert len(recovered) == 1
-    assert recovered[0]["retry_safe_job_types"] == {JobType.WORKFLOW_APPROVAL_EXPIRY.value}
+    assert recovered[0]["retry_safe_job_types"] == {
+        JobType.GOOGLE_TASK_REMOTE_DELETE.value,
+        JobType.GOOGLE_TASK_CREATION_RECONCILE.value,
+        JobType.STORAGE_DELETE.value,
+        JobType.WORKFLOW_APPROVAL_EXPIRY.value,
+    }
     assert recovered[0]["limit"] == worker.WORKER_STALE_CLAIM_REAPER_BATCH_SIZE
     assert scan_recovered == [
         {

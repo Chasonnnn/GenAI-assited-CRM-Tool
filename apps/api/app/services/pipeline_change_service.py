@@ -478,12 +478,14 @@ def build_pipeline_change_preview(
         dependency = dependency_by_key.get(stage_key, {})
         reasons: list[str] = []
         if int(dependency.get("surrogate_count") or 0) > 0:
-            reasons.append(
-                "active_records"
-                if normalize_pipeline_entity_type(dependency_graph.get("entity_type"))
-                == INTENDED_PARENT_PIPELINE_ENTITY
-                else "active_surrogates"
+            dependency_entity_type = normalize_pipeline_entity_type(
+                dependency_graph.get("entity_type")
             )
+            active_reason_by_entity = {
+                INTENDED_PARENT_PIPELINE_ENTITY: "active_records",
+                SURROGATE_PIPELINE_ENTITY: "active_surrogates",
+            }
+            reasons.append(active_reason_by_entity.get(dependency_entity_type, "active_donors"))
         if dependency.get("intelligent_suggestion_rules"):
             reasons.append("intelligent_suggestions")
         if dependency.get("integration_refs"):

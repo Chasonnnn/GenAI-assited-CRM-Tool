@@ -15,8 +15,14 @@ def _session(org_id, user_id):
     return SimpleNamespace(org_id=org_id, user_id=user_id, role="developer")
 
 
-def _submission(*, surrogate_id=None):
-    return SimpleNamespace(id=uuid4(), surrogate_id=surrogate_id, form_id=uuid4())
+def _submission(*, surrogate_id=None, donor_id=None, lead_kind="surrogate"):
+    return SimpleNamespace(
+        id=uuid4(),
+        surrogate_id=surrogate_id,
+        donor_id=donor_id,
+        lead_kind=lead_kind,
+        form_id=uuid4(),
+    )
 
 
 def _surrogate():
@@ -42,6 +48,11 @@ def test_download_submission_file_branch_paths(monkeypatch, db, test_org, test_u
     file_id = uuid4()
 
     monkeypatch.setattr(forms_router, "check_surrogate_access", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        forms_router.permission_service,
+        "check_permission",
+        lambda *_args, **_kwargs: True,
+    )
     monkeypatch.setattr(forms_router.audit_service, "log_phi_access", lambda **_kwargs: None)
 
     # Submission missing.
@@ -148,6 +159,17 @@ def test_download_submission_file_branch_paths(monkeypatch, db, test_org, test_u
     )
     assert response.download_url == "https://api.example.com/files/download/signed"
     assert response.filename == "doc.pdf"
+
+    # An unpromoted donor submission is accessible to donor reviewers.
+    monkeypatch.setattr(
+        forms_router.form_submission_service,
+        "get_submission",
+        lambda *_args, **_kwargs: _submission(lead_kind="egg_donor"),
+    )
+    response = forms_router.download_submission_file(
+        submission_id, file_id, request, session=session, db=db
+    )
+    assert response.download_url == "https://api.example.com/files/download/signed"
 
 
 def test_upload_and_delete_submission_file_branch_paths(monkeypatch, db, test_org, test_user):

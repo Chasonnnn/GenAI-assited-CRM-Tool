@@ -496,6 +496,100 @@ async def test_google_calendar_status_includes_tasks_access_diagnostics(
 
 
 @pytest.mark.asyncio
+async def test_google_calendar_disconnect_rechecks_recovery_created_in_another_org(
+    authed_client: AsyncClient,
+    db,
+    test_auth,
+    monkeypatch,
+):
+    from app.db.enums import JobStatus, JobType
+    from app.db.models import Job, Organization, UserIntegration
+    from app.services import (
+        calendar_service,
+        google_tasks_cleanup_service,
+        oauth_service,
+        permission_service,
+    )
+
+    other_org = Organization(
+        name="Other Google Donor Work Org",
+        slug=f"other-google-donor-work-{uuid.uuid4().hex}",
+    )
+    integration = UserIntegration(
+        user_id=test_auth.user.id,
+        integration_type="google_calendar",
+        access_token_encrypted="token-1",
+        account_email="owner@example.com",
+    )
+    db.add(other_org)
+    db.flush()
+    db.add(integration)
+    db.commit()
+    assert not google_tasks_cleanup_service.has_unresolved_google_task_work_for_user_in_organizations(
+        db,
+        org_ids=None,
+        user_id=test_auth.user.id,
+    )
+    fence_calls = 0
+    fence_observations: list[bool] = []
+    original_fence = permission_service.assert_google_donor_tasks_disconnectable
+
+    def disconnect_fence(db, user_id):
+        nonlocal fence_calls
+        fence_calls += 1
+        fence_observations.append(
+            google_tasks_cleanup_service.has_unresolved_google_task_work_for_user_in_organizations(
+                db,
+                org_ids=None,
+                user_id=user_id,
+            )
+        )
+        return original_fence(db, user_id)
+
+    monkeypatch.setattr(
+        permission_service,
+        "assert_google_donor_tasks_disconnectable",
+        disconnect_fence,
+    )
+
+    async def stop_watch(*, db, user_id, calendar_id):
+        assert user_id == test_auth.user.id
+        assert calendar_id == "primary"
+        db.add(
+            Job(
+                organization_id=other_org.id,
+                job_type=JobType.GOOGLE_TASK_CREATION_RECONCILE.value,
+                status=JobStatus.FAILED.value,
+                payload={
+                    "user_id": str(test_auth.user.id),
+                    "source_task_id": str(uuid.uuid4()),
+                    "google_task_list_id": "concrete-list",
+                },
+            )
+        )
+        db.commit()
+        return True
+
+    monkeypatch.setattr(calendar_service, "stop_google_calendar_watch", stop_watch)
+    delete_calls = 0
+
+    def delete_integration(*_args, **_kwargs):
+        nonlocal delete_calls
+        delete_calls += 1
+        return True
+
+    monkeypatch.setattr(oauth_service, "delete_integration", delete_integration)
+
+    response = await authed_client.delete("/integrations/google_calendar")
+
+    assert fence_calls == 2
+    assert fence_observations == [False, True]
+    assert response.status_code == 409
+    assert "Google cleanup is pending or failed" in response.json()["detail"]
+    assert delete_calls == 0
+
+
+@pytest.mark.asyncio
 async def test_google_calendar_manual_sync_runs_reconciliation_and_updates_last_sync(
     authed_client: AsyncClient,
     db,

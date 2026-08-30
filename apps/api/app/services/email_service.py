@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.db.enums import EmailStatus
 from app.db.models import (
     Attachment,
+    Donor,
     EmailDelivery,
     EmailLog,
     EmailLogAttachment,
@@ -1118,6 +1119,69 @@ def build_intended_parent_template_variables(db: Session, intended_parent) -> di
         "intended_parent_number": intended_parent.intended_parent_number or "",
         "status_label": humanize_identifier(intended_parent.status),
         "state": intended_parent.state or "",
+        "owner_name": owner_name,
+        "org_name": org.name if org else "",
+        "org_logo_url": org_logo_url or "",
+        "unsubscribe_url": unsubscribe_url,
+    }
+
+
+def build_donor_template_variables(db: Session, donor: Donor) -> dict[str, str]:
+    """Build flat template variables for an egg or sperm donor context."""
+    from app.db.enums import OwnerType
+    from app.db.models import Membership, Organization, Queue, User
+    from app.services import media_service
+
+    org = db.query(Organization).filter(Organization.id == donor.organization_id).first()
+    org_logo_url = media_service.get_signed_media_url(org.signature_logo_url) if org else None
+
+    owner_name = ""
+    if donor.owner_type == OwnerType.USER.value and donor.owner_id:
+        owner = (
+            db.query(User)
+            .join(Membership, Membership.user_id == User.id)
+            .filter(
+                User.id == donor.owner_id,
+                Membership.organization_id == donor.organization_id,
+                Membership.is_active.is_(True),
+            )
+            .first()
+        )
+        owner_name = owner.display_name if owner else ""
+    elif donor.owner_type == OwnerType.QUEUE.value and donor.owner_id:
+        queue = (
+            db.query(Queue)
+            .filter(
+                Queue.id == donor.owner_id,
+                Queue.organization_id == donor.organization_id,
+            )
+            .first()
+        )
+        owner_name = queue.name if queue else ""
+
+    full_name = donor.full_name or ""
+    email = donor.email or ""
+    unsubscribe_url = ""
+    if email:
+        from app.services import org_service, unsubscribe_service
+
+        unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
+            db,
+            org_id=donor.organization_id,
+            email=email,
+            base_url=org_service.get_org_portal_base_url(org),
+        )
+
+    return {
+        "first_name": full_name.split()[0] if full_name else "",
+        "full_name": full_name,
+        "email": email,
+        "phone": donor.phone or "",
+        "donor_number": donor.donor_number or "",
+        "donor_type": humanize_identifier(donor.pipeline_entity_type),
+        "education": donor.education or "",
+        "status_label": donor.status_label or "",
+        "state": donor.state or "",
         "owner_name": owner_name,
         "org_name": org.name if org else "",
         "org_logo_url": org_logo_url or "",

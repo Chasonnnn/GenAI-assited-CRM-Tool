@@ -7,7 +7,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from app.core.stage_definitions import (
+    DONOR_PIPELINE_ENTITY_TYPES,
+    EGG_DONOR_PIPELINE_ENTITY,
     INTENDED_PARENT_PIPELINE_ENTITY,
+    SPERM_DONOR_PIPELINE_ENTITY,
     canonicalize_stage_key,
     normalize_pipeline_entity_type,
 )
@@ -268,6 +271,63 @@ def default_stage_semantics(
             analytics_bucket=normalized_key if stage_type != "paused" else None,
         ).model_dump(mode="json")
 
+    if normalized_entity_type in DONOR_PIPELINE_ENTITY_TYPES:
+        matching_entry_key = (
+            "ready_to_match"
+            if normalized_entity_type == EGG_DONOR_PIPELINE_ENTITY
+            else "available"
+        )
+        capabilities = StageCapabilities(
+            counts_as_contacted=normalized_key
+            not in {"new", "on_hold", "disqualified", "closed"},
+            eligible_for_matching=normalized_key == matching_entry_key,
+            locks_match_state=normalized_key
+            in {
+                "matched",
+                "cycle_in_progress",
+                "retrieval_complete",
+                "collection_in_progress",
+                "donation_complete",
+                "closed",
+            },
+        )
+        if normalized_key in {"new", "contacted"}:
+            integration_bucket: IntegrationBucket = "intake"
+        elif normalized_key in {
+            "pre_screening",
+            "application_submitted",
+            "medical_records_review",
+            "psychological_screening",
+            "semen_analysis",
+            "medical_genetic_screening",
+        }:
+            integration_bucket = "qualified"
+        elif normalized_key in {
+            "ready_to_match",
+            "available",
+            "matched",
+            "cycle_in_progress",
+            "retrieval_complete",
+            "collection_in_progress",
+            "donation_complete",
+            "closed",
+        }:
+            integration_bucket = "converted"
+        elif normalized_key == "disqualified":
+            integration_bucket = "not_qualified"
+        else:
+            integration_bucket = "none"
+        return StageSemantics(
+            capabilities=capabilities,
+            # Donor status changes do not maintain a resumable prior-stage pointer.
+            # Keep the pause semantic honest while still requiring an audit reason.
+            pause_behavior="none",
+            terminal_outcome="disqualified" if normalized_key == "disqualified" else "none",
+            integration_bucket=integration_bucket,
+            analytics_bucket=normalized_key,
+            requires_reason_on_enter=normalized_key == "on_hold",
+        ).model_dump(mode="json")
+
     capabilities = StageCapabilities(
         counts_as_contacted=normalized_key
         in {
@@ -362,6 +422,68 @@ def default_pipeline_feature_config(entity_type: str | None = None) -> dict[str,
     normalized_entity_type = normalize_pipeline_entity_type(entity_type)
     if normalized_entity_type == INTENDED_PARENT_PIPELINE_ENTITY:
         return PipelineFeatureConfig().model_dump(mode="json")
+
+    if normalized_entity_type in DONOR_PIPELINE_ENTITY_TYPES:
+        if normalized_entity_type == EGG_DONOR_PIPELINE_ENTITY:
+            donor_stage_keys = [
+                "new",
+                "contacted",
+                "pre_screening",
+                "application_submitted",
+                "medical_records_review",
+                "psychological_screening",
+                "ready_to_match",
+                "matched",
+                "cycle_in_progress",
+                "retrieval_complete",
+                "on_hold",
+                "disqualified",
+                "closed",
+            ]
+            qualification_stage_key = "ready_to_match"
+        elif normalized_entity_type == SPERM_DONOR_PIPELINE_ENTITY:
+            donor_stage_keys = [
+                "new",
+                "contacted",
+                "pre_screening",
+                "application_submitted",
+                "semen_analysis",
+                "medical_genetic_screening",
+                "available",
+                "matched",
+                "collection_in_progress",
+                "donation_complete",
+                "on_hold",
+                "disqualified",
+                "closed",
+            ]
+            qualification_stage_key = "available"
+        else:  # pragma: no cover - guarded by DONOR_PIPELINE_ENTITY_TYPES
+            raise ValueError(f"Unsupported donor pipeline entity type: {normalized_entity_type}")
+        return PipelineFeatureConfig(
+            analytics=AnalyticsFeatureConfig(
+                funnel_stage_keys=list(donor_stage_keys),
+                performance_stage_keys=list(donor_stage_keys),
+                qualification_stage_key=qualification_stage_key,
+                conversion_stage_key="matched",
+            ),
+            role_visibility={
+                "admin": RoleStageRule(
+                    stage_types=["intake", "post_approval", "paused", "terminal"]
+                ),
+                "developer": RoleStageRule(
+                    stage_types=["intake", "post_approval", "paused", "terminal"]
+                ),
+            },
+            role_mutation={
+                "admin": RoleStageRule(
+                    stage_types=["intake", "post_approval", "paused", "terminal"]
+                ),
+                "developer": RoleStageRule(
+                    stage_types=["intake", "post_approval", "paused", "terminal"]
+                ),
+            },
+        ).model_dump(mode="json")
 
     return PipelineFeatureConfig(
         journey=JourneyFeatureConfig(

@@ -123,6 +123,11 @@ EXACT_COLUMN_MAPPING: dict[str, str] = {
     "state": "state",
     "st": "state",
     "province": "state",
+    # Education (available for donor lead mappings)
+    "education": "education",
+    "education_level": "education",
+    "highest_education": "education",
+    "highest_level_of_education": "education",
     # Date of birth variations
     "date_of_birth": "date_of_birth",
     "dob": "date_of_birth",
@@ -246,6 +251,7 @@ KEYWORD_PATTERNS: dict[str, list[str]] = {
     "phone": ["phone", "mobile", "cell", "contact number"],
     "full_name": ["full.*name", "your name"],
     "state": ["state", "where.*live", "location"],
+    "education": ["education", "highest.*degree", "highest.*school"],
     "created_at": [
         "submitted",
         "submission",
@@ -348,6 +354,7 @@ CANONICAL_NAMES: dict[str, list[str]] = {
     "phone": ["phone number", "telephone", "mobile number", "cell phone", "fone"],
     "date_of_birth": ["date of birth", "birth date", "birthday", "dob date"],
     "state": ["state province", "province"],
+    "education": ["education level", "highest education", "highest degree"],
     "race": ["race ethnicity", "ethnicity"],
     "height_ft": ["height feet", "height in feet"],
     "weight_lb": ["weight pounds", "weight lbs"],

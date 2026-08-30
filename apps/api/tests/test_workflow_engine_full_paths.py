@@ -780,7 +780,7 @@ def test_default_adapter_action_helpers(monkeypatch):
     notifications: list[dict] = []
     monkeypatch.setattr(
         "app.services.notification_facade.create_notification",
-        lambda **kwargs: notifications.append(kwargs),
+        lambda **kwargs: notifications.append(kwargs) or SimpleNamespace(id=uuid4()),
     )
     notify_result = adapter._action_send_notification(
         db=SimpleNamespace(query=lambda *_args, **_kwargs: None),
@@ -886,7 +886,13 @@ def test_workflow_service_stats_options_and_preferences(db, test_org, test_user)
     assert isinstance(pref, UserWorkflowPreference)
     assert workflow_service.is_user_opted_out(db, test_user.id, wf_org.id) is True
 
-    items, total = workflow_service.list_executions(db, wf_org.id, limit=10, offset=0)
+    items, total = workflow_service.list_executions(
+        db,
+        wf_org.id,
+        test_org.id,
+        limit=10,
+        offset=0,
+    )
     assert total >= 1
     assert items
 

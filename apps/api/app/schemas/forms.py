@@ -24,6 +24,7 @@ FieldType = Literal[
     "height",
 ]
 FormPurpose = Literal["surrogate_application", "lead_capture", "event_intake", "other"]
+FormLeadKind = Literal["surrogate", "egg_donor", "sperm_donor"]
 FieldSensitivity = Literal[
     "identity",
     "contact",
@@ -128,6 +129,7 @@ class FormCreate(BaseModel):
     name: str = Field(min_length=1, max_length=150)
     description: str | None = None
     purpose: FormPurpose = "surrogate_application"
+    lead_kind: FormLeadKind = "surrogate"
     form_schema: FormSchema | None = None
     max_file_size_bytes: int | None = Field(None, ge=1)
     max_file_count: int | None = Field(None, ge=0, le=50)
@@ -139,6 +141,7 @@ class FormUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=150)
     description: str | None = None
     purpose: FormPurpose | None = None
+    lead_kind: FormLeadKind | None = None
     form_schema: FormSchema | None = None
     max_file_size_bytes: int | None = Field(None, ge=1)
     max_file_count: int | None = Field(None, ge=0, le=50)
@@ -151,6 +154,7 @@ class FormSummary(BaseModel):
     name: str
     status: str
     purpose: FormPurpose
+    lead_kind: FormLeadKind
     is_default_surrogate_application: bool = False
     created_at: datetime
     updated_at: datetime
@@ -204,6 +208,9 @@ class FormSubmissionRead(BaseModel):
     id: UUID
     form_id: UUID
     surrogate_id: UUID | None
+    donor_id: UUID | None
+    donor_number: str | None = None
+    lead_kind: FormLeadKind
     status: str
     submitted_at: datetime
     reviewed_at: datetime | None
@@ -354,6 +361,7 @@ class MessagingConsentOptionsRead(BaseModel):
 class FormIntakePublicRead(BaseModel):
     form_id: UUID
     intake_link_id: UUID
+    published_version_id: UUID
     name: str
     description: str | None
     form_schema: FormSchema
@@ -474,6 +482,7 @@ class FormSubmissionSharedResponse(BaseModel):
     status: str
     outcome: SharedSubmissionOutcome
     surrogate_id: UUID | None = None
+    donor_id: UUID | None = None
     intake_lead_id: UUID | None = None
 
 
@@ -514,7 +523,9 @@ class IntakeLeadRead(BaseModel):
     phone: str | None
     date_of_birth: str | None
     status: str
+    lead_type: FormLeadKind
     promoted_surrogate_id: UUID | None
+    promoted_donor_id: UUID | None
     created_at: datetime
     updated_at: datetime
     promoted_at: datetime | None
@@ -528,7 +539,8 @@ class IntakeLeadPromoteRequest(BaseModel):
 
 class IntakeLeadPromoteResponse(BaseModel):
     intake_lead_id: UUID
-    surrogate_id: UUID
+    surrogate_id: UUID | None = None
+    donor_id: UUID | None = None
     linked_submission_count: int
 
 

@@ -38,6 +38,22 @@ async def test_platform_create_org_allows_two_char_slug(authed_client, db, test_
     data = response.json()
     assert data["slug"] == "oc"
     assert "portal_base_url" in data
+    from app.db.models import Pipeline
+
+    donor_pipelines = (
+        db.query(Pipeline)
+        .filter(
+            Pipeline.organization_id == uuid.UUID(data["id"]),
+            Pipeline.entity_type.in_({"egg_donor", "sperm_donor"}),
+            Pipeline.is_default.is_(True),
+        )
+        .all()
+    )
+    assert {pipeline.entity_type for pipeline in donor_pipelines} == {
+        "egg_donor",
+        "sperm_donor",
+    }
+    assert all(len(pipeline.stages) == 13 for pipeline in donor_pipelines)
 
 
 @pytest.mark.asyncio

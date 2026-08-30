@@ -18,6 +18,7 @@ class TaskCreate(BaseModel):
     match_id: UUID | None = None
     surrogate_id: UUID | None = None
     intended_parent_id: UUID | None = None
+    donor_id: UUID | None = None
     # New owner model
     owner_type: str | None = Field(None, description="'user' or 'queue'")
     owner_id: UUID | None = Field(None, description="User or Queue ID")
@@ -32,7 +33,9 @@ class TaskUpdate(BaseModel):
     title: str | None = Field(None, min_length=1, max_length=255)
     description: str | None = None
     task_type: TaskType | None = None
+    surrogate_id: UUID | None = None
     intended_parent_id: UUID | None = None
+    donor_id: UUID | None = None
     # New owner model
     owner_type: str | None = Field(None, description="'user' or 'queue'")
     owner_id: UUID | None = Field(None, description="User or Queue ID")
@@ -47,7 +50,11 @@ class TaskRead(BaseModel):
     id: UUID
     surrogate_id: UUID | None
     intended_parent_id: UUID | None
+    donor_id: UUID | None
     surrogate_number: str | None = None
+    donor_number: str | None = None
+    donor_type: Literal["egg", "sperm"] | None = None
+    donor_name: str | None = None
     # Owner (new model)
     owner_type: str
     owner_id: UUID
@@ -94,7 +101,11 @@ class TaskListItem(BaseModel):
     id: UUID
     surrogate_id: UUID | None
     intended_parent_id: UUID | None
+    donor_id: UUID | None
     surrogate_number: str | None = None
+    donor_number: str | None = None
+    donor_type: Literal["egg", "sperm"] | None = None
+    donor_name: str | None = None
     title: str
     task_type: TaskType
     owner_type: str

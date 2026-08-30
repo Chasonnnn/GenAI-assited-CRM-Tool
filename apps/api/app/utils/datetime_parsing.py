@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DEFAULT_TIMEZONE = "America/Los_Angeles"
@@ -89,6 +89,53 @@ def parse_datetime_with_timezone(raw_value: str, org_timezone: str | None) -> Pa
 
     warnings.append(f"Unrecognized datetime format: {value}")
     return ParsedDatetime(value=None, warnings=warnings, used_fallback_timezone=used_fallback)
+
+
+def parse_created_from_filter(value: str) -> datetime:
+    """Parse an inclusive ISO creation-date lower bound in UTC."""
+    normalized = value.strip()
+    if "T" not in normalized:
+        return datetime.combine(date.fromisoformat(normalized), time.min, tzinfo=UTC)
+    parsed = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def parse_created_to_filter(value: str) -> tuple[datetime, bool]:
+    """Parse an ISO upper bound, making a date-only bound inclusive."""
+    normalized = value.strip()
+    if "T" not in normalized:
+        parsed_date = date.fromisoformat(normalized)
+        return datetime.combine(parsed_date + timedelta(days=1), time.min, tzinfo=UTC), True
+    parsed = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+    return (parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC), False)
+
+
+def normalize_effective_at(
+    effective_at: datetime | None,
+    org_timezone: str,
+    *,
+    now: datetime | None = None,
+) -> datetime:
+    """Normalize a stage-change effective time to timezone-aware UTC."""
+    current_time = now or datetime.now(UTC)
+    if effective_at is None:
+        return current_time
+
+    org_tz = ZoneInfo(org_timezone)
+    local_effective_at = (
+        effective_at.replace(tzinfo=org_tz)
+        if effective_at.tzinfo is None
+        else effective_at.astimezone(org_tz)
+    )
+    if local_effective_at.time() == time.min:
+        today = current_time.astimezone(org_tz).date()
+        if local_effective_at.date() == today:
+            return current_time
+        if local_effective_at.date() < today:
+            return datetime.combine(local_effective_at.date(), time(12), tzinfo=org_tz).astimezone(
+                UTC
+            )
+    return local_effective_at.astimezone(UTC)
 
 
 def _resolve_timezone(org_timezone: str | None, warnings: list[str]) -> tuple[ZoneInfo, bool]:

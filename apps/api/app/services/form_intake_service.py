@@ -7,6 +7,7 @@ import logging
 import re
 import uuid
 from datetime import UTC, date, datetime, timedelta
+from io import BytesIO
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
@@ -17,6 +18,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.encryption import hash_date_of_birth, hash_email, hash_phone
 from app.db.enums import (
+    AuditEventType,
+    FormLeadKind,
     FormLinkMode,
     FormPurpose,
     FormStatus,
@@ -27,13 +30,16 @@ from app.db.enums import (
 )
 from app.db.enums.workflows import WorkflowTriggerType
 from app.db.models import (
+    Attachment,
     AutomationWorkflow,
     ConsentRecord,
+    Donor,
     EmbedSession,
     Form,
     FormIntakeDraft,
     FormIntakeLink,
     FormSubmission,
+    FormSubmissionFile,
     FormSubmissionMatchCandidate,
     IntakeLead,
     LeadAttribution,
@@ -41,6 +47,7 @@ from app.db.models import (
     Surrogate,
     TrackingEventLog,
 )
+from app.schemas.donor import DonorCreate
 from app.services import (
     embed_policy_service,
     form_service,
@@ -48,6 +55,11 @@ from app.services import (
     meta_capi,
     meta_crm_dataset_service,
     surrogate_input_normalization_service,
+)
+from app.services.attachment_service import (
+    load_file_bytes,
+    register_storage_cleanup_on_rollback,
+    store_file,
 )
 from app.utils.normalization import (
     normalize_email,
@@ -57,6 +69,9 @@ from app.utils.normalization import (
 )
 
 IDENTITY_SURROGATE_FIELDS = ("full_name", "date_of_birth", "phone", "email")
+IDENTITY_DONOR_FIELDS = ("full_name", "email", "phone", "state", "education")
+DONOR_LEAD_KINDS = {FormLeadKind.EGG_DONOR.value, FormLeadKind.SPERM_DONOR.value}
+DONOR_PROFILE_PHOTO_CONTENT_TYPES = {"image/png", "image/jpeg"}
 INTAKE_SLUG_MAX_LENGTH = 100
 EMBED_ALLOWED_ATTRIBUTION_KEYS = {
     "utm_source",
@@ -229,7 +244,12 @@ def create_intake_link(
     privacy_policy_url: str | None = None,
     thank_you_config: dict[str, Any] | None = None,
     embed_theme_json: dict[str, Any] | None = None,
+    commit: bool = True,
 ) -> FormIntakeLink:
+    locked_form = form_service.get_form_for_update(db, org_id, form.id)
+    if not locked_form:
+        raise ValueError("Form not found")
+    form = locked_form
     if form.status != FormStatus.PUBLISHED.value:
         raise ValueError("Form must be published before creating shared links")
     normalized_campaign_name = (campaign_name or "").strip() or None
@@ -264,9 +284,70 @@ def create_intake_link(
     db.flush()
     version = create_published_intake_version(db=db, form=form, link=record, user_id=user_id)
     record.published_version_id = version.id
-    db.commit()
-    db.refresh(record)
+    if commit:
+        db.commit()
+        db.refresh(record)
+    else:
+        db.flush()
     return record
+
+
+def advance_active_intake_link_versions(
+    db: Session,
+    *,
+    org_id: uuid.UUID,
+    form: Form,
+    user_id: uuid.UUID | None,
+    commit: bool = True,
+) -> list[FormIntakeLink]:
+    """Atomically point every active link at a new immutable form publication."""
+    locked_form = form_service.get_form_for_update(db, org_id, form.id)
+    if not locked_form:
+        raise ValueError("Form not found")
+    form = locked_form
+    links = (
+        db.query(FormIntakeLink)
+        .filter(
+            FormIntakeLink.organization_id == org_id,
+            FormIntakeLink.form_id == form.id,
+            FormIntakeLink.is_active.is_(True),
+        )
+        .order_by(FormIntakeLink.id)
+        .with_for_update()
+        .all()
+    )
+    if not links:
+        links = [
+            create_intake_link(
+                db,
+                org_id=org_id,
+                form=form,
+                user_id=user_id,
+                campaign_name=(form.name or "").strip() or "Shared Intake",
+                event_name=None,
+                expires_at=None,
+                max_submissions=None,
+                utm_defaults=None,
+                tracking_mode=_default_tracking_mode_for_form(db, form),
+                commit=False,
+            )
+        ]
+    else:
+        for link in links:
+            version = create_published_intake_version(
+                db=db,
+                form=form,
+                link=link,
+                user_id=user_id,
+            )
+            link.published_version_id = version.id
+    if commit:
+        db.commit()
+        for link in links:
+            db.refresh(link)
+    else:
+        db.flush()
+    return links
 
 
 def ensure_default_intake_link(
@@ -368,6 +449,7 @@ def create_published_intake_version(
         thank_you_config_snapshot_json=link.thank_you_config or {},
         tracking_mode_snapshot=link.tracking_mode,
         tracking_policy_hash=embed_policy_service.stable_json_hash(tracking_policy_snapshot),
+        lead_kind_snapshot=getattr(form, "lead_kind", FormLeadKind.SURROGATE.value),
         embed_theme_snapshot_json=link.embed_theme_json or {},
         published_by_user_id=user_id,
     )
@@ -560,7 +642,14 @@ def _has_enabled_form_scoped_submission_workflow(
     )
 
 
-def _default_intake_routing_actions() -> list[dict[str, Any]]:
+def _default_intake_routing_actions(form: Form) -> list[dict[str, Any]]:
+    if form.lead_kind in DONOR_LEAD_KINDS:
+        return [
+            {
+                "action_type": "create_intake_lead",
+                "requires_approval": True,
+            }
+        ]
     return [
         {
             "action_type": "auto_match_submission",
@@ -579,6 +668,7 @@ def ensure_default_intake_routing_workflow(
     org_id: uuid.UUID,
     form: Form,
     user_id: uuid.UUID | None,
+    commit: bool = True,
 ) -> AutomationWorkflow | None:
     """Ensure an enabled, form-scoped shared-intake routing workflow exists."""
     if form.status != FormStatus.PUBLISHED.value:
@@ -601,10 +691,11 @@ def ensure_default_intake_routing_workflow(
     )
 
     trigger_config = {"form_id": str(form.id)}
-    actions = _default_intake_routing_actions()
+    actions = _default_intake_routing_actions(form)
     now = datetime.now(UTC)
 
     if workflow:
+        workflow.subject_type = "form_submission"
         workflow.trigger_config = trigger_config
         workflow.actions = actions
         workflow.conditions = []
@@ -614,20 +705,28 @@ def ensure_default_intake_routing_workflow(
         workflow.is_system_workflow = True
         workflow.updated_by_user_id = user_id
         workflow.updated_at = now
-        db.commit()
-        db.refresh(workflow)
+        if commit:
+            db.commit()
+            db.refresh(workflow)
+        else:
+            db.flush()
         return workflow
 
     workflow = AutomationWorkflow(
         organization_id=org_id,
         name=f"Intake Routing ({str(form.id)[:8]})",
         description=(
-            "Automatically routes shared form submissions by running auto-match first, "
-            "then creating an intake lead if no deterministic match exists."
+            "Creates a donor intake lead for review."
+            if form.lead_kind in DONOR_LEAD_KINDS
+            else (
+                "Automatically routes shared form submissions by running auto-match first, "
+                "then creating an intake lead if no deterministic match exists."
+            )
         ),
         icon="workflow",
         scope="org",
         owner_user_id=None,
+        subject_type="form_submission",
         trigger_type=WorkflowTriggerType.FORM_SUBMITTED.value,
         trigger_config=trigger_config,
         conditions=[],
@@ -641,8 +740,11 @@ def ensure_default_intake_routing_workflow(
         updated_by_user_id=user_id,
     )
     db.add(workflow)
-    db.commit()
-    db.refresh(workflow)
+    if commit:
+        db.commit()
+        db.refresh(workflow)
+    else:
+        db.flush()
     return workflow
 
 
@@ -760,6 +862,24 @@ def update_intake_link(
     user_id: uuid.UUID | None = None,
 ) -> FormIntakeLink:
     fields_set = fields_set or set()
+    publication_fields = {
+        "embed_enabled",
+        "allowed_embed_origins",
+        "tracking_mode",
+        "consent_text",
+        "privacy_policy_url",
+        "thank_you_config",
+        "embed_theme_json",
+    }
+    was_active = link.is_active
+    requires_form_lock = "is_active" in fields_set or bool(fields_set & publication_fields)
+    form = (
+        form_service.get_form_for_update(db, link.organization_id, link.form_id)
+        if requires_form_lock
+        else None
+    )
+    if requires_form_lock and not form:
+        raise ValueError("Form not found")
     if "campaign_name" in fields_set:
         link.campaign_name = (campaign_name or "").strip() or None
     if "event_name" in fields_set:
@@ -779,9 +899,8 @@ def update_intake_link(
             allowed_embed_origins
         )
     if "tracking_mode" in fields_set:
-        form = form_service.get_form(db, link.organization_id, link.form_id)
         link.tracking_mode = tracking_mode or (
-            _default_tracking_mode_for_form(form) if form else DEFAULT_EMBED_TRACKING_MODE
+            _default_tracking_mode_for_form(db, form) if form else DEFAULT_EMBED_TRACKING_MODE
         )
     if "consent_text" in fields_set:
         link.consent_text = (consent_text or "").strip() or None
@@ -791,16 +910,10 @@ def update_intake_link(
         link.thank_you_config = thank_you_config or {}
     if "embed_theme_json" in fields_set:
         link.embed_theme_json = embed_theme_json or {}
-    if fields_set & {
-        "embed_enabled",
-        "allowed_embed_origins",
-        "tracking_mode",
-        "consent_text",
-        "privacy_policy_url",
-        "thank_you_config",
-        "embed_theme_json",
-    }:
-        form = form_service.get_form(db, link.organization_id, link.form_id)
+    should_snapshot = bool(fields_set & publication_fields) or (
+        "is_active" in fields_set and bool(is_active) and not was_active
+    )
+    if should_snapshot:
         if form:
             _validate_link_embed_policy(db=db, form=form, link=link)
             version = create_published_intake_version(
@@ -854,8 +967,33 @@ def _build_form_mapping_lookup(db: Session, form_id: uuid.UUID) -> dict[str, str
     return {
         m.surrogate_field: m.field_key
         for m in form_submission_service.list_field_mappings(db, form_id)
-        if m.surrogate_field in IDENTITY_SURROGATE_FIELDS
     }
+
+
+def _mapping_lookup_from_snapshot(mappings: list[dict[str, Any]]) -> dict[str, str]:
+    return {
+        str(mapping["surrogate_field"]): str(mapping["field_key"])
+        for mapping in mappings
+        if mapping.get("surrogate_field") and mapping.get("field_key")
+    }
+
+
+def _published_version_for_link(
+    db: Session,
+    *,
+    link: FormIntakeLink,
+) -> PublishedIntakeVersion | None:
+    if not link.published_version_id:
+        return None
+    return (
+        db.query(PublishedIntakeVersion)
+        .filter(
+            PublishedIntakeVersion.organization_id == link.organization_id,
+            PublishedIntakeVersion.intake_link_id == link.id,
+            PublishedIntakeVersion.id == link.published_version_id,
+        )
+        .first()
+    )
 
 
 def _extract_identity(
@@ -938,6 +1076,19 @@ def _extract_identity_partial(
         "email": email,
         "email_hash": email_hash,
     }
+
+
+def _extract_donor_identity(
+    *,
+    answers: dict[str, Any],
+    mapping_lookup: dict[str, str],
+) -> dict[str, Any]:
+    identity = _extract_identity_partial(answers=answers, mapping_lookup=mapping_lookup)
+    if not identity.get("full_name"):
+        raise ValueError("Missing required field: full_name")
+    if not identity.get("email"):
+        raise ValueError("Missing required field: email")
+    return identity
 
 
 def _match_rule_phone(
@@ -1268,8 +1419,18 @@ def _create_shared_submission(
     consent_text_hash: str | None = None,
     tracking_policy_hash: str | None = None,
     identity: dict[str, Any] | None = None,
+    lead_kind: str | None = None,
+    schema_snapshot: dict[str, Any] | None = None,
+    mapping_snapshot: list[dict[str, Any]] | None = None,
 ) -> FormSubmission:
-    schema = form_submission_service.parse_schema(form.published_schema_json or {})
+    selected_schema_snapshot = schema_snapshot or form.published_schema_json or {}
+    selected_mapping_snapshot = (
+        mapping_snapshot
+        if mapping_snapshot is not None
+        else form_submission_service._snapshot_mappings(db, form.id)  # type: ignore[attr-defined]
+    )
+    selected_lead_kind = lead_kind or form.lead_kind
+    schema = form_submission_service.parse_schema(selected_schema_snapshot)
     form_submission_service._validate_answers(schema, answers)  # type: ignore[attr-defined]
     file_fields = form_submission_service._get_file_fields(schema, answers)  # type: ignore[attr-defined]
     resolved_file_field_keys = form_submission_service._resolve_file_field_keys(  # type: ignore[attr-defined]
@@ -1284,16 +1445,34 @@ def _create_shared_submission(
         file_fields, resolved_file_field_keys
     )
     validated_content_types = form_submission_service._validate_files(form, files or [])  # type: ignore[attr-defined]
-    mapping_snapshot = form_submission_service._snapshot_mappings(db, form.id)  # type: ignore[attr-defined]
+    if selected_lead_kind in DONOR_LEAD_KINDS:
+        profile_photo_key = _mapping_lookup_from_snapshot(selected_mapping_snapshot).get(
+            "profile_photo"
+        )
+        profile_file_indexes = [
+            index
+            for index, field_key in enumerate(resolved_file_field_keys)
+            if field_key == profile_photo_key
+        ]
+        if len(profile_file_indexes) != 1:
+            raise ValueError("Donor intake requires exactly one profile photo")
+        profile_content_type = validated_content_types[profile_file_indexes[0]]
+        if profile_content_type not in DONOR_PROFILE_PHOTO_CONTENT_TYPES:
+            raise ValueError("Donor profile photo must be a PNG or JPEG image")
     if identity is None:
-        mapping_lookup = _build_form_mapping_lookup(db, form.id)
-        identity = _extract_identity_partial(answers=answers, mapping_lookup=mapping_lookup)
+        mapping_lookup = _mapping_lookup_from_snapshot(selected_mapping_snapshot)
+        identity = (
+            _extract_donor_identity(answers=answers, mapping_lookup=mapping_lookup)
+            if selected_lead_kind in DONOR_LEAD_KINDS
+            else _extract_identity_partial(answers=answers, mapping_lookup=mapping_lookup)
+        )
     now = datetime.now(UTC)
 
     submission = FormSubmission(
         organization_id=form.organization_id,
         form_id=form.id,
         surrogate_id=surrogate_id,
+        donor_id=None,
         intake_link_id=link.id,
         intake_lead_id=intake_lead_id,
         published_version_id=published_version_id,
@@ -1307,13 +1486,14 @@ def _create_shared_submission(
         email_hash=(identity or {}).get("email_hash"),
         phone_hash=(identity or {}).get("phone_hash"),
         source_mode=FormLinkMode.SHARED.value,
+        lead_kind=selected_lead_kind,
         status=FormSubmissionStatus.PENDING_REVIEW.value,
         match_status=match_status,
         match_reason=match_reason,
         matched_at=matched_at,
         answers_json=answers,
-        schema_snapshot=form.published_schema_json,
-        mapping_snapshot=mapping_snapshot,
+        schema_snapshot=selected_schema_snapshot,
+        mapping_snapshot=selected_mapping_snapshot,
         submitted_at=now,
     )
     db.add(submission)
@@ -1342,6 +1522,7 @@ def create_shared_submission(
     answers: dict[str, Any],
     files: list[UploadFile] | None = None,
     file_field_keys: list[str] | None = None,
+    published_version_id: uuid.UUID | None = None,
     source_metadata: dict[str, Any] | None = None,
     challenge_token: str | None = None,
     idempotency_key: str | None = None,
@@ -1374,11 +1555,35 @@ def create_shared_submission(
         sms_promotional=sms_promotional,
     )
 
-    schema = form_submission_service.parse_schema(form.published_schema_json)
+    published_version = _published_version_for_link(db, link=link)
+    selected_schema_snapshot = (
+        published_version.form_schema_snapshot_json
+        if published_version
+        else form.published_schema_json
+    )
+    selected_lead_kind = (
+        published_version.lead_kind_snapshot if published_version else form.lead_kind
+    )
+    if selected_lead_kind in DONOR_LEAD_KINDS and published_version_id is None:
+        raise LookupError("Published donor form version is required")
+    if published_version_id is not None and (
+        published_version is None or published_version.id != published_version_id
+    ):
+        raise LookupError("Published version is no longer current")
+    selected_mapping_snapshot = (
+        published_version.mapping_snapshot_json
+        if published_version and selected_lead_kind in DONOR_LEAD_KINDS
+        else form_submission_service._snapshot_mappings(db, form.id)  # type: ignore[attr-defined]
+    )
+    schema = form_submission_service.parse_schema(selected_schema_snapshot)
     form_submission_service._validate_answers(schema, answers)  # type: ignore[attr-defined]
 
-    mapping_lookup = _build_form_mapping_lookup(db, form.id)
-    identity = _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
+    mapping_lookup = _mapping_lookup_from_snapshot(selected_mapping_snapshot)
+    identity = (
+        _extract_donor_identity(answers=answers, mapping_lookup=mapping_lookup)
+        if selected_lead_kind in DONOR_LEAD_KINDS
+        else _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
+    )
     _raise_if_duplicate_applicant_submission(db, link=link, identity=identity)
     submission = _create_shared_submission(
         db,
@@ -1394,6 +1599,15 @@ def create_shared_submission(
         match_reason="workflow_pending",
         matched_at=None,
         idempotency_key=normalized_idempotency_key,
+        published_version_id=published_version.id if published_version else None,
+        form_schema_hash=published_version.form_version_hash if published_version else None,
+        consent_text_hash=published_version.consent_text_hash if published_version else None,
+        tracking_policy_hash=(
+            published_version.tracking_policy_hash if published_version else None
+        ),
+        lead_kind=selected_lead_kind,
+        schema_snapshot=selected_schema_snapshot,
+        mapping_snapshot=selected_mapping_snapshot,
     )
     metadata = source_metadata or {}
     client_ip = str(metadata.get("client_ip") or "").strip() or None
@@ -1909,6 +2123,16 @@ def auto_match_submission(
         outcome = submission.match_status or FormSubmissionMatchStatus.LINKED.value
         return submission, _normalize_shared_outcome(outcome)
 
+    if submission.lead_kind in DONOR_LEAD_KINDS:
+        if submission.donor_id:
+            return submission, FormSubmissionMatchStatus.LINKED.value
+        submission.match_status = FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
+        submission.match_reason = "donor_lead_requires_promotion"
+        submission.matched_at = None
+        db.commit()
+        db.refresh(submission)
+        return submission, FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
+
     if submission.surrogate_id:
         if submission.match_status != FormSubmissionMatchStatus.LINKED.value:
             submission.match_status = FormSubmissionMatchStatus.LINKED.value
@@ -2038,7 +2262,7 @@ def create_intake_lead_for_submission(
     """Create or attach an intake lead for a shared submission."""
     if submission.source_mode != FormLinkMode.SHARED.value:
         return submission, None
-    if submission.surrogate_id:
+    if submission.surrogate_id or submission.donor_id:
         return submission, None
 
     if not allow_ambiguous:
@@ -2091,8 +2315,12 @@ def create_intake_lead_for_submission(
         )
 
     answers = submission.answers_json if isinstance(submission.answers_json, dict) else {}
-    mapping_lookup = _build_form_mapping_lookup(db, submission.form_id)
-    if form.purpose == FormPurpose.LEAD_CAPTURE.value:
+    mapping_lookup = _mapping_lookup_from_snapshot(submission.mapping_snapshot or [])
+    if not mapping_lookup:
+        mapping_lookup = _build_form_mapping_lookup(db, submission.form_id)
+    if submission.lead_kind in DONOR_LEAD_KINDS:
+        identity = _extract_donor_identity(answers=answers, mapping_lookup=mapping_lookup)
+    elif form.purpose == FormPurpose.LEAD_CAPTURE.value:
         identity = _lead_capture_identity(answers=answers, mapping_lookup=mapping_lookup)
     else:
         identity = _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
@@ -2109,6 +2337,7 @@ def create_intake_lead_for_submission(
         and link is not None
         and form.purpose == FormPurpose.LEAD_CAPTURE.value
         and link.embed_enabled
+        and submission.lead_kind == FormLeadKind.SURROGATE.value
     )
     lead_source = "website" if auto_promote_website_lead else (source or "shared_intake")
     metadata.setdefault("source", lead_source)
@@ -2123,6 +2352,7 @@ def create_intake_lead_for_submission(
         user_id=user_id,
         form_submission_id=submission.id,
         source=lead_source,
+        lead_type=submission.lead_kind,
     )
     submission.intake_lead_id = lead.id
     submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
@@ -2457,6 +2687,8 @@ def resolve_submission_match(
         raise ValueError("Only shared submissions can be match-resolved")
 
     if surrogate_id:
+        if submission.lead_kind in DONOR_LEAD_KINDS:
+            raise ValueError("Donor submissions cannot be linked to a surrogate")
         surrogate = (
             db.query(Surrogate)
             .filter(
@@ -2628,6 +2860,256 @@ def get_intake_lead(
     )
 
 
+def _linked_submissions_for_lead(db: Session, lead: IntakeLead) -> list[FormSubmission]:
+    return (
+        db.query(FormSubmission)
+        .filter(
+            FormSubmission.organization_id == lead.organization_id,
+            or_(
+                FormSubmission.intake_lead_id == lead.id,
+                FormSubmission.id == lead.form_submission_id,
+            ),
+        )
+        .order_by(FormSubmission.submitted_at.asc())
+        .all()
+    )
+
+
+def _mapped_donor_payload(submission: FormSubmission) -> dict[str, Any]:
+    allowed_fields = {"full_name", "email", "phone", "state", "education"}
+    payload: dict[str, Any] = {}
+    for mapping in submission.mapping_snapshot or []:
+        field_key = mapping.get("field_key")
+        target_field = mapping.get("surrogate_field")
+        if not field_key or target_field not in allowed_fields:
+            continue
+        value = submission.answers_json.get(field_key)
+        if value not in (None, ""):
+            payload[target_field] = value
+    return payload
+
+
+def _profile_photo_for_donor_lead(
+    db: Session,
+    *,
+    lead: IntakeLead,
+    linked_submissions: list[FormSubmission],
+) -> FormSubmissionFile:
+    source_submission = next(
+        (
+            submission
+            for submission in linked_submissions
+            if submission.id == lead.form_submission_id
+        ),
+        linked_submissions[0] if linked_submissions else None,
+    )
+    if source_submission is None:
+        raise ValueError("Donor intake lead has no source submission")
+
+    profile_photo_key = _mapping_lookup_from_snapshot(source_submission.mapping_snapshot or []).get(
+        "profile_photo"
+    )
+    if not profile_photo_key:
+        raise ValueError("Donor intake submission is missing a profile photo mapping")
+
+    files = (
+        db.query(FormSubmissionFile)
+        .filter(
+            FormSubmissionFile.organization_id == lead.organization_id,
+            FormSubmissionFile.submission_id == source_submission.id,
+            FormSubmissionFile.field_key == profile_photo_key,
+            FormSubmissionFile.deleted_at.is_(None),
+        )
+        .order_by(FormSubmissionFile.created_at.asc())
+        .all()
+    )
+    if len(files) != 1:
+        raise ValueError("Donor intake requires exactly one profile photo")
+    profile_photo = files[0]
+    if profile_photo.content_type not in DONOR_PROFILE_PHOTO_CONTENT_TYPES:
+        raise ValueError("Donor profile photo must be a PNG or JPEG image")
+    if profile_photo.scan_status != "clean" or profile_photo.quarantined:
+        raise ValueError("Donor profile photo must pass security scanning before promotion")
+    return profile_photo
+
+
+def _copy_profile_photo_to_donor_attachment(
+    db: Session,
+    *,
+    donor: Donor,
+    source_file: FormSubmissionFile,
+    user_id: uuid.UUID | None,
+) -> Attachment:
+    attachment_id = uuid.uuid4()
+    extension = (
+        source_file.filename.rsplit(".", 1)[-1].lower()
+        if "." in source_file.filename
+        else ("png" if source_file.content_type == "image/png" else "jpg")
+    )
+    storage_key = f"{donor.organization_id}/donors/{donor.id}/profile/{attachment_id}.{extension}"
+    payload = load_file_bytes(source_file.storage_key)
+    store_file(storage_key, BytesIO(payload), source_file.content_type)
+    register_storage_cleanup_on_rollback(db, storage_key)
+
+    attachment = Attachment(
+        id=attachment_id,
+        organization_id=donor.organization_id,
+        donor_id=donor.id,
+        uploaded_by_user_id=user_id,
+        filename=source_file.filename,
+        storage_key=storage_key,
+        content_type=source_file.content_type,
+        file_size=source_file.file_size,
+        checksum_sha256=source_file.checksum_sha256,
+        scan_status="clean",
+        scanned_at=datetime.now(UTC),
+        quarantined=False,
+    )
+    db.add(attachment)
+    db.flush()
+    donor.profile_photo_attachment_id = attachment.id
+
+    from app.services import audit_service
+
+    audit_service.log_event(
+        db=db,
+        org_id=donor.organization_id,
+        event_type=AuditEventType.ATTACHMENT_UPLOADED,
+        actor_user_id=user_id,
+        target_type="attachment",
+        target_id=attachment.id,
+        details={
+            "donor_id": str(donor.id),
+            "source_submission_file_id": str(source_file.id),
+            "profile_photo": True,
+        },
+    )
+    return attachment
+
+
+def _promote_donor_intake_lead(
+    db: Session,
+    *,
+    lead: IntakeLead,
+    user_id: uuid.UUID | None,
+    source: str | None,
+) -> tuple[Donor, int]:
+    if lead.status == IntakeLeadStatus.PROMOTED.value and lead.promoted_donor_id:
+        donor = (
+            db.query(Donor)
+            .filter(
+                Donor.organization_id == lead.organization_id,
+                Donor.id == lead.promoted_donor_id,
+            )
+            .first()
+        )
+        if donor:
+            linked_count = (
+                db.scalar(
+                    select(func.count(FormSubmission.id)).where(
+                        FormSubmission.organization_id == lead.organization_id,
+                        FormSubmission.intake_lead_id == lead.id,
+                        FormSubmission.donor_id == donor.id,
+                    )
+                )
+                or 0
+            )
+            return donor, int(linked_count)
+
+    if lead.lead_type not in DONOR_LEAD_KINDS:
+        raise ValueError("Intake lead is not a donor lead")
+    if not lead.email:
+        raise ValueError("Intake lead is missing email")
+
+    linked_submissions = _linked_submissions_for_lead(db, lead)
+    if not linked_submissions:
+        raise ValueError("Donor intake lead has no source submission")
+    profile_photo = _profile_photo_for_donor_lead(
+        db,
+        lead=lead,
+        linked_submissions=linked_submissions,
+    )
+
+    mapped_payload: dict[str, Any] = {}
+    for submission in linked_submissions:
+        mapped_payload.update(_mapped_donor_payload(submission))
+    mapped_payload.update(
+        {
+            "donor_type": "egg" if lead.lead_type == FormLeadKind.EGG_DONOR.value else "sperm",
+            "full_name": lead.full_name,
+            "email": lead.email,
+            "phone": lead.phone,
+            "source": source or lead.source,
+        }
+    )
+
+    from app.services import donor_service
+
+    donor_data = DonorCreate.model_validate(mapped_payload)
+    if donor_service.get_active_donor_by_email(
+        db,
+        lead.organization_id,
+        str(donor_data.email),
+    ):
+        raise donor_service.DonorConflictError("An active donor with this email already exists")
+
+    try:
+        donor = donor_service.create_donor(
+            db=db,
+            org_id=lead.organization_id,
+            user_id=user_id,
+            data=donor_data,
+            commit=False,
+            emit_workflow_events=False,
+        )
+        attachment = _copy_profile_photo_to_donor_attachment(
+            db,
+            donor=donor,
+            source_file=profile_photo,
+            user_id=user_id,
+        )
+
+        now = datetime.now(UTC)
+        lead.status = IntakeLeadStatus.PROMOTED.value
+        lead.promoted_donor_id = donor.id
+        lead.promoted_at = now
+        linked_count = (
+            db.query(FormSubmission)
+            .filter(
+                FormSubmission.organization_id == lead.organization_id,
+                FormSubmission.intake_lead_id == lead.id,
+                FormSubmission.surrogate_id.is_(None),
+                FormSubmission.donor_id.is_(None),
+            )
+            .update(
+                {
+                    FormSubmission.donor_id: donor.id,
+                    FormSubmission.match_status: FormSubmissionMatchStatus.LINKED.value,
+                    FormSubmission.match_reason: "lead_promoted_to_donor",
+                    FormSubmission.matched_at: now,
+                },
+                synchronize_session=False,
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(lead)
+    donor = donor_service.get_donor(db, lead.organization_id, donor.id) or donor
+    from app.services import workflow_triggers
+
+    try:
+        workflow_triggers.trigger_donor_created(db, donor)
+    except Exception:
+        logger.debug("trigger_promoted_donor_created_failed", exc_info=True)
+    try:
+        workflow_triggers.trigger_document_uploaded(db, attachment)
+    except Exception:
+        logger.debug("trigger_promoted_donor_document_uploaded_failed", exc_info=True)
+    return donor, int(linked_count or 0)
+
+
 def promote_intake_lead(
     db: Session,
     *,
@@ -2636,7 +3118,29 @@ def promote_intake_lead(
     source: str | None = None,
     is_priority: bool = False,
     assign_to_user: bool | None = None,
-) -> tuple[Surrogate, int]:
+) -> tuple[Surrogate | Donor, int]:
+    if isinstance(db, Session):
+        locked_lead = (
+            db.query(IntakeLead)
+            .filter(
+                IntakeLead.organization_id == lead.organization_id,
+                IntakeLead.id == lead.id,
+            )
+            .with_for_update()
+            .first()
+        )
+        if not locked_lead:
+            raise ValueError("Intake lead not found")
+        lead = locked_lead
+    if getattr(lead, "lead_type", FormLeadKind.SURROGATE.value) in DONOR_LEAD_KINDS:
+        if is_priority or assign_to_user is not None:
+            raise ValueError("Surrogate assignment options do not apply to donor promotion")
+        return _promote_donor_intake_lead(
+            db,
+            lead=lead,
+            user_id=user_id,
+            source=source,
+        )
     if lead.status == IntakeLeadStatus.PROMOTED.value and lead.promoted_surrogate_id:
         surrogate = (
             db.query(Surrogate)

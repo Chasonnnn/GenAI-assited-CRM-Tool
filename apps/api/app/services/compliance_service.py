@@ -18,20 +18,30 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.enums import JobType
+from app.db.enums import JobStatus, JobType
 from app.db.models import (
     AIActionApproval,
     AIConversation,
     AIEntitySummary,
     AIMessage,
     AIUsageLog,
+    Attachment,
     AuditLog,
+    Campaign,
+    CampaignRecipient,
     DataRetentionPolicy,
+    Donor,
+    EmailDelivery,
+    EmailLog,
     EmailMessage,
     EmailMessageContent,
     EmailMessageOccurrence,
     EntityNote,
     ExportJob,
+    FormSubmission,
+    FormSubmissionFile,
+    IntakeLead,
+    Job,
     LegalHold,
     Match,
     MessageDelivery,
@@ -43,6 +53,8 @@ from app.db.models import (
     MessagingContact,
     MessagingGlobalSuppression,
     MessagingMessage,
+    MetaLead,
+    Notification,
     Surrogate,
     SurrogateActivityLog,
     Task,
@@ -50,8 +62,14 @@ from app.db.models import (
     TicketEvent,
     TicketNote,
     User,
+    WorkflowExecution,
 )
-from app.services import attachment_service, audit_service, job_service
+from app.services import (
+    audit_service,
+    google_tasks_cleanup_service,
+    job_service,
+    storage_cleanup_service,
+)
 from app.utils.pagination import PaginationParams, paginate_query
 
 EXPORT_STATUS_PENDING = "pending"
@@ -64,6 +82,7 @@ REDACT_MODE_FULL = "full"
 
 
 PERSON_LINKED_TARGETS = {
+    "donor",
     "surrogate",
     "intended_parent",
     "match",
@@ -75,6 +94,7 @@ PERSON_LINKED_TARGETS = {
 }
 
 PERSON_LINKED_DETAIL_KEYS = {
+    "donor_id",
     "surrogate_id",
     "user_id",
     "intended_parent_id",
@@ -608,6 +628,8 @@ def seed_default_retention_policies(
 ) -> list[DataRetentionPolicy]:
     """Create default retention policies for a new organization."""
     default_entities: list[tuple[str, int]] = [
+        ("donors", settings.DEFAULT_RETENTION_DAYS),
+        ("donor_leads", settings.DEFAULT_RETENTION_DAYS),
         ("surrogates", settings.DEFAULT_RETENTION_DAYS),
         ("matches", settings.DEFAULT_RETENTION_DAYS),
         ("tasks", settings.DEFAULT_RETENTION_DAYS),
@@ -812,6 +834,111 @@ def _build_retention_query(
     surrogate_hold_ids: set[UUID],
     entity_hold_ids: dict[str, set[UUID]],
 ):
+    if entity_type == "donors":
+        query = db.query(Donor).filter(
+            Donor.organization_id == org_id,
+            Donor.archived_at.is_not(None),
+            Donor.archived_at < cutoff,
+        )
+        if entity_hold_ids.get("donor"):
+            query = query.filter(~Donor.id.in_(entity_hold_ids["donor"]))
+        if entity_hold_ids.get("task"):
+            held_task_exists = (
+                select(Task.id)
+                .where(
+                    Task.donor_id == Donor.id,
+                    Task.id.in_(entity_hold_ids["task"]),
+                )
+                .exists()
+            )
+            query = query.filter(~held_task_exists)
+        if entity_hold_ids.get("attachment"):
+            held_attachment_ids = entity_hold_ids["attachment"]
+            held_attachment_exists = (
+                select(Attachment.id)
+                .where(
+                    Attachment.donor_id == Donor.id,
+                    Attachment.id.in_(held_attachment_ids),
+                )
+                .exists()
+            )
+            query = query.filter(
+                ~held_attachment_exists,
+                or_(
+                    Donor.profile_photo_attachment_id.is_(None),
+                    ~Donor.profile_photo_attachment_id.in_(held_attachment_ids),
+                ),
+            )
+        if entity_hold_ids.get("form_submission"):
+            query = query.filter(
+                ~select(FormSubmission.id)
+                .where(
+                    FormSubmission.donor_id == Donor.id,
+                    FormSubmission.id.in_(entity_hold_ids["form_submission"]),
+                )
+                .exists()
+            )
+        if entity_hold_ids.get("form_submission_file"):
+            query = query.filter(
+                ~select(FormSubmissionFile.id)
+                .join(
+                    FormSubmission,
+                    FormSubmissionFile.submission_id == FormSubmission.id,
+                )
+                .where(
+                    FormSubmission.organization_id == Donor.organization_id,
+                    FormSubmission.donor_id == Donor.id,
+                    FormSubmissionFile.organization_id == Donor.organization_id,
+                    FormSubmissionFile.id.in_(entity_hold_ids["form_submission_file"]),
+                )
+                .exists()
+            )
+        if entity_hold_ids.get("intake_lead"):
+            query = query.filter(
+                ~select(IntakeLead.id)
+                .where(
+                    IntakeLead.promoted_donor_id == Donor.id,
+                    IntakeLead.id.in_(entity_hold_ids["intake_lead"]),
+                )
+                .exists()
+            )
+        if entity_hold_ids.get("meta_lead"):
+            query = query.filter(
+                ~select(MetaLead.id)
+                .where(
+                    MetaLead.converted_donor_id == Donor.id,
+                    MetaLead.id.in_(entity_hold_ids["meta_lead"]),
+                )
+                .exists()
+            )
+        note_hold_ids = set().union(
+            entity_hold_ids.get("entity_notes", set()),
+            entity_hold_ids.get("entity_note", set()),
+            entity_hold_ids.get("note", set()),
+        )
+        if note_hold_ids:
+            query = query.filter(
+                ~select(EntityNote.id)
+                .where(
+                    EntityNote.organization_id == Donor.organization_id,
+                    EntityNote.entity_type == "donor",
+                    EntityNote.entity_id == Donor.id,
+                    EntityNote.id.in_(note_hold_ids),
+                )
+                .exists()
+            )
+        if entity_hold_ids.get("workflow_execution"):
+            query = query.filter(
+                ~select(WorkflowExecution.id)
+                .where(
+                    WorkflowExecution.organization_id == Donor.organization_id,
+                    WorkflowExecution.subject_type.in_(("egg_donor", "sperm_donor")),
+                    WorkflowExecution.subject_id == Donor.id,
+                    WorkflowExecution.id.in_(entity_hold_ids["workflow_execution"]),
+                )
+                .exists()
+            )
+        return query
     if entity_type == "surrogates":
         query = db.query(Surrogate).filter(
             Surrogate.organization_id == org_id,
@@ -841,6 +968,10 @@ def _build_retention_query(
         if surrogate_hold_ids:
             query = query.filter(
                 or_(Task.surrogate_id.is_(None), ~Task.surrogate_id.in_(surrogate_hold_ids))
+            )
+        if entity_hold_ids.get("donor"):
+            query = query.filter(
+                or_(Task.donor_id.is_(None), ~Task.donor_id.in_(entity_hold_ids["donor"]))
             )
         if entity_hold_ids.get("task"):
             query = query.filter(~Task.id.in_(entity_hold_ids["task"]))
@@ -1077,23 +1208,33 @@ def _build_retention_query(
             )
             query = query.filter(~MessagingMessage.contact_id.in_(held_contact_ids))
         if entity_hold_ids.get("messaging_message"):
-            query = query.filter(
-                ~MessagingMessage.id.in_(entity_hold_ids["messaging_message"])
-            )
+            query = query.filter(~MessagingMessage.id.in_(entity_hold_ids["messaging_message"]))
         return query
     if entity_type == "messaging_consent_evidence":
-        backs_consent_state = select(MessagingConsentState.id).where(
-            MessagingConsentState.organization_id == org_id,
-            MessagingConsentState.latest_evidence_id == MessagingConsentEvidence.id,
-        ).exists()
-        backs_global_suppression = select(MessagingGlobalSuppression.id).where(
-            MessagingGlobalSuppression.organization_id == org_id,
-            MessagingGlobalSuppression.latest_evidence_id == MessagingConsentEvidence.id,
-        ).exists()
-        backs_delivery = select(MessageDelivery.id).where(
-            MessageDelivery.organization_id == org_id,
-            MessageDelivery.consent_evidence_id == MessagingConsentEvidence.id,
-        ).exists()
+        backs_consent_state = (
+            select(MessagingConsentState.id)
+            .where(
+                MessagingConsentState.organization_id == org_id,
+                MessagingConsentState.latest_evidence_id == MessagingConsentEvidence.id,
+            )
+            .exists()
+        )
+        backs_global_suppression = (
+            select(MessagingGlobalSuppression.id)
+            .where(
+                MessagingGlobalSuppression.organization_id == org_id,
+                MessagingGlobalSuppression.latest_evidence_id == MessagingConsentEvidence.id,
+            )
+            .exists()
+        )
+        backs_delivery = (
+            select(MessageDelivery.id)
+            .where(
+                MessageDelivery.organization_id == org_id,
+                MessageDelivery.consent_evidence_id == MessagingConsentEvidence.id,
+            )
+            .exists()
+        )
         query = db.query(MessagingConsentEvidence).filter(
             MessagingConsentEvidence.organization_id == org_id,
             MessagingConsentEvidence.created_at < cutoff,
@@ -1109,9 +1250,7 @@ def _build_retention_query(
             query = query.filter(~MessagingConsentEvidence.contact_id.in_(held_contact_ids))
         if entity_hold_ids.get("messaging_consent_evidence"):
             query = query.filter(
-                ~MessagingConsentEvidence.id.in_(
-                    entity_hold_ids["messaging_consent_evidence"]
-                )
+                ~MessagingConsentEvidence.id.in_(entity_hold_ids["messaging_consent_evidence"])
             )
         return query
     if entity_type == "messaging_webhook_events":
@@ -1125,9 +1264,11 @@ def _build_retention_query(
             )
         return query
     if entity_type == "messaging_media_assets":
-        linked = select(MessageMediaLink.id).where(
-            MessageMediaLink.media_asset_id == MessageMediaAsset.id
-        ).exists()
+        linked = (
+            select(MessageMediaLink.id)
+            .where(MessageMediaLink.media_asset_id == MessageMediaAsset.id)
+            .exists()
+        )
         query = db.query(MessageMediaAsset).filter(
             MessageMediaAsset.organization_id == org_id,
             MessageMediaAsset.created_at < cutoff,
@@ -1151,11 +1292,784 @@ def preview_purge(db: Session, org_id: UUID) -> list[PurgeResult]:
         if not policy.is_active or policy.retention_days == 0:
             continue
         cutoff = datetime.now(UTC) - timedelta(days=policy.retention_days)
+        if policy.entity_type == "donor_leads":
+            candidates = _get_donor_lead_purge_candidates(
+                db,
+                org_id=org_id,
+                cutoff=cutoff,
+                entity_hold_ids=entity_hold_ids,
+            )
+            results.append(PurgeResult(entity_type=policy.entity_type, count=candidates.count))
+            continue
         query = _build_retention_query(
             db, org_id, policy.entity_type, cutoff, surrogate_hold_ids, entity_hold_ids
         )
         results.append(PurgeResult(entity_type=policy.entity_type, count=query.count()))
     return results
+
+
+DONOR_SUBJECT_TYPES = ("egg_donor", "sperm_donor")
+
+
+@dataclass(frozen=True, slots=True)
+class _DonorLeadPurgeCandidates:
+    submission_ids: frozenset[UUID]
+    intake_lead_ids: frozenset[UUID]
+    meta_lead_ids: frozenset[UUID]
+
+    @property
+    def count(self) -> int:
+        return len(self.submission_ids) + len(self.intake_lead_ids) + len(self.meta_lead_ids)
+
+
+def _ensure_email_deliveries_not_leased(
+    db: Session,
+    *,
+    org_id: UUID,
+    email_log_ids: set[UUID],
+) -> None:
+    if not email_log_ids:
+        return
+    deliveries = (
+        db.query(EmailDelivery.id, EmailDelivery.status)
+        .filter(
+            EmailDelivery.organization_id == org_id,
+            EmailDelivery.email_log_id.in_(email_log_ids),
+        )
+        .with_for_update()
+        .all()
+    )
+    if any(status == "leased" for _delivery_id, status in deliveries):
+        raise ValueError(
+            "Cannot purge donors while a donor email delivery is leased; stop workers and retry"
+        )
+
+
+def _ensure_message_deliveries_not_leased(
+    db: Session,
+    *,
+    org_id: UUID,
+    message_delivery_ids: set[UUID],
+) -> None:
+    if not message_delivery_ids:
+        return
+    deliveries = (
+        db.query(MessageDelivery.id, MessageDelivery.status)
+        .filter(
+            MessageDelivery.organization_id == org_id,
+            MessageDelivery.id.in_(message_delivery_ids),
+        )
+        .with_for_update()
+        .all()
+    )
+    if any(status == "leased" for _delivery_id, status in deliveries):
+        raise ValueError(
+            "Cannot purge donors while a donor message delivery is leased; stop workers and retry"
+        )
+
+
+def _get_donor_lead_purge_candidates(
+    db: Session,
+    *,
+    org_id: UUID,
+    cutoff: datetime,
+    entity_hold_ids: dict[str, set[UUID]],
+) -> _DonorLeadPurgeCandidates:
+    """Resolve old, unconverted donor intake records without splitting linked pairs."""
+    submission_query = db.query(FormSubmission.id).filter(
+        FormSubmission.organization_id == org_id,
+        FormSubmission.lead_kind.in_(DONOR_SUBJECT_TYPES),
+        FormSubmission.donor_id.is_(None),
+        FormSubmission.submitted_at < cutoff,
+    )
+    if entity_hold_ids.get("form_submission"):
+        submission_query = submission_query.filter(
+            ~FormSubmission.id.in_(entity_hold_ids["form_submission"])
+        )
+    submission_ids = {value for (value,) in submission_query.all()}
+
+    intake_query = db.query(IntakeLead.id).filter(
+        IntakeLead.organization_id == org_id,
+        IntakeLead.lead_type.in_(DONOR_SUBJECT_TYPES),
+        IntakeLead.promoted_donor_id.is_(None),
+        IntakeLead.created_at < cutoff,
+    )
+    if entity_hold_ids.get("intake_lead"):
+        intake_query = intake_query.filter(~IntakeLead.id.in_(entity_hold_ids["intake_lead"]))
+    intake_lead_ids = {value for (value,) in intake_query.all()}
+
+    meta_query = db.query(MetaLead.id).filter(
+        MetaLead.organization_id == org_id,
+        MetaLead.lead_kind.in_(DONOR_SUBJECT_TYPES),
+        MetaLead.converted_donor_id.is_(None),
+        MetaLead.received_at < cutoff,
+    )
+    if entity_hold_ids.get("meta_lead"):
+        meta_query = meta_query.filter(~MetaLead.id.in_(entity_hold_ids["meta_lead"]))
+    meta_lead_ids = {value for (value,) in meta_query.all()}
+
+    held_file_ids = entity_hold_ids.get("form_submission_file", set())
+    if held_file_ids and submission_ids:
+        held_file_submission_ids = {
+            value
+            for (value,) in db.query(FormSubmissionFile.submission_id)
+            .filter(
+                FormSubmissionFile.organization_id == org_id,
+                FormSubmissionFile.id.in_(held_file_ids),
+                FormSubmissionFile.submission_id.in_(submission_ids),
+            )
+            .all()
+        }
+        submission_ids.difference_update(held_file_submission_ids)
+
+    held_execution_ids = entity_hold_ids.get("workflow_execution", set())
+    if held_execution_ids:
+        held_executions = (
+            db.query(
+                WorkflowExecution.entity_type,
+                WorkflowExecution.entity_id,
+                WorkflowExecution.subject_type,
+                WorkflowExecution.subject_id,
+            )
+            .filter(
+                WorkflowExecution.organization_id == org_id,
+                WorkflowExecution.id.in_(held_execution_ids),
+            )
+            .all()
+        )
+        for entity_type, entity_id, subject_type, subject_id in held_executions:
+            for candidate_type, candidate_id in (
+                (entity_type, entity_id),
+                (subject_type, subject_id),
+            ):
+                if candidate_type == "form_submission":
+                    submission_ids.discard(candidate_id)
+                elif candidate_type == "intake_lead":
+                    intake_lead_ids.discard(candidate_id)
+                elif candidate_type == "meta_lead":
+                    meta_lead_ids.discard(candidate_id)
+
+    linked_pairs = {
+        (intake_id, submission_id)
+        for intake_id, submission_id in db.query(
+            IntakeLead.id,
+            IntakeLead.form_submission_id,
+        )
+        .filter(
+            IntakeLead.organization_id == org_id,
+            IntakeLead.lead_type.in_(DONOR_SUBJECT_TYPES),
+            IntakeLead.promoted_donor_id.is_(None),
+            IntakeLead.form_submission_id.is_not(None),
+            or_(
+                IntakeLead.id.in_(intake_lead_ids),
+                IntakeLead.form_submission_id.in_(submission_ids),
+            ),
+        )
+        .all()
+    }
+    linked_pairs.update(
+        (intake_id, submission_id)
+        for submission_id, intake_id in db.query(
+            FormSubmission.id,
+            FormSubmission.intake_lead_id,
+        )
+        .filter(
+            FormSubmission.organization_id == org_id,
+            FormSubmission.lead_kind.in_(DONOR_SUBJECT_TYPES),
+            FormSubmission.donor_id.is_(None),
+            FormSubmission.intake_lead_id.is_not(None),
+            or_(
+                FormSubmission.id.in_(submission_ids),
+                FormSubmission.intake_lead_id.in_(intake_lead_ids),
+            ),
+        )
+        .all()
+    )
+    for intake_id, submission_id in linked_pairs:
+        if intake_id not in intake_lead_ids or submission_id not in submission_ids:
+            intake_lead_ids.discard(intake_id)
+            submission_ids.discard(submission_id)
+
+    return _DonorLeadPurgeCandidates(
+        submission_ids=frozenset(submission_ids),
+        intake_lead_ids=frozenset(intake_lead_ids),
+        meta_lead_ids=frozenset(meta_lead_ids),
+    )
+
+
+def _donor_related_jobs(
+    db: Session,
+    *,
+    org_id: UUID,
+    donor_ids: set[UUID],
+    task_ids: set[UUID],
+    attachment_ids: set[UUID],
+    submission_ids: set[UUID],
+    submission_file_ids: set[UUID],
+    intake_lead_ids: set[UUID],
+    meta_lead_ids: set[UUID],
+    meta_external_ids: set[str],
+    execution_ids: set[UUID],
+) -> tuple[set[UUID], set[UUID]]:
+    """Resolve jobs whose payload can retain or act on donor PII."""
+    donor_id_strings = {str(value) for value in donor_ids}
+    task_id_strings = {str(value) for value in task_ids}
+    attachment_id_strings = {str(value) for value in attachment_ids}
+    submission_id_strings = {str(value) for value in submission_ids}
+    submission_file_id_strings = {str(value) for value in submission_file_ids}
+    intake_lead_id_strings = {str(value) for value in intake_lead_ids}
+    meta_lead_id_strings = {str(value) for value in meta_lead_ids}
+    execution_id_strings = {str(value) for value in execution_ids}
+    relevant_types = {
+        JobType.ATTACHMENT_SCAN.value,
+        JobType.FORM_SUBMISSION_FILE_SCAN.value,
+        JobType.META_LEAD_FETCH.value,
+        JobType.NOTIFICATION.value,
+        JobType.WORKFLOW_EMAIL.value,
+        JobType.WORKFLOW_RESUME.value,
+    }
+    jobs = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == org_id,
+            Job.job_type.in_(relevant_types),
+        )
+        .with_for_update()
+        .all()
+    )
+    matched_job_ids: set[UUID] = set()
+    workflow_email_job_ids: set[UUID] = set()
+    for job in jobs:
+        payload = job.payload or {}
+        entity_type = payload.get("entity_type")
+        entity_id = str(payload.get("entity_id") or "")
+        execution_id = str(
+            payload.get("workflow_execution_id") or payload.get("execution_id") or ""
+        )
+        related = False
+        if job.job_type == JobType.WORKFLOW_EMAIL.value:
+            related = (
+                payload.get("subject_type") in DONOR_SUBJECT_TYPES
+                and str(payload.get("subject_id") or "") in donor_id_strings
+            ) or execution_id in execution_id_strings
+        elif job.job_type == JobType.WORKFLOW_RESUME.value:
+            related = execution_id in execution_id_strings
+        elif job.job_type == JobType.ATTACHMENT_SCAN.value:
+            related = str(payload.get("attachment_id") or "") in attachment_id_strings
+        elif job.job_type == JobType.FORM_SUBMISSION_FILE_SCAN.value:
+            related = str(payload.get("submission_file_id") or "") in submission_file_id_strings
+        elif job.job_type == JobType.META_LEAD_FETCH.value:
+            related = str(payload.get("leadgen_id") or "") in meta_external_ids
+        elif job.job_type == JobType.NOTIFICATION.value:
+            related = (
+                entity_type in {"donor", *DONOR_SUBJECT_TYPES} and entity_id in donor_id_strings
+            ) or (entity_type == "task" and entity_id in task_id_strings)
+            related = related or (
+                entity_type == "form_submission" and entity_id in submission_id_strings
+            )
+            related = related or (
+                entity_type == "intake_lead" and entity_id in intake_lead_id_strings
+            )
+            related = related or (entity_type == "meta_lead" and entity_id in meta_lead_id_strings)
+        if not related:
+            continue
+        if job.status == JobStatus.RUNNING.value:
+            raise ValueError(
+                "Cannot purge donors while a donor-related background job is running; "
+                "stop workers and retry"
+            )
+        matched_job_ids.add(job.id)
+        if job.job_type == JobType.WORKFLOW_EMAIL.value:
+            workflow_email_job_ids.add(job.id)
+
+    campaign_jobs = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == org_id,
+            Job.job_type == JobType.CAMPAIGN_SEND.value,
+        )
+        .with_for_update()
+        .all()
+    )
+    running_campaign_ids: set[UUID] = set()
+    for job in campaign_jobs:
+        if job.status != JobStatus.RUNNING.value:
+            continue
+        try:
+            running_campaign_ids.add(UUID(str((job.payload or {}).get("campaign_id"))))
+        except (TypeError, ValueError):
+            continue
+    if running_campaign_ids:
+        donor_campaign_running = (
+            db.query(Campaign.id)
+            .filter(
+                Campaign.organization_id == org_id,
+                Campaign.id.in_(running_campaign_ids),
+                Campaign.recipient_type.in_(DONOR_SUBJECT_TYPES),
+            )
+            .first()
+        )
+        if donor_campaign_running is not None:
+            raise ValueError(
+                "Cannot purge donors while a donor campaign is running; stop workers and retry"
+            )
+    return matched_job_ids, workflow_email_job_ids
+
+
+def _purge_donor_leads(
+    db: Session,
+    *,
+    org_id: UUID,
+    candidates: _DonorLeadPurgeCandidates,
+    storage_keys_to_delete: list[str],
+) -> int:
+    """Remove old unconverted donor applications and their derived PII."""
+    if candidates.count == 0:
+        return 0
+
+    submission_ids = set(candidates.submission_ids)
+    intake_lead_ids = set(candidates.intake_lead_ids)
+    meta_lead_ids = set(candidates.meta_lead_ids)
+    submission_file_rows = []
+    if submission_ids:
+        submission_file_rows = (
+            db.query(FormSubmissionFile.id, FormSubmissionFile.storage_key)
+            .filter(
+                FormSubmissionFile.organization_id == org_id,
+                FormSubmissionFile.submission_id.in_(submission_ids),
+            )
+            .all()
+        )
+        storage_keys_to_delete.extend(key for _file_id, key in submission_file_rows)
+    submission_file_ids = {file_id for file_id, _key in submission_file_rows}
+
+    meta_lead_rows = []
+    if meta_lead_ids:
+        meta_lead_rows = (
+            db.query(MetaLead.id, MetaLead.meta_lead_id)
+            .filter(
+                MetaLead.organization_id == org_id,
+                MetaLead.id.in_(meta_lead_ids),
+            )
+            .all()
+        )
+    meta_external_ids = {external_id for _lead_id, external_id in meta_lead_rows}
+
+    execution_filters = []
+    for entity_type, entity_ids in (
+        ("form_submission", submission_ids),
+        ("intake_lead", intake_lead_ids),
+        ("meta_lead", meta_lead_ids),
+    ):
+        if not entity_ids:
+            continue
+        execution_filters.extend(
+            (
+                and_(
+                    WorkflowExecution.entity_type == entity_type,
+                    WorkflowExecution.entity_id.in_(entity_ids),
+                ),
+                and_(
+                    WorkflowExecution.subject_type == entity_type,
+                    WorkflowExecution.subject_id.in_(entity_ids),
+                ),
+            )
+        )
+    execution_ids = {
+        value
+        for (value,) in db.query(WorkflowExecution.id)
+        .filter(
+            WorkflowExecution.organization_id == org_id,
+            or_(*execution_filters),
+        )
+        .all()
+    }
+
+    job_ids, workflow_email_job_ids = _donor_related_jobs(
+        db,
+        org_id=org_id,
+        donor_ids=set(),
+        task_ids=set(),
+        attachment_ids=set(),
+        submission_ids=submission_ids,
+        submission_file_ids=submission_file_ids,
+        intake_lead_ids=intake_lead_ids,
+        meta_lead_ids=meta_lead_ids,
+        meta_external_ids=meta_external_ids,
+        execution_ids=execution_ids,
+    )
+    email_log_ids: set[UUID] = set()
+    if workflow_email_job_ids:
+        email_log_ids = {
+            value
+            for (value,) in db.query(EmailLog.id)
+            .filter(
+                EmailLog.organization_id == org_id,
+                or_(
+                    EmailLog.job_id.in_(workflow_email_job_ids),
+                    and_(
+                        EmailLog.source_type == "workflow_job",
+                        EmailLog.source_id.in_(workflow_email_job_ids),
+                    ),
+                ),
+            )
+            .all()
+        }
+    _ensure_email_deliveries_not_leased(
+        db,
+        org_id=org_id,
+        email_log_ids=email_log_ids,
+    )
+
+    notification_filters = []
+    for entity_type, entity_ids in (
+        ("form_submission", submission_ids),
+        ("intake_lead", intake_lead_ids),
+        ("meta_lead", meta_lead_ids),
+        ("workflow_execution", execution_ids),
+    ):
+        if entity_ids:
+            notification_filters.append(
+                and_(
+                    Notification.entity_type == entity_type, Notification.entity_id.in_(entity_ids)
+                )
+            )
+    if notification_filters:
+        db.query(Notification).filter(
+            Notification.organization_id == org_id,
+            or_(*notification_filters),
+        ).delete(synchronize_session=False)
+    if email_log_ids:
+        db.query(EmailLog).filter(
+            EmailLog.organization_id == org_id,
+            EmailLog.id.in_(email_log_ids),
+        ).delete(synchronize_session=False)
+    if job_ids:
+        db.query(Job).filter(
+            Job.organization_id == org_id,
+            Job.id.in_(job_ids),
+        ).delete(synchronize_session=False)
+    if execution_ids:
+        db.query(WorkflowExecution).filter(
+            WorkflowExecution.organization_id == org_id,
+            WorkflowExecution.id.in_(execution_ids),
+        ).delete(synchronize_session=False)
+    if meta_lead_ids:
+        db.query(MetaLead).filter(
+            MetaLead.organization_id == org_id,
+            MetaLead.id.in_(meta_lead_ids),
+        ).delete(synchronize_session=False)
+    if intake_lead_ids:
+        db.query(IntakeLead).filter(
+            IntakeLead.organization_id == org_id,
+            IntakeLead.id.in_(intake_lead_ids),
+        ).delete(synchronize_session=False)
+    if submission_ids:
+        db.query(FormSubmission).filter(
+            FormSubmission.organization_id == org_id,
+            FormSubmission.id.in_(submission_ids),
+        ).delete(synchronize_session=False)
+    return candidates.count
+
+
+def _purge_donor_dependents(
+    db: Session,
+    *,
+    org_id: UUID,
+    donor_ids: list[UUID],
+    profile_photo_ids: list[UUID],
+    storage_keys_to_delete: list[str],
+) -> None:
+    """Remove donor-linked source and derived PII before the donor rows cascade."""
+    if not donor_ids:
+        return
+    donor_id_set = set(donor_ids)
+    task_ids = {
+        value
+        for (value,) in db.query(Task.id)
+        .filter(Task.organization_id == org_id, Task.donor_id.in_(donor_ids))
+        .all()
+    }
+    google_tasks_cleanup_service.enqueue_donor_task_remote_deletions(
+        db,
+        org_id=org_id,
+        task_ids=task_ids,
+    )
+    attachment_rows = (
+        db.query(Attachment.id, Attachment.storage_key)
+        .filter(
+            Attachment.organization_id == org_id,
+            or_(
+                Attachment.donor_id.in_(donor_ids),
+                Attachment.id.in_(profile_photo_ids),
+            ),
+        )
+        .all()
+    )
+    attachment_ids = {attachment_id for attachment_id, _key in attachment_rows}
+    storage_keys_to_delete.extend(key for _attachment_id, key in attachment_rows)
+
+    submission_ids = {
+        value
+        for (value,) in db.query(FormSubmission.id)
+        .filter(
+            FormSubmission.organization_id == org_id,
+            FormSubmission.donor_id.in_(donor_ids),
+        )
+        .all()
+    }
+    submission_file_rows = []
+    if submission_ids:
+        submission_file_rows = (
+            db.query(FormSubmissionFile.id, FormSubmissionFile.storage_key)
+            .filter(
+                FormSubmissionFile.organization_id == org_id,
+                FormSubmissionFile.submission_id.in_(submission_ids),
+            )
+            .all()
+        )
+        storage_keys_to_delete.extend(key for _file_id, key in submission_file_rows)
+    submission_file_ids = {file_id for file_id, _key in submission_file_rows}
+
+    intake_filters = [IntakeLead.promoted_donor_id.in_(donor_ids)]
+    if submission_ids:
+        intake_filters.append(IntakeLead.form_submission_id.in_(submission_ids))
+    intake_lead_ids = {
+        value
+        for (value,) in db.query(IntakeLead.id)
+        .filter(IntakeLead.organization_id == org_id, or_(*intake_filters))
+        .all()
+    }
+    meta_lead_rows = (
+        db.query(MetaLead.id, MetaLead.meta_lead_id)
+        .filter(
+            MetaLead.organization_id == org_id,
+            MetaLead.converted_donor_id.in_(donor_ids),
+        )
+        .all()
+    )
+    meta_lead_ids = {lead_id for lead_id, _external_id in meta_lead_rows}
+    meta_external_ids = {external_id for _lead_id, external_id in meta_lead_rows}
+    note_ids = {
+        value
+        for (value,) in db.query(EntityNote.id)
+        .filter(
+            EntityNote.organization_id == org_id,
+            EntityNote.entity_type == "donor",
+            EntityNote.entity_id.in_(donor_ids),
+        )
+        .all()
+    }
+
+    execution_filters = [
+        and_(
+            WorkflowExecution.subject_type.in_(DONOR_SUBJECT_TYPES),
+            WorkflowExecution.subject_id.in_(donor_ids),
+        )
+    ]
+    for entity_type, entity_ids in (
+        ("task", task_ids),
+        ("note", note_ids),
+        ("document", attachment_ids),
+        ("form_submission", submission_ids),
+        ("intake_lead", intake_lead_ids),
+    ):
+        if entity_ids:
+            execution_filters.append(
+                and_(
+                    WorkflowExecution.entity_type == entity_type,
+                    WorkflowExecution.entity_id.in_(entity_ids),
+                )
+            )
+    execution_ids = {
+        value
+        for (value,) in db.query(WorkflowExecution.id)
+        .filter(
+            WorkflowExecution.organization_id == org_id,
+            or_(*execution_filters),
+        )
+        .all()
+    }
+
+    campaign_recipient_rows = (
+        db.query(
+            CampaignRecipient.id,
+            CampaignRecipient.email_log_id,
+            CampaignRecipient.message_delivery_id,
+        )
+        .filter(
+            CampaignRecipient.entity_type.in_(DONOR_SUBJECT_TYPES),
+            CampaignRecipient.entity_id.in_(donor_ids),
+        )
+        .join(CampaignRecipient.run)
+        .filter(CampaignRecipient.run.has(organization_id=org_id))
+        .all()
+    )
+    campaign_recipient_ids = {row.id for row in campaign_recipient_rows}
+    email_log_ids = {row.email_log_id for row in campaign_recipient_rows if row.email_log_id}
+    message_delivery_ids = {
+        row.message_delivery_id for row in campaign_recipient_rows if row.message_delivery_id
+    }
+    message_ids: set[UUID] = set()
+    media_asset_ids: set[UUID] = set()
+    if message_delivery_ids:
+        message_ids = {
+            value
+            for (value,) in db.query(MessageDelivery.message_id)
+            .filter(
+                MessageDelivery.organization_id == org_id,
+                MessageDelivery.id.in_(message_delivery_ids),
+            )
+            .all()
+        }
+        _ensure_message_deliveries_not_leased(
+            db,
+            org_id=org_id,
+            message_delivery_ids=message_delivery_ids,
+        )
+    if message_ids:
+        media_asset_ids = {
+            value
+            for (value,) in db.query(MessageMediaLink.media_asset_id)
+            .filter(MessageMediaLink.message_id.in_(message_ids))
+            .all()
+        }
+
+    job_ids, workflow_email_job_ids = _donor_related_jobs(
+        db,
+        org_id=org_id,
+        donor_ids=donor_id_set,
+        task_ids=task_ids,
+        attachment_ids=attachment_ids,
+        submission_ids=submission_ids,
+        submission_file_ids=submission_file_ids,
+        intake_lead_ids=intake_lead_ids,
+        meta_lead_ids=meta_lead_ids,
+        meta_external_ids=meta_external_ids,
+        execution_ids=execution_ids,
+    )
+    if workflow_email_job_ids:
+        email_log_ids.update(
+            value
+            for (value,) in db.query(EmailLog.id)
+            .filter(
+                EmailLog.organization_id == org_id,
+                or_(
+                    EmailLog.job_id.in_(workflow_email_job_ids),
+                    and_(
+                        EmailLog.source_type == "workflow_job",
+                        EmailLog.source_id.in_(workflow_email_job_ids),
+                    ),
+                ),
+            )
+            .all()
+        )
+
+    _ensure_email_deliveries_not_leased(
+        db,
+        org_id=org_id,
+        email_log_ids=email_log_ids,
+    )
+
+    notification_filters = [
+        and_(
+            Notification.entity_type.in_(("donor", *DONOR_SUBJECT_TYPES)),
+            Notification.entity_id.in_(donor_ids),
+        )
+    ]
+    for entity_type, entity_ids in (
+        ("task", task_ids),
+        ("workflow_execution", execution_ids),
+        ("form_submission", submission_ids),
+        ("intake_lead", intake_lead_ids),
+        ("meta_lead", meta_lead_ids),
+    ):
+        if entity_ids:
+            notification_filters.append(
+                and_(
+                    Notification.entity_type == entity_type, Notification.entity_id.in_(entity_ids)
+                )
+            )
+    db.query(Notification).filter(
+        Notification.organization_id == org_id,
+        or_(*notification_filters),
+    ).delete(synchronize_session=False)
+
+    if campaign_recipient_ids:
+        db.query(CampaignRecipient).filter(CampaignRecipient.id.in_(campaign_recipient_ids)).delete(
+            synchronize_session=False
+        )
+    if email_log_ids:
+        db.query(EmailLog).filter(
+            EmailLog.organization_id == org_id,
+            EmailLog.id.in_(email_log_ids),
+        ).delete(synchronize_session=False)
+    if message_ids:
+        db.query(MessagingMessage).filter(
+            MessagingMessage.organization_id == org_id,
+            MessagingMessage.id.in_(message_ids),
+        ).delete(synchronize_session=False)
+    if media_asset_ids:
+        orphan_media = (
+            db.query(MessageMediaAsset.id, MessageMediaAsset.storage_key)
+            .filter(
+                MessageMediaAsset.organization_id == org_id,
+                MessageMediaAsset.id.in_(media_asset_ids),
+                ~select(MessageMediaLink.id)
+                .where(MessageMediaLink.media_asset_id == MessageMediaAsset.id)
+                .exists(),
+            )
+            .all()
+        )
+        storage_keys_to_delete.extend(key for _asset_id, key in orphan_media)
+        orphan_media_ids = [asset_id for asset_id, _key in orphan_media]
+        if orphan_media_ids:
+            db.query(MessageMediaAsset).filter(MessageMediaAsset.id.in_(orphan_media_ids)).delete(
+                synchronize_session=False
+            )
+    if job_ids:
+        db.query(Job).filter(Job.id.in_(job_ids)).delete(synchronize_session=False)
+    if execution_ids:
+        db.query(WorkflowExecution).filter(
+            WorkflowExecution.organization_id == org_id,
+            WorkflowExecution.id.in_(execution_ids),
+        ).delete(synchronize_session=False)
+    if note_ids:
+        db.query(EntityNote).filter(
+            EntityNote.organization_id == org_id,
+            EntityNote.id.in_(note_ids),
+        ).delete(synchronize_session=False)
+    if meta_lead_ids:
+        db.query(MetaLead).filter(
+            MetaLead.organization_id == org_id,
+            MetaLead.id.in_(meta_lead_ids),
+        ).delete(synchronize_session=False)
+    if intake_lead_ids:
+        db.query(IntakeLead).filter(
+            IntakeLead.organization_id == org_id,
+            IntakeLead.id.in_(intake_lead_ids),
+        ).delete(synchronize_session=False)
+    if submission_ids:
+        db.query(FormSubmission).filter(
+            FormSubmission.organization_id == org_id,
+            FormSubmission.id.in_(submission_ids),
+        ).delete(synchronize_session=False)
+
+    # The donor rows are locked by execute_purge, so no new FK reference can
+    # commit. Rescan under task row locks immediately before the parent delete
+    # to prove every remotely synced task has a durable deletion tombstone.
+    final_task_ids = {
+        value
+        for (value,) in db.query(Task.id)
+        .filter(Task.organization_id == org_id, Task.donor_id.in_(donor_ids))
+        .with_for_update()
+        .all()
+    }
+    google_tasks_cleanup_service.enqueue_donor_task_remote_deletions(
+        db,
+        org_id=org_id,
+        task_ids=final_task_ids,
+    )
 
 
 def execute_purge(db: Session, org_id: UUID, user_id: UUID | None) -> list[PurgeResult]:
@@ -1164,34 +2078,98 @@ def execute_purge(db: Session, org_id: UUID, user_id: UUID | None) -> list[Purge
         return []
     policies = list_retention_policies(db, org_id)
     results: list[PurgeResult] = []
-    media_storage_keys: list[str] = []
+    storage_keys_to_delete: list[str] = []
     for policy in policies:
         if not policy.is_active or policy.retention_days == 0:
             continue
         cutoff = datetime.now(UTC) - timedelta(days=policy.retention_days)
+        if policy.entity_type == "donor_leads":
+            candidates = _get_donor_lead_purge_candidates(
+                db,
+                org_id=org_id,
+                cutoff=cutoff,
+                entity_hold_ids=entity_hold_ids,
+            )
+            count = _purge_donor_leads(
+                db,
+                org_id=org_id,
+                candidates=candidates,
+                storage_keys_to_delete=storage_keys_to_delete,
+            )
+            results.append(PurgeResult(entity_type=policy.entity_type, count=count))
+            continue
         query = _build_retention_query(
             db, org_id, policy.entity_type, cutoff, surrogate_hold_ids, entity_hold_ids
         )
         count = query.count()
         if count:
             if policy.entity_type == "messaging_media_assets":
-                media_storage_keys.extend(
-                    key
-                    for (key,) in query.with_entities(MessageMediaAsset.storage_key).all()
+                storage_keys_to_delete.extend(
+                    key for (key,) in query.with_entities(MessageMediaAsset.storage_key).all()
                 )
-            query.delete(synchronize_session=False)
+                query.delete(synchronize_session=False)
+            elif policy.entity_type == "donors":
+                donor_rows = (
+                    query.with_entities(
+                        Donor.id,
+                        Donor.profile_photo_attachment_id,
+                    )
+                    .with_for_update()
+                    .all()
+                )
+                donor_ids = [donor_id for donor_id, _photo_id in donor_rows]
+                count = len(donor_ids)
+                profile_photo_ids = [
+                    photo_id for _donor_id, photo_id in donor_rows if photo_id is not None
+                ]
+                _purge_donor_dependents(
+                    db,
+                    org_id=org_id,
+                    donor_ids=donor_ids,
+                    profile_photo_ids=profile_photo_ids,
+                    storage_keys_to_delete=storage_keys_to_delete,
+                )
+                if donor_ids:
+                    # Delete only the rows in the locked snapshot. A donor that
+                    # becomes retention-eligible concurrently waits for the next
+                    # purge instead of bypassing dependent-task reconciliation.
+                    db.query(Donor).filter(
+                        Donor.organization_id == org_id,
+                        Donor.id.in_(donor_ids),
+                    ).delete(synchronize_session=False)
+            elif policy.entity_type == "tasks":
+                task_rows = query.with_entities(Task.id, Task.donor_id).all()
+                task_ids = [task_id for task_id, _donor_id in task_rows]
+                count = len(task_ids)
+                if task_ids:
+                    donor_task_ids = {
+                        task_id for task_id, donor_id in task_rows if donor_id is not None
+                    }
+                    google_tasks_cleanup_service.enqueue_donor_task_remote_deletions(
+                        db,
+                        org_id=org_id,
+                        task_ids=donor_task_ids,
+                    )
+                    db.query(Notification).filter(
+                        Notification.organization_id == org_id,
+                        Notification.entity_type == "task",
+                        Notification.entity_id.in_(task_ids),
+                    ).delete(synchronize_session=False)
+                    # Keep deletion tied to the exact snapshot whose donor
+                    # identities were fenced above.
+                    db.query(Task).filter(
+                        Task.organization_id == org_id,
+                        Task.id.in_(task_ids),
+                    ).delete(synchronize_session=False)
+            else:
+                query.delete(synchronize_session=False)
         results.append(PurgeResult(entity_type=policy.entity_type, count=count))
+    storage_cleanup_service.enqueue_storage_deletions(
+        db,
+        org_id=org_id,
+        storage_keys=storage_keys_to_delete,
+    )
     db.commit()
-
-    for storage_key in media_storage_keys:
-        try:
-            attachment_service.delete_file(storage_key)
-        except Exception as exc:  # pragma: no cover - backend-specific outage path
-            logger.warning(
-                "Messaging retention could not remove application storage object",
-                exc_info=exc,
-                extra={"organization_id": str(org_id)},
-            )
 
     audit_service.log_compliance_purge_executed(
         db=db,

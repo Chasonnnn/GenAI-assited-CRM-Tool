@@ -14,11 +14,41 @@ from app.db.models import AutomationWorkflow
 from app.schemas.auth import UserSession
 from app.services import permission_service
 
+DONOR_SUBJECT_TYPES = frozenset({"donor", "egg_donor", "sperm_donor"})
+
 
 def _has_manage_automation(db: Session, session: UserSession) -> bool:
     """Internal helper to check manage_automation permission."""
     return permission_service.check_permission(
         db, session.org_id, session.user_id, session.role.value, P.AUTOMATION_MANAGE.value
+    )
+
+
+def can_view_subject(db: Session, session: UserSession, subject_type: str | None) -> bool:
+    """Check access to subject-specific workflow data."""
+    if subject_type not in DONOR_SUBJECT_TYPES:
+        return True
+    return permission_service.check_permission(
+        db,
+        session.org_id,
+        session.user_id,
+        session.role.value,
+        P.DONORS_VIEW.value,
+    )
+
+
+def can_edit_subject(db: Session, session: UserSession, subject_type: str | None) -> bool:
+    """Check write access to subject-specific workflow behavior."""
+    if subject_type not in DONOR_SUBJECT_TYPES:
+        return True
+    if not can_view_subject(db, session, subject_type):
+        return False
+    return permission_service.check_permission(
+        db,
+        session.org_id,
+        session.user_id,
+        session.role.value,
+        P.DONORS_EDIT.value,
     )
 
 
@@ -41,7 +71,12 @@ def can_create(db: Session, session: UserSession, scope: str) -> bool:
     return True
 
 
-def can_edit(db: Session, session: UserSession, workflow: AutomationWorkflow) -> bool:
+def can_edit(
+    db: Session,
+    session: UserSession,
+    workflow: AutomationWorkflow,
+    effective_subject_type: str | None = None,
+) -> bool:
     """
     Check if user can edit this workflow.
 
@@ -53,6 +88,13 @@ def can_edit(db: Session, session: UserSession, workflow: AutomationWorkflow) ->
     Returns:
         True if user can edit this workflow
     """
+    if not can_edit_subject(
+        db,
+        session,
+        effective_subject_type if effective_subject_type is not None else workflow.subject_type,
+    ):
+        return False
+
     if workflow.scope == "org":
         # Org workflows require manage_automation permission
         return _has_manage_automation(db, session)
@@ -61,7 +103,12 @@ def can_edit(db: Session, session: UserSession, workflow: AutomationWorkflow) ->
     return workflow.owner_user_id == session.user_id
 
 
-def can_view(db: Session, session: UserSession, workflow: AutomationWorkflow) -> bool:
+def can_view(
+    db: Session,
+    session: UserSession,
+    workflow: AutomationWorkflow,
+    effective_subject_type: str | None = None,
+) -> bool:
     """
     Check if user can view this workflow.
 
@@ -73,6 +120,13 @@ def can_view(db: Session, session: UserSession, workflow: AutomationWorkflow) ->
     Returns:
         True if user can view this workflow
     """
+    if not can_view_subject(
+        db,
+        session,
+        effective_subject_type if effective_subject_type is not None else workflow.subject_type,
+    ):
+        return False
+
     if workflow.scope == "org":
         # All users in the org can view org workflows
         return True
@@ -85,7 +139,12 @@ def can_view(db: Session, session: UserSession, workflow: AutomationWorkflow) ->
     return _has_manage_automation(db, session)
 
 
-def can_delete(db: Session, session: UserSession, workflow: AutomationWorkflow) -> bool:
+def can_delete(
+    db: Session,
+    session: UserSession,
+    workflow: AutomationWorkflow,
+    effective_subject_type: str | None = None,
+) -> bool:
     """
     Check if user can delete this workflow.
 
@@ -99,10 +158,15 @@ def can_delete(db: Session, session: UserSession, workflow: AutomationWorkflow) 
     Returns:
         True if user can delete this workflow
     """
-    return can_edit(db, session, workflow)
+    return can_edit(db, session, workflow, effective_subject_type)
 
 
-def can_toggle(db: Session, session: UserSession, workflow: AutomationWorkflow) -> bool:
+def can_toggle(
+    db: Session,
+    session: UserSession,
+    workflow: AutomationWorkflow,
+    effective_subject_type: str | None = None,
+) -> bool:
     """
     Check if user can toggle (enable/disable) this workflow.
 
@@ -116,10 +180,15 @@ def can_toggle(db: Session, session: UserSession, workflow: AutomationWorkflow) 
     Returns:
         True if user can toggle this workflow
     """
-    return can_edit(db, session, workflow)
+    return can_edit(db, session, workflow, effective_subject_type)
 
 
-def can_duplicate(db: Session, session: UserSession, workflow: AutomationWorkflow) -> bool:
+def can_duplicate(
+    db: Session,
+    session: UserSession,
+    workflow: AutomationWorkflow,
+    effective_subject_type: str | None = None,
+) -> bool:
     """
     Check if user can duplicate this workflow.
 
@@ -137,7 +206,12 @@ def can_duplicate(db: Session, session: UserSession, workflow: AutomationWorkflo
         True if user can duplicate this workflow
     """
     # Must be able to view the source workflow
-    if not can_view(db, session, workflow):
+    subject_type = (
+        effective_subject_type if effective_subject_type is not None else workflow.subject_type
+    )
+    if not can_view(db, session, workflow, subject_type):
+        return False
+    if not can_edit_subject(db, session, subject_type):
         return False
 
     # For org workflows, need manage_automation to create the duplicate

@@ -2,14 +2,18 @@
 
 import logging
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import UUID
 
 from fastapi import HTTPException, Request
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.db.enums import OwnerType, TaskStatus, TaskType
+from app.core.permissions import PermissionKey as P
+from app.db.enums import OwnerType, Role, TaskStatus, TaskType
 from app.db.models import (
+    Donor,
+    IntendedParent,
     Membership,
     Queue,
     Surrogate,
@@ -27,11 +31,113 @@ from app.schemas.task import (
     TaskRead,
     TaskUpdate,
 )
-from app.services import membership_service, queue_service
+from app.services import membership_service, permission_service, queue_service
 from app.utils.normalization import escape_like_string
 from app.utils.pagination import paginate_query_by_offset
 
 logger = logging.getLogger(__name__)
+
+
+def user_can_view_donors(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    role: Role | str | None = None,
+) -> bool:
+    """Resolve donor visibility for a current or prospective task recipient."""
+    resolved_role = role.value if isinstance(role, Role) else role
+    if resolved_role is None:
+        membership = membership_service.get_membership_for_org(db, org_id, user_id)
+        if not membership:
+            return False
+        resolved_role = membership.role
+    return permission_service.check_permission(
+        db,
+        org_id,
+        user_id,
+        resolved_role,
+        P.DONORS_VIEW.value,
+    )
+
+
+def validate_task_subject_ids(
+    *,
+    surrogate_id: UUID | None,
+    intended_parent_id: UUID | None,
+    donor_id: UUID | None,
+) -> None:
+    """Reject donor tasks linked to any other subject.
+
+    Surrogate and intended-parent IDs may coexist because match tasks intentionally
+    carry both sides of a match.
+    """
+    if donor_id and (surrogate_id or intended_parent_id):
+        raise ValueError(
+            "donor_id cannot be combined with surrogate_id or intended_parent_id"
+        )
+
+
+def _lock_active_donor_for_task(db: Session, org_id: UUID, donor_id: UUID) -> Donor:
+    """Fence donor retention and reject new work for archived donor records."""
+    donor = (
+        db.query(Donor)
+        .filter(Donor.organization_id == org_id, Donor.id == donor_id)
+        .with_for_update()
+        .one_or_none()
+    )
+    if donor is None:
+        raise ValueError("Donor not found")
+    if donor.is_archived:
+        raise ValueError("Cannot create or relink a task for an archived donor")
+    return donor
+
+
+def _lock_active_donor_task_owner(db: Session, org_id: UUID, owner_id: UUID) -> None:
+    membership = (
+        db.query(Membership)
+        .join(User, User.id == Membership.user_id)
+        .filter(
+            Membership.organization_id == org_id,
+            Membership.user_id == owner_id,
+            Membership.is_active.is_(True),
+            User.is_active.is_(True),
+        )
+        .with_for_update(of=Membership)
+        .one_or_none()
+    )
+    if membership is None:
+        raise ValueError("Owner user not found in organization")
+
+
+def validate_task_subject_update(task: Task, data: TaskUpdate) -> None:
+    """Validate a partial subject edit against the persisted task."""
+    update_data = data.model_dump(exclude_unset=True)
+    subject_fields = {"surrogate_id", "intended_parent_id", "donor_id"}
+    if not subject_fields.intersection(update_data):
+        return
+
+    next_surrogate_id = update_data.get("surrogate_id", task.surrogate_id)
+    next_intended_parent_id = update_data.get(
+        "intended_parent_id",
+        task.intended_parent_id,
+    )
+    next_donor_id = update_data.get("donor_id", task.donor_id)
+    validate_task_subject_ids(
+        surrogate_id=next_surrogate_id,
+        intended_parent_id=next_intended_parent_id,
+        donor_id=next_donor_id,
+    )
+
+    current_subject = (task.surrogate_id, task.intended_parent_id, task.donor_id)
+    next_subject = (next_surrogate_id, next_intended_parent_id, next_donor_id)
+    if task.is_workflow_approval and next_subject != current_subject:
+        raise ValueError("Workflow approval task subject cannot be changed")
+
+    # A surrogate+intended-parent pair is reserved for an existing match task.
+    if next_surrogate_id and next_intended_parent_id and next_subject != current_subject:
+        raise ValueError(
+            "surrogate_id and intended_parent_id can coexist only on an existing match task"
+        )
 
 
 def _coerce_task_type(value: str | None, *, task_id: UUID | None = None) -> TaskType:
@@ -89,6 +195,11 @@ def create_task(
     emit_events: bool = False,
 ) -> Task:
     """Create a new task."""
+    validate_task_subject_ids(
+        surrogate_id=data.surrogate_id,
+        intended_parent_id=data.intended_parent_id,
+        donor_id=data.donor_id,
+    )
     # Determine owner - default to creator if not provided
     owner_type = data.owner_type or "user"
     if owner_type == "queue":
@@ -98,11 +209,17 @@ def create_task(
     else:
         owner_id = data.owner_id or user_id
 
+    if data.donor_id:
+        _lock_active_donor_for_task(db, org_id, data.donor_id)
+        if owner_type == OwnerType.USER.value:
+            _lock_active_donor_task_owner(db, org_id, owner_id)
+
     task = Task(
         organization_id=org_id,
         created_by_user_id=user_id,
         surrogate_id=data.surrogate_id,
         intended_parent_id=data.intended_parent_id,
+        donor_id=data.donor_id,
         owner_type=owner_type,
         owner_id=owner_id,
         title=data.title,
@@ -152,10 +269,62 @@ def update_task(
     If actor_user_id is provided, sends notification on assignee change.
     """
     update_data = data.model_dump(exclude_unset=True)
+    next_donor_id = update_data.get("donor_id", task.donor_id)
+    donor_involved = task.donor_id is not None or next_donor_id is not None
+    if donor_involved:
+        donor_ids_to_lock = sorted(
+            {donor_id for donor_id in (task.donor_id, next_donor_id) if donor_id is not None},
+            key=str,
+        )
+        locked_donors = (
+            db.query(Donor)
+            .filter(
+                Donor.organization_id == task.organization_id,
+                Donor.id.in_(donor_ids_to_lock),
+            )
+            .order_by(Donor.id)
+            .with_for_update()
+            .all()
+        )
+        locked_donors_by_id = {donor.id: donor for donor in locked_donors}
+        if next_donor_id is not None:
+            next_donor = locked_donors_by_id.get(next_donor_id)
+            if next_donor is None:
+                raise ValueError("Donor not found")
+            if next_donor.is_archived:
+                raise ValueError("Cannot create or relink a task for an archived donor")
+
+        next_owner_type = update_data.get("owner_type", task.owner_type)
+        next_owner_id = update_data.get("owner_id", task.owner_id)
+        owner_ids_to_lock = {
+            owner_id
+            for owner_type, owner_id in (
+                (task.owner_type, task.owner_id),
+                (next_owner_type, next_owner_id),
+            )
+            if owner_type == OwnerType.USER.value and owner_id is not None
+        }
+        for owner_id in sorted(owner_ids_to_lock, key=str):
+            _lock_active_donor_task_owner(db, task.organization_id, owner_id)
+        locked_task = (
+            db.query(Task)
+            .filter(
+                Task.organization_id == task.organization_id,
+                Task.id == task.id,
+            )
+            .with_for_update()
+            .one_or_none()
+        )
+        if locked_task is None:
+            raise ValueError("Task not found")
+        task = locked_task
+        update_data = data.model_dump(exclude_unset=True)
+
+    validate_task_subject_update(task, data)
 
     # Track owner for notification
+    old_owner_type = task.owner_type
     old_owner_id = task.owner_id
-
     if "owner_type" in update_data or "owner_id" in update_data:
         owner_type = update_data.get("owner_type", task.owner_type)
         owner_id = update_data.get("owner_id", task.owner_id)
@@ -164,8 +333,46 @@ def update_task(
         update_data["owner_type"] = owner_type
         update_data["owner_id"] = owner_id
 
+    next_owner_type = update_data.get("owner_type", task.owner_type)
+    next_owner_id = update_data.get("owner_id", task.owner_id)
+    next_donor_id = update_data.get("donor_id", task.donor_id)
+    remote_identity_must_move = bool(
+        task.google_task_id
+        and donor_involved
+        and (
+            next_owner_type != old_owner_type
+            or next_owner_id != old_owner_id
+            or next_donor_id is None
+        )
+    )
+    if remote_identity_must_move:
+        from app.services import google_tasks_cleanup_service
+
+        google_tasks_cleanup_service.enqueue_remote_deletion(
+            db,
+            org_id=task.organization_id,
+            user_id=old_owner_id,
+            source_task_id=task.id,
+            google_task_id=task.google_task_id,
+            google_task_list_id=(
+                task.google_task_list_id
+                or google_tasks_cleanup_service.GOOGLE_DEFAULT_TASKLIST_ID
+            ),
+        )
+        task.google_task_id = None
+        task.google_task_list_id = None
+        task.google_task_updated_at = None
+
     # Fields that can be cleared (set to None)
-    clearable_fields = {"due_date", "due_time", "description", "duration_minutes"}
+    clearable_fields = {
+        "due_date",
+        "due_time",
+        "description",
+        "duration_minutes",
+        "surrogate_id",
+        "intended_parent_id",
+        "donor_id",
+    }
 
     for field, value in update_data.items():
         # For clearable fields, allow None; for others, skip None
@@ -270,8 +477,14 @@ def bulk_complete_tasks(
     from fastapi import HTTPException
 
     from app.core.deps import is_owner_or_assignee_or_admin
+    from app.core.policies import POLICIES
     from app.core.surrogate_access import check_surrogate_access
-    from app.services import dashboard_service, surrogate_service
+    from app.services import (
+        dashboard_service,
+        donor_service,
+        permission_service,
+        surrogate_service,
+    )
 
     results: dict = {"completed": 0, "failed": []}
     completed_tasks_to_sync: list[Task] = []
@@ -293,6 +506,21 @@ def bulk_complete_tasks(
                         db=db,
                         org_id=session.org_id,
                     )
+
+            if task.donor_id:
+                can_view_donors = permission_service.check_permission(
+                    db,
+                    session.org_id,
+                    session.user_id,
+                    session.role.value,
+                    POLICIES["donors"].default.value,
+                )
+                donor = donor_service.get_donor(db, session.org_id, task.donor_id)
+                if not can_view_donors or not donor:
+                    results["failed"].append(
+                        {"task_id": str(task_id), "reason": "Not authorized"}
+                    )
+                    continue
 
             if not is_owner_or_assignee_or_admin(
                 session, task.created_by_user_id, task.owner_type, task.owner_id
@@ -345,6 +573,48 @@ def get_task(db: Session, task_id: UUID, org_id: UUID) -> Task | None:
     )
 
 
+def check_task_subject_access(db: Session, task: Task, session: UserSession) -> None:
+    """Validate tenant ownership and record access for every linked task subject."""
+    from app.core.surrogate_access import check_surrogate_access
+    from app.services import donor_service, ip_service, surrogate_service
+
+    if task.organization_id != session.org_id:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task.surrogate_id:
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, task.surrogate_id)
+        if not surrogate:
+            raise HTTPException(status_code=404, detail="Task subject not found")
+        check_surrogate_access(
+            surrogate,
+            session.role,
+            session.user_id,
+            db=db,
+            org_id=session.org_id,
+        )
+
+    if task.intended_parent_id:
+        intended_parent = ip_service.get_intended_parent(
+            db,
+            task.intended_parent_id,
+            session.org_id,
+        )
+        if not intended_parent:
+            raise HTTPException(status_code=404, detail="Task subject not found")
+
+    if task.donor_id:
+        if not user_can_view_donors(
+            db,
+            session.org_id,
+            session.user_id,
+            session.role,
+        ):
+            raise HTTPException(status_code=403, detail="Missing permission: view_donors")
+        donor = donor_service.get_donor(db, session.org_id, task.donor_id)
+        if not donor:
+            raise HTTPException(status_code=404, detail="Task subject not found")
+
+
 def delete_task(
     db: Session,
     task: Task,
@@ -352,7 +622,16 @@ def delete_task(
     emit_events: bool = False,
 ) -> None:
     """Delete a task."""
-    _delete_task_from_google_best_effort(db, task)
+    if task.donor_id:
+        from app.services import google_tasks_cleanup_service
+
+        google_tasks_cleanup_service.enqueue_donor_task_remote_deletions(
+            db,
+            org_id=task.organization_id,
+            task_ids={task.id},
+        )
+    else:
+        _delete_task_from_google_best_effort(db, task)
     db.delete(task)
     db.commit()
     if emit_events:
@@ -398,14 +677,20 @@ def get_task_context(
     db: Session,
     org_id: UUID,
     tasks: list[Task],
-) -> dict[str, dict[UUID, str | None]]:
+) -> dict[str, dict]:
     """Fetch related data for tasks in bulk."""
     if not tasks:
-        return {"user_names": {}, "queue_names": {}, "surrogate_numbers": {}}
+        return {
+            "user_names": {},
+            "queue_names": {},
+            "surrogate_numbers": {},
+            "donor_metadata": {},
+        }
 
     user_ids = set()
     queue_ids = set()
     surrogate_ids = set()
+    donor_ids = set()
 
     for task in tasks:
         if task.owner_type == OwnerType.USER.value:
@@ -420,6 +705,8 @@ def get_task_context(
             user_ids.add(task.workflow_triggered_by_user_id)
         if task.surrogate_id:
             surrogate_ids.add(task.surrogate_id)
+        if task.donor_id:
+            donor_ids.add(task.donor_id)
 
     user_names = {}
     if user_ids:
@@ -456,14 +743,34 @@ def get_task_context(
         )
         surrogate_numbers = {surrogate.id: surrogate.surrogate_number for surrogate in surrogates}
 
+    donor_metadata = {}
+    if donor_ids:
+        donors = (
+            db.query(Donor)
+            .filter(
+                Donor.organization_id == org_id,
+                Donor.id.in_(donor_ids),
+            )
+            .all()
+        )
+        donor_metadata = {
+            donor.id: {
+                "donor_number": donor.donor_number,
+                "donor_type": donor.donor_type,
+                "donor_name": donor.full_name,
+            }
+            for donor in donors
+        }
+
     return {
         "user_names": user_names,
         "queue_names": queue_names,
         "surrogate_numbers": surrogate_numbers,
+        "donor_metadata": donor_metadata,
     }
 
 
-def to_task_read(task: Task, context: dict[str, dict[UUID, str | None]]) -> TaskRead:
+def to_task_read(task: Task, context: dict[str, dict]) -> TaskRead:
     """Convert Task model to TaskRead schema."""
     owner_name = None
     if task.owner_type == OwnerType.USER.value:
@@ -475,12 +782,17 @@ def to_task_read(task: Task, context: dict[str, dict[UUID, str | None]]) -> Task
     completed_by_name = context["user_names"].get(task.completed_by_user_id)
     triggered_by_name = context["user_names"].get(task.workflow_triggered_by_user_id)
     surrogate_number = context["surrogate_numbers"].get(task.surrogate_id)
+    donor_metadata = context["donor_metadata"].get(task.donor_id, {})
 
     return TaskRead(
         id=task.id,
         surrogate_id=task.surrogate_id,
         intended_parent_id=task.intended_parent_id,
+        donor_id=task.donor_id,
         surrogate_number=surrogate_number,
+        donor_number=donor_metadata.get("donor_number"),
+        donor_type=donor_metadata.get("donor_type"),
+        donor_name=donor_metadata.get("donor_name"),
         owner_type=task.owner_type,
         owner_id=task.owner_id,
         owner_name=owner_name,
@@ -510,7 +822,7 @@ def to_task_read(task: Task, context: dict[str, dict[UUID, str | None]]) -> Task
 
 def to_task_list_item(
     task: Task,
-    context: dict[str, dict[UUID, str | None]],
+    context: dict[str, dict],
 ) -> TaskListItem:
     """Convert Task model to TaskListItem schema."""
     owner_name = None
@@ -520,12 +832,17 @@ def to_task_list_item(
         owner_name = context["queue_names"].get(task.owner_id)
 
     surrogate_number = context["surrogate_numbers"].get(task.surrogate_id)
+    donor_metadata = context["donor_metadata"].get(task.donor_id, {})
 
     return TaskListItem(
         id=task.id,
         surrogate_id=task.surrogate_id,
         intended_parent_id=task.intended_parent_id,
+        donor_id=task.donor_id,
         surrogate_number=surrogate_number,
+        donor_number=donor_metadata.get("donor_number"),
+        donor_type=donor_metadata.get("donor_type"),
+        donor_name=donor_metadata.get("donor_name"),
         title=task.title,
         task_type=_coerce_task_type(task.task_type, task_id=task.id),
         owner_type=task.owner_type,
@@ -553,6 +870,8 @@ def list_tasks(
     owner_id: UUID | None = None,
     surrogate_id: UUID | None = None,
     intended_parent_id: UUID | None = None,
+    donor_id: UUID | None = None,
+    donor_type: Literal["egg", "sperm"] | None = None,
     pipeline_id: UUID | None = None,
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
@@ -561,6 +880,7 @@ def list_tasks(
     due_after: str | None = None,
     my_tasks_user_id: UUID | None = None,
     exclude_approvals: bool = False,
+    can_view_donors: bool = False,
 ):
     """
     List tasks with filters and pagination.
@@ -585,7 +905,15 @@ def list_tasks(
     if user_id:
         _pull_google_tasks_for_user_best_effort(db, user_id, org_id)
 
-    query = db.query(Task).filter(Task.organization_id == org_id)
+    query = db.query(Task).filter(
+        Task.organization_id == org_id,
+        task_subjects_belong_to_org(org_id),
+    )
+
+    # Donor task access fails closed independently of the surrogate visibility
+    # predicate below. A NULL surrogate_id must never make donor tasks public.
+    if not can_view_donors:
+        query = query.filter(Task.donor_id.is_(None))
 
     # Role-based surrogate access filtering for intake specialists:
     # filter out tasks linked to surrogates they can't access.
@@ -664,6 +992,15 @@ def list_tasks(
     if intended_parent_id:
         query = query.filter(Task.intended_parent_id == intended_parent_id)
 
+    if donor_id:
+        query = query.filter(Task.donor_id == donor_id)
+
+    if donor_type:
+        query = query.join(Donor, Task.donor_id == Donor.id).filter(
+            Donor.organization_id == org_id,
+            Donor.donor_type == donor_type,
+        )
+
     # Completion filter
     if is_completed is not None:
         query = query.filter(Task.is_completed == is_completed)
@@ -724,6 +1061,8 @@ def list_tasks_for_session(
     owner_id: UUID | None = None,
     surrogate_id: UUID | None = None,
     intended_parent_id: UUID | None = None,
+    donor_id: UUID | None = None,
+    donor_type: Literal["egg", "sperm"] | None = None,
     pipeline_id: UUID | None = None,
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
@@ -735,7 +1074,19 @@ def list_tasks_for_session(
 ) -> TaskListResponse:
     """List tasks scoped to the current session with access checks and PHI auditing."""
     from app.core.surrogate_access import check_surrogate_access
-    from app.services import ip_service, phi_access_service, surrogate_service
+    from app.services import (
+        donor_service,
+        ip_service,
+        phi_access_service,
+        surrogate_service,
+    )
+
+    can_view_donors = user_can_view_donors(
+        db,
+        session.org_id,
+        session.user_id,
+        session.role,
+    )
 
     if surrogate_id:
         surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
@@ -753,6 +1104,14 @@ def list_tasks_for_session(
         if not ip:
             raise HTTPException(status_code=404, detail="Intended parent not found")
 
+    if donor_id or donor_type:
+        if not can_view_donors:
+            raise HTTPException(status_code=403, detail="Missing permission: view_donors")
+    if donor_id:
+        donor = donor_service.get_donor(db, session.org_id, donor_id)
+        if not donor:
+            raise HTTPException(status_code=404, detail="Donor not found")
+
     tasks, total = list_tasks(
         db=db,
         org_id=session.org_id,
@@ -764,6 +1123,8 @@ def list_tasks_for_session(
         owner_id=owner_id,
         surrogate_id=surrogate_id,
         intended_parent_id=intended_parent_id,
+        donor_id=donor_id,
+        donor_type=donor_type,
         pipeline_id=pipeline_id,
         is_completed=is_completed,
         task_type=task_type,
@@ -772,6 +1133,7 @@ def list_tasks_for_session(
         due_after=due_after,
         my_tasks_user_id=session.user_id if my_tasks else None,
         exclude_approvals=exclude_approvals,
+        can_view_donors=can_view_donors,
     )
 
     phi_access_service.log_phi_access(
@@ -789,6 +1151,8 @@ def list_tasks_for_session(
             "owner_id": str(owner_id) if owner_id else None,
             "surrogate_id": str(surrogate_id) if surrogate_id else None,
             "intended_parent_id": str(intended_parent_id) if intended_parent_id else None,
+            "donor_id": str(donor_id) if donor_id else None,
+            "donor_type": donor_type,
             "pipeline_id": str(pipeline_id) if pipeline_id else None,
             "is_completed": is_completed,
             "task_type": task_type.value if task_type else None,
@@ -811,31 +1175,46 @@ def list_tasks_for_session(
     )
 
 
-def count_pending_tasks(db: Session, org_id: UUID) -> int:
+def count_pending_tasks(
+    db: Session,
+    org_id: UUID,
+    *,
+    can_view_donors: bool = True,
+) -> int:
     """Count incomplete tasks for dashboard metrics."""
+    filters = [
+        Task.organization_id == org_id,
+        task_subjects_belong_to_org(org_id),
+        Task.is_completed.is_(False),
+        Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
+    ]
+    if not can_view_donors:
+        filters.append(Task.donor_id.is_(None))
     return (
-        db.scalar(
-            select(func.count(Task.id)).where(
-                Task.organization_id == org_id,
-                Task.is_completed.is_(False),
-                Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
-            )
-        )
+        db.scalar(select(func.count(Task.id)).where(*filters))
         or 0
     )
 
 
-def count_overdue_tasks(db: Session, org_id: UUID, today) -> int:
+def count_overdue_tasks(
+    db: Session,
+    org_id: UUID,
+    today,
+    *,
+    can_view_donors: bool = True,
+) -> int:
     """Count overdue tasks for dashboard metrics."""
+    filters = [
+        Task.organization_id == org_id,
+        task_subjects_belong_to_org(org_id),
+        Task.is_completed.is_(False),
+        Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
+        Task.due_date < today,
+    ]
+    if not can_view_donors:
+        filters.append(Task.donor_id.is_(None))
     return (
-        db.scalar(
-            select(func.count(Task.id)).where(
-                Task.organization_id == org_id,
-                Task.is_completed.is_(False),
-                Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
-                Task.due_date < today,
-            )
-        )
+        db.scalar(select(func.count(Task.id)).where(*filters))
         or 0
     )
 
@@ -867,18 +1246,15 @@ def iter_tasks_due_in_window(
     """Yield tasks due within a time window (org-scoped)."""
     from datetime import datetime as dt
 
-    from app.db.models import Surrogate
-
     start_date = window_start.date()
     end_date = window_end.date()
     tzinfo = window_start.tzinfo
 
     query = (
         db.query(Task)
-        .join(Surrogate, Task.surrogate_id == Surrogate.id)
         .filter(
             Task.organization_id == org_id,
-            Surrogate.organization_id == org_id,
+            task_subjects_belong_to_org(org_id),
             Task.due_date.isnot(None),
             Task.due_date >= start_date,
             Task.due_date <= end_date,
@@ -905,14 +1281,11 @@ def iter_overdue_tasks(
     batch_size: int = 1000,
 ):
     """Yield overdue tasks (org-scoped)."""
-    from app.db.models import Surrogate
-
     query = (
         db.query(Task)
-        .join(Surrogate, Task.surrogate_id == Surrogate.id)
         .filter(
             Task.organization_id == org_id,
-            Surrogate.organization_id == org_id,
+            task_subjects_belong_to_org(org_id),
             Task.due_date.isnot(None),
             Task.due_date < today,
             Task.is_completed.is_(False),
@@ -922,6 +1295,39 @@ def iter_overdue_tasks(
     )
 
     yield from query.yield_per(batch_size)
+
+
+def task_subjects_belong_to_org(org_id: UUID):
+    """Fail closed if any linked task subject belongs to another organization."""
+    return and_(
+        or_(
+            Task.surrogate_id.is_(None),
+            exists()
+            .where(
+                Surrogate.id == Task.surrogate_id,
+                Surrogate.organization_id == org_id,
+            )
+            .correlate(Task),
+        ),
+        or_(
+            Task.intended_parent_id.is_(None),
+            exists()
+            .where(
+                IntendedParent.id == Task.intended_parent_id,
+                IntendedParent.organization_id == org_id,
+            )
+            .correlate(Task),
+        ),
+        or_(
+            Task.donor_id.is_(None),
+            exists()
+            .where(
+                Donor.id == Task.donor_id,
+                Donor.organization_id == org_id,
+            )
+            .correlate(Task),
+        ),
+    )
 
 
 def list_user_tasks_due_on(

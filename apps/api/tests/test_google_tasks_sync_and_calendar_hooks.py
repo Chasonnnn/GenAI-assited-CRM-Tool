@@ -296,9 +296,13 @@ async def test_google_upsert_delete_and_access_paths(monkeypatch, db):
 
     calls: list[str] = []
 
-    async def _fake_request(*, access_token, method, path, params=None, json_body=None):
-        del access_token, params, json_body
+    async def _fake_request(
+        *, access_token, method, path, params=None, json_body=None, max_attempts=3
+    ):
+        del access_token, params, json_body, max_attempts
         calls.append(f"{method}:{path}")
+        if method == "GET" and path == "/users/@me/lists/%40default":
+            return 200, {"id": "default"}
         if method == "PATCH":
             return 404, None
         if method == "POST":
@@ -344,6 +348,88 @@ async def test_google_upsert_delete_and_access_paths(monkeypatch, db):
     ok, reason = google_tasks_sync_service.check_google_tasks_access(db, uuid4())
     assert ok is False
     assert reason == "probe_failed"
+
+
+@pytest.mark.asyncio
+async def test_uncertain_donor_post_reconciles_marker_without_replaying(monkeypatch, db):
+    task = _make_task(donor_id=uuid4(), google_task_list_id=None)
+
+    async def _token(*_args, **_kwargs):
+        return "tok"
+
+    task_snapshots = 0
+    post_attempts: list[int] = []
+
+    async def _fake_request(
+        *, access_token, method, path, params=None, json_body=None, max_attempts=3
+    ):
+        nonlocal task_snapshots
+        del access_token, params
+        if path == "/users/@me/lists/%40default":
+            return 200, {"id": "concrete-default-list"}
+        if method == "GET" and path == "/lists/concrete-default-list/tasks":
+            task_snapshots += 1
+            if task_snapshots == 1:
+                return 200, {"items": []}
+            return 200, {
+                "items": [
+                    {
+                        "id": "accepted-after-timeout",
+                        "notes": (
+                            f"[Surrogacy Force task ID: {task.id}]"
+                        ),
+                        "updated": "2026-08-29T12:00:00Z",
+                    }
+                ]
+            }
+        if method == "POST":
+            assert json_body is not None
+            assert f"[Surrogacy Force task ID: {task.id}]" in str(json_body["notes"])
+            post_attempts.append(max_attempts)
+            return 0, None
+        raise AssertionError(f"Unexpected Google request: {method} {path}")
+
+    monkeypatch.setattr(google_tasks_sync_service.oauth_service, "get_access_token_async", _token)
+    monkeypatch.setattr(google_tasks_sync_service, "_google_request", _fake_request)
+
+    result = await google_tasks_sync_service._upsert_google_task_for_platform_task(task, db)
+
+    assert result is not None
+    assert result[0] == "accepted-after-timeout"
+    assert result[1] == "concrete-default-list"
+    assert post_attempts == [1]
+
+
+@pytest.mark.asyncio
+async def test_failed_donor_patch_is_not_mistaken_for_creation_reconciliation(
+    monkeypatch,
+    db,
+):
+    task = _make_task(
+        donor_id=uuid4(),
+        google_task_id="existing-remote",
+        google_task_list_id="concrete-list",
+    )
+
+    async def _token(*_args, **_kwargs):
+        return "tok"
+
+    requests: list[tuple[str, str]] = []
+
+    async def _fake_request(
+        *, access_token, method, path, params=None, json_body=None, max_attempts=3
+    ):
+        del access_token, params, json_body, max_attempts
+        requests.append((method, path))
+        return 503, {"error": {"message": "temporarily unavailable"}}
+
+    monkeypatch.setattr(google_tasks_sync_service.oauth_service, "get_access_token_async", _token)
+    monkeypatch.setattr(google_tasks_sync_service, "_google_request", _fake_request)
+
+    result = await google_tasks_sync_service._upsert_google_task_for_platform_task(task, db)
+
+    assert result is None
+    assert requests == [("PATCH", "/lists/concrete-list/tasks/existing-remote")]
 
 
 def test_sync_platform_task_wrappers(monkeypatch, db):
@@ -443,8 +529,10 @@ async def test_task_api_disables_outbound_google_sync_after_scope_403(
 
     google_requests = []
 
-    async def _fake_request(*, access_token, method, path, params=None, json_body=None):
-        del access_token, params, json_body
+    async def _fake_request(
+        *, access_token, method, path, params=None, json_body=None, max_attempts=3
+    ):
+        del access_token, params, json_body, max_attempts
         google_requests.append((method, path))
         return 403, {"error": {"message": "Request had insufficient authentication scopes."}}
 
@@ -473,7 +561,7 @@ async def test_task_api_disables_outbound_google_sync_after_scope_403(
 
     deleted = await authed_client.delete(f"/tasks/{task_id}")
     assert deleted.status_code == 204, deleted.text
-    assert google_requests == [("POST", "/lists/%40default/tasks")]
+    assert google_requests == [("GET", "/users/@me/lists/%40default")]
 
 
 def test_calendar_watch_helper_functions(monkeypatch):

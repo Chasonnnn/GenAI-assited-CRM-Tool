@@ -45,6 +45,9 @@ def build_action_preview(
     if action_type == WorkflowActionType.ASSIGN_SURROGATE.value:
         return _preview_assign_surrogate(db, action, entity)
 
+    if action_type == WorkflowActionType.ASSIGN_DONOR.value:
+        return _preview_assign_surrogate(db, action, entity)
+
     if action_type == WorkflowActionType.SEND_NOTIFICATION.value:
         return _preview_send_notification(db, action, entity)
 
@@ -187,7 +190,10 @@ def _preview_add_note(db: Session, action: dict, entity: Any) -> str:
 
 
 def _get_surrogate_ref(entity: Any) -> str:
-    """Get a reference to the surrogate without PII."""
+    """Get a stable subject reference without PII."""
+    if hasattr(entity, "donor_number") and entity.donor_number:
+        donor_kind = str(getattr(entity, "donor_type", "donor")).title()
+        return f"{donor_kind} donor #{entity.donor_number}"
     if hasattr(entity, "surrogate_number") and entity.surrogate_number:
         return f"Surrogate #{entity.surrogate_number}"
     if hasattr(entity, "id"):

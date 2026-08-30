@@ -98,7 +98,7 @@ def disconnect_integration(
 ) -> dict[str, object]:
     """Disconnect an integration."""
     from app.db.enums import AuditEventType
-    from app.services import audit_service, calendar_service
+    from app.services import audit_service, calendar_service, permission_service
 
     integration = oauth_service.get_user_integration(db, session.user_id, integration_type)
     if not integration:
@@ -109,6 +109,14 @@ def disconnect_integration(
 
     # Best-effort channel cleanup before deleting integration credentials.
     if integration_type == "google_calendar":
+        try:
+            permission_service.assert_google_donor_tasks_disconnectable(
+                db,
+                session.user_id,
+            )
+        except ValueError as exc:
+            db.rollback()
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         try:
             run_async(
                 calendar_service.stop_google_calendar_watch(
@@ -124,6 +132,17 @@ def disconnect_integration(
                 session.user_id,
                 session.org_id,
             )
+        # Watch cleanup commits its metadata update. Reacquire the global fence
+        # so donor-task sync cannot create work between that commit and the
+        # user-global credential deletion below.
+        try:
+            permission_service.assert_google_donor_tasks_disconnectable(
+                db,
+                session.user_id,
+            )
+        except ValueError as exc:
+            db.rollback()
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     deleted = oauth_service.delete_integration(db, session.user_id, integration_type)
     if not deleted:

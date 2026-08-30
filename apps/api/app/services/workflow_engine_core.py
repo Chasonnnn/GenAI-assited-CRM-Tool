@@ -51,6 +51,8 @@ class WorkflowEngineCore:
         depth: int = 0,
         source: WorkflowEventSource = WorkflowEventSource.USER,
         entity_owner_id: UUID | None = None,
+        subject_type: str | None = None,
+        subject_id: UUID | None = None,
     ) -> list[WorkflowExecution]:
         """
         Trigger workflows for an event.
@@ -74,9 +76,35 @@ class WorkflowEngineCore:
         event_id = event_id or uuid_module.uuid4()
         executions = []
 
+        if subject_type is None or subject_id is None:
+            resolver = getattr(self.adapter, "resolve_subject_context", None)
+            resolved = resolver(db, entity_type, entity_id) if resolver else None
+            if resolved:
+                subject_type, subject_id = resolved
+            elif entity_type in {
+                "surrogate",
+                "form_submission",
+                "intake_lead",
+                "match",
+                "appointment",
+            }:
+                subject_type, subject_id = entity_type, entity_id
+            elif entity_type == "task":
+                # Legacy unlinked tasks still produce a surrogate-scoped execution
+                # whose actions fail closed when no related surrogate exists.
+                subject_type, subject_id = "surrogate", entity_id
+        if subject_type is None or subject_id is None:
+            logger.warning(f"Workflow subject unresolved for {entity_type}:{entity_id}")
+            return []
+
         # Find matching enabled workflows
         workflows = self._find_matching_workflows(
-            db, org_id, trigger_type, event_data, entity_owner_id
+            db,
+            org_id,
+            trigger_type,
+            event_data,
+            entity_owner_id,
+            subject_type,
         )
 
         for workflow in workflows:
@@ -89,6 +117,8 @@ class WorkflowEngineCore:
                 event_id=event_id,
                 depth=depth,
                 source=source,
+                subject_type=subject_type,
+                subject_id=subject_id,
             )
             if execution:
                 executions.append(execution)
@@ -107,6 +137,8 @@ class WorkflowEngineCore:
         depth: int = 0,
         source: WorkflowEventSource = WorkflowEventSource.USER,
         bypass_dedupe: bool = False,
+        subject_type: str | None = None,
+        subject_id: UUID | None = None,
     ) -> WorkflowExecution | None:
         """Execute a single workflow directly (used for manual retries)."""
         event_id = event_id or uuid_module.uuid4()
@@ -120,6 +152,8 @@ class WorkflowEngineCore:
             depth=depth,
             source=source,
             bypass_dedupe=bypass_dedupe,
+            subject_type=subject_type or workflow.subject_type,
+            subject_id=subject_id or entity_id,
         )
 
     def _find_matching_workflows(
@@ -129,6 +163,7 @@ class WorkflowEngineCore:
         trigger_type: WorkflowTriggerType,
         event_data: dict,
         entity_owner_id: UUID | None = None,
+        subject_type: str = "surrogate",
     ) -> list[AutomationWorkflow]:
         """
         Find enabled workflows that match the trigger.
@@ -153,6 +188,7 @@ class WorkflowEngineCore:
             .filter(
                 AutomationWorkflow.organization_id == org_id,
                 AutomationWorkflow.trigger_type == trigger_type.value,
+                AutomationWorkflow.subject_type == subject_type,
                 AutomationWorkflow.is_enabled.is_(True),
                 scope_filter,
             )
@@ -175,7 +211,10 @@ class WorkflowEngineCore:
         """Check if trigger config matches the event data."""
         config = workflow.trigger_config
 
-        if trigger_type == WorkflowTriggerType.STATUS_CHANGED:
+        if trigger_type in {
+            WorkflowTriggerType.STATUS_CHANGED,
+            WorkflowTriggerType.DONOR_STAGE_CHANGED,
+        }:
             to_stage_id = config.get("to_stage_id")
             from_stage_id = config.get("from_stage_id")
             to_stage_key = config.get("to_stage_key")
@@ -197,13 +236,19 @@ class WorkflowEngineCore:
                 return False
             return True
 
-        if trigger_type == WorkflowTriggerType.SURROGATE_ASSIGNED:
+        if trigger_type in {
+            WorkflowTriggerType.SURROGATE_ASSIGNED,
+            WorkflowTriggerType.DONOR_ASSIGNED,
+        }:
             to_user_id = config.get("to_user_id")
             if to_user_id and str(event_data.get("new_owner_id")) != str(to_user_id):
                 return False
             return True
 
-        if trigger_type == WorkflowTriggerType.SURROGATE_UPDATED:
+        if trigger_type in {
+            WorkflowTriggerType.SURROGATE_UPDATED,
+            WorkflowTriggerType.DONOR_UPDATED,
+        }:
             required_fields = set(config.get("fields", []))
             changed_fields = set(event_data.get("changed_fields", []))
             return bool(required_fields & changed_fields)
@@ -218,11 +263,17 @@ class WorkflowEngineCore:
             form_id = config.get("form_id")
             if form_id and str(event_data.get("form_id")) != str(form_id):
                 return False
+            lead_kind = config.get("lead_kind")
+            if lead_kind and event_data.get("lead_kind") != lead_kind:
+                return False
             return True
 
         if trigger_type == WorkflowTriggerType.INTAKE_LEAD_CREATED:
             form_id = config.get("form_id")
             if form_id and str(event_data.get("form_id")) != str(form_id):
+                return False
+            lead_type = config.get("lead_type")
+            if lead_type and event_data.get("lead_type") != lead_type:
                 return False
             return True
 
@@ -241,12 +292,17 @@ class WorkflowEngineCore:
         depth: int,
         source: WorkflowEventSource,
         bypass_dedupe: bool = False,
+        subject_type: str | None = None,
+        subject_id: UUID | None = None,
     ) -> WorkflowExecution | None:
         """Execute a single workflow and log the result."""
         start_time = time.time()
+        if subject_type is None or subject_id is None or subject_type != workflow.subject_type:
+            logger.warning(f"Workflow {workflow.id} received invalid subject context")
+            return None
 
         # Check dedupe for sweep-based triggers
-        dedupe_key = self._get_dedupe_key(workflow, entity_id, event_data=event_data)
+        dedupe_key = self._get_dedupe_key(workflow, subject_id, event_data=event_data)
         if dedupe_key and bypass_dedupe:
             # Allow manual retries for sweep-based triggers by namespacing the key.
             dedupe_key = f"{dedupe_key}:retry:{event_id}"
@@ -254,7 +310,7 @@ class WorkflowEngineCore:
             return None
 
         # Check rate limits
-        rate_limit_error = self._check_rate_limits(db, workflow, entity_id)
+        rate_limit_error = self._check_rate_limits(db, workflow, subject_id)
         if rate_limit_error:
             execution = WorkflowExecution(
                 organization_id=workflow.organization_id,
@@ -264,6 +320,8 @@ class WorkflowEngineCore:
                 event_source=source.value,
                 entity_type=entity_type,
                 entity_id=entity_id,
+                subject_type=subject_type,
+                subject_id=subject_id,
                 trigger_event=event_data,
                 dedupe_key=dedupe_key,
                 matched_conditions=False,
@@ -282,18 +340,39 @@ class WorkflowEngineCore:
         if not entity:
             logger.warning(f"Entity {entity_type}:{entity_id} not found")
             return None
+        entity_org_id = getattr(entity, "organization_id", None)
+        if entity_org_id != workflow.organization_id:
+            logger.warning(f"Entity {entity_type}:{entity_id} is outside workflow organization")
+            return None
+
+        condition_entity = entity
+        if subject_type in {"egg_donor", "sperm_donor"}:
+            donor = self.adapter.get_entity(db, "donor", subject_id)
+            if (
+                donor is None
+                or donor.organization_id != workflow.organization_id
+                or donor.pipeline_entity_type != subject_type
+            ):
+                logger.warning(f"Donor subject {subject_type}:{subject_id} is invalid")
+                return None
+            condition_entity = donor
 
         # Evaluate conditions
         conditions_matched = self._evaluate_conditions(
             workflow.conditions,
             workflow.condition_logic,
-            entity,
+            condition_entity,
         )
 
         # Check user opt-out (for owner of entity)
         user_opted_out = False
-        if hasattr(entity, "owner_id") and entity.owner_type == OwnerType.USER.value:
-            user_opted_out = workflow_service.is_user_opted_out(db, entity.owner_id, workflow.id)
+        if (
+            hasattr(condition_entity, "owner_id")
+            and condition_entity.owner_type == OwnerType.USER.value
+        ):
+            user_opted_out = workflow_service.is_user_opted_out(
+                db, condition_entity.owner_id, workflow.id
+            )
 
         if not conditions_matched or user_opted_out:
             execution = WorkflowExecution(
@@ -304,6 +383,8 @@ class WorkflowEngineCore:
                 event_source=source.value,
                 entity_type=entity_type,
                 entity_id=entity_id,
+                subject_type=subject_type,
+                subject_id=subject_id,
                 trigger_event=event_data,
                 dedupe_key=dedupe_key,
                 matched_conditions=conditions_matched,
@@ -328,6 +409,8 @@ class WorkflowEngineCore:
             entity=entity,
             has_approval_actions=has_approval_actions,
             triggered_by_user_id=event_data.get("triggered_by_user_id"),
+            subject_type=subject_type,
+            subject_id=subject_id,
         )
         if approval_error:
             execution = WorkflowExecution(
@@ -338,6 +421,8 @@ class WorkflowEngineCore:
                 event_source=source.value,
                 entity_type=entity_type,
                 entity_id=entity_id,
+                subject_type=subject_type,
+                subject_id=subject_id,
                 trigger_event=event_data,
                 dedupe_key=dedupe_key,
                 matched_conditions=True,
@@ -359,6 +444,8 @@ class WorkflowEngineCore:
             event_source=source.value,
             entity_type=entity_type,
             entity_id=entity_id,
+            subject_type=subject_type,
+            subject_id=subject_id,
             trigger_event=event_data,
             dedupe_key=dedupe_key,
             matched_conditions=True,
@@ -429,9 +516,12 @@ class WorkflowEngineCore:
                 depth=depth,
                 workflow_scope=workflow.scope,
                 workflow_owner_id=workflow.owner_user_id,
+                workflow_creator_user_id=workflow.created_by_user_id,
                 trigger_callback=self.trigger,
                 workflow_execution_id=execution.id,
                 workflow_action_index=idx,
+                subject_type=subject_type,
+                subject_id=subject_id,
             )
             action_results.append(result)
             if not result.get("success"):
@@ -545,9 +635,12 @@ class WorkflowEngineCore:
                 depth=execution.depth,
                 workflow_scope=workflow.scope,
                 workflow_owner_id=workflow.owner_user_id,
+                workflow_creator_user_id=workflow.created_by_user_id,
                 trigger_callback=self.trigger,
                 workflow_execution_id=execution.id,
                 workflow_action_index=action_index,
+                subject_type=execution.subject_type,
+                subject_id=execution.subject_id,
             )
             action_results.append(result)
 
@@ -565,6 +658,8 @@ class WorkflowEngineCore:
                         entity=entity,
                         has_approval_actions=True,
                         triggered_by_user_id=task.workflow_triggered_by_user_id,
+                        subject_type=execution.subject_type,
+                        subject_id=execution.subject_id,
                     )
 
                     if approval_error or not owner:
@@ -614,9 +709,12 @@ class WorkflowEngineCore:
                     depth=execution.depth,
                     workflow_scope=workflow.scope,
                     workflow_owner_id=workflow.owner_user_id,
+                    workflow_creator_user_id=workflow.created_by_user_id,
                     trigger_callback=self.trigger,
                     workflow_execution_id=execution.id,
                     workflow_action_index=actual_idx,
+                    subject_type=execution.subject_type,
+                    subject_id=execution.subject_id,
                 )
                 action_results.append(result)
 
@@ -703,6 +801,8 @@ class WorkflowEngineCore:
         entity: Any,
         has_approval_actions: bool,
         triggered_by_user_id: UUID | None,
+        subject_type: str | None = None,
+        subject_id: UUID | None = None,
     ) -> tuple[Any | None, User | None, str | None]:
         """
         Resolve related surrogate + approver for approval-gated actions.
@@ -711,6 +811,29 @@ class WorkflowEngineCore:
         """
         surrogate = self.adapter.get_related_surrogate(db, entity_type, entity)
         approval_owner: User | None = None
+
+        if subject_type in {"egg_donor", "sperm_donor"} and subject_id:
+            donor = self.adapter.get_entity(db, "donor", subject_id)
+            if (
+                donor is None
+                or donor.organization_id != workflow.organization_id
+                or donor.pipeline_entity_type != subject_type
+            ):
+                return None, None, "Workflow donor subject could not be resolved"
+            requires_user_owner = has_approval_actions or workflow.scope == "personal"
+            if requires_user_owner and (
+                donor.owner_type != OwnerType.USER.value or not donor.owner_id
+            ):
+                return None, None, "Workflow requires donor owner to be a user"
+            if donor.owner_type == OwnerType.USER.value and donor.owner_id:
+                approval_owner = self._load_active_org_user(
+                    db,
+                    org_id=workflow.organization_id,
+                    user_id=donor.owner_id,
+                )
+                if requires_user_owner and not approval_owner:
+                    return None, None, "Workflow requires donor owner but owner not found"
+            return None, approval_owner, None
 
         if surrogate:
             requires_user_owner = has_approval_actions or workflow.scope == "personal"
@@ -822,7 +945,7 @@ class WorkflowEngineCore:
         """
         from datetime import timedelta
 
-        from sqlalchemy import func
+        from sqlalchemy import and_, func, or_
 
         now = datetime.now(UTC)
 
@@ -850,7 +973,13 @@ class WorkflowEngineCore:
                 db.query(func.count(WorkflowExecution.id))
                 .filter(
                     WorkflowExecution.workflow_id == workflow.id,
-                    WorkflowExecution.entity_id == entity_id,
+                    or_(
+                        WorkflowExecution.subject_id == entity_id,
+                        and_(
+                            WorkflowExecution.subject_id.is_(None),
+                            WorkflowExecution.entity_id == entity_id,
+                        ),
+                    ),
                     WorkflowExecution.executed_at >= day_ago,
                     WorkflowExecution.status != WorkflowExecutionStatus.SKIPPED.value,
                 )

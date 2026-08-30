@@ -10,6 +10,7 @@ from sqlalchemy import func, literal, text
 from sqlalchemy.orm import Session
 
 from app.db.models import (
+    Donor,
     MetaAd,
     MetaAdAccount,
     MetaCampaign,
@@ -304,6 +305,16 @@ def get_leads_by_ad(
             ad_id_expr.label("ad_id"),
             func.count(MetaLead.id).label("lead_count"),
             func.count(MetaLead.converted_surrogate_id).label("surrogate_count"),
+            func.count(MetaLead.converted_donor_id)
+            .filter(Donor.donor_type == "egg")
+            .label("egg_donor_count"),
+            func.count(MetaLead.converted_donor_id)
+            .filter(Donor.donor_type == "sperm")
+            .label("sperm_donor_count"),
+        )
+        .outerjoin(
+            Donor,
+            (MetaLead.converted_donor_id == Donor.id) & (Donor.organization_id == organization_id),
         )
         .filter(
             MetaLead.organization_id == organization_id,
@@ -334,7 +345,10 @@ def get_leads_by_ad(
     for counts in lead_counts:
         lead_count = int(counts.lead_count or 0)
         surrogate_count = int(counts.surrogate_count or 0)
-        conversion_rate = round(surrogate_count / lead_count * 100, 1) if lead_count > 0 else 0.0
+        egg_donor_count = int(counts.egg_donor_count or 0)
+        sperm_donor_count = int(counts.sperm_donor_count or 0)
+        converted_count = surrogate_count + egg_donor_count + sperm_donor_count
+        conversion_rate = round(converted_count / lead_count * 100, 1) if lead_count > 0 else 0.0
         ad_id = counts.ad_id
         result.append(
             {
@@ -342,6 +356,9 @@ def get_leads_by_ad(
                 "ad_name": ad_names.get(ad_id) or f"Ad {ad_id[:8]}...",
                 "lead_count": lead_count,
                 "surrogate_count": surrogate_count,
+                "egg_donor_count": egg_donor_count,
+                "sperm_donor_count": sperm_donor_count,
+                "converted_count": converted_count,
                 "conversion_rate": conversion_rate,
             }
         )
@@ -1054,7 +1071,7 @@ def get_leads_by_form(
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> list[dict[str, Any]]:
-    """Lead counts from meta_leads, conversion rates from joined Cases."""
+    """Lead and exact subject-conversion counts grouped by Meta form."""
     lead_time = func.coalesce(MetaLead.meta_created_time, MetaLead.received_at)
 
     lead_counts_query = (
@@ -1062,6 +1079,16 @@ def get_leads_by_form(
             MetaLead.meta_form_id.label("form_external_id"),
             func.count(MetaLead.id).label("lead_count"),
             func.count(MetaLead.converted_surrogate_id).label("surrogate_count"),
+            func.count(MetaLead.converted_donor_id)
+            .filter(Donor.donor_type == "egg")
+            .label("egg_donor_count"),
+            func.count(MetaLead.converted_donor_id)
+            .filter(Donor.donor_type == "sperm")
+            .label("sperm_donor_count"),
+        )
+        .outerjoin(
+            Donor,
+            (MetaLead.converted_donor_id == Donor.id) & (Donor.organization_id == organization_id),
         )
         .filter(MetaLead.organization_id == organization_id)
         .filter(MetaLead.meta_form_id.isnot(None))
@@ -1116,22 +1143,32 @@ def get_leads_by_form(
 
     form_names: dict[str, str] = {}
     form_statuses: dict[str, str] = {}
+    form_lead_kinds: dict[str, str] = {}
     forms = (
-        db.query(MetaForm.form_external_id, MetaForm.form_name, MetaForm.mapping_status)
+        db.query(
+            MetaForm.form_external_id,
+            MetaForm.form_name,
+            MetaForm.mapping_status,
+            MetaForm.lead_kind,
+        )
         .filter(MetaForm.organization_id == organization_id)
         .all()
     )
     for f in forms:
         form_names[f.form_external_id] = f.form_name
         form_statuses[f.form_external_id] = f.mapping_status
+        form_lead_kinds[f.form_external_id] = f.lead_kind
 
     result = []
     for form_external_id, counts in lead_counts.items():
         lead_count = counts.lead_count or 0
         surrogate_count = counts.surrogate_count or 0
+        egg_donor_count = counts.egg_donor_count or 0
+        sperm_donor_count = counts.sperm_donor_count or 0
+        converted_count = surrogate_count + egg_donor_count + sperm_donor_count
         qualified_count = qualified_counts.get(form_external_id, 0)
 
-        conversion_rate = round(surrogate_count / lead_count * 100, 1) if lead_count > 0 else 0.0
+        conversion_rate = round(converted_count / lead_count * 100, 1) if lead_count > 0 else 0.0
         qualified_rate = (
             round(qualified_count / surrogate_count * 100, 1) if surrogate_count > 0 else 0.0
         )
@@ -1141,8 +1178,12 @@ def get_leads_by_form(
                 "form_external_id": form_external_id,
                 "form_name": form_names.get(form_external_id, f"Form {form_external_id[:8]}..."),
                 "mapping_status": form_statuses.get(form_external_id, "unknown"),
+                "lead_kind": form_lead_kinds.get(form_external_id, "unknown"),
                 "lead_count": lead_count,
                 "surrogate_count": surrogate_count,
+                "egg_donor_count": egg_donor_count,
+                "sperm_donor_count": sperm_donor_count,
+                "converted_count": converted_count,
                 "qualified_count": qualified_count,
                 "conversion_rate": conversion_rate,
                 "qualified_rate": qualified_rate,

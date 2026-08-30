@@ -625,7 +625,7 @@ def test_meta_lead_mapping_creates_review_task_on_mapping_related_conversion_fai
     )
 
     def _raise_mapping_failure(*args, **kwargs):
-        raise ValueError("Mapped field validation failed")
+        raise ValueError("Mapped field validation failed for pii-sentinel@example.com")
 
     monkeypatch.setattr(
         "app.services.meta_lead_service.surrogate_service.create_surrogate",
@@ -655,7 +655,7 @@ def test_meta_lead_mapping_creates_review_task_on_mapping_related_conversion_fai
 
     assert surrogate is None
     assert error is not None
-    assert captured_reasons == ["Mapping conversion failed: Mapped field validation failed"]
+    assert captured_reasons == ["Mapping conversion failed: ValueError"]
 
 
 def test_meta_lead_mapping_persists_meta_tracking_metadata(db, test_org, test_user):
@@ -882,11 +882,15 @@ def test_meta_lead_conversion_failure_records_system_alert(monkeypatch, db, test
     form.current_version_id = version.id
     form.mapping_version_id = version.id
 
+    pii_values = (
+        "PII Sentinel Name",
+        "pii-sentinel@example.com",
+    )
     surrogate_service.create_surrogate(
         db=db,
         org_id=org_id,
         user_id=test_user.id,
-        data=SurrogateCreate(full_name="Existing Alert Failure", email="alert@example.com"),
+        data=SurrogateCreate(full_name="Existing Alert Failure", email=pii_values[1]),
     )
 
     lead = MetaLead(
@@ -895,12 +899,12 @@ def test_meta_lead_conversion_failure_records_system_alert(monkeypatch, db, test
         meta_form_id="form_alert_failure",
         meta_page_id="page_alert_failure",
         field_data={
-            "full_name": "Alert Failure",
-            "email": "alert@example.com",
+            "full_name": pii_values[0],
+            "email": pii_values[1],
         },
         field_data_raw={
-            "full_name": "Alert Failure",
-            "email": "alert@example.com",
+            "full_name": pii_values[0],
+            "email": pii_values[1],
         },
         meta_created_time=datetime.now(UTC),
     )
@@ -954,6 +958,11 @@ def test_meta_lead_conversion_failure_records_system_alert(monkeypatch, db, test
 
     assert surrogate is None
     assert error is not None
+    assert error.startswith("Conversion failed: IntegrityError")
+    assert persisted_lead.conversion_error.startswith("IntegrityError")
+    for pii_value in pii_values:
+        assert pii_value not in error
+        assert pii_value not in persisted_lead.conversion_error
     assert captured
     assert captured[0] == ("lead_alert_failure", "IntegrityError")
 

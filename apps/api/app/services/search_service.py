@@ -1,7 +1,7 @@
 """Search service - global full-text search across entities.
 
 Provides:
-- Global search across surrogates, notes, attachments, intended parents
+- Global search across surrogates, notes, attachments, intended parents, and donors
 - Org-scoped and permission-gated results
 - Snippets via ts_headline for context
 - websearch_to_tsquery with plainto_tsquery fallback
@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.encryption import hash_email, hash_phone
 from app.core.surrogate_access import case_manager_approved_onward_joined_filter
 from app.db.enums import OwnerType, Role
-from app.db.models import Attachment, EntityNote, IntendedParent, PipelineStage, Surrogate
+from app.db.models import Attachment, Donor, EntityNote, IntendedParent, PipelineStage, Surrogate
 from app.schemas.auth import UserSession
 from app.utils.normalization import escape_like_string, normalize_identifier, normalize_search_text
 
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 class SearchResult(TypedDict):
     """A single search result."""
 
-    entity_type: str  # "surrogate", "note", "attachment", "intended_parent"
+    entity_type: str  # "surrogate", "note", "attachment", "intended_parent", "donor"
     entity_id: str
     title: str
     snippet: str
@@ -42,6 +42,7 @@ class SearchResult(TypedDict):
     # Additional context
     surrogate_id: str | None
     surrogate_name: str | None
+    donor_id: str | None
 
 
 class SearchResponse(TypedDict):
@@ -78,10 +79,10 @@ def _extract_hashes(query: str) -> tuple[str | None, str | None]:
 def normalize_entity_types(raw_types: str) -> list[str]:
     """Parse and normalize entity type filters from querystring input."""
     entity_types = [item.strip() for item in raw_types.split(",") if item.strip()]
-    valid_types = {"case", "surrogate", "note", "attachment", "intended_parent"}
+    valid_types = {"case", "surrogate", "note", "attachment", "intended_parent", "donor"}
     entity_types = [item for item in entity_types if item in valid_types]
     if not entity_types:
-        entity_types = ["surrogate", "note", "attachment", "intended_parent"]
+        entity_types = ["surrogate", "note", "attachment", "intended_parent", "donor"]
 
     # Backwards-compat: "case" is the legacy name for "surrogate".
     normalized = ["surrogate" if item == "case" else item for item in entity_types]
@@ -100,9 +101,19 @@ def _user_can_view_notes(permissions: set[str]) -> bool:
     return "view_surrogate_notes" in permissions
 
 
+def _user_can_view_surrogates(permissions: set[str]) -> bool:
+    """Check if user has permission to view surrogate records."""
+    return "view_surrogates" in permissions
+
+
 def _user_can_view_intended_parents(permissions: set[str]) -> bool:
     """Check if user has permission to view intended parents."""
     return "view_intended_parents" in permissions
+
+
+def _user_can_view_donors(permissions: set[str]) -> bool:
+    """Check if user has permission to view donors."""
+    return "view_donors" in permissions
 
 
 def _can_view_post_approval(permissions: set[str]) -> bool:
@@ -162,7 +173,7 @@ def global_search(
     offset: int = 0,
 ) -> SearchResponse:
     """
-    Search across cases, notes, attachments, and intended parents.
+    Search across cases, notes, attachments, intended parents, and donors.
 
     Args:
         db: Database session
@@ -171,7 +182,7 @@ def global_search(
         user_id: User ID
         role: User role (string value)
         permissions: User permissions set
-        entity_types: Optional filter for entity types ["case", "note", "attachment", "intended_parent"]
+        entity_types: Optional filter for entity types
         limit: Max results per type
         offset: Pagination offset
 
@@ -186,10 +197,12 @@ def global_search(
 
     # Default to all types
     if not entity_types:
-        entity_types = ["surrogate", "note", "attachment", "intended_parent"]
+        entity_types = ["surrogate", "note", "attachment", "intended_parent", "donor"]
 
+    can_view_surrogates = _user_can_view_surrogates(permissions)
     can_view_notes = _user_can_view_notes(permissions)
     can_view_ips = _user_can_view_intended_parents(permissions)
+    can_view_donors = _user_can_view_donors(permissions)
     can_view_post_approval = _can_view_post_approval(permissions)
     results = _global_search_unified(
         db=db,
@@ -198,8 +211,10 @@ def global_search(
         user_id=user_id,
         role=role_value,
         entity_types=entity_types,
+        can_view_surrogates=can_view_surrogates,
         can_view_notes=can_view_notes,
         can_view_intended_parents=can_view_ips,
+        can_view_donors=can_view_donors,
         can_view_post_approval=can_view_post_approval,
         limit=limit,
         offset=offset,
@@ -271,8 +286,10 @@ def _global_search_unified(
     user_id: UUID,
     role: str,
     entity_types: list[str],
+    can_view_surrogates: bool,
     can_view_notes: bool,
     can_view_intended_parents: bool,
+    can_view_donors: bool,
     can_view_post_approval: bool,
     limit: int,
     offset: int,
@@ -285,6 +302,7 @@ def _global_search_unified(
         notes_table = EntityNote.__table__.alias("en")
         attachments_table = Attachment.__table__.alias("a")
         ip_table = IntendedParent.__table__.alias("ip")
+        donor_table = Donor.__table__.alias("d")
         branch_limit = max(limit + offset, 0)
 
         def _apply_branch_limit(stmt):
@@ -304,6 +322,9 @@ def _global_search_unified(
         def _null_surrogate_name():
             return literal(None, type_=surrogate_table.c.full_name.type).label("surrogate_name")
 
+        def _null_donor_id():
+            return literal(None, type_=donor_table.c.id.type).label("donor_id")
+
         surrogate_access_filter = _build_surrogate_access_filter(
             org_id,
             role,
@@ -321,7 +342,7 @@ def _global_search_unified(
 
         subqueries = []
 
-        if "surrogate" in entity_types:
+        if "surrogate" in entity_types and can_view_surrogates:
             surrogate_from = surrogate_table.outerjoin(
                 stage_table, surrogate_table.c.stage_id == stage_table.c.id
             )
@@ -348,6 +369,7 @@ def _global_search_unified(
                         literal(2.0).label("rank"),
                         surrogate_table.c.id.label("surrogate_id"),
                         surrogate_table.c.full_name.label("surrogate_name"),
+                        _null_donor_id(),
                         surrogate_table.c.created_at.label("created_at"),
                     )
                     .select_from(surrogate_from)
@@ -376,6 +398,7 @@ def _global_search_unified(
                     surrogate_rank,
                     surrogate_table.c.id.label("surrogate_id"),
                     surrogate_table.c.full_name.label("surrogate_name"),
+                    _null_donor_id(),
                     surrogate_table.c.created_at.label("created_at"),
                 )
                 .select_from(surrogate_from)
@@ -421,6 +444,7 @@ def _global_search_unified(
                         literal(0.5).label("rank"),
                         surrogate_table.c.id.label("surrogate_id"),
                         surrogate_table.c.full_name.label("surrogate_name"),
+                        _null_donor_id(),
                         surrogate_table.c.created_at.label("created_at"),
                     )
                     .select_from(surrogate_from)
@@ -431,7 +455,7 @@ def _global_search_unified(
                     )
                 )
 
-        if "note" in entity_types and can_view_notes:
+        if "note" in entity_types and (can_view_notes or can_view_donors):
             note_snippet = func.ts_headline(
                 "english",
                 func.regexp_replace(
@@ -454,29 +478,31 @@ def _global_search_unified(
                 ),
             ).outerjoin(stage_table, surrogate_table.c.stage_id == stage_table.c.id)
 
-            subqueries.append(
-                select(
-                    literal("note").label("entity_type"),
-                    notes_table.c.id.label("entity_id"),
-                    func.coalesce(
-                        func.concat(literal("Note on "), surrogate_table.c.full_name),
-                        literal("Surrogate Note"),
-                    ).label("title"),
-                    note_snippet,
-                    note_rank,
-                    surrogate_table.c.id.label("surrogate_id"),
-                    surrogate_table.c.full_name.label("surrogate_name"),
-                    notes_table.c.created_at.label("created_at"),
+            if can_view_notes and can_view_surrogates:
+                subqueries.append(
+                    select(
+                        literal("note").label("entity_type"),
+                        notes_table.c.id.label("entity_id"),
+                        func.coalesce(
+                            func.concat(literal("Note on "), surrogate_table.c.full_name),
+                            literal("Surrogate Note"),
+                        ).label("title"),
+                        note_snippet,
+                        note_rank,
+                        surrogate_table.c.id.label("surrogate_id"),
+                        surrogate_table.c.full_name.label("surrogate_name"),
+                        _null_donor_id(),
+                        notes_table.c.created_at.label("created_at"),
+                    )
+                    .select_from(surrogate_note_from)
+                    .where(
+                        notes_table.c.organization_id == org_id,
+                        notes_table.c.search_vector.op("@@")(tsquery_english),
+                        surrogate_access_filter,
+                    )
                 )
-                .select_from(surrogate_note_from)
-                .where(
-                    notes_table.c.organization_id == org_id,
-                    notes_table.c.search_vector.op("@@")(tsquery_english),
-                    surrogate_access_filter,
-                )
-            )
 
-            if can_view_intended_parents:
+            if can_view_notes and can_view_intended_parents:
                 ip_note_from = notes_table.join(
                     ip_table,
                     and_(
@@ -497,6 +523,7 @@ def _global_search_unified(
                         note_rank,
                         _null_surrogate_id(),
                         _null_surrogate_name(),
+                        _null_donor_id(),
                         notes_table.c.created_at.label("created_at"),
                     )
                     .select_from(ip_note_from)
@@ -506,7 +533,38 @@ def _global_search_unified(
                     )
                 )
 
-        if "attachment" in entity_types:
+            if can_view_donors:
+                donor_note_from = notes_table.join(
+                    donor_table,
+                    and_(
+                        notes_table.c.entity_type == "donor",
+                        notes_table.c.entity_id == donor_table.c.id,
+                        donor_table.c.organization_id == notes_table.c.organization_id,
+                    ),
+                )
+                subqueries.append(
+                    select(
+                        literal("note").label("entity_type"),
+                        notes_table.c.id.label("entity_id"),
+                        func.concat(literal("Note on "), donor_table.c.full_name).label("title"),
+                        note_snippet,
+                        note_rank,
+                        _null_surrogate_id(),
+                        _null_surrogate_name(),
+                        donor_table.c.id.label("donor_id"),
+                        notes_table.c.created_at.label("created_at"),
+                    )
+                    .select_from(donor_note_from)
+                    .where(
+                        notes_table.c.organization_id == org_id,
+                        donor_table.c.is_archived.is_(False),
+                        notes_table.c.search_vector.op("@@")(tsquery_english),
+                    )
+                )
+
+        if "attachment" in entity_types and (
+            can_view_surrogates or can_view_intended_parents or can_view_donors
+        ):
             attachment_rank = func.ts_rank(attachments_table.c.search_vector, tsquery_simple).label(
                 "rank"
             )
@@ -517,29 +575,31 @@ def _global_search_unified(
                     surrogate_table.c.organization_id == attachments_table.c.organization_id,
                 ),
             ).outerjoin(stage_table, surrogate_table.c.stage_id == stage_table.c.id)
-            subqueries.append(
-                select(
-                    literal("attachment").label("entity_type"),
-                    attachments_table.c.id.label("entity_id"),
-                    func.coalesce(attachments_table.c.filename, literal("Attachment")).label(
-                        "title"
-                    ),
-                    literal("").label("snippet"),
-                    attachment_rank,
-                    attachments_table.c.surrogate_id.label("surrogate_id"),
-                    surrogate_table.c.full_name.label("surrogate_name"),
-                    attachments_table.c.created_at.label("created_at"),
+            if can_view_surrogates:
+                subqueries.append(
+                    select(
+                        literal("attachment").label("entity_type"),
+                        attachments_table.c.id.label("entity_id"),
+                        func.coalesce(attachments_table.c.filename, literal("Attachment")).label(
+                            "title"
+                        ),
+                        literal("").label("snippet"),
+                        attachment_rank,
+                        attachments_table.c.surrogate_id.label("surrogate_id"),
+                        surrogate_table.c.full_name.label("surrogate_name"),
+                        _null_donor_id(),
+                        attachments_table.c.created_at.label("created_at"),
+                    )
+                    .select_from(surrogate_attachment_from)
+                    .where(
+                        attachments_table.c.organization_id == org_id,
+                        attachments_table.c.surrogate_id.is_not(None),
+                        attachments_table.c.deleted_at.is_(None),
+                        attachments_table.c.quarantined.is_(False),
+                        attachments_table.c.search_vector.op("@@")(tsquery_simple),
+                        surrogate_access_filter,
+                    )
                 )
-                .select_from(surrogate_attachment_from)
-                .where(
-                    attachments_table.c.organization_id == org_id,
-                    attachments_table.c.surrogate_id.is_not(None),
-                    attachments_table.c.deleted_at.is_(None),
-                    attachments_table.c.quarantined.is_(False),
-                    attachments_table.c.search_vector.op("@@")(tsquery_simple),
-                    surrogate_access_filter,
-                )
-            )
 
             if can_view_intended_parents:
                 ip_attachment_from = attachments_table.join(
@@ -560,6 +620,7 @@ def _global_search_unified(
                         attachment_rank,
                         _null_surrogate_id(),
                         _null_surrogate_name(),
+                        _null_donor_id(),
                         attachments_table.c.created_at.label("created_at"),
                     )
                     .select_from(ip_attachment_from)
@@ -567,6 +628,39 @@ def _global_search_unified(
                         attachments_table.c.organization_id == org_id,
                         attachments_table.c.intended_parent_id.is_not(None),
                         attachments_table.c.surrogate_id.is_(None),
+                        attachments_table.c.deleted_at.is_(None),
+                        attachments_table.c.quarantined.is_(False),
+                        attachments_table.c.search_vector.op("@@")(tsquery_simple),
+                    )
+                )
+
+            if can_view_donors:
+                donor_attachment_from = attachments_table.join(
+                    donor_table,
+                    and_(
+                        attachments_table.c.donor_id == donor_table.c.id,
+                        donor_table.c.organization_id == attachments_table.c.organization_id,
+                    ),
+                )
+                subqueries.append(
+                    select(
+                        literal("attachment").label("entity_type"),
+                        attachments_table.c.id.label("entity_id"),
+                        func.coalesce(attachments_table.c.filename, literal("Attachment")).label(
+                            "title"
+                        ),
+                        literal("").label("snippet"),
+                        attachment_rank,
+                        _null_surrogate_id(),
+                        _null_surrogate_name(),
+                        donor_table.c.id.label("donor_id"),
+                        attachments_table.c.created_at.label("created_at"),
+                    )
+                    .select_from(donor_attachment_from)
+                    .where(
+                        attachments_table.c.organization_id == org_id,
+                        attachments_table.c.donor_id.is_not(None),
+                        donor_table.c.is_archived.is_(False),
                         attachments_table.c.deleted_at.is_(None),
                         attachments_table.c.quarantined.is_(False),
                         attachments_table.c.search_vector.op("@@")(tsquery_simple),
@@ -598,6 +692,7 @@ def _global_search_unified(
                         literal(2.0).label("rank"),
                         _null_surrogate_id(),
                         _null_surrogate_name(),
+                        _null_donor_id(),
                         ip_table.c.created_at.label("created_at"),
                     ).where(ip_table.c.organization_id == org_id, or_(*hash_filters))
                 )
@@ -618,6 +713,7 @@ def _global_search_unified(
                     ip_rank,
                     _null_surrogate_id(),
                     _null_surrogate_name(),
+                    _null_donor_id(),
                     ip_table.c.created_at.label("created_at"),
                 ).where(
                     ip_table.c.organization_id == org_id,
@@ -657,10 +753,77 @@ def _global_search_unified(
                         literal(0.5).label("rank"),
                         _null_surrogate_id(),
                         _null_surrogate_name(),
+                        _null_donor_id(),
                         ip_table.c.created_at.label("created_at"),
                     ).where(
                         ip_table.c.organization_id == org_id,
                         or_(*ip_fallback_filters),
+                    )
+                )
+
+        if "donor" in entity_types and can_view_donors:
+            donor_snippet = func.concat(
+                func.initcap(donor_table.c.donor_type),
+                literal(" donor · "),
+                donor_table.c.donor_number,
+            )
+            donor_hash_filters = []
+            if email_hash:
+                donor_hash_filters.append(donor_table.c.email_hash == email_hash)
+            if phone_hash:
+                donor_hash_filters.append(donor_table.c.phone_hash == phone_hash)
+            if donor_hash_filters:
+                subqueries.append(
+                    select(
+                        literal("donor").label("entity_type"),
+                        donor_table.c.id.label("entity_id"),
+                        donor_table.c.full_name.label("title"),
+                        donor_snippet.label("snippet"),
+                        literal(2.0).label("rank"),
+                        _null_surrogate_id(),
+                        _null_surrogate_name(),
+                        donor_table.c.id.label("donor_id"),
+                        donor_table.c.created_at.label("created_at"),
+                    ).where(
+                        donor_table.c.organization_id == org_id,
+                        donor_table.c.is_archived.is_(False),
+                        or_(*donor_hash_filters),
+                    )
+                )
+
+            donor_fallback_filters = []
+            if normalized_text:
+                escaped_text = escape_like_string(normalized_text)
+                donor_fallback_filters.append(
+                    func.lower(donor_table.c.full_name).ilike(
+                        f"%{escaped_text}%",
+                        escape="\\",
+                    )
+                )
+            if normalized_identifier:
+                escaped_identifier = escape_like_string(normalized_identifier)
+                donor_fallback_filters.append(
+                    func.lower(func.replace(donor_table.c.donor_number, " ", "")).ilike(
+                        f"%{escaped_identifier}%",
+                        escape="\\",
+                    )
+                )
+            if donor_fallback_filters:
+                subqueries.append(
+                    select(
+                        literal("donor").label("entity_type"),
+                        donor_table.c.id.label("entity_id"),
+                        donor_table.c.full_name.label("title"),
+                        donor_snippet.label("snippet"),
+                        literal(0.5).label("rank"),
+                        _null_surrogate_id(),
+                        _null_surrogate_name(),
+                        donor_table.c.id.label("donor_id"),
+                        donor_table.c.created_at.label("created_at"),
+                    ).where(
+                        donor_table.c.organization_id == org_id,
+                        donor_table.c.is_archived.is_(False),
+                        or_(*donor_fallback_filters),
                     )
                 )
 
@@ -677,6 +840,7 @@ def _global_search_unified(
             unioned.c.rank,
             unioned.c.surrogate_id,
             unioned.c.surrogate_name,
+            unioned.c.donor_id,
             unioned.c.created_at,
             func.row_number()
             .over(
@@ -694,6 +858,7 @@ def _global_search_unified(
                 deduped.c.rank,
                 deduped.c.surrogate_id,
                 deduped.c.surrogate_name,
+                deduped.c.donor_id,
             )
             .where(deduped.c.row_num == 1)
             .order_by(deduped.c.rank.desc(), deduped.c.created_at.desc())
@@ -713,6 +878,7 @@ def _global_search_unified(
                     rank=float(row.rank),
                     surrogate_id=str(row.surrogate_id) if row.surrogate_id else None,
                     surrogate_name=row.surrogate_name,
+                    donor_id=str(row.donor_id) if row.donor_id else None,
                 )
             )
         return results
