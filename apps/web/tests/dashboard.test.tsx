@@ -170,6 +170,7 @@ describe('DashboardPage', () => {
 
         mockUseSurrogatesTrend.mockReturnValue({ data: [], isLoading: false, isError: false })
         mockUseSurrogatesByStatus.mockReturnValue({ data: [], isLoading: false, isError: false })
+        mockUseDonorsByStatus.mockClear()
         mockUseDonorsByStatus.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
         mockUseEffectivePermissions.mockReturnValue({
             data: { permissions: ['view_dashboard', 'view_donors'] },
@@ -500,86 +501,13 @@ describe('DashboardPage', () => {
         expect(await screen.findByText('D10001')).toBeInTheDocument()
     })
 
-    it('hides donor pipeline selectors when donor access is revoked', async () => {
-        mockUseAuth.mockReturnValue({
-            user: {
-                display_name: 'Test Manager',
-                role: 'admin',
-                user_id: 'user-1',
-            },
-        })
-        mockUseEffectivePermissions.mockReturnValue({
-            data: { permissions: ['view_dashboard'] },
-            isLoading: false,
-        })
-
+    it('keeps pipeline distribution surrogate-only when donor access is granted', async () => {
         render(<DashboardPage />)
 
         expect(await screen.findByText('Pipeline Distribution')).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Egg Donors' })).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Sperm Donors' })).not.toBeInTheDocument()
-    })
-
-    it('links egg donor stage bars to the egg donor tab and stage filter', async () => {
-        mockUseDonorsByStatus.mockImplementation((params: { donor_type: string }) => ({
-            data: params.donor_type === 'egg'
-                ? [{ status: 'New', stage_id: 'egg-stage', count: 3, order: 1 }]
-                : [],
-            isLoading: false,
-            isError: false,
-            refetch: vi.fn(),
-        }))
-
-        render(<DashboardPage />)
-        fireEvent.click(await screen.findByRole('button', { name: 'Egg Donors' }))
-
-        const link = await screen.findByRole('link', { name: 'View New egg donors' })
-        expect(link).toHaveAttribute('href', '/donors?type=egg&stage=egg-stage')
-    })
-
-    it('carries the dashboard week boundaries into donor stage drilldowns', async () => {
-        mockUseSearchParams.mockReturnValue(new URLSearchParams('range=week'))
-        mockUseDonorsByStatus.mockImplementation((params: { donor_type: string }) => ({
-            data: params.donor_type === 'egg'
-                ? [{ status: 'New', stage_id: 'egg-stage', count: 3, order: 1 }]
-                : [],
-            isLoading: false,
-            isError: false,
-            refetch: vi.fn(),
-        }))
-        const today = new Date()
-        const sunday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay())
-
-        render(<DashboardPage />)
-        fireEvent.click(await screen.findByRole('button', { name: 'Egg Donors' }))
-
-        const link = await screen.findByRole('link', { name: 'View New egg donors' })
-        expect(link).toHaveAttribute(
-            'href',
-            `/donors?type=egg&stage=egg-stage&range=week&from=${formatLocalDate(sunday)}&to=${formatLocalDate(today)}`,
-        )
-    })
-
-    it('shows the donor empty state instead of a zero-value stage chart', async () => {
-        mockUseDonorsByStatus.mockImplementation((params: { donor_type: string }) => ({
-            data: params.donor_type === 'egg'
-                ? Array.from({ length: 10 }, (_, index) => ({
-                    status: `Stage ${index + 1}`,
-                    stage_id: `egg-stage-${index + 1}`,
-                    count: 0,
-                    order: index + 1,
-                }))
-                : [],
-            isLoading: false,
-            isError: false,
-            refetch: vi.fn(),
-        }))
-
-        render(<DashboardPage />)
-        fireEvent.click(await screen.findByRole('button', { name: 'Egg Donors' }))
-
-        expect(await screen.findByText('No egg donors yet')).toBeInTheDocument()
-        expect(screen.queryByRole('link', { name: 'View Stage 1 egg donors' })).not.toBeInTheDocument()
+        expect(mockUseDonorsByStatus).not.toHaveBeenCalled()
     })
 
     it('uses donor detail and subtype-filtered links for stuck donors', async () => {
