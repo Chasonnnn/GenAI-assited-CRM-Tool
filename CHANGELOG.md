@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.61](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.60...surrogacy-crm-platform-v0.91.61) (2026-08-31)
+
+
+### Features
+
+* add privacy-safe production error telemetry ([ec9028e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ec9028ef9e1da403d0d8145c4a05106a02cd0ef0))
+* add production error telemetry ([e2996b5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e2996b5c4551928db7f093b441b6b6ebf79031da))
+
+
+### Bug Fixes
+
+* authenticate client error telemetry ([d511dfe](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d511dfe5149ae7d6c72249c054bd196be272399a))
+* keep dashboard pipeline distribution surrogate-only ([20202e8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/20202e841bb08a9384462fe42cb3d04477c0a83e))
+* keep dashboard pipeline distribution surrogate-only ([d448e21](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d448e21d66e9e75f59dfc0052c90e1c289b893ba))
+
 ## [0.91.60](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.59...surrogacy-crm-platform-v0.91.60) (2026-08-31)
 
 
