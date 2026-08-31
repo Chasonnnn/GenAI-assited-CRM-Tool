@@ -36,10 +36,11 @@ if TYPE_CHECKING:
 
 class Campaign(Base):
     """
-    Bulk email campaign definition.
+    Bulk campaign definition.
 
-    Allows sending targeted emails to groups of cases or intended parents
-    with filtering, scheduling, and tracking.
+    Allows sending targeted emails or messages to groups of surrogates,
+    intended parents, egg donors, or sperm donors with filtering, scheduling,
+    and tracking.
     """
 
     __tablename__ = "campaigns"
@@ -74,9 +75,7 @@ class Campaign(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    channel: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default=text("'email'")
-    )
+    channel: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'email'"))
 
     # Immutable channel template selection. MessageTemplate is already one
     # version per row, while email retains its existing snapshot behavior.
@@ -94,7 +93,7 @@ class Campaign(Base):
     # Recipient filtering
     recipient_type: Mapped[str] = mapped_column(
         String(30), nullable=False
-    )  # 'case' | 'intended_parent'
+    )  # 'case' | 'intended_parent' | 'egg_donor' | 'sperm_donor'
     filter_criteria: Mapped[dict] = mapped_column(
         JSONB, default=dict, server_default="{}", nullable=False
     )  # {stage_id, state, created_after, tags, etc.}
@@ -210,7 +209,7 @@ class CampaignRecipient(Base):
     """
     Per-recipient status for a campaign run.
 
-    Tracks the delivery status of each email sent.
+    Tracks the delivery status of each email or message sent.
     """
 
     __tablename__ = "campaign_recipients"
@@ -244,11 +243,17 @@ class CampaignRecipient(Base):
     # Recipient reference
     entity_type: Mapped[str] = mapped_column(
         String(30), nullable=False
-    )  # 'case' | 'intended_parent'
+    )  # Preserves the campaign's exact recipient subtype.
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     recipient_email: Mapped[str | None] = mapped_column(CITEXT, nullable=True)
     recipient_phone_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
     recipient_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Immutable donor identity and rendered content captured at first launch.
+    # Legacy donor recipients remain nullable and are pinned on their first retry.
+    donor_launch_snapshot: Mapped[dict | None] = mapped_column(
+        JSONB(none_as_null=True),
+        nullable=True,
+    )
 
     # Status
     status: Mapped[str] = mapped_column(

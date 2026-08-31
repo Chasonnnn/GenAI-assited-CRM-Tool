@@ -1,9 +1,8 @@
 """Intended parent stage change helpers (apply + request + history + notifications)."""
 
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TypedDict
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -19,6 +18,7 @@ from app.db.models import (
     StatusChangeRequest,
     User,
 )
+from app.utils.datetime_parsing import normalize_effective_at
 
 
 class StatusChangeResult(TypedDict):
@@ -47,35 +47,6 @@ def _get_org_timezone(db: Session, org_id: UUID) -> str:
         select(Organization.timezone).where(Organization.id == org_id)
     ).scalar_one_or_none()
     return result or "America/Los_Angeles"
-
-
-def _normalize_effective_at(
-    effective_at: datetime | None,
-    org_timezone_str: str,
-) -> datetime:
-    now = datetime.now(UTC)
-
-    if effective_at is None:
-        return now
-
-    org_tz = ZoneInfo(org_timezone_str)
-    if effective_at.tzinfo is None:
-        effective_at = effective_at.replace(tzinfo=org_tz)
-    else:
-        effective_at = effective_at.astimezone(org_tz)
-
-    if effective_at.time() == time(0, 0, 0):
-        today_org = now.astimezone(org_tz).date()
-        effective_date = effective_at.date()
-
-        if effective_date == today_org:
-            return now
-        if effective_date < today_org:
-            noon = datetime.combine(effective_date, time(12, 0, 0)).replace(tzinfo=org_tz)
-            return noon.astimezone(UTC)
-        return effective_at.astimezone(UTC)
-
-    return effective_at.astimezone(UTC)
 
 
 def get_default_pipeline_stage(
@@ -135,7 +106,7 @@ def change_status(
 
     now = datetime.now(UTC)
     org_tz_str = _get_org_timezone(db, ip.organization_id)
-    normalized_effective_at = _normalize_effective_at(effective_at, org_tz_str)
+    normalized_effective_at = normalize_effective_at(effective_at, org_tz_str)
 
     is_backdated = (now - normalized_effective_at).total_seconds() > 1
     is_regression = new_stage.order < current_stage.order
@@ -211,6 +182,22 @@ def change_status(
             status="pending",
         )
         db.add(request)
+        db.flush()
+        from app.services import entity_activity_service
+
+        entity_activity_service.record_activity(
+            db,
+            org_id=ip.organization_id,
+            entity_type="intended_parent",
+            entity_id=ip.id,
+            activity_type="status_change_requested",
+            actor_user_id=user_id,
+            details={
+                "status_request_id": str(request.id),
+                "target_stage_id": str(new_stage.id),
+            },
+            occurred_at=now,
+        )
         try:
             db.commit()
         except IntegrityError:
@@ -264,6 +251,7 @@ def apply_status_change(
     approved_by_user_id: UUID | None = None,
     approved_at: datetime | None = None,
     requested_at: datetime | None = None,
+    commit: bool = True,
 ) -> StatusChangeResult:
     """Apply a stage change to an intended parent."""
     ip.stage_id = new_stage.id
@@ -273,11 +261,14 @@ def apply_status_change(
 
     history = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
+        organization_id=ip.organization_id,
         changed_by_user_id=user_id,
         old_stage_id=old_stage.id if old_stage else None,
         new_stage_id=new_stage.id,
         old_status=old_stage.stage_key if old_stage else None,
         new_status=new_stage.stage_key,
+        old_label_snapshot=old_stage.label if old_stage else None,
+        new_label_snapshot=new_stage.label,
         reason=reason,
         changed_at=effective_at,
         effective_at=effective_at,
@@ -289,8 +280,11 @@ def apply_status_change(
         approved_at=approved_at,
     )
     db.add(history)
-    db.commit()
-    db.refresh(ip)
+    if commit:
+        db.commit()
+        db.refresh(ip)
+    else:
+        db.flush()
 
     return StatusChangeResult(
         status="applied",

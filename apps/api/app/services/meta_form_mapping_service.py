@@ -14,7 +14,16 @@ from sqlalchemy.orm import Session
 from app.core.constants import SYSTEM_USER_ID
 from app.core.encryption import hash_email
 from app.db.enums import OwnerType, Role, TaskType
-from app.db.models import Membership, MetaAd, MetaForm, MetaFormVersion, MetaLead, Surrogate, Task
+from app.db.models import (
+    Donor,
+    Membership,
+    MetaAd,
+    MetaForm,
+    MetaFormVersion,
+    MetaLead,
+    Surrogate,
+    Task,
+)
 from app.schemas.task import TaskCreate
 from app.services import import_detection_service, queue_service, task_service
 from app.utils.normalization import normalize_email
@@ -28,6 +37,7 @@ META_SYSTEM_COLUMNS: list[tuple[str, str]] = [
 ]
 AUTO_SAFE_SCHEMA_KEYS = {"lead_id"}
 TEST_LEAD_PATTERN = re.compile(r"test lead:|dummy data", re.IGNORECASE)
+DONOR_META_MAPPING_FIELDS = ["full_name", "email", "phone", "state", "education", "source"]
 
 
 def _schema_keys(field_schema: list[dict[str, object]] | None) -> set[str]:
@@ -246,6 +256,37 @@ def get_lead_stats(db: Session, org_id: UUID) -> dict[str, dict[str, object]]:
     return stats
 
 
+def get_donor_lead_form_external_ids(db: Session, org_id: UUID) -> set[str]:
+    """Return form identifiers containing any donor-routed lead snapshot."""
+    return {
+        str(form_external_id)
+        for form_external_id in db.scalars(
+            select(MetaLead.meta_form_id)
+            .where(
+                MetaLead.organization_id == org_id,
+                MetaLead.meta_form_id.isnot(None),
+                MetaLead.lead_kind.in_({"egg_donor", "sperm_donor"}),
+            )
+            .distinct()
+        ).all()
+        if form_external_id
+    }
+
+
+def form_has_donor_leads(db: Session, org_id: UUID, form_external_id: str) -> bool:
+    return bool(
+        db.scalar(
+            select(MetaLead.id)
+            .where(
+                MetaLead.organization_id == org_id,
+                MetaLead.meta_form_id == form_external_id,
+                MetaLead.lead_kind.in_({"egg_donor", "sperm_donor"}),
+            )
+            .limit(1)
+        )
+    )
+
+
 def list_unconverted_leads_for_form(
     db: Session,
     org_id: UUID,
@@ -273,13 +314,27 @@ def get_reprocess_eligibility_for_leads(
     db: Session,
     org_id: UUID,
     leads: list[MetaLead],
+    *,
+    lead_kind: str = "surrogate",
 ) -> tuple[dict[UUID, str | None], dict[str, int]]:
     """Classify which unconverted leads are safe to reprocess automatically."""
     email_hashes: dict[UUID, str] = {}
-    duplicate_hashes_within_batch: set[str] = set()
-    seen_hashes: set[str] = set()
+    subject_group_by_lead: dict[UUID, str] = {}
+    duplicate_hashes_within_batch: set[tuple[str, str]] = set()
+    seen_hashes: set[tuple[str, str]] = set()
+    hashes_by_subject_group: dict[str, set[str]] = {
+        "surrogate": set(),
+        "donor": set(),
+    }
 
     for lead in leads:
+        effective_lead_kind = getattr(lead, "lead_kind", None) or lead_kind
+        subject_group = (
+            "donor"
+            if effective_lead_kind in {"egg_donor", "sperm_donor"}
+            else "surrogate"
+        )
+        subject_group_by_lead[lead.id] = subject_group
         email = _extract_lead_email(lead)
         if not email:
             continue
@@ -288,19 +343,27 @@ def get_reprocess_eligibility_for_leads(
             continue
         email_hash = hash_email(normalized)
         email_hashes[lead.id] = email_hash
-        if email_hash in seen_hashes:
-            duplicate_hashes_within_batch.add(email_hash)
+        hashes_by_subject_group[subject_group].add(email_hash)
+        subject_hash = (subject_group, email_hash)
+        if subject_hash in seen_hashes:
+            duplicate_hashes_within_batch.add(subject_hash)
         else:
-            seen_hashes.add(email_hash)
+            seen_hashes.add(subject_hash)
 
-    existing_hashes: set[str] = set()
-    if email_hashes:
-        existing_hashes = set(
+    existing_hashes_by_subject_group: dict[str, set[str]] = {
+        "surrogate": set(),
+        "donor": set(),
+    }
+    for subject_group, subject_model in (("surrogate", Surrogate), ("donor", Donor)):
+        subject_hashes = hashes_by_subject_group[subject_group]
+        if not subject_hashes:
+            continue
+        existing_hashes_by_subject_group[subject_group] = set(
             db.scalars(
-                select(Surrogate.email_hash).where(
-                    Surrogate.organization_id == org_id,
-                    Surrogate.is_archived.is_(False),
-                    Surrogate.email_hash.in_(set(email_hashes.values())),
+                select(subject_model.email_hash).where(
+                    subject_model.organization_id == org_id,
+                    subject_model.is_archived.is_(False),
+                    subject_model.email_hash.in_(subject_hashes),
                 )
             ).all()
         )
@@ -313,8 +376,10 @@ def get_reprocess_eligibility_for_leads(
             reason = "test_lead"
         else:
             email_hash = email_hashes.get(lead.id)
+            subject_group = subject_group_by_lead[lead.id]
             if email_hash and (
-                email_hash in existing_hashes or email_hash in duplicate_hashes_within_batch
+                email_hash in existing_hashes_by_subject_group[subject_group]
+                or (subject_group, email_hash) in duplicate_hashes_within_batch
             ):
                 reason = "duplicate_email"
 
@@ -340,7 +405,14 @@ def get_reprocess_plan_for_form(
         .order_by(MetaLead.received_at.desc())
         .all()
     )
-    reasons_by_lead, reason_counts = get_reprocess_eligibility_for_leads(db, org_id, leads)
+    form = get_form_by_external_id(db, org_id, form_external_id)
+    lead_kind = form.lead_kind if form else "surrogate"
+    reasons_by_lead, reason_counts = get_reprocess_eligibility_for_leads(
+        db,
+        org_id,
+        leads,
+        lead_kind=lead_kind,
+    )
     eligible_ids = [lead.id for lead in leads if reasons_by_lead.get(lead.id) is None]
     return leads, eligible_ids, reasons_by_lead, reason_counts
 
@@ -469,12 +541,17 @@ def build_mapping_preview(
     sample_matrix = [[row.get(key, "") for key in keys] for row in sample_rows]
 
     # Analyze columns with learning from previous corrections
+    available_fields = (
+        DONOR_META_MAPPING_FIELDS
+        if form.lead_kind in {"egg_donor", "sperm_donor"}
+        else import_detection_service.AVAILABLE_SURROGATE_FIELDS
+    )
     suggestions = import_detection_service.analyze_columns_with_learning(
         db,
         form.organization_id,
         analysis_headers,
         sample_matrix,
-        allowed_fields=import_detection_service.AVAILABLE_SURROGATE_FIELDS,
+        allowed_fields=available_fields,
     )
 
     system_keys = {key for key, _ in META_SYSTEM_COLUMNS}
@@ -498,7 +575,7 @@ def build_mapping_preview(
         "column_suggestions": suggestions,
         "sample_rows": sample_rows,
         "has_live_leads": has_live_leads,
-        "available_fields": import_detection_service.AVAILABLE_SURROGATE_FIELDS,
+        "available_fields": available_fields,
         "ai_available": ai_available,
     }
 
@@ -509,6 +586,7 @@ def save_mapping(
     *,
     column_mappings: list[dict],
     unknown_column_behavior: str,
+    lead_kind: str,
     user_id: UUID,
     original_suggestions: list[dict] | None = None,
 ) -> None:
@@ -523,7 +601,10 @@ def save_mapping(
         user_id: User saving the mapping
         original_suggestions: Optional list of original suggestions for learning
     """
+    if lead_kind not in {"surrogate", "egg_donor", "sperm_donor"}:
+        raise ValueError("Unsupported Meta lead kind")
     _validate_required_mappings(column_mappings)
+    _validate_mapping_targets(column_mappings, lead_kind)
 
     if not form.current_version_id:
         raise ValueError("Form has no schema version yet. Sync forms first.")
@@ -559,6 +640,7 @@ def save_mapping(
 
     form.mapping_rules = column_mappings
     form.unknown_column_behavior = unknown_column_behavior
+    form.lead_kind = lead_kind
     form.mapping_status = "mapped"
     form.mapping_version_id = form.current_version_id
     form.mapping_updated_at = datetime.now(UTC)
@@ -660,6 +742,25 @@ def _validate_required_mappings(column_mappings: list[dict]) -> None:
     for mapping in column_mappings:
         if mapping.get("action") == "map" and not mapping.get("surrogate_field"):
             raise ValueError("All mapped columns must select a surrogate field")
+
+
+def _validate_mapping_targets(column_mappings: list[dict], lead_kind: str) -> None:
+    if lead_kind not in {"egg_donor", "sperm_donor"}:
+        return
+    allowed_fields = set(DONOR_META_MAPPING_FIELDS)
+    unsupported_fields = sorted(
+        {
+            str(mapping["surrogate_field"])
+            for mapping in column_mappings
+            if mapping.get("action") == "map"
+            and mapping.get("surrogate_field")
+            and mapping["surrogate_field"] not in allowed_fields
+        }
+    )
+    if unsupported_fields:
+        raise ValueError(
+            "Unsupported donor mapping field(s): " + ", ".join(unsupported_fields)
+        )
 
 
 def _format_sample_value(value: object) -> str:

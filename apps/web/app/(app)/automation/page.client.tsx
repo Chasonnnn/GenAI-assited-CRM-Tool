@@ -2,7 +2,7 @@
 
 import { useReducer, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
@@ -27,7 +27,6 @@ import {
     UserIcon,
     CalendarIcon,
     CheckCircle2Icon,
-    TrendingUpIcon,
     ActivityIcon,
     XIcon,
     GripVerticalIcon,
@@ -64,6 +63,8 @@ import type {
     WorkflowTestResponse,
     WorkflowOptions,
     WorkflowScope,
+    WorkflowSubjectType,
+    WorkflowExecution,
 } from "@/lib/api/workflows"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
@@ -77,6 +78,7 @@ import { getAppointments } from "@/lib/api/appointments"
 import { listMatches, type ListMatchesParams } from "@/lib/api/matches"
 import { getTasks, type TaskListParams } from "@/lib/api/tasks"
 import { getSurrogates, type SurrogateListParams } from "@/lib/api/surrogates"
+import { listDonors } from "@/lib/api/donors"
 import { getSurrogateFieldLabel } from "@/lib/constants/surrogate-field-labels"
 import { US_STATES } from "@/lib/constants/us-states"
 import { parseDateInput } from "@/lib/utils/date"
@@ -105,6 +107,8 @@ import {
     type EditableCondition,
     type SelectOption,
 } from "@/components/automation/workflow-editor/shared"
+import { AutomationPageHeader } from "./components/automation-page-header"
+import { WorkflowStatsCards } from "./components/workflow-stats-cards"
 
 // Icon mapping for trigger types
 const triggerIcons: Record<string, React.ElementType> = {
@@ -126,6 +130,10 @@ const triggerIcons: Record<string, React.ElementType> = {
     appointment_completed: CheckCircle2Icon,
     note_added: FileTextIcon,
     document_uploaded: FileTextIcon,
+    donor_created: FileTextIcon,
+    donor_stage_changed: ZapIcon,
+    donor_assigned: UserIcon,
+    donor_updated: FileTextIcon,
 }
 
 const triggerLabels: Record<string, string> = {
@@ -147,6 +155,92 @@ const triggerLabels: Record<string, string> = {
     appointment_completed: "Appointment Completed",
     note_added: "Note Added",
     document_uploaded: "Document Uploaded",
+    donor_created: "Donor Created",
+    donor_stage_changed: "Donor Stage Changed",
+    donor_assigned: "Donor Assigned",
+    donor_updated: "Donor Updated",
+}
+
+const WORKFLOW_SUBJECT_LABELS: Record<WorkflowSubjectType, string> = {
+    surrogate: "Surrogate",
+    form_submission: "Form Submission",
+    intake_lead: "Intake Lead",
+    match: "Match",
+    appointment: "Appointment",
+    egg_donor: "Egg Donor",
+    sperm_donor: "Sperm Donor",
+}
+
+const WORKFLOW_SUBJECT_PLURAL_LABELS: Record<WorkflowSubjectType, string> = {
+    surrogate: "Surrogates",
+    form_submission: "Form Submissions",
+    intake_lead: "Intake Leads",
+    match: "Matches",
+    appointment: "Appointments",
+    egg_donor: "Egg Donors",
+    sperm_donor: "Sperm Donors",
+}
+
+const CREATE_WORKFLOW_SUBJECT_OPTIONS: Array<{
+    value: Extract<WorkflowSubjectType, "surrogate" | "egg_donor" | "sperm_donor">
+    label: string
+}> = [
+    { value: "surrogate", label: WORKFLOW_SUBJECT_LABELS.surrogate },
+    { value: "egg_donor", label: WORKFLOW_SUBJECT_LABELS.egg_donor },
+    { value: "sperm_donor", label: WORKFLOW_SUBJECT_LABELS.sperm_donor },
+]
+
+const DONOR_TYPE_OPTIONS: SelectOption[] = [
+    { value: "egg", label: "Egg Donor" },
+    { value: "sperm", label: "Sperm Donor" },
+]
+
+function isDonorSubject(
+    subjectType: WorkflowSubjectType,
+): subjectType is Extract<WorkflowSubjectType, "egg_donor" | "sperm_donor"> {
+    return subjectType === "egg_donor" || subjectType === "sperm_donor"
+}
+
+function getDonorExecutionLink(execution: WorkflowExecution): string | null {
+    if (
+        execution.subject_type &&
+        isDonorSubject(execution.subject_type) &&
+        execution.subject_id &&
+        getDonorExecutionIdentityLabel(execution)
+    ) {
+        return `/donors/${execution.subject_id}`
+    }
+    return null
+}
+
+function getDonorExecutionIdentityLabel(execution: WorkflowExecution): string | null {
+    const name = execution.entity_name?.trim()
+    const number = execution.entity_number?.trim()
+    if (number && name) return `${number} — ${name}`
+    return number || name || null
+}
+
+function WorkflowExecutionRecordLink({ execution }: { execution: WorkflowExecution }) {
+    const isDonorExecution = execution.subject_type
+        ? isDonorSubject(execution.subject_type)
+        : false
+    const donorLabel = isDonorExecution
+        ? getDonorExecutionIdentityLabel(execution) ?? "Donor unavailable"
+        : null
+    const donorLink = getDonorExecutionLink(execution)
+    if (donorLink && donorLabel) {
+        return (
+            <Link href={donorLink} className="font-medium text-primary hover:underline">
+                {donorLabel}
+            </Link>
+        )
+    }
+    if (donorLabel) return <p className="font-medium">{donorLabel}</p>
+    return (
+        <p className="font-medium">
+            {execution.entity_type}: {execution.entity_id.slice(0, 8)}&hellip;
+        </p>
+    )
 }
 
 function getConditionFieldLabel(value: string): string {
@@ -184,6 +278,9 @@ const conditionFieldLabels: Record<string, string> = {
     meta_lead_id: "Meta Lead ID",
     meta_ad_external_id: "Meta Ad External ID",
     meta_form_id: "Meta Form ID",
+    education: "Education",
+    donor_type: "Donor Type",
+    donor_number: "Donor Number",
 }
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -195,6 +292,8 @@ const ENTITY_LABELS: Record<string, string> = {
     appointment: "Appointment ID",
     note: "Note ID",
     document: "Document ID",
+    egg_donor: "Egg Donor ID",
+    sperm_donor: "Sperm Donor ID",
 }
 
 const ENTITY_PLURALS: Record<string, string> = {
@@ -206,6 +305,8 @@ const ENTITY_PLURALS: Record<string, string> = {
     appointment: "appointments",
     note: "notes",
     document: "documents",
+    egg_donor: "egg donors",
+    sperm_donor: "sperm donors",
 }
 
 function formatRelativeTime(dateString: string | null): string {
@@ -237,6 +338,21 @@ async function fetchTestEntities(
     entityType: string,
     query: string
 ): Promise<TestEntitySuggestion[]> {
+    if (entityType === "egg_donor" || entityType === "sperm_donor") {
+        const response = await listDonors({
+            donor_type: entityType === "egg_donor" ? "egg" : "sperm",
+            per_page: 5,
+            page: 1,
+            ...(query.trim() ? { q: query.trim() } : {}),
+        })
+        return response.items.map((item) =>
+            buildTestEntitySuggestion(
+                item.id,
+                `${item.donor_number} — ${item.full_name}`,
+                item.status_label,
+            ),
+        )
+    }
     if (entityType === "surrogate") {
         const params: SurrogateListParams = {
             per_page: 5,
@@ -335,7 +451,7 @@ function normalizeTriggerConfigForUi(
     statuses: StatusOption[],
 ): JsonObject {
     const next: JsonObject = { ...triggerConfig }
-    if (triggerType === "status_changed") {
+    if (triggerType === "status_changed" || triggerType === "donor_stage_changed") {
         if (
             (typeof next.to_stage_id !== "string" || !next.to_stage_id) &&
             typeof next.to_status === "string"
@@ -386,10 +502,10 @@ function normalizeTriggerConfigForUi(
     ) {
         if (typeof next.form_id !== "string") next.form_id = ""
     }
-    if (triggerType === "surrogate_updated") {
+    if (triggerType === "surrogate_updated" || triggerType === "donor_updated") {
         if (!Array.isArray(next.fields)) next.fields = []
     }
-    if (triggerType === "surrogate_assigned") {
+    if (triggerType === "surrogate_assigned" || triggerType === "donor_assigned") {
         if (typeof next.to_user_id !== "string") delete next.to_user_id
     }
     return next
@@ -413,6 +529,7 @@ type WorkflowBuilderState = {
     workflowName: string
     workflowDescription: string
     workflowScope: WorkflowScope
+    subjectType: WorkflowSubjectType
     triggerType: string
     triggerConfig: JsonObject
     conditions: EditableCondition[]
@@ -431,6 +548,7 @@ type WorkflowBuilderAction =
     | { type: "setWorkflowName"; value: string }
     | { type: "setWorkflowDescription"; value: string }
     | { type: "setWorkflowScope"; value: WorkflowScope }
+    | { type: "setSubjectType"; value: WorkflowSubjectType }
     | { type: "setTriggerType"; value: string }
     | { type: "setTriggerConfig"; value: StateUpdate<JsonObject> }
     | { type: "normalizeTriggerConfig"; value: JsonObject }
@@ -490,6 +608,7 @@ function createInitialWorkflowBuilderState(scope: WorkflowScope = "personal"): W
         workflowName: "",
         workflowDescription: "",
         workflowScope: scope,
+        subjectType: "surrogate",
         triggerType: "",
         triggerConfig: {},
         conditions: [],
@@ -524,6 +643,7 @@ function workflowBuilderReducer(state: WorkflowBuilderState, action: WorkflowBui
                 workflowName: workflow.name,
                 workflowDescription: workflow.description ?? "",
                 workflowScope: workflow.scope,
+                subjectType: workflow.subject_type ?? "surrogate",
                 triggerType: workflow.trigger_type,
                 triggerConfig: normalizeTriggerConfigForUi(
                     workflow.trigger_type,
@@ -552,6 +672,18 @@ function workflowBuilderReducer(state: WorkflowBuilderState, action: WorkflowBui
             return { ...state, workflowDescription: action.value, serverErrors: [] }
         case "setWorkflowScope":
             return { ...state, workflowScope: action.value, serverErrors: [] }
+        case "setSubjectType":
+            if (action.value === state.subjectType) return state
+            return {
+                ...state,
+                subjectType: action.value,
+                triggerType: "",
+                triggerConfig: {},
+                conditions: [],
+                actions: [],
+                validationError: null,
+                serverErrors: [],
+            }
         case "setTriggerType":
             if (action.value === state.triggerType) return state
             return {
@@ -700,6 +832,12 @@ function getActionValidationError(action: ActionConfig): string | null {
     ) {
         return "Select at least one email recipient."
     }
+    if (action.action_type === "send_message" && !action.purpose) {
+        return "Select a message purpose for all messaging actions."
+    }
+    if (action.action_type === "send_message" && !action.message_template_version_id) {
+        return "Select a message template for all messaging actions."
+    }
     if (action.action_type === "create_task" && !title.trim()) {
         return "Task actions need a title."
     }
@@ -709,7 +847,7 @@ function getActionValidationError(action: ActionConfig): string | null {
     if (action.action_type === "send_notification" && Array.isArray(action.recipients) && action.recipients.length === 0) {
         return "Select at least one recipient."
     }
-    if (action.action_type === "assign_surrogate") {
+    if (action.action_type === "assign_surrogate" || action.action_type === "assign_donor") {
         if (!action.owner_type) return "Assign actions need an owner type."
         if (!action.owner_id) return "Assign actions need a target owner."
     }
@@ -725,7 +863,7 @@ function getActionValidationError(action: ActionConfig): string | null {
     return null
 }
 
-export default function AutomationPageClient({
+function useAutomationPageView({
     initialTab,
     initialWorkflowScopeTab,
     initialCreateOpen,
@@ -776,6 +914,7 @@ export default function AutomationPageClient({
         workflowName,
         workflowDescription,
         workflowScope,
+        subjectType,
         triggerType,
         triggerConfig,
         conditions,
@@ -807,6 +946,8 @@ export default function AutomationPageClient({
         dispatchWorkflowBuilder({ type: "setWorkflowName", value })
     const setWorkflowDescription = (value: string) =>
         dispatchWorkflowBuilder({ type: "setWorkflowDescription", value })
+    const setSubjectType = (value: WorkflowSubjectType) =>
+        dispatchWorkflowBuilder({ type: "setSubjectType", value })
     const setTriggerType = (value: string) =>
         dispatchWorkflowBuilder({ type: "setTriggerType", value })
     const setTriggerConfig = (value: StateUpdate<JsonObject>) =>
@@ -842,7 +983,7 @@ export default function AutomationPageClient({
     // API hooks
     const { data: workflows, isLoading: workflowsLoading } = useWorkflows({ scope: activeWorkflowScope })
     const { data: stats, isLoading: statsLoading } = useWorkflowStats()
-    const { data: options } = useWorkflowOptions(workflowScope)
+    const { data: options } = useWorkflowOptions(workflowScope, subjectType)
     const statusOptions = options?.statuses ?? EMPTY_STATUS_OPTIONS
     const activeStatusOptions = statusOptions.filter((status) => status.is_active !== false)
     const actionTypeOptions = options?.action_types ?? []
@@ -854,6 +995,20 @@ export default function AutomationPageClient({
         : actionTypeOptions
     const userOptions = options?.users ?? []
     const queueOptions = options?.queues ?? []
+    const messageTemplates = options?.message_templates ?? []
+    const emailRecipientOptions = isDonorSubject(subjectType)
+        ? [
+            { value: "donor", label: "Donor" },
+            ...EMAIL_RECIPIENT_OPTIONS.flatMap((option) => {
+                if (option.value === "surrogate") return []
+                return [
+                    option.value === "owner"
+                        ? { ...option, label: "Donor Owner" }
+                        : option,
+                ]
+            }),
+        ]
+        : EMAIL_RECIPIENT_OPTIONS
     const formOptions: SelectOption[] = (options?.forms ?? []).map((form) => ({ value: form.id, label: form.name }))
     const updateFields = options?.update_fields ?? []
     const conditionOperators = options?.condition_operators ?? []
@@ -876,10 +1031,21 @@ export default function AutomationPageClient({
 
     const stateOptions: SelectOption[] = US_STATES.map((state) => ({ value: state.value, label: state.label }))
 
-    const triggerEntityTypes = options?.trigger_entity_types ?? {}
     const selectedTestWorkflow = workflows?.find((workflow) => workflow.id === testWorkflowId)
     const testTriggerType = selectedTestWorkflow?.trigger_type
-    const testEntityType = testTriggerType ? triggerEntityTypes[testTriggerType] ?? "surrogate" : "surrogate"
+    const testSubjectType = selectedTestWorkflow?.subject_type ?? "surrogate"
+    const { data: testOptions } = useWorkflowOptions(activeWorkflowScope, testSubjectType)
+    const testTriggerEntityTypes = testOptions?.trigger_entity_types ?? {}
+    const testEntityType = isDonorSubject(testSubjectType)
+        ? testSubjectType
+        : testTriggerType
+            ? testTriggerEntityTypes[testTriggerType] ?? "surrogate"
+            : "surrogate"
+    const isTestDonorEntity = testEntityType === "egg_donor" || testEntityType === "sperm_donor"
+    const testEntityInputLabel = isTestDonorEntity
+        ? WORKFLOW_SUBJECT_LABELS[testEntityType]
+        : ENTITY_LABELS[testEntityType] ?? "Entity ID"
+    const testEntityLabel = testEntityInputLabel.replace(/ ID$/, "")
 
     const {
         data: testEntitySuggestionsData,
@@ -938,6 +1104,7 @@ export default function AutomationPageClient({
         if (field === "source") return SOURCE_OPTIONS
         if (field === "source_mode") return FORM_SOURCE_MODE_OPTIONS
         if (field === "match_status") return FORM_MATCH_STATUS_OPTIONS
+        if (field === "donor_type") return DONOR_TYPE_OPTIONS
         return null
     }
 
@@ -966,7 +1133,7 @@ export default function AutomationPageClient({
             const formId = triggerConfig.form_id
             if (!formId || typeof formId !== "string") return "Select a form."
         }
-        if (triggerType === "surrogate_updated") {
+        if (triggerType === "surrogate_updated" || triggerType === "donor_updated") {
             const fields = triggerConfig.fields
             if (!Array.isArray(fields) || fields.length === 0) return "Select at least one field to watch."
         }
@@ -1068,7 +1235,10 @@ export default function AutomationPageClient({
         })
     }
 
-    if (triggerType === "status_changed" && statusOptions.length > 0) {
+    if (
+        (triggerType === "status_changed" || triggerType === "donor_stage_changed") &&
+        statusOptions.length > 0
+    ) {
         const normalized = normalizeTriggerConfigForUi(triggerType, triggerConfig, statusOptions)
         if (!areJsonObjectsEqual(normalized, triggerConfig)) {
             dispatchWorkflowBuilder({ type: "normalizeTriggerConfig", value: normalized })
@@ -1095,7 +1265,7 @@ export default function AutomationPageClient({
 
         const buildTriggerConfig = (): JsonObject => {
             const next: JsonObject = { ...triggerConfig }
-            if (triggerType === "status_changed") {
+            if (triggerType === "status_changed" || triggerType === "donor_stage_changed") {
                 if (typeof next.to_stage_id !== "string" || !next.to_stage_id) delete next.to_stage_id
                 if (typeof next.from_stage_id !== "string" || !next.from_stage_id) delete next.from_stage_id
                 delete next.to_status
@@ -1122,30 +1292,45 @@ export default function AutomationPageClient({
             if (triggerType === "intake_lead_created") {
                 if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
             }
-            if (triggerType === "surrogate_updated") {
+            if (triggerType === "surrogate_updated" || triggerType === "donor_updated") {
                 if (!Array.isArray(next.fields)) next.fields = []
             }
-            if (triggerType === "surrogate_assigned") {
+            if (triggerType === "surrogate_assigned" || triggerType === "donor_assigned") {
                 if (typeof next.to_user_id !== "string") delete next.to_user_id
             }
             return next
         }
 
+        const normalizedActions = normalizeActionsForSave(actions).map((action) => {
+            if (
+                isDonorSubject(subjectType) &&
+                action.action_type === "send_email" &&
+                (action.recipients === undefined || action.recipients === "surrogate")
+            ) {
+                return { ...action, recipients: "donor" }
+            }
+            return action
+        })
+
         const data: WorkflowCreate = {
             name: workflowName,
+            subject_type: subjectType,
             trigger_type: triggerType,
             trigger_config: buildTriggerConfig(),
             conditions: normalizeConditionsForSave(conditions),
             condition_logic: conditionLogic,
-            actions: normalizeActionsForSave(actions),
+            actions: normalizedActions,
             is_enabled: true,
             scope: workflowScope,
             ...(workflowDescription ? { description: workflowDescription } : {}),
         }
 
         if (editingWorkflowId) {
+            const { subject_type: _subjectType, scope: _scope, ...updateData } = data
+            void _subjectType
+            void _scope
             updateWorkflow.mutate(
-                { id: editingWorkflowId, data },
+                { id: editingWorkflowId, data: updateData },
                 {
                     onSuccess: () => resetWizard(),
                     onError: (error) => setServerErrors(parseServerErrors(error)),
@@ -1184,6 +1369,16 @@ export default function AutomationPageClient({
 
     const updateAction = (index: number, updates: Partial<ActionConfig>) => {
         dispatchWorkflowBuilder({ type: "updateAction", index, updates })
+    }
+
+    const updateActionType = (index: number, actionType: string) => {
+        updateAction(index, {
+            action_type: actionType,
+            ...(isDonorSubject(subjectType) &&
+            (actionType === "send_email" || actionType === "send_message")
+                ? { requires_approval: true }
+                : {}),
+        })
     }
 
     // Email template handlers (preserved)
@@ -1228,84 +1423,16 @@ export default function AutomationPageClient({
 
     return (
         <div className="flex min-h-screen flex-col">
-            {/* Page Header */}
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <h1 className="text-2xl font-semibold">Workflows</h1>
-                    <div className="flex gap-3">
-                        {activeTab === "workflows" && (
-                            <Button variant="outline" onClick={() => push("/automation/executions")}>
-                                <ActivityIcon className="mr-2 size-4" />
-                                Execution History
-                            </Button>
-                        )}
-                        {activeTab === "email-templates" && (
-                            <Button onClick={() => handleOpenTemplateModal()}>
-                                <PlusIcon className="mr-2 size-4" />
-                                New Template
-                            </Button>
-                        )}
-                    </div>
-                </div>
-            </div>
+            <AutomationPageHeader
+                activeTab={activeTab}
+                onOpenExecutions={() => push("/automation/executions")}
+                onCreateTemplate={() => handleOpenTemplateModal()}
+            />
 
             {/* Main Content */}
             <div className="flex-1 p-6">
                 <div className="space-y-6">
-                    {/* Stats Cards */}
-                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <CardTitle className="text-sm font-medium text-muted-foreground">Total Workflows</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">
-                                    {statsLoading ? "-" : stats?.total_workflows ?? 0}
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <CardTitle className="text-sm font-medium text-muted-foreground">Enabled</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">
-                                    {statsLoading ? "-" : stats?.enabled_workflows ?? 0}
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <CardTitle className="text-sm font-medium text-muted-foreground">Success Rate 24h</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="flex items-baseline gap-2">
-                                    <div className="text-2xl font-bold">
-                                        {statsLoading ? "-" : `${stats?.success_rate_24h?.toFixed(1) ?? 0}%`}
-                                    </div>
-                                    {stats?.success_rate_24h && stats.success_rate_24h > 95 && (
-                                        <div className="flex items-center text-xs font-medium text-green-600">
-                                            <TrendingUpIcon className="mr-1 size-3" />
-                                            Good
-                                        </div>
-                                    )}
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <CardTitle className="text-sm font-medium text-muted-foreground">Executions 24h</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">
-                                    {statsLoading ? "-" : stats?.total_executions_24h ?? 0}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
+                    <WorkflowStatsCards stats={stats} isLoading={statsLoading} />
 
                     {/* Workflow Tabs */}
                     <Tabs
@@ -1434,6 +1561,9 @@ export default function AutomationPageClient({
                                                     </div>
                                                     <p className="text-sm text-muted-foreground">{workflow.description || "No description"}</p>
                                                     <div className="mt-2 flex items-center gap-3">
+                                                        <Badge variant="outline" className="text-xs">
+                                                            {WORKFLOW_SUBJECT_LABELS[workflow.subject_type ?? "surrogate"]}
+                                                        </Badge>
                                                         <Badge variant="secondary" className="text-xs">
                                                             {triggerLabels[workflow.trigger_type] || workflow.trigger_type}
                                                         </Badge>
@@ -1530,9 +1660,49 @@ export default function AutomationPageClient({
                         {wizardStep === 1 && (
                             <div className="space-y-4">
                                 <div>
+                                    <Label htmlFor={editingWorkflowId ? "workflow-subject-readonly" : undefined}>
+                                        Record Type *
+                                    </Label>
+                                    {editingWorkflowId ? (
+                                        <Input
+                                            id="workflow-subject-readonly"
+                                            aria-label="Record type"
+                                            className="mt-1.5"
+                                            value={WORKFLOW_SUBJECT_LABELS[subjectType]}
+                                            disabled
+                                            readOnly
+                                        />
+                                    ) : (
+                                        <Select
+                                            aria-label="Record type"
+                                            value={subjectType}
+                                            onValueChange={(value) =>
+                                                value && setSubjectType(value as WorkflowSubjectType)
+                                            }
+                                        >
+                                            <SelectTrigger aria-label="Record type" className="mt-1.5 w-full">
+                                                <SelectValue placeholder="Select record type">
+                                                    {(value: string | null) =>
+                                                        value
+                                                            ? WORKFLOW_SUBJECT_LABELS[value as WorkflowSubjectType]
+                                                            : "Select record type"
+                                                    }
+                                                </SelectValue>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {CREATE_WORKFLOW_SUBJECT_OPTIONS.map((option) => (
+                                                    <SelectItem key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    )}
+                                </div>
+                                <div>
                                     <Label>Workflow Name *</Label>
                                     <Input
-                                        placeholder="e.g., Welcome New Surrogates"
+                                        placeholder={`e.g., Welcome New ${WORKFLOW_SUBJECT_PLURAL_LABELS[subjectType]}`}
                                         className="mt-1.5"
                                         value={workflowName}
                                         onChange={(e) => setWorkflowName(e.target.value)}
@@ -1540,8 +1710,12 @@ export default function AutomationPageClient({
                                 </div>
                                 <div>
                                     <Label>Trigger Type *</Label>
-                                    <Select value={triggerType} onValueChange={(v) => v && setTriggerType(v)}>
-                                        <SelectTrigger className="mt-1.5 w-full">
+                                    <Select
+                                        aria-label="Trigger type"
+                                        value={triggerType}
+                                        onValueChange={(v) => v && setTriggerType(v)}
+                                    >
+                                        <SelectTrigger aria-label="Trigger type" className="mt-1.5 w-full">
                                             <SelectValue placeholder="Select trigger">
                                                 {(value: string | null) => {
                                                     if (!value) return "Select trigger"
@@ -1557,7 +1731,7 @@ export default function AutomationPageClient({
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                {triggerType === "status_changed" && (
+                                {(triggerType === "status_changed" || triggerType === "donor_stage_changed") && (
                                     <div className="grid gap-4 md:grid-cols-2">
                                         <div>
                                             <Label>To Stage (Optional)</Label>
@@ -1784,7 +1958,7 @@ export default function AutomationPageClient({
                                         />
                                     </div>
                                 )}
-                                {triggerType === "surrogate_updated" && (
+                                {(triggerType === "surrogate_updated" || triggerType === "donor_updated") && (
                                     <div className="space-y-3">
                                         <Label>Fields to Watch *</Label>
                                         <div className="flex items-center gap-3">
@@ -1844,7 +2018,7 @@ export default function AutomationPageClient({
                                         )}
                                     </div>
                                 )}
-                                {triggerType === "surrogate_assigned" && (
+                                {(triggerType === "surrogate_assigned" || triggerType === "donor_assigned") && (
                                     <div>
                                         <Label>Assigned To (Optional)</Label>
                                         <Select
@@ -1993,10 +2167,11 @@ export default function AutomationPageClient({
                                                 <div className="flex items-center gap-3">
                                                     <GripVerticalIcon className="size-4 text-muted-foreground" />
                                                     <Select
+                                                        aria-label={`Action type ${index + 1}`}
                                                         value={action.action_type}
-                                                        onValueChange={(v) => v && updateAction(index, { action_type: v })}
+                                                        onValueChange={(v) => v && updateActionType(index, v)}
                                                     >
-                                                        <SelectTrigger className="flex-1">
+                                                        <SelectTrigger aria-label={`Action type ${index + 1}`} className="flex-1">
                                                             <SelectValue placeholder="Action type">
                                                                 {(value: string | null) => {
                                                                     if (!value) return "Action type"
@@ -2044,7 +2219,12 @@ export default function AutomationPageClient({
                                                         <div className="grid gap-2">
                                                             <Label>Recipient</Label>
                                                             <Select
-                                                                value={getEmailRecipientKind(action)}
+                                                                value={
+                                                                    isDonorSubject(subjectType) &&
+                                                                    getEmailRecipientKind(action) === "surrogate"
+                                                                        ? "donor"
+                                                                        : getEmailRecipientKind(action)
+                                                                }
                                                                 onValueChange={(value) => {
                                                                     if (value === "user") {
                                                                         const currentUser = getEmailRecipientUserId(action)
@@ -2060,7 +2240,7 @@ export default function AutomationPageClient({
                                                                     <SelectValue placeholder="Select recipient" />
                                                                 </SelectTrigger>
                                                                 <SelectContent>
-                                                                    {EMAIL_RECIPIENT_OPTIONS.map((option) => (
+                                                                    {emailRecipientOptions.map((option) => (
                                                                         <SelectItem key={option.value} value={option.value}>
                                                                             {option.label}
                                                                         </SelectItem>
@@ -2095,6 +2275,73 @@ export default function AutomationPageClient({
                                                         )}
                                                     </div>
                                                 )}
+                                                {action.action_type === "send_message" && (
+                                                    <div className="space-y-3">
+                                                        <Select
+                                                            aria-label="Message purpose"
+                                                            value={typeof action.purpose === "string" ? action.purpose : ""}
+                                                            onValueChange={(value) => {
+                                                                if (!value) return
+                                                                updateAction(index, {
+                                                                    purpose: value,
+                                                                    message_template_version_id: "",
+                                                                })
+                                                            }}
+                                                        >
+                                                            <SelectTrigger aria-label="Message purpose">
+                                                                <SelectValue placeholder="Message purpose">
+                                                                    {(value: string | null) => {
+                                                                        if (value === "operational") return "Operational"
+                                                                        if (value === "promotional") return "Promotional"
+                                                                        return "Message purpose"
+                                                                    }}
+                                                                </SelectValue>
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="operational">Operational</SelectItem>
+                                                                <SelectItem value="promotional">Promotional</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <Select
+                                                            aria-label="Message template"
+                                                            value={
+                                                                typeof action.message_template_version_id === "string"
+                                                                    ? action.message_template_version_id
+                                                                    : ""
+                                                            }
+                                                            onValueChange={(value) =>
+                                                                value && updateAction(index, {
+                                                                    message_template_version_id: value,
+                                                                })
+                                                            }
+                                                        >
+                                                            <SelectTrigger aria-label="Message template">
+                                                                <SelectValue placeholder="Message template">
+                                                                    {(value: string | null) => {
+                                                                        if (!value) return "Message template"
+                                                                        const template = messageTemplates.find(
+                                                                            (candidate) => candidate.id === value,
+                                                                        )
+                                                                        return template
+                                                                            ? `${template.name} v${template.version}`
+                                                                            : "Unknown template"
+                                                                    }}
+                                                                </SelectValue>
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {messageTemplates.flatMap((template) =>
+                                                                    template.purpose === action.purpose
+                                                                        ? [
+                                                                            <SelectItem key={template.id} value={template.id}>
+                                                                                {template.name} v{template.version}
+                                                                            </SelectItem>,
+                                                                        ]
+                                                                        : [],
+                                                                )}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                )}
                                                 {action.action_type === "create_task" && (
                                                     <div className="space-y-3">
                                                         <Input
@@ -2127,7 +2374,11 @@ export default function AutomationPageClient({
                                                                     <SelectValue placeholder="Assignee" />
                                                                 </SelectTrigger>
                                                                 <SelectContent>
-                                                                    <SelectItem value="owner">Case Owner</SelectItem>
+                                                                    <SelectItem value="owner">
+                                                                        {isDonorSubject(subjectType)
+                                                                            ? "Donor Owner"
+                                                                            : "Case Owner"}
+                                                                    </SelectItem>
                                                                     <SelectItem value="creator">Creator</SelectItem>
                                                                     <SelectItem value="admin">Admin</SelectItem>
                                                                     {userOptions.map((user) => (
@@ -2186,15 +2437,17 @@ export default function AutomationPageClient({
                                                         </Select>
                                                     </div>
                                                 )}
-                                                {action.action_type === "assign_surrogate" && (
+                                                {(action.action_type === "assign_surrogate" ||
+                                                    action.action_type === "assign_donor") && (
                                                     <div className="space-y-3">
                                                         <Select
-                                                            value={typeof action.owner_type === "string" ? action.owner_type : "user"}
+                                                            aria-label="Assignment owner type"
+                                                            value={typeof action.owner_type === "string" ? action.owner_type : ""}
                                                             onValueChange={(value) =>
                                                                 updateAction(index, { owner_type: value, owner_id: "" })
                                                             }
                                                         >
-                                                            <SelectTrigger>
+                                                            <SelectTrigger aria-label="Assignment owner type">
                                                                 <SelectValue placeholder="Owner type" />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -2203,10 +2456,11 @@ export default function AutomationPageClient({
                                                             </SelectContent>
                                                         </Select>
                                                         <Select
+                                                            aria-label="Assignment owner"
                                                             value={typeof action.owner_id === "string" ? action.owner_id : ""}
                                                             onValueChange={(value) => value && updateAction(index, { owner_id: value })}
                                                         >
-                                                            <SelectTrigger>
+                                                            <SelectTrigger aria-label="Assignment owner">
                                                                 <SelectValue placeholder="Select owner" />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -2375,13 +2629,20 @@ export default function AutomationPageClient({
                                                                 Requires Approval
                                                             </Label>
                                                             <span className="text-xs text-muted-foreground">
-                                                                Surrogate owner must approve before this action runs
+                                                                {isDonorSubject(subjectType)
+                                                                    ? "Donor owner must approve before this action runs"
+                                                                    : "Surrogate owner must approve before this action runs"}
                                                             </span>
                                                         </div>
                                                         <Switch
                                                             id={`approval-${action.clientId}`}
                                                             checked={!!action.requires_approval}
                                                             onCheckedChange={(checked) => updateAction(index, { requires_approval: checked })}
+                                                            disabled={
+                                                                isDonorSubject(subjectType) &&
+                                                                (action.action_type === "send_email" ||
+                                                                    action.action_type === "send_message")
+                                                            }
                                                         />
                                                     </div>
                                                 )}
@@ -2401,6 +2662,12 @@ export default function AutomationPageClient({
                                         <div className="flex justify-between">
                                             <span className="text-muted-foreground">Name:</span>
                                             <span className="font-medium">{workflowName || "Untitled"}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-muted-foreground">Record Type:</span>
+                                            <span className="font-medium">
+                                                {WORKFLOW_SUBJECT_LABELS[subjectType]}
+                                            </span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="text-muted-foreground">Trigger:</span>
@@ -2577,7 +2844,7 @@ export default function AutomationPageClient({
                                             <div className="flex-1 pb-4">
                                                 <div className="flex items-start justify-between">
                                                     <div>
-                                                        <p className="font-medium">{execution.entity_type}: {execution.entity_id.slice(0, 8)}&hellip;</p>
+                                                        <WorkflowExecutionRecordLink execution={execution} />
                                                         <p className="text-sm text-muted-foreground">{formatRelativeTime(execution.executed_at)}</p>
                                                     </div>
                                                     <Badge
@@ -2613,29 +2880,37 @@ export default function AutomationPageClient({
                     <DialogHeader>
                         <DialogTitle>Test Workflow</DialogTitle>
                         <DialogDescription>
-                            Test this workflow against a specific {testEntityType} (dry run - no changes will be made)
+                            Test this workflow against a specific {testEntityLabel.toLowerCase()} (dry run - no changes will be made)
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">
-                            <Label>{ENTITY_LABELS[testEntityType] ?? "Entity ID"}</Label>
+                            <Label htmlFor="workflow-test-record">
+                                {testEntityInputLabel}
+                            </Label>
                             <Input
-                                placeholder={`Enter ${testEntityType} UUID`}
-                                list="workflow-test-entity-options"
+                                id="workflow-test-record"
+                                aria-label={testEntityInputLabel}
+                                placeholder={isTestDonorEntity
+                                    ? `Search ${ENTITY_PLURALS[testEntityType]}`
+                                    : `Enter ${testEntityInputLabel}`}
+                                list={isTestDonorEntity ? undefined : "workflow-test-entity-options"}
                                 value={testEntityQuery}
                                 onChange={(e) => {
                                     setTestEntityQuery(e.target.value)
-                                    setTestEntityId(e.target.value)
+                                    setTestEntityId(isTestDonorEntity ? "" : e.target.value)
                                 }}
                             />
-                            <datalist id="workflow-test-entity-options">
-                                {testEntitySuggestions.map((item) => (
-                                    <option key={item.id} value={item.id}>
-                                        {item.label}
-                                    </option>
-                                ))}
-                            </datalist>
+                            {!isTestDonorEntity && (
+                                <datalist id="workflow-test-entity-options">
+                                    {testEntitySuggestions.map((item) => (
+                                        <option key={item.id} value={item.id}>
+                                            {item.label}
+                                        </option>
+                                    ))}
+                                </datalist>
+                            )}
                             <p className="text-xs text-muted-foreground">
                                 {testEntityType === "note" || testEntityType === "document"
                                     ? "Type a keyword to search notes or documents."
@@ -2658,7 +2933,7 @@ export default function AutomationPageClient({
                                             className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-muted"
                                             onClick={() => {
                                                 setTestEntityId(item.id)
-                                                setTestEntityQuery(item.id)
+                                                setTestEntityQuery(isTestDonorEntity ? item.label : item.id)
                                             }}
                                         >
                                             <span className="font-medium">{item.label}</span>
@@ -2741,4 +3016,10 @@ export default function AutomationPageClient({
             </Dialog>
         </div >
     )
+}
+
+export default function AutomationPageClient(
+    props: Parameters<typeof useAutomationPageView>[0],
+) {
+    return useAutomationPageView(props)
 }

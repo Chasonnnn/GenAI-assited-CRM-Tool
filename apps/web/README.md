@@ -32,6 +32,7 @@ app/
 │   ├── dashboard/
 │   ├── surrogates/
 │   ├── intended-parents/
+│   ├── donors/            # Egg and sperm donor tabs and record detail
 │   ├── tasks/
 │   ├── reports/
 │   ├── ai-assistant/

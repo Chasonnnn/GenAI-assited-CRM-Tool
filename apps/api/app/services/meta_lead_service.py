@@ -11,12 +11,23 @@ from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.constants import SYSTEM_USER_ID
 from app.db.enums import AlertSeverity, AlertType, SurrogateSource
-from app.db.models import MetaAd, MetaAdPlatformDaily, MetaForm, MetaLead, Organization, Surrogate
+from app.db.models import (
+    Donor,
+    MetaAd,
+    MetaAdPlatformDaily,
+    MetaForm,
+    MetaLead,
+    Organization,
+    Surrogate,
+)
 from app.db.session import SessionLocal
+from app.schemas.donor import DonorCreate
 from app.schemas.surrogate import SurrogateCreate
 from app.services import (
     custom_field_service,
+    donor_service,
     surrogate_input_normalization_service,
     surrogate_service,
 )
@@ -32,6 +43,21 @@ logger = logging.getLogger(__name__)
 REQUIRED_CONVERSION_FIELDS = {"full_name", "email"}
 
 
+def _safe_conversion_error(error: Exception) -> str:
+    """Return diagnostic context that cannot serialize lead or SQL parameters."""
+    error_class = type(error).__name__
+    if isinstance(error, IntegrityError):
+        constraint_name = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+        if isinstance(constraint_name, str) and constraint_name and all(
+            character.isalnum() or character in {"_", "-", "."}
+            for character in constraint_name
+        ):
+            return f"{error_class} ({constraint_name[:100]})"
+    if isinstance(error, ValidationError):
+        return f"{error_class} ({error.error_count()} validation errors)"
+    return error_class
+
+
 def _mark_conversion_failed(
     db: Session,
     error: Exception,
@@ -43,7 +69,7 @@ def _mark_conversion_failed(
     emit_alert: bool = False,
 ) -> None:
     """Persist convert_failed state after a failed transaction."""
-    error_message = str(error)[:500]
+    error_message = _safe_conversion_error(error)
     db.rollback()
 
     isolated = SessionLocal()
@@ -85,6 +111,8 @@ def _is_mapping_related_conversion_failure(error: Exception) -> bool:
             "unique constraint",
             "already converted",
             "already has a linked surrogate",
+            "already has a linked donor",
+            "active donor with this email",
         )
     ):
         return False
@@ -126,14 +154,35 @@ def _ensure_review_task_for_mapping_conversion_failure(
         if not form:
             return
 
-        error_message = str(error).strip() or type(error).__name__
         meta_form_mapping_service.ensure_mapping_review_task(
             db,
             form,
-            reason=f"Mapping conversion failed: {error_message[:200]}",
+            reason=f"Mapping conversion failed: {_safe_conversion_error(error)}",
         )
     except Exception as exc:
-        logger.warning("Failed to create mapping review task after conversion failure: %s", exc)
+        logger.warning(
+            "Failed to create mapping review task after conversion failure",
+            extra={"error_class": type(exc).__name__},
+        )
+
+
+def _configured_form_lead_kind(
+    db: Session,
+    org_id: UUID,
+    meta_form_id: str | None,
+) -> str | None:
+    """Resolve a reviewed form classification without freezing an unmapped default."""
+    if not meta_form_id:
+        return None
+    form = db.scalar(
+        select(MetaForm).where(
+            MetaForm.organization_id == org_id,
+            MetaForm.form_external_id == meta_form_id,
+        )
+    )
+    if not form or form.mapping_status == "unmapped":
+        return None
+    return form.lead_kind
 
 
 def store_meta_lead(
@@ -185,6 +234,12 @@ def store_meta_lead(
             existing.custom_disclaimer_responses = custom_disclaimer_responses
         if meta_form_legal_snapshot_id is not None:
             existing.meta_form_legal_snapshot_id = meta_form_legal_snapshot_id
+        if existing.lead_kind is None:
+            existing.lead_kind = _configured_form_lead_kind(
+                db,
+                org_id,
+                meta_form_id or existing.meta_form_id,
+            )
         db.commit()
         db.refresh(existing)
         return existing, None
@@ -194,6 +249,7 @@ def store_meta_lead(
         meta_lead_id=meta_lead_id,
         meta_form_id=meta_form_id,
         meta_page_id=meta_page_id,
+        lead_kind=_configured_form_lead_kind(db, org_id, meta_form_id),
         field_data=field_data,
         field_data_raw=field_data_raw,
         raw_payload=raw_payload,
@@ -447,13 +503,140 @@ def convert_to_surrogate_with_mapping(
             emit_alert=True,
         )
         _ensure_review_task_for_mapping_conversion_failure(db, organization_id, meta_form_id, e)
-        return None, f"Conversion failed: {e}"
+        return None, f"Conversion failed: {_safe_conversion_error(e)}"
+
+
+def convert_to_donor_with_mapping(
+    db: Session,
+    meta_lead: MetaLead,
+    mapping_rules: list[dict],
+    *,
+    donor_type: str,
+    unknown_column_behavior: str = "metadata",
+    user_id: UUID | None = None,
+) -> tuple[Donor | None, str | None]:
+    """Convert one Meta lead into the configured donor subtype."""
+    if donor_type not in {"egg", "sperm"}:
+        return None, "Unsupported donor lead type"
+    if meta_lead.is_converted:
+        return None, "Meta lead already converted"
+    if meta_lead.converted_donor_id:
+        return None, "Meta lead already has a linked donor"
+
+    field_data = dict(meta_lead.field_data_raw or meta_lead.field_data or {})
+    row_data, _, _, unmapped_fields = _apply_mapping_rules(
+        field_data,
+        mapping_rules,
+        unknown_column_behavior,
+    )
+    full_name = str(row_data.get("full_name") or "").strip()
+    email = str(row_data.get("email") or "").strip().lower()
+    if not full_name or len(full_name) < 2:
+        full_name = f"Meta Lead {meta_lead.meta_lead_id[:8]}"
+    if not email or "@" not in email:
+        email = f"meta-{meta_lead.meta_lead_id[:16]}@placeholder.invalid"
+
+    if donor_service.get_active_donor_by_email(db, meta_lead.organization_id, email):
+        error = "An active donor with this email already exists"
+        meta_lead.conversion_error = error
+        meta_lead.unmapped_fields = unmapped_fields or None
+        db.commit()
+        return None, f"Conversion failed: {error}"
+
+    identity = sa_inspect(meta_lead).identity
+    persisted_lead_id = identity[0] if identity else None
+    organization_id = meta_lead.organization_id
+    external_meta_lead_id = meta_lead.meta_lead_id
+    meta_form_id = meta_lead.meta_form_id
+
+    try:
+        donor = donor_service.create_donor(
+            db=db,
+            org_id=meta_lead.organization_id,
+            user_id=user_id or SYSTEM_USER_ID,
+            data=DonorCreate(
+                donor_type=donor_type,
+                full_name=full_name,
+                email=email,
+                phone=row_data.get("phone"),
+                state=row_data.get("state"),
+                education=row_data.get("education"),
+                source="Meta",
+            ),
+            commit=False,
+            emit_workflow_events=False,
+        )
+        meta_lead.is_converted = True
+        meta_lead.converted_donor_id = donor.id
+        meta_lead.converted_at = datetime.now(UTC)
+        meta_lead.conversion_error = None
+        meta_lead.unmapped_fields = unmapped_fields or None
+        db.commit()
+        db.refresh(donor)
+    except Exception as exc:
+        _mark_conversion_failed(
+            db,
+            exc,
+            persisted_lead_id=persisted_lead_id,
+            organization_id=organization_id,
+            external_meta_lead_id=external_meta_lead_id,
+            unmapped_fields=unmapped_fields,
+            emit_alert=True,
+        )
+        _ensure_review_task_for_mapping_conversion_failure(db, organization_id, meta_form_id, exc)
+        return None, f"Conversion failed: {_safe_conversion_error(exc)}"
+
+    try:
+        from app.services import workflow_triggers
+
+        workflow_triggers.trigger_donor_created(db, donor)
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Donor-created workflow dispatch failed after Meta conversion for lead %s",
+            external_meta_lead_id,
+        )
+    return donor, None
+
+
+def convert_with_form_mapping(
+    db: Session,
+    meta_lead: MetaLead,
+    form: MetaForm,
+    *,
+    user_id: UUID | None = None,
+) -> tuple[Surrogate | Donor | None, str | None]:
+    """Dispatch conversion only from the organization-scoped form configuration."""
+    if form.organization_id != meta_lead.organization_id:
+        return None, "Meta form organization does not match lead organization"
+    lead_kind = meta_lead.lead_kind or form.lead_kind
+    if lead_kind not in {"surrogate", "egg_donor", "sperm_donor"}:
+        return None, "Unsupported Meta lead kind"
+    if meta_lead.lead_kind is None:
+        # Persist routing before conversion so a failed attempt cannot later be
+        # redirected by a form reclassification.
+        meta_lead.lead_kind = lead_kind
+        db.commit()
+    common = {
+        "db": db,
+        "meta_lead": meta_lead,
+        "mapping_rules": form.mapping_rules or [],
+        "unknown_column_behavior": form.unknown_column_behavior or "metadata",
+        "user_id": user_id,
+    }
+    if lead_kind == "surrogate":
+        return convert_to_surrogate_with_mapping(**common)
+    if lead_kind == "egg_donor":
+        return convert_to_donor_with_mapping(**common, donor_type="egg")
+    if lead_kind == "sperm_donor":
+        return convert_to_donor_with_mapping(**common, donor_type="sperm")
+    return None, "Unsupported Meta lead kind"
 
 
 def process_stored_meta_lead(
     db: Session,
     meta_lead: MetaLead,
-) -> tuple[str, Surrogate | None]:
+) -> tuple[str, Surrogate | Donor | None]:
     """
     Process a stored Meta lead using the standard mapping pipeline.
 
@@ -470,7 +653,24 @@ def process_stored_meta_lead(
     if meta_lead.is_converted:
         meta_lead.status = "converted"
         db.commit()
-        return meta_lead.status, db.get(Surrogate, meta_lead.converted_surrogate_id)
+        if meta_lead.converted_donor_id:
+            subject = donor_service.get_donor(
+                db,
+                meta_lead.organization_id,
+                meta_lead.converted_donor_id,
+            )
+            return meta_lead.status, subject
+        subject = (
+            db.query(Surrogate)
+            .filter(
+                Surrogate.organization_id == meta_lead.organization_id,
+                Surrogate.id == meta_lead.converted_surrogate_id,
+            )
+            .first()
+            if meta_lead.converted_surrogate_id
+            else None
+        )
+        return meta_lead.status, subject
 
     form = meta_form_mapping_service.get_form_by_external_id(
         db, meta_lead.organization_id, meta_lead.meta_form_id
@@ -483,6 +683,13 @@ def process_stored_meta_lead(
             meta_lead.meta_lead_id,
         )
         return meta_lead.status, None
+
+    configured_lead_kind = (
+        form.lead_kind if form.mapping_status != "unmapped" else None
+    )
+    if meta_lead.lead_kind is None and configured_lead_kind:
+        meta_lead.lead_kind = configured_lead_kind
+        db.commit()
 
     if form.mapping_status != "mapped" or form.mapping_version_id != form.current_version_id:
         meta_lead.status = "awaiting_mapping"
@@ -499,13 +706,7 @@ def process_stored_meta_lead(
     meta_lead.status = "stored"
     db.commit()
 
-    surrogate, convert_error = convert_to_surrogate_with_mapping(
-        db=db,
-        meta_lead=meta_lead,
-        mapping_rules=form.mapping_rules or [],
-        unknown_column_behavior=form.unknown_column_behavior or "metadata",
-        user_id=None,
-    )
+    subject, convert_error = convert_with_form_mapping(db, meta_lead, form, user_id=None)
 
     if convert_error:
         logger.warning("Meta lead auto-conversion failed: %s", convert_error)
@@ -516,11 +717,12 @@ def process_stored_meta_lead(
     meta_lead.status = "converted"
     db.commit()
     logger.info(
-        "Meta lead %s converted to surrogate %s",
+        "Meta lead %s converted to %s",
         meta_lead.meta_lead_id,
-        surrogate.surrogate_number if surrogate else None,
+        getattr(subject, "donor_number", None)
+        or getattr(subject, "surrogate_number", None),
     )
-    return meta_lead.status, surrogate
+    return meta_lead.status, subject
 
 
 def get_unconverted(db: Session, org_id: UUID) -> list[MetaLead]:

@@ -530,6 +530,7 @@ def create_organization(
     org = Organization(name=name, slug=validated_slug, timezone=timezone_str)
     db.add(org)
     db.flush()
+    org_service.seed_donor_pipelines(db, org.id, actor_id, commit=False)
 
     # Create subscription with concrete period (never NULL)
     subscription = OrganizationSubscription(

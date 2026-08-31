@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 
 from app.schemas.import_template import ColumnMappingItem, ColumnSuggestionResponse
 
+MetaLeadKind = Literal["surrogate", "egg_donor", "sperm_donor"]
+
 
 class MetaFormSummary(BaseModel):
     """Summary of a Meta lead form and mapping status."""
@@ -22,6 +24,7 @@ class MetaFormSummary(BaseModel):
     mapping_version_id: UUID | None
     mapping_updated_at: datetime | None
     mapping_updated_by_name: str | None
+    lead_kind: MetaLeadKind = "surrogate"
     is_active: bool
     synced_at: datetime
     unconverted_leads: int
@@ -56,6 +59,7 @@ class MetaFormMappingUpdateRequest(BaseModel):
 
     column_mappings: list[ColumnMappingItem] = Field(default_factory=list)
     unknown_column_behavior: Literal["ignore", "metadata", "warn"] = "metadata"
+    lead_kind: MetaLeadKind | None = None
 
 
 class MetaFormMappingUpdateResponse(BaseModel):
@@ -64,6 +68,7 @@ class MetaFormMappingUpdateResponse(BaseModel):
     success: bool
     mapping_status: str
     mapping_version_id: UUID | None
+    lead_kind: MetaLeadKind
     message: str | None = None
 
 

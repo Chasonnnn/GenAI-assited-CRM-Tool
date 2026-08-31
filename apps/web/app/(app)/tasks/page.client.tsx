@@ -24,6 +24,7 @@ import { useTaskFocusNavigation } from "@/lib/hooks/use-task-focus-navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useAIContext } from "@/lib/context/ai-context"
 import type { TaskListItem } from "@/lib/types/task"
+import type { TaskUpdatePayload } from "@/lib/api/tasks"
 import { buildRecurringDates, MAX_TASK_OCCURRENCES } from "@/lib/utils/task-recurrence"
 import { format, parseISO } from "date-fns"
 import { toast } from "@/components/ui/toast"
@@ -54,17 +55,6 @@ const isFocusTarget = (value: string | null): value is FocusTarget =>
     value === "this-week" ||
     value === "later" ||
     value === "no-date"
-
-type TaskEditPayload = {
-    id: string
-    title: string
-    description: string | null
-    task_type: string
-    due_date: string | null
-    due_time: string | null
-    is_completed: boolean
-    surrogate_id: string | null
-}
 
 function useTasksPageController() {
     const searchParams = useSearchParams()
@@ -136,12 +126,8 @@ function useTasksPageController() {
     const [addTaskDialogOpen, setAddTaskDialogOpen] = useState(false)
     const [editingTask, setEditingTask] = useState<TaskListItem | null>(null)
 
-    const handleSaveTask = async (taskId: string, data: Partial<TaskEditPayload>) => {
-        const payload: Record<string, unknown> = {}
-        for (const [key, value] of Object.entries(data)) {
-            payload[key] = value === null ? undefined : value
-        }
-        await updateTask.mutateAsync({ taskId, data: payload })
+    const handleSaveTask = async (taskId: string, data: TaskUpdatePayload) => {
+        await updateTask.mutateAsync({ taskId, data })
     }
 
     const handleDeleteTask = async (taskId: string) => {
@@ -297,6 +283,9 @@ function useTasksPageController() {
             ...(data.description ? { description: data.description } : {}),
             ...(dueDate ? { due_date: dueDate } : {}),
             ...(dueTime ? { due_time: dueTime } : {}),
+            ...(data.surrogate_id ? { surrogate_id: data.surrogate_id } : {}),
+            ...(data.intended_parent_id ? { intended_parent_id: data.intended_parent_id } : {}),
+            ...(data.donor_id ? { donor_id: data.donor_id } : {}),
         })
 
         if (data.recurrence === "none") {
@@ -352,6 +341,12 @@ function useTasksPageController() {
             due_time: editingTask.due_time ?? null,
             is_completed: editingTask.is_completed,
             surrogate_id: editingTask.surrogate_id,
+            surrogate_number: editingTask.surrogate_number,
+            intended_parent_id: editingTask.intended_parent_id,
+            donor_id: editingTask.donor_id,
+            donor_number: editingTask.donor_number,
+            donor_type: editingTask.donor_type,
+            donor_name: editingTask.donor_name,
         } : null,
         filter,
         hasError,
@@ -528,12 +523,14 @@ function TasksPageDialogs({ controller }: { controller: TasksPageController }) {
                 onDelete={controller.handleDeleteTask}
                 isDeleting={controller.deleteTaskPending}
             />
-            <AddTaskDialog
-                open={controller.addTaskDialogOpen}
-                onOpenChange={controller.setAddTaskDialogOpen}
-                onSubmit={controller.handleAddTask}
-                isPending={controller.addTaskPending}
-            />
+            {controller.addTaskDialogOpen ? (
+                <AddTaskDialog
+                    open
+                    onOpenChange={controller.setAddTaskDialogOpen}
+                    onSubmit={controller.handleAddTask}
+                    isPending={controller.addTaskPending}
+                />
+            ) : null}
         </>
     )
 }

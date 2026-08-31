@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { describe, expect, it, vi } from "vitest"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { SurrogateHistoryTab } from "@/components/surrogates/detail/SurrogateHistoryTab"
 
 const formatDateTime = (value: string) => `formatted ${value}`
@@ -382,5 +382,31 @@ describe("SurrogateHistoryTab", () => {
         expect(screen.getByText("Sensitive Info Revealed")).toBeInTheDocument()
         expect(screen.getByText(/ssn: revealed/i)).toBeInTheDocument()
         expect(screen.getByText(/date of birth: revealed/i)).toBeInTheDocument()
+    })
+
+    it("keeps loaded activity visible when loading the next page fails", () => {
+        const retry = vi.fn()
+        render(
+            <SurrogateHistoryTab
+                activities={[
+                    {
+                        id: "a-loaded",
+                        activity_type: "note_added",
+                        actor_name: "Alex",
+                        created_at: "2024-01-09T00:00:00Z",
+                        details: { preview: "Already loaded" },
+                    },
+                ]}
+                formatDateTime={formatDateTime}
+                hasMore
+                loadMoreError
+                onLoadMore={retry}
+            />,
+        )
+
+        expect(screen.getByText("Already loaded")).toBeInTheDocument()
+        expect(screen.getByRole("alert")).toHaveTextContent("Failed to load more activity.")
+        fireEvent.click(screen.getByRole("button", { name: "Retry load more" }))
+        expect(retry).toHaveBeenCalledOnce()
     })
 })

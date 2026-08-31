@@ -1,6 +1,20 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
+
+const mockUseDonors = vi.fn()
+
+vi.mock("@/lib/hooks/use-donors", () => ({
+    useDonors: (filters: unknown) => mockUseDonors(filters),
+}))
+
+vi.mock("@/lib/hooks/use-surrogates", () => ({
+    useSurrogates: () => ({ data: { items: [] }, isLoading: false }),
+}))
+
+vi.mock("@/lib/hooks/use-intended-parents", () => ({
+    useIntendedParents: () => ({ data: { items: [] }, isLoading: false }),
+}))
 
 vi.mock("@/components/ui/select", () => ({
     Select: ({
@@ -40,6 +54,22 @@ function renderDialog(onSubmit = vi.fn().mockResolvedValue(undefined)) {
 }
 
 describe("AddTaskDialog", () => {
+    beforeEach(() => {
+        mockUseDonors.mockImplementation((filters: { donor_type: string }) => ({
+            data: {
+                items: filters.donor_type === "egg"
+                    ? [{
+                        id: "donor-1",
+                        donor_number: "D10001",
+                        donor_type: "egg",
+                        full_name: "Maya Thompson",
+                    }]
+                    : [],
+            },
+            isLoading: false,
+        }))
+    })
+
     it("requires a due date before creating recurring tasks", async () => {
         const { onSubmit } = renderDialog()
 
@@ -80,7 +110,30 @@ describe("AddTaskDialog", () => {
             description: "Check the latest upload.",
             due_date: "2026-08-12",
             due_time: "09:30",
+            surrogate_id: null,
+            intended_parent_id: null,
+            donor_id: null,
         })
         expect(onOpenChange).toHaveBeenCalledWith(false)
+    })
+
+    it("submits an egg donor selected as the linked record", async () => {
+        const onSubmit = vi.fn().mockResolvedValue(undefined)
+        renderDialog(onSubmit)
+
+        fireEvent.change(screen.getByLabelText("Title *"), {
+            target: { value: "Review donor profile" },
+        })
+        const relatedRecordSelect = screen.getAllByRole("combobox")[2]
+        fireEvent.change(relatedRecordSelect, { target: { value: "donor:donor-1" } })
+        fireEvent.click(screen.getByRole("button", { name: "Create Task" }))
+
+        await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(
+            expect.objectContaining({
+                donor_id: "donor-1",
+                surrogate_id: null,
+                intended_parent_id: null,
+            }),
+        ))
     })
 })

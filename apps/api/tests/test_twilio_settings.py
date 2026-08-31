@@ -124,16 +124,10 @@ async def test_patch_twilio_settings_keeps_credentials_write_only(authed_client)
                 "operational": {
                     "messaging_service_sid": "MG" + "5" * 32,
                     "sender_phone_e164": "+14155550101",
-                    "a2p_status": "approved",
-                    "advanced_opt_out_status": "verified",
-                    "consent_management_status": "available",
                 },
                 "promotional": {
                     "messaging_service_sid": "MG" + "6" * 32,
                     "sender_phone_e164": "+14155550102",
-                    "a2p_status": "pending",
-                    "advanced_opt_out_status": "enabled",
-                    "consent_management_status": "unknown",
                 },
             },
         },
@@ -158,6 +152,26 @@ async def test_patch_twilio_settings_keeps_credentials_write_only(authed_client)
     persisted = await authed_client.get("/twilio/settings")
     assert persisted.status_code == 200
     assert persisted.json() == payload
+
+
+async def test_patch_twilio_settings_rejects_administrator_provider_evidence(authed_client):
+    initial = (await authed_client.get("/twilio/settings")).json()
+
+    for field, value in (
+        ("a2p_status", "approved"),
+        ("advanced_opt_out_status", "verified"),
+        ("consent_management_status", "available"),
+        ("capability_evidence", {"sms": True, "mms": True}),
+    ):
+        response = await authed_client.patch(
+            "/twilio/settings",
+            json={
+                "expected_version": initial["current_version"],
+                "routes": {"operational": {field: value}},
+            },
+        )
+
+        assert response.status_code == 422
 
 
 async def test_patch_twilio_settings_rejects_stale_version(authed_client):
@@ -235,6 +249,10 @@ async def test_twilio_settings_test_validates_account_and_routes_without_sending
     from app.services import twilio_provider_service
 
     fetched_services: list[str] = []
+    expected_webhooks = {
+        "MG" + "3" * 32: initial["routes"]["operational"],
+        "MG" + "4" * 32: initial["routes"]["promotional"],
+    }
 
     class FakeServiceContext:
         def __init__(self, sid: str):
@@ -242,7 +260,46 @@ async def test_twilio_settings_test_validates_account_and_routes_without_sending
 
         def fetch(self):
             fetched_services.append(self.sid)
-            return type("Service", (), {"sid": self.sid, "friendly_name": "Verified"})()
+            urls = expected_webhooks[self.sid]
+            return type(
+                "Service",
+                (),
+                {
+                    "sid": self.sid,
+                    "inbound_request_url": urls["inbound_webhook_url"],
+                    "inbound_method": "POST",
+                    "use_inbound_webhook_on_number": False,
+                    "status_callback": urls["status_callback_url"],
+                },
+            )()
+
+        @property
+        def phone_numbers(self):
+            return type(
+                "PhoneNumbers",
+                (),
+                {
+                    "list": lambda _self, **_kwargs: [
+                        type(
+                            "Sender",
+                            (),
+                            {"phone_number": "+14155550101", "capabilities": ["SMS", "MMS"]},
+                        )()
+                    ]
+                },
+            )()
+
+        @property
+        def us_app_to_person(self):
+            return type(
+                "Campaigns",
+                (),
+                {
+                    "list": lambda _self, **_kwargs: [
+                        type("Campaign", (), {"campaign_status": "VERIFIED"})()
+                    ]
+                },
+            )()
 
     class FakeServices:
         def __call__(self, sid: str):
@@ -278,8 +335,14 @@ async def test_twilio_settings_test_validates_account_and_routes_without_sending
         "/twilio/settings/test",
         json={
             "routes": {
-                "operational": {"messaging_service_sid": "MG" + "3" * 32},
-                "promotional": {"messaging_service_sid": "MG" + "4" * 32},
+                "operational": {
+                    "messaging_service_sid": "MG" + "3" * 32,
+                    "sender_phone_e164": "+14155550101",
+                },
+                "promotional": {
+                    "messaging_service_sid": "MG" + "4" * 32,
+                    "sender_phone_e164": "+14155550101",
+                },
             }
         },
     )
@@ -293,6 +356,19 @@ async def test_twilio_settings_test_validates_account_and_routes_without_sending
             "account_api": True,
             "messaging_services": True,
             "webhook_validation": False,
+        },
+        "route_capabilities": {
+            purpose: {
+                "service_verified": True,
+                    "sender_in_pool": True,
+                    "sender_type": "10dlc",
+                    "sms": True,
+                "mms": True,
+                "a2p_status": "VERIFIED",
+                "inbound_webhook_matches": True,
+                "status_callback_matches": True,
+            }
+            for purpose in ("operational", "promotional")
         },
         "error": None,
         "warning": "Primary Auth Token is not configured; webhook validation is unavailable.",

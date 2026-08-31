@@ -318,6 +318,8 @@ class IntendedParentStatusHistoryItem(BaseModel):
     new_stage_id: UUID | None = None
     old_status: str | None
     new_status: str
+    old_label_snapshot: str | None = None
+    new_label_snapshot: str | None = None
     reason: str | None
     changed_by_user_id: UUID | None
     changed_by_name: str | None = None  # Resolved user name

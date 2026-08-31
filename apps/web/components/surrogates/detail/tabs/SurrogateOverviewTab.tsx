@@ -989,11 +989,11 @@ export function SurrogateOverviewTab() {
     const id = params.id
     const detailContext = useSurrogateDetailContext()
     const surrogateData = detailContext?.surrogate
-    const { data: defaultPipeline } = useDefaultPipeline()
-    const stageOptions = defaultPipeline?.stages || []
+    const pipelineQuery = useDefaultPipeline()
+    const stageOptions = pipelineQuery.data?.stages || []
     const stageById = new Map(stageOptions.map((stage) => [stage.id, stage]))
-    const { data: activityData } = useSurrogateActivity(id)
-    const { data: tasksData } = useTasks({ surrogate_id: id, exclude_approvals: true })
+    const activityQuery = useSurrogateActivity(id, 1, 100)
+    const tasksQuery = useTasks({ surrogate_id: id, exclude_approvals: true })
     const updateSurrogateMutation = useUpdateSurrogate()
     const revealSensitiveInfoMutation = useRevealSurrogateSensitiveInfo()
     const [copiedEmail, setCopiedEmail] = React.useState(false)
@@ -1669,8 +1669,20 @@ export function SurrogateOverviewTab() {
                         surrogateId={id}
                         currentStageId={surrogateData.stage_id}
                         stages={stageOptions}
-                        activities={activityData?.items ?? []}
-                        tasks={tasksData?.items ?? []}
+                        activities={activityQuery.data?.items ?? []}
+                        tasks={tasksQuery.data?.items ?? []}
+                        tasksStatus={
+                            tasksQuery.isLoading ? "loading" : tasksQuery.isError ? "error" : "ready"
+                        }
+                        onRetryTasks={() => { void tasksQuery.refetch() }}
+                        activityStatus={
+                            activityQuery.isLoading || pipelineQuery.isLoading
+                                ? "loading"
+                                : activityQuery.isError || pipelineQuery.isError
+                                  ? "error"
+                                  : "ready"
+                        }
+                        onRetryActivity={() => { void activityQuery.refetch() }}
                         {...(effectiveStage?.id ? { effectiveStageId: effectiveStage.id } : {})}
                     />
 

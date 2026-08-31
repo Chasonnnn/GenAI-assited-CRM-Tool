@@ -27,6 +27,7 @@ import type {
     IntendedParentStatusUpdate,
     EntityNoteCreate,
 } from '@/lib/types/intended-parent'
+import { entityActivityKeys } from './use-entity-activity'
 
 // Query keys
 export const intendedParentKeys = {
@@ -123,6 +124,9 @@ export function useUpdateIntendedParent() {
         onSuccess: (_, { id }) => {
             void queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
             void queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(id) })
+            void queryClient.invalidateQueries({
+                queryKey: entityActivityKeys.entity('intended_parent', id),
+            })
         },
     })
 }
@@ -144,6 +148,9 @@ export function useUpdateIntendedParentStatus() {
             void queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(id) })
             void queryClient.invalidateQueries({ queryKey: intendedParentKeys.stats() })
             void queryClient.invalidateQueries({ queryKey: intendedParentKeys.history(id) })
+            void queryClient.invalidateQueries({
+                queryKey: entityActivityKeys.entity('intended_parent', id),
+            })
         },
     })
 }
@@ -157,6 +164,9 @@ export function useArchiveIntendedParent() {
             void queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
             void queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(id) })
             void queryClient.invalidateQueries({ queryKey: intendedParentKeys.stats() })
+            void queryClient.invalidateQueries({
+                queryKey: entityActivityKeys.entity('intended_parent', id),
+            })
         },
     })
 }
@@ -170,6 +180,9 @@ export function useRestoreIntendedParent() {
             void queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
             void queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(id) })
             void queryClient.invalidateQueries({ queryKey: intendedParentKeys.stats() })
+            void queryClient.invalidateQueries({
+                queryKey: entityActivityKeys.entity('intended_parent', id),
+            })
         },
     })
 }
@@ -196,6 +209,9 @@ export function useCreateIntendedParentNote() {
         onSuccess: (_, { id }) => {
             void queryClient.invalidateQueries({ queryKey: intendedParentKeys.notes(id) })
             void queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(id) })
+            void queryClient.invalidateQueries({
+                queryKey: entityActivityKeys.entity('intended_parent', id),
+            })
         },
     })
 }
@@ -208,6 +224,9 @@ export function useDeleteIntendedParentNote() {
             deleteIntendedParentNote(ipId, noteId),
         onSuccess: (_, { ipId }) => {
             void queryClient.invalidateQueries({ queryKey: intendedParentKeys.notes(ipId) })
+            void queryClient.invalidateQueries({
+                queryKey: entityActivityKeys.entity('intended_parent', ipId),
+            })
         },
     })
 }

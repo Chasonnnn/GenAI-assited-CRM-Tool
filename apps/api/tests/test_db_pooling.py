@@ -22,3 +22,4 @@ def test_create_engine_with_settings_applies_pool_config():
     assert pool._max_overflow == 3
     assert pool._timeout == 15
     assert pool._recycle == 120
+    assert engine.hide_parameters is True

@@ -85,6 +85,54 @@ describe("AdminDataPage", () => {
         expect(exportButton).toBeEnabled()
     })
 
+    it("requests the donor export endpoint", async () => {
+        const fetchMock = vi.fn()
+            .mockResolvedValueOnce(jsonResponse({ job_id: "job-donor", status: "completed" }))
+            .mockResolvedValueOnce(jsonResponse({
+                download_url: "https://example.test/donors.csv",
+                filename: "donors.csv",
+            }))
+        vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {})
+        vi.stubGlobal("fetch", fetchMock)
+
+        render(<AdminDataPage />)
+        fireEvent.click(screen.getByRole("button", { name: /export donors csv/i }))
+
+        await waitFor(() => {
+            expect(fetchMock).toHaveBeenNthCalledWith(
+                1,
+                "http://localhost:8000/admin/exports/donors",
+                expect.objectContaining({ method: "POST", credentials: "include" }),
+            )
+        })
+    })
+
+    it("uploads the donor restore CSV to the donor import endpoint", async () => {
+        const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({
+            status: "completed",
+            donors_imported: 2,
+        }))
+        vi.stubGlobal("fetch", fetchMock)
+
+        render(<AdminDataPage />)
+        fireEvent.click(screen.getByRole("tab", { name: "Import Data" }))
+        const donorFile = new File(["id,donor_number\n"], "donors.csv", {
+            type: "text/csv",
+        })
+        fireEvent.change(screen.getByLabelText("Donors (CSV)"), {
+            target: { files: [donorFile] },
+        })
+        fireEvent.click(screen.getByRole("button", { name: "Import Donors Only" }))
+
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+        const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit]
+        expect(url).toBe("http://localhost:8000/admin/imports/donors")
+        expect(request.method).toBe("POST")
+        expect(request.credentials).toBe("include")
+        expect(request.body).toBeInstanceOf(FormData)
+        expect((request.body as FormData).get("donors_csv")).toBe(donorFile)
+    })
+
     it("re-enables export controls after a failed export", async () => {
         const fetchMock = vi.fn().mockResolvedValueOnce(new Response(null, { status: 500 }))
         vi.stubGlobal("fetch", fetchMock)

@@ -38,4 +38,20 @@ describe("buildStageChartData", () => {
         expect(result.data.find((item) => item.status === "Other")).toBeUndefined()
         expect(result.data).toHaveLength(4)
     })
+
+    it("preserves every configured stage when all counts are zero", () => {
+        const statusData: StageStatus[] = Array.from({ length: 10 }, (_, index) => ({
+            status: `Stage ${index + 1}`,
+            stage_id: `s${index + 1}`,
+            count: 0,
+            order: index + 1,
+        }))
+
+        const result = buildStageChartData(statusData, new Map())
+
+        expect(result.total).toBe(0)
+        expect(result.data).toHaveLength(10)
+        expect(result.data.every((item) => item.count === 0)).toBe(true)
+        expect(result.data.find((item) => item.status === "Other")).toBeUndefined()
+    })
 })

@@ -65,6 +65,19 @@ def create_note(
         content=clean_content,
     )
     db.add(note)
+    db.flush()
+    if type_str in {EntityType.INTENDED_PARENT.value, EntityType.DONOR.value}:
+        from app.services import entity_activity_service
+
+        entity_activity_service.record_activity(
+            db,
+            org_id=org_id,
+            entity_type=type_str,
+            entity_id=entity_id,
+            activity_type="note_added",
+            actor_user_id=author_id,
+            details={"note_id": str(note.id)},
+        )
     db.commit()
     db.refresh(note)
 
@@ -148,7 +161,19 @@ def to_note_read(note: EntityNote) -> NoteRead:
     )
 
 
-def delete_note(db: Session, note: EntityNote) -> None:
+def delete_note(db: Session, note: EntityNote, *, actor_user_id: UUID | None = None) -> None:
     """Delete a note."""
+    if note.entity_type in {EntityType.INTENDED_PARENT.value, EntityType.DONOR.value}:
+        from app.services import entity_activity_service
+
+        entity_activity_service.record_activity(
+            db,
+            org_id=note.organization_id,
+            entity_type=note.entity_type,
+            entity_id=note.entity_id,
+            activity_type="note_deleted",
+            actor_user_id=actor_user_id,
+            details={"note_id": str(note.id)},
+        )
     db.delete(note)
     db.commit()

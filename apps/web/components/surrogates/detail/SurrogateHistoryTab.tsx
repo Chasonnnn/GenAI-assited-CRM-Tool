@@ -3,6 +3,7 @@
 import type { ReactNode } from "react"
 
 import { OutcomeBadge } from "@/components/surrogates/OutcomeBadge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatHeight } from "@/components/surrogates/detail/surrogate-detail-utils"
 import {
@@ -22,6 +23,12 @@ type SurrogateActivityEntry = {
 type SurrogateHistoryTabProps = {
     activities: SurrogateActivityEntry[]
     formatDateTime: (dateString: string) => string
+    status?: "loading" | "error" | "ready"
+    onRetry?: () => void
+    hasMore?: boolean
+    isLoadingMore?: boolean
+    loadMoreError?: boolean
+    onLoadMore?: () => void
 }
 
 function formatActivityType(type: string): string {
@@ -368,14 +375,32 @@ function formatActivityDetails(
     }
 }
 
-export function SurrogateHistoryTab({ activities, formatDateTime }: SurrogateHistoryTabProps) {
+export function SurrogateHistoryTab({
+    activities,
+    formatDateTime,
+    status = "ready",
+    onRetry,
+    hasMore = false,
+    isLoadingMore = false,
+    loadMoreError = false,
+    onLoadMore,
+}: SurrogateHistoryTabProps) {
     return (
         <Card>
             <CardHeader>
                 <CardTitle>Activity Log</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-                {activities.length > 0 ? (
+                {status === "loading" ? (
+                    <p className="py-4 text-center text-sm text-muted-foreground" role="status">
+                        Loading activity…
+                    </p>
+                ) : status === "error" ? (
+                    <div className="space-y-3 py-4 text-center">
+                        <p className="text-sm text-destructive">Failed to load activity.</p>
+                        {onRetry ? <Button variant="outline" size="sm" onClick={onRetry}>Retry</Button> : null}
+                    </div>
+                ) : activities.length > 0 ? (
                     activities.map((entry, idx) => {
                         const isLast = idx === activities.length - 1
                         const outcomeMeta = getActivityOutcomeMeta(entry.activity_type, entry.details)
@@ -383,7 +408,7 @@ export function SurrogateHistoryTab({ activities, formatDateTime }: SurrogateHis
                             ? getSurrogateOutcomePresentation(outcomeMeta.kind, outcomeMeta.value)
                             : null
                         return (
-                            <div key={entry.id} className="flex gap-3">
+                            <div key={`${entry.activity_type}:${entry.id}`} className="flex gap-3">
                                 <div className="relative">
                                     <div
                                         className={cn(
@@ -442,6 +467,25 @@ export function SurrogateHistoryTab({ activities, formatDateTime }: SurrogateHis
                         No activity recorded.
                     </p>
                 )}
+                {status === "ready" && loadMoreError ? (
+                    <p className="text-sm text-destructive" role="alert">
+                        Failed to load more activity.
+                    </p>
+                ) : null}
+                {status === "ready" && hasMore ? (
+                    <Button
+                        variant="outline"
+                        className="w-full"
+                        disabled={isLoadingMore}
+                        onClick={onLoadMore}
+                    >
+                        {isLoadingMore
+                            ? "Loading…"
+                            : loadMoreError
+                              ? "Retry load more"
+                              : "Load more"}
+                    </Button>
+                ) : null}
             </CardContent>
         </Card>
     )

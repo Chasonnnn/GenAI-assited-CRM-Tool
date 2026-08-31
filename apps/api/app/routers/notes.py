@@ -165,5 +165,5 @@ def delete_note(
         )
         db.commit()
 
-    note_service.delete_note(db, note)
+    note_service.delete_note(db, note, actor_user_id=session.user_id)
     return None

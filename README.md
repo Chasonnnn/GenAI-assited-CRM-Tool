@@ -2,14 +2,14 @@
 
 **Version:** 0.91.59 <!-- x-release-please-version -->
 
-A modern, multi-tenant platform for surrogacy agencies. Manage surrogates from intake through delivery with configurable workflows, matching, automation, and full auditability.
+A modern, multi-tenant platform for surrogacy agencies. Manage surrogates, intended parents, egg donors, and sperm donors with configurable workflows, matching, automation, and full auditability.
 
 ---
 
 ## Current Status
 
 - Auth, org setup, and multi-tenancy
-- Surrogates, intended parents, and matches
+- Surrogates, intended parents, egg donors, sperm donors, and matches
 - Custom fields, intake form builder, and public/embeddable forms
 - Surrogate journey timelines, contact attempts, and automated reminders
 - Tasks, notes, attachments, and notifications
@@ -38,10 +38,11 @@ A modern, multi-tenant platform for surrogacy agencies. Manage surrogates from i
 ## Key Features
 
 ### Core CRM
-- Pipeline-driven surrogate and intended parent lifecycles with stage history
+- Pipeline-driven surrogate and intended parent lifecycles, plus separate egg-donor and sperm-donor pipelines with stage history
+- Donor records with `D10001+` identifiers, education, profile photos, notes, attachments, tasks, and archive/restore
 - Match lifecycle tracking with approvals and coordination
 - Custom fields that extend surrogate and intended-parent records with configurable typed fields
-- Configurable intake forms via a form builder, with versioning, public applicant-facing forms, and embeddable iframe forms
+- Configurable intake forms via a form builder, with versioning, public applicant-facing forms, embeddable iframe forms, donor subtype routing, and required donor profile photos
 - Surrogate journey timeline aggregating the full record lifecycle
 - Contact attempts logging with automated follow-up reminders
 - Status-change approval requests reviewed before they take effect
@@ -94,7 +95,7 @@ A modern, multi-tenant platform for surrogacy agencies. Manage surrogates from i
 - Google Calendar two-way sync (with push webhooks) and Gmail journal inbox (send/compose/reply via Cloud Pub/Sub push)
 - Google Tasks sync for platform tasks
 - Zoom meeting creation/updates with `meeting.started`/`meeting.ended` webhooks
-- Meta Lead Ads import with Conversions API (CAPI) feedback and direct Meta CRM Dataset delivery
+- Meta Lead Ads import with explicit surrogate, egg-donor, or sperm-donor routing, Conversions API (CAPI) feedback, and direct Meta CRM Dataset delivery
 - Zapier inbound lead webhooks and outbound stage/qualification events
 - Resend email provider for campaign, workflow, and platform/system email (with delivery webhooks)
 - AI powered by Google Gemini and Vertex AI (Workload Identity Federation / OIDC for keyless Vertex auth)
@@ -105,7 +106,7 @@ A modern, multi-tenant platform for surrogacy agencies. Manage surrogates from i
 - MFA via TOTP (authenticator apps) and Duo Universal Prompt (with Duo Admin API reset)
 - Hash-chain audit logging and encryption at rest
 - PHI-access audit logging across surrogate, task, note, match, appointment, and attachment reads
-- Compliance: retention policies, legal holds, and purge preview/execution
+- Compliance: retention policies, legal holds, purge preview/execution, and durable donor photo and Google Task erasure
 - ClamAV malware scanning for uploads (signatures synced via S3-compatible storage; optional Cloud Run scan job)
 - S3-compatible / Google Cloud Storage object storage for attachments
 - Admin/developer config version control, org export, and org restore import

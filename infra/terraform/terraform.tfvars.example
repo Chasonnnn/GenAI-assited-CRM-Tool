@@ -35,6 +35,7 @@ enable_domain_mapping = true
 # worker_min_instances = 1
 # worker_max_instances = 1
 # worker_cpu_idle = false
+# messaging_delivery_dispatch_enabled = false
 
 # Legacy worker schedule (keep disabled for 24/7 automation)
 # worker_schedule_enabled = false

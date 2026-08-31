@@ -18,6 +18,57 @@ from app.main import app
 from app.services import session_service
 
 
+@pytest.fixture(autouse=True)
+def _enable_messaging_dispatch(monkeypatch):
+    monkeypatch.setenv("MESSAGING_DELIVERY_DISPATCH_ENABLED", "true")
+
+
+def _configure_ready_route(db, test_org, *, purpose: str) -> None:
+    from app.core.encryption import hash_phone
+    from app.services import twilio_settings_service
+
+    settings = twilio_settings_service.get_or_create_settings(db, test_org.id)
+    settings.enabled = True
+    settings.account_sid_encrypted = twilio_settings_service.encrypt_credential("AC" + "1" * 32)
+    settings.api_key_sid_encrypted = twilio_settings_service.encrypt_credential("SK" + "2" * 32)
+    settings.api_secret_encrypted = twilio_settings_service.encrypt_credential("secret")
+    settings.auth_token_encrypted = twilio_settings_service.encrypt_credential("auth-token")
+    settings.legal_messaging_brand = "EWI Surrogacy"
+    settings.operational_disclosure = "Operational SMS disclosure"
+    settings.promotional_disclosure = "Promotional SMS disclosure"
+    settings.sms_terms_url = "https://example.org/sms-terms"
+    settings.privacy_policy_url = "https://example.org/privacy"
+    settings.support_contact = "support@example.org"
+    settings.expected_frequency = "Message frequency varies"
+    settings.counsel_approved_at = datetime.now(UTC)
+    route = next(item for item in settings.routes if item.purpose == purpose)
+    route.enabled = True
+    route.messaging_service_sid_encrypted = twilio_settings_service.encrypt_credential(
+        "MG" + "3" * 32
+    )
+    route.sender_phone_encrypted = twilio_settings_service.encrypt_credential("+14155550199")
+    route.sender_phone_hash = hash_phone("+14155550199")
+    route.sender_phone_last4 = "0199"
+    route.a2p_status = "approved"
+    route.advanced_opt_out_status = "verified"
+    route.consent_management_status = "available"
+    route.capability_evidence = {
+        "provider": {
+            "account_active": True,
+            "service_verified": True,
+            "sender_in_pool": True,
+            "sms": True,
+            "mms": True,
+            "a2p_status": "VERIFIED",
+            "inbound_webhook_matches": True,
+            "status_callback_matches": True,
+            "checked_at": datetime.now(UTC).isoformat(),
+            "settings_version": settings.current_version,
+        },
+    }
+    db.flush()
+
+
 @asynccontextmanager
 async def _messaging_client_with_email_permission(db, organization_id):
     user = User(
@@ -176,6 +227,7 @@ def test_messaging_campaign_materializes_promotional_outbox_occurrence(
     template.is_enrollment_confirmation = True
     surrogate = _messaging_surrogate(db, test_org, test_user, default_stage)
     consent = _consent_for_surrogate(db, test_org, surrogate, purpose="promotional")
+    _configure_ready_route(db, test_org, purpose="promotional")
     campaign = campaign_service.create_campaign(
         db,
         org_id=test_org.id,
@@ -453,6 +505,7 @@ def test_send_message_workflow_materializes_deterministic_outbox_without_inline_
     template.is_enrollment_confirmation = True
     surrogate = _messaging_surrogate(db, test_org, test_user, default_stage)
     _consent_for_surrogate(db, test_org, surrogate, purpose="operational")
+    _configure_ready_route(db, test_org, purpose="operational")
 
     def _forbid_inline_send(*_args, **_kwargs):
         pytest.fail("workflow actions must materialize an outbox row, not call Twilio")

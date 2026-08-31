@@ -24,37 +24,38 @@ locals {
   )
 
   common_env = merge({
-    ENV                                = "production"
-    PLATFORM_BASE_DOMAIN               = var.domain
-    API_BASE_URL                       = local.api_url
-    FRONTEND_URL                       = local.app_url
-    OPS_FRONTEND_URL                   = local.ops_url
-    COOKIE_DOMAIN                      = var.cookie_domain
-    PLATFORM_ADMIN_EMAILS              = var.platform_admin_emails
-    CORS_ORIGINS                       = local.cors_origins
-    GOOGLE_REDIRECT_URI                = "${local.api_url}/auth/google/callback"
-    ZOOM_REDIRECT_URI                  = "${local.api_url}/integrations/zoom/callback"
-    GMAIL_REDIRECT_URI                 = "${local.api_url}/integrations/gmail/callback"
-    GOOGLE_CALENDAR_REDIRECT_URI       = "${local.api_url}/integrations/google-calendar/callback"
-    DUO_REDIRECT_URI                   = "${local.app_url}/auth/duo/callback"
-    STORAGE_BACKEND                    = var.storage_backend
-    S3_BUCKET                          = var.s3_bucket
-    S3_REGION                          = var.s3_region
-    EXPORT_STORAGE_BACKEND             = var.export_storage_backend
-    EXPORT_S3_BUCKET                   = var.export_s3_bucket
-    EXPORT_S3_REGION                   = var.export_s3_region
-    ATTACHMENT_SCAN_ENABLED            = tostring(var.attachment_scan_enabled)
-    ATTACHMENT_SCAN_CLOUD_RUN_JOB_NAME = var.attachment_scan_job_enabled ? var.attachment_scan_job_name : ""
-    ATTACHMENT_SCAN_CLOUD_RUN_REGION   = var.attachment_scan_job_enabled ? var.region : ""
-    CLAMAV_SIGNATURES_BUCKET           = var.clamav_signatures_bucket
-    CLAMAV_SIGNATURES_PREFIX           = var.clamav_signatures_prefix
-    CLAMAV_SIGNATURES_MAX_AGE_HOURS    = tostring(var.clamav_signatures_max_age_hours)
-    CLAMAV_SIGNATURES_DOWNLOAD_ONLY    = tostring(var.clamav_signatures_download_only)
-    ALLOWED_EMAIL_DOMAINS              = var.allowed_email_domains
-    GCP_MONITORING_ENABLED             = tostring(var.gcp_monitoring_enabled)
-    GCP_PROJECT_ID                     = var.project_id
-    DB_MIGRATION_CHECK                 = tostring(var.db_migration_check)
-    DB_AUTO_MIGRATE                    = tostring(var.db_auto_migrate)
+    ENV                                 = "production"
+    PLATFORM_BASE_DOMAIN                = var.domain
+    API_BASE_URL                        = local.api_url
+    FRONTEND_URL                        = local.app_url
+    OPS_FRONTEND_URL                    = local.ops_url
+    COOKIE_DOMAIN                       = var.cookie_domain
+    PLATFORM_ADMIN_EMAILS               = var.platform_admin_emails
+    CORS_ORIGINS                        = local.cors_origins
+    GOOGLE_REDIRECT_URI                 = "${local.api_url}/auth/google/callback"
+    ZOOM_REDIRECT_URI                   = "${local.api_url}/integrations/zoom/callback"
+    GMAIL_REDIRECT_URI                  = "${local.api_url}/integrations/gmail/callback"
+    GOOGLE_CALENDAR_REDIRECT_URI        = "${local.api_url}/integrations/google-calendar/callback"
+    DUO_REDIRECT_URI                    = "${local.app_url}/auth/duo/callback"
+    STORAGE_BACKEND                     = var.storage_backend
+    S3_BUCKET                           = var.s3_bucket
+    S3_REGION                           = var.s3_region
+    EXPORT_STORAGE_BACKEND              = var.export_storage_backend
+    EXPORT_S3_BUCKET                    = var.export_s3_bucket
+    EXPORT_S3_REGION                    = var.export_s3_region
+    ATTACHMENT_SCAN_ENABLED             = tostring(var.attachment_scan_enabled)
+    MESSAGING_DELIVERY_DISPATCH_ENABLED = tostring(var.messaging_delivery_dispatch_enabled)
+    ATTACHMENT_SCAN_CLOUD_RUN_JOB_NAME  = var.attachment_scan_job_enabled ? var.attachment_scan_job_name : ""
+    ATTACHMENT_SCAN_CLOUD_RUN_REGION    = var.attachment_scan_job_enabled ? var.region : ""
+    CLAMAV_SIGNATURES_BUCKET            = var.clamav_signatures_bucket
+    CLAMAV_SIGNATURES_PREFIX            = var.clamav_signatures_prefix
+    CLAMAV_SIGNATURES_MAX_AGE_HOURS     = tostring(var.clamav_signatures_max_age_hours)
+    CLAMAV_SIGNATURES_DOWNLOAD_ONLY     = tostring(var.clamav_signatures_download_only)
+    ALLOWED_EMAIL_DOMAINS               = var.allowed_email_domains
+    GCP_MONITORING_ENABLED              = tostring(var.gcp_monitoring_enabled)
+    GCP_PROJECT_ID                      = var.project_id
+    DB_MIGRATION_CHECK                  = tostring(var.db_migration_check)
+    DB_AUTO_MIGRATE                     = tostring(var.db_auto_migrate)
   }, local.optional_env)
 
   api_env = merge(local.common_env, {
@@ -71,6 +72,10 @@ locals {
     WORKFLOW_SWEEP_FALLBACK_ENABLED           = tostring(var.workflow_sweep_fallback_enabled)
     WORKFLOW_MAINTENANCE_FALLBACK_ENABLED     = tostring(var.workflow_maintenance_fallback_enabled)
     WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED = tostring(var.workflow_approval_expiry_fallback_enabled)
+  })
+
+  job_env = merge(local.common_env, {
+    GCP_SERVICE_NAME = var.api_service_name
   })
 
   common_secret_keys = [
@@ -97,15 +102,18 @@ locals {
     "DUO_CLIENT_SECRET",
     "DUO_API_HOST",
     "PLATFORM_RESEND_API_KEY",
-    "PLATFORM_RESEND_WEBHOOK_SECRET",
-    "PLATFORM_RESEND_ADMISSION_GROUP_TOKEN"
+    "PLATFORM_RESEND_WEBHOOK_SECRET"
   ]
+
+  service_secret_keys = concat(local.common_secret_keys, [
+    "PLATFORM_RESEND_ADMISSION_GROUP_TOKEN"
+  ])
 
   billing_secret_keys = [
     "BILLING_SLACK_WEBHOOK_URL"
   ]
 
-  all_secret_keys = concat(local.common_secret_keys, local.billing_secret_keys)
+  all_secret_keys = concat(local.service_secret_keys, local.billing_secret_keys)
 
   billing_export_table = "gcp_billing_export_v1_${replace(var.billing_account_id, "-", "")}"
 }

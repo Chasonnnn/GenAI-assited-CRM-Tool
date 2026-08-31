@@ -277,28 +277,18 @@ describe("Messaging integration settings page", () => {
         expect(payload.routes.operational).not.toHaveProperty("sender_phone_e164")
     })
 
-    it("submits the route readiness evidence shown to trusted administrators", async () => {
+    it("never submits provider-derived route evidence", async () => {
         render(<MessagingIntegrationPageClient />)
 
         fireEvent.click(screen.getByRole("button", { name: "Save messaging settings" }))
 
         await waitFor(() => expect(mockUpdateSettings).toHaveBeenCalledTimes(1))
         const routes = mockUpdateSettings.mock.calls[0]?.[0].routes
-        expect(routes.operational).toMatchObject({
-            a2p_status: "approved",
-            advanced_opt_out_status: "enabled",
-            consent_management_status: "available",
-            capability_evidence: { sms: true, mms: true },
-        })
-        expect(routes.promotional).toMatchObject({
-            a2p_status: "pending",
-            advanced_opt_out_status: "enabled",
-            consent_management_status: "available",
-            capability_evidence: { sms: true, mms: true },
-        })
+        expect(routes.operational).toEqual({ enabled: true })
+        expect(routes.promotional).toEqual({ enabled: false })
     })
 
-    it("lets administrators record capability evidence on a newly configured route", async () => {
+    it("renders provider evidence as read-only", async () => {
         mockUseTwilioSettings.mockReturnValue({
             data: {
                 ...settings,
@@ -318,23 +308,10 @@ describe("Messaging integration settings page", () => {
         })
         render(<MessagingIntegrationPageClient />)
 
-        fireEvent.click(screen.getByRole("switch", { name: "Operational SMS capable" }))
-        fireEvent.click(screen.getByRole("switch", { name: "Operational MMS capable" }))
-        fireEvent.click(screen.getByRole("switch", { name: "Operational US 10DLC sender" }))
-        fireEvent.click(
-            screen.getByRole("switch", { name: "Operational Meta consent mapping verified" }),
-        )
-        fireEvent.click(screen.getByRole("button", { name: "Save messaging settings" }))
-
-        await waitFor(() => expect(mockUpdateSettings).toHaveBeenCalledTimes(1))
-        expect(mockUpdateSettings.mock.calls[0]?.[0].routes.operational).toMatchObject({
-            capability_evidence: {
-                sms: true,
-                mms: true,
-                sender_type: "10dlc",
-                meta_consent_mapping_verified: true,
-            },
-        })
+        expect(screen.queryByRole("switch", { name: "Operational SMS capable" })).toBeNull()
+        expect(screen.queryByRole("switch", { name: "Operational MMS capable" })).toBeNull()
+        expect(screen.getAllByText("SMS not evidenced").length).toBeGreaterThan(0)
+        expect(screen.getAllByText("Sender pool not verified").length).toBeGreaterThan(0)
     })
 
     it("tests unsaved credentials and route services without persisting them", async () => {

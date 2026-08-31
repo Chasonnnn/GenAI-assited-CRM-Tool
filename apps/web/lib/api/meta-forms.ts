@@ -1,6 +1,8 @@
 import api from '../api'
 import type { ColumnMappingItem, ColumnSuggestion } from './import'
 
+export type MetaLeadKind = 'surrogate' | 'egg_donor' | 'sperm_donor'
+
 export interface MetaFormSummary {
     id: string
     form_external_id: string
@@ -12,6 +14,7 @@ export interface MetaFormSummary {
     mapping_version_id: string | null
     mapping_updated_at: string | null
     mapping_updated_by_name: string | null
+    lead_kind: MetaLeadKind
     is_active: boolean
     synced_at: string
     unconverted_leads: number
@@ -40,6 +43,7 @@ export interface MetaFormMappingPreview {
 export interface MetaFormMappingUpdate {
     column_mappings: ColumnMappingItem[]
     unknown_column_behavior: 'ignore' | 'metadata' | 'warn'
+    lead_kind: MetaLeadKind
 }
 
 export interface MetaFormUnconvertedLead {

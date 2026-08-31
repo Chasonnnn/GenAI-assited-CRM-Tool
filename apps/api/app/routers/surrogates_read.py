@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_permission
+from app.core.permissions import PermissionKey
 from app.core.policies import POLICIES
 from app.core.security import decode_export_token
 from app.core.surrogate_access import check_surrogate_access
@@ -27,6 +28,7 @@ from app.services import (
     analytics_service,
     intelligent_suggestions_service,
     org_service,
+    permission_service,
     surrogate_service,
     user_service,
 )
@@ -471,6 +473,12 @@ def export_surrogate_packet(
             surrogate_name=surrogate_name,
             org_name=org_name,
         )
+    except pdf_export_service.PdfRendererBusyError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc),
+            headers={"Retry-After": "5"},
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -680,6 +688,13 @@ def get_surrogate_activity(
         surrogate_id=surrogate_id,
         page=page,
         per_page=per_page,
+        include_note_previews=permission_service.check_permission(
+            db,
+            session.org_id,
+            session.user_id,
+            session.role.value,
+            PermissionKey.SURROGATES_VIEW_NOTES.value,
+        ),
     )
     pages = (total + per_page - 1) // per_page if total > 0 else 1
 

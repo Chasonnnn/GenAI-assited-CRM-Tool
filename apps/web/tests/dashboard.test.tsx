@@ -1,13 +1,14 @@
 import type { PropsWithChildren } from "react"
 import * as React from "react"
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { ApiError } from '@/lib/api'
 import { formatLocalDate } from '@/lib/utils/date'
 import DashboardPage from '../app/(app)/dashboard/page'
 
 const mockUseSearchParams = vi.fn()
 const mockUseAuth = vi.fn()
+const mockPush = vi.fn()
 
 type DynamicComponent = React.ComponentType<Record<string, unknown>>
 type DynamicModule = DynamicComponent | { default: DynamicComponent }
@@ -45,7 +46,7 @@ vi.mock("next/dynamic", () => ({
 }))
 
 vi.mock('next/navigation', () => ({
-    useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+    useRouter: () => ({ replace: vi.fn(), push: mockPush }),
     useSearchParams: () => mockUseSearchParams(),
 }))
 
@@ -68,6 +69,8 @@ vi.mock('recharts', () => ({
     XAxis: () => <div />,
     YAxis: () => <div />,
     Cell: () => <div />,
+    Tooltip: () => <div />,
+    LabelList: () => <div />,
 }))
 
 vi.mock('@/components/ui/chart', () => ({
@@ -80,8 +83,10 @@ const mockUseSurrogateStats = vi.fn()
 const mockUseTasks = vi.fn()
 const mockUseSurrogatesTrend = vi.fn()
 const mockUseSurrogatesByStatus = vi.fn()
+const mockUseDonorsByStatus = vi.fn()
 const mockUseAttention = vi.fn()
 const mockUseUpcoming = vi.fn()
+const mockUseEffectivePermissions = vi.fn()
 
 vi.mock('@/lib/hooks/use-surrogates', () => ({
     useSurrogateStats: (params: unknown) => mockUseSurrogateStats(params),
@@ -97,6 +102,11 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
 vi.mock('@/lib/hooks/use-analytics', () => ({
     useSurrogatesTrend: (params: unknown) => mockUseSurrogatesTrend(params),
     useSurrogatesByStatus: (params: unknown) => mockUseSurrogatesByStatus(params),
+    useDonorsByStatus: (params: unknown, options: unknown) => mockUseDonorsByStatus(params, options),
+}))
+
+vi.mock('@/lib/hooks/use-permissions', () => ({
+    useEffectivePermissions: () => mockUseEffectivePermissions(),
 }))
 
 vi.mock('@/lib/hooks/use-dashboard', () => ({
@@ -129,6 +139,7 @@ vi.mock('@/lib/hooks/use-dashboard-socket', () => ({
 describe('DashboardPage', () => {
     beforeEach(() => {
         mockUseSearchParams.mockReturnValue(new URLSearchParams())
+        mockPush.mockClear()
         mockUseAuth.mockReturnValue({
             user: {
                 display_name: 'Test Manager',
@@ -159,6 +170,11 @@ describe('DashboardPage', () => {
 
         mockUseSurrogatesTrend.mockReturnValue({ data: [], isLoading: false, isError: false })
         mockUseSurrogatesByStatus.mockReturnValue({ data: [], isLoading: false, isError: false })
+        mockUseDonorsByStatus.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['view_dashboard', 'view_donors'] },
+            isLoading: false,
+        })
         mockUseAttention.mockReturnValue({
             data: {
                 unreached_leads: [],
@@ -167,6 +183,9 @@ describe('DashboardPage', () => {
                 overdue_count: 0,
                 stuck_surrogates: [],
                 stuck_count: 0,
+                stuck_donors: [],
+                stuck_donor_count: 0,
+                stuck_donor_counts: { egg: 0, sperm: 0 },
                 total_count: 0,
             },
             isLoading: false,
@@ -447,5 +466,205 @@ describe('DashboardPage', () => {
         expect(screen.getByText('Overdue tasks')).toBeInTheDocument()
         expect(screen.queryByText('Overdue Task 1')).not.toBeInTheDocument()
         expect(screen.queryByText('Week Task 1')).not.toBeInTheDocument()
+    })
+
+    it('shows the donor number for donor-linked upcoming tasks', async () => {
+        const today = formatLocalDate(new Date())
+        mockUseUpcoming.mockReturnValue({
+            data: {
+                tasks: [
+                    {
+                        id: 'donor-task-1',
+                        type: 'task',
+                        title: 'Review donor application',
+                        time: null,
+                        surrogate_id: null,
+                        surrogate_number: null,
+                        donor_id: 'donor-1',
+                        donor_number: 'D10001',
+                        donor_type: 'egg',
+                        date: today,
+                        is_overdue: false,
+                        task_type: 'other',
+                    },
+                ],
+                meetings: [],
+            },
+            isLoading: false,
+            isError: false,
+        })
+
+        render(<DashboardPage />)
+        fireEvent.click(screen.getByRole('button', { name: /Upcoming This Week/i }))
+
+        expect(await screen.findByText('D10001')).toBeInTheDocument()
+    })
+
+    it('hides donor pipeline selectors when donor access is revoked', async () => {
+        mockUseAuth.mockReturnValue({
+            user: {
+                display_name: 'Test Manager',
+                role: 'admin',
+                user_id: 'user-1',
+            },
+        })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['view_dashboard'] },
+            isLoading: false,
+        })
+
+        render(<DashboardPage />)
+
+        expect(await screen.findByText('Pipeline Distribution')).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Egg Donors' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Sperm Donors' })).not.toBeInTheDocument()
+    })
+
+    it('links egg donor stage bars to the egg donor tab and stage filter', async () => {
+        mockUseDonorsByStatus.mockImplementation((params: { donor_type: string }) => ({
+            data: params.donor_type === 'egg'
+                ? [{ status: 'New', stage_id: 'egg-stage', count: 3, order: 1 }]
+                : [],
+            isLoading: false,
+            isError: false,
+            refetch: vi.fn(),
+        }))
+
+        render(<DashboardPage />)
+        fireEvent.click(await screen.findByRole('button', { name: 'Egg Donors' }))
+
+        const link = await screen.findByRole('link', { name: 'View New egg donors' })
+        expect(link).toHaveAttribute('href', '/donors?type=egg&stage=egg-stage')
+    })
+
+    it('carries the dashboard week boundaries into donor stage drilldowns', async () => {
+        mockUseSearchParams.mockReturnValue(new URLSearchParams('range=week'))
+        mockUseDonorsByStatus.mockImplementation((params: { donor_type: string }) => ({
+            data: params.donor_type === 'egg'
+                ? [{ status: 'New', stage_id: 'egg-stage', count: 3, order: 1 }]
+                : [],
+            isLoading: false,
+            isError: false,
+            refetch: vi.fn(),
+        }))
+        const today = new Date()
+        const sunday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay())
+
+        render(<DashboardPage />)
+        fireEvent.click(await screen.findByRole('button', { name: 'Egg Donors' }))
+
+        const link = await screen.findByRole('link', { name: 'View New egg donors' })
+        expect(link).toHaveAttribute(
+            'href',
+            `/donors?type=egg&stage=egg-stage&range=week&from=${formatLocalDate(sunday)}&to=${formatLocalDate(today)}`,
+        )
+    })
+
+    it('shows the donor empty state instead of a zero-value stage chart', async () => {
+        mockUseDonorsByStatus.mockImplementation((params: { donor_type: string }) => ({
+            data: params.donor_type === 'egg'
+                ? Array.from({ length: 10 }, (_, index) => ({
+                    status: `Stage ${index + 1}`,
+                    stage_id: `egg-stage-${index + 1}`,
+                    count: 0,
+                    order: index + 1,
+                }))
+                : [],
+            isLoading: false,
+            isError: false,
+            refetch: vi.fn(),
+        }))
+
+        render(<DashboardPage />)
+        fireEvent.click(await screen.findByRole('button', { name: 'Egg Donors' }))
+
+        expect(await screen.findByText('No egg donors yet')).toBeInTheDocument()
+        expect(screen.queryByRole('link', { name: 'View Stage 1 egg donors' })).not.toBeInTheDocument()
+    })
+
+    it('uses donor detail and subtype-filtered links for stuck donors', async () => {
+        mockUseAttention.mockReturnValue({
+            data: {
+                unreached_leads: [],
+                unreached_count: 0,
+                overdue_tasks: [],
+                overdue_count: 0,
+                stuck_surrogates: [],
+                stuck_count: 0,
+                stuck_donors: [{
+                    id: 'donor-1',
+                    donor_number: 'D10001',
+                    donor_type: 'egg',
+                    stage_label: 'Contacted',
+                    days_in_stage: 100,
+                    last_stage_change: new Date().toISOString(),
+                }],
+                stuck_donor_count: 3,
+                stuck_donor_counts: { egg: 1, sperm: 2 },
+                total_count: 3,
+            },
+            isLoading: false,
+            isError: false,
+        })
+
+        render(<DashboardPage />)
+
+        const eggDonorLink = await screen.findByText('Stuck egg donors (90+ days)')
+        expect(eggDonorLink.closest('a')).toHaveAttribute('href', '/donors/donor-1')
+        const spermDonorLink = await screen.findByText('Stuck sperm donors (90+ days)')
+        expect(spermDonorLink.closest('a')).toHaveAttribute(
+            'href',
+            '/donors?type=sperm&dynamic_filter=attention_stuck',
+        )
+
+        const attentionSection = screen.getByText('Attention Needed').closest('section')
+        expect(attentionSection).not.toBeNull()
+        fireEvent.click(within(attentionSection!).getByRole('button', { name: 'View all' }))
+        expect(await screen.findByRole('link', { name: 'Stuck egg donors' })).toHaveAttribute(
+            'href',
+            '/donors?type=egg&dynamic_filter=attention_stuck',
+        )
+        expect(screen.getByRole('link', { name: 'Stuck sperm donors' })).toHaveAttribute(
+            'href',
+            '/donors?type=sperm&dynamic_filter=attention_stuck',
+        )
+    })
+
+    it('hides stuck donor rows and View all links without donor permission', async () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['view_dashboard'] },
+            isLoading: false,
+        })
+        mockUseAttention.mockReturnValue({
+            data: {
+                unreached_leads: [],
+                unreached_count: 0,
+                overdue_tasks: [],
+                overdue_count: 0,
+                stuck_surrogates: [],
+                stuck_count: 0,
+                stuck_donors: [{
+                    id: 'donor-1',
+                    donor_number: 'D10001',
+                    donor_type: 'egg',
+                    stage_label: 'Contacted',
+                    days_in_stage: 100,
+                    last_stage_change: new Date().toISOString(),
+                }],
+                stuck_donor_count: 1,
+                stuck_donor_counts: { egg: 1, sperm: 0 },
+                total_count: 1,
+            },
+            isLoading: false,
+            isError: false,
+        })
+
+        render(<DashboardPage />)
+
+        expect(screen.queryByText('Stuck egg donors (90+ days)')).not.toBeInTheDocument()
+        const attentionSection = screen.getByText('Attention Needed').closest('section')
+        fireEvent.click(within(attentionSection!).getByRole('button', { name: 'View all' }))
+        expect(screen.queryByRole('link', { name: 'Stuck egg donors' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('link', { name: 'Stuck sperm donors' })).not.toBeInTheDocument()
     })
 })

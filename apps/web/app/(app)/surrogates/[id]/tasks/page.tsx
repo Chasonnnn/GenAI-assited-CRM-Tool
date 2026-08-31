@@ -17,18 +17,8 @@ import {
 } from "@/lib/hooks/use-tasks"
 import { useSurrogate } from "@/lib/hooks/use-surrogates"
 import type { TaskListItem } from "@/lib/types/task"
+import type { TaskUpdatePayload } from "@/lib/api/tasks"
 import { buildRecurringDates, MAX_TASK_OCCURRENCES } from "@/lib/utils/task-recurrence"
-
-type TaskEditPayload = {
-    id: string
-    title: string
-    description: string | null
-    task_type: string
-    due_date: string | null
-    due_time: string | null
-    is_completed: boolean
-    surrogate_id: string | null
-}
 
 export default function SurrogateTasksPage() {
     const params = useParams<{ id: string }>()
@@ -92,12 +82,8 @@ export default function SurrogateTasksPage() {
         setEditingTask(task)
     }
 
-    const handleSaveTask = async (taskId: string, data: Partial<TaskEditPayload>) => {
-        const payload: Record<string, unknown> = {}
-        for (const [key, value] of Object.entries(data)) {
-            payload[key] = value === null ? undefined : value
-        }
-        await updateTaskMutation.mutateAsync({ taskId, data: payload })
+    const handleSaveTask = async (taskId: string, data: TaskUpdatePayload) => {
+        await updateTaskMutation.mutateAsync({ taskId, data })
     }
 
     const handleDeleteTask = async (taskId: string) => {
@@ -134,6 +120,12 @@ export default function SurrogateTasksPage() {
                               due_time: editingTask.due_time ?? null,
                               is_completed: editingTask.is_completed,
                               surrogate_id: editingTask.surrogate_id,
+                              surrogate_number: editingTask.surrogate_number,
+                              intended_parent_id: editingTask.intended_parent_id,
+                              donor_id: editingTask.donor_id,
+                              donor_number: editingTask.donor_number,
+                              donor_type: editingTask.donor_type,
+                              donor_name: editingTask.donor_name,
                           }
                         : null
                 }

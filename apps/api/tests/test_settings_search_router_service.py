@@ -108,11 +108,18 @@ def test_search_service_helpers():
     normalized = search_service.normalize_entity_types("case,note,invalid,case,attachment")
     assert normalized == ["surrogate", "note", "attachment"]
     defaults = search_service.normalize_entity_types("invalid")
-    assert defaults == ["surrogate", "note", "attachment", "intended_parent"]
+    assert defaults == ["surrogate", "note", "attachment", "intended_parent", "donor"]
 
-    perms = {"view_surrogate_notes", "view_intended_parents"}
+    perms = {
+        "view_surrogates",
+        "view_surrogate_notes",
+        "view_intended_parents",
+        "view_donors",
+    }
+    assert search_service._user_can_view_surrogates(perms) is True
     assert search_service._user_can_view_notes(perms) is True
     assert search_service._user_can_view_intended_parents(perms) is True
+    assert search_service._user_can_view_donors(perms) is True
     assert search_service._can_view_post_approval(perms) is False
 
     developer_filter = search_service._build_surrogate_access_filter(

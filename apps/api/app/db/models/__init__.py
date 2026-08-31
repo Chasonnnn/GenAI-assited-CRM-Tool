@@ -1,5 +1,6 @@
 """SQLAlchemy ORM models for the application."""
 
+from app.db.models.activity import EntityActivityLog
 from app.db.models.ai import (
     AIActionApproval,
     AIBulkTaskRequest,
@@ -40,6 +41,7 @@ from app.db.models.auth import (
     UserSession,
 )
 from app.db.models.campaigns import Campaign, CampaignRecipient, CampaignRun, CampaignTrackingEvent
+from app.db.models.donors import Donor, DonorStatusHistory
 from app.db.models.email import (
     EmailDelivery,
     EmailDeliveryAttempt,
@@ -211,6 +213,8 @@ __all__ = [
     "CustomField",
     "CustomFieldValue",
     "DataRetentionPolicy",
+    "Donor",
+    "DonorStatusHistory",
     "ImportMappingCorrection",
     "EmailLog",
     "EmailDelivery",
@@ -222,6 +226,7 @@ __all__ = [
     "ResendWebhookEvent",
     "UnsubscribeToken",
     "EntityNote",
+    "EntityActivityLog",
     "EntityVersion",
     "ExportJob",
     "Form",

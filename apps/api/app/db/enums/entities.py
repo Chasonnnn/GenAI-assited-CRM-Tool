@@ -8,3 +8,4 @@ class EntityType(str, Enum):
 
     SURROGATE = "surrogate"
     INTENDED_PARENT = "intended_parent"
+    DONOR = "donor"

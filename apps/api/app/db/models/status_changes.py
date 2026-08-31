@@ -48,6 +48,15 @@ class StatusChangeRequest(Base):
             unique=True,
             postgresql_where=text("entity_type = 'intended_parent' AND status = 'pending'"),
         ),
+        Index(
+            "idx_pending_donor_requests",
+            "organization_id",
+            "entity_id",
+            "target_stage_id",
+            "effective_at",
+            unique=True,
+            postgresql_where=text("entity_type = 'donor' AND status = 'pending'"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -58,7 +67,7 @@ class StatusChangeRequest(Base):
     )
     entity_type: Mapped[str] = mapped_column(
         String(50), nullable=False
-    )  # 'surrogate' or 'intended_parent'
+    )  # 'surrogate', 'intended_parent', 'donor', or 'match'
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     target_stage_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("pipeline_stages.id", ondelete="SET NULL"), nullable=True

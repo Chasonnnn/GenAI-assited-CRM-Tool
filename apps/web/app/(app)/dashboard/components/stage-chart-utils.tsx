@@ -52,6 +52,19 @@ export function buildStageChartData(
 
     const total = sorted.reduce((sum, item) => sum + item.count, 0)
 
+    if (total === 0) {
+        return {
+            data: sorted.map((item) => ({
+                status: item.status,
+                stage_id: item.stage_id,
+                count: 0,
+                percent: 0,
+                fill: (item.stage_id && stageColorMap.get(item.stage_id)) || "#6b7280",
+            })),
+            total,
+        }
+    }
+
     if (sorted.length <= maxVisibleStages) {
         return {
             data: sorted.map((item) => ({

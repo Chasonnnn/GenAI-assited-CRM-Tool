@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.pipeline_stage_colors import resolve_stage_color
 from app.core.stage_definitions import (
+    DONOR_PIPELINE_ENTITY_TYPES,
     INTENDED_PARENT_PIPELINE_ENTITY,
     SURROGATE_PIPELINE_ENTITY,
     canonicalize_stage_key,
@@ -21,6 +22,7 @@ from app.core.stage_definitions import (
 from app.db.models import (
     AutomationWorkflow,
     Campaign,
+    Donor,
     IntendedParent,
     MetaCrmDatasetSettings,
     OrgIntelligentSuggestionRule,
@@ -616,6 +618,8 @@ def get_or_create_default_pipeline(
     org_id: UUID,
     user_id: UUID | None = None,
     entity_type: str = SURROGATE_PIPELINE_ENTITY,
+    *,
+    commit: bool = True,
 ) -> Pipeline:
     """
     Get the default pipeline for an org, creating if not exists.
@@ -682,8 +686,11 @@ def get_or_create_default_pipeline(
             created_by_user_id=user_id,  # None for system-created
             comment="Initial version",
         )
-        db.commit()
-        db.refresh(pipeline)
+        if commit:
+            db.commit()
+            db.refresh(pipeline)
+        else:
+            db.flush()
         return pipeline
 
     legacy_requires_full_default_sync = (
@@ -705,13 +712,23 @@ def get_or_create_default_pipeline(
         for stage_def in required_stage_defs
     }
     if required_stage_keys - existing_stage_keys:
-        sync_missing_stages(db, pipeline, user_id, stage_defs=required_stage_defs)
-        db.refresh(pipeline)
+        sync_missing_stages(
+            db,
+            pipeline,
+            user_id,
+            stage_defs=required_stage_defs,
+            commit=commit,
+        )
+        if commit:
+            db.refresh(pipeline)
         return pipeline
 
     if changed:
-        db.commit()
-        db.refresh(pipeline)
+        if commit:
+            db.commit()
+            db.refresh(pipeline)
+        else:
+            db.flush()
     return pipeline
 
 
@@ -726,7 +743,7 @@ def get_pipeline(
         Pipeline.id == pipeline_id,
         Pipeline.organization_id == org_id,
     )
-    if entity_type:
+    if entity_type is not None:
         query = query.filter(Pipeline.entity_type == _normalize_pipeline_entity_type(entity_type))
     return query.first()
 
@@ -753,6 +770,8 @@ def sync_missing_stages(
     pipeline: Pipeline,
     user_id: UUID | None = None,
     stage_defs: list[dict[str, object]] | None = None,
+    *,
+    commit: bool = True,
 ) -> int:
     """
     Add missing default stages to an existing pipeline.
@@ -807,8 +826,11 @@ def sync_missing_stages(
     _validate_pipeline_configuration(db, pipeline)
     _bump_pipeline_version(db, pipeline, user_id, f"Added {len(missing)} missing stages")
 
-    db.commit()
-    db.refresh(pipeline)
+    if commit:
+        db.commit()
+        db.refresh(pipeline)
+    else:
+        db.flush()
     return len(missing)
 
 
@@ -1022,21 +1044,47 @@ def rollback_pipeline(
     Returns:
         (updated_pipeline, error) - error is set if rollback failed
     """
-    # Rollback version (creates new version from old payload)
-    new_version, error = version_service.rollback_to_version(
+    payload, error = version_service.get_verified_version_payload(
+        db,
+        pipeline.organization_id,
+        ENTITY_TYPE,
+        pipeline.id,
+        target_version,
+    )
+    if error or payload is None:
+        return None, error or "Version payload is unavailable"
+
+    snapshot_stages = payload.get("stages", [])
+    snapshot_feature_config = payload.get("feature_config")
+    if not isinstance(snapshot_stages, list) or any(
+        not isinstance(stage, dict) for stage in snapshot_stages
+    ):
+        return None, "Version payload has invalid pipeline stages"
+    if snapshot_feature_config is not None and not isinstance(snapshot_feature_config, dict):
+        return None, "Version payload has invalid pipeline feature configuration"
+
+    preview = build_pipeline_draft_preview(
+        db,
+        pipeline,
+        name=payload.get("name") if isinstance(payload.get("name"), str) else None,
+        stages=snapshot_stages,
+        feature_config=snapshot_feature_config,
+        remaps=[],
+    )
+    preview_errors = list(preview["validation_errors"]) + list(preview["blocking_issues"])
+    if preview_errors:
+        return None, "; ".join(str(item) for item in preview_errors)
+
+    # The dependency-safe snapshot becomes a new immutable version.
+    new_version = version_service.create_version(
         db=db,
         org_id=pipeline.organization_id,
         entity_type=ENTITY_TYPE,
         entity_id=pipeline.id,
-        target_version=target_version,
-        user_id=user_id,
+        payload=payload,
+        created_by_user_id=user_id,
+        comment=f"Rollback from v{target_version}",
     )
-
-    if error:
-        return None, error
-
-    # Get the rolled-back payload and apply to pipeline
-    payload = version_service.decrypt_payload(new_version.payload_encrypted)
 
     pipeline.name = payload.get("name", pipeline.name)
     pipeline.feature_config = pipeline_semantics_service.get_pipeline_feature_config(
@@ -1513,7 +1561,7 @@ def delete_stage(
                 }
             )
         )
-    else:
+    elif pipeline and pipeline.entity_type == SURROGATE_PIPELINE_ENTITY:
         migrated = (
             db.query(Surrogate)
             .filter(Surrogate.stage_id == stage.id)
@@ -1528,6 +1576,20 @@ def delete_stage(
             db.query(Surrogate)
             .filter(Surrogate.paused_from_stage_id == stage.id)
             .update({Surrogate.paused_from_stage_id: migrate_to_stage_id})
+        )
+    elif pipeline and pipeline.entity_type in DONOR_PIPELINE_ENTITY_TYPES:
+        donor_type = pipeline.entity_type.removesuffix("_donor")
+        migrated = (
+            db.query(Donor)
+            .filter(
+                Donor.organization_id == pipeline.organization_id,
+                Donor.donor_type == donor_type,
+                Donor.stage_id == stage.id,
+            )
+            .update(
+                {Donor.stage_id: migrate_to_stage_id},
+                synchronize_session="fetch",
+            )
         )
 
     pending_request_query = db.query(StatusChangeRequest).filter(
@@ -1786,16 +1848,22 @@ def _apply_external_stage_remaps(
                 organization_id=pipeline.organization_id,
             )
 
-    campaigns = (
-        db.query(Campaign)
-        .filter(
-            Campaign.organization_id == pipeline.organization_id,
-            Campaign.recipient_type
-            == ("case" if pipeline.entity_type == SURROGATE_PIPELINE_ENTITY else "intended_parent"),
-            Campaign.status.in_(("draft", "scheduled")),
+    campaign_recipient_type = {
+        SURROGATE_PIPELINE_ENTITY: "case",
+        INTENDED_PARENT_PIPELINE_ENTITY: "intended_parent",
+        **{entity_type: entity_type for entity_type in DONOR_PIPELINE_ENTITY_TYPES},
+    }.get(pipeline.entity_type)
+    campaigns = []
+    if campaign_recipient_type:
+        campaigns = (
+            db.query(Campaign)
+            .filter(
+                Campaign.organization_id == pipeline.organization_id,
+                Campaign.recipient_type == campaign_recipient_type,
+                Campaign.status.in_(("draft", "scheduled")),
+            )
+            .all()
         )
-        .all()
-    )
     for campaign in campaigns:
         campaign_service.remap_campaign_stage_references(
             db,
@@ -1804,11 +1872,24 @@ def _apply_external_stage_remaps(
             remap_by_key,
         )
 
-    workflows = (
-        db.query(AutomationWorkflow)
-        .filter(AutomationWorkflow.organization_id == pipeline.organization_id)
-        .all()
-    )
+    workflows = []
+    if pipeline.entity_type in {
+        SURROGATE_PIPELINE_ENTITY,
+        INTENDED_PARENT_PIPELINE_ENTITY,
+        *DONOR_PIPELINE_ENTITY_TYPES,
+    }:
+        workflow_query = db.query(AutomationWorkflow).filter(
+            AutomationWorkflow.organization_id == pipeline.organization_id
+        )
+        if pipeline.entity_type in DONOR_PIPELINE_ENTITY_TYPES:
+            workflow_query = workflow_query.filter(
+                AutomationWorkflow.subject_type == pipeline.entity_type
+            )
+        else:
+            workflow_query = workflow_query.filter(
+                AutomationWorkflow.subject_type.notin_(DONOR_PIPELINE_ENTITY_TYPES)
+            )
+        workflows = workflow_query.all()
     for workflow in workflows:
         workflow_service.remap_workflow_stage_references(
             db,
@@ -1962,7 +2043,7 @@ def apply_pipeline_draft(
                         }
                     )
                 )
-            else:
+            elif pipeline.entity_type == SURROGATE_PIPELINE_ENTITY:
                 (
                     db.query(Surrogate)
                     .filter(
@@ -1977,8 +2058,23 @@ def apply_pipeline_draft(
                         }
                     )
                 )
+            elif pipeline.entity_type in DONOR_PIPELINE_ENTITY_TYPES:
+                donor_type = pipeline.entity_type.removesuffix("_donor")
+                (
+                    db.query(Donor)
+                    .filter(
+                        Donor.organization_id == pipeline.organization_id,
+                        Donor.donor_type == donor_type,
+                        Donor.stage_id == stage.id,
+                        Donor.is_archived.is_(False),
+                    )
+                    .update(
+                        {Donor.stage_id: target_stage.id},
+                        synchronize_session="fetch",
+                    )
+                )
 
-        if target_stage is not None and pipeline.entity_type != INTENDED_PARENT_PIPELINE_ENTITY:
+        if target_stage is not None and pipeline.entity_type == SURROGATE_PIPELINE_ENTITY:
             (
                 db.query(Surrogate)
                 .filter(

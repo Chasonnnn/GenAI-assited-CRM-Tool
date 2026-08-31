@@ -37,6 +37,7 @@ import {
     HeartHandshake,
     Search,
     PanelLeftIcon,
+    CircleUserRound,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
@@ -52,6 +53,7 @@ const INTENT_PREFETCH_ROUTES = new Set([
     "/dashboard",
     "/surrogates",
     "/intended-parents",
+    "/donors",
     "/intended-parents/matches",
     "/tasks",
 ])
@@ -63,7 +65,7 @@ const navigation = [
         icon: Home,
     },
     {
-        title: "Tickets",
+        title: "Tickets (beta)",
         url: "/tickets",
         icon: Inbox,
     },
@@ -77,6 +79,12 @@ const navigation = [
         url: "/intended-parents",
         icon: Users,
         requiredPermission: "view_intended_parents",
+    },
+    {
+        title: "Donors (beta)",
+        url: "/donors",
+        icon: CircleUserRound,
+        requiredPermission: "view_donors",
     },
     {
         title: "Matches",
@@ -589,7 +597,6 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
     const permissionSet = new Set(effectivePermissions?.permissions ?? [])
     const canViewTeam = isDeveloper || permissionSet.has("manage_team")
-    const canViewTickets = isDeveloper
     const canViewPipelines = isDeveloper || permissionSet.has("manage_pipelines")
     const canViewQueues = isDeveloper || permissionSet.has("manage_queues")
     const canViewCompliance = isDeveloper || permissionSet.has("manage_compliance")
@@ -605,7 +612,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const canViewReports = isDeveloper || permissionSet.has("view_reports")
 
     const navigationItems = navigation.filter((item) => {
-        if (item.url === "/tickets") return canViewTickets
+        if (item.url === "/tickets" || item.url === "/donors") return isDeveloper
         if ("requiredPermission" in item) {
             return isDeveloper || permissionSet.has(item.requiredPermission)
         }

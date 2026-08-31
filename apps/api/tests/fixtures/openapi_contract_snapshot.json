@@ -25,6 +25,11 @@
       "202"
     ]
   },
+  "/admin/exports/donors": {
+    "POST": [
+      "202"
+    ]
+  },
   "/admin/exports/jobs/{job_id}": {
     "GET": [
       "200",
@@ -55,6 +60,12 @@
     ]
   },
   "/admin/imports/config": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/admin/imports/donors": {
     "POST": [
       "200",
       "422"
@@ -377,6 +388,24 @@
       "200"
     ]
   },
+  "/analytics/donors/by-status": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/donors/summary": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/donors/trend": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
   "/analytics/export/pdf": {
     "GET": [
       "200",
@@ -611,6 +640,22 @@
   },
   "/appointments/{appointment_id}/reschedule/slots": {
     "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/attachments/donors/{donor_id}/attachments": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/attachments/donors/{donor_id}/profile-photo": {
+    "POST": [
       "200",
       "422"
     ]
@@ -974,6 +1019,12 @@
       "422"
     ]
   },
+  "/dashboard/donors/by-status": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
   "/dashboard/upcoming": {
     "GET": [
       "200",
@@ -1018,6 +1069,72 @@
   },
   "/dev/seed-templates/{org_id}": {
     "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/donors": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/donors/{donor_id}": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/donors/{donor_id}/archive": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/donors/{donor_id}/activity": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/donors/{donor_id}/history": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/donors/{donor_id}/notes": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/donors/{donor_id}/notes/{note_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ]
+  },
+  "/donors/{donor_id}/restore": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/donors/{donor_id}/status": {
+    "PATCH": [
       "200",
       "422"
     ]
@@ -1266,7 +1383,8 @@
   },
   "/forms/mapping-options": {
     "GET": [
-      "200"
+      "200",
+      "422"
     ]
   },
   "/forms/public/embed/{slug}": {
@@ -1867,6 +1985,12 @@
   },
   "/intended-parents/{ip_id}/archive": {
     "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/intended-parents/{ip_id}/activity": {
+    "GET": [
       "200",
       "422"
     ]

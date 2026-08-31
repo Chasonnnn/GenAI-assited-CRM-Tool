@@ -8,10 +8,17 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.stage_definitions import canonicalize_stage_key
+from app.core.stage_definitions import (
+    EGG_DONOR_PIPELINE_ENTITY,
+    INTENDED_PARENT_PIPELINE_ENTITY,
+    SPERM_DONOR_PIPELINE_ENTITY,
+    SURROGATE_PIPELINE_ENTITY,
+    canonicalize_stage_key,
+)
 from app.db.models import (
     AutomationWorkflow,
     Campaign,
+    Donor,
     IntendedParent,
     MetaCrmDatasetSettings,
     OrgIntelligentSuggestionRule,
@@ -137,8 +144,8 @@ def build_pipeline_dependency_graph(
         stage.stage_key: _empty_dependency_entry(stage) for stage in stages if stage.stage_key
     }
 
-    if pipeline.entity_type == "intended_parent":
-        surrogate_counts = dict(
+    if pipeline.entity_type == INTENDED_PARENT_PIPELINE_ENTITY:
+        entity_counts = dict(
             db.query(IntendedParent.stage_id, func.count(IntendedParent.id))
             .filter(
                 IntendedParent.organization_id == pipeline.organization_id,
@@ -148,8 +155,8 @@ def build_pipeline_dependency_graph(
             .group_by(IntendedParent.stage_id)
             .all()
         )
-    else:
-        surrogate_counts = dict(
+    elif pipeline.entity_type == SURROGATE_PIPELINE_ENTITY:
+        entity_counts = dict(
             db.query(Surrogate.stage_id, func.count(Surrogate.id))
             .filter(
                 Surrogate.organization_id == pipeline.organization_id,
@@ -159,9 +166,27 @@ def build_pipeline_dependency_graph(
             .group_by(Surrogate.stage_id)
             .all()
         )
+    elif pipeline.entity_type in {
+        EGG_DONOR_PIPELINE_ENTITY,
+        SPERM_DONOR_PIPELINE_ENTITY,
+    }:
+        donor_type = pipeline.entity_type.removesuffix("_donor")
+        entity_counts = dict(
+            db.query(Donor.stage_id, func.count(Donor.id))
+            .filter(
+                Donor.organization_id == pipeline.organization_id,
+                Donor.donor_type == donor_type,
+                Donor.is_archived.is_(False),
+                Donor.stage_id.is_not(None),
+            )
+            .group_by(Donor.stage_id)
+            .all()
+        )
+    else:
+        entity_counts = {}
     for stage in stages:
         if stage.stage_key in stage_map:
-            stage_map[stage.stage_key]["surrogate_count"] = int(surrogate_counts.get(stage.id, 0))
+            stage_map[stage.stage_key]["surrogate_count"] = int(entity_counts.get(stage.id, 0))
 
     for milestone in feature_config.journey.milestones:
         for stage_key in milestone.mapped_stage_keys:
@@ -186,7 +211,7 @@ def build_pipeline_dependency_graph(
             if normalized in stage_map:
                 stage_map[normalized]["role_mutation_roles"].append(role)
 
-    if pipeline.entity_type == "surrogate":
+    if pipeline.entity_type == SURROGATE_PIPELINE_ENTITY:
         rules = (
             db.query(OrgIntelligentSuggestionRule)
             .filter(OrgIntelligentSuggestionRule.organization_id == pipeline.organization_id)
@@ -205,7 +230,7 @@ def build_pipeline_dependency_graph(
                 )
 
     integration_refs: dict[str, set[str]] = defaultdict(set)
-    if pipeline.entity_type == "surrogate":
+    if pipeline.entity_type == SURROGATE_PIPELINE_ENTITY:
         zapier_settings = (
             db.query(ZapierWebhookSettings)
             .filter(ZapierWebhookSettings.organization_id == pipeline.organization_id)
@@ -236,16 +261,23 @@ def build_pipeline_dependency_graph(
         if stage_key in stage_map:
             stage_map[stage_key]["integration_refs"] = sorted(refs)
 
-    campaigns = (
-        db.query(Campaign)
-        .filter(
-            Campaign.organization_id == pipeline.organization_id,
-            Campaign.recipient_type
-            == ("case" if pipeline.entity_type == "surrogate" else "intended_parent"),
-            Campaign.status.in_(("draft", "scheduled")),
+    campaign_recipient_type = {
+        SURROGATE_PIPELINE_ENTITY: "case",
+        INTENDED_PARENT_PIPELINE_ENTITY: "intended_parent",
+        EGG_DONOR_PIPELINE_ENTITY: "egg_donor",
+        SPERM_DONOR_PIPELINE_ENTITY: "sperm_donor",
+    }.get(pipeline.entity_type)
+    campaigns = []
+    if campaign_recipient_type:
+        campaigns = (
+            db.query(Campaign)
+            .filter(
+                Campaign.organization_id == pipeline.organization_id,
+                Campaign.recipient_type == campaign_recipient_type,
+                Campaign.status.in_(("draft", "scheduled")),
+            )
+            .all()
         )
-        .all()
-    )
     for campaign in campaigns:
         for stage in stages:
             if not stage.stage_key or stage.stage_key not in stage_map:
@@ -261,11 +293,33 @@ def build_pipeline_dependency_graph(
                     }
                 )
 
-    workflows = (
-        db.query(AutomationWorkflow)
-        .filter(AutomationWorkflow.organization_id == pipeline.organization_id)
-        .all()
-    )
+    workflows = []
+    if pipeline.entity_type in {
+        SURROGATE_PIPELINE_ENTITY,
+        INTENDED_PARENT_PIPELINE_ENTITY,
+        EGG_DONOR_PIPELINE_ENTITY,
+        SPERM_DONOR_PIPELINE_ENTITY,
+    }:
+        workflow_query = db.query(AutomationWorkflow).filter(
+            AutomationWorkflow.organization_id == pipeline.organization_id
+        )
+        if pipeline.entity_type in {
+            EGG_DONOR_PIPELINE_ENTITY,
+            SPERM_DONOR_PIPELINE_ENTITY,
+        }:
+            workflow_query = workflow_query.filter(
+                AutomationWorkflow.subject_type == pipeline.entity_type
+            )
+        else:
+            workflow_query = workflow_query.filter(
+                AutomationWorkflow.subject_type.notin_(
+                    {
+                        EGG_DONOR_PIPELINE_ENTITY,
+                        SPERM_DONOR_PIPELINE_ENTITY,
+                    }
+                )
+            )
+        workflows = workflow_query.all()
     for workflow in workflows:
         for stage in stages:
             if not stage.stage_key or stage.stage_key not in stage_map:

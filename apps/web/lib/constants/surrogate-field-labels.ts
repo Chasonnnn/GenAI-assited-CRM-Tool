@@ -3,6 +3,7 @@ const SURROGATE_FIELD_LABELS: Record<string, string> = {
     email: "Email",
     phone: "Phone",
     state: "State",
+    education: "Education",
     date_of_birth: "Date of Birth",
     race: "Race",
     height_ft: "Height (ft)",

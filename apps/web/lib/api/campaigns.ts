@@ -9,6 +9,7 @@ import api from '../api'
 
 export interface FilterCriteria {
     stage_ids?: string[]
+    stage_keys?: string[]
     stage_slugs?: string[]
     states?: string[]
     created_after?: string
@@ -18,13 +19,19 @@ export interface FilterCriteria {
     has_email?: boolean
 }
 
+export type CampaignRecipientType =
+    | "case"
+    | "intended_parent"
+    | "egg_donor"
+    | "sperm_donor"
+
 export interface CampaignCreate {
     name: string
     description?: string
     channel?: "email" | "messaging"
     email_template_id?: string
     message_template_version_id?: string
-    recipient_type: "case" | "intended_parent"
+    recipient_type: CampaignRecipientType
     filter_criteria?: FilterCriteria
     scheduled_at?: string
     include_unsubscribed?: boolean
@@ -36,7 +43,7 @@ export interface CampaignUpdate {
     email_template_id?: string
     channel?: "email" | "messaging"
     message_template_version_id?: string
-    recipient_type?: "case" | "intended_parent"
+    recipient_type?: CampaignRecipientType
     filter_criteria?: FilterCriteria
     scheduled_at?: string
     include_unsubscribed?: boolean
@@ -51,7 +58,7 @@ export interface Campaign {
     email_template_name: string | null
     message_template_version_id: string | null
     message_template_name: string | null
-    recipient_type: "case" | "intended_parent"
+    recipient_type: CampaignRecipientType
     filter_criteria: FilterCriteria
     scheduled_at: string | null
     status: "draft" | "scheduled" | "sending" | "completed" | "cancelled" | "failed"
@@ -75,7 +82,7 @@ export interface CampaignListItem {
     channel: "email" | "messaging"
     email_template_name: string | null
     message_template_name: string | null
-    recipient_type: "case" | "intended_parent"
+    recipient_type: CampaignRecipientType
     status: "draft" | "scheduled" | "sending" | "completed" | "cancelled" | "failed"
     scheduled_at: string | null
     include_unsubscribed: boolean
@@ -106,7 +113,7 @@ export interface CampaignRun {
 
 export interface CampaignRecipient {
     id: string
-    entity_type: string
+    entity_type: CampaignRecipientType
     entity_id: string
     recipient_email: string | null
     recipient_phone_last4: string | null
@@ -119,7 +126,7 @@ export interface CampaignRecipient {
 }
 
 export interface RecipientPreview {
-    entity_type: string
+    entity_type: CampaignRecipientType
     entity_id: string
     email: string | null
     phone_last4: string | null
@@ -226,7 +233,7 @@ export async function previewRecipients(
  */
 export async function previewFilters(
     channel: "email" | "messaging",
-    recipientType: "case" | "intended_parent",
+    recipientType: CampaignRecipientType,
     filterCriteria: FilterCriteria,
     includeUnsubscribed: boolean,
     limit?: number

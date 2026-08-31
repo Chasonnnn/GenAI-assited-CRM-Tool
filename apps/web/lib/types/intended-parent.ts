@@ -201,6 +201,8 @@ export interface IntendedParentStatusHistoryItem {
     new_stage_id?: string | null
     old_status: string | null
     new_status: string
+    old_label_snapshot?: string | null
+    new_label_snapshot?: string | null
     reason: string | null
     changed_by_user_id: string | null
     changed_by_name: string | null

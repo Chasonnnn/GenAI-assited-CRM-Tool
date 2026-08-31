@@ -18,10 +18,42 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.enums import AuditEventType, JobStatus, JobType
-from app.db.models import Attachment, Job
+from app.db.models import Attachment, Donor, Job
 from app.services import audit_service, job_service, storage_client
 
 logger = logging.getLogger(__name__)
+
+
+def _record_shared_entity_activity(
+    db: Session,
+    attachment: Attachment,
+    activity_type: str,
+    actor_user_id: uuid.UUID | None,
+    *,
+    occurred_at: datetime | None = None,
+) -> None:
+    entity_type = (
+        "donor"
+        if attachment.donor_id
+        else "intended_parent"
+        if attachment.intended_parent_id
+        else None
+    )
+    entity_id = attachment.donor_id or attachment.intended_parent_id
+    if entity_type is None or entity_id is None:
+        return
+    from app.services import entity_activity_service
+
+    entity_activity_service.record_activity(
+        db,
+        org_id=attachment.organization_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        activity_type=activity_type,
+        actor_user_id=actor_user_id,
+        details={"attachment_id": str(attachment.id)},
+        occurred_at=occurred_at,
+    )
 
 
 class AttachmentStorageError(RuntimeError):
@@ -468,6 +500,7 @@ def upload_attachment(
     file_size: int,
     surrogate_id: uuid.UUID | None = None,
     intended_parent_id: uuid.UUID | None = None,
+    donor_id: uuid.UUID | None = None,
     allowed_extensions: set[str] | None = None,
     allowed_mime_types: set[str] | None = None,
 ) -> Attachment:
@@ -475,7 +508,7 @@ def upload_attachment(
     Upload and store an attachment.
 
     File is scanned asynchronously; only infected/failed scans are quarantined.
-    Either surrogate_id or intended_parent_id should be provided.
+    A surrogate, intended parent, or donor may own the attachment.
     """
     # Validate
     is_valid, error = validate_file(
@@ -503,7 +536,7 @@ def upload_attachment(
     # Generate storage key
     attachment_id = uuid.uuid4()
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    entity_id = surrogate_id or intended_parent_id
+    entity_id = surrogate_id or intended_parent_id or donor_id
     storage_key = f"{org_id}/{entity_id}/{attachment_id}.{ext}"
 
     # Store file
@@ -520,6 +553,7 @@ def upload_attachment(
         organization_id=org_id,
         surrogate_id=surrogate_id,
         intended_parent_id=intended_parent_id,
+        donor_id=donor_id,
         uploaded_by_user_id=user_id,
         filename=filename,
         storage_key=storage_key,
@@ -530,6 +564,13 @@ def upload_attachment(
         quarantined=False,
     )
     db.add(attachment)
+
+    _record_shared_entity_activity(
+        db,
+        attachment,
+        "attachment_added",
+        user_id,
+    )
 
     # Audit log
     audit_service.log_event(
@@ -542,6 +583,7 @@ def upload_attachment(
         details={
             "surrogate_id": str(surrogate_id) if surrogate_id else None,
             "intended_parent_id": str(intended_parent_id) if intended_parent_id else None,
+            "donor_id": str(donor_id) if donor_id else None,
             "file_ext": ext,
             "file_size": file_size,
         },
@@ -559,6 +601,37 @@ def upload_attachment(
         )
 
     return attachment
+
+
+def set_donor_profile_photo(
+    db: Session,
+    *,
+    donor: Donor,
+    attachment: Attachment,
+    user_id: uuid.UUID,
+) -> None:
+    """Designate one image attachment as the donor profile photo."""
+    if (
+        attachment.organization_id != donor.organization_id
+        or attachment.donor_id != donor.id
+        or attachment.deleted_at is not None
+    ):
+        raise ValueError("Profile photo attachment does not belong to this donor")
+    if attachment.content_type not in {"image/png", "image/jpeg"}:
+        raise ValueError("Profile photo must be a PNG or JPEG image")
+
+    donor.profile_photo_attachment_id = attachment.id
+    donor.updated_at = datetime.now(UTC)
+    audit_service.log_event(
+        db=db,
+        org_id=donor.organization_id,
+        event_type=AuditEventType.DONOR_UPDATED,
+        actor_user_id=user_id,
+        target_type="donor",
+        target_id=donor.id,
+        details={"updated_fields": ["profile_photo_attachment_id"]},
+    )
+    db.flush()
 
 
 def ensure_attachment_scan_job(
@@ -711,10 +784,11 @@ def list_attachments(
     org_id: uuid.UUID,
     surrogate_id: uuid.UUID | None = None,
     intended_parent_id: uuid.UUID | None = None,
+    donor_id: uuid.UUID | None = None,
     include_quarantined: bool = False,
     content_type_prefix: str | None = None,
 ) -> list[Attachment]:
-    """List attachments for a case or intended parent (excludes deleted).
+    """List attachments for a case, intended parent, or donor (excludes deleted).
 
     Args:
         content_type_prefix: Filter by content type prefix (e.g., "image/" for all images)
@@ -728,6 +802,8 @@ def list_attachments(
         query = query.filter(Attachment.surrogate_id == surrogate_id)
     elif intended_parent_id:
         query = query.filter(Attachment.intended_parent_id == intended_parent_id)
+    elif donor_id:
+        query = query.filter(Attachment.donor_id == donor_id)
 
     if not include_quarantined:
         query = query.filter(Attachment.scan_status.notin_(["infected", "error"]))
@@ -799,6 +875,7 @@ def get_download_url(
             "intended_parent_id": str(attachment.intended_parent_id)
             if attachment.intended_parent_id
             else None,
+            "donor_id": str(attachment.donor_id) if attachment.donor_id else None,
             "file_ext": ext,
             "file_size": attachment.file_size,
         },
@@ -821,6 +898,26 @@ def soft_delete_attachment(
 
     attachment.deleted_at = datetime.now(UTC)
     attachment.deleted_by_user_id = user_id
+    _record_shared_entity_activity(
+        db,
+        attachment,
+        "attachment_deleted",
+        user_id,
+        occurred_at=attachment.deleted_at,
+    )
+    if attachment.donor_id:
+        donor = (
+            db.query(Donor)
+            .filter(
+                Donor.organization_id == org_id,
+                Donor.id == attachment.donor_id,
+                Donor.profile_photo_attachment_id == attachment.id,
+            )
+            .first()
+        )
+        if donor:
+            donor.profile_photo_attachment_id = None
+            donor.updated_at = datetime.now(UTC)
 
     # Audit log
     ext = attachment.filename.rsplit(".", 1)[-1].lower() if "." in attachment.filename else ""
@@ -833,6 +930,10 @@ def soft_delete_attachment(
         target_id=attachment_id,
         details={
             "surrogate_id": str(attachment.surrogate_id) if attachment.surrogate_id else None,
+            "intended_parent_id": str(attachment.intended_parent_id)
+            if attachment.intended_parent_id
+            else None,
+            "donor_id": str(attachment.donor_id) if attachment.donor_id else None,
             "file_ext": ext,
             "file_size": attachment.file_size,
         },
@@ -869,5 +970,18 @@ def mark_attachment_scanned(
         trigger_document_uploaded(db, attachment)
     else:
         attachment.quarantined = True
+        if attachment.donor_id:
+            donor = (
+                db.query(Donor)
+                .filter(
+                    Donor.organization_id == attachment.organization_id,
+                    Donor.id == attachment.donor_id,
+                    Donor.profile_photo_attachment_id == attachment.id,
+                )
+                .first()
+            )
+            if donor:
+                donor.profile_photo_attachment_id = None
+                donor.updated_at = datetime.now(UTC)
 
     db.flush()

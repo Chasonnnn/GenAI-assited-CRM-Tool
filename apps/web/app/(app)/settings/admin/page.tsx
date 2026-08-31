@@ -27,9 +27,9 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
 const EXPORT_POLL_INTERVAL_MS = 2000
 const EXPORT_MAX_ATTEMPTS = 60
 
-type ExportType = "surrogates" | "config" | "analytics"
-type ImportType = "config" | "surrogates" | "all"
-type ImportFiles = { config?: File; surrogates?: File }
+type ExportType = "surrogates" | "donors" | "config" | "analytics"
+type ImportType = "config" | "surrogates" | "donors" | "all"
+type ImportFiles = { config?: File; surrogates?: File; donors?: File }
 
 type ExportJob = {
     jobId: string
@@ -146,6 +146,10 @@ function buildImportFormData(type: ImportType, files: ImportFiles) {
         if (!files.surrogates) throw new Error("Surrogates CSV required")
         formData.append("surrogates_csv", files.surrogates)
     }
+    if (type === "donors" || type === "all") {
+        if (!files.donors) throw new Error("Donors CSV required")
+        formData.append("donors_csv", files.donors)
+    }
     return formData
 }
 
@@ -215,7 +219,7 @@ export default function AdminDataPage() {
             const data = await importAdminData(type, files)
             setImportResult({ status: "success", details: data })
             toast.success("Import complete", {
-                description: `Imported ${data.surrogates_imported || 0} surrogates`,
+                description: `Imported ${data.surrogates_imported || 0} surrogates and ${data.donors_imported || 0} donors`,
             })
             finishImport()
         } catch (error) {
@@ -268,7 +272,7 @@ export default function AdminDataPage() {
                     </TabsList>
 
                     <TabsContent value="export" className="space-y-6 mt-6">
-                        <div className="grid gap-6 md:grid-cols-3">
+                        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
                             <Card>
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-2">
@@ -291,6 +295,32 @@ export default function AdminDataPage() {
                                             <DownloadIcon className="mr-2 size-4" aria-hidden="true" />
                                         )}
                                         Export Surrogates CSV
+                                    </Button>
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <DatabaseIcon className="size-5" aria-hidden="true" />
+                                        Donors
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Export egg and sperm donors with exact pipeline stages
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <Button
+                                        className="w-full"
+                                        onClick={() => handleExport("donors")}
+                                        disabled={isExporting !== null}
+                                    >
+                                        {isExporting === "donors" ? (
+                                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                        ) : (
+                                            <DownloadIcon className="mr-2 size-4" aria-hidden="true" />
+                                        )}
+                                        Export Donors CSV
                                     </Button>
                                 </CardContent>
                             </Card>
@@ -375,12 +405,13 @@ function ImportForm({
     isLoading,
     result
 }: {
-    onImport: (type: "config" | "surrogates" | "all", files: { config?: File; surrogates?: File }) => Promise<void>
+    onImport: (type: ImportType, files: ImportFiles) => Promise<void>
     isLoading: boolean
     result: { status: string; details: Record<string, unknown> } | null
 }) {
     const [configFile, setConfigFile] = useState<File | null>(null)
     const [surrogatesFile, setSurrogatesFile] = useState<File | null>(null)
+    const [donorsFile, setDonorsFile] = useState<File | null>(null)
 
     return (
         <div className="space-y-6">
@@ -422,6 +453,21 @@ function ImportForm({
                         )}
                     </div>
 
+                    <div className="space-y-2">
+                        <Label htmlFor="donors-file">Donors (CSV)</Label>
+                        <Input
+                            id="donors-file"
+                            type="file"
+                            accept=".csv"
+                            onChange={(e) => setDonorsFile(e.target.files?.[0] || null)}
+                        />
+                        {donorsFile && (
+                            <p className="text-sm text-muted-foreground">
+                                Selected: {donorsFile.name}
+                            </p>
+                        )}
+                    </div>
+
                     <Separator />
 
                     <div className="flex flex-wrap gap-3">
@@ -456,12 +502,28 @@ function ImportForm({
                         </Button>
 
                         <Button
+                            variant="outline"
+                            onClick={() =>
+                                onImport("donors", donorsFile ? { donors: donorsFile } : {})
+                            }
+                            disabled={isLoading || !donorsFile}
+                        >
+                            {isLoading ? (
+                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                            ) : (
+                                <UploadIcon className="mr-2 size-4" aria-hidden="true" />
+                            )}
+                            Import Donors Only
+                        </Button>
+
+                        <Button
                             variant="secondary"
                             onClick={() => onImport("all", {
                                 ...(configFile ? { config: configFile } : {}),
                                 ...(surrogatesFile ? { surrogates: surrogatesFile } : {}),
+                                ...(donorsFile ? { donors: donorsFile } : {}),
                             })}
-                            disabled={isLoading || !configFile || !surrogatesFile}
+                            disabled={isLoading || !configFile || !surrogatesFile || !donorsFile}
                         >
                             {isLoading ? (
                                 <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />

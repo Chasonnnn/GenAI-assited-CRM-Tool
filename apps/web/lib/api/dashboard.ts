@@ -15,6 +15,9 @@ export interface UpcomingTask {
     time: string | null  // HH:MM format or null for all-day
     surrogate_id: string | null
     surrogate_number: string | null
+    donor_id: string | null
+    donor_number: string | null
+    donor_type: 'egg' | 'sperm' | null
     date: string  // YYYY-MM-DD
     is_overdue: boolean
     task_type: string
@@ -86,11 +89,23 @@ export interface OverdueTaskItem {
     due_date: string | null
     days_overdue: number
     surrogate_id: string | null
+    donor_id: string | null
+    donor_number: string | null
+    donor_type: 'egg' | 'sperm' | null
 }
 
 export interface StuckSurrogate {
     id: string
     surrogate_number: string
+    stage_label: string
+    days_in_stage: number
+    last_stage_change: string | null
+}
+
+export interface StuckDonor {
+    id: string
+    donor_number: string
+    donor_type: 'egg' | 'sperm'
     stage_label: string
     days_in_stage: number
     last_stage_change: string | null
@@ -103,6 +118,12 @@ export interface AttentionResponse {
     overdue_count: number
     stuck_surrogates: StuckSurrogate[]
     stuck_count: number
+    stuck_donors: StuckDonor[]
+    stuck_donor_count: number
+    stuck_donor_counts: {
+        egg: number
+        sperm: number
+    }
     total_count: number
 }
 

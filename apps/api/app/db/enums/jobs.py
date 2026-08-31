@@ -31,6 +31,7 @@ class JobType(str, Enum):
     EXPORT_GENERATION = "export_generation"
     ADMIN_EXPORT = "admin_export"
     DATA_PURGE = "data_purge"
+    STORAGE_DELETE = "storage_delete"
     CAMPAIGN_SEND = "campaign_send"  # Bulk email campaign execution
     AI_CHAT = "ai_chat"
     CONTACT_REMINDER_CHECK = "contact_reminder_check"  # Daily contact follow-up check
@@ -43,6 +44,12 @@ class JobType(str, Enum):
     ORG_DELETE = "org_delete"  # Hard delete org after grace period
     GOOGLE_CALENDAR_SYNC = "google_calendar_sync"  # Two-way Google calendar reconciliation
     GOOGLE_TASKS_SYNC = "google_tasks_sync"  # Two-way Google Tasks reconciliation
+    GOOGLE_TASK_CREATION_RECONCILE = (
+        "google_task_creation_reconcile"  # Recover an uncertain donor-task POST
+    )
+    GOOGLE_TASK_REMOTE_DELETE = (
+        "google_task_remote_delete"  # Durable erasure of a previously synced task
+    )
     GOOGLE_CALENDAR_WATCH_REFRESH = (
         "google_calendar_watch_refresh"  # Refresh Google Calendar push channels
     )

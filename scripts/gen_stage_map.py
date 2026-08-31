@@ -37,8 +37,16 @@ def _load_pipeline_semantics_module():
 pipeline_semantics = _load_pipeline_semantics_module()
 
 
-def _stage_defs() -> list[dict[str, object]]:
-    stage_defs = stage_definitions.get_default_stage_defs()
+PIPELINE_ENTITY_TYPES = [
+    stage_definitions.SURROGATE_PIPELINE_ENTITY,
+    stage_definitions.INTENDED_PARENT_PIPELINE_ENTITY,
+    stage_definitions.EGG_DONOR_PIPELINE_ENTITY,
+    stage_definitions.SPERM_DONOR_PIPELINE_ENTITY,
+]
+
+
+def _stage_defs(entity_type: str) -> list[dict[str, object]]:
+    stage_defs = stage_definitions.get_default_stage_defs(entity_type)
     return [
         {
             "stageKey": stage["stage_key"],
@@ -54,22 +62,40 @@ def _stage_defs() -> list[dict[str, object]]:
 
 def _default_stage_semantics_by_key(
     stage_defs: list[dict[str, object]],
+    entity_type: str,
 ) -> dict[str, dict[str, object]]:
     return {
         str(stage["stageKey"]): pipeline_semantics.default_stage_semantics(
             str(stage["stageKey"]),
             str(stage["stageType"]),
-            stage_definitions.SURROGATE_PIPELINE_ENTITY,
+            entity_type,
         )
         for stage in stage_defs
     }
 
 
 def render_typescript() -> str:
-    stage_defs = _stage_defs()
+    stage_defs_by_entity = {
+        entity_type: _stage_defs(entity_type) for entity_type in PIPELINE_ENTITY_TYPES
+    }
+    stage_type_map_by_entity = {
+        entity_type: {
+            str(stage["slug"]): str(stage["stageType"])
+            for stage in stage_defs_by_entity[entity_type]
+        }
+        for entity_type in PIPELINE_ENTITY_TYPES
+    }
+    stage_order_by_entity = {
+        entity_type: [str(stage["stageKey"]) for stage in stage_defs_by_entity[entity_type]]
+        for entity_type in PIPELINE_ENTITY_TYPES
+    }
+    stage_defs = stage_defs_by_entity[stage_definitions.SURROGATE_PIPELINE_ENTITY]
     stage_type_map = dict(stage_definitions.STAGE_TYPE_MAP)
     stage_order = list(stage_definitions.DEFAULT_STAGE_ORDER)
-    stage_semantics = _default_stage_semantics_by_key(stage_defs)
+    stage_semantics = _default_stage_semantics_by_key(
+        stage_defs,
+        stage_definitions.SURROGATE_PIPELINE_ENTITY,
+    )
 
     stage_types = sorted({stage["stageType"] for stage in stage_defs})
     stage_type_union = (
@@ -80,6 +106,7 @@ def render_typescript() -> str:
 
 import type {{ StageSemantics }} from "@/lib/api/pipelines"
 
+export type PipelineEntityType = {" | ".join(f'"{entity_type}"' for entity_type in PIPELINE_ENTITY_TYPES)}
 export type StageType = {stage_type_union}
 
 export type StageDef = {{
@@ -93,9 +120,17 @@ export type StageDef = {{
 
 export const STAGE_DEFS: StageDef[] = {json.dumps(stage_defs, indent=4)}
 
+export const PIPELINE_ENTITY_TYPES: PipelineEntityType[] = {json.dumps(PIPELINE_ENTITY_TYPES, indent=4)}
+
+export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {json.dumps(stage_defs_by_entity, indent=4)}
+
 export const STAGE_TYPE_MAP: Record<string, StageType> = {json.dumps(stage_type_map, indent=4, sort_keys=True)}
 
+export const STAGE_TYPE_MAP_BY_ENTITY: Record<PipelineEntityType, Record<string, StageType>> = {json.dumps(stage_type_map_by_entity, indent=4, sort_keys=True)}
+
 export const DEFAULT_STAGE_ORDER: string[] = {json.dumps(stage_order, indent=4)}
+
+export const DEFAULT_STAGE_ORDER_BY_ENTITY: Record<PipelineEntityType, string[]> = {json.dumps(stage_order_by_entity, indent=4)}
 
 export const DEFAULT_STAGE_SEMANTICS_BY_KEY: Record<string, StageSemantics> = {json.dumps(stage_semantics, indent=4, sort_keys=True)}
 """

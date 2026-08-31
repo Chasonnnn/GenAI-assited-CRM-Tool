@@ -30,6 +30,7 @@ from app.schemas.workflow import (
 from app.services import (
     appointment_service,
     attachment_service,
+    donor_service,
     form_intake_service,
     form_submission_service,
     match_service,
@@ -60,6 +61,77 @@ def _require_messaging_admin(session: UserSession) -> None:
         )
 
 
+def _require_subject_access(db: Session, session: UserSession, subject_type: str | None) -> None:
+    if not workflow_access.can_view_subject(db, session, subject_type):
+        raise HTTPException(status_code=403, detail="Missing permission: view_donors")
+
+
+def _require_subject_edit_access(
+    db: Session,
+    session: UserSession,
+    subject_type: str | None,
+) -> None:
+    if not workflow_access.can_edit_subject(db, session, subject_type):
+        raise HTTPException(status_code=403, detail="Missing permission: edit_donors")
+
+
+def _effective_workflow_subject(db: Session, workflow) -> str | None:
+    return workflow_service.get_workflow_effective_subject_type(db, workflow)
+
+
+def _can_view_workflow(db: Session, session: UserSession, workflow) -> bool:
+    return workflow_access.can_view(
+        db,
+        session,
+        workflow,
+        _effective_workflow_subject(db, workflow),
+    )
+
+
+def _can_edit_workflow(db: Session, session: UserSession, workflow) -> bool:
+    return workflow_access.can_edit(
+        db,
+        session,
+        workflow,
+        _effective_workflow_subject(db, workflow),
+    )
+
+
+def _require_entity_subject_access(
+    db: Session,
+    session: UserSession,
+    entity_type: str,
+    entity,
+) -> None:
+    if getattr(entity, "organization_id", session.org_id) != session.org_id:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    if entity_type == "task":
+        task_service.check_task_subject_access(db, entity, session)
+    elif entity_type == "form_submission":
+        _require_subject_access(db, session, entity.lead_kind)
+    elif entity_type == "intake_lead":
+        _require_subject_access(db, session, entity.lead_type)
+    elif entity_type == "donor":
+        _require_subject_access(db, session, entity.pipeline_entity_type)
+
+
+def _require_entity_subject_edit_access(
+    db: Session,
+    session: UserSession,
+    entity_type: str,
+    entity,
+) -> None:
+    _require_entity_subject_access(db, session, entity_type, entity)
+    if entity_type == "task" and entity.donor_id:
+        _require_subject_edit_access(db, session, "egg_donor")
+    elif entity_type == "form_submission":
+        _require_subject_edit_access(db, session, entity.lead_kind)
+    elif entity_type == "intake_lead":
+        _require_subject_edit_access(db, session, entity.lead_type)
+    elif entity_type == "donor":
+        _require_subject_edit_access(db, session, entity.pipeline_entity_type)
+
+
 # =============================================================================
 # Workflow CRUD
 # =============================================================================
@@ -70,6 +142,7 @@ def list_workflows(
     scope: Annotated[Literal["org", "personal"] | None, "fastapi_param"] = Query(default=None),
     enabled_only: bool = False,
     trigger_type: WorkflowTriggerType | None = None,
+    subject_type: str | None = None,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -82,6 +155,8 @@ def list_workflows(
     Args:
         scope: Filter by scope ('org' or 'personal'). If omitted, shows all visible.
     """
+    if subject_type:
+        _require_subject_access(db, session, subject_type)
     has_manage = workflow_access.has_manage_permission(db, session)
     workflows = workflow_service.list_workflows(
         db=db,
@@ -91,10 +166,16 @@ def list_workflows(
         scope_filter=scope,
         enabled_only=enabled_only,
         trigger_type=trigger_type,
+        subject_type=subject_type,
     )
+    workflows = [
+        workflow
+        for workflow in workflows
+        if _can_view_workflow(db, session, workflow)
+    ]
     return [
         workflow_service.to_workflow_list_item(
-            db, w, can_edit=workflow_access.can_edit(db, session, w)
+            db, w, can_edit=_can_edit_workflow(db, session, w)
         )
         for w in workflows
     ]
@@ -102,6 +183,7 @@ def list_workflows(
 
 @router.get("/options", response_model=WorkflowOptions)
 def get_workflow_options(
+    subject_type: Annotated[str, "fastapi_param"] = Query(default="surrogate"),
     workflow_scope: Annotated[Literal["org", "personal"] | None, "fastapi_param"] = Query(
         default=None,
         description="Filter email templates by workflow scope",
@@ -118,15 +200,17 @@ def get_workflow_options(
             - 'personal': Returns user's personal + org templates (for personal workflows)
             - None: Returns org templates (default for backward compatibility)
     """
+    _require_subject_access(db, session, subject_type)
     return workflow_service.get_workflow_options(
         db=db,
         org_id=session.org_id,
         workflow_scope=workflow_scope,
         user_id=session.user_id,
         allow_messaging=(
-            session.role in {Role.ADMIN, Role.DEVELOPER}
-            and workflow_scope != "personal"
+            session.role in {Role.ADMIN, Role.DEVELOPER} and workflow_scope != "personal"
         ),
+        subject_type=subject_type,
+        include_donor_forms=workflow_access.can_view_subject(db, session, "donor"),
     )
 
 
@@ -136,7 +220,15 @@ def get_workflow_stats(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get workflow statistics for dashboard."""
-    return workflow_service.get_workflow_stats(db, session.org_id)
+    return workflow_service.get_workflow_stats(
+        db,
+        session.org_id,
+        include_donor_subjects=workflow_access.can_view_subject(
+            db,
+            session,
+            "egg_donor",
+        ),
+    )
 
 
 # =============================================================================
@@ -160,6 +252,12 @@ def list_org_executions(
     """
     if not workflow_access.has_manage_permission(db, session):
         raise HTTPException(status_code=403, detail="Cannot view org executions")
+    if workflow_id:
+        workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        if not _can_view_workflow(db, session, workflow):
+            raise HTTPException(status_code=403, detail="Cannot view this workflow")
 
     offset = (page - 1) * per_page
     items, total = workflow_service.list_org_executions(
@@ -169,6 +267,11 @@ def list_org_executions(
         workflow_id=workflow_id,
         limit=per_page,
         offset=offset,
+        include_donor_subjects=workflow_access.can_view_subject(
+            db,
+            session,
+            "egg_donor",
+        ),
     )
     return {"items": items, "total": total}
 
@@ -181,7 +284,15 @@ def get_execution_stats(
     """Get execution statistics for the dashboard (last 24h)."""
     if not workflow_access.has_manage_permission(db, session):
         raise HTTPException(status_code=403, detail="Cannot view org execution stats")
-    return workflow_service.get_execution_stats(db, session.org_id)
+    return workflow_service.get_execution_stats(
+        db,
+        session.org_id,
+        include_donor_subjects=workflow_access.can_view_subject(
+            db,
+            session,
+            "egg_donor",
+        ),
+    )
 
 
 @router.post(
@@ -199,6 +310,13 @@ def retry_workflow_execution(
     if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
 
+    _require_subject_access(db, session, execution.subject_type)
+
+    entity = engine.adapter.get_entity(db, execution.entity_type, execution.entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    _require_entity_subject_edit_access(db, session, execution.entity_type, entity)
+
     if execution.status != WorkflowExecutionStatus.FAILED.value:
         raise HTTPException(status_code=422, detail="Only failed executions can be retried")
 
@@ -209,13 +327,8 @@ def retry_workflow_execution(
     if _uses_messaging(workflow.actions):
         _require_messaging_admin(session)
 
-    if not workflow_access.can_edit(db, session, workflow):
+    if not _can_edit_workflow(db, session, workflow):
         raise HTTPException(status_code=403, detail="Cannot retry this workflow")
-
-    # Fail explicitly rather than silently returning no execution.
-    entity = engine.adapter.get_entity(db, execution.entity_type, execution.entity_id)
-    if not entity:
-        raise HTTPException(status_code=404, detail="Entity not found")
 
     event_data = dict(execution.trigger_event or {})
     event_data.setdefault("triggered_by_user_id", str(session.user_id))
@@ -229,6 +342,8 @@ def retry_workflow_execution(
         event_data=event_data,
         source=WorkflowEventSource.USER,
         bypass_dedupe=True,
+        subject_type=execution.subject_type,
+        subject_id=execution.subject_id,
     )
 
     if not new_execution:
@@ -249,6 +364,15 @@ def create_workflow(
     - Org workflows: require manage_automation permission
     - Personal workflows: any authenticated user can create
     """
+    effective_subject_type = workflow_service.resolve_effective_workflow_subject_type(
+        db,
+        session.org_id,
+        subject_type=data.subject_type,
+        trigger_type=data.trigger_type,
+        trigger_config=data.trigger_config,
+    )
+    _require_subject_access(db, session, effective_subject_type)
+    _require_subject_edit_access(db, session, effective_subject_type)
     if _uses_messaging(data.actions):
         _require_messaging_admin(session)
     if not workflow_access.can_create(db, session, data.scope):
@@ -279,10 +403,10 @@ def get_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    if not workflow_access.can_view(db, session, workflow):
+    if not _can_view_workflow(db, session, workflow):
         raise HTTPException(status_code=403, detail="Cannot view this workflow")
     return workflow_service.to_workflow_read(
-        db, workflow, can_edit=workflow_access.can_edit(db, session, workflow)
+        db, workflow, can_edit=_can_edit_workflow(db, session, workflow)
     )
 
 
@@ -301,10 +425,20 @@ def update_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if not _can_edit_workflow(db, session, workflow):
+        raise HTTPException(status_code=403, detail="Cannot edit this workflow")
+    prospective_subject_type = workflow_service.resolve_effective_workflow_subject_type(
+        db,
+        session.org_id,
+        subject_type=workflow.subject_type,
+        trigger_type=data.trigger_type or workflow.trigger_type,
+        trigger_config=(
+            data.trigger_config if data.trigger_config is not None else workflow.trigger_config
+        ),
+    )
+    _require_subject_edit_access(db, session, prospective_subject_type)
     if _uses_messaging(workflow.actions) or _uses_messaging(data.actions):
         _require_messaging_admin(session)
-    if not workflow_access.can_edit(db, session, workflow):
-        raise HTTPException(status_code=403, detail="Cannot edit this workflow")
 
     try:
         workflow = workflow_service.update_workflow(
@@ -330,7 +464,12 @@ def delete_workflow(
         raise HTTPException(status_code=404, detail="Workflow not found")
     if _uses_messaging(workflow.actions):
         _require_messaging_admin(session)
-    if not workflow_access.can_delete(db, session, workflow):
+    if not workflow_access.can_delete(
+        db,
+        session,
+        workflow,
+        _effective_workflow_subject(db, workflow),
+    ):
         raise HTTPException(status_code=403, detail="Cannot delete this workflow")
 
     workflow_service.delete_workflow(db, workflow)
@@ -353,7 +492,12 @@ def toggle_workflow(
         raise HTTPException(status_code=404, detail="Workflow not found")
     if _uses_messaging(workflow.actions):
         _require_messaging_admin(session)
-    if not workflow_access.can_toggle(db, session, workflow):
+    if not workflow_access.can_toggle(
+        db,
+        session,
+        workflow,
+        _effective_workflow_subject(db, workflow),
+    ):
         raise HTTPException(status_code=403, detail="Cannot toggle this workflow")
 
     workflow = workflow_service.toggle_workflow(db, workflow, session.user_id)
@@ -381,7 +525,12 @@ def duplicate_workflow(
         raise HTTPException(status_code=404, detail="Workflow not found")
     if _uses_messaging(workflow.actions):
         _require_messaging_admin(session)
-    if not workflow_access.can_duplicate(db, session, workflow):
+    if not workflow_access.can_duplicate(
+        db,
+        session,
+        workflow,
+        _effective_workflow_subject(db, workflow),
+    ):
         raise HTTPException(status_code=403, detail="Cannot duplicate this workflow")
 
     # If duplicating an org workflow, keep it as org if user has permission
@@ -416,11 +565,14 @@ def test_workflow(
         raise HTTPException(status_code=404, detail="Workflow not found")
     if _uses_messaging(workflow.actions):
         _require_messaging_admin(session)
-    if not workflow_access.can_view(db, session, workflow):
+    if not _can_view_workflow(db, session, workflow):
         raise HTTPException(status_code=403, detail="Cannot view this workflow")
 
-    expected_entity_type = workflow_service.TRIGGER_ENTITY_TYPES.get(
-        workflow.trigger_type, "surrogate"
+    donor_subject = workflow.subject_type in workflow_service.DONOR_SUBJECT_TYPES
+    expected_entity_type = (
+        workflow.subject_type
+        if donor_subject
+        else workflow_service.TRIGGER_ENTITY_TYPES.get(workflow.trigger_type, "surrogate")
     )
     entity_type = request.entity_type or expected_entity_type
     if entity_type != expected_entity_type:
@@ -430,7 +582,11 @@ def test_workflow(
         )
 
     # Get entity scoped to org
-    if entity_type == "surrogate":
+    if donor_subject:
+        entity = donor_service.get_donor(db, session.org_id, request.entity_id)
+        if entity and entity.pipeline_entity_type != workflow.subject_type:
+            entity = None
+    elif entity_type == "surrogate":
         entity = surrogate_service.get_surrogate(db, session.org_id, request.entity_id)
     else:
         if entity_type == "task":
@@ -458,6 +614,8 @@ def test_workflow(
 
     if not entity:
         raise HTTPException(status_code=404, detail=f"{entity_type.capitalize()} not found")
+
+    _require_entity_subject_access(db, session, entity_type, entity)
 
     # Evaluate conditions
     conditions_evaluated = []
@@ -502,6 +660,8 @@ def test_workflow(
             description += f"Create task '{action.get('title')}'"
         elif action_type == "assign_surrogate":
             description += f"Assign to {action.get('owner_type')}:{action.get('owner_id')}"
+        elif action_type == "assign_donor":
+            description += f"Assign to {action.get('owner_type')}:{action.get('owner_id')}"
         elif action_type == "send_notification":
             description += f"Notify: {action.get('title')}"
         elif action_type == "update_field":
@@ -541,10 +701,21 @@ def list_executions(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    if not workflow_access.can_view(db, session, workflow):
+    if not _can_view_workflow(db, session, workflow):
         raise HTTPException(status_code=403, detail="Cannot view this workflow")
 
-    items, total = workflow_service.list_executions(db, workflow_id, limit, offset)
+    items, total = workflow_service.list_executions(
+        db,
+        workflow_id,
+        session.org_id,
+        limit,
+        offset,
+        include_donor_subjects=workflow_access.can_view_subject(
+            db,
+            session,
+            "egg_donor",
+        ),
+    )
     return ExecutionListResponse(
         items=[ExecutionRead.model_validate(e) for e in items],
         total=total,
@@ -567,7 +738,7 @@ def get_my_preferences(
     result = []
     for pref in prefs:
         workflow = workflow_service.get_workflow(db, pref.workflow_id, session.org_id)
-        if workflow:
+        if workflow and _can_view_workflow(db, session, workflow):
             result.append(
                 UserWorkflowPreferenceRead(
                     id=pref.id,
@@ -595,6 +766,8 @@ def update_my_preference(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if not _can_view_workflow(db, session, workflow):
+        raise HTTPException(status_code=403, detail="Cannot view this workflow")
 
     # Users can only opt out of workflows they created OR their own preferences
     # They cannot disable org-level workflows globally

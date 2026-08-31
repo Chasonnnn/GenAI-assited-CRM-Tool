@@ -2,6 +2,7 @@
 
 import type { StageSemantics } from "@/lib/api/pipelines"
 
+export type PipelineEntityType = "surrogate" | "intended_parent" | "egg_donor" | "sperm_donor"
 export type StageType = "intake" | "paused" | "post_approval" | "terminal"
 
 export type StageDef = {
@@ -208,6 +209,456 @@ export const STAGE_DEFS: StageDef[] = [
     }
 ]
 
+export const PIPELINE_ENTITY_TYPES: PipelineEntityType[] = [
+    "surrogate",
+    "intended_parent",
+    "egg_donor",
+    "sperm_donor"
+]
+
+export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
+    "surrogate": [
+        {
+            "stageKey": "new_unread",
+            "slug": "new_unread",
+            "label": "New Unread",
+            "color": "#3B82F6",
+            "order": 1,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "contacted",
+            "slug": "contacted",
+            "label": "Contacted",
+            "color": "#06B6D4",
+            "order": 2,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "pre_qualified",
+            "slug": "pre_qualified",
+            "label": "Pre-Qualified",
+            "color": "#10B981",
+            "order": 3,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "application_submitted",
+            "slug": "application_submitted",
+            "label": "Application Submitted",
+            "color": "#8B5CF6",
+            "order": 4,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "interview_scheduled",
+            "slug": "interview_scheduled",
+            "label": "Interview Scheduled",
+            "color": "#A855F7",
+            "order": 5,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "pending_docusign",
+            "slug": "pending_docusign",
+            "label": "Pending-DocuSign",
+            "color": "#F59E0B",
+            "order": 6,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "under_review",
+            "slug": "under_review",
+            "label": "Under Review",
+            "color": "#F59E0B",
+            "order": 7,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "approved",
+            "slug": "approved",
+            "label": "Approved",
+            "color": "#22C55E",
+            "order": 8,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "ready_to_match",
+            "slug": "ready_to_match",
+            "label": "Ready to Match",
+            "color": "#0EA5E9",
+            "order": 9,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "matched",
+            "slug": "matched",
+            "label": "Matched",
+            "color": "#6366F1",
+            "order": 10,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "medical_clearance_passed",
+            "slug": "medical_clearance_passed",
+            "label": "Medical Clearance Passed",
+            "color": "#14B8A6",
+            "order": 11,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "legal_clearance_passed",
+            "slug": "legal_clearance_passed",
+            "label": "Legal Clearance Passed",
+            "color": "#059669",
+            "order": 12,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "transfer_cycle",
+            "slug": "transfer_cycle",
+            "label": "Transfer Cycle Initiated",
+            "color": "#0D9488",
+            "order": 13,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "second_hcg_confirmed",
+            "slug": "second_hcg_confirmed",
+            "label": "Second hCG confirmed",
+            "color": "#10B981",
+            "order": 14,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "heartbeat_confirmed",
+            "slug": "heartbeat_confirmed",
+            "label": "Heartbeat Confirmed",
+            "color": "#22C55E",
+            "order": 15,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "life_insurance_application_started",
+            "slug": "life_insurance_application_started",
+            "label": "Life Insurance Application Started",
+            "color": "#0891B2",
+            "order": 16,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "ob_care_established",
+            "slug": "ob_care_established",
+            "label": "OB Care Established",
+            "color": "#84CC16",
+            "order": 17,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "pbo_process_started",
+            "slug": "pbo_process_started",
+            "label": "PBO Process Started",
+            "color": "#DB2777",
+            "order": 18,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "anatomy_scanned",
+            "slug": "anatomy_scanned",
+            "label": "Anatomy Scanned",
+            "color": "#16A34A",
+            "order": 19,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "delivered",
+            "slug": "delivered",
+            "label": "Delivered",
+            "color": "#16A34A",
+            "order": 20,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "on_hold",
+            "slug": "on_hold",
+            "label": "On-Hold",
+            "color": "#B4536A",
+            "order": 21,
+            "stageType": "paused"
+        },
+        {
+            "stageKey": "cold_leads",
+            "slug": "cold_leads",
+            "label": "Cold Leads",
+            "color": "#64748B",
+            "order": 22,
+            "stageType": "terminal"
+        },
+        {
+            "stageKey": "lost",
+            "slug": "lost",
+            "label": "Lost",
+            "color": "#EF4444",
+            "order": 23,
+            "stageType": "terminal"
+        },
+        {
+            "stageKey": "disqualified",
+            "slug": "disqualified",
+            "label": "Disqualified",
+            "color": "#EF4444",
+            "order": 24,
+            "stageType": "terminal"
+        }
+    ],
+    "intended_parent": [
+        {
+            "stageKey": "new",
+            "slug": "new",
+            "label": "New",
+            "color": "#3B82F6",
+            "order": 1,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "ready_to_match",
+            "slug": "ready_to_match",
+            "label": "Ready to Match",
+            "color": "#F59E0B",
+            "order": 2,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "matched",
+            "slug": "matched",
+            "label": "Matched",
+            "color": "#10B981",
+            "order": 3,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "delivered",
+            "slug": "delivered",
+            "label": "Delivered",
+            "color": "#14B8A6",
+            "order": 4,
+            "stageType": "post_approval"
+        }
+    ],
+    "egg_donor": [
+        {
+            "stageKey": "new",
+            "slug": "new",
+            "label": "New",
+            "color": "#3B82F6",
+            "order": 1,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "contacted",
+            "slug": "contacted",
+            "label": "Contacted",
+            "color": "#06B6D4",
+            "order": 2,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "pre_screening",
+            "slug": "pre_screening",
+            "label": "Pre-Screening",
+            "color": "#8B5CF6",
+            "order": 3,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "application_submitted",
+            "slug": "application_submitted",
+            "label": "Application Submitted",
+            "color": "#A855F7",
+            "order": 4,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "medical_records_review",
+            "slug": "medical_records_review",
+            "label": "Medical Records Review",
+            "color": "#F59E0B",
+            "order": 5,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "psychological_screening",
+            "slug": "psychological_screening",
+            "label": "Psychological Screening",
+            "color": "#D97706",
+            "order": 6,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "ready_to_match",
+            "slug": "ready_to_match",
+            "label": "Ready to Match",
+            "color": "#0EA5E9",
+            "order": 7,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "matched",
+            "slug": "matched",
+            "label": "Matched",
+            "color": "#6366F1",
+            "order": 8,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "cycle_in_progress",
+            "slug": "cycle_in_progress",
+            "label": "Cycle in Progress",
+            "color": "#14B8A6",
+            "order": 9,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "retrieval_complete",
+            "slug": "retrieval_complete",
+            "label": "Retrieval Complete",
+            "color": "#10B981",
+            "order": 10,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "on_hold",
+            "slug": "on_hold",
+            "label": "On-Hold",
+            "color": "#B4536A",
+            "order": 11,
+            "stageType": "paused"
+        },
+        {
+            "stageKey": "disqualified",
+            "slug": "disqualified",
+            "label": "Disqualified",
+            "color": "#EF4444",
+            "order": 12,
+            "stageType": "terminal"
+        },
+        {
+            "stageKey": "closed",
+            "slug": "closed",
+            "label": "Closed",
+            "color": "#64748B",
+            "order": 13,
+            "stageType": "terminal"
+        }
+    ],
+    "sperm_donor": [
+        {
+            "stageKey": "new",
+            "slug": "new",
+            "label": "New",
+            "color": "#3B82F6",
+            "order": 1,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "contacted",
+            "slug": "contacted",
+            "label": "Contacted",
+            "color": "#06B6D4",
+            "order": 2,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "pre_screening",
+            "slug": "pre_screening",
+            "label": "Pre-Screening",
+            "color": "#8B5CF6",
+            "order": 3,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "application_submitted",
+            "slug": "application_submitted",
+            "label": "Application Submitted",
+            "color": "#A855F7",
+            "order": 4,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "semen_analysis",
+            "slug": "semen_analysis",
+            "label": "Semen Analysis",
+            "color": "#F59E0B",
+            "order": 5,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "medical_genetic_screening",
+            "slug": "medical_genetic_screening",
+            "label": "Medical & Genetic Screening",
+            "color": "#D97706",
+            "order": 6,
+            "stageType": "intake"
+        },
+        {
+            "stageKey": "available",
+            "slug": "available",
+            "label": "Available",
+            "color": "#0EA5E9",
+            "order": 7,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "matched",
+            "slug": "matched",
+            "label": "Matched",
+            "color": "#6366F1",
+            "order": 8,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "collection_in_progress",
+            "slug": "collection_in_progress",
+            "label": "Collection in Progress",
+            "color": "#14B8A6",
+            "order": 9,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "donation_complete",
+            "slug": "donation_complete",
+            "label": "Donation Complete",
+            "color": "#10B981",
+            "order": 10,
+            "stageType": "post_approval"
+        },
+        {
+            "stageKey": "on_hold",
+            "slug": "on_hold",
+            "label": "On-Hold",
+            "color": "#B4536A",
+            "order": 11,
+            "stageType": "paused"
+        },
+        {
+            "stageKey": "disqualified",
+            "slug": "disqualified",
+            "label": "Disqualified",
+            "color": "#EF4444",
+            "order": 12,
+            "stageType": "terminal"
+        },
+        {
+            "stageKey": "closed",
+            "slug": "closed",
+            "label": "Closed",
+            "color": "#64748B",
+            "order": 13,
+            "stageType": "terminal"
+        }
+    ]
+}
+
 export const STAGE_TYPE_MAP: Record<string, StageType> = {
     "anatomy_scanned": "post_approval",
     "application_submitted": "intake",
@@ -233,6 +684,71 @@ export const STAGE_TYPE_MAP: Record<string, StageType> = {
     "second_hcg_confirmed": "post_approval",
     "transfer_cycle": "post_approval",
     "under_review": "intake"
+}
+
+export const STAGE_TYPE_MAP_BY_ENTITY: Record<PipelineEntityType, Record<string, StageType>> = {
+    "egg_donor": {
+        "application_submitted": "intake",
+        "closed": "terminal",
+        "contacted": "intake",
+        "cycle_in_progress": "post_approval",
+        "disqualified": "terminal",
+        "matched": "post_approval",
+        "medical_records_review": "intake",
+        "new": "intake",
+        "on_hold": "paused",
+        "pre_screening": "intake",
+        "psychological_screening": "intake",
+        "ready_to_match": "post_approval",
+        "retrieval_complete": "post_approval"
+    },
+    "intended_parent": {
+        "delivered": "post_approval",
+        "matched": "post_approval",
+        "new": "intake",
+        "ready_to_match": "post_approval"
+    },
+    "sperm_donor": {
+        "application_submitted": "intake",
+        "available": "post_approval",
+        "closed": "terminal",
+        "collection_in_progress": "post_approval",
+        "contacted": "intake",
+        "disqualified": "terminal",
+        "donation_complete": "post_approval",
+        "matched": "post_approval",
+        "medical_genetic_screening": "intake",
+        "new": "intake",
+        "on_hold": "paused",
+        "pre_screening": "intake",
+        "semen_analysis": "intake"
+    },
+    "surrogate": {
+        "anatomy_scanned": "post_approval",
+        "application_submitted": "intake",
+        "approved": "intake",
+        "cold_leads": "terminal",
+        "contacted": "intake",
+        "delivered": "post_approval",
+        "disqualified": "terminal",
+        "heartbeat_confirmed": "post_approval",
+        "interview_scheduled": "intake",
+        "legal_clearance_passed": "post_approval",
+        "life_insurance_application_started": "post_approval",
+        "lost": "terminal",
+        "matched": "post_approval",
+        "medical_clearance_passed": "post_approval",
+        "new_unread": "intake",
+        "ob_care_established": "post_approval",
+        "on_hold": "paused",
+        "pbo_process_started": "post_approval",
+        "pending_docusign": "intake",
+        "pre_qualified": "intake",
+        "ready_to_match": "post_approval",
+        "second_hcg_confirmed": "post_approval",
+        "transfer_cycle": "post_approval",
+        "under_review": "intake"
+    }
 }
 
 export const DEFAULT_STAGE_ORDER: string[] = [
@@ -261,6 +777,71 @@ export const DEFAULT_STAGE_ORDER: string[] = [
     "lost",
     "disqualified"
 ]
+
+export const DEFAULT_STAGE_ORDER_BY_ENTITY: Record<PipelineEntityType, string[]> = {
+    "surrogate": [
+        "new_unread",
+        "contacted",
+        "pre_qualified",
+        "application_submitted",
+        "interview_scheduled",
+        "pending_docusign",
+        "under_review",
+        "approved",
+        "ready_to_match",
+        "matched",
+        "medical_clearance_passed",
+        "legal_clearance_passed",
+        "transfer_cycle",
+        "second_hcg_confirmed",
+        "heartbeat_confirmed",
+        "life_insurance_application_started",
+        "ob_care_established",
+        "pbo_process_started",
+        "anatomy_scanned",
+        "delivered",
+        "on_hold",
+        "cold_leads",
+        "lost",
+        "disqualified"
+    ],
+    "intended_parent": [
+        "new",
+        "ready_to_match",
+        "matched",
+        "delivered"
+    ],
+    "egg_donor": [
+        "new",
+        "contacted",
+        "pre_screening",
+        "application_submitted",
+        "medical_records_review",
+        "psychological_screening",
+        "ready_to_match",
+        "matched",
+        "cycle_in_progress",
+        "retrieval_complete",
+        "on_hold",
+        "disqualified",
+        "closed"
+    ],
+    "sperm_donor": [
+        "new",
+        "contacted",
+        "pre_screening",
+        "application_submitted",
+        "semen_analysis",
+        "medical_genetic_screening",
+        "available",
+        "matched",
+        "collection_in_progress",
+        "donation_complete",
+        "on_hold",
+        "disqualified",
+        "closed"
+    ]
+}
 
 export const DEFAULT_STAGE_SEMANTICS_BY_KEY: Record<string, StageSemantics> = {
     "anatomy_scanned": {

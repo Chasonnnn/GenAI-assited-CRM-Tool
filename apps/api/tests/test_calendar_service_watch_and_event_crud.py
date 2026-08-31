@@ -164,17 +164,21 @@ async def test_calendar_user_wrappers_and_appointment_helpers(monkeypatch, db):
 
     async def _events(*_args, **kwargs):
         if kwargs.get("calendar_id") == "primary":
-            return [
+            events = [
                 {"id": "evt1", "start": now, "end": now + timedelta(minutes=30), "summary": "One"}
             ]
-        return [{"id": "evt1", "start": now, "end": now + timedelta(minutes=30), "summary": "Dup"}]
+        else:
+            events = [
+                {"id": "evt1", "start": now, "end": now + timedelta(minutes=30), "summary": "Dup"}
+            ]
+        return {"events": events, "complete": True}
 
     async def _calendar_ids(*_args, **_kwargs):
         return ["primary", "team"]
 
     monkeypatch.setattr(calendar_service, "get_google_access_token", _token)
     monkeypatch.setattr(calendar_service, "list_google_calendar_ids", _calendar_ids)
-    monkeypatch.setattr(calendar_service, "get_google_events", _events)
+    monkeypatch.setattr(calendar_service, "_fetch_google_events_snapshot", _events)
 
     across = await calendar_service.get_user_calendar_events_across_calendars(
         db,

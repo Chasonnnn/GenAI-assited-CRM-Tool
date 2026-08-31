@@ -7,12 +7,78 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_csrf_header, require_permission
+from app.core.deps import (
+    get_current_session,
+    get_db,
+    require_csrf_header,
+    require_permission,
+)
+from app.core.permissions import PermissionKey
 from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
-from app.services import status_change_request_service
+from app.services import permission_service, status_change_request_service
 
 router = APIRouter(prefix="/status-change-requests", tags=["Status Change Requests"])
+
+
+def _has_permission(
+    db: Session,
+    session: UserSession,
+    permission: PermissionKey,
+) -> bool:
+    role = session.role.value if hasattr(session.role, "value") else session.role
+    return permission_service.check_permission(
+        db,
+        session.org_id,
+        session.user_id,
+        role,
+        permission.value,
+    )
+
+
+def _require_donor_request_access(
+    db: Session,
+    session: UserSession,
+    entity_type: str,
+) -> None:
+    if entity_type == "donor" and not _has_permission(
+        db,
+        session,
+        PermissionKey.DONORS_VIEW,
+    ):
+        raise HTTPException(status_code=404, detail="Request not found")
+
+
+_CANCEL_PERMISSIONS: dict[str, tuple[PermissionKey, ...]] = {
+    "surrogate": (
+        PermissionKey.SURROGATES_VIEW,
+        PermissionKey.SURROGATES_CHANGE_STATUS,
+    ),
+    "intended_parent": (
+        PermissionKey.INTENDED_PARENTS_VIEW,
+        PermissionKey.INTENDED_PARENTS_EDIT,
+    ),
+    "donor": (
+        PermissionKey.DONORS_VIEW,
+        PermissionKey.DONORS_CHANGE_STATUS,
+    ),
+    "match": (
+        PermissionKey.MATCHES_VIEW,
+        PermissionKey.MATCHES_PROPOSE,
+    ),
+}
+
+
+def _require_cancel_access(
+    db: Session,
+    session: UserSession,
+    entity_type: str,
+) -> None:
+    permissions = _CANCEL_PERMISSIONS.get(entity_type)
+    if not permissions or not all(
+        _has_permission(db, session, permission) for permission in permissions
+    ):
+        raise HTTPException(status_code=403, detail="Missing permission for request entity")
 
 
 # ============================================================================
@@ -100,6 +166,11 @@ def list_pending_requests(
         entity_type=entity_type,
         page=page,
         per_page=per_page,
+        include_donor_requests=_has_permission(
+            db,
+            session,
+            PermissionKey.DONORS_VIEW,
+        ),
     )
 
     # Get details for each request
@@ -163,18 +234,21 @@ def get_request(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get a status change request by ID."""
+    req = status_change_request_service.get_request(
+        db=db,
+        request_id=request_id,
+        org_id=session.org_id,
+    )
+    if not req or req.organization_id != session.org_id:
+        raise HTTPException(status_code=404, detail="Request not found")
+    _require_donor_request_access(db, session, req.entity_type)
+
     details = status_change_request_service.get_request_with_details(
         db=db,
         request_id=request_id,
         org_id=session.org_id,
     )
     if not details:
-        raise HTTPException(status_code=404, detail="Request not found")
-
-    req = details["request"]
-
-    # Verify org access
-    if req.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Request not found")
 
     return StatusChangeRequestDetail(
@@ -230,6 +304,7 @@ def approve_request(
     )
     if not req or req.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Request not found")
+    _require_donor_request_access(db, session, req.entity_type)
 
     try:
         result = status_change_request_service.approve_request(
@@ -289,6 +364,7 @@ def reject_request(
     )
     if not req or req.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Request not found")
+    _require_donor_request_access(db, session, req.entity_type)
 
     try:
         result = status_change_request_service.reject_request(
@@ -331,7 +407,7 @@ def reject_request(
 def cancel_request(
     request_id: UUID,
     session: Annotated[UserSession, "fastapi_param"] = Depends(
-        require_permission(POLICIES["surrogates"].actions["change_status"])
+        get_current_session
     ),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
@@ -348,6 +424,7 @@ def cancel_request(
     )
     if not req or req.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Request not found")
+    _require_cancel_access(db, session, req.entity_type)
 
     try:
         result = status_change_request_service.cancel_request(

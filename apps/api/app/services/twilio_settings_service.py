@@ -93,7 +93,7 @@ def get_or_create_settings(
     return created
 
 
-def _route_url(webhook_id: str, suffix: str) -> str:
+def route_webhook_url(webhook_id: str, suffix: str) -> str:
     base_url = app_settings.API_BASE_URL.rstrip("/")
     return f"{base_url}/webhooks/twilio/{webhook_id}/{suffix}"
 
@@ -113,8 +113,8 @@ def project_settings(settings: TwilioSettings) -> TwilioSettingsResponse:
             consent_management_status=route.consent_management_status,
             capability_evidence=route.capability_evidence or {},
             webhook_id=route.webhook_id,
-            inbound_webhook_url=_route_url(route.webhook_id, "inbound"),
-            status_callback_url=_route_url(route.webhook_id, "status"),
+            inbound_webhook_url=route_webhook_url(route.webhook_id, "inbound"),
+            status_callback_url=route_webhook_url(route.webhook_id, "status"),
         )
 
     return TwilioSettingsResponse(
@@ -266,13 +266,7 @@ def update_settings(
                 route.sender_phone_encrypted = encrypt_credential(phone) if phone else None
                 route.sender_phone_hash = hash_phone(phone) if phone else None
                 route.sender_phone_last4 = phone[-4:] if phone else None
-            for field_name in (
-                "enabled",
-                "a2p_status",
-                "advanced_opt_out_status",
-                "consent_management_status",
-                "capability_evidence",
-            ):
+            for field_name in ("enabled",):
                 if field_name in route_fields:
                     setattr(route, field_name, getattr(route_update, field_name))
             route.updated_at = datetime.now(UTC)

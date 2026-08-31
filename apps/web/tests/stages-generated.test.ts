@@ -1,12 +1,59 @@
 import { describe, expect, it } from "vitest"
 import {
+    DEFAULT_STAGE_ORDER_BY_ENTITY,
     DEFAULT_STAGE_SEMANTICS_BY_KEY,
     DEFAULT_STAGE_ORDER,
+    PIPELINE_ENTITY_TYPES,
     STAGE_DEFS,
     STAGE_TYPE_MAP,
 } from "@/lib/constants/stages.generated"
 
 describe("stages.generated", () => {
+    it("exports the exact pipeline entity type contract", () => {
+        expect(PIPELINE_ENTITY_TYPES).toEqual([
+            "surrogate",
+            "intended_parent",
+            "egg_donor",
+            "sperm_donor",
+        ])
+    })
+
+    it("exports distinct egg and sperm donor defaults", () => {
+        expect(DEFAULT_STAGE_ORDER_BY_ENTITY.egg_donor).toEqual([
+            "new",
+            "contacted",
+            "pre_screening",
+            "application_submitted",
+            "medical_records_review",
+            "psychological_screening",
+            "ready_to_match",
+            "matched",
+            "cycle_in_progress",
+            "retrieval_complete",
+            "on_hold",
+            "disqualified",
+            "closed",
+        ])
+        expect(DEFAULT_STAGE_ORDER_BY_ENTITY.sperm_donor).toEqual([
+            "new",
+            "contacted",
+            "pre_screening",
+            "application_submitted",
+            "semen_analysis",
+            "medical_genetic_screening",
+            "available",
+            "matched",
+            "collection_in_progress",
+            "donation_complete",
+            "on_hold",
+            "disqualified",
+            "closed",
+        ])
+        expect(DEFAULT_STAGE_ORDER_BY_ENTITY.egg_donor).not.toEqual(
+            DEFAULT_STAGE_ORDER_BY_ENTITY.sperm_donor
+        )
+    })
+
     it("matches the full platform surrogate default stage order", () => {
         expect(DEFAULT_STAGE_ORDER).toEqual([
             "new_unread",

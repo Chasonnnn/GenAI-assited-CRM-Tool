@@ -654,11 +654,14 @@ def repair_matched_without_match(org_slug: str | None, apply: bool):
             db.add(
                 IntendedParentStatusHistory(
                     intended_parent_id=intended_parent.id,
+                    organization_id=intended_parent.organization_id,
                     changed_by_user_id=None,
                     old_stage_id=current_stage.id,
                     new_stage_id=ready_stage.id,
                     old_status=old_status,
                     new_status=ready_stage.stage_key,
+                    old_label_snapshot=current_stage.label,
+                    new_label_snapshot=ready_stage.label,
                     reason=repair_reason,
                     changed_at=now,
                     effective_at=now,

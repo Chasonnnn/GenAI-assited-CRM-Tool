@@ -1,7 +1,7 @@
 """Intended Parent service - business logic for IP CRUD and status management."""
 
 import logging
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import TypedDict
 from uuid import UUID
@@ -15,6 +15,7 @@ from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 from app.db.enums import IntendedParentStatus, Role
 from app.db.models import IntendedParent, IntendedParentStatusHistory
 from app.schemas.auth import UserSession
+from app.utils.datetime_parsing import parse_created_from_filter, parse_created_to_filter
 from app.utils.normalization import (
     escape_like_string,
     extract_email_domain,
@@ -31,20 +32,6 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Query Helpers
 # =============================================================================
-
-
-def _parse_created_before_filter(value: str) -> tuple[datetime, bool]:
-    """Parse created_before value.
-
-    Returns:
-        (parsed_datetime, is_date_only)
-    """
-    normalized = value.strip()
-    if "T" not in normalized:
-        parsed_date = date.fromisoformat(normalized)
-        return datetime.combine(parsed_date + timedelta(days=1), time(0, 0, 0)), True
-    parsed_datetime = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
-    return parsed_datetime, False
 
 
 def _build_intended_parent_query(
@@ -122,13 +109,13 @@ def _build_intended_parent_query(
     # Created date range filter (ISO format)
     if created_after:
         try:
-            after_date = datetime.fromisoformat(created_after.replace("Z", "+00:00"))
+            after_date = parse_created_from_filter(created_after)
             query = query.filter(IntendedParent.created_at >= after_date)
         except ValueError, AttributeError:
             logger.debug("ip_filter_invalid_created_after")
     if created_before:
         try:
-            before_date, is_date_only = _parse_created_before_filter(created_before)
+            before_date, is_date_only = parse_created_to_filter(created_before)
             if is_date_only:
                 query = query.filter(IntendedParent.created_at < before_date)
             else:
@@ -417,7 +404,7 @@ def create_intended_parent(
     ip_clinic_email: str | None = None,
 ) -> IntendedParent:
     """Create a new intended parent and record initial status."""
-    from app.services import pipeline_service
+    from app.services import entity_activity_service, pipeline_service
 
     now = datetime.now(UTC)
     normalized_email = normalize_email(email)
@@ -505,16 +492,28 @@ def create_intended_parent(
     # Record initial status in history
     history = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
+        organization_id=org_id,
         changed_by_user_id=user_id,
         old_stage_id=None,
         new_stage_id=default_stage.id,
         old_status=None,
         new_status=default_stage.stage_key,
+        old_label_snapshot=None,
+        new_label_snapshot=default_stage.label,
         reason="Initial creation",
         effective_at=now,
         recorded_at=now,
     )
     db.add(history)
+    entity_activity_service.record_activity(
+        db,
+        org_id=org_id,
+        entity_type="intended_parent",
+        entity_id=ip.id,
+        activity_type="record_created",
+        actor_user_id=user_id,
+        occurred_at=now,
+    )
     db.commit()
     db.refresh(ip)
     return ip
@@ -528,6 +527,10 @@ def update_intended_parent(
     updates: dict[str, object],
 ) -> IntendedParent:
     """Update intended parent fields and bump last_activity."""
+    from app.services import entity_activity_service
+
+    old_owner_type = ip.owner_type
+    old_owner_id = ip.owner_id
     if "full_name" in updates:
         full_name = updates["full_name"]
         if isinstance(full_name, str) and full_name:
@@ -643,6 +646,33 @@ def update_intended_parent(
     ip.last_activity = datetime.now(UTC)
     ip.updated_at = datetime.now(UTC)
 
+    entity_activity_service.record_activity(
+        db,
+        org_id=ip.organization_id,
+        entity_type="intended_parent",
+        entity_id=ip.id,
+        activity_type="info_edited",
+        actor_user_id=user_id,
+        details={"changed_fields": sorted(updates)},
+        occurred_at=ip.updated_at,
+    )
+    if (old_owner_type, old_owner_id) != (ip.owner_type, ip.owner_id):
+        entity_activity_service.record_activity(
+            db,
+            org_id=ip.organization_id,
+            entity_type="intended_parent",
+            entity_id=ip.id,
+            activity_type="assigned" if ip.owner_id else "unassigned",
+            actor_user_id=user_id,
+            details={
+                "from_owner_type": old_owner_type,
+                "from_owner_id": str(old_owner_id) if old_owner_id else None,
+                "to_owner_type": ip.owner_type,
+                "to_owner_id": str(ip.owner_id) if ip.owner_id else None,
+            },
+            occurred_at=ip.updated_at,
+        )
+
     db.commit()
     db.refresh(ip)
     return ip
@@ -682,11 +712,18 @@ def change_status(
     )
 
 
-def get_ip_status_history(db: Session, ip_id: UUID) -> list[IntendedParentStatusHistory]:
+def get_ip_status_history(
+    db: Session,
+    org_id: UUID,
+    ip_id: UUID,
+) -> list[IntendedParentStatusHistory]:
     """Get status history for an intended parent."""
     return (
         db.query(IntendedParentStatusHistory)
-        .filter(IntendedParentStatusHistory.intended_parent_id == ip_id)
+        .filter(
+            IntendedParentStatusHistory.organization_id == org_id,
+            IntendedParentStatusHistory.intended_parent_id == ip_id,
+        )
         .order_by(IntendedParentStatusHistory.recorded_at.desc())
         .all()
     )
@@ -703,7 +740,7 @@ def archive_intended_parent(
     user_id: UUID,
 ) -> IntendedParent:
     """Soft delete (archive) an intended parent without mutating its live pipeline stage."""
-    from app.services import intended_parent_status_service
+    from app.services import entity_activity_service, intended_parent_status_service
 
     now = datetime.now(UTC)
     current_stage = intended_parent_status_service.get_current_stage(db, ip)
@@ -714,16 +751,28 @@ def archive_intended_parent(
     # Record in history
     history = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
+        organization_id=ip.organization_id,
         changed_by_user_id=user_id,
         old_stage_id=current_stage.id,
         new_stage_id=current_stage.id,
         old_status=current_stage.stage_key,
         new_status=IntendedParentStatus.ARCHIVED.value,
+        old_label_snapshot=current_stage.label,
+        new_label_snapshot="Archived",
         reason="Archived",
         effective_at=now,
         recorded_at=now,
     )
     db.add(history)
+    entity_activity_service.record_activity(
+        db,
+        org_id=ip.organization_id,
+        entity_type="intended_parent",
+        entity_id=ip.id,
+        activity_type="archived",
+        actor_user_id=user_id,
+        occurred_at=now,
+    )
     db.commit()
     db.refresh(ip)
     return ip
@@ -735,7 +784,7 @@ def restore_intended_parent(
     user_id: UUID,
 ) -> IntendedParent:
     """Restore an archived intended parent without changing its live pipeline stage."""
-    from app.services import intended_parent_status_service
+    from app.services import entity_activity_service, intended_parent_status_service
 
     now = datetime.now(UTC)
     current_stage = intended_parent_status_service.get_current_stage(db, ip)
@@ -746,16 +795,28 @@ def restore_intended_parent(
 
     history_entry = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
+        organization_id=ip.organization_id,
         changed_by_user_id=user_id,
         old_stage_id=current_stage.id,
         new_stage_id=current_stage.id,
         old_status=IntendedParentStatus.ARCHIVED.value,
         new_status=current_stage.stage_key,
+        old_label_snapshot="Archived",
+        new_label_snapshot=current_stage.label,
         reason="Restored from archive",
         effective_at=now,
         recorded_at=now,
     )
     db.add(history_entry)
+    entity_activity_service.record_activity(
+        db,
+        org_id=ip.organization_id,
+        entity_type="intended_parent",
+        entity_id=ip.id,
+        activity_type="restored",
+        actor_user_id=user_id,
+        occurred_at=now,
+    )
     db.commit()
     db.refresh(ip)
     return ip

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type Dispatch, type SetStateAction } from "react"
+import { useState, type Dispatch, type ReactNode, type SetStateAction } from "react"
 import Link from "@/components/app-link"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -77,9 +77,21 @@ import { useQuery } from "@tanstack/react-query"
 import { RecipientPreviewCard } from "@/components/recipient-preview-card"
 import { US_STATES } from "@/lib/constants/us-states"
 import { getIntendedParentStageOptions } from "@/lib/intended-parent-stage-utils"
-import type { CampaignListItem, FilterCriteria } from "@/lib/api/campaigns"
+import type {
+    CampaignListItem,
+    CampaignRecipientType,
+    FilterCriteria,
+} from "@/lib/api/campaigns"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 import { listMessagingTemplates } from "@/lib/api/twilio"
+import {
+    CAMPAIGN_RECIPIENT_OPTIONS,
+    getCampaignPipelineEntityType,
+    getCampaignRecipientHref,
+    getCampaignRecipientLabel,
+    isCampaignRecipientType,
+    isDonorCampaignRecipientType,
+} from "@/lib/campaign-recipient"
 
 const statusStyles: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; className?: string }> = {
     draft: { variant: "secondary" },
@@ -116,7 +128,7 @@ const TERRITORY_CODES = new Set(["PR", "GU", "VI", "AS", "MP"])
 const STATE_OPTIONS = US_STATES.filter((state) => !TERRITORY_CODES.has(state.value))
 const TERRITORY_OPTIONS = US_STATES.filter((state) => TERRITORY_CODES.has(state.value))
 
-type RecipientType = "case" | "intended_parent"
+type RecipientType = CampaignRecipientType
 type CampaignChannel = "email" | "messaging"
 type ScheduleFor = "now" | "later"
 type StateSetter<T> = Dispatch<SetStateAction<T>>
@@ -183,7 +195,7 @@ type CampaignWizardData = {
     stageById: Map<string, CampaignStageOption>
     stateLabelByCode: Map<string, string>
     previewTotalCount: number
-    previewSampleRecipients: { email: string; name: string | null }[]
+    previewSampleRecipients: { email: string; name: string | null; href?: string }[]
     isPreviewLoading: boolean
 }
 
@@ -262,6 +274,39 @@ function buildCampaignStagePresets(
                 label: "Delivered",
                 stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
                     stage.stage_key === "delivered"
+                ),
+            },
+        ]
+    }
+
+    if (isDonorCampaignRecipientType(recipientType)) {
+        return [
+            {
+                key: "donor-intake",
+                label: "Screening",
+                stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
+                    (stage.category ?? stage.stage_type) === "intake"
+                ),
+            },
+            {
+                key: "donor-active",
+                label: "Active",
+                stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
+                    (stage.category ?? stage.stage_type) === "post_approval"
+                ),
+            },
+            {
+                key: "donor-paused",
+                label: "On Hold",
+                stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
+                    (stage.category ?? stage.stage_type) === "paused"
+                ),
+            },
+            {
+                key: "donor-terminal",
+                label: "Closed",
+                stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
+                    (stage.category ?? stage.stage_type) === "terminal"
                 ),
             },
         ]
@@ -353,6 +398,8 @@ function buildCampaignWizardDerivedData({
     previewFiltersData:
         | {
               sample_recipients?: {
+                  entity_type: CampaignRecipientType
+                  entity_id: string
                   email: string | null
                   phone_last4: string | null
                   name: string | null
@@ -400,14 +447,18 @@ function buildCampaignWizardDerivedData({
     const selectedStateCodeSet = new Set(selectedStates)
     const selectedTemplate = templates?.find((template) => template.id === selectedTemplateId)
     const previewSampleRecipients =
-        previewFiltersData?.sample_recipients?.map((recipient) => ({
-            email:
-                recipient.email ??
-                (recipient.phone_last4
-                    ? `••• ••• ${recipient.phone_last4}`
-                    : "Contact unavailable"),
-            name: recipient.name,
-        })) || []
+        previewFiltersData?.sample_recipients?.map((recipient) => {
+            const href = getCampaignRecipientHref(recipient.entity_type, recipient.entity_id)
+            return {
+                email:
+                    recipient.email ??
+                    (recipient.phone_last4
+                        ? `••• ••• ${recipient.phone_last4}`
+                        : "Contact unavailable"),
+                name: recipient.name,
+                ...(href ? { href } : {}),
+            }
+        }) || []
 
     return {
         selectedTemplate,
@@ -426,13 +477,10 @@ function buildCampaignWizardDerivedData({
     }
 }
 
-const isRecipientType = (value: string | null): value is RecipientType =>
-    value === "case" || value === "intended_parent"
-
 const isScheduleFor = (value: unknown): value is ScheduleFor =>
     value === "now" || value === "later"
 
-export default function CampaignsPage() {
+function useCampaignsPageController() {
     const { push } = useRouter()
     const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
     const [showCreateWizard, setShowCreateWizard] = useState(false)
@@ -480,9 +528,11 @@ export default function CampaignsPage() {
     const buildFilterCriteria = () =>
         buildCampaignFilterCriteria(recipientType, selectedStages, selectedStates)
 
+    const pipelineEntityType = getCampaignPipelineEntityType(recipientType)
     const { data: pipeline } = useQuery({
-        queryKey: ["defaultPipeline", "surrogate"],
-        queryFn: () => getDefaultPipeline("surrogate"),
+        queryKey: ["defaultPipeline", pipelineEntityType],
+        queryFn: () => getDefaultPipeline(pipelineEntityType ?? "surrogate"),
+        enabled: pipelineEntityType !== null,
     })
     const pipelineStages = pipeline?.stages || []
     const intendedParentStageOptions: CampaignStageOption[] = getIntendedParentStageOptions(
@@ -695,6 +745,10 @@ export default function CampaignsPage() {
             setSelectedTemplateId("")
             if (typeof next !== "function" && next === "messaging") {
                 setIncludeUnsubscribed(false)
+                if (isDonorCampaignRecipientType(recipientType)) {
+                    setRecipientType("case")
+                    setSelectedStages([])
+                }
             }
         },
         setSelectedTemplateId,
@@ -727,33 +781,51 @@ export default function CampaignsPage() {
         handleSendNowCampaign,
     }
 
+    return {
+        headerProps: {
+            onCreateCampaign: () => setShowCreateWizard(true),
+        },
+        listProps: {
+            statusFilter,
+            onStatusFilterChange: setStatusFilter,
+            campaigns: filteredCampaigns,
+            isLoading,
+            page,
+            perPage,
+            onPageChange: setPage,
+            onCreateCampaign: () => setShowCreateWizard(true),
+            onViewCampaign: (campaignId: string) => push(`/automation/campaigns/${campaignId}`),
+            onEditCampaign: (campaignId: string) =>
+                push(`/automation/campaigns/${campaignId}?edit=1`),
+            onSendNowCampaign: setSendNowDialogId,
+            onDuplicateCampaign: handleDuplicateCampaign,
+            onCancelCampaign: setCancelDialogId,
+            onDeleteCampaign: setDeleteDialogId,
+        },
+        wizardProps: {
+            open: showCreateWizard,
+            state: wizardState,
+            data: wizardData,
+            actions: wizardActions,
+            pending: wizardPending,
+        },
+        confirmationProps: {
+            state: dialogState,
+            actions: dialogActions,
+        },
+    }
+}
+
+export default function CampaignsPage() {
+    const { headerProps, listProps, wizardProps, confirmationProps } =
+        useCampaignsPageController()
+
     return (
         <div className="flex min-h-screen flex-col bg-background">
-            <CampaignsPageHeader onCreateCampaign={() => setShowCreateWizard(true)} />
-            <CampaignsListSection
-                statusFilter={statusFilter}
-                onStatusFilterChange={setStatusFilter}
-                campaigns={filteredCampaigns}
-                isLoading={isLoading}
-                page={page}
-                perPage={perPage}
-                onPageChange={setPage}
-                onCreateCampaign={() => setShowCreateWizard(true)}
-                onViewCampaign={(campaignId) => push(`/automation/campaigns/${campaignId}`)}
-                onEditCampaign={(campaignId) => push(`/automation/campaigns/${campaignId}?edit=1`)}
-                onSendNowCampaign={setSendNowDialogId}
-                onDuplicateCampaign={handleDuplicateCampaign}
-                onCancelCampaign={setCancelDialogId}
-                onDeleteCampaign={setDeleteDialogId}
-            />
-            <CampaignCreateWizardDialog
-                open={showCreateWizard}
-                state={wizardState}
-                data={wizardData}
-                actions={wizardActions}
-                pending={wizardPending}
-            />
-            <CampaignConfirmationDialogs state={dialogState} actions={dialogActions} />
+            <CampaignsPageHeader {...headerProps} />
+            <CampaignsListSection {...listProps} />
+            <CampaignCreateWizardDialog {...wizardProps} />
+            <CampaignConfirmationDialogs {...confirmationProps} />
         </div>
     )
 }
@@ -991,9 +1063,14 @@ function CampaignsTableRow({
                 </div>
             </TableCell>
             <TableCell>
-                <div className="flex items-center gap-1">
-                    <UsersIcon className="size-4 text-muted-foreground" />
-                    {campaign.total_recipients}
+                <div className="space-y-1">
+                    <div className="flex items-center gap-1">
+                        <UsersIcon className="size-4 text-muted-foreground" />
+                        {campaign.total_recipients}
+                    </div>
+                    <Badge variant="outline" className="text-[10px]">
+                        {getCampaignRecipientLabel(campaign.recipient_type)}
+                    </Badge>
                 </div>
             </TableCell>
             <TableCell>
@@ -1307,10 +1384,11 @@ function CampaignTemplateStep({
             <div className="space-y-2">
                 <Label>Template *</Label>
                 <Select
+                    aria-label="Email template"
                     value={state.selectedTemplateId}
                     onValueChange={(value) => value && actions.setSelectedTemplateId(value)}
                 >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger aria-label="Email template" className="w-full">
                         <SelectValue placeholder="Choose a template">
                             {(value: string | null) => {
                                 if (!value) return "Choose a template"
@@ -1360,32 +1438,46 @@ function CampaignRecipientsStep({
     data: CampaignWizardData
     actions: CampaignWizardActions
 }) {
+    const recipientOptionItems: ReactNode[] = []
+    for (const option of CAMPAIGN_RECIPIENT_OPTIONS) {
+        if (
+            state.channel === "email" ||
+            !isDonorCampaignRecipientType(option.value)
+        ) {
+            recipientOptionItems.push(
+                <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                </SelectItem>,
+            )
+        }
+    }
+
     return (
         <div className="space-y-4">
             <h3 className="font-medium">Recipients</h3>
             <div className="space-y-2">
                 <Label>Recipient Type</Label>
                 <Select
+                    aria-label="Recipient type"
                     value={state.recipientType}
                     onValueChange={(value) => {
-                        if (isRecipientType(value)) {
+                        if (isCampaignRecipientType(value)) {
                             actions.setRecipientType(value)
                             actions.setSelectedStages([])
                         }
                     }}
                 >
-                    <SelectTrigger>
+                    <SelectTrigger aria-label="Recipient type">
                         <SelectValue placeholder="Select type">
                             {(value: string | null) => {
-                                if (value === "case") return "Surrogates"
-                                if (value === "intended_parent") return "Intended Parents"
-                                return "Select type"
+                                return isCampaignRecipientType(value)
+                                    ? getCampaignRecipientLabel(value)
+                                    : "Select type"
                             }}
                         </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="case">Surrogates</SelectItem>
-                        <SelectItem value="intended_parent">Intended Parents</SelectItem>
+                        {recipientOptionItems}
                     </SelectContent>
                 </Select>
             </div>
@@ -1644,7 +1736,7 @@ function CampaignReviewStep({
                     <div className="flex justify-between">
                         <span className="text-muted-foreground">Recipients:</span>
                         <span className="font-medium">
-                            {state.recipientType === "case" ? "Surrogates" : "Intended Parents"}
+                            {getCampaignRecipientLabel(state.recipientType)}
                         </span>
                     </div>
                     {state.channel === "email" ? <div className="flex justify-between">

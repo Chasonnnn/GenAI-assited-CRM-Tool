@@ -13,6 +13,17 @@ const mockPush = vi.fn()
 const mockUseRunRecipients = vi.fn()
 const mockUpdateCampaign = vi.fn()
 let mockSearchParams = new URLSearchParams()
+let mockPreviewData: {
+    total_count: number
+    sample_recipients: Array<{
+        entity_type: string
+        entity_id: string
+        email: string | null
+        phone_last4: string | null
+        name: string | null
+        stage: string | null
+    }>
+} = { total_count: 0, sample_recipients: [] }
 let mockCampaignData = {
     id: "camp1",
     name: "Test Campaign",
@@ -75,7 +86,7 @@ vi.mock("@/lib/hooks/use-campaigns", () => ({
         ],
     }),
     useCampaignPreview: () => ({
-        data: { total_count: 0, sample_recipients: [] },
+        data: mockPreviewData,
         isLoading: false,
         refetch: vi.fn(),
     }),
@@ -187,6 +198,7 @@ describe("CampaignDetailPage", () => {
         mockUpdateCampaign.mockReset()
         mockUpdateCampaign.mockResolvedValue({})
         mockUseRunRecipients.mockReturnValue({ data: [] })
+        mockPreviewData = { total_count: 0, sample_recipients: [] }
     })
 
     it("shows Failed tab and requests failed recipients on selection", async () => {
@@ -321,6 +333,86 @@ describe("CampaignDetailPage", () => {
                     include_unsubscribed: false,
                 },
             })
+        })
+    })
+
+    it("shows, edits, and links egg donor campaign recipients with the exact pipeline", async () => {
+        mockCampaignData = {
+            ...mockCampaignData,
+            name: "Egg donor screening",
+            status: "draft",
+            recipient_type: "egg_donor",
+            filter_criteria: { stage_ids: ["egg-stage-1"] },
+        }
+        mockPreviewData = {
+            total_count: 1,
+            sample_recipients: [{
+                entity_type: "egg_donor",
+                entity_id: "donor-egg-preview",
+                email: "preview@example.com",
+                phone_last4: null,
+                name: "Preview Donor",
+                stage: "Egg Screening",
+            }],
+        }
+        mockUseRunRecipients.mockReturnValue({
+            data: [{
+                id: "recipient-1",
+                entity_type: "egg_donor",
+                entity_id: "donor-egg-1",
+                recipient_email: "maya@example.com",
+                recipient_phone_last4: null,
+                message_delivery_id: null,
+                recipient_name: "Maya Donor",
+                status: "sent",
+                error: null,
+                skip_reason: null,
+                sent_at: "2026-08-29T12:00:00Z",
+            }],
+        })
+        vi.mocked(useQuery).mockImplementation(({ queryKey }) => ({
+            data: queryKey[0] === "defaultPipeline" && queryKey[1] === "egg_donor"
+                ? {
+                    stages: [{
+                        id: "egg-stage-1",
+                        label: "Egg Screening",
+                        color: "#7C3AED",
+                        stage_key: "pre_screening",
+                        stage_type: "intake",
+                        is_active: true,
+                    }],
+                }
+                : null,
+            isLoading: false,
+            error: null,
+            refetch: vi.fn(),
+        }) as never)
+
+        render(<CampaignDetailPage />)
+
+        expect(screen.getByText("Egg Donors")).toBeInTheDocument()
+        expect(screen.getAllByText("Egg Screening").length).toBeGreaterThan(0)
+        expect(screen.getByRole("link", { name: "Preview Donor" })).toHaveAttribute(
+            "href",
+            "/donors/donor-egg-preview",
+        )
+        expect(screen.getByRole("link", { name: "Maya Donor" })).toHaveAttribute(
+            "href",
+            "/donors/donor-egg-1",
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: /^edit$/i }))
+        expect(screen.getByRole("combobox", { name: "Recipient type" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: /save changes/i }))
+
+        await waitFor(() => {
+            expect(mockUpdateCampaign).toHaveBeenCalledWith(expect.objectContaining({
+                id: "camp1",
+                data: expect.objectContaining({
+                    recipient_type: "egg_donor",
+                    filter_criteria: { stage_ids: ["egg-stage-1"] },
+                }),
+            }))
         })
     })
 })

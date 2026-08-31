@@ -55,6 +55,7 @@ import {
 } from '@/lib/api/forms'
 import { ApiError } from '@/lib/api'
 import { invalidateSurrogateCrmCaches, surrogateKeys } from './use-surrogates'
+import { donorKeys } from './use-donors'
 
 export const formKeys = {
     all: ['forms'] as const,
@@ -511,14 +512,24 @@ export function usePromoteIntakeLead() {
         onSuccess: (result) => {
             void queryClient.invalidateQueries({ queryKey: formKeys.intakeLead(result.intake_lead_id) })
             void queryClient.invalidateQueries({ queryKey: formKeys.all, exact: false })
-            invalidateSurrogateCrmCaches(queryClient, result.surrogate_id)
+            if (result.surrogate_id) {
+                invalidateSurrogateCrmCaches(queryClient, result.surrogate_id)
+            }
+            if (result.donor_id) {
+                void queryClient.invalidateQueries({ queryKey: donorKeys.all })
+            }
         },
     })
 }
 
 export function useUploadFormLogo() {
+    const queryClient = useQueryClient()
+
     return useMutation({
         mutationFn: (file: File) => uploadFormLogo(file),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: formKeys.lists() })
+        },
     })
 }
 

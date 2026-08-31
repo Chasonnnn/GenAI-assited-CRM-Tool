@@ -3,7 +3,7 @@ import uuid
 import pytest
 
 from app.db.enums import IntendedParentStatus, MatchStatus
-from app.db.models import IntendedParent, Match, StatusChangeRequest, Surrogate
+from app.db.models import EntityActivityLog, IntendedParent, Match, StatusChangeRequest, Surrogate
 from app.services import pipeline_service
 
 
@@ -49,8 +49,20 @@ async def _create_accepted_match(authed_client) -> dict:
     return accept.json()
 
 
+def _ip_activity_types(db, match: Match) -> list[str]:
+    return [
+        row.activity_type
+        for row in (
+            db.query(EntityActivityLog)
+            .filter(EntityActivityLog.intended_parent_id == match.intended_parent_id)
+            .order_by(EntityActivityLog.occurred_at, EntityActivityLog.id)
+            .all()
+        )
+    ]
+
+
 @pytest.mark.asyncio
-async def test_create_match_response_excludes_compatibility_score(authed_client):
+async def test_create_match_response_excludes_compatibility_score(authed_client, db):
     surrogate = await _create_surrogate(authed_client)
     intended_parent = await _create_intended_parent(authed_client)
 
@@ -71,6 +83,9 @@ async def test_create_match_response_excludes_compatibility_score(authed_client)
     items = list_response.json()["items"]
     assert items
     assert "compatibility_score" not in items[0]
+    match = db.get(Match, uuid.UUID(payload["id"]))
+    assert match is not None
+    assert "match_proposed" in _ip_activity_types(db, match)
 
 
 @pytest.mark.asyncio
@@ -97,6 +112,7 @@ async def test_match_cancel_request_creates_pending_request(authed_client, db, t
     match_row = db.query(Match).filter(Match.id == uuid.UUID(match["id"])).first()
     assert match_row is not None
     assert match_row.status == MatchStatus.CANCEL_PENDING.value
+    assert _ip_activity_types(db, match_row)[-1] == "match_cancel_requested"
 
 
 @pytest.mark.asyncio
@@ -139,6 +155,7 @@ async def test_match_cancel_request_approval_updates_statuses(authed_client, db,
     )
     assert intended_parent is not None
     assert intended_parent.status == IntendedParentStatus.READY_TO_MATCH.value
+    assert _ip_activity_types(db, match_row)[-1] == "match_cancelled"
 
 
 @pytest.mark.asyncio
@@ -167,6 +184,38 @@ async def test_match_cancel_request_reject_restores_status(authed_client, db, te
     match_row = db.query(Match).filter(Match.id == uuid.UUID(match["id"])).first()
     assert match_row is not None
     assert match_row.status == MatchStatus.ACCEPTED.value
+    assert _ip_activity_types(db, match_row)[-1] == "match_cancel_requested"
+
+
+@pytest.mark.asyncio
+async def test_reject_and_cancel_match_are_mirrored_to_intended_parent_activity(authed_client, db):
+    surrogate = await _create_surrogate(authed_client)
+    rejected_ip = await _create_intended_parent(authed_client)
+    rejected = await authed_client.post(
+        "/matches/",
+        json={"surrogate_id": surrogate["id"], "intended_parent_id": rejected_ip["id"]},
+    )
+    assert rejected.status_code == 201, rejected.text
+    reject_response = await authed_client.put(
+        f"/matches/{rejected.json()['id']}/reject",
+        json={"rejection_reason": "Not compatible"},
+    )
+    assert reject_response.status_code == 200, reject_response.text
+    rejected_match = db.get(Match, uuid.UUID(rejected.json()["id"]))
+    assert rejected_match is not None
+    assert _ip_activity_types(db, rejected_match)[-1] == "match_rejected"
+
+    cancelled_ip = await _create_intended_parent(authed_client)
+    cancelled = await authed_client.post(
+        "/matches/",
+        json={"surrogate_id": surrogate["id"], "intended_parent_id": cancelled_ip["id"]},
+    )
+    assert cancelled.status_code == 201, cancelled.text
+    cancel_response = await authed_client.delete(f"/matches/{cancelled.json()['id']}")
+    assert cancel_response.status_code == 204, cancel_response.text
+    cancelled_match = db.get(Match, uuid.UUID(cancelled.json()["id"]))
+    assert cancelled_match is not None
+    assert _ip_activity_types(db, cancelled_match)[-1] == "match_cancelled"
 
 
 @pytest.mark.asyncio

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
+
+import pytest
 
 from app.db.enums import FormStatus, FormSubmissionStatus
 from app.db.models import Form, FormSubmission
@@ -176,6 +179,92 @@ def test_interview_export_html_helpers(monkeypatch):
     assert "Interview Export" in export_html
     assert "Transcript text" in export_html
     assert "doc.pdf" in export_html
+
+
+def test_submission_images_respect_per_file_and_aggregate_embedding_budgets(monkeypatch):
+    files = [
+        SimpleNamespace(
+            filename="first.png",
+            content_type="image/png",
+            file_size=8,
+            storage_key="first",
+            quarantined=False,
+        ),
+        SimpleNamespace(
+            filename="second.png",
+            content_type="image/png",
+            file_size=8,
+            storage_key="second",
+            quarantined=False,
+        ),
+    ]
+    loaded: list[str] = []
+
+    def _load(storage_key: str):
+        loaded.append(storage_key)
+        return b"x" * 8, "image/png"
+
+    monkeypatch.setattr(pdf_export_service, "MAX_EMBEDDED_IMAGE_BYTES", 10, raising=False)
+    monkeypatch.setattr(
+        pdf_export_service,
+        "MAX_EMBEDDED_IMAGE_TOTAL_BYTES",
+        12,
+        raising=False,
+    )
+    monkeypatch.setattr(pdf_export_service, "_load_file_bytes", _load)
+
+    entries = pdf_export_service._collect_submission_files(files)
+
+    assert loaded == ["first"]
+    assert entries[0]["data_url"] is not None
+    assert entries[1]["data_url"] is None
+
+
+def test_pdf_render_slot_rejects_a_concurrent_renderer():
+    with pdf_export_service._pdf_render_slot():
+        with pytest.raises(pdf_export_service.PdfRendererBusyError):
+            with pdf_export_service._pdf_render_slot():
+                pytest.fail("a second renderer must not start")
+
+
+def test_html_renderer_closes_browser_after_failure(monkeypatch):
+    from playwright import async_api
+
+    class _Page:
+        async def set_content(self, *_args, **_kwargs):
+            raise RuntimeError("render failed")
+
+    class _Browser:
+        closed = False
+
+        async def new_page(self, **_kwargs):
+            return _Page()
+
+        async def close(self):
+            self.closed = True
+
+    browser = _Browser()
+
+    class _Chromium:
+        async def launch(self, **_kwargs):
+            return browser
+
+    class _Playwright:
+        chromium = _Chromium()
+
+    class _PlaywrightContext:
+        async def __aenter__(self):
+            return _Playwright()
+
+        async def __aexit__(self, *_args):
+            return None
+
+    monkeypatch.setattr(async_api, "async_playwright", lambda: _PlaywrightContext())
+
+    with pytest.raises(RuntimeError, match="render failed"):
+        asyncio.run(pdf_export_service._render_html_to_pdf("<p>test</p>"))
+
+    assert browser.closed is True
 
 
 def test_export_submission_pdf_and_export_interviews_pdf(db, test_org, test_user, monkeypatch):

@@ -64,6 +64,7 @@ const mockApproveStatusChange = vi.fn()
 const mockRejectStatusChange = vi.fn()
 const mockSetAIContext = vi.fn()
 const mockClearAIContext = vi.fn()
+const mockUseDonors = vi.fn()
 
 vi.mock('@/lib/hooks/use-tasks', () => ({
     useTasks: (params: unknown) => mockUseTasks(params),
@@ -75,6 +76,18 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
     useDeleteTask: () => ({ mutateAsync: mockDeleteTask, isPending: false }),
     useBulkCompleteTasks: () => ({ mutateAsync: mockBulkCompleteTasks, isPending: false }),
     useResolveWorkflowApproval: () => ({ mutateAsync: mockResolveApproval, isPending: false }),
+}))
+
+vi.mock('@/lib/hooks/use-donors', () => ({
+    useDonors: (params: unknown) => mockUseDonors(params),
+}))
+
+vi.mock('@/lib/hooks/use-surrogates', () => ({
+    useSurrogates: () => ({ data: { items: [] }, isLoading: false }),
+}))
+
+vi.mock('@/lib/hooks/use-intended-parents', () => ({
+    useIntendedParents: () => ({ data: { items: [] }, isLoading: false }),
 }))
 
 vi.mock('@/lib/hooks/use-import', () => ({
@@ -197,6 +210,8 @@ describe('TasksPage', () => {
         mockRejectImport.mockReset()
         mockSetAIContext.mockReset()
         mockClearAIContext.mockReset()
+        mockUseDonors.mockReset()
+        mockUseDonors.mockReturnValue({ data: { items: [] }, isLoading: false })
     })
 
     it('renders tasks and toggles completion', () => {
@@ -382,6 +397,42 @@ describe('TasksPage', () => {
         })
         expect(mockCreateTask).not.toHaveBeenCalled()
     })
+
+    it('creates a task linked to an egg donor', async () => {
+        mockCreateTask.mockResolvedValue({})
+        mockUseDonors.mockImplementation((params: { donor_type?: string }) => ({
+            data: {
+                items: params.donor_type === 'egg'
+                    ? [{
+                        id: 'donor-1',
+                        donor_number: 'D10001',
+                        donor_type: 'egg',
+                        full_name: 'Maya Thompson',
+                    }]
+                    : [],
+            },
+            isLoading: false,
+        }))
+
+        render(<TasksPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'Add Task' }))
+        fireEvent.change(screen.getByLabelText('Title *'), {
+            target: { value: 'Review donor profile' },
+        })
+        fireEvent.click(screen.getByRole('combobox', { name: 'Linked record' }))
+        const donorOption = await screen.findByRole('option', {
+            name: 'Egg Donor D10001 — Maya Thompson',
+        })
+        fireEvent.mouseMove(donorOption)
+        fireEvent.click(donorOption)
+        fireEvent.click(screen.getByRole('button', { name: 'Create Task' }))
+
+        await waitFor(() => expect(mockCreateTask).toHaveBeenCalledWith({
+            title: 'Review donor profile',
+            task_type: 'other',
+            donor_id: 'donor-1',
+        }))
+    })
 })
 
 describe('TasksListView', () => {
@@ -476,6 +527,57 @@ describe('TasksListView', () => {
         const surrogateLink = screen.getByRole('link', { name: 'Surrogate #S12345' })
         expect(surrogateLink.closest('button')).toBeNull()
         expect(surrogateLink.closest('[role="button"]')).toBeNull()
+    })
+
+    it('links donor tasks with subtype and donor number, and fails closed without metadata', () => {
+        render(
+            <TasksListView
+                incompleteTasks={[
+                    {
+                        id: 'donor-task',
+                        title: 'Review donor profile',
+                        is_completed: false,
+                        due_date: null,
+                        donor_id: 'donor-1',
+                        donor_number: 'D10001',
+                        donor_type: 'egg',
+                        donor_name: 'Maya Thompson',
+                        owner_type: 'user',
+                        owner_id: 'u1',
+                    } as TaskListItem,
+                    {
+                        id: 'missing-donor-task',
+                        title: 'Follow up on removed donor',
+                        is_completed: false,
+                        due_date: null,
+                        donor_id: 'donor-missing',
+                        donor_number: null,
+                        donor_type: null,
+                        donor_name: null,
+                        owner_type: 'user',
+                        owner_id: 'u1',
+                    } as TaskListItem,
+                ]}
+                completedTasks={{ items: [], total: 0 }}
+                selectedTaskIds={new Set()}
+                showCompleted={false}
+                loadingCompleted={false}
+                completedError={false}
+                onToggleShowCompleted={() => {}}
+                onTaskToggle={() => {}}
+                onTaskClick={() => {}}
+                onSelectTask={() => {}}
+                onSelectAll={() => {}}
+                onBulkCompleteSelected={() => {}}
+                bulkCompletePending={false}
+            />
+        )
+
+        expect(screen.getByRole('link', { name: 'Egg Donor D10001' })).toHaveAttribute(
+            'href',
+            '/donors/donor-1',
+        )
+        expect(screen.getByText('Donor unavailable').closest('a')).toBeNull()
     })
 })
 
@@ -619,5 +721,41 @@ describe('TasksApprovalsSection', () => {
         expect(html).toContain('Jun 3, 2026')
         expect(html).toContain('Jun 4, 2026')
         expect(html).not.toContain('remaining')
+    })
+
+    it('routes donor workflow approvals to the donor detail', () => {
+        render(
+            <TasksApprovalsSection
+                pendingApprovals={[
+                    {
+                        id: 'approval-donor',
+                        title: 'Approve donor stage change',
+                        task_type: 'workflow_approval',
+                        status: 'pending',
+                        is_completed: false,
+                        due_date: null,
+                        donor_id: 'donor-1',
+                        donor_number: 'D10001',
+                        donor_type: 'sperm',
+                        donor_name: 'Ethan Reed',
+                        owner_type: 'user',
+                        owner_id: 'u1',
+                    } as TaskListItem,
+                ]}
+                pendingStatusRequests={[]}
+                pendingImportApprovals={[]}
+                loadingApprovals={false}
+                loadingStatusRequests={false}
+                loadingImportApprovals={false}
+                onResolvedStatusRequests={() => {}}
+                onResolvedImportApprovals={() => {}}
+                currentUserId="u1"
+            />,
+        )
+
+        expect(screen.getByRole('link', { name: 'Sperm Donor D10001' })).toHaveAttribute(
+            'href',
+            '/donors/donor-1',
+        )
     })
 })

@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from app.utils.normalization import normalize_phone
 
@@ -59,13 +59,11 @@ class TwilioSettingsResponse(BaseModel):
 
 
 class TwilioRouteUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     enabled: bool | None = None
     messaging_service_sid: TwilioMessagingServiceSid | None = None
     sender_phone_e164: str | None = None
-    a2p_status: Literal["unconfigured", "pending", "approved", "rejected"] | None = None
-    advanced_opt_out_status: Literal["unconfigured", "enabled", "verified"] | None = None
-    consent_management_status: Literal["unknown", "available", "unavailable"] | None = None
-    capability_evidence: dict | None = None
 
     @field_validator("messaging_service_sid", mode="before")
     @classmethod
@@ -117,12 +115,16 @@ class TwilioSettingsTestResponse(BaseModel):
     account_status: str | None
     twilio_edition: str | None
     capabilities: dict[str, bool]
+    route_capabilities: dict[MessagingPurpose, dict[str, bool | str | None]] = Field(
+        default_factory=dict
+    )
     error: str | None
     warning: str | None
 
 
 class TwilioSettingsTestRoute(BaseModel):
     messaging_service_sid: TwilioMessagingServiceSid | None = None
+    sender_phone_e164: str | None = None
 
     @field_validator("messaging_service_sid", mode="before")
     @classmethod
@@ -130,6 +132,13 @@ class TwilioSettingsTestRoute(BaseModel):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @field_validator("sender_phone_e164")
+    @classmethod
+    def normalize_sender_phone(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        return normalize_phone(value)
 
 
 class TwilioSettingsTestRequest(BaseModel):

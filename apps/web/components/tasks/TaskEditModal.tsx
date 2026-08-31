@@ -35,23 +35,33 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon, Loader2 } from "lucide-react"
 import { format, parseISO } from "date-fns"
 import { cn } from "@/lib/utils"
+import type { TaskListItem, TaskUpdatePayload } from "@/lib/api/tasks"
+import { TaskRelatedRecordPicker } from "@/components/tasks/TaskRelatedRecordPicker"
+import {
+    getTaskRelatedRecordSelection,
+    toTaskRelatedRecordPayload,
+    type TaskRelatedRecordFields,
+    type TaskRelatedRecordSelection,
+} from "@/lib/task-related-record"
 
-interface Task {
+interface Task extends TaskRelatedRecordFields {
     id: string
     title: string
     description: string | null
-    task_type: string
+    task_type: TaskListItem["task_type"]
     due_date: string | null
     due_time: string | null
     is_completed: boolean
     surrogate_id: string | null
+    intended_parent_id?: string | null
+    donor_id?: string | null
 }
 
 interface TaskEditModalProps {
     task: Task | null
     open: boolean
     onClose: () => void
-    onSave: (taskId: string, data: Partial<Task>) => Promise<void>
+    onSave: (taskId: string, data: TaskUpdatePayload) => Promise<void>
     onDelete?: (taskId: string) => Promise<void>
     isDeleting?: boolean
 }
@@ -60,9 +70,10 @@ type TaskEditDraft = {
     taskId: string | null
     title: string
     description: string
-    taskType: string
+    taskType: TaskListItem["task_type"]
     dueDate: Date | undefined
     dueTime: string
+    relatedRecord: TaskRelatedRecordSelection
 }
 
 const TASK_TYPES = [
@@ -85,6 +96,7 @@ function createTaskEditDraft(task: Task | null): TaskEditDraft {
             taskType: "other",
             dueDate: undefined,
             dueTime: "",
+            relatedRecord: "none",
         }
     }
     return {
@@ -94,6 +106,7 @@ function createTaskEditDraft(task: Task | null): TaskEditDraft {
         taskType: task.task_type,
         dueDate: task.due_date ? parseISO(task.due_date) : undefined,
         dueTime: task.due_time?.slice(0, 5) || "",
+        relatedRecord: getTaskRelatedRecordSelection(task),
     }
 }
 
@@ -130,6 +143,7 @@ export function TaskEditModal({
                 task_type: draft.taskType,
                 due_date: draft.dueDate ? format(draft.dueDate, "yyyy-MM-dd") : null,
                 due_time: draft.dueTime ? `${draft.dueTime}:00` : null,
+                ...toTaskRelatedRecordPayload(draft.relatedRecord),
             })
         } catch (error) {
             console.error("Failed to save task:", error)
@@ -211,6 +225,14 @@ export function TaskEditModal({
                                 </SelectContent>
                             </Select>
                         </div>
+
+                        {task ? (
+                            <TaskRelatedRecordPicker
+                                value={draft.relatedRecord}
+                                onValueChange={(relatedRecord) => updateDraft({ relatedRecord })}
+                                currentRecord={task}
+                            />
+                        ) : null}
 
                         {/* Due Date & Time */}
                         <div className="grid grid-cols-2 gap-4">

@@ -54,6 +54,12 @@ const statusBadge = (status: string) => {
     )
 }
 
+const leadKindLabel = {
+    surrogate: "Surrogate",
+    egg_donor: "Egg donor",
+    sperm_donor: "Sperm donor",
+}
+
 export default function MetaFormsPage() {
     const { data: forms = [], isLoading } = useMetaForms()
     const syncMutation = useSyncMetaForms()
@@ -102,7 +108,7 @@ export default function MetaFormsPage() {
                     <Alert>
                         <AlertTitle>Forms need mapping</AlertTitle>
                         <AlertDescription>
-                            {needsMapping.length} form(s) require mapping before leads can convert to cases.
+                            {needsMapping.length} form(s) require mapping before leads can convert.
                         </AlertDescription>
                     </Alert>
                 )}
@@ -126,6 +132,7 @@ export default function MetaFormsPage() {
                                     <TableRow>
                                         <TableHead>Form</TableHead>
                                         <TableHead>Page</TableHead>
+                                        <TableHead>Lead type</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead>Unconverted</TableHead>
                                         <TableHead>Last lead</TableHead>
@@ -144,6 +151,9 @@ export default function MetaFormsPage() {
                                             <TableCell>
                                                 <div>{form.page_name || "—"}</div>
                                                 <div className="text-xs text-muted-foreground">{form.page_id}</div>
+                                            </TableCell>
+                                            <TableCell>
+                                                {leadKindLabel[form.lead_kind ?? "surrogate"]}
                                             </TableCell>
                                             <TableCell>{statusBadge(form.mapping_status)}</TableCell>
                                             <TableCell>

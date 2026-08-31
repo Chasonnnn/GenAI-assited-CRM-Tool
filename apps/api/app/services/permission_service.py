@@ -356,6 +356,119 @@ def backfill_new_permissions(db: Session) -> int:
 # =============================================================================
 
 
+def assert_google_donor_tasks_deprovisionable(
+    db: Session,
+    org_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> None:
+    """Keep one membership until its donor-task remote cleanup is complete."""
+    from app.db.models import Membership
+
+    membership = (
+        db.query(Membership)
+        .filter(
+            Membership.organization_id == org_id,
+            Membership.user_id == user_id,
+        )
+        .with_for_update(of=Membership)
+        .one_or_none()
+    )
+    if membership is None:
+        raise ValueError("Member is outside this organization")
+
+    _assert_no_google_donor_task_work(
+        db,
+        org_ids={org_id},
+        user_id=user_id,
+        operation="remove this member or Google connection",
+    )
+
+
+def assert_google_donor_tasks_disconnectable(
+    db: Session,
+    user_id: uuid.UUID,
+) -> None:
+    """Fence every active tenant before deleting user-global Google credentials."""
+    from app.db.models import Membership, User
+
+    (
+        db.query(Membership.id)
+        # Google OAuth credentials are user-global. The authenticated request's
+        # tenant backstop must not hide another tenant's active membership.
+        .execution_options(skip_org_scope=True)
+        .filter(
+            Membership.user_id == user_id,
+            Membership.is_active.is_(True),
+        )
+        .order_by(Membership.organization_id)
+        .with_for_update(of=Membership)
+        .all()
+    )
+    # Membership first matches task-sync, cleanup, and deprovision lock order.
+    user = (
+        db.query(User)
+        .filter(User.id == user_id, User.is_active.is_(True))
+        .with_for_update()
+        .one_or_none()
+    )
+    if user is None:
+        raise ValueError("Google connection user is no longer active")
+
+    _assert_no_google_donor_task_work(
+        db,
+        # OAuth credentials are user-global. Scan all existing tenant work,
+        # including stranded rows outside the currently active membership set.
+        org_ids=None,
+        user_id=user_id,
+        operation="disconnect Google",
+    )
+
+
+def _assert_no_google_donor_task_work(
+    db: Session,
+    *,
+    org_ids: set[uuid.UUID] | None,
+    user_id: uuid.UUID,
+    operation: str,
+) -> None:
+    from app.db.enums import OwnerType
+    from app.db.models import Task
+    from app.services import google_tasks_cleanup_service
+
+    if org_ids == set():
+        return
+    donor_task_query = db.query(Task.id, Task.google_task_id).filter(
+        Task.donor_id.is_not(None),
+        Task.owner_type == OwnerType.USER.value,
+        Task.owner_id == user_id,
+    )
+    if org_ids is not None:
+        donor_task_query = donor_task_query.filter(Task.organization_id.in_(org_ids))
+    else:
+        # This is the credential-disconnect path. It remains bound to the exact
+        # authenticated user while intentionally scanning every organization.
+        donor_task_query = donor_task_query.execution_options(skip_org_scope=True)
+    donor_tasks = (
+        donor_task_query
+        .order_by(Task.organization_id, Task.id)
+        .with_for_update()
+        .all()
+    )
+    if any(google_task_id for _task_id, google_task_id in donor_tasks):
+        raise ValueError(
+            f"Cannot {operation} while synced donor tasks remain; "
+            "reassign or delete those tasks and finish Google cleanup first"
+        )
+    if google_tasks_cleanup_service.has_unresolved_google_task_work_for_user_in_organizations(
+        db,
+        org_ids=org_ids,
+        user_id=user_id,
+    ):
+        raise ValueError(
+            f"Cannot {operation} while donor-task Google cleanup is pending or failed"
+        )
+
+
 def get_user_overrides(
     db: Session,
     org_id: uuid.UUID,
@@ -424,6 +537,8 @@ def deprovision_member(
         queue_service,
         session_service,
     )
+
+    assert_google_donor_tasks_deprovisionable(db, org_id, user.id)
 
     personal_templates = (
         db.query(EmailTemplate)

@@ -20,6 +20,14 @@ class FormPurpose(str, Enum):
     OTHER = "other"
 
 
+class FormLeadKind(str, Enum):
+    """Record type produced when a hosted form lead is promoted."""
+
+    SURROGATE = "surrogate"
+    EGG_DONOR = "egg_donor"
+    SPERM_DONOR = "sperm_donor"
+
+
 class FieldSensitivity(str, Enum):
     """Privacy classification for public form fields."""
 

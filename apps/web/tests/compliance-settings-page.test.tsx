@@ -37,13 +37,24 @@ describe("Compliance settings page", () => {
     beforeEach(() => {
         vi.clearAllMocks()
         useRetentionPoliciesMock.mockReturnValue({
-            data: [policy("surrogates", 30), policy("tasks", 45)],
+            data: [policy("donors", 30), policy("surrogates", 30), policy("tasks", 45)],
             isLoading: false,
         })
         useLegalHoldsMock.mockReturnValue({
             data: { items: [], total: 0, page: 1, per_page: 20, pages: 1 },
             isLoading: false,
         })
+    })
+
+    it("exposes donor retention and legal-hold controls", async () => {
+        render(<ComplianceSettingsPage />)
+
+        expect(await screen.findByRole("spinbutton", {
+            name: "Donors (archived only) retention days",
+        })).toHaveValue(30)
+
+        fireEvent.click(screen.getByRole("combobox", { name: "Hold Scope" }))
+        expect(await screen.findByRole("option", { name: "Donor" })).toBeInTheDocument()
     })
 
     it("adopts refreshed policies without overwriting an edited field", async () => {

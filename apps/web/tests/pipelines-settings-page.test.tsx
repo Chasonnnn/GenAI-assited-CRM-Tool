@@ -44,9 +44,9 @@ vi.mock("@/lib/hooks/use-pipelines", () => ({
     ) => mockUsePipelineChangePreview(id, draft, entityType, draftFingerprint),
     useRollbackPipeline: () => ({ mutateAsync: mockRollbackPipeline, isPending: false }),
     useApplyPipelineDraft: () => ({ mutateAsync: mockApplyPipelineDraft, isPending: false }),
-    useRecommendedPipelineDraft: () => ({
-        mutateAsync: mockUseRecommendedPipelineDraft,
-        isPending: false,
+    useRecommendedPipelineDraft: (id: string | null, entityType?: string) => ({
+        refetch: () => mockUseRecommendedPipelineDraft(id, entityType),
+        isFetching: false,
     }),
 }))
 
@@ -1209,7 +1209,7 @@ describe("PipelinesSettingsPage", () => {
             data: resettableDependencyGraph,
             isLoading: false,
         })
-        mockUseRecommendedPipelineDraft.mockResolvedValue(recommendedResetDraft)
+        mockUseRecommendedPipelineDraft.mockResolvedValue({ data: recommendedResetDraft })
 
         const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
 
@@ -1218,10 +1218,7 @@ describe("PipelinesSettingsPage", () => {
         fireEvent.click(screen.getByRole("button", { name: /reset to default/i }))
 
         await waitFor(() => {
-            expect(mockUseRecommendedPipelineDraft).toHaveBeenCalledWith({
-                id: "p1",
-                entityType: "surrogate",
-            })
+            expect(mockUseRecommendedPipelineDraft).toHaveBeenCalledWith("p1", "surrogate")
         })
         await waitFor(() => {
             expect(screen.getByDisplayValue("Application Submitted")).toBeInTheDocument()
@@ -1429,5 +1426,36 @@ describe("PipelinesSettingsPage", () => {
         expect(screen.queryByText("Suggestion profile")).not.toBeInTheDocument()
         expect(screen.queryByText("Analytics bucket")).not.toBeInTheDocument()
         expect(screen.getByRole("button", { name: /hide details for ready to match/i })).toBeInTheDocument()
+    })
+
+    it("exposes separately configurable egg- and sperm-donor pipelines", async () => {
+        render(<PipelinesSettingsPage />)
+
+        const entitySelect = screen.getByRole("combobox", { name: "Entity" })
+        fireEvent.mouseDown(entitySelect)
+
+        const eggDonorOption = await screen.findByRole("option", { name: "Egg Donors" })
+        expect(screen.getByRole("option", { name: "Sperm Donors" })).toBeInTheDocument()
+        fireEvent.mouseMove(eggDonorOption)
+        fireEvent.click(eggDonorOption)
+
+        expect(mockUsePipelines).toHaveBeenLastCalledWith("egg_donor")
+        expect(entitySelect).toHaveTextContent("Egg Donors")
+        expect(
+            screen.getByText("Configure egg-donor stage identity, category, and stage semantics from one versioned draft."),
+        ).toBeInTheDocument()
+        expect(screen.queryByText("Journey Mapping")).not.toBeInTheDocument()
+        expect(screen.queryByText("Analytics Funnel")).not.toBeInTheDocument()
+
+        fireEvent.mouseDown(entitySelect)
+        const spermDonorOption = await screen.findByRole("option", { name: "Sperm Donors" })
+        fireEvent.mouseMove(spermDonorOption)
+        fireEvent.click(spermDonorOption)
+
+        expect(mockUsePipelines).toHaveBeenLastCalledWith("sperm_donor")
+        expect(entitySelect).toHaveTextContent("Sperm Donors")
+        expect(
+            screen.getByText("Configure sperm-donor stage identity, category, and stage semantics from one versioned draft."),
+        ).toBeInTheDocument()
     })
 })

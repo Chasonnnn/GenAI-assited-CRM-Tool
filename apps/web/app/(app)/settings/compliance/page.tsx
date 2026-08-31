@@ -30,6 +30,8 @@ import {
 import type { LegalHoldListResponse, PurgePreviewItem } from "@/lib/api/compliance"
 
 const RETENTION_OPTIONS = [
+    { value: "donors", label: "Donors (archived only)" },
+    { value: "donor_leads", label: "Donor applications (unconverted only)" },
     { value: "surrogates", label: "Surrogates (archived only)" },
     { value: "matches", label: "Matches" },
     { value: "tasks", label: "Tasks (completed only)" },
@@ -39,6 +41,11 @@ const RETENTION_OPTIONS = [
 
 const LEGAL_HOLD_TYPES = [
     { value: "org", label: "Organization (all records)" },
+    { value: "donor", label: "Donor" },
+    { value: "form_submission", label: "Form Submission" },
+    { value: "form_submission_file", label: "Form Submission File" },
+    { value: "intake_lead", label: "Intake Lead" },
+    { value: "meta_lead", label: "Meta Lead" },
     { value: "surrogate", label: "Surrogate" },
     { value: "match", label: "Match" },
     { value: "task", label: "Task" },

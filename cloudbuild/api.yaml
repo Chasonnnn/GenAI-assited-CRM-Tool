@@ -126,8 +126,8 @@ steps:
           --image "$${worker_image_ref}" \
           --region "$_REGION" \
           --quiet
-  # The one-time legacy-claim cutover is complete. Update only the image so
-  # Cloud Run preserves the resumed worker's operator-managed configuration.
+  # Preserve operator-managed configuration while repairing the worker's
+  # monitoring identity on every release.
   - name: gcr.io/cloud-builders/gcloud
     entrypoint: bash
     args:
@@ -136,6 +136,7 @@ steps:
         read -r worker_image_ref < /workspace/release-worker-image-ref
         gcloud run services update "$_WORKER_SERVICE" \
           --image "$${worker_image_ref}" \
+          --update-env-vars "GCP_SERVICE_NAME=$_WORKER_SERVICE" \
           --region "$_REGION" \
           --quiet
   - name: gcr.io/cloud-builders/gcloud

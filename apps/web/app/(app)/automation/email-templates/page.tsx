@@ -14,14 +14,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-    DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu"
 import {
     Dialog,
     DialogContent,
@@ -51,8 +43,6 @@ import {
 } from "@/components/ui/select"
 import {
     PlusIcon,
-    MoreVerticalIcon,
-    EditIcon,
     TrashIcon,
     EyeIcon,
     CameraIcon,
@@ -60,19 +50,14 @@ import {
     CodeIcon,
     XIcon,
     LinkIcon,
-    ImageIcon,
     CopyIcon,
     ShareIcon,
     UserIcon,
     BuildingIcon,
     LayoutTemplateIcon,
-    LockIcon,
-    SparklesIcon,
     AlertTriangleIcon,
     SendIcon,
     HistoryIcon,
-    CircleOffIcon,
-    CircleCheckIcon,
 } from "lucide-react"
 import {
     useEmailTemplates,
@@ -113,22 +98,30 @@ import type {
 } from "@/lib/api/email-templates"
 import type {
     EmailTemplateDraft,
-    EmailTemplateDraftScope,
 } from "@/lib/api/email-template-drafts"
 import { toast } from "@/components/ui/toast"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
-import Link from "@/components/app-link"
 import {
     buildEmailTemplatePreviewHtml,
     extractEmailTemplateVariables as extractTemplateVariables,
     getEmailTemplateBodyMode as getTemplateBodyMode,
     hasAdvancedEmailTemplateHtml as hasAdvancedTemplateHtml,
 } from "@/lib/email-template-preview"
-import { formatDate } from "@/lib/formatters"
 import { insertAtCursor } from "@/lib/insert-at-cursor"
 import { SafeHtmlContent } from "@/components/safe-html-content"
 import { EmailTemplateHistoryDialog } from "@/components/email/EmailTemplateHistoryDialog"
+import { EmailTemplatesPageHeader } from "@/components/email/EmailTemplatesPageHeader"
+import { OrgSignaturePreview } from "@/components/email/OrgSignaturePreview"
+import { SignaturePhotoField } from "@/components/email/SignaturePhotoField"
+import { SignaturePreview } from "@/components/email/SignaturePreview"
+import {
+    TemplateCard,
+    type TemplateCardActionKind,
+    type TemplateCardControls,
+} from "@/components/email/TemplateCard"
+import { TemplateDraftSection } from "@/components/email/TemplateDraftSection"
+import { getTemplateStudioHref } from "@/components/email/template-studio-route"
 
 // =============================================================================
 // Signature Override Field Component
@@ -198,146 +191,6 @@ function SignatureOverrideField({
                 </p>
             )}
         </div>
-    )
-}
-
-// =============================================================================
-// Signature Photo Upload Component
-// =============================================================================
-
-interface SignaturePhotoFieldProps {
-    signaturePhotoUrl: string | null
-    profilePhotoUrl: string | null
-    profileName: string
-    avatarAction: React.ReactNode
-    customPhotoAction?: React.ReactNode
-}
-
-function SignaturePhotoField({
-    signaturePhotoUrl,
-    profilePhotoUrl,
-    profileName,
-    avatarAction,
-    customPhotoAction,
-}: SignaturePhotoFieldProps) {
-    const hasSignaturePhoto = !!signaturePhotoUrl
-    const displayPhoto = signaturePhotoUrl || profilePhotoUrl
-
-    const initials = profileName
-        ?.split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2) || "??"
-
-    return (
-        <div className="space-y-3">
-            <Label className="text-sm font-medium">Signature Photo</Label>
-            <div className="flex items-center gap-4">
-                <div className="relative group">
-                    <Avatar className="size-20 border-2 border-border">
-                        <AvatarImage src={displayPhoto || undefined} />
-                        <AvatarFallback className="text-lg bg-muted">
-                            {initials}
-                        </AvatarFallback>
-                    </Avatar>
-                    {avatarAction}
-                </div>
-                <div className="flex-1 space-y-1">
-                    {hasSignaturePhoto ? (
-                        <>
-                            <p className="text-sm font-medium text-primary">
-                                Custom signature photo
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                                Different from your profile avatar
-                            </p>
-                            {customPhotoAction}
-                        </>
-                    ) : (
-                        <>
-                            <p className="text-sm text-muted-foreground">
-                                {profilePhotoUrl ? "Using profile photo" : "No photo set"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                                Click camera to upload a signature-specific photo
-                            </p>
-                        </>
-                    )}
-                </div>
-            </div>
-        </div>
-    )
-}
-
-// =============================================================================
-// Signature Preview Component
-// =============================================================================
-
-function SignaturePreviewComponent() {
-    const { data: preview, isLoading } = useSignaturePreview()
-
-    if (isLoading) {
-        return (
-            <div className="flex items-center justify-center py-8">
-                <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
-            </div>
-        )
-    }
-
-    if (!preview?.html) {
-        return (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-                <ImageIcon className="size-10 text-muted-foreground/40 mb-2" />
-                <p className="text-sm text-muted-foreground">
-                    No signature configured yet
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                    Add your details and save to see preview
-                </p>
-            </div>
-        )
-    }
-
-    return (
-        <SafeHtmlContent
-            html={preview.html}
-            className="prose prose-sm prose-stone max-w-none text-stone-900"
-        />
-    )
-}
-
-// =============================================================================
-// Org Signature Preview Component
-// =============================================================================
-
-function OrgSignaturePreviewComponent() {
-    const { data: preview, isLoading } = useOrgSignaturePreview({ enabled: true, mode: "org_only" })
-
-    if (isLoading) {
-        return (
-            <div className="flex items-center justify-center py-8">
-                <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
-            </div>
-        )
-    }
-
-    if (!preview?.html) {
-        return (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-                <ImageIcon className="size-10 text-muted-foreground/40 mb-2" />
-                <p className="text-sm text-muted-foreground">
-                    No organization signature configured yet
-                </p>
-            </div>
-        )
-    }
-
-    return (
-        <SafeHtmlContent
-            html={preview.html}
-            className="prose prose-sm prose-stone max-w-none text-stone-900"
-        />
     )
 }
 
@@ -571,6 +424,12 @@ function buildTestVariableSample(
             return "S10001"
         case "intended_parent_number":
             return "I10001"
+        case "donor_number":
+            return "D10001"
+        case "donor_type":
+            return "Egg Donor"
+        case "education":
+            return "Bachelor's degree"
         case "status_label":
             return "Pre-Qualified"
         case "state":
@@ -658,26 +517,6 @@ async function handleCopySignatureHtml() {
 // Template Card Component
 // =============================================================================
 
-interface TemplateCardProps {
-    template: EmailTemplateListItem
-    controls: TemplateCardControls
-}
-
-type TemplateCardActionKind =
-    | "send_test"
-    | "edit"
-    | "set_active"
-    | "set_inactive"
-    | "copy"
-    | "share"
-    | "delete"
-type TemplateCardActionGroup = "test" | "edit" | "status" | "share" | "danger"
-
-type TemplateCardActionConfig = {
-    group: TemplateCardActionGroup
-    label: string
-}
-
 const personalTemplateVisibilityLabels: Record<"mine" | "all", string> = {
     mine: "My Templates",
     all: "All Personal Templates",
@@ -689,255 +528,11 @@ function getPersonalTemplateVisibilityLabel(value: string | null) {
         : personalTemplateVisibilityLabels.mine
 }
 
-function getTemplateStudioHref(template: EmailTemplateListItem): Route {
-    return `/automation/email-templates/${template.scope}/${template.id}` as Route
-}
-
-type TemplateCardControls =
-    | {
-        kind: "actions"
-        actions: TemplateCardActionKind[]
-        onAction: (action: TemplateCardActionKind) => void
-    }
-    | { kind: "read_only" }
-
-function getTemplateCardActionConfig(kind: TemplateCardActionKind): TemplateCardActionConfig {
-    switch (kind) {
-        case "send_test":
-            return { group: "test", label: "Send test email" }
-        case "edit":
-            return { group: "edit", label: "Edit" }
-        case "set_inactive":
-            return { group: "status", label: "Set inactive" }
-        case "set_active":
-            return { group: "status", label: "Set active" }
-        case "copy":
-            return { group: "share", label: "Copy to My Templates" }
-        case "share":
-            return { group: "share", label: "Share with Org" }
-        case "delete":
-            return { group: "danger", label: "Delete" }
-    }
-}
-
-function getTemplateCardActionIcon(kind: TemplateCardActionKind) {
-    switch (kind) {
-        case "send_test":
-            return <SendIcon className="mr-2 size-4" />
-        case "edit":
-            return <EditIcon className="mr-2 size-4" />
-        case "set_inactive":
-            return <CircleOffIcon className="mr-2 size-4" />
-        case "set_active":
-            return <CircleCheckIcon className="mr-2 size-4" />
-        case "copy":
-            return <CopyIcon className="mr-2 size-4" />
-        case "share":
-            return <ShareIcon className="mr-2 size-4" />
-        case "delete":
-            return <TrashIcon className="mr-2 size-4" />
-    }
-}
-
-function TemplateCard({ template, controls }: TemplateCardProps) {
-    const canEdit =
-        controls.kind === "actions" && controls.actions.includes("edit")
-
-    return (
-        <Card className="group relative min-w-0">
-            <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-start gap-2">
-                            <CardTitle className="min-h-12 text-base leading-6 break-words">
-                                {canEdit ? (
-                                    <Link
-                                        href={getTemplateStudioHref(template)}
-                                        fallbackMode="router"
-                                        aria-label={`Edit ${template.name}`}
-                                        className="block w-full cursor-pointer rounded-sm text-left transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                    >
-                                        <span className="line-clamp-2">
-                                            {template.name}
-                                        </span>
-                                    </Link>
-                                ) : (
-                                    <span className="line-clamp-2">
-                                        {template.name}
-                                    </span>
-                                )}
-                            </CardTitle>
-                            {template.is_system_template && (
-                                <Badge variant="secondary" className="text-xs shrink-0">
-                                    System
-                                </Badge>
-                            )}
-                        </div>
-                        <CardDescription className="mt-1 line-clamp-2 min-h-10 break-words" title={template.subject}>
-                            {template.subject}
-                        </CardDescription>
-                        {template.owner_name && (
-                            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                                <UserIcon className="size-3" />
-                                {template.owner_name}
-                            </p>
-                        )}
-                    </div>
-                    {controls.kind === "actions" && controls.actions.length > 0 && (
-                        <DropdownMenu>
-                            <DropdownMenuTrigger
-                                render={
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="icon"
-                                        className="size-8 shrink-0"
-                                        aria-label={`Actions for ${template.name}`}
-                                    >
-                                        <MoreVerticalIcon className="size-4" aria-hidden="true" />
-                                    </Button>
-                                }
-                            />
-                            <DropdownMenuContent align="end">
-                                {controls.actions.map((action, index) => {
-                                    const actionConfig = getTemplateCardActionConfig(action)
-                                    const previousAction = controls.actions[index - 1]
-                                    const previousActionConfig = previousAction
-                                        ? getTemplateCardActionConfig(previousAction)
-                                        : null
-                                    return (
-                                        <React.Fragment key={action}>
-                                            {previousActionConfig && previousActionConfig.group !== actionConfig.group && (
-                                                <DropdownMenuSeparator />
-                                            )}
-                                            <DropdownMenuItem
-                                                onClick={() => controls.onAction(action)}
-                                                className={actionConfig.group === "danger" ? "text-destructive" : undefined}
-                                            >
-                                                {getTemplateCardActionIcon(action)}
-                                                {actionConfig.label}
-                                            </DropdownMenuItem>
-                                        </React.Fragment>
-                                    )
-                                })}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    )}
-                    {controls.kind === "read_only" && (
-                        <Badge variant="outline" className="text-xs shrink-0">
-                            <LockIcon className="size-3 mr-1" />
-                            View Only
-                        </Badge>
-                    )}
-                </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-                <div className="flex items-center gap-2">
-                    <Badge variant={template.is_active ? "default" : "secondary"}>
-                        {template.is_active ? "Active" : "Inactive"}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">
-                        Updated {formatDate(template.updated_at)}
-                    </span>
-                </div>
-            </CardContent>
-        </Card>
-    )
-}
-
-type TemplateDraftSectionProps = {
-    drafts: EmailTemplateDraft[]
-    scope: EmailTemplateDraftScope
-    canDiscard: (draft: EmailTemplateDraft) => boolean
-    onDiscard: (draft: EmailTemplateDraft) => void
-    onResume: (draft: EmailTemplateDraft) => void
-}
-
-function TemplateDraftSection({
-    drafts,
-    scope,
-    canDiscard,
-    onDiscard,
-    onResume,
-}: TemplateDraftSectionProps) {
-    if (drafts.length === 0) return null
-
-    const headingId = `${scope}-template-drafts-heading`
-    return (
-        <section className="space-y-3" aria-labelledby={headingId}>
-            <div>
-                <h2 id={headingId} className="text-sm font-semibold">
-                    Drafts
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                    Continue work without changing the published template.
-                </p>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {drafts.map((draft) => (
-                    <Card key={draft.id}>
-                        <CardHeader className="pb-2">
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0 space-y-1">
-                                    <CardTitle className="truncate text-base">
-                                        {draft.name}
-                                    </CardTitle>
-                                    <CardDescription className="line-clamp-2">
-                                        {draft.subject}
-                                    </CardDescription>
-                                    {scope === "personal" && draft.owner_name ? (
-                                        <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                                            <UserIcon className="size-3" aria-hidden="true" />
-                                            {draft.owner_name}
-                                        </p>
-                                    ) : null}
-                                </div>
-                                <Badge variant="secondary">
-                                    {draft.template_id
-                                        ? "Draft changes"
-                                        : "Unpublished draft"}
-                                </Badge>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="flex items-center justify-between gap-3">
-                            <p className="text-xs text-muted-foreground">
-                                Revision {draft.revision}
-                            </p>
-                            <div className="flex items-center gap-2">
-                                {canDiscard(draft) ? (
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        className="text-destructive hover:text-destructive"
-                                        aria-label={`Discard ${draft.name}`}
-                                        onClick={() => onDiscard(draft)}
-                                    >
-                                        <TrashIcon className="mr-2 size-4" />
-                                        Discard
-                                    </Button>
-                                ) : null}
-                                <Button
-                                    size="sm"
-                                    aria-label={`Resume ${draft.name}`}
-                                    onClick={() => onResume(draft)}
-                                >
-                                    <EditIcon className="mr-2 size-4" />
-                                    Resume
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                ))}
-            </div>
-        </section>
-    )
-}
-
 // =============================================================================
 // Main Page Component
 // =============================================================================
 
-export default function EmailTemplatesPage() {
+function useEmailTemplatesPageView() {
     const router = useRouter()
     const { user } = useAuth()
     const isAdmin = user?.role === "admin" || user?.role === "developer"
@@ -1534,53 +1129,13 @@ export default function EmailTemplatesPage() {
 
     return (
         <div className="flex min-h-dvh flex-col">
-            {/* Page Header */}
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <h1 className="text-2xl font-semibold">Email Templates</h1>
-                    <div className="flex items-center gap-2">
-                        {activeTab === "personal" && (
-                            <>
-                                {canUseAI ? (
-                                    <Button
-                                        variant="outline"
-                                        title="Generate email template with AI"
-                                        render={<Link href="/automation/ai-builder?mode=email_template" />}
-                                    >
-                                        <SparklesIcon className="mr-2 size-4" />
-                                        Generate with AI
-                                    </Button>
-                                ) : (
-                                    <Button
-                                        variant="outline"
-                                        disabled
-                                        title="AI is disabled or permission is missing"
-                                    >
-                                        <SparklesIcon className="mr-2 size-4" />
-                                        Generate with AI
-                                    </Button>
-                                )}
-                                <Button
-                                    onClick={() =>
-                                        router.push(
-                                            "/automation/email-templates/personal/new" as Route,
-                                        )
-                                    }
-                                >
-                                    <PlusIcon className="mr-2 size-4" />
-                                    Create Template
-                                </Button>
-                            </>
-                        )}
-                        {activeTab === "org" && canManageEmailTemplates && (
-                            <Button onClick={() => router.push("/automation/email-templates/org/new")}>
-                                <PlusIcon className="mr-2 size-4" />
-                                Create Org Template
-                            </Button>
-                        )}
-                    </div>
-                </div>
-            </div>
+            <EmailTemplatesPageHeader
+                activeTab={activeTab}
+                canUseAI={canUseAI}
+                canManageEmailTemplates={canManageEmailTemplates}
+                onCreatePersonal={() => router.push("/automation/email-templates/personal/new" as Route)}
+                onCreateOrganization={() => router.push("/automation/email-templates/org/new")}
+            />
 
             {/* Content */}
             <div className="flex-1 p-6">
@@ -2283,9 +1838,9 @@ export default function EmailTemplatesPage() {
                                                 [Your email content here…]
                                             </p>
                                             {signaturePreviewMode === "personal" ? (
-                                                <SignaturePreviewComponent />
+                                                        <SignaturePreview />
                                             ) : (
-                                                <OrgSignaturePreviewComponent />
+                                                        <OrgSignaturePreview />
                                             )}
                                         </div>
                                     </CardContent>
@@ -3010,4 +2565,8 @@ export default function EmailTemplatesPage() {
             </Dialog>
         </div>
     )
+}
+
+export default function EmailTemplatesPage() {
+    return useEmailTemplatesPageView()
 }

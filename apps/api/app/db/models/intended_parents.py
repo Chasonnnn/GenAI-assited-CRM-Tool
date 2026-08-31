@@ -234,7 +234,15 @@ class IntendedParentStatusHistory(Base):
     """Tracks all status changes on intended parents for audit."""
 
     __tablename__ = "intended_parent_status_history"
-    __table_args__ = (Index("idx_ip_history_ip", "intended_parent_id", "changed_at"),)
+    __table_args__ = (
+        Index("idx_ip_history_ip", "intended_parent_id", "changed_at"),
+        Index(
+            "idx_ip_history_org_recorded",
+            "organization_id",
+            "intended_parent_id",
+            "recorded_at",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
@@ -242,6 +250,11 @@ class IntendedParentStatusHistory(Base):
     intended_parent_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("intended_parents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
     )
     changed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -255,6 +268,8 @@ class IntendedParentStatusHistory(Base):
     )
     old_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     new_status: Mapped[str] = mapped_column(String(50), nullable=False)
+    old_label_snapshot: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    new_label_snapshot: Mapped[str | None] = mapped_column(String(100), nullable=True)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     changed_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 

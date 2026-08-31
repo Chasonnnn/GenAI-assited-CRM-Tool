@@ -6,10 +6,11 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { RefreshCwIcon, AlertTriangleIcon, UsersIcon, InfoIcon } from "lucide-react"
+import Link from "@/components/app-link"
 
 interface RecipientPreviewCardProps {
     totalCount: number
-    sampleRecipients: { email: string; name: string | null }[]
+    sampleRecipients: { email: string; name: string | null; href?: string }[]
     isLoading: boolean
     onRefresh: () => void
     maxVisible?: number
@@ -110,7 +111,7 @@ export function RecipientPreviewCard({
                         >
                             {sampleRecipients.map((recipient) => (
                                 <div
-                                    key={recipient.email}
+                                    key={`${recipient.href ?? recipient.email}-${recipient.name ?? "recipient"}`}
                                     className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 flex-shrink-0"
                                 >
                                     <Avatar className="size-7">
@@ -119,9 +120,18 @@ export function RecipientPreviewCard({
                                         </AvatarFallback>
                                     </Avatar>
                                     <div className="flex flex-col min-w-0 flex-1">
-                                        <span className="text-sm font-medium truncate">
-                                            {recipient.name || recipient.email.split("@")[0]}
-                                        </span>
+                                        {recipient.href ? (
+                                            <Link
+                                                href={recipient.href}
+                                                className="truncate text-sm font-medium text-primary hover:underline"
+                                            >
+                                                {recipient.name || recipient.email.split("@")[0]}
+                                            </Link>
+                                        ) : (
+                                            <span className="text-sm font-medium truncate">
+                                                {recipient.name || recipient.email.split("@")[0]}
+                                            </span>
+                                        )}
                                         <span className="text-xs text-muted-foreground truncate">
                                             {recipient.email}
                                         </span>

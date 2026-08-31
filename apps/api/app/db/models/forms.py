@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     TIMESTAMP,
     Boolean,
+    CheckConstraint,
     ForeignKey,
     Index,
     Integer,
@@ -22,6 +23,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.enums import (
+    FormLeadKind,
     FormPurpose,
     FormStatus,
     FormSubmissionMatchStatus,
@@ -30,7 +32,7 @@ from app.db.enums import (
 from app.db.types import EncryptedDate
 
 if TYPE_CHECKING:
-    from app.db.models import Organization, Surrogate, User
+    from app.db.models import Donor, Organization, Surrogate, User
 
 
 class Form(Base):
@@ -41,6 +43,11 @@ class Form(Base):
         Index("idx_forms_org", "organization_id"),
         Index("idx_forms_org_status", "organization_id", "status"),
         Index("idx_forms_org_purpose_status", "organization_id", "purpose", "status"),
+        Index("idx_forms_org_lead_kind_status", "organization_id", "lead_kind", "status"),
+        CheckConstraint(
+            "lead_kind IN ('surrogate', 'egg_donor', 'sperm_donor')",
+            name="ck_forms_lead_kind",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -61,6 +68,11 @@ class Form(Base):
     purpose: Mapped[str] = mapped_column(
         String(40),
         server_default=text(f"'{FormPurpose.SURROGATE_APPLICATION.value}'"),
+        nullable=False,
+    )
+    lead_kind: Mapped[str] = mapped_column(
+        String(20),
+        server_default=text(f"'{FormLeadKind.SURROGATE.value}'"),
         nullable=False,
     )
 
@@ -168,6 +180,7 @@ class FormSubmission(Base):
         Index("idx_form_submissions_org", "organization_id"),
         Index("idx_form_submissions_form", "form_id"),
         Index("idx_form_submissions_surrogate", "surrogate_id"),
+        Index("idx_form_submissions_donor", "donor_id"),
         Index("idx_form_submissions_status", "status"),
         Index("idx_form_submissions_match_status", "match_status"),
         Index(
@@ -176,6 +189,21 @@ class FormSubmission(Base):
             "surrogate_id",
             unique=True,
             postgresql_where=text("surrogate_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_form_submission_donor_non_null",
+            "form_id",
+            "donor_id",
+            unique=True,
+            postgresql_where=text("donor_id IS NOT NULL"),
+        ),
+        CheckConstraint(
+            "lead_kind IN ('surrogate', 'egg_donor', 'sperm_donor')",
+            name="ck_form_submissions_lead_kind",
+        ),
+        CheckConstraint(
+            "surrogate_id IS NULL OR donor_id IS NULL",
+            name="ck_form_submissions_single_subject",
         ),
         Index(
             "uq_form_submission_intake_idempotency",
@@ -221,6 +249,9 @@ class FormSubmission(Base):
     surrogate_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=True
     )
+    donor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("donors.id", ondelete="SET NULL"), nullable=True
+    )
     intake_link_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("form_intake_links.id", ondelete="SET NULL"),
@@ -248,6 +279,11 @@ class FormSubmission(Base):
     source_mode: Mapped[str] = mapped_column(
         String(20),
         server_default=text("'shared'"),
+        nullable=False,
+    )
+    lead_kind: Mapped[str] = mapped_column(
+        String(20),
+        server_default=text(f"'{FormLeadKind.SURROGATE.value}'"),
         nullable=False,
     )
     match_status: Mapped[str] = mapped_column(
@@ -283,6 +319,7 @@ class FormSubmission(Base):
 
     form: Mapped[Form] = relationship()
     surrogate: Mapped[Surrogate | None] = relationship()
+    donor: Mapped[Donor | None] = relationship()
 
 
 class FormSubmissionDraft(Base):

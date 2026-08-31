@@ -106,6 +106,7 @@ def _prepare_chat_request(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Task not found",
             )
+        task_service.check_task_subject_access(db, task, session)
         if (
             task.created_by_user_id != session.user_id
             and task.assigned_to_user_id != session.user_id

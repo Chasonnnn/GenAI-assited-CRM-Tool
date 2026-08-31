@@ -113,6 +113,13 @@ async def process_google_tasks_sync(db, job) -> None:
     except ValueError as exc:
         raise ValueError("Invalid user_id in google_tasks_sync payload") from exc
 
+    google_tasks_sync_service.require_active_google_tasks_membership(
+        db,
+        org_id=job.organization_id,
+        user_id=user_id,
+        lock=True,
+    )
+
     changed_count = await google_tasks_sync_service.sync_google_tasks_for_user_async(
         db=db,
         user_id=user_id,
@@ -125,3 +132,33 @@ async def process_google_tasks_sync(db, job) -> None:
         job.organization_id,
         changed_count,
     )
+
+
+async def process_google_task_creation_reconcile(db, job) -> None:
+    """Recover or erase one donor task whose Google POST outcome was uncertain."""
+    from app.services import google_tasks_sync_service
+
+    await google_tasks_sync_service.reconcile_uncertain_google_donor_task_creation(db, job)
+    db.commit()
+
+
+async def process_google_task_remote_delete(db, job) -> None:
+    """Idempotently erase one tombstoned Google task."""
+    from app.services import google_tasks_cleanup_service, google_tasks_sync_service
+
+    target = google_tasks_cleanup_service.validate_cleanup_job_target(db, job)
+    concrete_task_list_id = await google_tasks_sync_service.delete_google_task_for_cleanup(
+        db,
+        user_id=target.user_id,
+        google_task_list_id=target.google_task_list_id,
+        google_task_id=target.google_task_id,
+    )
+    if concrete_task_list_id != target.google_task_list_id:
+        google_tasks_cleanup_service.persist_concrete_cleanup_task_list_identity(
+            db,
+            job,
+            target=target,
+            google_task_list_id=concrete_task_list_id,
+        )
+    google_tasks_cleanup_service.reactivate_creation_recovery_after_cleanup(db, job)
+    db.commit()

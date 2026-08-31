@@ -124,8 +124,11 @@ def receive_gcp_alert(
         )
         return {"status": "skipped", "reason": "org_id_invalid"}
 
+    websocket_failure_events = {"ws_send_failed", "ws_event_publish_failed"}
     alert_type = (
-        AlertType.NOTIFICATION_PUSH_FAILED if event == "ws_send_failed" else AlertType.API_ERROR
+        AlertType.NOTIFICATION_PUSH_FAILED
+        if event in websocket_failure_events
+        else AlertType.API_ERROR
     )
     severity = _map_severity(incident.severity or incident.state)
 

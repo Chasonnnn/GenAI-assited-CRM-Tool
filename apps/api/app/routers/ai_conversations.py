@@ -51,6 +51,7 @@ def get_conversation(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Task not found",
             )
+        task_service.check_task_subject_access(db, task, session)
         # Check if user owns or is assigned to the task
         if (
             task.created_by_user_id != session.user_id

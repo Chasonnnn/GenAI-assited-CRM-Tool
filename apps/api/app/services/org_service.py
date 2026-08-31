@@ -154,6 +154,7 @@ def seed_org_defaults(
     from app.services import queue_service, template_seeder
 
     seed_result = template_seeder.seed_all(db, org_id, user_id)
+    seed_donor_pipelines(db, org_id, user_id, commit=False)
     queue_service.get_or_create_default_queue(db, org_id)
     queue_service.get_or_create_surrogate_pool_queue(db, org_id)
     db.commit()
@@ -162,6 +163,29 @@ def seed_org_defaults(
         **seed_result,
         "queues_seeded": True,
     }
+
+
+def seed_donor_pipelines(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID | None = None,
+    *,
+    commit: bool = True,
+) -> None:
+    """Ensure both independent donor pipelines exist for an organization."""
+    from app.core.stage_definitions import DONOR_PIPELINE_ENTITY_TYPES
+    from app.services import pipeline_service
+
+    for entity_type in sorted(DONOR_PIPELINE_ENTITY_TYPES):
+        pipeline_service.get_or_create_default_pipeline(
+            db,
+            org_id,
+            user_id,
+            entity_type=entity_type,
+            commit=False,
+        )
+    if commit:
+        db.commit()
 
 
 def get_org_portal_base_url(org: Organization | None) -> str:

@@ -1,6 +1,6 @@
 """Tasks router - API endpoints for task management."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -36,17 +36,9 @@ router = APIRouter(
 )
 
 
-def _check_task_surrogate_access(task, session: UserSession, db: Session) -> None:
-    """Check surrogate access for a task linked to a surrogate."""
-    from app.core.surrogate_access import check_surrogate_access
-    from app.services import surrogate_service
-
-    if task.surrogate_id:
-        surrogate = surrogate_service.get_surrogate(db, session.org_id, task.surrogate_id)
-        if surrogate:
-            check_surrogate_access(
-                surrogate, session.role, session.user_id, db=db, org_id=session.org_id
-            )
+def _check_task_subject_access(task, session: UserSession, db: Session) -> None:
+    """Check record access for the task's subject."""
+    task_service.check_task_subject_access(db, task, session)
 
 
 @router.get("", response_model=TaskListResponse)
@@ -62,6 +54,8 @@ def list_tasks(
     owner_id: UUID | None = None,
     surrogate_id: UUID | None = None,
     intended_parent_id: UUID | None = None,
+    donor_id: UUID | None = None,
+    donor_type: Literal["egg", "sperm"] | None = None,
     pipeline_id: Annotated[UUID | None, "fastapi_param"] = Query(
         None, description="Filter tasks by pipeline UUID"
     ),
@@ -95,6 +89,8 @@ def list_tasks(
         owner_id=owner_id,
         surrogate_id=surrogate_id,
         intended_parent_id=intended_parent_id,
+        donor_id=donor_id,
+        donor_type=donor_type,
         pipeline_id=pipeline_id,
         is_completed=is_completed,
         task_type=task_type,
@@ -122,7 +118,25 @@ def create_task(
 ):
     """Create a new task (respects surrogate access control)."""
     from app.core.surrogate_access import check_surrogate_access
-    from app.services import ip_service, match_service, surrogate_service
+    from app.services import (
+        donor_service,
+        ip_service,
+        match_service,
+        permission_service,
+        surrogate_service,
+    )
+
+    if data.donor_id and (data.match_id or data.surrogate_id or data.intended_parent_id):
+        raise HTTPException(
+            status_code=400,
+            detail="donor_id cannot be combined with match_id, surrogate_id, or intended_parent_id",
+        )
+
+    if data.surrogate_id and data.intended_parent_id and not data.match_id:
+        raise HTTPException(
+            status_code=400,
+            detail="surrogate_id and intended_parent_id can be combined only through match_id",
+        )
 
     if data.match_id and (data.surrogate_id or data.intended_parent_id):
         raise HTTPException(
@@ -168,6 +182,19 @@ def create_task(
         if not intended_parent:
             raise HTTPException(status_code=400, detail="Intended parent not found")
 
+    if data.donor_id:
+        if not permission_service.check_permission(
+            db,
+            session.org_id,
+            session.user_id,
+            session.role.value,
+            POLICIES["donors"].default.value,
+        ):
+            raise HTTPException(status_code=403, detail="Missing permission: view_donors")
+        donor = donor_service.get_donor(db, session.org_id, data.donor_id)
+        if not donor:
+            raise HTTPException(status_code=400, detail="Donor not found")
+
     # Verify owner belongs to org if specified
     try:
         task_service.validate_task_owner(
@@ -180,13 +207,17 @@ def create_task(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    task = task_service.create_task(
-        db=db,
-        org_id=session.org_id,
-        user_id=session.user_id,
-        data=data,
-        emit_events=True,
-    )
+    try:
+        task = task_service.create_task(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            data=data,
+            emit_events=True,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     audit_service.log_event(
         db=db,
         org_id=session.org_id,
@@ -200,6 +231,7 @@ def create_task(
             "owner_id": str(task.owner_id),
             "surrogate_id": str(task.surrogate_id) if task.surrogate_id else None,
             "intended_parent_id": str(task.intended_parent_id) if task.intended_parent_id else None,
+            "donor_id": str(task.donor_id) if task.donor_id else None,
         },
         request=request,
     )
@@ -221,7 +253,7 @@ def get_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     # Access control: check case access if task is linked to a case
-    _check_task_surrogate_access(task, session, db)
+    _check_task_subject_access(task, session, db)
 
     from app.services import audit_service
 
@@ -236,6 +268,7 @@ def get_task(
             "view": "task_detail",
             "surrogate_id": str(task.surrogate_id) if task.surrogate_id else None,
             "intended_parent_id": str(task.intended_parent_id) if task.intended_parent_id else None,
+            "donor_id": str(task.donor_id) if task.donor_id else None,
         },
     )
     db.commit()
@@ -264,7 +297,12 @@ def update_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     # Access control: check case access if task is linked to a case
-    _check_task_surrogate_access(task, session, db)
+    _check_task_subject_access(task, session, db)
+
+    try:
+        task_service.validate_task_subject_update(task, data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     # Permission: creator, owner, or admin+
     if not is_owner_or_assignee_or_admin(
@@ -273,6 +311,61 @@ def update_task(
         raise HTTPException(status_code=403, detail="Not authorized to update this task")
 
     update_fields = data.model_dump(exclude_unset=True)
+    subject_fields = {"surrogate_id", "intended_parent_id", "donor_id"}
+    if subject_fields.intersection(update_fields):
+        from app.core.surrogate_access import check_surrogate_access
+        from app.services import (
+            donor_service,
+            ip_service,
+            permission_service,
+            surrogate_service,
+        )
+
+        next_surrogate_id = update_fields.get("surrogate_id", task.surrogate_id)
+        next_intended_parent_id = update_fields.get(
+            "intended_parent_id",
+            task.intended_parent_id,
+        )
+        next_donor_id = update_fields.get("donor_id", task.donor_id)
+
+        if next_surrogate_id:
+            surrogate = surrogate_service.get_surrogate(
+                db,
+                session.org_id,
+                next_surrogate_id,
+            )
+            if not surrogate:
+                raise HTTPException(status_code=400, detail="Surrogate not found")
+            check_surrogate_access(
+                surrogate,
+                session.role,
+                session.user_id,
+                db=db,
+                org_id=session.org_id,
+            )
+
+        if next_intended_parent_id:
+            intended_parent = ip_service.get_intended_parent(
+                db,
+                next_intended_parent_id,
+                session.org_id,
+            )
+            if not intended_parent:
+                raise HTTPException(status_code=400, detail="Intended parent not found")
+
+        if next_donor_id:
+            if not permission_service.check_permission(
+                db,
+                session.org_id,
+                session.user_id,
+                session.role.value,
+                POLICIES["donors"].default.value,
+            ):
+                raise HTTPException(status_code=403, detail="Missing permission: view_donors")
+            donor = donor_service.get_donor(db, session.org_id, next_donor_id)
+            if not donor:
+                raise HTTPException(status_code=400, detail="Donor not found")
+
     if "owner_type" in update_fields or "owner_id" in update_fields:
         owner_type = update_fields.get("owner_type", task.owner_type)
         owner_id = update_fields.get("owner_id", task.owner_id)
@@ -281,7 +374,10 @@ def update_task(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-    task = task_service.update_task(db, task, data, actor_user_id=session.user_id)
+    try:
+        task = task_service.update_task(db, task, data, actor_user_id=session.user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     updated_fields = data.model_dump(exclude_unset=True)
     audit_service.log_event(
         db=db,
@@ -321,7 +417,7 @@ def complete_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     # Access control: check case access if task is linked to a case
-    _check_task_surrogate_access(task, session, db)
+    _check_task_subject_access(task, session, db)
 
     if not is_owner_or_assignee_or_admin(
         session, task.created_by_user_id, task.owner_type, task.owner_id
@@ -369,7 +465,7 @@ def uncomplete_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     # Access control: check case access if task is linked to a case
-    _check_task_surrogate_access(task, session, db)
+    _check_task_subject_access(task, session, db)
 
     if not is_owner_or_assignee_or_admin(
         session, task.created_by_user_id, task.owner_type, task.owner_id
@@ -382,7 +478,12 @@ def uncomplete_task(
             detail="Workflow approvals must be resolved via /tasks/{id}/resolve",
         )
 
-    task = task_service.uncomplete_task(db, task, emit_events=True)
+    task = task_service.uncomplete_task(
+        db,
+        task,
+        user_id=session.user_id,
+        emit_events=True,
+    )
     audit_service.log_event(
         db=db,
         org_id=session.org_id,
@@ -457,7 +558,7 @@ def delete_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     # Access control: check case access if task is linked to a case
-    _check_task_surrogate_access(task, session, db)
+    _check_task_subject_access(task, session, db)
 
     # Permission: creator or admin+ only (not assignee)
     if not is_owner_or_can_manage(session, task.created_by_user_id):
@@ -486,13 +587,19 @@ def delete_task(
             "task_type": task.task_type,
             "surrogate_id": str(task.surrogate_id) if task.surrogate_id else None,
             "intended_parent_id": str(task.intended_parent_id) if task.intended_parent_id else None,
+            "donor_id": str(task.donor_id) if task.donor_id else None,
             "owner_id": str(task.owner_id),
             "owner_type": task.owner_type,
         },
         request=request,
     )
 
-    task_service.delete_task(db, task, emit_events=True)
+    task_service.delete_task(
+        db,
+        task,
+        actor_user_id=session.user_id,
+        emit_events=True,
+    )
     db.commit()
     return None
 
@@ -521,6 +628,9 @@ def resolve_workflow_approval(
     On approval, the workflow continues and executes the pending action.
     On denial, the workflow is canceled.
     """
+    approval_task = task_service.get_task(db, task_id, session.org_id)
+    if approval_task:
+        _check_task_subject_access(approval_task, session, db)
     try:
         task = task_service.resolve_workflow_approval(
             db=db,

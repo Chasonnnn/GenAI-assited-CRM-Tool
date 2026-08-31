@@ -9,9 +9,12 @@ from app.db.enums import OwnerType, WorkflowEventSource, WorkflowTriggerType
 from app.db.models import (
     Appointment,
     Attachment,
+    Donor,
     EntityNote,
+    FormSubmission,
     IntakeLead,
     Match,
+    PipelineStage,
     Surrogate,
     Task,
 )
@@ -23,6 +26,12 @@ def _get_entity_owner_id(surrogate: Surrogate) -> UUID | None:
     """Get owner_id if surrogate is owned by a user (not queue/unassigned)."""
     if surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id:
         return surrogate.owner_id
+    return None
+
+
+def _get_donor_owner_id(donor: Donor) -> UUID | None:
+    if donor.owner_type == OwnerType.USER.value and donor.owner_id:
+        return donor.owner_id
     return None
 
 
@@ -57,6 +66,130 @@ def _get_owner_id_for_surrogate_id(
     if not surrogate:
         return None
     return _get_entity_owner_id(surrogate)
+
+
+def _get_donor_by_id(db: Session, org_id: UUID, donor_id: UUID | None) -> Donor | None:
+    if not donor_id:
+        return None
+    return db.query(Donor).filter(Donor.id == donor_id, Donor.organization_id == org_id).first()
+
+
+def _task_subject_context(db: Session, task: Task) -> tuple[str | None, UUID | None, UUID | None]:
+    donor = _get_donor_by_id(db, task.organization_id, getattr(task, "donor_id", None))
+    if donor:
+        return donor.pipeline_entity_type, donor.id, _get_donor_owner_id(donor)
+    surrogate_id = getattr(task, "surrogate_id", None)
+    if surrogate_id:
+        return (
+            "surrogate",
+            surrogate_id,
+            _get_owner_id_for_surrogate_id(db, task.organization_id, surrogate_id),
+        )
+    return None, None, None
+
+
+# =============================================================================
+# Donor Triggers (called from donor_service.py)
+# =============================================================================
+
+
+def trigger_donor_created(db: Session, donor: Donor) -> None:
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.DONOR_CREATED,
+        entity_type="donor",
+        entity_id=donor.id,
+        subject_type=donor.pipeline_entity_type,
+        subject_id=donor.id,
+        event_data={
+            "donor_id": str(donor.id),
+            "donor_number": donor.donor_number,
+            "donor_type": donor.donor_type,
+            "stage_id": str(donor.stage_id),
+            "stage_key": donor.stage_key,
+            "stage_slug": donor.stage_slug,
+            "source": donor.source,
+        },
+        org_id=donor.organization_id,
+        source=WorkflowEventSource.USER,
+        entity_owner_id=_get_donor_owner_id(donor),
+    )
+
+
+def trigger_donor_stage_changed(
+    db: Session,
+    donor: Donor,
+    *,
+    old_stage: PipelineStage,
+    new_stage: PipelineStage,
+) -> None:
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.DONOR_STAGE_CHANGED,
+        entity_type="donor",
+        entity_id=donor.id,
+        subject_type=donor.pipeline_entity_type,
+        subject_id=donor.id,
+        event_data={
+            "donor_id": str(donor.id),
+            "old_stage_id": str(old_stage.id),
+            "new_stage_id": str(new_stage.id),
+            "old_stage_key": old_stage.stage_key,
+            "new_stage_key": new_stage.stage_key,
+            "old_status": old_stage.slug,
+            "new_status": new_stage.slug,
+        },
+        org_id=donor.organization_id,
+        source=WorkflowEventSource.USER,
+        entity_owner_id=_get_donor_owner_id(donor),
+    )
+
+
+def trigger_donor_assigned(
+    db: Session,
+    donor: Donor,
+    *,
+    old_owner_type: str | None,
+    old_owner_id: UUID | None,
+) -> None:
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.DONOR_ASSIGNED,
+        entity_type="donor",
+        entity_id=donor.id,
+        subject_type=donor.pipeline_entity_type,
+        subject_id=donor.id,
+        event_data={
+            "donor_id": str(donor.id),
+            "old_owner_type": old_owner_type,
+            "old_owner_id": str(old_owner_id) if old_owner_id else None,
+            "new_owner_type": donor.owner_type,
+            "new_owner_id": str(donor.owner_id) if donor.owner_id else None,
+        },
+        org_id=donor.organization_id,
+        source=WorkflowEventSource.USER,
+        entity_owner_id=_get_donor_owner_id(donor),
+    )
+
+
+def trigger_donor_updated(db: Session, donor: Donor, changed_fields: list[str]) -> None:
+    if not changed_fields:
+        return
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.DONOR_UPDATED,
+        entity_type="donor",
+        entity_id=donor.id,
+        subject_type=donor.pipeline_entity_type,
+        subject_id=donor.id,
+        event_data={
+            "donor_id": str(donor.id),
+            "changed_fields": changed_fields,
+        },
+        org_id=donor.organization_id,
+        source=WorkflowEventSource.USER,
+        entity_owner_id=_get_donor_owner_id(donor),
+    )
 
 
 # =============================================================================
@@ -235,6 +368,14 @@ def trigger_form_submitted(
     entity_owner_id: UUID | None = None,
 ) -> None:
     """Trigger workflows when an applicant submits a form."""
+    submission = (
+        db.query(FormSubmission)
+        .filter(
+            FormSubmission.id == submission_id,
+            FormSubmission.organization_id == org_id,
+        )
+        .first()
+    )
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.FORM_SUBMITTED,
@@ -245,6 +386,7 @@ def trigger_form_submitted(
             "form_id": str(form_id),
             "submission_id": str(submission_id),
             "source_mode": source_mode,
+            "lead_kind": submission.lead_kind if submission else None,
             "submitted_at": submitted_at.isoformat() if submitted_at else None,
         },
         org_id=org_id,
@@ -272,6 +414,7 @@ def trigger_intake_lead_created(
             "intake_link_id": str(lead.intake_link_id) if lead.intake_link_id else None,
             "submission_id": str(submission_id) if submission_id else None,
             "status": lead.status,
+            "lead_type": lead.lead_type,
         },
         org_id=lead.organization_id,
         source=WorkflowEventSource.SYSTEM,
@@ -296,7 +439,10 @@ def trigger_task_due(db: Session, task: Task) -> None:
     if not org_id:
         return
 
-    entity_owner_id = _get_entity_owner_id(surrogate) if surrogate else None
+    subject_type, subject_id, entity_owner_id = _task_subject_context(db, task)
+    if subject_type is None or subject_id is None:
+        return
+    donor_subject = subject_type in {"egg_donor", "sperm_donor"}
 
     engine.trigger(
         db=db,
@@ -305,13 +451,16 @@ def trigger_task_due(db: Session, task: Task) -> None:
         entity_id=task.id,
         event_data={
             "task_id": str(task.id),
-            "task_title": task.title,
+            "task_title": None if donor_subject else task.title,
             "due_date": str(task.due_date) if task.due_date else None,
             "surrogate_id": str(task.surrogate_id) if task.surrogate_id else None,
+            "donor_id": str(task.donor_id) if task.donor_id else None,
         },
         org_id=org_id,
         source=WorkflowEventSource.SYSTEM,
         entity_owner_id=entity_owner_id,
+        subject_type=subject_type,
+        subject_id=subject_id,
     )
 
 
@@ -327,7 +476,10 @@ def trigger_task_overdue(db: Session, task: Task) -> None:
     if not org_id:
         return
 
-    entity_owner_id = _get_entity_owner_id(surrogate) if surrogate else None
+    subject_type, subject_id, entity_owner_id = _task_subject_context(db, task)
+    if subject_type is None or subject_id is None:
+        return
+    donor_subject = subject_type in {"egg_donor", "sperm_donor"}
 
     engine.trigger(
         db=db,
@@ -336,13 +488,16 @@ def trigger_task_overdue(db: Session, task: Task) -> None:
         entity_id=task.id,
         event_data={
             "task_id": str(task.id),
-            "task_title": task.title,
+            "task_title": None if donor_subject else task.title,
             "due_date": str(task.due_date) if task.due_date else None,
             "surrogate_id": str(task.surrogate_id) if task.surrogate_id else None,
+            "donor_id": str(task.donor_id) if task.donor_id else None,
         },
         org_id=org_id,
         source=WorkflowEventSource.SYSTEM,
         entity_owner_id=entity_owner_id,
+        subject_type=subject_type,
+        subject_id=subject_id,
     )
 
 
@@ -430,20 +585,35 @@ def trigger_scheduled_workflows(
         # Simple cron matching (for daily/weekly schedules)
         # Full cron parsing would require croniter library
         if _should_run_cron(cron, now, tz):
-            for surrogate in _iter_surrogates(db, org_id):
-                if not _workflow_applies_to_surrogate(workflow, surrogate):
-                    continue
-                engine.execute_workflow(
-                    db=db,
-                    workflow=workflow,
-                    entity_type="surrogate",
-                    entity_id=surrogate.id,
-                    event_data={
-                        "schedule_time": now.isoformat(),
-                        "cron": cron,
-                    },
-                    source=WorkflowEventSource.SYSTEM,
-                )
+            if workflow.subject_type in {"egg_donor", "sperm_donor"}:
+                for donor in _iter_donors(db, org_id, workflow.subject_type):
+                    if not _workflow_applies_to_owner(workflow, _get_donor_owner_id(donor)):
+                        continue
+                    engine.execute_workflow(
+                        db=db,
+                        workflow=workflow,
+                        entity_type="donor",
+                        entity_id=donor.id,
+                        subject_type=workflow.subject_type,
+                        subject_id=donor.id,
+                        event_data={"schedule_time": now.isoformat(), "cron": cron},
+                        source=WorkflowEventSource.SYSTEM,
+                    )
+            elif workflow.subject_type == "surrogate":
+                for surrogate in _iter_surrogates(db, org_id):
+                    if not _workflow_applies_to_surrogate(workflow, surrogate):
+                        continue
+                    engine.execute_workflow(
+                        db=db,
+                        workflow=workflow,
+                        entity_type="surrogate",
+                        entity_id=surrogate.id,
+                        event_data={
+                            "schedule_time": now.isoformat(),
+                            "cron": cron,
+                        },
+                        source=WorkflowEventSource.SYSTEM,
+                    )
 
 
 def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
@@ -468,24 +638,40 @@ def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
         days = workflow.trigger_config.get("days", 7)
         threshold = now - timedelta(days=days)
 
-        # Find surrogates with no activity since threshold
-        # Using updated_at as proxy for activity
-        for surrogate in _iter_surrogates(db, org_id, updated_before=threshold):
-            if not _workflow_applies_to_surrogate(workflow, surrogate):
-                continue
-            engine.execute_workflow(
-                db=db,
-                workflow=workflow,
-                entity_type="surrogate",
-                entity_id=surrogate.id,
-                event_data={
-                    "days_inactive": days,
-                    "last_activity": surrogate.updated_at.isoformat()
-                    if surrogate.updated_at
-                    else None,
-                },
-                source=WorkflowEventSource.SYSTEM,
-            )
+        if workflow.subject_type in {"egg_donor", "sperm_donor"}:
+            for donor in _iter_donors(db, org_id, workflow.subject_type, updated_before=threshold):
+                if not _workflow_applies_to_owner(workflow, _get_donor_owner_id(donor)):
+                    continue
+                engine.execute_workflow(
+                    db=db,
+                    workflow=workflow,
+                    entity_type="donor",
+                    entity_id=donor.id,
+                    subject_type=workflow.subject_type,
+                    subject_id=donor.id,
+                    event_data={
+                        "days_inactive": days,
+                        "last_activity": donor.updated_at.isoformat() if donor.updated_at else None,
+                    },
+                    source=WorkflowEventSource.SYSTEM,
+                )
+        elif workflow.subject_type == "surrogate":
+            for surrogate in _iter_surrogates(db, org_id, updated_before=threshold):
+                if not _workflow_applies_to_surrogate(workflow, surrogate):
+                    continue
+                engine.execute_workflow(
+                    db=db,
+                    workflow=workflow,
+                    entity_type="surrogate",
+                    entity_id=surrogate.id,
+                    event_data={
+                        "days_inactive": days,
+                        "last_activity": surrogate.updated_at.isoformat()
+                        if surrogate.updated_at
+                        else None,
+                    },
+                    source=WorkflowEventSource.SYSTEM,
+                )
 
 
 def _iter_surrogates(
@@ -508,6 +694,35 @@ def _iter_surrogates(
         if last_id:
             query = query.filter(Surrogate.id > last_id)
         batch = query.order_by(Surrogate.id).limit(batch_size).all()
+        if not batch:
+            break
+        yield from batch
+        last_id = batch[-1].id
+
+
+def _iter_donors(
+    db: Session,
+    org_id: UUID,
+    subject_type: str,
+    updated_before: datetime | None = None,
+    batch_size: int = 500,
+):
+    """Iterate active donors for one exact subtype without cross-pipeline fallback."""
+    donor_type = subject_type.removesuffix("_donor")
+    if donor_type not in {"egg", "sperm"}:
+        return
+    last_id = None
+    while True:
+        query = db.query(Donor).filter(
+            Donor.organization_id == org_id,
+            Donor.donor_type == donor_type,
+            Donor.is_archived.is_(False),
+        )
+        if updated_before is not None:
+            query = query.filter(Donor.updated_at < updated_before)
+        if last_id:
+            query = query.filter(Donor.id > last_id)
+        batch = query.order_by(Donor.id).limit(batch_size).all()
         if not batch:
             break
         yield from batch
@@ -551,18 +766,14 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
             window_start,
             window_end,
         ):
-            surrogate = task.surrogate if hasattr(task, "surrogate") else None
-            entity_owner_id = (
-                _get_entity_owner_id(surrogate)
-                if surrogate
-                else _get_owner_id_for_surrogate_id(
-                    db,
-                    org_id,
-                    getattr(task, "surrogate_id", None),
-                )
-            )
+            subject_type, subject_id, entity_owner_id = _task_subject_context(db, task)
+            if subject_type is None and workflow.subject_type == "surrogate":
+                subject_type, subject_id = "surrogate", task.id
+            if subject_type != workflow.subject_type or subject_id is None:
+                continue
             if not _workflow_applies_to_owner(workflow, entity_owner_id):
                 continue
+            donor_subject = subject_type in {"egg_donor", "sperm_donor"}
             engine.execute_workflow(
                 db=db,
                 workflow=workflow,
@@ -570,11 +781,14 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
                 entity_id=task.id,
                 event_data={
                     "task_id": str(task.id),
-                    "task_title": task.title,
+                    "task_title": None if donor_subject else task.title,
                     "due_date": str(task.due_date) if task.due_date else None,
                     "surrogate_id": str(task.surrogate_id) if task.surrogate_id else None,
+                    "donor_id": (str(task.donor_id) if getattr(task, "donor_id", None) else None),
                 },
                 source=WorkflowEventSource.SYSTEM,
+                subject_type=subject_type,
+                subject_id=subject_id,
             )
 
 
@@ -686,7 +900,10 @@ def trigger_document_uploaded(db: Session, attachment: Attachment) -> None:
     """
     org_id = attachment.organization_id
     surrogate_id = None
+    donor = None
     entity_owner_id = None
+    subject_type = None
+    subject_id = None
 
     if attachment.surrogate_id:
         surrogate = (
@@ -701,9 +918,28 @@ def trigger_document_uploaded(db: Session, attachment: Attachment) -> None:
             return
         surrogate_id = surrogate.id
         entity_owner_id = _get_entity_owner_id(surrogate)
+        subject_type = "surrogate"
+        subject_id = surrogate.id
+
+    if not attachment.surrogate_id:
+        donor_id = getattr(attachment, "donor_id", None)
+        donor = _get_donor_by_id(db, org_id, donor_id)
+        if donor is None:
+            donor = (
+                db.query(Donor)
+                .filter(
+                    Donor.organization_id == org_id,
+                    Donor.profile_photo_attachment_id == attachment.id,
+                )
+                .first()
+            )
+        if donor:
+            subject_type = donor.pipeline_entity_type
+            subject_id = donor.id
+            entity_owner_id = _get_donor_owner_id(donor)
 
     # Fallback: check intended_parent_id for IP attachments
-    if not attachment.surrogate_id and attachment.intended_parent_id:
+    if not attachment.surrogate_id and not donor and attachment.intended_parent_id:
         from app.db.models import IntendedParent
 
         ip = (
@@ -727,9 +963,10 @@ def trigger_document_uploaded(db: Session, attachment: Attachment) -> None:
         entity_id=attachment.id,
         event_data={
             "attachment_id": str(attachment.id),
-            "filename": attachment.filename,
+            "filename": None if donor else attachment.filename,
             "content_type": attachment.content_type,
             "surrogate_id": str(surrogate_id) if surrogate_id else None,
+            "donor_id": str(donor.id) if donor else None,
             "uploaded_by": str(attachment.uploaded_by_user_id)
             if attachment.uploaded_by_user_id
             else None,
@@ -737,6 +974,8 @@ def trigger_document_uploaded(db: Session, attachment: Attachment) -> None:
         org_id=org_id,
         source=WorkflowEventSource.USER,
         entity_owner_id=entity_owner_id,
+        subject_type=subject_type,
+        subject_id=subject_id,
     )
 
 
@@ -754,7 +993,18 @@ def trigger_note_added(db: Session, note: EntityNote) -> None:
     should have conditions to avoid excessive execution.
     """
     entity_owner_id = None
-    if note.entity_type == "surrogate":
+    subject_type = None
+    subject_id = None
+    if note.entity_type == "donor":
+        donor = _get_donor_by_id(db, note.organization_id, note.entity_id)
+        if not donor:
+            return
+        subject_type = donor.pipeline_entity_type
+        subject_id = donor.id
+        entity_owner_id = _get_donor_owner_id(donor)
+    elif note.entity_type == "surrogate":
+        subject_type = "surrogate"
+        subject_id = note.entity_id
         entity_owner_id = _get_owner_id_for_surrogate_id(db, note.organization_id, note.entity_id)
     elif note.entity_type == "match":
         match = (
@@ -784,6 +1034,8 @@ def trigger_note_added(db: Session, note: EntityNote) -> None:
         org_id=note.organization_id,
         source=WorkflowEventSource.USER,
         entity_owner_id=entity_owner_id,
+        subject_type=subject_type,
+        subject_id=subject_id,
     )
 
 

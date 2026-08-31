@@ -4,7 +4,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import * as analyticsApi from '../api/analytics';
-import type { DateRangeParams, TrendParams, StatusParams, PerformanceByUserParams } from '../api/analytics';
+import type { DateRangeParams, TrendParams, StatusParams, PerformanceByUserParams, DonorAnalyticsParams } from '../api/analytics';
 
 // Query keys
 const analyticsKeys = {
@@ -14,6 +14,10 @@ const analyticsKeys = {
     byAssignee: () => [...analyticsKeys.all, 'by-assignee'] as const,
     trend: (params?: TrendParams) => [...analyticsKeys.all, 'trend', params] as const,
     metaPerformance: (params?: DateRangeParams) => [...analyticsKeys.all, 'meta', params] as const,
+    donorSummary: (params: DonorAnalyticsParams) => [...analyticsKeys.all, 'donors', 'summary', params] as const,
+    donorsByStatus: (surface: 'reports' | 'dashboard', params: DonorAnalyticsParams) =>
+        [...analyticsKeys.all, 'donors', surface, 'by-status', params] as const,
+    donorsTrend: (params: DonorAnalyticsParams) => [...analyticsKeys.all, 'donors', 'trend', params] as const,
 };
 
 /**
@@ -61,6 +65,47 @@ export function useSurrogatesTrend(params: TrendParams = {}) {
         queryFn: () => analyticsApi.getSurrogatesTrend(params),
         staleTime: 60 * 1000,
         refetchInterval: 60 * 1000, // Auto-refresh every 60 seconds
+    });
+}
+
+export function useDonorAnalyticsSummary(
+    params: DonorAnalyticsParams,
+    options: { enabled?: boolean } = {},
+) {
+    return useQuery({
+        queryKey: analyticsKeys.donorSummary(params),
+        queryFn: () => analyticsApi.getDonorAnalyticsSummary(params),
+        enabled: options.enabled ?? true,
+        staleTime: 60 * 1000,
+    });
+}
+
+export function useDonorsByStatus(
+    params: DonorAnalyticsParams,
+    options: { enabled?: boolean; surface?: 'reports' | 'dashboard' } = {},
+) {
+    const surface = options.surface ?? 'reports';
+    return useQuery({
+        queryKey: analyticsKeys.donorsByStatus(surface, params),
+        queryFn: () => surface === 'dashboard'
+            ? analyticsApi.getDashboardDonorsByStatus(params)
+            : analyticsApi.getDonorsByStatus(params),
+        enabled: options.enabled ?? true,
+        staleTime: 60 * 1000,
+        refetchInterval: 60 * 1000,
+    });
+}
+
+export function useDonorsTrend(
+    params: DonorAnalyticsParams,
+    options: { enabled?: boolean } = {},
+) {
+    return useQuery({
+        queryKey: analyticsKeys.donorsTrend(params),
+        queryFn: () => analyticsApi.getDonorsTrend(params),
+        enabled: options.enabled ?? true,
+        staleTime: 60 * 1000,
+        refetchInterval: 60 * 1000,
     });
 }
 

@@ -13,7 +13,7 @@ import {
     CommandItem,
     CommandList,
 } from "@/components/ui/command"
-import { FileText, Paperclip, Users, Loader2 } from "lucide-react"
+import { CircleUserRound, FileText, Paperclip, Users, Loader2 } from "lucide-react"
 import {
     createEmptySearchResponse,
     globalSearch,
@@ -34,18 +34,31 @@ const ENTITY_CONFIG = {
         icon: FileText,
         label: "Note",
         getUrl: (result: SearchResult) =>
-            result.surrogate_id ? `/surrogates/${result.surrogate_id}` : "#",
+            result.donor_id
+                ? `/donors/${result.donor_id}`
+                : result.surrogate_id
+                    ? `/surrogates/${result.surrogate_id}`
+                    : "#",
     },
     attachment: {
         icon: Paperclip,
         label: "File",
         getUrl: (result: SearchResult) =>
-            result.surrogate_id ? `/surrogates/${result.surrogate_id}` : "#",
+            result.donor_id
+                ? `/donors/${result.donor_id}`
+                : result.surrogate_id
+                    ? `/surrogates/${result.surrogate_id}`
+                    : "#",
     },
     intended_parent: {
         icon: Users,
         label: "Intended Parent",
         getUrl: (result: SearchResult) => `/intended-parents/${result.entity_id}`,
+    },
+    donor: {
+        icon: CircleUserRound,
+        label: "Donor",
+        getUrl: (result: SearchResult) => `/donors/${result.entity_id}`,
     },
 }
 
@@ -93,11 +106,11 @@ function SearchCommandDialogContent({ open, onOpenChange }: SearchCommandDialogP
             open={open}
             onOpenChange={onOpenChange}
             title="Search"
-            description="Search across surrogates, notes, files, and intended parents"
+            description="Search across surrogates, intended parents, donors, notes, and files"
         >
             <Command shouldFilter={false}>
             <CommandInput
-                placeholder="Search surrogates, intended parents, notes, files"
+                placeholder="Search surrogates, intended parents, donors, notes, files"
                 value={query}
                 onValueChange={setQuery}
             />

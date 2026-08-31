@@ -54,8 +54,8 @@ def _schema_or_none(schema_json: dict | None) -> FormSchema | None:
         return None
 
 
-def _public_schema_for_form(form) -> FormSchema | None:
-    schema = _schema_or_none(form.published_schema_json)
+def _public_schema_for_version(form, version) -> FormSchema | None:
+    schema = _schema_or_none(version.form_schema_snapshot_json)
     if not schema:
         return None
 
@@ -206,13 +206,19 @@ def get_shared_public_form(
     if not form or form.status != FormStatus.PUBLISHED.value:
         raise HTTPException(status_code=404, detail="Form not found")
 
-    schema = _public_schema_for_form(form)
+    version = form_intake_service.ensure_link_published_version(
+        db=db,
+        form=form,
+        link=intake_link,
+    )
+    schema = _public_schema_for_version(form, version)
     if not schema:
         raise HTTPException(status_code=404, detail="Form not found")
 
     return FormIntakePublicRead(
         form_id=form.id,
         intake_link_id=intake_link.id,
+        published_version_id=version.id,
         name=form.name,
         description=form.description,
         form_schema=schema,
@@ -254,7 +260,7 @@ def get_embed_public_form(
         form=form,
         link=intake_link,
     )
-    schema = _public_schema_for_form(form)
+    schema = _public_schema_for_version(form, version)
     if not schema:
         raise HTTPException(status_code=404, detail="Form not found")
 
@@ -368,6 +374,7 @@ def submit_embed_public_form(
         status=submission.status,
         outcome=outcome,
         surrogate_id=submission.surrogate_id,
+        donor_id=submission.donor_id,
         intake_lead_id=submission.intake_lead_id,
     )
 
@@ -553,6 +560,7 @@ def submit_shared_public_form(
     answers: Annotated[str, "fastapi_param"] = Form(),
     files: Annotated[list[UploadFile] | None, "fastapi_param"] = File(default=None),
     file_field_keys: Annotated[str | None, "fastapi_param"] = Form(default=None),
+    published_version_id: Annotated[UUID | None, "fastapi_param"] = Form(default=None),
     idempotency_key: Annotated[str | None, "fastapi_param"] = Form(default=None),
     sms_operational: Annotated[bool, "fastapi_param"] = Form(default=False),
     sms_promotional: Annotated[bool, "fastapi_param"] = Form(default=False),
@@ -614,6 +622,7 @@ def submit_shared_public_form(
             answers=answers_data,
             files=files or [],
             file_field_keys=parsed_keys,
+            published_version_id=published_version_id,
             source_metadata=source_metadata,
             challenge_token=challenge_token,
             idempotency_key=resolved_idempotency_key,
@@ -621,6 +630,8 @@ def submit_shared_public_form(
             sms_promotional=sms_promotional,
         )
     except form_intake_service.DuplicateApplicantSubmissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except LookupError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -630,5 +641,6 @@ def submit_shared_public_form(
         status=submission.status,
         outcome=outcome,
         surrogate_id=submission.surrogate_id,
+        donor_id=submission.donor_id,
         intake_lead_id=submission.intake_lead_id,
     )

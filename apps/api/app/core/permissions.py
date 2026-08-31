@@ -28,6 +28,7 @@ class PermissionCategory(str, Enum):
     NAVIGATION = "Navigation"
     SURROGATES = "Surrogates"
     INTENDED_PARENTS = "Intended Parents"
+    DONORS = "Donors"
     TICKETS = "Tickets"
     TASKS = "Tasks"
     APPOINTMENTS = "Appointments"
@@ -55,6 +56,10 @@ class PermissionKey(str, Enum):
 
     INTENDED_PARENTS_VIEW = "view_intended_parents"
     INTENDED_PARENTS_EDIT = "edit_intended_parents"
+    DONORS_VIEW = "view_donors"
+    DONORS_EDIT = "edit_donors"
+    DONORS_ARCHIVE = "archive_donors"
+    DONORS_CHANGE_STATUS = "change_donor_status"
     MATCHES_PROPOSE = "propose_matches"
     MATCHES_VIEW = "view_matches"
 
@@ -187,6 +192,31 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
         "Propose Matches",
         "Create match proposals between surrogates and IPs",
         PermissionCategory.INTENDED_PARENTS,
+    ),
+    # Donors
+    "view_donors": PermissionDef(
+        "view_donors",
+        "View Donors",
+        "Access egg and sperm donor records",
+        PermissionCategory.DONORS,
+    ),
+    "edit_donors": PermissionDef(
+        "edit_donors",
+        "Edit Donors",
+        "Create and modify donor records",
+        PermissionCategory.DONORS,
+    ),
+    "archive_donors": PermissionDef(
+        "archive_donors",
+        "Archive Donors",
+        "Archive donor records",
+        PermissionCategory.DONORS,
+    ),
+    "change_donor_status": PermissionDef(
+        "change_donor_status",
+        "Change Donor Status",
+        "Move donors through their subtype pipeline",
+        PermissionCategory.DONORS,
     ),
     "view_matches": PermissionDef(
         "view_matches",
@@ -444,6 +474,9 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "view_surrogate_notes",
         "edit_surrogate_notes",
         "import_surrogates",
+        "view_donors",
+        "edit_donors",
+        "change_donor_status",
         "view_tasks",
         "create_tasks",
         "edit_tasks",
@@ -467,6 +500,10 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "import_surrogates",
         "view_intended_parents",
         "edit_intended_parents",
+        "view_donors",
+        "edit_donors",
+        "archive_donors",
+        "change_donor_status",
         "propose_matches",
         "view_matches",
         "view_tasks",
@@ -496,6 +533,10 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "approve_status_change_requests",
         "view_intended_parents",
         "edit_intended_parents",
+        "view_donors",
+        "edit_donors",
+        "archive_donors",
+        "change_donor_status",
         "propose_matches",
         "view_matches",
         "view_tasks",
@@ -555,6 +596,12 @@ PERMISSION_BUNDLES: dict[str, set[str]] = {
         "edit_intended_parents",
         "view_matches",
         "propose_matches",
+    },
+    "donors_manage": {
+        "view_donors",
+        "edit_donors",
+        "archive_donors",
+        "change_donor_status",
     },
     "email_templates_manage": {
         "view_email_templates",

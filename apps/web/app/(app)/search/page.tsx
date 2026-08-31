@@ -15,6 +15,7 @@ import {
     Loader2,
     AlertCircle,
     ArrowRight,
+    CircleUserRound,
 } from "lucide-react"
 import {
     createEmptySearchResponse,
@@ -37,20 +38,34 @@ const ENTITY_CONFIG = {
         label: "Note",
         color: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
         getUrl: (result: SearchResult) =>
-            result.surrogate_id ? `/surrogates/${result.surrogate_id}` : "#",
+            result.donor_id
+                ? `/donors/${result.donor_id}`
+                : result.surrogate_id
+                    ? `/surrogates/${result.surrogate_id}`
+                    : "#",
     },
     attachment: {
         icon: Paperclip,
         label: "File",
         color: "bg-green-500/10 text-green-600 dark:text-green-400",
         getUrl: (result: SearchResult) =>
-            result.surrogate_id ? `/surrogates/${result.surrogate_id}` : "#",
+            result.donor_id
+                ? `/donors/${result.donor_id}`
+                : result.surrogate_id
+                    ? `/surrogates/${result.surrogate_id}`
+                    : "#",
     },
     intended_parent: {
         icon: Users,
         label: "Intended Parent",
         color: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
         getUrl: (result: SearchResult) => `/intended-parents/${result.entity_id}`,
+    },
+    donor: {
+        icon: CircleUserRound,
+        label: "Donor",
+        color: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
+        getUrl: (result: SearchResult) => `/donors/${result.entity_id}`,
     },
 }
 
@@ -88,7 +103,7 @@ export default function SearchPage() {
             <div className="relative max-w-2xl">
                 <Search className="absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                    placeholder="Search surrogates, intended parents, notes, files"
+                    placeholder="Search surrogates, intended parents, donors, notes, files"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={handleKeyDown}
@@ -113,7 +128,7 @@ export default function SearchPage() {
                         <CardTitle className="text-sm font-medium">Search Tips</CardTitle>
                     </CardHeader>
                     <CardContent className="text-sm text-muted-foreground space-y-2">
-                        <p>• Search by name, email, phone, or surrogate/intended parent number</p>
+                        <p>• Search by name, email, phone, or record number</p>
                         <p>• Use quotes for exact phrases: &quot;contract signed&quot;</p>
                         <p>• Results are ranked by relevance</p>
                     </CardContent>

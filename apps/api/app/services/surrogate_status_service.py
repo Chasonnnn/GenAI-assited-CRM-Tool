@@ -3,7 +3,7 @@
 import calendar
 import logging
 import secrets
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import TypedDict
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -33,6 +33,7 @@ from app.db.models import (
     Task,
     User,
 )
+from app.utils.datetime_parsing import normalize_effective_at
 
 logger = logging.getLogger(__name__)
 
@@ -55,44 +56,6 @@ def _get_org_timezone(db: Session, org_id: UUID) -> str:
         select(Organization.timezone).where(Organization.id == org_id)
     ).scalar_one_or_none()
     return result or "America/Los_Angeles"
-
-
-def _normalize_effective_at(
-    effective_at: datetime | None,
-    org_timezone_str: str,
-) -> datetime:
-    """
-    Normalize effective_at to UTC datetime.
-
-    Rules:
-    - None: return now (UTC)
-    - Today with time 00:00:00: return now (UTC) - effective now
-    - Past date with time 00:00:00: default to 12:00 PM in org timezone
-    - Otherwise: use as-is (assume UTC if no timezone)
-    """
-    now = datetime.now(UTC)
-
-    if effective_at is None:
-        return now
-
-    org_tz = ZoneInfo(org_timezone_str)
-    if effective_at.tzinfo is None:
-        effective_at = effective_at.replace(tzinfo=org_tz)
-    else:
-        effective_at = effective_at.astimezone(org_tz)
-
-    if effective_at.time() == time(0, 0, 0):
-        today_org = now.astimezone(org_tz).date()
-        effective_date = effective_at.date()
-
-        if effective_date == today_org:
-            return now
-        if effective_date < today_org:
-            noon = datetime.combine(effective_date, time(12, 0, 0)).replace(tzinfo=org_tz)
-            return noon.astimezone(UTC)
-        return effective_at.astimezone(UTC)
-
-    return effective_at.astimezone(UTC)
 
 
 def _get_org_user(db: Session, org_id: UUID, user_id: UUID | None) -> User | None:
@@ -371,7 +334,7 @@ def change_status(
 
     now = datetime.now(UTC)
     org_tz_str = _get_org_timezone(db, surrogate.organization_id)
-    normalized_effective_at = _normalize_effective_at(effective_at, org_tz_str)
+    normalized_effective_at = normalize_effective_at(effective_at, org_tz_str)
 
     old_stage_id = surrogate.stage_id
     old_label = surrogate.status_label

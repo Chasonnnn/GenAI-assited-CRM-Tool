@@ -32,6 +32,14 @@ POLICIES: dict[str, ResourcePolicy] = {
         default=P.INTENDED_PARENTS_VIEW,
         actions={"edit": P.INTENDED_PARENTS_EDIT},
     ),
+    "donors": ResourcePolicy(
+        default=P.DONORS_VIEW,
+        actions={
+            "edit": P.DONORS_EDIT,
+            "archive": P.DONORS_ARCHIVE,
+            "change_status": P.DONORS_CHANGE_STATUS,
+        },
+    ),
     "matches": ResourcePolicy(
         default=P.MATCHES_VIEW,
         actions={"propose": P.MATCHES_PROPOSE},

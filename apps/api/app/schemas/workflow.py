@@ -57,14 +57,45 @@ ALLOWED_CONDITION_FIELDS = {
     "meta_lead_id",
     "meta_ad_external_id",
     "meta_form_id",
+    # Donor fields
+    "education",
+    "donor_type",
+    "donor_number",
 }
 
-ALLOWED_UPDATE_FIELDS = {
+DONOR_ALLOWED_CONDITION_FIELDS = {
+    "status_label",
+    "stage_id",
+    "source",
+    "state",
+    "created_at",
+    "owner_type",
+    "owner_id",
+    "email",
+    "phone",
+    "full_name",
+    "education",
+    "donor_type",
+    "donor_number",
+}
+
+SURROGATE_ALLOWED_UPDATE_FIELDS = {
     "stage_id",
     "is_priority",
     "owner_type",
     "owner_id",
 }
+
+DONOR_ALLOWED_UPDATE_FIELDS = {
+    "stage_id",
+    "state",
+    "education",
+    "source",
+    "owner_type",
+    "owner_id",
+}
+
+ALLOWED_UPDATE_FIELDS = SURROGATE_ALLOWED_UPDATE_FIELDS | DONOR_ALLOWED_UPDATE_FIELDS
 
 ALLOWED_EMAIL_VARIABLES = {
     "full_name",
@@ -75,7 +106,20 @@ ALLOWED_EMAIL_VARIABLES = {
     "state",
     "owner_name",
     "org_name",
+    "donor_number",
+    "donor_type",
+    "education",
 }
+
+WorkflowSubjectType = Literal[
+    "surrogate",
+    "form_submission",
+    "intake_lead",
+    "match",
+    "appointment",
+    "egg_donor",
+    "sperm_donor",
+]
 
 
 def is_supported_simple_cron(cron: str) -> bool:
@@ -210,12 +254,14 @@ class FormSubmittedTriggerConfig(BaseModel):
     """Config for form_submitted trigger."""
 
     form_id: UUID | None = None
+    lead_kind: Literal["surrogate", "egg_donor", "sperm_donor"] | None = None
 
 
 class IntakeLeadCreatedTriggerConfig(BaseModel):
     """Config for intake_lead_created trigger."""
 
     form_id: UUID | None = None
+    lead_type: Literal["surrogate", "egg_donor", "sperm_donor"] | None = None
 
 
 # =============================================================================
@@ -228,7 +274,9 @@ class SendEmailActionConfig(BaseModel):
 
     action_type: Literal["send_email"] = "send_email"
     template_id: UUID
-    recipients: Literal["surrogate", "owner", "creator", "all_admins"] | list[UUID] = "surrogate"
+    recipients: (
+        Literal["surrogate", "donor", "subject", "owner", "creator", "all_admins"] | list[UUID]
+    ) = "surrogate"
 
 
 class SendMessageActionConfig(BaseModel):
@@ -253,6 +301,14 @@ class AssignSurrogateActionConfig(BaseModel):
     """Config for assign_surrogate action."""
 
     action_type: Literal["assign_surrogate"] = "assign_surrogate"
+    owner_type: OwnerType
+    owner_id: UUID
+
+
+class AssignDonorActionConfig(BaseModel):
+    """Config for assigning a donor within its organization."""
+
+    action_type: Literal["assign_donor"] = "assign_donor"
     owner_type: OwnerType
     owner_id: UUID
 
@@ -324,6 +380,7 @@ ActionConfig = (
     | SendMessageActionConfig
     | CreateTaskActionConfig
     | AssignSurrogateActionConfig
+    | AssignDonorActionConfig
     | SendNotificationActionConfig
     | SendZapierConversionEventActionConfig
     | UpdateFieldActionConfig
@@ -347,6 +404,7 @@ class WorkflowCreate(BaseModel):
     icon: str = Field(default="workflow", max_length=50)
     # Scope: 'org' for org-wide workflows, 'personal' for user-specific
     scope: Literal["org", "personal"] = "org"
+    subject_type: WorkflowSubjectType = "surrogate"
     trigger_type: WorkflowTriggerType
     trigger_config: dict[str, object] = Field(default_factory=dict)
     conditions: list[Condition] = Field(default_factory=list)
@@ -387,6 +445,7 @@ class WorkflowRead(BaseModel):
     scope: str  # 'org' or 'personal'
     owner_user_id: UUID | None = None
     owner_name: str | None = None  # Display name of owner (for personal workflows)
+    subject_type: WorkflowSubjectType
     trigger_type: str
     trigger_config: dict
     conditions: list[dict]
@@ -421,6 +480,7 @@ class WorkflowListItem(BaseModel):
     scope: str  # 'org' or 'personal'
     owner_user_id: UUID | None = None
     owner_name: str | None = None  # Display name of owner (for personal workflows)
+    subject_type: WorkflowSubjectType
     trigger_type: str
     is_enabled: bool
     run_count: int
@@ -448,6 +508,10 @@ class ExecutionRead(BaseModel):
     event_source: str
     entity_type: str
     entity_id: UUID
+    subject_type: str | None = None
+    subject_id: UUID | None = None
+    entity_name: str | None = None
+    entity_number: str | None = None
     trigger_event: dict
     matched_conditions: bool
     actions_executed: list[dict]

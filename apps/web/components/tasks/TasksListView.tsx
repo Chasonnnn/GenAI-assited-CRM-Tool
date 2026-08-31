@@ -1,6 +1,6 @@
 "use client"
 
-import Link from "@/components/app-link"
+import { TaskRelatedRecordLinks } from "@/components/tasks/TaskRelatedRecordLinks"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -112,14 +112,10 @@ function TaskListItemRow({
                         )}
                     </div>
                 </Button>
-                {task.surrogate_id && (
-                    <Link
-                        href={`/surrogates/${task.surrogate_id}`}
-                        className="text-sm text-muted-foreground hover:underline"
-                    >
-                        Surrogate #{task.surrogate_number}
-                    </Link>
-                )}
+                <TaskRelatedRecordLinks
+                    task={task}
+                    className="text-sm text-muted-foreground"
+                />
             </div>
             {task.owner_name && (
                 <TooltipProvider>

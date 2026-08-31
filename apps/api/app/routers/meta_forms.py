@@ -28,6 +28,7 @@ from app.services import (
     meta_form_mapping_service,
     meta_page_service,
     meta_sync_service,
+    permission_service,
     user_service,
 )
 
@@ -40,6 +41,57 @@ router = APIRouter(
     dependencies=[Depends(require_permission(POLICIES["meta_leads"].default))],
 )
 
+DONOR_LEAD_KINDS = {"egg_donor", "sperm_donor"}
+
+
+def _can_access_donor_forms(
+    db: Session,
+    session: UserSession,
+    *,
+    require_write: bool,
+) -> bool:
+    permission = (
+        POLICIES["donors"].actions["edit"]
+        if require_write
+        else POLICIES["donors"].default
+    )
+    role = getattr(session.role, "value", session.role)
+    return permission_service.check_permission(
+        db,
+        session.org_id,
+        session.user_id,
+        role,
+        permission.value,
+    )
+
+
+def _require_donor_form_access(
+    db: Session,
+    session: UserSession,
+    lead_kind: str | None,
+    *,
+    form_external_id: str | None = None,
+    require_write: bool,
+) -> None:
+    has_donor_leads = bool(
+        form_external_id
+        and meta_form_mapping_service.form_has_donor_leads(
+            db,
+            session.org_id,
+            form_external_id,
+        )
+    )
+    if (lead_kind or "surrogate") not in DONOR_LEAD_KINDS and not has_donor_leads:
+        return
+    if _can_access_donor_forms(db, session, require_write=require_write):
+        return
+    permission = (
+        POLICIES["donors"].actions["edit"]
+        if require_write
+        else POLICIES["donors"].default
+    )
+    raise HTTPException(status_code=403, detail=f"Missing permission: {permission.value}")
+
 
 @router.get("", response_model=list[MetaFormSummary])
 def list_meta_forms(
@@ -47,6 +99,16 @@ def list_meta_forms(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     forms = meta_form_mapping_service.list_forms(db, session.org_id)
+    if not _can_access_donor_forms(db, session, require_write=False):
+        donor_form_external_ids = (
+            meta_form_mapping_service.get_donor_lead_form_external_ids(db, session.org_id)
+        )
+        forms = [
+            form
+            for form in forms
+            if (form.lead_kind or "surrogate") not in DONOR_LEAD_KINDS
+            and form.form_external_id not in donor_form_external_ids
+        ]
     if not forms:
         return []
 
@@ -76,6 +138,7 @@ def list_meta_forms(
                 mapping_version_id=form.mapping_version_id,
                 mapping_updated_at=form.mapping_updated_at,
                 mapping_updated_by_name=user_names.get(form.mapping_updated_by_user_id),
+                lead_kind=form.lead_kind or "surrogate",
                 is_active=form.is_active,
                 synced_at=form.synced_at,
                 unconverted_leads=int(stats.get("unconverted", 0)),
@@ -94,6 +157,24 @@ async def sync_meta_forms(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
+    existing_forms = meta_form_mapping_service.list_forms(db, session.org_id)
+    if data.page_id:
+        existing_forms = [form for form in existing_forms if form.page_id == data.page_id]
+    donor_form_external_ids = meta_form_mapping_service.get_donor_lead_form_external_ids(
+        db,
+        session.org_id,
+    )
+    if any(
+        (form.lead_kind or "surrogate") in DONOR_LEAD_KINDS
+        or form.form_external_id in donor_form_external_ids
+        for form in existing_forms
+    ):
+        _require_donor_form_access(
+            db,
+            session,
+            "egg_donor",
+            require_write=True,
+        )
     result = await meta_sync_service.sync_forms(db, session.org_id, data.page_id)
     return {
         "success": result.get("error") is None,
@@ -111,6 +192,13 @@ def preview_meta_form_mapping(
     form = meta_form_mapping_service.get_form(db, session.org_id, form_id)
     if not form:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+    _require_donor_form_access(
+        db,
+        session,
+        form.lead_kind,
+        form_external_id=form.form_external_id,
+        require_write=False,
+    )
 
     preview = meta_form_mapping_service.build_mapping_preview(db, form)
 
@@ -136,6 +224,7 @@ def preview_meta_form_mapping(
         mapping_version_id=form.mapping_version_id,
         mapping_updated_at=form.mapping_updated_at,
         mapping_updated_by_name=updated_by_name,
+        lead_kind=form.lead_kind or "surrogate",
         is_active=form.is_active,
         synced_at=form.synced_at,
         unconverted_leads=int(stats.get("unconverted", 0)),
@@ -183,6 +272,20 @@ def update_meta_form_mapping(
     form = meta_form_mapping_service.get_form(db, session.org_id, form_id)
     if not form:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+    requested_lead_kind = data.lead_kind or form.lead_kind or "surrogate"
+    _require_donor_form_access(
+        db,
+        session,
+        form.lead_kind,
+        form_external_id=form.form_external_id,
+        require_write=True,
+    )
+    _require_donor_form_access(
+        db,
+        session,
+        requested_lead_kind,
+        require_write=True,
+    )
 
     # Get original suggestions for learning
     try:
@@ -203,6 +306,7 @@ def update_meta_form_mapping(
             form,
             column_mappings=[m.model_dump() for m in data.column_mappings],
             unknown_column_behavior=data.unknown_column_behavior,
+            lead_kind=requested_lead_kind,
             user_id=session.user_id,
             original_suggestions=original_suggestions,
         )
@@ -230,6 +334,7 @@ def update_meta_form_mapping(
         success=True,
         mapping_status=form.mapping_status,
         mapping_version_id=form.mapping_version_id,
+        lead_kind=form.lead_kind or "surrogate",
         message=(
             "Mapping saved and eligible leads queued for reprocessing."
             if eligible_ids
@@ -252,6 +357,13 @@ def list_unconverted_leads(
     form = meta_form_mapping_service.get_form(db, session.org_id, form_id)
     if not form:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+    _require_donor_form_access(
+        db,
+        session,
+        form.lead_kind,
+        form_external_id=form.form_external_id,
+        require_write=False,
+    )
 
     items, total = meta_form_mapping_service.list_unconverted_leads_for_form(
         db,
@@ -296,6 +408,13 @@ def reconvert_meta_form_leads(
     form = meta_form_mapping_service.get_form(db, session.org_id, form_id)
     if not form:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+    _require_donor_form_access(
+        db,
+        session,
+        form.lead_kind,
+        form_external_id=form.form_external_id,
+        require_write=True,
+    )
     if form.mapping_status != "mapped" or form.mapping_version_id != form.current_version_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -340,9 +459,17 @@ def delete_meta_form(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> Response:
-    deleted = meta_form_mapping_service.delete_form(db, session.org_id, form_id)
-    if not deleted:
+    form = meta_form_mapping_service.get_form(db, session.org_id, form_id)
+    if not form:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+    _require_donor_form_access(
+        db,
+        session,
+        form.lead_kind,
+        form_external_id=form.form_external_id,
+        require_write=True,
+    )
+    meta_form_mapping_service.delete_form(db, session.org_id, form_id)
 
 
 def _serialize_unconverted_lead(

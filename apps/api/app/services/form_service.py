@@ -10,9 +10,20 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.enums import FormPurpose, FormStatus
-from app.db.models import Form, FormFieldMapping, FormLogo, Organization
+from app.db.enums import FormLeadKind, FormPurpose, FormStatus, JobStatus, JobType
+from app.db.models import (
+    Form,
+    FormFieldMapping,
+    FormLogo,
+    FormSubmission,
+    FormSubmissionFile,
+    IntakeLead,
+    Job,
+    LegalHold,
+    Organization,
+)
 from app.schemas.forms import FormSchema
+from app.services import form_submission_service, storage_cleanup_service
 from app.services.attachment_service import (
     _get_local_storage_path,
     generate_signed_url,
@@ -89,6 +100,36 @@ PUBLIC_SURROGATE_FIELD_DEFAULTS: dict[str, dict[str, Any]] = {
         },
     },
 }
+DONOR_MAPPING_FIELD_TYPES: dict[str, set[str]] = {
+    "full_name": {"text", "textarea"},
+    "email": {"email", "text"},
+    "phone": {"phone", "text"},
+    "state": {"text", "select"},
+    "education": {"text", "textarea", "select"},
+    "profile_photo": {"file"},
+}
+REQUIRED_DONOR_MAPPING_FIELDS = ("full_name", "email", "profile_photo")
+DONOR_FIELD_LABELS = {
+    "full_name": "Full Name",
+    "email": "Email",
+    "phone": "Phone",
+    "state": "State",
+    "education": "Education",
+    "profile_photo": "Profile Photo",
+}
+
+
+def list_mapping_options(lead_kind: str) -> list[dict[str, Any]]:
+    if lead_kind == FormLeadKind.SURROGATE.value:
+        return form_submission_service.list_surrogate_mapping_options()
+    return [
+        {
+            "value": field_name,
+            "label": DONOR_FIELD_LABELS[field_name],
+            "is_critical": field_name in REQUIRED_DONOR_MAPPING_FIELDS,
+        }
+        for field_name in DONOR_MAPPING_FIELD_TYPES
+    ]
 
 
 def _coerce_number(value: Any) -> float | None:
@@ -195,6 +236,15 @@ def get_form(db: Session, org_id: uuid.UUID, form_id: uuid.UUID) -> Form | None:
     return db.query(Form).filter(Form.organization_id == org_id, Form.id == form_id).first()
 
 
+def get_form_for_update(db: Session, org_id: uuid.UUID, form_id: uuid.UUID) -> Form | None:
+    return (
+        db.query(Form)
+        .filter(Form.organization_id == org_id, Form.id == form_id)
+        .with_for_update()
+        .first()
+    )
+
+
 def create_form(
     db: Session,
     org_id: uuid.UUID,
@@ -206,6 +256,7 @@ def create_form(
     max_file_count: int | None,
     allowed_mime_types: list[str] | None,
     purpose: str = FormPurpose.SURROGATE_APPLICATION.value,
+    lead_kind: str = FormLeadKind.SURROGATE.value,
     default_application_email_template_id: uuid.UUID | None = None,
 ) -> Form:
     max_size = (
@@ -218,6 +269,7 @@ def create_form(
         name=name,
         description=description,
         purpose=purpose,
+        lead_kind=lead_kind,
         schema_json=schema,
         status=FormStatus.DRAFT.value,
         max_file_size_bytes=max_size,
@@ -245,13 +297,23 @@ def update_form(
     max_file_count: int | None,
     allowed_mime_types: list[str] | None,
     default_application_email_template_id: uuid.UUID | None | object = _UNSET,
+    lead_kind: str | None = None,
 ) -> Form:
+    if lead_kind is not None and lead_kind != form.lead_kind:
+        has_submissions = (
+            db.query(FormSubmission.id).filter(FormSubmission.form_id == form.id).first()
+            is not None
+        )
+        if has_submissions:
+            raise ValueError("Form lead kind cannot change after submissions exist")
     if name is not None:
         form.name = name
     if description is not None:
         form.description = description
     if purpose is not None:
         form.purpose = purpose
+    if lead_kind is not None and lead_kind != form.lead_kind:
+        form.lead_kind = lead_kind
     if schema is not None:
         form.schema_json = apply_public_surrogate_field_defaults(
             schema,
@@ -453,6 +515,9 @@ def validate_shared_intake_identity_targets(db: Session, form: Form) -> None:
     """Ensure published public intake forms can satisfy their identity contract."""
     if not form.schema_json:
         raise ValueError("Form schema is required before publishing")
+    if form.lead_kind != FormLeadKind.SURROGATE.value:
+        validate_donor_intake_schema(db, form)
+        return
     if form.purpose == FormPurpose.LEAD_CAPTURE.value:
         validate_lead_capture_schema(db, form)
         return
@@ -494,7 +559,64 @@ def validate_shared_intake_identity_targets(db: Session, form: Form) -> None:
         raise ValueError("Shared intake identity is incomplete; " + "; ".join(parts))
 
 
-def publish_form(db: Session, form: Form, user_id: uuid.UUID) -> Form:
+def validate_donor_intake_schema(db: Session, form: Form) -> None:
+    """Require donor identity plus one mapped, required profile image upload."""
+    if not form.schema_json:
+        raise ValueError("Form schema is required before publishing")
+
+    schema = parse_schema(form.schema_json)
+    fields = flatten_fields(schema)
+    mappings = {
+        mapping.surrogate_field: mapping.field_key
+        for mapping in db.query(FormFieldMapping).filter(FormFieldMapping.form_id == form.id).all()
+    }
+    if form.max_file_count < 1:
+        raise ValueError("Donor intake must allow at least one file upload")
+    allowed_mime_types = {
+        mime_type.strip().lower()
+        for mime_type in form.allowed_mime_types or []
+        if isinstance(mime_type, str)
+    }
+    if allowed_mime_types and not allowed_mime_types.intersection(
+        {"image/png", "image/jpeg", "image/jpg", "image/*"}
+    ):
+        raise ValueError("Donor intake must allow PNG or JPEG profile photos")
+
+    missing: list[str] = []
+    incompatible: list[str] = []
+    optional: list[str] = []
+    for target in REQUIRED_DONOR_MAPPING_FIELDS:
+        field_key = mappings.get(target)
+        label = DONOR_FIELD_LABELS[target]
+        if not field_key or field_key not in fields:
+            missing.append(label)
+            continue
+        field = fields[field_key]
+        allowed_types = DONOR_MAPPING_FIELD_TYPES[target]
+        if field.type not in allowed_types:
+            incompatible.append(f"{label} ({', '.join(sorted(allowed_types))})")
+            continue
+        if not field.required:
+            optional.append(label)
+
+    if missing or incompatible or optional:
+        parts: list[str] = []
+        if missing:
+            parts.append(f"missing required mappings or fields: {', '.join(missing)}")
+        if optional:
+            parts.append(f"must be marked required: {', '.join(optional)}")
+        if incompatible:
+            parts.append(f"use compatible field types for: {', '.join(incompatible)}")
+        raise ValueError("Donor intake is incomplete; " + "; ".join(parts))
+
+
+def publish_form(
+    db: Session,
+    form: Form,
+    user_id: uuid.UUID,
+    *,
+    commit: bool = True,
+) -> Form:
     if not form.schema_json:
         raise ValueError("Form schema is required before publishing")
     form.schema_json = apply_public_surrogate_field_defaults(
@@ -507,9 +629,12 @@ def publish_form(db: Session, form: Form, user_id: uuid.UUID) -> Form:
     form.published_schema_json = json.loads(json.dumps(form.schema_json))
     form.status = FormStatus.PUBLISHED.value
     form.updated_by_user_id = user_id
-    db.commit()
-    ensure_default_surrogate_application_form(db, form.organization_id)
-    db.refresh(form)
+    if commit:
+        db.commit()
+        ensure_default_surrogate_application_form(db, form.organization_id)
+        db.refresh(form)
+    else:
+        db.flush()
     return form
 
 
@@ -538,6 +663,7 @@ def ensure_default_surrogate_application_form(
             Form.organization_id == org_id,
             Form.status == FormStatus.PUBLISHED.value,
             Form.purpose == FormPurpose.SURROGATE_APPLICATION.value,
+            Form.lead_kind == FormLeadKind.SURROGATE.value,
         )
         .order_by(Form.updated_at.desc(), Form.created_at.desc())
         .all()
@@ -584,6 +710,8 @@ def set_default_surrogate_application_form(
         raise ValueError(
             "Default surrogate application form must have purpose=surrogate_application"
         )
+    if form.lead_kind != FormLeadKind.SURROGATE.value:
+        raise ValueError("Default surrogate application form must target surrogate leads")
 
     org = _get_org(db, org_id)
     if not org:
@@ -608,8 +736,14 @@ def set_field_mappings(
         surrogate_field = mapping["surrogate_field"]
         if field_key not in fields:
             raise ValueError(f"Unknown field key: {field_key}")
-        if surrogate_field not in SURROGATE_FIELD_TYPES:
-            raise ValueError(f"Unsupported surrogate field: {surrogate_field}")
+        allowed_fields = (
+            DONOR_MAPPING_FIELD_TYPES
+            if form.lead_kind != FormLeadKind.SURROGATE.value
+            else SURROGATE_FIELD_TYPES
+        )
+        if surrogate_field not in allowed_fields:
+            target_name = "donor" if form.lead_kind != FormLeadKind.SURROGATE.value else "surrogate"
+            raise ValueError(f"Unsupported {target_name} field: {surrogate_field}")
 
     field_key_set: set[str] = set()
     surrogate_field_set: set[str] = set()
@@ -644,8 +778,96 @@ def set_field_mappings(
 
 
 def delete_form(db: Session, form: Form) -> None:
-    """Permanently delete a form and all related records (via FK cascades)."""
+    """Delete a form after preserving holds and scheduling file erasure."""
     org_id = form.organization_id
+    submission_rows = (
+        db.query(FormSubmission.id, FormSubmission.donor_id)
+        .filter(
+            FormSubmission.organization_id == org_id,
+            FormSubmission.form_id == form.id,
+        )
+        .all()
+    )
+    submission_ids = {submission_id for submission_id, _donor_id in submission_rows}
+    donor_ids = {donor_id for _submission_id, donor_id in submission_rows if donor_id}
+    file_rows = []
+    if submission_ids:
+        file_rows = (
+            db.query(FormSubmissionFile.id, FormSubmissionFile.storage_key)
+            .filter(
+                FormSubmissionFile.organization_id == org_id,
+                FormSubmissionFile.submission_id.in_(submission_ids),
+            )
+            .all()
+        )
+    file_ids = {file_id for file_id, _storage_key in file_rows}
+    intake_rows = (
+        db.query(IntakeLead.id, IntakeLead.promoted_donor_id)
+        .filter(
+            IntakeLead.organization_id == org_id,
+            (
+                (IntakeLead.form_id == form.id)
+                | (IntakeLead.form_submission_id.in_(submission_ids))
+            ),
+        )
+        .all()
+    )
+    intake_lead_ids = {lead_id for lead_id, _donor_id in intake_rows}
+    donor_ids.update(donor_id for _lead_id, donor_id in intake_rows if donor_id)
+
+    if form.lead_kind in {FormLeadKind.EGG_DONOR.value, FormLeadKind.SPERM_DONOR.value}:
+        active_holds = (
+            db.query(LegalHold.entity_type, LegalHold.entity_id)
+            .filter(
+                LegalHold.organization_id == org_id,
+                LegalHold.released_at.is_(None),
+            )
+            .all()
+        )
+        for entity_type, entity_id in active_holds:
+            held = entity_type is None
+            held = held or (entity_type == "form" and entity_id == form.id)
+            held = held or (
+                entity_type == "form_submission" and entity_id in submission_ids
+            )
+            held = held or (
+                entity_type == "form_submission_file" and entity_id in file_ids
+            )
+            held = held or (entity_type == "intake_lead" and entity_id in intake_lead_ids)
+            held = held or (entity_type == "donor" and entity_id in donor_ids)
+            if held:
+                raise ValueError("Cannot delete donor form while related data is under legal hold")
+
+    file_id_strings = {str(file_id) for file_id in file_ids}
+    scan_job_ids: list[uuid.UUID] = []
+    if file_id_strings:
+        scan_jobs = (
+            db.query(Job)
+            .filter(
+                Job.organization_id == org_id,
+                Job.job_type == JobType.FORM_SUBMISSION_FILE_SCAN.value,
+            )
+            .all()
+        )
+        for job in scan_jobs:
+            if str((job.payload or {}).get("submission_file_id") or "") not in file_id_strings:
+                continue
+            if job.status == JobStatus.RUNNING.value:
+                raise ValueError(
+                    "Cannot delete form while an uploaded file scan is running; retry later"
+                )
+            scan_job_ids.append(job.id)
+    if scan_job_ids:
+        db.query(Job).filter(
+            Job.organization_id == org_id,
+            Job.id.in_(scan_job_ids),
+        ).delete(synchronize_session=False)
+
+    storage_cleanup_service.enqueue_storage_deletions(
+        db,
+        org_id=org_id,
+        storage_keys=[storage_key for _file_id, storage_key in file_rows],
+    )
     db.delete(form)
     db.commit()
     ensure_default_surrogate_application_form(db, org_id)

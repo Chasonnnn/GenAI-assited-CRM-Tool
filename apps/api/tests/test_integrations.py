@@ -496,6 +496,100 @@ async def test_google_calendar_status_includes_tasks_access_diagnostics(
 
 
 @pytest.mark.asyncio
+async def test_google_calendar_disconnect_rechecks_recovery_created_in_another_org(
+    authed_client: AsyncClient,
+    db,
+    test_auth,
+    monkeypatch,
+):
+    from app.db.enums import JobStatus, JobType
+    from app.db.models import Job, Organization, UserIntegration
+    from app.services import (
+        calendar_service,
+        google_tasks_cleanup_service,
+        oauth_service,
+        permission_service,
+    )
+
+    other_org = Organization(
+        name="Other Google Donor Work Org",
+        slug=f"other-google-donor-work-{uuid.uuid4().hex}",
+    )
+    integration = UserIntegration(
+        user_id=test_auth.user.id,
+        integration_type="google_calendar",
+        access_token_encrypted="token-1",
+        account_email="owner@example.com",
+    )
+    db.add(other_org)
+    db.flush()
+    db.add(integration)
+    db.commit()
+    assert not google_tasks_cleanup_service.has_unresolved_google_task_work_for_user_in_organizations(
+        db,
+        org_ids=None,
+        user_id=test_auth.user.id,
+    )
+    fence_calls = 0
+    fence_observations: list[bool] = []
+    original_fence = permission_service.assert_google_donor_tasks_disconnectable
+
+    def disconnect_fence(db, user_id):
+        nonlocal fence_calls
+        fence_calls += 1
+        fence_observations.append(
+            google_tasks_cleanup_service.has_unresolved_google_task_work_for_user_in_organizations(
+                db,
+                org_ids=None,
+                user_id=user_id,
+            )
+        )
+        return original_fence(db, user_id)
+
+    monkeypatch.setattr(
+        permission_service,
+        "assert_google_donor_tasks_disconnectable",
+        disconnect_fence,
+    )
+
+    async def stop_watch(*, db, user_id, calendar_id):
+        assert user_id == test_auth.user.id
+        assert calendar_id == "primary"
+        db.add(
+            Job(
+                organization_id=other_org.id,
+                job_type=JobType.GOOGLE_TASK_CREATION_RECONCILE.value,
+                status=JobStatus.FAILED.value,
+                payload={
+                    "user_id": str(test_auth.user.id),
+                    "source_task_id": str(uuid.uuid4()),
+                    "google_task_list_id": "concrete-list",
+                },
+            )
+        )
+        db.commit()
+        return True
+
+    monkeypatch.setattr(calendar_service, "stop_google_calendar_watch", stop_watch)
+    delete_calls = 0
+
+    def delete_integration(*_args, **_kwargs):
+        nonlocal delete_calls
+        delete_calls += 1
+        return True
+
+    monkeypatch.setattr(oauth_service, "delete_integration", delete_integration)
+
+    response = await authed_client.delete("/integrations/google_calendar")
+
+    assert fence_calls == 2
+    assert fence_observations == [False, True]
+    assert response.status_code == 409
+    assert "Google cleanup is pending or failed" in response.json()["detail"]
+    assert delete_calls == 0
+
+
+@pytest.mark.asyncio
 async def test_google_calendar_manual_sync_runs_reconciliation_and_updates_last_sync(
     authed_client: AsyncClient,
     db,
@@ -997,6 +1091,7 @@ async def test_google_calendar_events_endpoint_fetches_across_calendars(
                 }
             ],
             "error": None,
+            "complete": True,
         }
 
     monkeypatch.setattr(
@@ -1019,10 +1114,77 @@ async def test_google_calendar_events_endpoint_fetches_across_calendars(
     assert called["user_id"] == test_auth.user.id
     assert payload["connected"] is True
     assert payload["error"] is None
+    assert payload["complete"] is True
     assert len(payload["events"]) == 1
     assert payload["events"][0]["id"] == "google_multi_1"
     assert payload["events"][0]["summary"] == "Cross-calendar event"
     assert payload["events"][0]["source"] == "google"
+
+
+@pytest.mark.asyncio
+async def test_google_calendar_events_endpoint_exposes_incomplete_snapshot(
+    authed_client: AsyncClient,
+    monkeypatch,
+):
+    from app.services import calendar_service
+
+    async def incomplete_snapshot(**_kwargs):
+        return {
+            "connected": True,
+            "events": [],
+            "error": "incomplete",
+            "complete": False,
+        }
+
+    monkeypatch.setattr(
+        calendar_service,
+        "get_user_calendar_events_across_calendars",
+        incomplete_snapshot,
+    )
+
+    response = await authed_client.get(
+        "/integrations/google/calendar/events",
+        params={"date_start": "2026-02-01", "date_end": "2026-02-02"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["error"] == "incomplete"
+    assert response.json()["complete"] is False
+
+
+@pytest.mark.asyncio
+async def test_cross_calendar_fetch_preserves_incomplete_event_snapshot(monkeypatch):
+    from app.services import calendar_service
+
+    monkeypatch.setattr(
+        calendar_service.oauth_service,
+        "get_user_integration",
+        lambda *_args: object(),
+    )
+
+    async def access_token(*_args, **_kwargs):
+        return "token"
+
+    async def calendar_ids(*_args, **_kwargs):
+        return ["primary", "secondary"]
+
+    async def snapshot(*, calendar_id, **_kwargs):
+        return {"events": [], "complete": calendar_id != "secondary"}
+
+    monkeypatch.setattr(calendar_service, "get_google_access_token", access_token)
+    monkeypatch.setattr(calendar_service, "list_google_calendar_ids", calendar_ids)
+    monkeypatch.setattr(calendar_service, "_fetch_google_events_snapshot", snapshot)
+
+    result = await calendar_service.get_user_calendar_events_across_calendars(
+        db=object(),
+        user_id=uuid.uuid4(),
+        time_min=datetime(2026, 2, 1, tzinfo=UTC),
+        time_max=datetime(2026, 2, 2, tzinfo=UTC),
+    )
+
+    assert result["events"] == []
+    assert result["error"] == "incomplete"
+    assert result["complete"] is False
 
 
 @pytest.mark.asyncio

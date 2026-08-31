@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db
+from app.core.deps import get_current_session, get_db, require_all_permissions
 from app.core.permissions import PermissionKey
 from app.core.policies import POLICIES
 from app.db.enums import Role
@@ -101,6 +101,15 @@ class AssigneeCount(BaseModel):
 class TrendPoint(BaseModel):
     date: str
     count: int
+
+
+class DonorAnalyticsSummary(BaseModel):
+    donor_type: Literal["egg", "sperm"]
+    total_donors: int
+    new_this_period: int
+    qualification_rate: float
+    qualification_stage_key: str | None = None
+    avg_time_to_qualification_hours: float | None
 
 
 class MetaPerformance(BaseModel):
@@ -278,6 +287,165 @@ def get_surrogates_trend(
     return [TrendPoint(**item) for item in data]
 
 
+def _require_allowed_analytics_owner(session: UserSession, owner_id: UUID | None) -> None:
+    if (
+        owner_id
+        and owner_id != session.user_id
+        and session.role not in (Role.ADMIN, Role.DEVELOPER, Role.CASE_MANAGER)
+    ):
+        raise HTTPException(status_code=403, detail="Not authorized to view other users' analytics")
+
+
+def _optional_donor_date_range(
+    from_date: str | None,
+    to_date: str | None,
+    *,
+    timezone_name: str | None = None,
+) -> tuple[datetime | None, datetime | None]:
+    if not from_date and not to_date:
+        return None, None
+    return analytics_service.parse_date_range(
+        from_date,
+        to_date,
+        inclusive_date_end=True,
+        timezone_name=timezone_name,
+    )
+
+
+DONOR_REPORT_ACCESS = Depends(
+    require_all_permissions(
+        [PermissionKey.REPORTS_VIEW, PermissionKey.DONORS_VIEW]
+    )
+)
+
+
+@router.get(
+    "/donors/summary",
+    response_model=DonorAnalyticsSummary,
+    dependencies=[DONOR_REPORT_ACCESS],
+)
+def get_donor_analytics_summary(
+    donor_type: Annotated[Literal["egg", "sperm"], Query()],
+    session: Annotated[UserSession, Depends(get_current_session)],
+    db: Annotated[Session, Depends(get_db)],
+    from_date: Annotated[str | None, Query()] = None,
+    to_date: Annotated[str | None, Query()] = None,
+    pipeline_id: Annotated[UUID | None, Query()] = None,
+    owner_id: Annotated[UUID | None, Query()] = None,
+    state: Annotated[str | None, Query(max_length=100)] = None,
+    include_archived: Annotated[bool, Query()] = False,
+) -> DonorAnalyticsSummary:
+    """Get subtype-specific donor summary metrics for reports."""
+    from app.services import analytics_donor_service
+
+    _require_allowed_analytics_owner(session, owner_id)
+    start, end = analytics_service.parse_date_range(
+        from_date,
+        to_date,
+        inclusive_date_end=True,
+    )
+    try:
+        data = analytics_donor_service.get_cached_donor_summary(
+            db,
+            session.org_id,
+            donor_type,
+            start=start,
+            end=end,
+            pipeline_id=pipeline_id,
+            owner_id=owner_id,
+            state=state,
+            include_archived=include_archived,
+        )
+    except analytics_donor_service.DonorAnalyticsPipelineNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Pipeline not found") from exc
+    return DonorAnalyticsSummary(**data)
+
+
+@router.get(
+    "/donors/by-status",
+    response_model=list[StatusCount],
+    dependencies=[DONOR_REPORT_ACCESS],
+)
+def get_donors_by_status(
+    donor_type: Annotated[Literal["egg", "sperm"], Query()],
+    session: Annotated[UserSession, Depends(get_current_session)],
+    db: Annotated[Session, Depends(get_db)],
+    from_date: Annotated[str | None, Query()] = None,
+    to_date: Annotated[str | None, Query()] = None,
+    pipeline_id: Annotated[UUID | None, Query()] = None,
+    owner_id: Annotated[UUID | None, Query()] = None,
+    state: Annotated[str | None, Query(max_length=100)] = None,
+    include_archived: Annotated[bool, Query()] = False,
+) -> list[StatusCount]:
+    """Get every active subtype stage with its current donor count."""
+    from app.services import analytics_donor_service
+
+    _require_allowed_analytics_owner(session, owner_id)
+    start, end = _optional_donor_date_range(from_date, to_date)
+    try:
+        data = analytics_donor_service.get_cached_donors_by_status(
+            db,
+            session.org_id,
+            donor_type,
+            start=start,
+            end=end,
+            pipeline_id=pipeline_id,
+            owner_id=owner_id,
+            state=state,
+            include_archived=include_archived,
+        )
+    except analytics_donor_service.DonorAnalyticsPipelineNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Pipeline not found") from exc
+    return [StatusCount(**item) for item in data]
+
+
+@router.get(
+    "/donors/trend",
+    response_model=list[TrendPoint],
+    dependencies=[DONOR_REPORT_ACCESS],
+)
+def get_donors_trend(
+    donor_type: Annotated[Literal["egg", "sperm"], Query()],
+    session: Annotated[UserSession, Depends(get_current_session)],
+    db: Annotated[Session, Depends(get_db)],
+    from_date: Annotated[str | None, Query()] = None,
+    to_date: Annotated[str | None, Query()] = None,
+    period: Annotated[Literal["day", "week", "month"], Query()] = "day",
+    timezone_name: Annotated[str | None, Query(alias="timezone")] = None,
+    pipeline_id: Annotated[UUID | None, Query()] = None,
+    owner_id: Annotated[UUID | None, Query()] = None,
+    state: Annotated[str | None, Query(max_length=100)] = None,
+    include_archived: Annotated[bool, Query()] = False,
+) -> list[TrendPoint]:
+    """Get subtype donor creation volume grouped in the requested timezone."""
+    from app.services import analytics_donor_service
+
+    _require_allowed_analytics_owner(session, owner_id)
+    start, end = analytics_service.parse_date_range(
+        from_date,
+        to_date,
+        inclusive_date_end=True,
+        timezone_name=timezone_name,
+    )
+    try:
+        data = analytics_donor_service.get_cached_donors_trend(
+            db,
+            session.org_id,
+            donor_type,
+            start=start,
+            end=end,
+            period=period,
+            timezone_name=timezone_name,
+            pipeline_id=pipeline_id,
+            owner_id=owner_id,
+            state=state,
+            include_archived=include_archived,
+        )
+    except analytics_donor_service.DonorAnalyticsPipelineNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Pipeline not found") from exc
+    return [TrendPoint(**item) for item in data]
+
+
 @router.get("/meta/performance", response_model=MetaPerformance)
 def get_meta_performance(
     from_date: Annotated[str | None, "fastapi_param"] = Query(None),
@@ -366,8 +534,12 @@ class FormPerformanceItem(BaseModel):
     form_external_id: str
     form_name: str
     mapping_status: str
+    lead_kind: str
     lead_count: int
     surrogate_count: int
+    egg_donor_count: int
+    sperm_donor_count: int
+    converted_count: int
     qualified_count: int
     conversion_rate: float
     qualified_rate: float
@@ -387,6 +559,9 @@ class MetaAdPerformanceItem(BaseModel):
     ad_name: str
     lead_count: int
     surrogate_count: int
+    egg_donor_count: int
+    sperm_donor_count: int
+    converted_count: int
     conversion_rate: float
 
 

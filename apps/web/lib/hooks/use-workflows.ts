@@ -21,6 +21,8 @@ import {
     type WorkflowCreate,
     type WorkflowUpdate,
     type ListWorkflowsParams,
+    type WorkflowScope,
+    type WorkflowSubjectType,
 } from "@/lib/api/workflows"
 
 // =============================================================================
@@ -35,7 +37,8 @@ const workflowKeys = {
     details: () => [...workflowKeys.all, "detail"] as const,
     detail: (id: string) => [...workflowKeys.details(), id] as const,
     stats: () => [...workflowKeys.all, "stats"] as const,
-    options: (workflowScope?: string) => [...workflowKeys.all, "options", workflowScope] as const,
+    options: (workflowScope: WorkflowScope | undefined, subjectType: WorkflowSubjectType) =>
+        [...workflowKeys.all, "options", workflowScope, subjectType] as const,
     executions: (workflowId: string) =>
         [...workflowKeys.all, "executions", workflowId] as const,
     preferences: () => [...workflowKeys.all, "preferences"] as const,
@@ -67,10 +70,13 @@ export function useWorkflowStats() {
     })
 }
 
-export function useWorkflowOptions(workflowScope?: string) {
+export function useWorkflowOptions(
+    workflowScope?: WorkflowScope,
+    subjectType: WorkflowSubjectType = "surrogate",
+) {
     return useQuery({
-        queryKey: workflowKeys.options(workflowScope),
-        queryFn: () => getWorkflowOptions(workflowScope as 'org' | 'personal' | undefined),
+        queryKey: workflowKeys.options(workflowScope, subjectType),
+        queryFn: () => getWorkflowOptions(workflowScope, subjectType),
         staleTime: 5 * 60 * 1000, // 5 minutes - options don't change often
     })
 }

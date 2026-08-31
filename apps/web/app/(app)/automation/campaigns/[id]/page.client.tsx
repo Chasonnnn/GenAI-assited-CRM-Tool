@@ -71,7 +71,13 @@ import {
     useRetryFailedCampaignRun,
 } from "@/lib/hooks/use-campaigns"
 import { useEmailTemplate, useEmailTemplates } from "@/lib/hooks/use-email-templates"
-import type { Campaign, CampaignRecipient, CampaignRun, FilterCriteria } from "@/lib/api/campaigns"
+import type {
+    Campaign,
+    CampaignRecipient,
+    CampaignRecipientType,
+    CampaignRun,
+    FilterCriteria,
+} from "@/lib/api/campaigns"
 import type { EmailTemplate, EmailTemplateListItem } from "@/lib/api/email-templates"
 import { listMessagingTemplates, type MessagingTemplateVersion } from "@/lib/api/twilio"
 import { useIntendedParentStatuses } from "@/lib/hooks/use-metadata"
@@ -80,6 +86,14 @@ import { getDefaultPipeline } from "@/lib/api/pipelines"
 import { RecipientPreviewCard } from "@/components/recipient-preview-card"
 import { US_STATES } from "@/lib/constants/us-states"
 import { getIntendedParentStageOptions } from "@/lib/intended-parent-stage-utils"
+import {
+    CAMPAIGN_RECIPIENT_OPTIONS,
+    getCampaignPipelineEntityType,
+    getCampaignRecipientHref,
+    getCampaignRecipientLabel,
+    isCampaignRecipientType,
+    isDonorCampaignRecipientType,
+} from "@/lib/campaign-recipient"
 
 // Status styles
 const statusStyles: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; className?: string }> = {
@@ -140,7 +154,7 @@ function getSelectedLabels<T extends { label: string }>(
     ))
 }
 
-type CampaignEditRecipientType = "case" | "intended_parent"
+type CampaignEditRecipientType = CampaignRecipientType
 
 type CampaignEditDraftState = {
     name: string
@@ -180,8 +194,9 @@ function createCampaignEditDraft(campaign: Campaign): CampaignEditDraftState {
     const stageIds = Array.isArray(criteria.stage_ids) ? criteria.stage_ids : []
     const stageSlugs = Array.isArray(criteria.stage_slugs) ? criteria.stage_slugs : []
     const states = Array.isArray(criteria.states) ? criteria.states : []
-    const recipientType =
-        campaign.recipient_type === "intended_parent" ? "intended_parent" : "case"
+    const recipientType = isCampaignRecipientType(campaign.recipient_type)
+        ? campaign.recipient_type
+        : "case"
 
     return {
         name: campaign.name,
@@ -616,7 +631,7 @@ function CampaignFilterSummaryCard({
                     <div className="space-y-1">
                         <p className="text-xs text-muted-foreground">Recipient Type</p>
                         <p className="font-medium">
-                            {campaign.recipient_type === "case" ? "Surrogates" : "Intended Parents"}
+                            {getCampaignRecipientLabel(campaign.recipient_type)}
                         </p>
                     </div>
                     <div className="space-y-1">
@@ -670,14 +685,17 @@ function CampaignFilterSummaryCard({
                         </div>
                     )}
                 </div>
-                {(filterCriteria.source || filterCriteria.is_priority) && (
+                {(filterCriteria.source ||
+                    (filterCriteria.is_priority &&
+                        !isDonorCampaignRecipientType(campaign.recipient_type))) && (
                     <div className="flex flex-wrap gap-2">
                         {filterCriteria.source && (
                             <Badge variant="outline" className="text-xs">
                                 Source: {filterCriteria.source}
                             </Badge>
                         )}
-                        {filterCriteria.is_priority && (
+                        {filterCriteria.is_priority &&
+                            !isDonorCampaignRecipientType(campaign.recipient_type) && (
                             <Badge variant="outline" className="text-xs">
                                 Priority only
                             </Badge>
@@ -824,33 +842,48 @@ function CampaignRecipientsCard({
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {recipients.map((recipient) => (
-                                <TableRow key={recipient.id}>
-                                    <TableCell className="font-medium">
-                                        {recipient.recipient_name || "-"}
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground">
-                                        {channel === "messaging"
-                                            ? recipient.recipient_phone_last4
-                                                ? `••• ••• ${recipient.recipient_phone_last4}`
-                                                : "-"
-                                            : recipient.recipient_email ?? "-"}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge
-                                            variant={statusStyles[recipient.status]?.variant || "secondary"}
-                                            className={statusStyles[recipient.status]?.className}
-                                        >
-                                            {statusLabels[recipient.status] || recipient.status}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground text-sm">
-                                        {recipient.sent_at
-                                            ? format(parseDateInput(recipient.sent_at), "MMM d, yyyy h:mm a")
-                                            : "-"}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                            {recipients.map((recipient) => {
+                                const recipientHref = getCampaignRecipientHref(
+                                    recipient.entity_type,
+                                    recipient.entity_id,
+                                )
+                                return (
+                                    <TableRow key={recipient.id}>
+                                        <TableCell className="font-medium">
+                                            {recipientHref ? (
+                                                <Link
+                                                    href={recipientHref}
+                                                    className="text-primary hover:underline"
+                                                >
+                                                    {recipient.recipient_name || "-"}
+                                                </Link>
+                                            ) : (
+                                                recipient.recipient_name || "-"
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground">
+                                            {channel === "messaging"
+                                                ? recipient.recipient_phone_last4
+                                                    ? `••• ••• ${recipient.recipient_phone_last4}`
+                                                    : "-"
+                                                : recipient.recipient_email ?? "-"}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge
+                                                variant={statusStyles[recipient.status]?.variant || "secondary"}
+                                                className={statusStyles[recipient.status]?.className}
+                                            >
+                                                {statusLabels[recipient.status] || recipient.status}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground text-sm">
+                                            {recipient.sent_at
+                                                ? format(parseDateInput(recipient.sent_at), "MMM d, yyyy h:mm a")
+                                                : "-"}
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            })}
                         </TableBody>
                     </Table>
                 ) : (
@@ -931,6 +964,7 @@ function CampaignEditDialog({
                     <div className="space-y-2">
                         <Label>Template *</Label>
                         <Select
+                            aria-label="Campaign template"
                             value={editDraft.templateId}
                             onValueChange={(value) => {
                                 if (value) {
@@ -941,7 +975,7 @@ function CampaignEditDialog({
                                 }
                             }}
                         >
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger aria-label="Campaign template" className="w-full">
                                 <SelectValue placeholder="Choose a template">
                                     {(value: string | null) => {
                                         if (!value) return "Choose a template"
@@ -962,9 +996,10 @@ function CampaignEditDialog({
                     <div className="space-y-2">
                         <Label>Recipient Type</Label>
                         <Select
+                            aria-label="Recipient type"
                             value={editDraft.recipientType}
                             onValueChange={(value) => {
-                                if (value === "case" || value === "intended_parent") {
+                                if (isCampaignRecipientType(value)) {
                                     dispatchEditDraft({
                                         type: "changeRecipientType",
                                         value,
@@ -972,18 +1007,21 @@ function CampaignEditDialog({
                                 }
                             }}
                         >
-                            <SelectTrigger>
+                            <SelectTrigger aria-label="Recipient type">
                                 <SelectValue placeholder="Select type">
                                     {(value: string | null) => {
-                                        if (value === "case") return "Surrogates"
-                                        if (value === "intended_parent") return "Intended Parents"
-                                        return "Select type"
+                                        return isCampaignRecipientType(value)
+                                            ? getCampaignRecipientLabel(value)
+                                            : "Select type"
                                     }}
                                 </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="case">Surrogates</SelectItem>
-                                <SelectItem value="intended_parent">Intended Parents</SelectItem>
+                                {CAMPAIGN_RECIPIENT_OPTIONS.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </div>
@@ -1275,11 +1313,22 @@ export default function CampaignDetailPage() {
     const retryFailed = useRetryFailedCampaignRun()
     const { data: intendedParentStatuses } = useIntendedParentStatuses()
 
-    const { data: pipeline } = useQuery({
-        queryKey: ["defaultPipeline", "surrogate"],
-        queryFn: () => getDefaultPipeline("surrogate"),
+    const campaignPipelineEntityType = getCampaignPipelineEntityType(
+        campaign?.recipient_type ?? "case",
+    )
+    const editPipelineEntityType = getCampaignPipelineEntityType(editDraft.recipientType)
+    const { data: campaignPipeline } = useQuery({
+        queryKey: ["defaultPipeline", campaignPipelineEntityType],
+        queryFn: () => getDefaultPipeline(campaignPipelineEntityType ?? "surrogate"),
+        enabled: campaignPipelineEntityType !== null,
     })
-    const pipelineStages = pipeline?.stages || []
+    const { data: editPipeline } = useQuery({
+        queryKey: ["defaultPipeline", editPipelineEntityType],
+        queryFn: () => getDefaultPipeline(editPipelineEntityType ?? "surrogate"),
+        enabled: editPipelineEntityType !== null,
+    })
+    const campaignPipelineStages = campaignPipeline?.stages || []
+    const editPipelineStages = editPipeline?.stages || []
     const intendedParentStageOptions = getIntendedParentStageOptions(
         intendedParentStatuses?.statuses,
     ).map((stage) => ({
@@ -1292,7 +1341,7 @@ export default function CampaignDetailPage() {
     const editStageOptions =
         editDraft.recipientType === "intended_parent"
             ? intendedParentStageOptions
-            : pipelineStages.filter(stage => stage.is_active)
+            : editPipelineStages.filter(stage => stage.is_active)
     const canEdit = campaign?.status === "draft" || campaign?.status === "scheduled"
     const shouldAutoOpenEdit = searchParams.get("edit") === "1"
     const autoEditRequestKey =
@@ -1348,7 +1397,7 @@ export default function CampaignDetailPage() {
     const selectedStageFilters = toSelectedStringSet(rawStageFilters)
     const stageLabelsForFilter = campaign.recipient_type === "intended_parent"
         ? getSelectedLabels(intendedParentStageOptions, selectedStageFilters, (stage) => stage.id)
-        : getSelectedLabels(pipelineStages, selectedStageFilters, (stage) => stage.id)
+        : getSelectedLabels(campaignPipelineStages, selectedStageFilters, (stage) => stage.id)
     const stateFilters = Array.isArray(filterCriteria.states) ? filterCriteria.states : []
     const selectedStateFilters = toSelectedStringSet(stateFilters)
     const stateLabelsForFilter = getSelectedLabels(US_STATES, selectedStateFilters, (state) => state.value)
@@ -1418,15 +1467,22 @@ export default function CampaignDetailPage() {
                 <RecipientPreviewCard
                     totalCount={preview?.total_count || 0}
                     sampleRecipients={
-                        preview?.sample_recipients?.map((recipient) => ({
-                            email:
-                                campaign.channel === "messaging"
-                                    ? recipient.phone_last4
-                                        ? `••• ••• ${recipient.phone_last4}`
-                                        : "Phone unavailable"
-                                    : recipient.email ?? "Email unavailable",
-                            name: recipient.name,
-                        })) || []
+                        preview?.sample_recipients?.map((recipient) => {
+                            const href = getCampaignRecipientHref(
+                                recipient.entity_type,
+                                recipient.entity_id,
+                            )
+                            return {
+                                email:
+                                    campaign.channel === "messaging"
+                                        ? recipient.phone_last4
+                                            ? `••• ••• ${recipient.phone_last4}`
+                                            : "Phone unavailable"
+                                        : recipient.email ?? "Email unavailable",
+                                name: recipient.name,
+                                ...(href ? { href } : {}),
+                            }
+                        }) || []
                     }
                     isLoading={previewLoading}
                     onRefresh={() => refetchPreview()}

@@ -37,6 +37,11 @@ async def process_admin_export(db, job) -> None:
         payload["file_path"] = file_path
         payload["filename"] = filename
 
+    elif export_type == "donors_csv":
+        file_path = admin_export_service.store_donors_csv(db, job.organization_id, filename)
+        payload["file_path"] = file_path
+        payload["filename"] = filename
+
     elif export_type == "org_config_zip":
         export_bytes = admin_export_service.build_org_config_zip(db, job.organization_id)
         file_path = admin_export_service.store_export_bytes(

@@ -11,7 +11,14 @@ from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token
 from app.db.enums import Role
-from app.db.models import Appointment, Membership, Surrogate, SurrogateActivityLog, User
+from app.db.models import (
+    Appointment,
+    Membership,
+    Surrogate,
+    SurrogateActivityLog,
+    User,
+    UserPermissionOverride,
+)
 from app.main import app
 from app.services import pipeline_service, session_service
 
@@ -28,7 +35,7 @@ def _get_stage(db, org_id, slug: str):
 
 
 @asynccontextmanager
-async def role_client(db, org, role: Role):
+async def role_client(db, org, role: Role, *, revokes: tuple[str, ...] = ()):
     user = User(
         id=uuid.uuid4(),
         email=f"{role.value}-{uuid.uuid4().hex[:8]}@test.com",
@@ -46,6 +53,18 @@ async def role_client(db, org, role: Role):
             organization_id=org.id,
             role=role,
         )
+    )
+    db.add_all(
+        [
+            UserPermissionOverride(
+                id=uuid.uuid4(),
+                organization_id=org.id,
+                user_id=user.id,
+                permission=permission,
+                override_type="revoke",
+            )
+            for permission in revokes
+        ]
     )
     db.flush()
 
@@ -80,6 +99,46 @@ async def role_client(db, org, role: Role):
         yield client, user
 
     app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_surrogate_activity_redacts_note_preview_without_note_permission(
+    authed_client,
+    db,
+    test_org,
+):
+    create_res = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Private Activity Note",
+            "email": f"private-activity-{uuid.uuid4().hex[:8]}@example.com",
+        },
+    )
+    assert create_res.status_code == 201, create_res.text
+    surrogate_id = uuid.UUID(create_res.json()["id"])
+    note_activity = SurrogateActivityLog(
+        organization_id=test_org.id,
+        surrogate_id=surrogate_id,
+        activity_type="note_added",
+        details={"note_id": str(uuid.uuid4()), "preview": "Private note preview"},
+    )
+    db.add(note_activity)
+    db.commit()
+
+    async with role_client(
+        db,
+        test_org,
+        Role.ADMIN,
+        revokes=("view_surrogate_notes",),
+    ) as (restricted_client, _user):
+        response = await restricted_client.get(f"/surrogates/{surrogate_id}/activity")
+
+    assert response.status_code == 200, response.text
+    activity = next(
+        item for item in response.json()["items"] if item["id"] == str(note_activity.id)
+    )
+    assert activity["activity_type"] == "note_added"
+    assert activity["details"] == {"note_id": note_activity.details["note_id"]}
 
 
 @pytest.mark.asyncio

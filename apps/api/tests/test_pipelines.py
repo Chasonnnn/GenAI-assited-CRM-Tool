@@ -1,6 +1,7 @@
 """Tests for Pipelines API with versioning."""
 
 import uuid
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,12 +14,21 @@ from sqlalchemy import event
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.encryption import hash_email
+from app.core.permissions import PermissionKey as P
 from app.core.pipeline_stage_colors import resolve_stage_color
 from app.core.security import create_session_token
-from app.core.stage_definitions import get_default_stage_defs
+from app.core.stage_definitions import (
+    EGG_DONOR_PIPELINE_ENTITY,
+    INTENDED_PARENT_PIPELINE_ENTITY,
+    SPERM_DONOR_PIPELINE_ENTITY,
+    get_default_stage_defs,
+)
 from app.db.enums import Role, WorkflowTriggerType
 from app.db.models import (
+    AutomationWorkflow,
+    Donor,
     EmailTemplate,
+    IntendedParent,
     Membership,
     OrgIntelligentSuggestionRule,
     Pipeline,
@@ -26,6 +36,7 @@ from app.db.models import (
     StatusChangeRequest,
     Surrogate,
     User,
+    UserPermissionOverride,
 )
 from app.main import app
 from app.schemas.campaign import CampaignCreate
@@ -33,12 +44,88 @@ from app.schemas.workflow import WorkflowCreate
 from app.services import (
     campaign_service,
     meta_crm_dataset_settings_service,
+    pipeline_dependency_service,
     pipeline_service,
     session_service,
     workflow_service,
     zapier_settings_service,
 )
 from app.utils.normalization import normalize_email
+
+
+def _admin_with_revoked_pipeline_permissions(
+    db,
+    *,
+    org_id: UUID,
+    permissions: list[P],
+) -> User:
+    user = User(
+        id=uuid.uuid4(),
+        email=f"pipeline-rbac-{uuid.uuid4().hex[:8]}@test.com",
+        display_name="Pipeline RBAC Tester",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+    db.add(
+        Membership(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            organization_id=org_id,
+            role=Role.ADMIN.value,
+            is_active=True,
+        )
+    )
+    db.add_all(
+        [
+            UserPermissionOverride(
+                id=uuid.uuid4(),
+                organization_id=org_id,
+                user_id=user.id,
+                permission=permission.value,
+                override_type="revoke",
+            )
+            for permission in permissions
+        ]
+    )
+    db.flush()
+    return user
+
+
+@asynccontextmanager
+async def _pipeline_client_for(db, *, org_id: UUID, user: User):
+    token = create_session_token(
+        user_id=user.id,
+        org_id=org_id,
+        role=Role.ADMIN.value,
+        token_version=user.token_version,
+        mfa_verified=True,
+        mfa_required=True,
+    )
+    session_service.create_session(
+        db=db,
+        user_id=user.id,
+        org_id=org_id,
+        token=token,
+        request=None,
+    )
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    csrf_token = generate_csrf_token()
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="https://test",
+            cookies={COOKIE_NAME: token, CSRF_COOKIE_NAME: csrf_token},
+            headers={CSRF_HEADER: csrf_token},
+        ) as client:
+            yield client
+    finally:
+        app.dependency_overrides.clear()
 
 
 def _create_surrogate_for_stage(
@@ -62,6 +149,46 @@ def _create_surrogate_for_stage(
     db.add(surrogate)
     db.flush()
     return surrogate
+
+
+def _create_donor_for_stage(
+    db, *, org_id: UUID, donor_type: str, stage: PipelineStage
+) -> Donor:
+    email = f"pipeline-{donor_type}-donor-{uuid.uuid4().hex[:8]}@example.com"
+    normalized_email = normalize_email(email)
+    donor = Donor(
+        id=uuid.uuid4(),
+        organization_id=org_id,
+        donor_number=f"D{uuid.uuid4().int % 90000 + 10000:05d}",
+        donor_type=donor_type,
+        stage_id=stage.id,
+        full_name=f"Pipeline {donor_type.title()} Donor",
+        email=normalized_email,
+        email_hash=hash_email(normalized_email),
+    )
+    db.add(donor)
+    db.flush()
+    return donor
+
+
+def _create_intended_parent_for_stage(
+    db, *, org_id: UUID, stage: PipelineStage
+) -> IntendedParent:
+    email = f"pipeline-ip-{uuid.uuid4().hex[:8]}@example.com"
+    normalized_email = normalize_email(email)
+    intended_parent = IntendedParent(
+        id=uuid.uuid4(),
+        organization_id=org_id,
+        intended_parent_number=f"IP{uuid.uuid4().int % 90000 + 10000:05d}",
+        stage_id=stage.id,
+        status=stage.slug,
+        full_name="Pipeline Intended Parent",
+        email=normalized_email,
+        email_hash=hash_email(normalized_email),
+    )
+    db.add(intended_parent)
+    db.flush()
+    return intended_parent
 
 
 def _create_email_template(db, *, org_id: UUID) -> EmailTemplate:
@@ -140,6 +267,881 @@ async def test_list_pipelines_authed(authed_client: AsyncClient):
     response = await authed_client.get("/settings/pipelines")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+
+
+@pytest.mark.asyncio
+async def test_pipeline_api_rejects_unknown_non_empty_entity_type(authed_client: AsyncClient):
+    response = await authed_client.get("/settings/pipelines", params={"entity_type": "egg-donor"})
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_pipeline_api_returns_distinct_donor_defaults(authed_client: AsyncClient):
+    egg_response = await authed_client.get(
+        "/settings/pipelines/default", params={"entity_type": EGG_DONOR_PIPELINE_ENTITY}
+    )
+    sperm_response = await authed_client.get(
+        "/settings/pipelines/default", params={"entity_type": SPERM_DONOR_PIPELINE_ENTITY}
+    )
+
+    assert egg_response.status_code == 200, egg_response.text
+    assert sperm_response.status_code == 200, sperm_response.text
+    assert egg_response.json()["entity_type"] == EGG_DONOR_PIPELINE_ENTITY
+    assert sperm_response.json()["entity_type"] == SPERM_DONOR_PIPELINE_ENTITY
+    assert [stage["stage_key"] for stage in egg_response.json()["stages"]] != [
+        stage["stage_key"] for stage in sperm_response.json()["stages"]
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "entity_type",
+    [EGG_DONOR_PIPELINE_ENTITY, SPERM_DONOR_PIPELINE_ENTITY],
+)
+async def test_donor_pipeline_reads_require_donor_view_after_resolving_actual_type(
+    db,
+    test_org,
+    test_user,
+    entity_type,
+):
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        entity_type=entity_type,
+    )
+    user = _admin_with_revoked_pipeline_permissions(
+        db,
+        org_id=test_org.id,
+        permissions=[P.DONORS_VIEW],
+    )
+    stages = pipeline_service.get_stages(db, pipeline.id)
+    draft_payload = {
+        "name": pipeline.name,
+        "stages": [
+            {
+                "id": str(stage.id),
+                "stage_key": stage.stage_key,
+                "slug": stage.slug,
+                "label": stage.label,
+                "color": stage.color,
+                "order": stage.order,
+                "category": stage.stage_type,
+                "is_active": stage.is_active,
+                "semantics": stage.semantics,
+            }
+            for stage in stages
+        ],
+        "feature_config": pipeline.feature_config,
+        "remaps": [],
+    }
+
+    async with _pipeline_client_for(db, org_id=test_org.id, user=user) as client:
+        responses = [
+            await client.get("/settings/pipelines", params={"entity_type": entity_type}),
+            await client.get(
+                "/settings/pipelines/default",
+                params={"entity_type": entity_type},
+            ),
+            await client.get(f"/settings/pipelines/{pipeline.id}"),
+            await client.get(f"/settings/pipelines/{pipeline.id}/dependency-graph"),
+            await client.post(
+                f"/settings/pipelines/{pipeline.id}/change-preview",
+                json=draft_payload,
+            ),
+        ]
+        surrogate_control = await client.get("/settings/pipelines/default")
+
+    assert [response.status_code for response in responses] == [403, 403, 403, 403, 403]
+    assert surrogate_control.status_code == 200, surrogate_control.text
+
+
+@pytest.mark.asyncio
+async def test_donor_pipeline_configuration_mutations_require_donor_edit(
+    db,
+    test_org,
+    test_user,
+):
+    donor_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        entity_type=EGG_DONOR_PIPELINE_ENTITY,
+    )
+    surrogate_pipeline = pipeline_service.create_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        "Surrogate mutation control",
+    )
+    user = _admin_with_revoked_pipeline_permissions(
+        db,
+        org_id=test_org.id,
+        permissions=[P.DONORS_EDIT],
+    )
+
+    async with _pipeline_client_for(db, org_id=test_org.id, user=user) as client:
+        detail = await client.get(f"/settings/pipelines/{donor_pipeline.id}")
+        donor_update = await client.patch(
+            f"/settings/pipelines/{donor_pipeline.id}",
+            json={"name": "Forbidden donor pipeline update"},
+        )
+        donor_create = await client.post(
+            "/settings/pipelines",
+            json={
+                "name": "Forbidden donor pipeline",
+                "entity_type": SPERM_DONOR_PIPELINE_ENTITY,
+            },
+        )
+        surrogate_update = await client.patch(
+            f"/settings/pipelines/{surrogate_pipeline.id}",
+            json={"name": "Allowed surrogate pipeline update"},
+        )
+
+    assert detail.status_code == 200, detail.text
+    assert donor_update.status_code == 403
+    assert donor_create.status_code == 403
+    assert surrogate_update.status_code == 200, surrogate_update.text
+
+
+@pytest.mark.asyncio
+async def test_donor_pipeline_record_remaps_require_donor_change_status(
+    db,
+    test_org,
+    test_user,
+):
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        entity_type=EGG_DONOR_PIPELINE_ENTITY,
+    )
+    custom_stage = pipeline_service.create_stage(
+        db,
+        pipeline.id,
+        slug="permission_review",
+        label="Permission Review",
+        color="#475569",
+        stage_type="intake",
+        user_id=test_user.id,
+    )
+    target_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "contacted")
+    assert target_stage is not None
+    _create_donor_for_stage(
+        db,
+        org_id=test_org.id,
+        donor_type="egg",
+        stage=custom_stage,
+    )
+    db.commit()
+    user = _admin_with_revoked_pipeline_permissions(
+        db,
+        org_id=test_org.id,
+        permissions=[P.DONORS_CHANGE_STATUS],
+    )
+
+    async with _pipeline_client_for(db, org_id=test_org.id, user=user) as client:
+        detail = await client.get(f"/settings/pipelines/{pipeline.id}")
+        assert detail.status_code == 200, detail.text
+        payload = detail.json()
+        remap = await client.put(
+            f"/settings/pipelines/{pipeline.id}/apply-draft",
+            json={
+                "name": payload["name"],
+                "stages": [
+                    _draft_stage_payload(stage, index + 1)
+                    for index, stage in enumerate(
+                        stage
+                        for stage in payload["stages"]
+                        if stage["id"] != str(custom_stage.id)
+                    )
+                ],
+                "feature_config": payload["feature_config"],
+                "expected_version": payload["current_version"],
+                "remaps": [
+                    {
+                        "removed_stage_key": custom_stage.stage_key,
+                        "target_stage_key": target_stage.stage_key,
+                    }
+                ],
+            },
+        )
+        config_only = await client.post(
+            f"/settings/pipelines/{pipeline.id}/stages",
+            json={
+                "slug": "configuration_only",
+                "label": "Configuration Only",
+                "color": "#64748B",
+                "stage_type": "intake",
+            },
+        )
+
+    assert remap.status_code == 403
+    assert config_only.status_code == 201, config_only.text
+
+
+def test_donor_pipeline_rollback_rejects_snapshot_that_would_strand_active_donor(
+    db,
+    test_org,
+    test_user,
+):
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        entity_type=EGG_DONOR_PIPELINE_ENTITY,
+    )
+    target_version = pipeline.current_version
+    custom_stage = pipeline_service.create_stage(
+        db,
+        pipeline.id,
+        slug="rollback_review",
+        label="Rollback Review",
+        color="#475569",
+        stage_type="intake",
+        user_id=test_user.id,
+    )
+    donor = _create_donor_for_stage(
+        db,
+        org_id=test_org.id,
+        donor_type="egg",
+        stage=custom_stage,
+    )
+    db.commit()
+    db.refresh(pipeline)
+    version_before = pipeline.current_version
+    version_count_before = len(
+        pipeline_service.get_pipeline_versions(db, test_org.id, pipeline.id)
+    )
+
+    updated, error = pipeline_service.rollback_pipeline(
+        db,
+        pipeline,
+        target_version=target_version,
+        user_id=test_user.id,
+    )
+
+    db.refresh(pipeline)
+    db.refresh(custom_stage)
+    db.refresh(donor)
+    assert updated is None
+    assert error == "Stage 'Rollback Review' requires a remap target before removal."
+    assert pipeline.current_version == version_before
+    assert custom_stage.is_active is True
+    assert donor.stage_id == custom_stage.id
+    assert len(pipeline_service.get_pipeline_versions(db, test_org.id, pipeline.id)) == (
+        version_count_before
+    )
+
+
+@pytest.mark.parametrize(
+    "entity_type",
+    ["surrogate", INTENDED_PARENT_PIPELINE_ENTITY],
+)
+def test_existing_entity_pipeline_rollback_rejects_snapshot_that_would_strand_records(
+    db,
+    test_org,
+    test_user,
+    entity_type,
+):
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        entity_type=entity_type,
+    )
+    target_version = pipeline.current_version
+    custom_stage = pipeline_service.create_stage(
+        db,
+        pipeline.id,
+        slug="rollback_review",
+        label="Rollback Review",
+        color="#475569",
+        stage_type="intake",
+        user_id=test_user.id,
+    )
+    if entity_type == INTENDED_PARENT_PIPELINE_ENTITY:
+        record = _create_intended_parent_for_stage(
+            db,
+            org_id=test_org.id,
+            stage=custom_stage,
+        )
+    else:
+        record = _create_surrogate_for_stage(
+            db,
+            org_id=test_org.id,
+            user_id=test_user.id,
+            stage=custom_stage,
+        )
+    db.commit()
+    db.refresh(pipeline)
+    version_before = pipeline.current_version
+
+    updated, error = pipeline_service.rollback_pipeline(
+        db,
+        pipeline,
+        target_version=target_version,
+        user_id=test_user.id,
+    )
+
+    db.refresh(pipeline)
+    db.refresh(custom_stage)
+    db.refresh(record)
+    assert updated is None
+    assert error == "Stage 'Rollback Review' requires a remap target before removal."
+    assert pipeline.current_version == version_before
+    assert custom_stage.is_active is True
+    assert record.stage_id == custom_stage.id
+
+
+def test_donor_pipeline_rollback_rejects_snapshot_with_workflow_dependency(
+    db,
+    test_org,
+    test_user,
+):
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        entity_type=EGG_DONOR_PIPELINE_ENTITY,
+    )
+    target_version = pipeline.current_version
+    custom_stage = pipeline_service.create_stage(
+        db,
+        pipeline.id,
+        slug="rollback_review",
+        label="Rollback Review",
+        color="#475569",
+        stage_type="intake",
+        user_id=test_user.id,
+    )
+    workflow = AutomationWorkflow(
+        organization_id=test_org.id,
+        name=f"Egg rollback workflow {uuid.uuid4().hex[:8]}",
+        subject_type=EGG_DONOR_PIPELINE_ENTITY,
+        trigger_type=WorkflowTriggerType.DONOR_STAGE_CHANGED.value,
+        trigger_config={"to_stage_id": str(custom_stage.id)},
+        conditions=[],
+        actions=[],
+        is_enabled=True,
+        scope="org",
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.commit()
+    db.refresh(pipeline)
+    version_before = pipeline.current_version
+
+    updated, error = pipeline_service.rollback_pipeline(
+        db,
+        pipeline,
+        target_version=target_version,
+        user_id=test_user.id,
+    )
+
+    db.refresh(pipeline)
+    db.refresh(custom_stage)
+    assert updated is None
+    assert error == "Stage 'Rollback Review' requires a remap target before removal."
+    assert pipeline.current_version == version_before
+    assert custom_stage.is_active is True
+
+
+def test_donor_pipeline_rollback_applies_dependency_free_snapshot(
+    db,
+    test_org,
+    test_user,
+):
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        entity_type=EGG_DONOR_PIPELINE_ENTITY,
+    )
+    target_version = pipeline.current_version
+    custom_stage = pipeline_service.create_stage(
+        db,
+        pipeline.id,
+        slug="rollback_review",
+        label="Rollback Review",
+        color="#475569",
+        stage_type="intake",
+        user_id=test_user.id,
+    )
+    db.refresh(pipeline)
+    version_before = pipeline.current_version
+
+    updated, error = pipeline_service.rollback_pipeline(
+        db,
+        pipeline,
+        target_version=target_version,
+        user_id=test_user.id,
+    )
+
+    db.refresh(custom_stage)
+    assert error is None
+    assert updated is not None
+    assert updated.current_version == version_before + 1
+    assert custom_stage.is_active is False
+
+
+def test_donor_default_pipelines_are_created_and_listed_in_isolation(db, test_org, test_user):
+    egg_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        entity_type=EGG_DONOR_PIPELINE_ENTITY,
+    )
+    sperm_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        entity_type=SPERM_DONOR_PIPELINE_ENTITY,
+    )
+
+    assert egg_pipeline.id != sperm_pipeline.id
+    assert egg_pipeline.entity_type == EGG_DONOR_PIPELINE_ENTITY
+    assert sperm_pipeline.entity_type == SPERM_DONOR_PIPELINE_ENTITY
+    assert [stage.stage_key for stage in sorted(egg_pipeline.stages, key=lambda item: item.order)] == [
+        stage["stage_key"] for stage in get_default_stage_defs(EGG_DONOR_PIPELINE_ENTITY)
+    ]
+    assert [
+        pipeline.id
+        for pipeline in pipeline_service.list_pipelines(
+            db, test_org.id, EGG_DONOR_PIPELINE_ENTITY
+        )
+    ] == [egg_pipeline.id]
+    assert [
+        pipeline.id
+        for pipeline in pipeline_service.list_pipelines(
+            db, test_org.id, SPERM_DONOR_PIPELINE_ENTITY
+        )
+    ] == [sperm_pipeline.id]
+
+    custom_egg_pipeline = pipeline_service.create_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        "Egg Donor Review",
+        entity_type=EGG_DONOR_PIPELINE_ENTITY,
+    )
+
+    assert {
+        pipeline.id
+        for pipeline in pipeline_service.list_pipelines(
+            db, test_org.id, EGG_DONOR_PIPELINE_ENTITY
+        )
+    } == {egg_pipeline.id, custom_egg_pipeline.id}
+    assert pipeline_service.get_pipeline(
+        db,
+        test_org.id,
+        custom_egg_pipeline.id,
+        entity_type=SPERM_DONOR_PIPELINE_ENTITY,
+    ) is None
+
+
+@pytest.mark.parametrize(
+    ("entity_type", "expected_stage_keys"),
+    [
+        (
+            EGG_DONOR_PIPELINE_ENTITY,
+            [
+                "new",
+                "contacted",
+                "pre_screening",
+                "application_submitted",
+                "medical_records_review",
+                "psychological_screening",
+                "ready_to_match",
+                "matched",
+                "cycle_in_progress",
+                "retrieval_complete",
+                "on_hold",
+                "disqualified",
+                "closed",
+            ],
+        ),
+        (
+            SPERM_DONOR_PIPELINE_ENTITY,
+            [
+                "new",
+                "contacted",
+                "pre_screening",
+                "application_submitted",
+                "semen_analysis",
+                "medical_genetic_screening",
+                "available",
+                "matched",
+                "collection_in_progress",
+                "donation_complete",
+                "on_hold",
+                "disqualified",
+                "closed",
+            ],
+        ),
+    ],
+)
+def test_donor_recommended_pipeline_draft_resets_to_its_own_defaults(
+    db, test_org, test_user, entity_type, expected_stage_keys
+):
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, test_org.id, test_user.id, entity_type=entity_type
+    )
+
+    draft = pipeline_service.build_recommended_pipeline_draft(pipeline)
+
+    assert [stage["stage_key"] for stage in draft["stages"]] == expected_stage_keys
+
+
+def test_donor_dependency_graph_does_not_reuse_surrogate_workflow_references(
+    db, test_org, test_user
+):
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        entity_type=EGG_DONOR_PIPELINE_ENTITY,
+    )
+    db.add(
+        AutomationWorkflow(
+            organization_id=test_org.id,
+            name=f"Surrogate stage workflow {uuid.uuid4().hex[:8]}",
+            trigger_type="status_changed",
+            trigger_config={"to_stage_key": "ready_to_match"},
+            conditions=[],
+            actions=[],
+            is_enabled=True,
+            scope="org",
+            created_by_user_id=test_user.id,
+        )
+    )
+    db.commit()
+
+    graph = pipeline_dependency_service.build_pipeline_dependency_graph(db, pipeline)
+
+    assert all(stage["surrogate_count"] == 0 for stage in graph["stages"])
+    assert all(stage["campaign_refs"] == [] for stage in graph["stages"])
+    assert all(stage["workflow_refs"] == [] for stage in graph["stages"])
+
+
+def test_donor_dependency_graph_includes_only_same_subtype_workflows(
+    db, test_org, test_user
+):
+    egg_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        entity_type=EGG_DONOR_PIPELINE_ENTITY,
+    )
+    egg_workflow = AutomationWorkflow(
+        organization_id=test_org.id,
+        name=f"Egg donor pipeline workflow {uuid.uuid4().hex[:8]}",
+        subject_type=EGG_DONOR_PIPELINE_ENTITY,
+        trigger_type=WorkflowTriggerType.DONOR_STAGE_CHANGED.value,
+        trigger_config={"to_stage_key": "contacted"},
+        conditions=[],
+        actions=[],
+        is_enabled=True,
+        scope="org",
+        created_by_user_id=test_user.id,
+    )
+    sperm_workflow = AutomationWorkflow(
+        organization_id=test_org.id,
+        name=f"Sperm donor pipeline workflow {uuid.uuid4().hex[:8]}",
+        subject_type=SPERM_DONOR_PIPELINE_ENTITY,
+        trigger_type=WorkflowTriggerType.DONOR_STAGE_CHANGED.value,
+        trigger_config={"to_stage_key": "contacted"},
+        conditions=[],
+        actions=[],
+        is_enabled=True,
+        scope="org",
+        created_by_user_id=test_user.id,
+    )
+    db.add_all([egg_workflow, sperm_workflow])
+    db.commit()
+
+    graph = pipeline_dependency_service.build_pipeline_dependency_graph(db, egg_pipeline)
+    contacted = next(stage for stage in graph["stages"] if stage["stage_key"] == "contacted")
+
+    assert {item["id"] for item in contacted["workflow_refs"]} == {str(egg_workflow.id)}
+
+
+def test_surrogate_dependency_graph_does_not_reuse_donor_workflow_references(
+    db, test_org, test_user
+):
+    surrogate_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+    )
+    donor_workflow = AutomationWorkflow(
+        organization_id=test_org.id,
+        name=f"Donor-only pipeline workflow {uuid.uuid4().hex[:8]}",
+        subject_type=EGG_DONOR_PIPELINE_ENTITY,
+        trigger_type=WorkflowTriggerType.DONOR_STAGE_CHANGED.value,
+        trigger_config={"to_stage_key": "contacted"},
+        conditions=[],
+        actions=[],
+        is_enabled=True,
+        scope="org",
+        created_by_user_id=test_user.id,
+    )
+    db.add(donor_workflow)
+    db.commit()
+
+    graph = pipeline_dependency_service.build_pipeline_dependency_graph(db, surrogate_pipeline)
+    contacted = next(stage for stage in graph["stages"] if stage["stage_key"] == "contacted")
+
+    assert contacted["workflow_refs"] == []
+
+
+def test_donor_dependency_graph_counts_only_same_org_and_donor_type(
+    db, test_org, test_user
+):
+    egg_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        entity_type=EGG_DONOR_PIPELINE_ENTITY,
+    )
+    sperm_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        entity_type=SPERM_DONOR_PIPELINE_ENTITY,
+    )
+    egg_new = next(stage for stage in egg_pipeline.stages if stage.stage_key == "new")
+    sperm_new = next(stage for stage in sperm_pipeline.stages if stage.stage_key == "new")
+    _create_donor_for_stage(db, org_id=test_org.id, donor_type="egg", stage=egg_new)
+    _create_donor_for_stage(db, org_id=test_org.id, donor_type="sperm", stage=sperm_new)
+    db.commit()
+
+    egg_graph = pipeline_dependency_service.build_pipeline_dependency_graph(db, egg_pipeline)
+    sperm_graph = pipeline_dependency_service.build_pipeline_dependency_graph(db, sperm_pipeline)
+
+    egg_new_dependency = next(
+        stage for stage in egg_graph["stages"] if stage["stage_key"] == "new"
+    )
+    sperm_new_dependency = next(
+        stage for stage in sperm_graph["stages"] if stage["stage_key"] == "new"
+    )
+    assert egg_new_dependency["surrogate_count"] == 1
+    assert sperm_new_dependency["surrogate_count"] == 1
+
+
+def test_apply_egg_pipeline_remap_moves_only_egg_donors_and_refreshes_stage_state(
+    db, test_org, test_user
+):
+    egg_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, test_org.id, test_user.id, entity_type=EGG_DONOR_PIPELINE_ENTITY
+    )
+    sperm_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, test_org.id, test_user.id, entity_type=SPERM_DONOR_PIPELINE_ENTITY
+    )
+    custom_stage = pipeline_service.create_stage(
+        db,
+        egg_pipeline.id,
+        slug="secondary_review",
+        label="Secondary Review",
+        color="#475569",
+        stage_type="intake",
+        user_id=test_user.id,
+    )
+    egg_target = pipeline_service.get_stage_by_key(db, egg_pipeline.id, "contacted")
+    sperm_stage = pipeline_service.get_stage_by_key(db, sperm_pipeline.id, "contacted")
+    assert egg_target is not None
+    assert sperm_stage is not None
+    egg_donor = _create_donor_for_stage(
+        db, org_id=test_org.id, donor_type="egg", stage=custom_stage
+    )
+    sperm_donor = _create_donor_for_stage(
+        db, org_id=test_org.id, donor_type="sperm", stage=sperm_stage
+    )
+    assert egg_donor.stage.id == custom_stage.id
+    assert sperm_donor.stage.id == sperm_stage.id
+    db.commit()
+
+    kept_stages = [
+        stage
+        for stage in pipeline_service.get_stages(db, egg_pipeline.id, include_inactive=True)
+        if stage.is_active and stage.id != custom_stage.id
+    ]
+    pipeline_service.apply_pipeline_draft(
+        db,
+        egg_pipeline,
+        name=egg_pipeline.name,
+        stages=[
+            {
+                "id": str(stage.id),
+                "stage_key": stage.stage_key,
+                "slug": stage.slug,
+                "label": stage.label,
+                "color": stage.color,
+                "order": index + 1,
+                "category": stage.stage_type,
+                "is_active": stage.is_active,
+                "semantics": stage.semantics,
+            }
+            for index, stage in enumerate(kept_stages)
+        ],
+        feature_config=egg_pipeline.feature_config,
+        remaps=[
+            {
+                "removed_stage_key": custom_stage.stage_key,
+                "target_stage_key": egg_target.stage_key,
+            }
+        ],
+        user_id=test_user.id,
+    )
+
+    assert egg_donor.stage_id == egg_target.id
+    assert egg_donor.stage.id == egg_target.id
+    assert sperm_donor.stage_id == sperm_stage.id
+    assert sperm_donor.stage.id == sperm_stage.id
+
+
+def test_apply_donor_pipeline_remap_updates_only_same_subtype_workflows(
+    db, test_org, test_user
+):
+    egg_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, test_org.id, test_user.id, entity_type=EGG_DONOR_PIPELINE_ENTITY
+    )
+    sperm_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, test_org.id, test_user.id, entity_type=SPERM_DONOR_PIPELINE_ENTITY
+    )
+    egg_custom = pipeline_service.create_stage(
+        db,
+        egg_pipeline.id,
+        slug="secondary_review",
+        label="Secondary Review",
+        color="#475569",
+        stage_type="intake",
+        user_id=test_user.id,
+    )
+    sperm_custom = pipeline_service.create_stage(
+        db,
+        sperm_pipeline.id,
+        slug="secondary_review",
+        label="Secondary Review",
+        color="#475569",
+        stage_type="intake",
+        user_id=test_user.id,
+    )
+    egg_target = pipeline_service.get_stage_by_key(db, egg_pipeline.id, "contacted")
+    assert egg_target is not None
+    egg_workflow = workflow_service.create_workflow(
+        db,
+        test_org.id,
+        test_user.id,
+        WorkflowCreate(
+            name=f"Egg donor remap workflow {uuid.uuid4().hex[:8]}",
+            subject_type=EGG_DONOR_PIPELINE_ENTITY,
+            trigger_type=WorkflowTriggerType.DONOR_STAGE_CHANGED,
+            trigger_config={"to_stage_id": str(egg_custom.id)},
+            actions=[
+                {
+                    "action_type": "send_notification",
+                    "title": "Egg donor stage changed",
+                    "body": "Pipeline remap audit workflow",
+                    "recipients": "owner",
+                }
+            ],
+        ),
+    )
+    sperm_workflow = workflow_service.create_workflow(
+        db,
+        test_org.id,
+        test_user.id,
+        WorkflowCreate(
+            name=f"Sperm donor remap workflow {uuid.uuid4().hex[:8]}",
+            subject_type=SPERM_DONOR_PIPELINE_ENTITY,
+            trigger_type=WorkflowTriggerType.DONOR_STAGE_CHANGED,
+            trigger_config={"to_stage_id": str(sperm_custom.id)},
+            actions=[
+                {
+                    "action_type": "send_notification",
+                    "title": "Sperm donor stage changed",
+                    "body": "Pipeline remap audit workflow",
+                    "recipients": "owner",
+                }
+            ],
+        ),
+    )
+    db.commit()
+
+    kept_stages = [
+        stage
+        for stage in pipeline_service.get_stages(db, egg_pipeline.id, include_inactive=True)
+        if stage.is_active and stage.id != egg_custom.id
+    ]
+    pipeline_service.apply_pipeline_draft(
+        db,
+        egg_pipeline,
+        name=egg_pipeline.name,
+        stages=[
+            {
+                "id": str(stage.id),
+                "stage_key": stage.stage_key,
+                "slug": stage.slug,
+                "label": stage.label,
+                "color": stage.color,
+                "order": index + 1,
+                "category": stage.stage_type,
+                "is_active": stage.is_active,
+                "semantics": stage.semantics,
+            }
+            for index, stage in enumerate(kept_stages)
+        ],
+        feature_config=egg_pipeline.feature_config,
+        remaps=[
+            {
+                "removed_stage_key": egg_custom.stage_key,
+                "target_stage_key": egg_target.stage_key,
+            }
+        ],
+        user_id=test_user.id,
+    )
+
+    db.refresh(egg_workflow)
+    db.refresh(sperm_workflow)
+    assert egg_workflow.trigger_config["to_stage_key"] == egg_target.stage_key
+    assert UUID(egg_workflow.trigger_config["to_stage_id"]) == egg_target.id
+    assert sperm_workflow.trigger_config["to_stage_key"] == sperm_custom.stage_key
+    assert UUID(sperm_workflow.trigger_config["to_stage_id"]) == sperm_custom.id
+
+
+def test_delete_donor_stage_migrates_matching_subtype_records(db, test_org, test_user):
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, test_org.id, test_user.id, entity_type=SPERM_DONOR_PIPELINE_ENTITY
+    )
+    custom_stage = pipeline_service.create_stage(
+        db,
+        pipeline.id,
+        slug="repeat_analysis",
+        label="Repeat Analysis",
+        color="#475569",
+        stage_type="intake",
+        user_id=test_user.id,
+    )
+    target_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "semen_analysis")
+    assert target_stage is not None
+    donor = _create_donor_for_stage(
+        db, org_id=test_org.id, donor_type="sperm", stage=custom_stage
+    )
+    assert donor.stage.id == custom_stage.id
+    db.commit()
+
+    migrated = pipeline_service.delete_stage(
+        db,
+        custom_stage,
+        target_stage.id,
+        user_id=test_user.id,
+    )
+
+    assert migrated == 1
+    assert donor.stage_id == target_stage.id
+    assert donor.stage.id == target_stage.id
 
 
 def test_get_or_create_default_pipeline_prunes_legacy_feature_config_refs(db, test_org):

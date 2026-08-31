@@ -5,7 +5,10 @@ from app.db.models import SystemAlert
 
 
 @pytest.mark.anyio
-async def test_gcp_alert_webhook_creates_alert(client, db, test_user, test_org, monkeypatch):
+@pytest.mark.parametrize("event", ["ws_send_failed", "ws_event_publish_failed"])
+async def test_gcp_alert_webhook_creates_alert(
+    client, db, test_user, test_org, monkeypatch, event
+):
     from app.core.config import settings
 
     settings.INTERNAL_SECRET = "test-internal-secret"
@@ -17,7 +20,7 @@ async def test_gcp_alert_webhook_creates_alert(client, db, test_user, test_org, 
             "summary": "Websocket send failures detected",
             "metric": {
                 "labels": {
-                    "event": "ws_send_failed",
+                    "event": event,
                     "user_id": str(test_user.id),
                 }
             },

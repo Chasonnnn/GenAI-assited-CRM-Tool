@@ -27,6 +27,20 @@ if TYPE_CHECKING:
     from app.db.models import Organization, Task, User
 
 
+def _default_workflow_subject_type(context) -> str:
+    """Keep direct ORM inserts aligned with legacy trigger subject semantics."""
+    trigger_type = context.get_current_parameters().get("trigger_type")
+    return {
+        "form_submitted": "form_submission",
+        "intake_lead_created": "intake_lead",
+        "match_proposed": "match",
+        "match_accepted": "match",
+        "match_rejected": "match",
+        "appointment_scheduled": "appointment",
+        "appointment_completed": "appointment",
+    }.get(trigger_type, "surrogate")
+
+
 class AutomationWorkflow(Base):
     """
     Automation workflow definition.
@@ -39,6 +53,7 @@ class AutomationWorkflow(Base):
     __table_args__ = (
         UniqueConstraint("organization_id", "name", name="uq_workflow_name"),
         Index("idx_wf_org_enabled", "organization_id", "is_enabled"),
+        Index("idx_wf_org_subject", "organization_id", "subject_type", "is_enabled"),
         # Scope/owner integrity: org workflows have no owner, personal workflows require owner
         CheckConstraint(
             "(scope = 'org' AND owner_user_id IS NULL) OR "
@@ -70,6 +85,12 @@ class AutomationWorkflow(Base):
     schema_version: Mapped[int] = mapped_column(default=1)
 
     # Trigger
+    subject_type: Mapped[str] = mapped_column(
+        String(50),
+        default=_default_workflow_subject_type,
+        server_default=text("'surrogate'"),
+        nullable=False,
+    )
     trigger_type: Mapped[str] = mapped_column(String(50), nullable=False)
     trigger_config: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
 
@@ -169,6 +190,7 @@ class WorkflowExecution(Base):
         Index("idx_exec_workflow", "workflow_id", "executed_at"),
         Index("idx_exec_event", "event_id"),
         Index("idx_exec_entity", "entity_type", "entity_id"),
+        Index("idx_exec_subject", "organization_id", "subject_type", "subject_id"),
         Index(
             "idx_exec_paused",
             "organization_id",
@@ -203,6 +225,8 @@ class WorkflowExecution(Base):
     # Context
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    subject_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    subject_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     trigger_event: Mapped[dict] = mapped_column(JSONB, nullable=False)
 
     # Dedupe (for scheduled/sweep triggers)

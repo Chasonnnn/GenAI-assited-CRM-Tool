@@ -1,16 +1,17 @@
 """Dashboard router - API endpoints for dashboard widgets."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db
+from app.core.deps import get_current_session, get_db, require_all_permissions
+from app.core.permissions import PermissionKey
 from app.db.enums import Role
 from app.schemas.auth import UserSession
-from app.services import dashboard_service
+from app.services import dashboard_service, task_service
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -29,6 +30,9 @@ class UpcomingTask(BaseModel):
     time: str | None  # HH:MM format or None for all-day
     surrogate_id: str | None
     surrogate_number: str | None
+    donor_id: str | None = None
+    donor_number: str | None = None
+    donor_type: str | None = None
     date: str  # YYYY-MM-DD
     is_overdue: bool
     task_type: str
@@ -78,6 +82,9 @@ class OverdueTask(BaseModel):
     due_date: str | None
     days_overdue: int
     surrogate_id: str | None
+    donor_id: str | None = None
+    donor_number: str | None = None
+    donor_type: str | None = None
 
 
 class StuckSurrogate(BaseModel):
@@ -90,6 +97,22 @@ class StuckSurrogate(BaseModel):
     last_stage_change: str | None
 
 
+class StuckDonor(BaseModel):
+    """Stuck donor for attention panel."""
+
+    id: str
+    donor_number: str
+    donor_type: Literal["egg", "sperm"]
+    stage_label: str
+    days_in_stage: int
+    last_stage_change: str | None
+
+
+class StuckDonorCounts(BaseModel):
+    egg: int = 0
+    sperm: int = 0
+
+
 class AttentionResponse(BaseModel):
     """Response for attention items endpoint."""
 
@@ -99,7 +122,17 @@ class AttentionResponse(BaseModel):
     overdue_count: int
     stuck_surrogates: list[StuckSurrogate]
     stuck_count: int
+    stuck_donors: list[StuckDonor]
+    stuck_donor_count: int
+    stuck_donor_counts: StuckDonorCounts = Field(default_factory=StuckDonorCounts)
     total_count: int
+
+
+class DonorStatusCount(BaseModel):
+    status: str
+    stage_id: str
+    count: int
+    order: int
 
 
 # =============================================================================
@@ -107,7 +140,67 @@ class AttentionResponse(BaseModel):
 # =============================================================================
 
 
-@router.get("/upcoming", response_model=UpcomingResponse)
+@router.get(
+    "/donors/by-status",
+    response_model=list[DonorStatusCount],
+    dependencies=[
+        Depends(
+            require_all_permissions(
+                [PermissionKey.VIEW_DASHBOARD, PermissionKey.DONORS_VIEW]
+            )
+        )
+    ],
+)
+def get_dashboard_donors_by_status(
+    donor_type: Annotated[Literal["egg", "sperm"], Query()],
+    session: Annotated[UserSession, Depends(get_current_session)],
+    db: Annotated[Session, Depends(get_db)],
+    from_date: Annotated[str | None, Query()] = None,
+    to_date: Annotated[str | None, Query()] = None,
+    pipeline_id: Annotated[UUID | None, Query()] = None,
+    owner_id: Annotated[UUID | None, Query()] = None,
+    state: Annotated[str | None, Query(max_length=100)] = None,
+    include_archived: Annotated[bool, Query()] = False,
+) -> list[DonorStatusCount]:
+    """Get subtype pipeline distribution for the dashboard card."""
+    from app.services import analytics_donor_service, analytics_service
+
+    if (
+        owner_id
+        and owner_id != session.user_id
+        and session.role not in (Role.ADMIN, Role.DEVELOPER, Role.CASE_MANAGER)
+    ):
+        raise HTTPException(status_code=403, detail="Not authorized to view other users' analytics")
+
+    start = end = None
+    if from_date or to_date:
+        start, end = analytics_service.parse_date_range(
+            from_date,
+            to_date,
+            inclusive_date_end=True,
+        )
+    try:
+        data = analytics_donor_service.get_cached_donors_by_status(
+            db,
+            session.org_id,
+            donor_type,
+            start=start,
+            end=end,
+            pipeline_id=pipeline_id,
+            owner_id=owner_id,
+            state=state,
+            include_archived=include_archived,
+        )
+    except analytics_donor_service.DonorAnalyticsPipelineNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Pipeline not found") from exc
+    return [DonorStatusCount(**item) for item in data]
+
+
+@router.get(
+    "/upcoming",
+    response_model=UpcomingResponse,
+    dependencies=[Depends(require_all_permissions([PermissionKey.VIEW_DASHBOARD]))],
+)
 def get_upcoming(
     request: Request,
     days: Annotated[int, "fastapi_param"] = Query(
@@ -141,6 +234,12 @@ def get_upcoming(
         )
 
     target_user_id = assignee_id or session.user_id
+    can_view_donors = task_service.user_can_view_donors(
+        db,
+        session.org_id,
+        session.user_id,
+        session.role,
+    )
 
     tasks, meetings = dashboard_service.get_upcoming_items(
         db=db,
@@ -149,6 +248,7 @@ def get_upcoming(
         days=days,
         include_overdue=include_overdue,
         pipeline_id=pipeline_id,
+        can_view_donors=can_view_donors,
     )
 
     from app.services import audit_service
@@ -175,7 +275,11 @@ def get_upcoming(
     )
 
 
-@router.get("/attention", response_model=AttentionResponse)
+@router.get(
+    "/attention",
+    response_model=AttentionResponse,
+    dependencies=[Depends(require_all_permissions([PermissionKey.VIEW_DASHBOARD]))],
+)
 def get_attention(
     request: Request,
     days_unreached: Annotated[int, "fastapi_param"] = Query(
@@ -206,6 +310,7 @@ def get_attention(
     - unreached_leads: Surrogates in early intake stages with no contact or updates in X days
     - overdue_tasks: User's tasks past due date
     - stuck_surrogates: Surrogates that haven't moved stages in X days
+    - stuck_donors: Donors that haven't moved stages in X days
     - total_count: Sum of all attention items
     """
     if assignee_id and assignee_id != session.user_id:
@@ -214,6 +319,12 @@ def get_attention(
                 status_code=403, detail="Not authorized to view other users' attention items"
             )
 
+    can_view_donors = task_service.user_can_view_donors(
+        db,
+        session.org_id,
+        session.user_id,
+        session.role,
+    )
     data = dashboard_service.get_attention_items(
         db=db,
         org_id=session.org_id,
@@ -224,6 +335,7 @@ def get_attention(
         pipeline_id=pipeline_id,
         assignee_id=assignee_id,
         limit=limit,
+        can_view_donors=can_view_donors,
     )
 
     from app.services import audit_service
@@ -250,5 +362,10 @@ def get_attention(
         overdue_count=data["overdue_count"],
         stuck_surrogates=[StuckSurrogate(**item) for item in data["stuck_surrogates"]],
         stuck_count=data["stuck_count"],
+        stuck_donors=[StuckDonor(**item) for item in data["stuck_donors"]],
+        stuck_donor_count=data["stuck_donor_count"],
+        stuck_donor_counts=data.get(
+            "stuck_donor_counts", {"egg": 0, "sperm": 0}
+        ),
         total_count=data["total_count"],
     )

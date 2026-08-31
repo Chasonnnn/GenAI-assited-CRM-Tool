@@ -3,9 +3,10 @@
  */
 
 import api from '../api';
+import type { PipelineEntityType as GeneratedPipelineEntityType } from '../constants/stages.generated';
 
 // Types
-export type PipelineEntityType = 'surrogate' | 'intended_parent';
+export type PipelineEntityType = GeneratedPipelineEntityType;
 export type StageType = 'intake' | 'paused' | 'post_approval' | 'terminal';
 export type StageCapabilityKey =
     | 'counts_as_contacted'

@@ -13,8 +13,10 @@ from app.core.deps import (
     require_csrf_header,
     require_permission,
 )
+from app.core.permissions import PermissionKey
 from app.core.policies import POLICIES
 from app.db.enums import AuditEventType, EntityType, Role
+from app.schemas.activity import EntityActivityRead, EntityActivityResponse
 from app.schemas.auth import UserSession
 from app.schemas.entity_note import EntityNoteCreate, EntityNoteListItem, EntityNoteRead
 from app.schemas.intended_parent import (
@@ -26,7 +28,14 @@ from app.schemas.intended_parent import (
     IntendedParentStatusUpdate,
     IntendedParentUpdate,
 )
-from app.services import audit_service, ip_service, note_service, user_service
+from app.services import (
+    audit_service,
+    entity_activity_service,
+    ip_service,
+    note_service,
+    permission_service,
+    user_service,
+)
 from app.utils.normalization import normalize_email
 
 router = APIRouter(
@@ -525,6 +534,90 @@ def delete_intended_parent(
 # =============================================================================
 
 
+@router.get("/{ip_id}/activity", response_model=EntityActivityResponse)
+def get_activity(
+    ip_id: UUID,
+    request: Request,
+    page: Annotated[int, "fastapi_param"] = Query(1, ge=1),
+    per_page: Annotated[int, "fastapi_param"] = Query(20, ge=1, le=100),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> EntityActivityResponse:
+    """Get comprehensive intended-parent activity."""
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
+    if not ip:
+        raise HTTPException(status_code=404, detail="Intended parent not found")
+    can_view_task_previews = permission_service.check_permission(
+        db,
+        session.org_id,
+        session.user_id,
+        session.role.value,
+        PermissionKey.TASKS_VIEW.value,
+    )
+    items, total = entity_activity_service.list_entity_activity(
+        db,
+        org_id=session.org_id,
+        entity_type="intended_parent",
+        entity_id=ip.id,
+        page=page,
+        per_page=per_page,
+        include_note_previews=True,
+        include_task_previews=can_view_task_previews,
+    )
+    note_preview_count = sum(
+        1
+        for item in items
+        if item["activity_type"] in {"note_added", "note_deleted"}
+        and isinstance(item["details"], dict)
+        and "preview" in item["details"]
+    )
+    task_preview_count = sum(
+        1
+        for item in items
+        if item["activity_type"].startswith("task_")
+        and isinstance(item["details"], dict)
+        and "title" in item["details"]
+    )
+    if note_preview_count:
+        audit_service.log_event(
+            db=db,
+            org_id=session.org_id,
+            event_type=AuditEventType.DATA_VIEW_NOTE,
+            actor_user_id=session.user_id,
+            target_type="intended_parent",
+            target_id=ip.id,
+            details={"view": "activity", "notes_count": note_preview_count},
+            request=request,
+        )
+        audit_service.log_phi_access(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            target_type="intended_parent",
+            target_id=ip.id,
+            request=request,
+            details={"view": "activity_notes", "notes_count": note_preview_count},
+        )
+    if task_preview_count:
+        audit_service.log_phi_access(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            target_type="intended_parent",
+            target_id=ip.id,
+            request=request,
+            details={"view": "activity_tasks", "tasks_count": task_preview_count},
+        )
+    if note_preview_count or task_preview_count:
+        db.commit()
+    return EntityActivityResponse(
+        items=[EntityActivityRead(**item) for item in items],
+        total=total,
+        page=page,
+        pages=(total + per_page - 1) // per_page if total else 1,
+    )
+
+
 @router.get("/{ip_id}/history", response_model=list[IntendedParentStatusHistoryItem])
 def get_status_history(
     ip_id: UUID,
@@ -536,7 +629,7 @@ def get_status_history(
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
 
-    history = ip_service.get_ip_status_history(db, ip_id)
+    history = ip_service.get_ip_status_history(db, session.org_id, ip_id)
 
     # Resolve user names
     user_ids = {
@@ -558,6 +651,8 @@ def get_status_history(
                 new_stage_id=h.new_stage_id,
                 old_status=h.old_status,
                 new_status=h.new_status,
+                old_label_snapshot=h.old_label_snapshot,
+                new_label_snapshot=h.new_label_snapshot,
                 reason=h.reason,
                 changed_by_user_id=h.changed_by_user_id,
                 changed_by_name=changed_by_name,
@@ -675,7 +770,7 @@ def delete_note(
         raise HTTPException(status_code=404, detail="Intended parent not found")
 
     note = note_service.get_note(db, note_id, session.org_id)
-    if not note or note.entity_id != ip_id:
+    if not note or note.entity_type != EntityType.INTENDED_PARENT.value or note.entity_id != ip_id:
         raise HTTPException(status_code=404, detail="Note not found")
 
     # Check permission: author or admin+
@@ -685,4 +780,4 @@ def delete_note(
     ):
         raise HTTPException(status_code=403, detail="Not authorized to delete this note")
 
-    note_service.delete_note(db, note)
+    note_service.delete_note(db, note, actor_user_id=session.user_id)

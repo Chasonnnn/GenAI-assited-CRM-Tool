@@ -73,4 +73,25 @@ export const attachmentsApi = {
             formData
         )
     },
+
+    listForDonor: (donorId: string) =>
+        api.get<Attachment[]>(`/attachments/donors/${donorId}/attachments`),
+
+    uploadForDonor: async (donorId: string, file: File): Promise<Attachment> => {
+        const formData = new FormData()
+        formData.append("file", file)
+        return api.upload<Attachment>(
+            `/attachments/donors/${donorId}/attachments`,
+            formData,
+        )
+    },
+
+    uploadDonorProfilePhoto: async (donorId: string, file: File): Promise<Attachment> => {
+        const formData = new FormData()
+        formData.append("file", file)
+        return api.upload<Attachment>(
+            `/attachments/donors/${donorId}/profile-photo`,
+            formData,
+        )
+    },
 }

@@ -116,11 +116,15 @@ async def process_twilio_consent_sync(db, job) -> None:
         )
     ).scalar_one_or_none()
 
-    sender_type = (
-        str((route.capability_evidence or {}).get("sender_type", "")).casefold()
-        if route is not None
-        else ""
+    route_evidence = route.capability_evidence or {} if route is not None else {}
+    provider_evidence = (
+        route_evidence.get("provider")
+        if isinstance(route_evidence.get("provider"), dict)
+        else {}
     )
+    sender_type = str(
+        provider_evidence.get("sender_type") or route_evidence.get("sender_type") or ""
+    ).casefold()
     configured = bool(
         settings is not None
         and settings.enabled
@@ -132,7 +136,6 @@ async def process_twilio_consent_sync(db, job) -> None:
         and route.messaging_service_sid_encrypted
         and route.sender_phone_encrypted
         and route.a2p_status == "approved"
-        and route.consent_management_status == "available"
         and sender_type == "10dlc"
     )
     if not configured:
@@ -184,6 +187,14 @@ async def process_twilio_consent_sync(db, job) -> None:
     state.provider_sync_status = "synced"
     state.provider_sync_error_code = None
     state.provider_synced_at = datetime.now(UTC)
+    route.consent_management_status = "available"
+    route_evidence = dict(route.capability_evidence or {})
+    route_evidence["consent_management"] = {
+        "source": "successful_upsert",
+        "verified_at": datetime.now(UTC).isoformat(),
+    }
+    route.capability_evidence = route_evidence
+    route.updated_at = datetime.now(UTC)
     if payload["status"] == "opt-in":
         state.status = "opted_in"
         suppression = state.contact.suppression

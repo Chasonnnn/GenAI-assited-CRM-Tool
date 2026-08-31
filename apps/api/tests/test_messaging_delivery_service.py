@@ -10,8 +10,57 @@ from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import text
 
 
-def _consented_contact(db, test_org):
-    from app.services import messaging_consent_service
+@pytest.fixture(autouse=True)
+def _enable_messaging_dispatch(monkeypatch):
+    monkeypatch.setenv("MESSAGING_DELIVERY_DISPATCH_ENABLED", "true")
+
+
+def _consented_contact(db, test_org, *, ready=True):
+    from app.core.encryption import hash_phone
+    from app.services import messaging_consent_service, twilio_settings_service
+
+    if ready:
+        settings = twilio_settings_service.get_or_create_settings(db, test_org.id)
+        settings.enabled = True
+        settings.account_sid_encrypted = twilio_settings_service.encrypt_credential("AC" + "1" * 32)
+        settings.api_key_sid_encrypted = twilio_settings_service.encrypt_credential("SK" + "2" * 32)
+        settings.api_secret_encrypted = twilio_settings_service.encrypt_credential("secret")
+        settings.auth_token_encrypted = twilio_settings_service.encrypt_credential("auth-token")
+        settings.legal_messaging_brand = "EWI Surrogacy"
+        settings.operational_disclosure = "Operational SMS disclosure"
+        settings.promotional_disclosure = "Promotional SMS disclosure"
+        settings.sms_terms_url = "https://example.org/sms-terms"
+        settings.privacy_policy_url = "https://example.org/privacy"
+        settings.support_contact = "support@example.org"
+        settings.expected_frequency = "Message frequency varies"
+        settings.counsel_approved_at = datetime.now(UTC)
+        route = next(item for item in settings.routes if item.purpose == "operational")
+        route.enabled = True
+        route.messaging_service_sid_encrypted = twilio_settings_service.encrypt_credential(
+            "MG" + "3" * 32
+        )
+        route.sender_phone_encrypted = twilio_settings_service.encrypt_credential("+14155550199")
+        route.sender_phone_hash = hash_phone("+14155550199")
+        route.sender_phone_last4 = "0199"
+        route.a2p_status = "approved"
+        route.advanced_opt_out_status = "verified"
+        route.consent_management_status = "available"
+        route.capability_evidence = {
+            "meta_consent_mapping_verified": True,
+            "provider": {
+                "account_active": True,
+                "service_verified": True,
+                "sender_in_pool": True,
+                "sms": True,
+                "mms": True,
+                "a2p_status": "VERIFIED",
+                "inbound_webhook_matches": True,
+                "status_callback_matches": True,
+                "checked_at": datetime.now(UTC).isoformat(),
+                "settings_version": settings.current_version,
+            },
+        }
+        db.commit()
 
     return messaging_consent_service.record_opt_in(
         db,
@@ -26,6 +75,30 @@ def _consented_contact(db, test_org):
         idempotency_key="intake-1-operational",
         evidence_metadata={"affirmative_action": "checked"},
     )
+
+
+def test_materialize_refuses_to_queue_when_dispatch_readiness_is_blocked(
+    db,
+    test_org,
+) -> None:
+    from app.services import messaging_delivery_service
+
+    consent = _consented_contact(db, test_org, ready=False)
+
+    with pytest.raises(messaging_delivery_service.MessagingRouteNotReady):
+        messaging_delivery_service.materialize_delivery(
+            db,
+            organization_id=test_org.id,
+            contact_id=consent.contact_id,
+            purpose="operational",
+            body="We received your application.",
+            idempotency_key="workflow:blocked-route:occurrence-1",
+            source_type="workflow",
+            source_id=None,
+            template_version_id=None,
+            media_asset_ids=[],
+            is_enrollment_confirmation=True,
+        )
 
 
 def test_materialize_encrypts_message_and_coalesces_identical_idempotency_key(

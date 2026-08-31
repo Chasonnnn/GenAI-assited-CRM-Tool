@@ -38,6 +38,7 @@ import {
     type UnknownColumnBehavior,
 } from "@/lib/import-utils"
 import { getSurrogateFieldLabel } from "@/lib/constants/surrogate-field-labels"
+import type { MetaLeadKind } from "@/lib/api/meta-forms"
 
 const TRANSFORM_OPTIONS = [
     { value: "", label: "None" },
@@ -64,11 +65,18 @@ const UNKNOWN_COLUMN_BEHAVIOR_OPTIONS = [
     { value: "warn", label: "Warn only" },
 ] satisfies Array<{ value: UnknownColumnBehavior; label: string }>
 
+const LEAD_KIND_OPTIONS = [
+    { value: "surrogate", label: "Surrogate" },
+    { value: "egg_donor", label: "Egg donor" },
+    { value: "sperm_donor", label: "Sperm donor" },
+] satisfies Array<{ value: MetaLeadKind; label: string }>
+
 const ACTION_LABELS = new Map(ACTION_OPTIONS.map((option) => [option.value, option.label]))
 const TRANSFORM_LABELS = new Map(TRANSFORM_OPTIONS.map((option) => [option.value, option.label]))
 const UNKNOWN_COLUMN_BEHAVIOR_LABELS = new Map(
     UNKNOWN_COLUMN_BEHAVIOR_OPTIONS.map((option) => [option.value, option.label])
 )
+const LEAD_KIND_LABELS = new Map(LEAD_KIND_OPTIONS.map((option) => [option.value, option.label]))
 
 function getActionLabel(value: string | null) {
     return value ? ACTION_LABELS.get(value) ?? value : "Action"
@@ -80,6 +88,10 @@ function getTransformationLabel(value: string | null) {
 
 function getUnknownColumnBehaviorLabel(value: UnknownColumnBehavior | null) {
     return value ? UNKNOWN_COLUMN_BEHAVIOR_LABELS.get(value) ?? value : "Store metadata"
+}
+
+function getLeadKindLabel(value: MetaLeadKind | null) {
+    return value ? LEAD_KIND_LABELS.get(value) ?? value : "Surrogate"
 }
 
 type MetaFormMappingData = NonNullable<ReturnType<typeof useMetaFormMapping>["data"]>
@@ -128,18 +140,22 @@ function MetaColumnMappingCard({
     data,
     mappings,
     onAiHelp,
+    onLeadKindChange,
     onUnknownBehaviorChange,
     onUpdateMapping,
     unknownColumnBehavior,
+    leadKind,
 }: {
     aiMapPending: boolean
     columnLabels: ReadonlyMap<string, string>
     data: MetaFormMappingData
     mappings: ColumnMappingDraft[]
     onAiHelp: () => Promise<void>
+    onLeadKindChange: (value: MetaLeadKind) => void
     onUnknownBehaviorChange: (value: UnknownColumnBehavior) => void
     onUpdateMapping: UpdateMapping
     unknownColumnBehavior: UnknownColumnBehavior
+    leadKind: MetaLeadKind
 }) {
     return (
         <Card className="overflow-hidden">
@@ -149,6 +165,31 @@ function MetaColumnMappingCard({
                         <CardTitle>Column Mapping</CardTitle>
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <span>Lead type:</span>
+                            <Select
+                                value={leadKind}
+                                onValueChange={(value) => onLeadKindChange(value as MetaLeadKind)}
+                            >
+                                <SelectTrigger
+                                    className="h-8 w-[140px]"
+                                    aria-label="Lead type"
+                                >
+                                    <SelectValue>
+                                        {(value: string | null) =>
+                                            getLeadKindLabel(value as MetaLeadKind | null)
+                                        }
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {LEAD_KIND_OPTIONS.map((option) => (
+                                        <SelectItem key={option.value} value={option.value}>
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <span>Unknown columns:</span>
                             <Select
@@ -199,6 +240,15 @@ function MetaColumnMappingCard({
                 </div>
             </CardHeader>
             <CardContent>
+                {leadKind !== "surrogate" ? (
+                    <Alert className="mb-4">
+                        <AlertTitle>Profile photo follow-up required</AlertTitle>
+                        <AlertDescription>
+                            Meta lead forms do not send file uploads. Collect the donor profile
+                            photo with a hosted donor form or add it after conversion.
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
                 <div className="max-h-[520px] overflow-auto">
                     <Table>
                         <TableHeader className="sticky top-0 z-10 bg-background">
@@ -595,6 +645,7 @@ export default function MetaFormMappingPage() {
     const [mappingOverrides, setMappingOverrides] = useState<Record<string, ColumnMappingDraft>>({})
     const [unknownColumnBehaviorOverride, setUnknownColumnBehaviorOverride] =
         useState<UnknownColumnBehavior | null>(null)
+    const [leadKindOverride, setLeadKindOverride] = useState<MetaLeadKind | null>(null)
     const [error, setError] = useState<string>("")
     const [reconvertMessage, setReconvertMessage] = useState<string>("")
 
@@ -634,6 +685,7 @@ export default function MetaFormMappingPage() {
     })()
     const unknownColumnBehavior =
         unknownColumnBehaviorOverride ?? serverMappingState.unknownColumnBehavior
+    const leadKind = leadKindOverride ?? data?.form.lead_kind ?? "surrogate"
     const touchedColumns = new Set(serverMappingState.touchedColumns)
     for (const csvColumn of Object.keys(mappingOverrides)) {
         touchedColumns.add(csvColumn)
@@ -748,6 +800,7 @@ export default function MetaFormMappingPage() {
             await updateMutation.mutateAsync({
                 column_mappings: payload.column_mappings,
                 unknown_column_behavior: payload.unknown_column_behavior,
+                lead_kind: leadKind,
             })
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : "Failed to save mapping")
@@ -800,9 +853,11 @@ export default function MetaFormMappingPage() {
                     data={data}
                     mappings={mappings}
                     onAiHelp={handleAiHelp}
+                    onLeadKindChange={setLeadKindOverride}
                     onUnknownBehaviorChange={handleUnknownBehaviorChange}
                     onUpdateMapping={updateMapping}
                     unknownColumnBehavior={unknownColumnBehavior}
+                    leadKind={leadKind}
                 />
 
                 <MetaMappingPreviewCard data={data} />

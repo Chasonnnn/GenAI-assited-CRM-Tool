@@ -970,7 +970,17 @@ async def analyze_dashboard(
     status_summary = surrogate_stats["by_status"]
     surrogates_this_week = surrogate_stats["this_week"]
     surrogates_last_week = surrogate_stats["last_week"]
-    overdue_tasks = task_service.count_overdue_tasks(db, session.org_id, now.date())
+    overdue_tasks = task_service.count_overdue_tasks(
+        db,
+        session.org_id,
+        now.date(),
+        can_view_donors=task_service.user_can_view_donors(
+            db,
+            session.org_id,
+            session.user_id,
+            session.role,
+        ),
+    )
 
     # Build stats summary
     stats = {
@@ -1093,7 +1103,17 @@ async def analyze_dashboard_stream(
     status_summary = surrogate_stats["by_status"]
     surrogates_this_week = surrogate_stats["this_week"]
     surrogates_last_week = surrogate_stats["last_week"]
-    overdue_tasks = task_service.count_overdue_tasks(db, session.org_id, now.date())
+    overdue_tasks = task_service.count_overdue_tasks(
+        db,
+        session.org_id,
+        now.date(),
+        can_view_donors=task_service.user_can_view_donors(
+            db,
+            session.org_id,
+            session.user_id,
+            session.role,
+        ),
+    )
 
     stats = {
         "total_active_surrogates": total_surrogates,
