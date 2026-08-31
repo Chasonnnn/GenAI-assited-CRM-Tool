@@ -372,19 +372,35 @@ def link_surrogates_to_campaigns(db: Session, org_id: UUID) -> int:
     )
 
     surrogates = db.scalars(surrogates_query).all()
-    updated = 0
-
-    for surrogate in surrogates:
-        # Find the ad
-        ad = db.scalar(
-            select(MetaAd).where(
+    ad_external_ids = {
+        surrogate.meta_ad_external_id
+        for surrogate in surrogates
+        if surrogate.meta_ad_external_id is not None
+    }
+    ads_by_external_id: dict[str, tuple[str | None, str | None]] = {}
+    if ad_external_ids:
+        ad_rows = db.execute(
+            select(
+                MetaAd.ad_external_id,
+                MetaAd.campaign_external_id,
+                MetaAd.adset_external_id,
+            ).where(
                 MetaAd.organization_id == org_id,
-                MetaAd.ad_external_id == surrogate.meta_ad_external_id,
+                MetaAd.ad_external_id.in_(ad_external_ids),
             )
-        )
-        if ad:
-            surrogate.meta_campaign_external_id = ad.campaign_external_id
-            surrogate.meta_adset_external_id = ad.adset_external_id
+        ).all()
+        ads_by_external_id = {
+            ad_external_id: (campaign_external_id, adset_external_id)
+            for ad_external_id, campaign_external_id, adset_external_id in ad_rows
+        }
+
+    updated = 0
+    for surrogate in surrogates:
+        if surrogate.meta_ad_external_id is None:
+            continue
+        ad_values = ads_by_external_id.get(surrogate.meta_ad_external_id)
+        if ad_values:
+            surrogate.meta_campaign_external_id, surrogate.meta_adset_external_id = ad_values
             updated += 1
 
     if updated > 0:

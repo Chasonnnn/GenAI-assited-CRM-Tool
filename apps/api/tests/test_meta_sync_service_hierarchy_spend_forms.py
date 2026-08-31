@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import event
 
 from app.db.models import (
     MetaAdAccount,
@@ -295,6 +296,87 @@ async def test_meta_sync_forms_error_and_no_token_paths(db, test_org, monkeypatc
     assert result["forms_synced"] == 0
     db.refresh(page)
     assert page.last_error == "boom"
+
+
+def test_link_surrogates_to_campaigns_uses_single_meta_ads_query(
+    db,
+    test_org,
+    test_user,
+    default_stage,
+):
+    account = _create_ad_account(db, test_org.id)
+    campaign = MetaCampaign(
+        organization_id=test_org.id,
+        ad_account_id=account.id,
+        campaign_external_id="camp_bulk",
+        campaign_name="Bulk Campaign",
+        status="ACTIVE",
+    )
+    db.add(campaign)
+    db.flush()
+
+    adset = meta_sync_service._upsert_adset(
+        db,
+        account,
+        test_org.id,
+        {
+            "id": "adset_bulk",
+            "campaign_id": "camp_bulk",
+            "name": "Bulk Adset",
+            "status": "ACTIVE",
+        },
+        {"camp_bulk": campaign.id},
+    )
+    assert adset is not None
+    meta_sync_service._upsert_ad(
+        db,
+        account,
+        test_org.id,
+        {
+            "id": "ad_bulk",
+            "campaign_id": "camp_bulk",
+            "adset_id": "adset_bulk",
+            "name": "Bulk Ad",
+        },
+        {"camp_bulk": campaign.id},
+        {"adset_bulk": adset.id},
+    )
+
+    for index in range(4):
+        db.add(
+            Surrogate(
+                id=uuid4(),
+                organization_id=test_org.id,
+                surrogate_number=f"S{uuid4().int % 90000 + 10000:05d}",
+                stage_id=default_stage.id,
+                status_label=default_stage.label,
+                owner_type="user",
+                owner_id=test_user.id,
+                created_by_user_id=test_user.id,
+                full_name=f"Bulk Meta Lead {index}",
+                email=f"bulk-meta-{index}@example.com",
+                email_hash=f"hash-bulk-meta-{index}",
+                meta_ad_external_id="ad_bulk",
+            )
+        )
+    db.commit()
+
+    statements: list[str] = []
+
+    def capture_sql(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
+        normalized = statement.lower()
+        if normalized.lstrip().startswith("select") and "from meta_ads" in normalized:
+            statements.append(normalized)
+
+    engine = db.get_bind()
+    event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        updated = meta_sync_service.link_surrogates_to_campaigns(db, test_org.id)
+    finally:
+        event.remove(engine, "before_cursor_execute", capture_sql)
+
+    assert updated == 4
+    assert len(statements) == 1
 
 
 def test_meta_sync_link_surrogates_and_upsert_rows(db, test_org, test_user, default_stage):
