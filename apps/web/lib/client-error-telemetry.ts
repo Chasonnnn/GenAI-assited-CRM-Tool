@@ -1,3 +1,5 @@
+import { getCsrfHeaders } from "@/lib/csrf"
+
 export type ClientErrorKind =
     | "window_error"
     | "unhandled_rejection"
@@ -36,10 +38,13 @@ export function reportClientError(kind: ClientErrorKind, error: unknown): void {
     try {
         void fetch("/client-errors", {
             method: "POST",
-            credentials: "same-origin",
+            credentials: "include",
             keepalive: true,
             cache: "no-store",
-            headers: { "content-type": "application/json" },
+            headers: {
+                "content-type": "application/json",
+                ...getCsrfHeaders(),
+            },
             body: JSON.stringify({ kind, errorClass }),
         }).catch(() => undefined)
     } catch {

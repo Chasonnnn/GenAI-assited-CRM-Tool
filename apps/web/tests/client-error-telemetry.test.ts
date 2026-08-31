@@ -1,5 +1,6 @@
 describe("client error telemetry", () => {
     it("reports only a normalized error class and deduplicates repeats", async () => {
+        document.cookie = "crm_csrf=test-csrf-token; path=/"
         const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
         vi.stubGlobal("fetch", fetchMock)
         const { reportClientError } = await import("@/lib/client-error-telemetry")
@@ -13,8 +14,12 @@ describe("client error telemetry", () => {
             "/client-errors",
             expect.objectContaining({
                 method: "POST",
-                credentials: "same-origin",
+                credentials: "include",
                 keepalive: true,
+                headers: {
+                    "content-type": "application/json",
+                    "X-CSRF-Token": "test-csrf-token",
+                },
                 body: JSON.stringify({ kind: "window_error", errorClass: "TypeError" }),
             }),
         )
