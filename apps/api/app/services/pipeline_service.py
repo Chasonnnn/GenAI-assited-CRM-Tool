@@ -1250,6 +1250,92 @@ def get_stage_by_slug(db: Session, pipeline_id: UUID, slug: str) -> PipelineStag
     )
 
 
+def resolve_stages_bulk(
+    db: Session, pipeline_id: UUID, refs: list[str | UUID]
+) -> list[PipelineStage | None]:
+    """Bulk resolve multiple stages preserving input order and semantics of resolve_stage."""
+    ref_uuids = []
+    normalized_refs = []
+    for ref in refs:
+        if ref is None:
+            continue
+        if isinstance(ref, UUID):
+            ref_uuids.append(ref)
+            continue
+        ref_str = str(ref).strip()
+        if not ref_str:
+            continue
+        try:
+            ref_uuids.append(UUID(ref_str))
+            continue
+        except ValueError:
+            pass
+
+        normalized_refs.append(_normalize_stage_key(ref_str))
+        normalized_slug = _normalize_slug(ref_str)
+        if normalized_slug:
+            normalized_refs.append(normalized_slug)
+            normalized_refs.append(_normalize_stage_key(normalized_slug))
+
+    normalized_refs = [r for r in normalized_refs if r]
+
+    stage_dict: dict[str | UUID, PipelineStage] = {}
+    if ref_uuids or normalized_refs:
+        query = db.query(PipelineStage).filter(PipelineStage.pipeline_id == pipeline_id)
+        if ref_uuids and normalized_refs:
+            query = query.filter(
+                (PipelineStage.id.in_(ref_uuids))
+                | (PipelineStage.stage_key.in_(normalized_refs))
+                | (PipelineStage.slug.in_(normalized_refs))
+            )
+        elif ref_uuids:
+            query = query.filter(PipelineStage.id.in_(ref_uuids))
+        else:
+            query = query.filter(
+                (PipelineStage.stage_key.in_(normalized_refs))
+                | (PipelineStage.slug.in_(normalized_refs))
+            )
+
+        stages = query.all()
+        for stage in stages:
+            stage_dict[stage.id] = stage
+            if stage.stage_key:
+                stage_dict[stage.stage_key] = stage
+            if stage.slug:
+                stage_dict[stage.slug] = stage
+
+    results = []
+    for ref in refs:
+        if ref is None:
+            results.append(None)
+            continue
+        if isinstance(ref, UUID):
+            results.append(stage_dict.get(ref))
+            continue
+
+        ref_str = str(ref).strip()
+        if not ref_str:
+            results.append(None)
+            continue
+
+        try:
+            stage = stage_dict.get(UUID(ref_str))
+        except ValueError:
+            stage = None
+
+        if not stage:
+            stage = stage_dict.get(_normalize_stage_key(ref_str))
+        if not stage:
+            norm_slug = _normalize_slug(ref_str)
+            stage = stage_dict.get(norm_slug)
+            if not stage and norm_slug:
+                stage = stage_dict.get(_normalize_stage_key(norm_slug))
+
+        results.append(stage)
+
+    return results
+
+
 def resolve_stage(db: Session, pipeline_id: UUID, ref: str | UUID | None) -> PipelineStage | None:
     """
     Resolve a stage by stage ID, stage_key, or slug.
@@ -1259,44 +1345,8 @@ def resolve_stage(db: Session, pipeline_id: UUID, ref: str | UUID | None) -> Pip
     2) stage_key (canonicalized)
     3) slug
     """
-    if ref is None:
-        return None
-
-    if isinstance(ref, UUID):
-        return (
-            db.query(PipelineStage)
-            .filter(
-                PipelineStage.pipeline_id == pipeline_id,
-                PipelineStage.id == ref,
-            )
-            .first()
-        )
-
-    ref_str = str(ref).strip()
-    if not ref_str:
-        return None
-
-    try:
-        ref_uuid = UUID(ref_str)
-    except ValueError:
-        ref_uuid = None
-
-    if ref_uuid is not None:
-        stage = (
-            db.query(PipelineStage)
-            .filter(
-                PipelineStage.pipeline_id == pipeline_id,
-                PipelineStage.id == ref_uuid,
-            )
-            .first()
-        )
-        if stage:
-            return stage
-
-    stage = get_stage_by_key(db, pipeline_id, ref_str)
-    if stage:
-        return stage
-    return get_stage_by_slug(db, pipeline_id, ref_str)
+    result = resolve_stages_bulk(db, pipeline_id, [ref])
+    return result[0] if result else None
 
 
 def get_stage_ids_by_keys_or_slugs(
@@ -1316,8 +1366,8 @@ def get_stage_ids_by_keys_or_slugs(
 
     stage_ids: list[UUID] = []
     seen: set[UUID] = set()
-    for ref in refs:
-        stage = resolve_stage(db, pipeline_id, ref)
+    resolved_stages = resolve_stages_bulk(db, pipeline_id, refs)
+    for stage in resolved_stages:
         if stage and stage.id not in seen:
             seen.add(stage.id)
             stage_ids.append(stage.id)
