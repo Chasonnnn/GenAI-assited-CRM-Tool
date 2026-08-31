@@ -2,6 +2,49 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.60](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.59...surrogacy-crm-platform-v0.91.60) (2026-08-31)
+
+
+### Features
+
+* add developer-only donor beta module ([ce599d3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ce599d3903ce063d81cd9b28884bb0ae8e35d722))
+* add donor backend workflows ([3839f89](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3839f89715ec9275577428c4f0375235989f5ffc))
+* add donor data foundation ([3beabb5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3beabb56fff2dc3fda414d2e5fc8a6306684d798))
+* add donor workflow builder UI ([2118921](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/211892169a37e140f5238cee0a47a1b8a7d57490))
+* add donor workspace beta UI ([ca4798e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ca4798e40f48976e3a1686a82480b9383f62751f))
+* add durable entity activity backend ([161b746](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/161b746504311eb8fef42b663f25a60dc1da237e))
+* complete messaging workflow UI ([9211c63](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9211c63b531ecaebc4d78bad9352dfff465a1a4a))
+* integrate donors across client workflows ([753d8ed](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/753d8ed48e5a237a2fc8754aac5431290227d9a4))
+* remind users about unread notifications ([bc7efe2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bc7efe2447550ac4268a62c04a85b79440d73824))
+* separate personal and organization integrations ([d60fbf5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d60fbf545bd994a5ebc4a5df3fdba6cfc26da389))
+* update Gemini settings controls ([c97ef2d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c97ef2d512d21265d7855a71dfc2de0615f29bc8))
+* upgrade AI assistant to Gemini 3.7 Flash ([c0b9400](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c0b940027e8a6fb4deb830f216e52d1814e0090e))
+
+
+### Bug Fixes
+
+* batch AI context queries ([4d6d0e3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4d6d0e31b5ed984da3c6db2fe5449a93250d4c8b))
+* batch Meta ad backfill lookup ([b8acf8f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b8acf8f8b5e5c12ead172e0b441cac32c239ad09))
+* batch Meta ad backfill lookup ([0ea9778](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0ea9778cfc49db3d8b88cc7094b4e16d75871b79))
+* consolidate backend query paths ([068a927](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/068a9273fcd052a489d2af9fdc1494b8acd8adb6))
+* enforce messaging route readiness ([3faef05](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3faef0598b5fe23cbcc0da99a30524176ff06f2d))
+* harden runtime resource handling ([dbfadb9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dbfadb9d7231c8708e1326781728f4fcf0cb86f2))
+* isolate donor backend from messaging WIP ([33767e6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/33767e67f4ab0cf32d9acbedff7a5c87237c2582))
+* isolate email template route helper ([c0e152a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c0e152aa705f470fb46a727fa8f9e612b8c6a309))
+* label the ops logout action ([2dce946](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2dce9463375b97f5ae3b5a049ff5915f4584fedc))
+* make donor detail header responsive ([b62adca](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b62adca37b808d748713c1bd099752ba4429ba4e))
+* prepare latest build for release ([1018f80](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1018f8083950151ff5e5c3c7dd0c990fdd04a1e8))
+* reconcile production runtime infrastructure ([9bcf210](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9bcf210fb1bfe43ee4756df066087aa834832642))
+* rename beta sidebar entries ([7403606](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/74036062cd2ac2dcbac9b1ef13ab8c0ebe028168))
+* repair backend migration and workflow contracts ([c0cdf5c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c0cdf5c617fd06c2e03d18d76173b3f89e06090a))
+* suspend donor history search params ([11b4d3e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/11b4d3efd833c15ba40b5c2aa1ff1dbb095b106d))
+
+
+### Maintenance
+
+* add messaging runtime configuration ([aa9abe3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/aa9abe3eb50952ba4e792edecd77a0b0a5229864))
+* update nanoid security pin ([35b4fbc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/35b4fbcc8a67700c32487f49499bb0011e613fcb))
+
 ## [0.91.59](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.58...surrogacy-crm-platform-v0.91.59) (2026-08-10)
 
 
