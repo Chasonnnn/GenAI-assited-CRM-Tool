@@ -160,3 +160,43 @@ def test_runtime_delivery_and_oom_logging_metrics_and_alerts_are_configured() ->
     assert 'resource "google_logging_metric" "api_memory_limit_exceeded"' in content
     assert 'textPayload:\\"Memory limit of\\"' in content
     assert 'resource "google_monitoring_alert_policy" "api_memory_limit_exceeded"' in content
+
+
+def test_websocket_disconnect_and_frontend_error_alerts_are_rate_based_and_privacy_safe() -> None:
+    content = _read("infra/terraform/monitoring.tf")
+
+    websocket_metric = _slice_block(
+        content,
+        'resource "google_logging_metric" "websocket_client_disconnects" {',
+        'resource "google_logging_metric" "frontend_client_errors" {',
+    )
+    frontend_metric = _slice_block(
+        content,
+        'resource "google_logging_metric" "frontend_client_errors" {',
+        'resource "google_logging_metric" "api_memory_limit_exceeded" {',
+    )
+    websocket_alert = _slice_block(
+        content,
+        'resource "google_monitoring_alert_policy" "websocket_client_disconnects" {',
+        'resource "google_monitoring_alert_policy" "frontend_client_errors" {',
+    )
+    frontend_alert = _slice_block(
+        content,
+        'resource "google_monitoring_alert_policy" "frontend_client_errors" {',
+        'resource "google_monitoring_alert_policy" "api_memory_limit_exceeded" {',
+    )
+
+    assert r"resource.labels.service_name=\"${var.api_service_name}\"" in websocket_metric
+    assert r"jsonPayload.event=\"websocket_client_disconnect\"" in websocket_metric
+    assert r"textPayload:\"connection handler failed\"" in websocket_metric
+    assert r"textPayload:\"ConnectionClosedError\"" in websocket_metric
+
+    assert r"resource.labels.service_name=\"${var.web_service_name}\"" in frontend_metric
+    assert r"jsonPayload.event=\"frontend_client_error\"" in frontend_metric
+    for sensitive_label in ("user_id", "org_id", "url", "message", "stack", "digest"):
+        assert sensitive_label not in frontend_metric
+
+    assert "threshold_value = 10" in websocket_alert
+    assert 'alignment_period   = "300s"' in websocket_alert
+    assert "threshold_value = 5" in frontend_alert
+    assert 'alignment_period   = "300s"' in frontend_alert
