@@ -28,6 +28,7 @@ from app.core.request_audit_context import (
     reset_request_audit_context,
     start_request_audit_context,
 )
+from app.core.runtime_logging import configure_runtime_logging
 from app.core.structured_logging import (
     build_log_context,
     build_request_log_context,
@@ -121,6 +122,7 @@ from app.services import alert_service, metrics_service
 # ============================================================================
 
 apply_protobuf_json_depth_guard()
+configure_runtime_logging()
 
 gcp_monitoring = setup_gcp_monitoring(settings.GCP_SERVICE_NAME)
 if gcp_monitoring.logging_enabled:

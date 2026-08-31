@@ -195,6 +195,30 @@ resource "google_logging_metric" "websocket_publish_failures" {
   }
 }
 
+resource "google_logging_metric" "websocket_client_disconnects" {
+  name   = "websocket_client_disconnects"
+  filter = "resource.type=\"cloud_run_revision\" resource.labels.service_name=\"${var.api_service_name}\" (jsonPayload.event=\"websocket_client_disconnect\" OR (textPayload:\"connection handler failed\" textPayload:\"ConnectionClosedError\"))"
+
+  metric_descriptor {
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
+    display_name = "Expected WebSocket client disconnects"
+  }
+}
+
+resource "google_logging_metric" "frontend_client_errors" {
+  name   = "frontend_client_errors"
+  filter = "resource.type=\"cloud_run_revision\" resource.labels.service_name=\"${var.web_service_name}\" jsonPayload.event=\"frontend_client_error\""
+
+  metric_descriptor {
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
+    display_name = "Frontend client errors"
+  }
+}
+
 resource "google_logging_metric" "api_memory_limit_exceeded" {
   name   = "api_memory_limit_exceeded"
   filter = "resource.type=\"cloud_run_revision\" resource.labels.service_name=\"${var.api_service_name}\" textPayload:\"Memory limit of\" textPayload:\"exceeded with\""
@@ -271,6 +295,56 @@ resource "google_monitoring_alert_policy" "websocket_publish_failures" {
       comparison      = "COMPARISON_GT"
       threshold_value = 0
       duration        = "300s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "300s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+}
+
+resource "google_monitoring_alert_policy" "websocket_client_disconnects" {
+  count = local.alerting_enabled ? 1 : 0
+
+  display_name          = "WebSocket client disconnect spike"
+  combiner              = "OR"
+  notification_channels = local.alert_notification_channels
+
+  conditions {
+    display_name = "Expected WebSocket client disconnects > 10 in 5m"
+    condition_threshold {
+      filter          = "resource.type=\"cloud_run_revision\" metric.type=\"logging.googleapis.com/user/${google_logging_metric.websocket_client_disconnects.name}\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 10
+      duration        = "0s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "300s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+}
+
+resource "google_monitoring_alert_policy" "frontend_client_errors" {
+  count = local.alerting_enabled ? 1 : 0
+
+  display_name          = "Frontend client error spike"
+  combiner              = "OR"
+  notification_channels = local.alert_notification_channels
+
+  conditions {
+    display_name = "Frontend client errors > 5 in 5m"
+    condition_threshold {
+      filter          = "resource.type=\"cloud_run_revision\" metric.type=\"logging.googleapis.com/user/${google_logging_metric.frontend_client_errors.name}\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 5
+      duration        = "0s"
       trigger {
         count = 1
       }

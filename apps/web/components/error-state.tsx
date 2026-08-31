@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "@/components/app-link"
 import { AlertCircle, ChevronDown, ChevronUp, ShieldAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -13,6 +13,7 @@ import {
     EmptyDescription,
 } from "@/components/ui/empty"
 import { cn } from "@/lib/utils"
+import { reportClientError } from "@/lib/client-error-telemetry"
 
 interface ErrorStateProps {
     error: Error & { digest?: string }
@@ -31,6 +32,12 @@ interface PermissionDeniedStateProps {
     className?: string
 }
 
+function useReportErrorBoundary(error: Error): void {
+    useEffect(() => {
+        reportClientError("react_error_boundary", error)
+    }, [error])
+}
+
 /**
  * Reusable error state component with retry functionality.
  *
@@ -47,6 +54,7 @@ export function ErrorState({
     const isDev = process.env.NODE_ENV === "development"
     const shouldShowDetails = showDetails ?? isDev
     const [isOpen, setIsOpen] = useState(false)
+    useReportErrorBoundary(error)
 
     return (
         <div className="flex min-h-[50vh] items-center justify-center p-6">
