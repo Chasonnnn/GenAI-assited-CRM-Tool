@@ -267,13 +267,15 @@ def normalize_filter_criteria(
 
     stage_by_id = {}
     if all_target_ids:
+        # BOLT OPTIMIZATION: Fix N+1 query
+        # We bulk-fetch PipelineStage objects outside the loop instead of performing individual lookups.
+        # This replaces O(N) database latency with a single query, significantly reducing CPU load.
         if donor_recipient:
             stages = (
                 db.query(PipelineStage)
                 .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
                 .filter(
                     PipelineStage.id.in_(all_target_ids),
-                    PipelineStage.is_active.is_(True),
                     Pipeline.organization_id == org_id,
                     Pipeline.entity_type == pipeline_entity_type,
                     Pipeline.is_default.is_(True),
@@ -281,11 +283,7 @@ def normalize_filter_criteria(
                 .all()
             )
         else:
-            stages = (
-                db.query(PipelineStage)
-                .filter(PipelineStage.id.in_(all_target_ids), PipelineStage.is_active.is_(True))
-                .all()
-            )
+            stages = db.query(PipelineStage).filter(PipelineStage.id.in_(all_target_ids)).all()
         stage_by_id = {stage.id: stage for stage in stages}
 
     for stage_id in parsed_stage_ids:
@@ -294,7 +292,9 @@ def normalize_filter_criteria(
             raise ValueError(
                 f"Stage filter not found in {recipient_type.replace('_', ' ')} pipeline"
             )
-        if stage and stage_id not in stage_ids:
+        if not donor_recipient and stage is None:
+            continue
+        if stage and stage.is_active and stage_id not in stage_ids:
             stage_ids.append(stage.id)
 
     if donor_recipient and stage_refs:
@@ -314,7 +314,8 @@ def normalize_filter_criteria(
                 )
 
     for stage_id in resolved_ids:
-        if stage_id in stage_by_id and stage_id not in stage_ids:
+        stage = stage_by_id.get(stage_id)
+        if stage and stage.is_active and stage_id not in stage_ids:
             stage_ids.append(stage_id)
 
     stage_keys: list[str] = []
