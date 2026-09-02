@@ -424,6 +424,9 @@ def _emit_mutation_fallback_audit(request: Request, status_code: int | None) -> 
 
 @app.middleware("http")
 async def metrics_middleware(request: Request, call_next):
+    if request.url.path in {"/healthz", "/health/live"}:
+        return await call_next(request)
+
     start = perf_counter()
     try:
         response = await call_next(request)
@@ -910,7 +913,7 @@ def _check_redis_connection() -> dict:
 
 @app.get("/healthz")
 @limiter.exempt
-def healthz() -> object:
+async def healthz() -> object:
     """Liveness probe (no external dependencies)."""
     return {"status": "ok"}
 
@@ -939,9 +942,9 @@ def readyz() -> object:
 
 @app.get("/health/live")
 @limiter.exempt
-def health_live() -> object:
+async def health_live() -> object:
     """Liveness alias."""
-    return healthz()
+    return await healthz()
 
 
 @app.get("/health/ready")

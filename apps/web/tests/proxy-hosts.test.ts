@@ -55,6 +55,7 @@ describe('getServerApiBaseUrl', () => {
 
 describe('proxy hard-fail behavior', () => {
     afterEach(() => {
+        vi.useRealTimers()
         vi.restoreAllMocks()
     })
 
@@ -151,7 +152,7 @@ describe('proxy hard-fail behavior', () => {
         expect(fetchSpy).not.toHaveBeenCalled()
     })
 
-    it('returns 500 when tenant lookup fails for a platform subdomain', async () => {
+    it('returns a retryable service-unavailable response when tenant lookup fails', async () => {
         vi.spyOn(globalThis, 'fetch').mockResolvedValue(
             new Response('upstream failure', { status: 500 }),
         )
@@ -163,10 +164,43 @@ describe('proxy hard-fail behavior', () => {
             }) as never,
         )
 
-        expect(response.status).toBe(500)
+        expect(response.status).toBe(503)
+        expect(await response.text()).toBe('Tenant service temporarily unavailable')
+        expect(response.headers.get('Retry-After')).toBe('5')
         expect(consoleErrorSpy).toHaveBeenCalledWith(
             '[middleware] API error resolving org for ewi.surrogacyforce.com: 500'
         )
+    })
+
+    it('allows five seconds for a tenant lookup before returning service unavailable', async () => {
+        vi.useFakeTimers()
+        vi.spyOn(console, 'error').mockImplementation(() => undefined)
+        vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+            return new Promise((_resolve, reject) => {
+                init?.signal?.addEventListener('abort', () => {
+                    reject(new DOMException('aborted', 'AbortError'))
+                })
+            })
+        })
+
+        let settled = false
+        const responsePromise = proxy(
+            createRequest('https://timeout-tenant.surrogacyforce.com/dashboard', {
+                host: 'timeout-tenant.surrogacyforce.com',
+            }) as never,
+        ).then((response) => {
+            settled = true
+            return response
+        })
+
+        await vi.advanceTimersByTimeAsync(4_999)
+        expect(settled).toBe(false)
+
+        await vi.advanceTimersByTimeAsync(1)
+        const response = await responsePromise
+
+        expect(response.status).toBe(503)
+        expect(response.headers.get('Retry-After')).toBe('5')
     })
 
     it('rewrites missing route resources to /_not-found with a real 404', async () => {
