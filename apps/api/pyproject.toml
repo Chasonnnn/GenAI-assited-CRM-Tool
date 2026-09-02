@@ -82,7 +82,7 @@ dependencies = [
     "grpcio==1.76.0",
     "grpcio-status==1.76.0",
     "proto-plus==1.27.0",
-    "pypdf==6.15.0",
+    "pypdf==6.16.1",
     "openai>=2.36.0",
     "twilio==9.10.9",
     "phonenumbers==9.0.34",
