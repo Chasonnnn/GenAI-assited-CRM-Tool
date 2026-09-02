@@ -13,6 +13,7 @@ const enableRustReactCompiler =
   process.env.NEXT_EXPERIMENTAL_RUST_REACT_COMPILER === "true";
 
 module.exports = withBundleAnalyzer({
+  output: "standalone",
   // Cache Components changes rendering semantics globally. Keep it paired with Partial
   // Prefetching and behind a build-time adoption gate until every tenant route passes
   // the production-prerender and authenticated-navigation gates documented in docs/.
