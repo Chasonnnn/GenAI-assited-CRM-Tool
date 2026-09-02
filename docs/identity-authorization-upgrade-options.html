@@ -1,0 +1,2510 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Repository-grounded identity and authorization upgrade options for Surrogacy Force.">
+  <title>Identity &amp; Authorization Upgrade Options — Surrogacy Force</title>
+  <style>
+    :root {
+      --c-bg: #f8fafc;
+      --c-canvas: #ffffff;
+      --c-border: #cbd5e1;
+      --c-border-strong: #64748b;
+      --c-text-main: #0f172a;
+      --c-text-sub: #64748b;
+      --c-accent: #2563eb;
+      --c-accent-soft: #eff6ff;
+      --font-ui: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      min-height: 100vh;
+      padding: 32px;
+      background: var(--c-bg);
+      color: var(--c-text-main);
+      font-family: var(--font-ui);
+      line-height: 1.5;
+    }
+
+    a {
+      color: var(--c-accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    a:hover {
+      text-decoration-thickness: 2px;
+    }
+
+    .diagram-container {
+      width: min(1440px, 100%);
+      margin: 0 auto;
+    }
+
+    .diagram-canvas {
+      background: var(--c-canvas);
+      border: 1px solid var(--c-border);
+      padding: 32px;
+    }
+
+    .diagram-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: end;
+      padding-bottom: 20px;
+      border-bottom: 2px solid var(--c-text-main);
+    }
+
+    .diagram-title {
+      max-width: 900px;
+      font-size: clamp(28px, 4vw, 48px);
+      font-weight: 650;
+      letter-spacing: -0.035em;
+      line-height: 1.05;
+    }
+
+    .diagram-subtitle,
+    .eyebrow,
+    .component-label,
+    .metric-label,
+    .plan-code,
+    .phase-code,
+    .table-note,
+    code,
+    .mono {
+      font-family: var(--font-mono);
+    }
+
+    .diagram-subtitle {
+      color: var(--c-text-sub);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-align: right;
+      text-transform: uppercase;
+    }
+
+    .section-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--c-border);
+    }
+
+    .section-nav a {
+      color: var(--c-text-sub);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .section-nav a:hover {
+      color: var(--c-accent);
+    }
+
+    section {
+      padding: 32px 0;
+      border-bottom: 1px solid var(--c-border);
+      scroll-margin-top: 20px;
+    }
+
+    section:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .section-heading {
+      display: grid;
+      grid-template-columns: 160px minmax(0, 1fr);
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    .eyebrow {
+      color: var(--c-text-sub);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      font-size: clamp(22px, 3vw, 32px);
+      font-weight: 650;
+      letter-spacing: -0.025em;
+      line-height: 1.15;
+    }
+
+    h3 {
+      font-size: 17px;
+      font-weight: 650;
+      line-height: 1.25;
+    }
+
+    p {
+      max-width: 78ch;
+    }
+
+    ul,
+    ol {
+      padding-left: 18px;
+    }
+
+    li + li {
+      margin-top: 6px;
+    }
+
+    code {
+      font-size: 0.92em;
+      overflow-wrap: anywhere;
+    }
+
+    .recommendation {
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(260px, 0.75fr);
+      border: 2px solid var(--c-accent);
+      background: var(--c-accent-soft);
+    }
+
+    .recommendation-main,
+    .recommendation-side {
+      padding: 24px;
+    }
+
+    .recommendation-side {
+      border-left: 1px solid var(--c-accent);
+    }
+
+    .recommendation h2 {
+      margin: 8px 0 14px;
+    }
+
+    .recommendation p + p {
+      margin-top: 12px;
+    }
+
+    .recommendation .callout {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid var(--c-accent);
+      font-weight: 600;
+    }
+
+    .fact-list {
+      display: grid;
+      gap: 14px;
+      list-style: none;
+      padding: 0;
+    }
+
+    .fact-list li {
+      margin: 0;
+    }
+
+    .fact-list strong {
+      display: block;
+      font-size: 12px;
+    }
+
+    .fact-list span {
+      color: var(--c-text-sub);
+      font-size: 13px;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      border-top: 1px solid var(--c-border);
+      border-left: 1px solid var(--c-border);
+    }
+
+    .metric {
+      min-height: 118px;
+      padding: 16px;
+      border-right: 1px solid var(--c-border);
+      border-bottom: 1px solid var(--c-border);
+    }
+
+    .metric-value {
+      font-family: var(--font-mono);
+      font-size: 28px;
+      font-weight: 600;
+      line-height: 1;
+    }
+
+    .metric-label {
+      margin-top: 12px;
+      color: var(--c-text-sub);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .metric-detail {
+      margin-top: 6px;
+      color: var(--c-text-sub);
+      font-size: 12px;
+    }
+
+    .two-col,
+    .three-col {
+      display: grid;
+      gap: 16px;
+    }
+
+    .two-col {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .three-col {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .component,
+    .finding,
+    .plan,
+    .phase,
+    .gate,
+    .source-item {
+      border: 1px solid var(--c-border);
+      background: var(--c-canvas);
+    }
+
+    .component,
+    .finding,
+    .gate,
+    .source-item {
+      padding: 18px;
+    }
+
+    .component-label,
+    .plan-code,
+    .phase-code {
+      color: var(--c-text-sub);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .component-value {
+      margin-top: 8px;
+      font-size: 16px;
+      font-weight: 650;
+    }
+
+    .component p,
+    .finding p,
+    .gate p,
+    .source-item p {
+      margin-top: 8px;
+      color: var(--c-text-sub);
+      font-size: 13px;
+    }
+
+    .finding strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .stack-diagram {
+      display: grid;
+      grid-template-columns: minmax(190px, 0.7fr) 38px minmax(0, 1.3fr) 38px minmax(190px, 0.7fr);
+      align-items: stretch;
+      margin-top: 20px;
+    }
+
+    .stack-column {
+      display: grid;
+      gap: 10px;
+    }
+
+    .connector-column {
+      display: grid;
+      place-items: center;
+      color: var(--c-border-strong);
+      font-family: var(--font-mono);
+      font-size: 18px;
+    }
+
+    .decision-equation {
+      margin-top: 16px;
+      padding: 16px;
+      border: 1px dashed var(--c-border-strong);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .plans {
+      display: grid;
+      gap: 18px;
+    }
+
+    .plan {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr);
+    }
+
+    .plan-summary {
+      padding: 22px;
+      border-right: 1px solid var(--c-border);
+    }
+
+    .plan.recommended {
+      border: 2px solid var(--c-accent);
+    }
+
+    .plan.recommended .plan-summary {
+      background: var(--c-accent-soft);
+      border-right-color: var(--c-accent);
+    }
+
+    .plan-title {
+      margin-top: 8px;
+      font-size: 20px;
+      font-weight: 650;
+      line-height: 1.15;
+    }
+
+    .plan-meta {
+      display: grid;
+      gap: 10px;
+      margin-top: 18px;
+      font-size: 12px;
+    }
+
+    .plan-meta div {
+      padding-top: 8px;
+      border-top: 1px solid var(--c-border);
+    }
+
+    .plan-meta strong {
+      display: block;
+      color: var(--c-text-sub);
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .plan-body {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .plan-cell {
+      padding: 22px;
+      border-right: 1px solid var(--c-border);
+    }
+
+    .plan-cell:last-child {
+      border-right: 0;
+    }
+
+    .plan-cell h3 {
+      margin-bottom: 12px;
+    }
+
+    .plan-cell ul {
+      color: var(--c-text-sub);
+      font-size: 13px;
+    }
+
+    .matrix-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--c-border);
+    }
+
+    table {
+      width: 100%;
+      min-width: 900px;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      padding: 13px 14px;
+      border-right: 1px solid var(--c-border);
+      border-bottom: 1px solid var(--c-border);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th:last-child,
+    td:last-child {
+      border-right: 0;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    th {
+      background: var(--c-bg);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    td:first-child {
+      font-weight: 650;
+    }
+
+    .selected-col {
+      background: var(--c-accent-soft);
+    }
+
+    .rating {
+      display: inline-block;
+      min-width: 74px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .table-note {
+      margin-top: 10px;
+      color: var(--c-text-sub);
+      font-size: 10px;
+    }
+
+    .target-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0;
+      border-top: 1px solid var(--c-border);
+      border-left: 1px solid var(--c-border);
+    }
+
+    .target-node {
+      min-height: 150px;
+      padding: 16px;
+      border-right: 1px solid var(--c-border);
+      border-bottom: 1px solid var(--c-border);
+    }
+
+    .target-node h3 {
+      margin-top: 8px;
+      font-size: 15px;
+    }
+
+    .target-node p {
+      margin-top: 8px;
+      color: var(--c-text-sub);
+      font-size: 12px;
+    }
+
+    .target-node.accent {
+      background: var(--c-accent-soft);
+      border-color: var(--c-accent);
+    }
+
+    .target-flow {
+      padding: 14px;
+      border: 1px solid var(--c-border);
+      border-top: 0;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .phases {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      border-top: 1px solid var(--c-border);
+      border-left: 1px solid var(--c-border);
+    }
+
+    .phase {
+      min-height: 230px;
+      padding: 16px;
+      border-top: 0;
+      border-left: 0;
+    }
+
+    .phase h3 {
+      margin: 10px 0 12px;
+      font-size: 15px;
+    }
+
+    .phase ul {
+      color: var(--c-text-sub);
+      font-size: 12px;
+    }
+
+    .phase-time {
+      display: inline-block;
+      margin-top: 16px;
+      padding-top: 8px;
+      border-top: 1px solid var(--c-border);
+      color: var(--c-text-sub);
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    .gates {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .gate strong {
+      display: block;
+      font-size: 14px;
+    }
+
+    .do-not {
+      border-left: 3px solid var(--c-text-main);
+      padding-left: 18px;
+    }
+
+    .do-not li {
+      color: var(--c-text-sub);
+      font-size: 13px;
+    }
+
+    .sources {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .source-item a {
+      font-weight: 650;
+    }
+
+    .source-tag {
+      display: inline-block;
+      margin-bottom: 8px;
+      padding: 2px 5px;
+      border: 1px solid var(--c-border);
+      color: var(--c-text-sub);
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .footer-meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 12px;
+      padding-top: 18px;
+      color: var(--c-text-sub);
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    .mockup-shell {
+      overflow: hidden;
+      border: 1px solid #d6d3d1;
+      border-radius: 12px;
+      background: #fafaf9;
+      color: #1c1917;
+      font-family: "Noto Sans", var(--font-ui);
+    }
+
+    .mockup-shell button:focus-visible,
+    .mockup-shell input:focus-visible {
+      outline: 2px solid #14b8a6;
+      outline-offset: 2px;
+    }
+
+    .mockup-topbar {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr) auto;
+      min-height: 58px;
+      align-items: center;
+      border-bottom: 1px solid #e7e5e4;
+      background: #ffffff;
+    }
+
+    .mockup-brand,
+    .mockup-org,
+    .mockup-account {
+      padding: 0 18px;
+    }
+
+    .mockup-brand {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .mockup-org,
+    .mockup-account {
+      color: #78716c;
+      font-size: 12px;
+    }
+
+    .mockup-org {
+      border-left: 1px solid #e7e5e4;
+    }
+
+    .mockup-account {
+      text-align: right;
+    }
+
+    .mockup-body {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr);
+      min-height: 720px;
+    }
+
+    .mockup-sidebar {
+      padding: 18px 12px;
+      border-right: 1px solid #e7e5e4;
+      background: #ffffff;
+    }
+
+    .mockup-sidebar-label {
+      padding: 0 10px 8px;
+      color: #a8a29e;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .mockup-sidebar-item {
+      display: block;
+      width: 100%;
+      padding: 9px 10px;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      color: #57534e;
+      font: inherit;
+      font-size: 13px;
+      text-align: left;
+    }
+
+    .mockup-sidebar-item + .mockup-sidebar-item {
+      margin-top: 3px;
+    }
+
+    .mockup-sidebar-item[data-active="true"] {
+      background: #f0fdfa;
+      color: #0f766e;
+      font-weight: 650;
+    }
+
+    .mockup-main {
+      min-width: 0;
+      padding: 26px;
+    }
+
+    .mockup-page-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .mockup-page-title {
+      font-size: 24px;
+      font-weight: 650;
+      letter-spacing: -0.025em;
+      line-height: 1.2;
+    }
+
+    .mockup-page-meta {
+      margin-top: 4px;
+      color: #78716c;
+      font-size: 12px;
+    }
+
+    .mockup-button {
+      min-height: 34px;
+      padding: 7px 12px;
+      border: 1px solid #d6d3d1;
+      border-radius: 6px;
+      background: #ffffff;
+      color: #292524;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .mockup-button:hover:not(:disabled) {
+      background: #f5f5f4;
+    }
+
+    .mockup-button.primary {
+      border-color: #14b8a6;
+      background: #14b8a6;
+      color: #ffffff;
+    }
+
+    .mockup-button.primary:hover:not(:disabled) {
+      background: #0f9f91;
+    }
+
+    .mockup-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+
+    .mockup-tabs {
+      display: inline-flex;
+      gap: 3px;
+      margin-bottom: 18px;
+      padding: 3px;
+      border-radius: 999px;
+      background: #f5f5f4;
+    }
+
+    .mockup-tab {
+      min-width: 92px;
+      padding: 7px 13px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      background: transparent;
+      color: #78716c;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .mockup-tab[data-active="true"] {
+      border-color: #e7e5e4;
+      background: #ffffff;
+      color: #1c1917;
+    }
+
+    .mockup-panel[hidden] {
+      display: none;
+    }
+
+    .mockup-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .mockup-card {
+      overflow: hidden;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .mockup-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 15px 16px;
+      border-bottom: 1px solid #e7e5e4;
+    }
+
+    .mockup-card-title {
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .mockup-card-meta {
+      color: #78716c;
+      font-size: 11px;
+    }
+
+    .mockup-module-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: center;
+      padding: 15px 16px;
+    }
+
+    .mockup-module-row + .mockup-module-row {
+      border-top: 1px solid #f0efed;
+    }
+
+    .mockup-module-name {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .mockup-module-detail {
+      margin-top: 4px;
+      color: #78716c;
+      font-size: 11px;
+    }
+
+    .mockup-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 20px;
+      padding: 2px 7px;
+      border: 1px solid #d6d3d1;
+      border-radius: 999px;
+      color: #57534e;
+      font-size: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .mockup-badge.on {
+      border-color: #99f6e4;
+      background: #f0fdfa;
+      color: #0f766e;
+    }
+
+    .mockup-badge.locked {
+      border-color: #fed7aa;
+      background: #fff7ed;
+      color: #c2410c;
+    }
+
+    .mockup-switch {
+      position: relative;
+      width: 34px;
+      height: 20px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      background: #d6d3d1;
+      cursor: pointer;
+      transition: background 120ms ease;
+    }
+
+    .mockup-switch::after {
+      position: absolute;
+      top: 1px;
+      left: 1px;
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      background: #ffffff;
+      content: "";
+      transition: transform 120ms ease;
+    }
+
+    .mockup-switch[aria-pressed="true"] {
+      background: #14b8a6;
+    }
+
+    .mockup-switch[aria-pressed="true"]::after {
+      transform: translateX(14px);
+    }
+
+    .mockup-switch:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+
+    .mockup-summary {
+      position: sticky;
+      top: 16px;
+    }
+
+    .mockup-summary-body {
+      padding: 16px;
+    }
+
+    .mockup-summary-count {
+      font-size: 28px;
+      font-weight: 650;
+      line-height: 1;
+    }
+
+    .mockup-summary-label {
+      margin-top: 7px;
+      color: #78716c;
+      font-size: 11px;
+    }
+
+    .mockup-summary-list {
+      min-height: 42px;
+      margin: 14px 0;
+      padding: 12px 0;
+      border-top: 1px solid #e7e5e4;
+      border-bottom: 1px solid #e7e5e4;
+      color: #57534e;
+      font-size: 11px;
+    }
+
+    .mockup-summary .mockup-button {
+      width: 100%;
+    }
+
+    .mockup-role-layout {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .mockup-role-option {
+      display: block;
+      width: 100%;
+      padding: 12px 14px;
+      border: 0;
+      border-left: 3px solid transparent;
+      border-bottom: 1px solid #f0efed;
+      background: #ffffff;
+      color: #57534e;
+      font: inherit;
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .mockup-role-option:last-child {
+      border-bottom: 0;
+    }
+
+    .mockup-role-option[data-active="true"] {
+      border-left-color: #14b8a6;
+      background: #f0fdfa;
+      color: #0f766e;
+      font-weight: 650;
+    }
+
+    .mockup-role-detail {
+      padding: 16px;
+    }
+
+    .mockup-role-heading {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: start;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid #e7e5e4;
+    }
+
+    .mockup-role-name {
+      font-size: 17px;
+      font-weight: 650;
+    }
+
+    .mockup-level-row {
+      display: grid;
+      grid-template-columns: minmax(140px, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      padding: 14px 0;
+    }
+
+    .mockup-level-row + .mockup-level-row {
+      border-top: 1px solid #f0efed;
+    }
+
+    .mockup-level-name {
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .mockup-level-detail {
+      margin-top: 3px;
+      color: #78716c;
+      font-size: 10px;
+    }
+
+    .mockup-level-group {
+      display: inline-flex;
+      padding: 2px;
+      border: 1px solid #e7e5e4;
+      border-radius: 7px;
+      background: #fafaf9;
+    }
+
+    .mockup-level {
+      padding: 5px 8px;
+      border: 1px solid transparent;
+      border-radius: 5px;
+      background: transparent;
+      color: #78716c;
+      font: inherit;
+      font-size: 10px;
+      cursor: pointer;
+    }
+
+    .mockup-level[data-active="true"] {
+      border-color: #d6d3d1;
+      background: #ffffff;
+      color: #0f766e;
+      font-weight: 650;
+    }
+
+    .mockup-search {
+      width: min(280px, 100%);
+      height: 34px;
+      padding: 7px 10px;
+      border: 1px solid #d6d3d1;
+      border-radius: 6px;
+      background: #ffffff;
+      color: #292524;
+      font: inherit;
+      font-size: 12px;
+    }
+
+    .mockup-table-wrap {
+      overflow-x: auto;
+    }
+
+    .mockup-table {
+      min-width: 680px;
+      font-size: 11px;
+    }
+
+    .mockup-table th {
+      background: #fafaf9;
+      color: #78716c;
+      font-family: var(--font-ui);
+      font-size: 9px;
+    }
+
+    .mockup-table td:first-child {
+      font-weight: 500;
+    }
+
+    .mockup-person-name {
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .mockup-person-email {
+      margin-top: 2px;
+      color: #78716c;
+      font-size: 10px;
+    }
+
+    .mockup-principles {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .mockup-principle {
+      padding: 15px;
+      border: 1px solid var(--c-border);
+      background: var(--c-canvas);
+    }
+
+    .mockup-principle strong {
+      display: block;
+      font-size: 13px;
+    }
+
+    .mockup-principle p {
+      margin-top: 6px;
+      color: var(--c-text-sub);
+      font-size: 12px;
+    }
+
+    .mockup-dialog {
+      width: min(480px, calc(100vw - 32px));
+      padding: 0;
+      border: 1px solid #d6d3d1;
+      border-radius: 10px;
+      background: #ffffff;
+      color: #1c1917;
+    }
+
+    .mockup-dialog::backdrop {
+      background: rgba(28, 25, 23, 0.38);
+    }
+
+    .mockup-dialog-header,
+    .mockup-dialog-body,
+    .mockup-dialog-footer {
+      padding: 18px;
+    }
+
+    .mockup-dialog-header {
+      border-bottom: 1px solid #e7e5e4;
+    }
+
+    .mockup-dialog-title {
+      font-size: 17px;
+      font-weight: 650;
+    }
+
+    .mockup-dialog-body {
+      color: #57534e;
+      font-size: 12px;
+    }
+
+    .mockup-dialog-impact {
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid #fde68a;
+      border-radius: 7px;
+      background: #fffbeb;
+      color: #92400e;
+    }
+
+    .mockup-dialog-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      border-top: 1px solid #e7e5e4;
+    }
+
+    @media (max-width: 1100px) {
+      .metrics {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .plan {
+        grid-template-columns: 1fr;
+      }
+
+      .plan-summary {
+        border-right: 0;
+        border-bottom: 1px solid var(--c-border);
+      }
+
+      .plan.recommended .plan-summary {
+        border-right: 0;
+        border-bottom-color: var(--c-accent);
+      }
+
+      .phases {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .mockup-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .mockup-summary {
+        position: static;
+      }
+
+      .mockup-principles {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 820px) {
+      body {
+        padding: 14px;
+      }
+
+      .diagram-canvas {
+        padding: 20px;
+      }
+
+      .diagram-header,
+      .section-heading,
+      .recommendation,
+      .two-col,
+      .three-col,
+      .sources {
+        grid-template-columns: 1fr;
+      }
+
+      .diagram-subtitle {
+        text-align: left;
+      }
+
+      .section-heading {
+        gap: 8px;
+      }
+
+      .recommendation-side {
+        border-top: 1px solid var(--c-accent);
+        border-left: 0;
+      }
+
+      .stack-diagram {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      .connector-column {
+        min-height: 28px;
+        transform: rotate(90deg);
+      }
+
+      .plan-body {
+        grid-template-columns: 1fr;
+      }
+
+      .plan-cell {
+        border-right: 0;
+        border-bottom: 1px solid var(--c-border);
+      }
+
+      .plan-cell:last-child {
+        border-bottom: 0;
+      }
+
+      .target-grid,
+      .gates {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .mockup-topbar {
+        grid-template-columns: 1fr auto;
+      }
+
+      .mockup-org {
+        display: none;
+      }
+
+      .mockup-body {
+        grid-template-columns: 1fr;
+      }
+
+      .mockup-sidebar {
+        display: flex;
+        gap: 4px;
+        overflow-x: auto;
+        padding: 9px 12px;
+        border-right: 0;
+        border-bottom: 1px solid #e7e5e4;
+      }
+
+      .mockup-sidebar-label {
+        display: none;
+      }
+
+      .mockup-sidebar-item {
+        width: auto;
+        white-space: nowrap;
+      }
+
+      .mockup-sidebar-item + .mockup-sidebar-item {
+        margin-top: 0;
+      }
+
+      .mockup-role-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .mockup-card[aria-label="Role list"] {
+        display: flex;
+        overflow-x: auto;
+      }
+
+      .mockup-role-option {
+        width: auto;
+        min-width: 150px;
+        border-right: 1px solid #f0efed;
+        border-bottom: 0;
+      }
+    }
+
+    @media (max-width: 540px) {
+      .metrics,
+      .target-grid,
+      .phases,
+      .gates {
+        grid-template-columns: 1fr;
+      }
+
+      .mockup-main {
+        padding: 18px 14px;
+      }
+
+      .mockup-brand,
+      .mockup-account {
+        padding: 0 12px;
+      }
+
+      .mockup-tabs {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        width: 100%;
+      }
+
+      .mockup-tab {
+        min-width: 0;
+        padding-inline: 8px;
+      }
+
+      .mockup-level-row {
+        grid-template-columns: 1fr;
+      }
+
+      .mockup-level-group {
+        width: 100%;
+      }
+
+      .mockup-level {
+        flex: 1;
+      }
+
+      .mockup-principles {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media print {
+      body {
+        padding: 0;
+        background: var(--c-canvas);
+      }
+
+      .diagram-canvas {
+        border: 0;
+        padding: 18px;
+      }
+
+      .section-nav {
+        display: none;
+      }
+
+      a {
+        color: var(--c-text-main);
+      }
+
+      .plan,
+      .recommendation,
+      .target-grid,
+      .phase,
+      .gate,
+      .source-item {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="diagram-container">
+    <article class="diagram-canvas">
+      <header class="diagram-header">
+        <div>
+          <h1 class="diagram-title">Identity &amp; Authorization Upgrade Options</h1>
+        </div>
+        <div class="diagram-subtitle">
+          Surrogacy Force Platform<br>
+          Repository review + external research<br>
+          2026-08-30 / Proposal v1
+        </div>
+      </header>
+
+      <nav class="section-nav" aria-label="Document sections">
+        <a href="#recommendation">Recommendation</a>
+        <a href="#current-state">Current state</a>
+        <a href="#problem">Problem model</a>
+        <a href="#plans">Three plans</a>
+        <a href="#comparison">Comparison</a>
+        <a href="#target">Target design</a>
+        <a href="#frontend-mockup">Frontend mock-up</a>
+        <a href="#migration">Migration</a>
+        <a href="#gates">Acceptance gates</a>
+        <a href="#sources">Sources</a>
+      </nav>
+
+      <section id="recommendation">
+        <div class="recommendation">
+          <div class="recommendation-main">
+            <div class="eyebrow">Recommended decision</div>
+            <h2>Choose Plan B: a modular policy kernel and custom roles, delivered incrementally inside the existing stack.</h2>
+            <p>Keep Google/OIDC authentication, PostgreSQL, authenticated membership-derived tenant scope, CSRF enforcement, and the SQLAlchemy organization backstop. Replace scattered role and permission branches with one typed authorization decision service shared by API dependencies and a generated frontend capability manifest.</p>
+            <p>Add organization module entitlements, code-owned capability definitions, organization-defined roles, and explicit record-scope policies. Treat access as an intersection, so enabling a module never grants a person access by itself.</p>
+            <div class="callout">Sequence: ship Plan A’s consolidation work first, continue into Plan B’s data model, and adopt Plan C only when object-level sharing or multiple services make a network authorization plane worth its operational cost.</div>
+          </div>
+          <aside class="recommendation-side">
+            <ul class="fact-list">
+              <li><strong>Expected delivery</strong><span>8–12 weeks in five reversible phases</span></li>
+              <li><strong>Primary payoff</strong><span>One place to toggle modules, roles, actions, and frontend surfaces</span></li>
+              <li><strong>Primary trade-off</strong><span>Moderate schema and migration work before custom roles are useful</span></li>
+              <li><strong>External service</strong><span>Not required for the recommended target</span></li>
+              <li><strong>Identity scope</strong><span>Prepare for multi-organization membership; do not enable it without a confirmed use case and tenant-switch threat model</span></li>
+            </ul>
+          </aside>
+        </div>
+      </section>
+
+      <section id="current-state">
+        <div class="section-heading">
+          <div class="eyebrow">01 / Repository evidence</div>
+          <h2>The foundation is stronger than the control surface.</h2>
+        </div>
+
+        <div class="metrics" aria-label="Current authorization implementation metrics">
+          <div class="metric">
+            <div class="metric-value">56</div>
+            <div class="metric-label">Canonical permissions</div>
+            <div class="metric-detail"><code>app/core/permissions.py</code></div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">4</div>
+            <div class="metric-label">Fixed organization roles</div>
+            <div class="metric-detail">Intake, case manager, admin, developer</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">21</div>
+            <div class="metric-label">Resource policies</div>
+            <div class="metric-detail"><code>app/core/policies.py</code></div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">305</div>
+            <div class="metric-label">Permission dependency references</div>
+            <div class="metric-detail">Broad backend adoption is already present</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">35</div>
+            <div class="metric-label">Frontend files using effective permissions</div>
+            <div class="metric-detail">Repeated local sets and string checks</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">31</div>
+            <div class="metric-label">Frontend files with explicit org-role checks</div>
+            <div class="metric-detail">Role semantics leak into presentation code</div>
+          </div>
+        </div>
+
+        <div class="two-col" style="margin-top: 16px;">
+          <div class="component">
+            <div class="component-label">Keep / identity</div>
+            <div class="component-value">External identities are already separate from users.</div>
+            <p><code>AuthIdentity</code> binds provider subject to a global <code>User</code>; session records support revocation; MFA state is enforced centrally.</p>
+          </div>
+          <div class="component">
+            <div class="component-label">Constraint / identity</div>
+            <div class="component-value">Membership enforces one organization per user.</div>
+            <p><code>Membership.user_id</code> is unique and the session carries one organization and one fixed role. This is simple and safe, but it is a future limit for consultants, shared staff, or agency groups.</p>
+          </div>
+          <div class="component">
+            <div class="component-label">Keep / tenancy</div>
+            <div class="component-value">Tenant isolation is derived from authenticated membership.</div>
+            <p>The API validates organization host, stamps the request session, and applies a SQLAlchemy organization-scoping backstop to top-level ORM reads. This must remain outside tenant-configurable permissions.</p>
+          </div>
+          <div class="component">
+            <div class="component-label">Keep / authorization</div>
+            <div class="component-value">Role defaults, organization overrides, and member grants/revokes are audited.</div>
+            <p>Backend dependencies deny missing permissions, developer-only capabilities are filtered for non-developers, and permission changes are evaluated from the database on protected API calls.</p>
+          </div>
+          <div class="component">
+            <div class="component-label">Gap / modules</div>
+            <div class="component-value">There is no platform-wide module entitlement model.</div>
+            <p><code>ai_enabled</code> and feature-specific settings exist, but product modules, permissions, navigation, route loading, API access, and record scope are not represented by one contract.</p>
+          </div>
+          <div class="component">
+            <div class="component-label">Gap / frontend</div>
+            <div class="component-value">Capability decisions are reconstructed across pages and components.</div>
+            <p>The sidebar and feature pages mix permission strings, role shortcuts, organization flags, and local special cases. UI visibility can lag changes and is difficult to audit as a whole.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="problem">
+        <div class="section-heading">
+          <div class="eyebrow">02 / Problem model</div>
+          <h2>“Can this user do this?” currently crosses four different concerns.</h2>
+        </div>
+
+        <div class="stack-diagram" aria-label="Current authorization concerns">
+          <div class="stack-column">
+            <div class="component">
+              <div class="component-label">Identity</div>
+              <div class="component-value">Who is signed in?</div>
+              <p>User, provider subject, MFA, active session.</p>
+            </div>
+            <div class="component">
+              <div class="component-label">Tenant</div>
+              <div class="component-value">Which organization?</div>
+              <p>Membership, host, session organization, database scope.</p>
+            </div>
+          </div>
+          <div class="connector-column" aria-hidden="true">→</div>
+          <div class="stack-column">
+            <div class="component">
+              <div class="component-label">Availability</div>
+              <div class="component-value">Does the organization have the module?</div>
+              <p>AI and several integrations have bespoke enablement flags; most product modules do not.</p>
+            </div>
+            <div class="component">
+              <div class="component-label">Capability</div>
+              <div class="component-value">May this member perform the action?</div>
+              <p>Fixed role defaults + organization role overrides + member grants/revokes.</p>
+            </div>
+            <div class="component">
+              <div class="component-label">Record scope</div>
+              <div class="component-value">May they act on this resource?</div>
+              <p>Ownership, queue, intake-pool grant, stage, author, or platform-admin logic.</p>
+            </div>
+          </div>
+          <div class="connector-column" aria-hidden="true">→</div>
+          <div class="stack-column">
+            <div class="component">
+              <div class="component-label">API enforcement</div>
+              <div class="component-value">FastAPI dependency + service policy</div>
+              <p>The authoritative boundary.</p>
+            </div>
+            <div class="component">
+              <div class="component-label">Frontend projection</div>
+              <div class="component-value">Navigation + routes + actions + queries</div>
+              <p>Must mirror decisions without becoming a security boundary.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="decision-equation">ALLOW = authenticated ∩ active_membership ∩ tenant_match ∩ module_enabled ∩ capability_granted ∩ resource_policy_passed ∩ safety_constraint_passed</div>
+
+        <div class="three-col" style="margin-top: 16px;">
+          <div class="finding">
+            <strong>Drift risk</strong>
+            <p>Adding a capability can require edits to the enum, registry, role defaults, policy map, backend dependencies, frontend strings, navigation, page guards, and tests.</p>
+          </div>
+          <div class="finding">
+            <strong>Toggle ambiguity</strong>
+            <p>A module switch, a role permission, and an ownership rule are different controls. Treating them as one checkbox can either over-grant access or create confusing partial enablement.</p>
+          </div>
+          <div class="finding">
+            <strong>Role rigidity</strong>
+            <p>Four fixed roles encode job titles and privileges together. Agency-specific roles such as auditor, coordinator, finance, or read-only reviewer become collections of individual exceptions.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="plans">
+        <div class="section-heading">
+          <div class="eyebrow">03 / Options</div>
+          <h2>Three viable plans, from consolidation to an external decision plane.</h2>
+        </div>
+
+        <div class="plans">
+          <article class="plan">
+            <div class="plan-summary">
+              <div class="plan-code">Plan A / Lowest change</div>
+              <div class="plan-title">Consolidate the current RBAC system</div>
+              <div class="plan-meta">
+                <div><strong>Time</strong>4–6 weeks</div>
+                <div><strong>Risk</strong>Low</div>
+                <div><strong>Schema</strong>Small or none</div>
+                <div><strong>Best when</strong>The four roles remain sufficient</div>
+              </div>
+            </div>
+            <div class="plan-body">
+              <div class="plan-cell">
+                <h3>Build</h3>
+                <ul>
+                  <li>One typed capability catalog with module, resource, action, label, risk tier, and dependencies.</li>
+                  <li>Generated TypeScript capability keys and a declarative frontend surface manifest.</li>
+                  <li><code>useAuthorization()</code>, <code>&lt;Can&gt;</code>, route guards, and query enablement from one snapshot.</li>
+                  <li>Backend lint/test inventory that maps every protected route to a policy.</li>
+                </ul>
+              </div>
+              <div class="plan-cell">
+                <h3>Gain</h3>
+                <ul>
+                  <li>Far fewer string checks and sidebar exceptions.</li>
+                  <li>One review surface for API and UI coverage.</li>
+                  <li>No new runtime dependency or major data migration.</li>
+                  <li>Immediate base for safer module toggles.</li>
+                </ul>
+              </div>
+              <div class="plan-cell">
+                <h3>Limit</h3>
+                <ul>
+                  <li>Roles stay fixed and organization-specific job design still creates overrides.</li>
+                  <li>Record-level policies remain distributed unless explicitly migrated.</li>
+                  <li>Single-organization identity remains unchanged.</li>
+                  <li>Improves implementation modularity more than business configurability.</li>
+                </ul>
+              </div>
+            </div>
+          </article>
+
+          <article class="plan recommended">
+            <div class="plan-summary">
+              <div class="plan-code">Plan B / Recommended</div>
+              <div class="plan-title">Add a modular policy kernel and custom roles</div>
+              <div class="plan-meta">
+                <div><strong>Time</strong>8–12 weeks</div>
+                <div><strong>Risk</strong>Medium</div>
+                <div><strong>Schema</strong>Role, assignment, module, and version tables</div>
+                <div><strong>Best when</strong>Agencies need different access packages</div>
+              </div>
+            </div>
+            <div class="plan-body">
+              <div class="plan-cell">
+                <h3>Build</h3>
+                <ul>
+                  <li>Code-owned capability catalog and organization-owned role definitions.</li>
+                  <li>Many-to-many member role assignments with built-in roles retained as seeded templates.</li>
+                  <li>Organization module entitlements independent from member permissions.</li>
+                  <li>A policy kernel accepting principal, action, resource, and context, with typed reason codes.</li>
+                  <li>An authorization snapshot/version consumed by the frontend.</li>
+                </ul>
+              </div>
+              <div class="plan-cell">
+                <h3>Gain</h3>
+                <ul>
+                  <li>Admin-friendly module and role toggles without code changes for every agency variation.</li>
+                  <li>Resource policies become testable named rules instead of inline role branches.</li>
+                  <li>Frontend visibility, route loading, and API enforcement share one vocabulary.</li>
+                  <li>Preserves current deployment topology and low-latency database checks.</li>
+                </ul>
+              </div>
+              <div class="plan-cell">
+                <h3>Trade-off</h3>
+                <ul>
+                  <li>Requires dual-read migration and a compatibility adapter for the four current roles.</li>
+                  <li>Multiple roles need explicit conflict rules; deny must win.</li>
+                  <li>Admin UI needs impact previews and lockout protection.</li>
+                  <li>Multi-organization membership should remain dormant until product demand justifies tenant switching.</li>
+                </ul>
+              </div>
+            </div>
+          </article>
+
+          <article class="plan">
+            <div class="plan-summary">
+              <div class="plan-code">Plan C / Highest flexibility</div>
+              <div class="plan-title">Externalize authorization decisions</div>
+              <div class="plan-meta">
+                <div><strong>Time</strong>12–20+ weeks</div>
+                <div><strong>Risk</strong>High</div>
+                <div><strong>Runtime</strong>New policy service or managed dependency</div>
+                <div><strong>Best when</strong>Object sharing and multiple services are core</div>
+              </div>
+            </div>
+            <div class="plan-body">
+              <div class="plan-cell">
+                <h3>Build</h3>
+                <ul>
+                  <li>OpenFGA for organization, team, case, queue, and object relationships; or Cedar/OPA for rich contextual rules.</li>
+                  <li>Policy model/schema versioning, relationship synchronization, decision telemetry, and consistency strategy.</li>
+                  <li>Local enforcement adapters so routers never call a vendor SDK directly.</li>
+                  <li>Shadow evaluation against the current system before cutover.</li>
+                </ul>
+              </div>
+              <div class="plan-cell">
+                <h3>Gain</h3>
+                <ul>
+                  <li>Strong fit for delegated and object-specific access across services.</li>
+                  <li>Policy lifecycle, testing, and relationship queries become first-class.</li>
+                  <li>New services can share one decision vocabulary.</li>
+                  <li>Supports future machine or agent principals cleanly.</li>
+                </ul>
+              </div>
+              <div class="plan-cell">
+                <h3>Trade-off</h3>
+                <ul>
+                  <li>Authorization enters the request availability and latency path.</li>
+                  <li>Data synchronization, cache consistency, outages, and policy deployment become operating concerns.</li>
+                  <li>Tenant isolation still belongs in application and database boundaries.</li>
+                  <li>Excessive for current fixed-tenant, mostly organization-level access patterns.</li>
+                </ul>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="comparison">
+        <div class="section-heading">
+          <div class="eyebrow">04 / Decision matrix</div>
+          <h2>Plan B solves the stated configurability problem without introducing a new control-plane dependency.</h2>
+        </div>
+
+        <div class="matrix-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Criterion</th>
+                <th>Plan A — Consolidate</th>
+                <th class="selected-col">Plan B — Policy kernel</th>
+                <th>Plan C — Externalize</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Speed to first value</td>
+                <td><span class="rating">HIGH</span>Typed contracts and frontend cleanup land quickly.</td>
+                <td class="selected-col"><span class="rating">MEDIUM</span>First two phases still deliver Plan A value.</td>
+                <td><span class="rating">LOW</span>Model, infrastructure, and synchronization precede cutover.</td>
+              </tr>
+              <tr>
+                <td>Agency-defined roles</td>
+                <td><span class="rating">LOW</span>Fixed roles plus member overrides.</td>
+                <td class="selected-col"><span class="rating">HIGH</span>Custom roles are a core data model.</td>
+                <td><span class="rating">HIGH</span>Supported, with more modeling overhead.</td>
+              </tr>
+              <tr>
+                <td>Module toggles</td>
+                <td><span class="rating">MEDIUM</span>Manifest can standardize existing flags.</td>
+                <td class="selected-col"><span class="rating">HIGH</span>Module entitlement is a separate control plane.</td>
+                <td><span class="rating">HIGH</span>Policy can express it, though product configuration still needs storage and UI.</td>
+              </tr>
+              <tr>
+                <td>Record-level relationships</td>
+                <td><span class="rating">MEDIUM</span>Named in-process policies.</td>
+                <td class="selected-col"><span class="rating">HIGH</span>Enough for current ownership, queue, grant, and stage rules.</td>
+                <td><span class="rating">VERY HIGH</span>Best for dense case/team/object sharing graphs.</td>
+              </tr>
+              <tr>
+                <td>Operational load</td>
+                <td><span class="rating">LOW</span>No new service.</td>
+                <td class="selected-col"><span class="rating">LOW–MED</span>New schema and decision telemetry, same runtime.</td>
+                <td><span class="rating">HIGH</span>Availability, latency, consistency, and policy deployment.</td>
+              </tr>
+              <tr>
+                <td>Migration risk</td>
+                <td><span class="rating">LOW</span>Mostly refactor and contract generation.</td>
+                <td class="selected-col"><span class="rating">MEDIUM</span>Dual-read and role-assignment migration required.</td>
+                <td><span class="rating">HIGH</span>Dual system plus relationship-data migration.</td>
+              </tr>
+              <tr>
+                <td>Future multi-service fit</td>
+                <td><span class="rating">LOW–MED</span>Python and TypeScript contracts remain app-centered.</td>
+                <td class="selected-col"><span class="rating">MEDIUM</span>Stable decision interface can later be externalized.</td>
+                <td><span class="rating">VERY HIGH</span>Designed as a shared authorization plane.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="table-note">Ratings are architecture judgments based on the current repository shape, not measured delivery estimates.</p>
+      </section>
+
+      <section id="target">
+        <div class="section-heading">
+          <div class="eyebrow">05 / Recommended target</div>
+          <h2>A layered decision contract keeps toggles useful without weakening tenant or record boundaries.</h2>
+        </div>
+
+        <div class="target-grid" aria-label="Recommended authorization architecture">
+          <div class="target-node">
+            <div class="component-label">Layer 1</div>
+            <h3>Authentication</h3>
+            <p><code>User</code>, <code>AuthIdentity</code>, MFA, session revocation. Identity proves the principal; it does not grant domain access.</p>
+          </div>
+          <div class="target-node">
+            <div class="component-label">Layer 2</div>
+            <h3>Tenant context</h3>
+            <p>Active <code>Membership</code> derives organization scope. Host validation and database backstop remain fail-closed and non-configurable.</p>
+          </div>
+          <div class="target-node">
+            <div class="component-label">Layer 3</div>
+            <h3>Module entitlement</h3>
+            <p><code>OrganizationModule</code> decides whether the agency has Surrogates, Donors, Tickets, AI, Reports, or another module.</p>
+          </div>
+          <div class="target-node">
+            <div class="component-label">Layer 4</div>
+            <h3>Role capabilities</h3>
+            <p>Built-in or custom <code>AuthorizationRole</code> assignments grant code-defined actions. Member denies override all grants.</p>
+          </div>
+          <div class="target-node">
+            <div class="component-label">Layer 5</div>
+            <h3>Resource policy</h3>
+            <p>Named rules evaluate ownership, queue membership, pool grants, stage, authorship, and organization-bound relationships.</p>
+          </div>
+          <div class="target-node accent">
+            <div class="component-label">Decision point</div>
+            <h3><code>AuthorizationService.decide()</code></h3>
+            <p>Input: principal, action, optional resource, context. Output: allow/deny, stable reason code, policy version, and non-sensitive audit metadata.</p>
+          </div>
+          <div class="target-node">
+            <div class="component-label">API enforcement</div>
+            <h3>Typed dependencies</h3>
+            <p><code>require_action(Action.SURROGATE_EDIT)</code> handles coarse checks; services call the same decision boundary for loaded resources.</p>
+          </div>
+          <div class="target-node">
+            <div class="component-label">Frontend projection</div>
+            <h3>Authorization snapshot</h3>
+            <p>One bootstrap supplies modules, capabilities, reason-safe flags, and version. A route/surface manifest controls navigation, prefetch, pages, and actions.</p>
+          </div>
+        </div>
+        <div class="target-flow">DATABASE SOURCE OF TRUTH → VERSIONED DECISION → API ENFORCEMENT → FRONTEND PROJECTION</div>
+
+        <div class="two-col" style="margin-top: 16px;">
+          <div class="component">
+            <div class="component-label">Proposed capability record</div>
+            <div class="component-value"><code>donors.record.edit</code></div>
+            <p><span class="mono">module=donors · resource=donor · action=edit · risk=standard · implies=donors.record.view</span></p>
+          </div>
+          <div class="component">
+            <div class="component-label">Proposed decision result</div>
+            <div class="component-value"><code>DENY / resource_scope_mismatch</code></div>
+            <p><span class="mono">policy_version=42 · capability_granted=true · tenant_match=true · no PII</span></p>
+          </div>
+        </div>
+      </section>
+
+      <section id="frontend-mockup">
+        <div class="section-heading">
+          <div class="eyebrow">06 / Frontend concept</div>
+          <h2>Give administrators one control center with a simple order: Modules, Roles, then People.</h2>
+        </div>
+
+        <div class="mockup-shell" data-access-mockup>
+          <div class="mockup-topbar">
+            <div class="mockup-brand">Surrogacy Force</div>
+            <div class="mockup-org">Evergreen Surrogacy</div>
+            <div class="mockup-account">Jordan Kim · Admin</div>
+          </div>
+
+          <div class="mockup-body">
+            <aside class="mockup-sidebar" aria-label="Settings navigation">
+              <div class="mockup-sidebar-label">Settings</div>
+              <div class="mockup-sidebar-item">General</div>
+              <div class="mockup-sidebar-item">Team</div>
+              <div class="mockup-sidebar-item" data-active="true">Access control</div>
+              <div class="mockup-sidebar-item">Pipelines</div>
+              <div class="mockup-sidebar-item">Integrations</div>
+              <div class="mockup-sidebar-item">Audit log</div>
+            </aside>
+
+            <div class="mockup-main">
+              <div class="mockup-page-header">
+                <div>
+                  <div class="mockup-page-title">Access control</div>
+                  <div class="mockup-page-meta">41 people · 5 roles · Updated today</div>
+                </div>
+                <span class="mockup-badge">Interactive concept</span>
+              </div>
+
+              <div class="mockup-tabs" role="tablist" aria-label="Access control sections">
+                <button
+                  class="mockup-tab"
+                  id="mock-tab-modules"
+                  type="button"
+                  role="tab"
+                  aria-controls="mock-panel-modules"
+                  aria-selected="true"
+                  data-mock-tab="modules"
+                  data-active="true"
+                >Modules</button>
+                <button
+                  class="mockup-tab"
+                  id="mock-tab-roles"
+                  type="button"
+                  role="tab"
+                  aria-controls="mock-panel-roles"
+                  aria-selected="false"
+                  data-mock-tab="roles"
+                  data-active="false"
+                >Roles</button>
+                <button
+                  class="mockup-tab"
+                  id="mock-tab-people"
+                  type="button"
+                  role="tab"
+                  aria-controls="mock-panel-people"
+                  aria-selected="false"
+                  data-mock-tab="people"
+                  data-active="false"
+                >People</button>
+              </div>
+
+              <div
+                class="mockup-panel"
+                id="mock-panel-modules"
+                role="tabpanel"
+                aria-labelledby="mock-tab-modules"
+                data-mock-panel="modules"
+              >
+                <div class="mockup-layout">
+                  <div class="mockup-card">
+                    <div class="mockup-card-header">
+                      <div>
+                        <div class="mockup-card-title">Organization modules</div>
+                        <div class="mockup-card-meta">Turning off a module removes it for everyone but preserves role settings.</div>
+                      </div>
+                    </div>
+
+                    <div class="mockup-module-row" data-module-row data-module-name="Surrogates" data-people="41" data-roles="5">
+                      <div>
+                        <div class="mockup-module-name">
+                          Surrogates
+                          <span class="mockup-badge on" data-module-status>On</span>
+                        </div>
+                        <div class="mockup-module-detail">41 people across 5 roles</div>
+                      </div>
+                      <button class="mockup-switch" type="button" role="switch" aria-label="Surrogates module" aria-checked="true" aria-pressed="true"></button>
+                    </div>
+
+                    <div class="mockup-module-row" data-module-row data-module-name="Intended Parents" data-people="18" data-roles="3">
+                      <div>
+                        <div class="mockup-module-name">
+                          Intended Parents
+                          <span class="mockup-badge on" data-module-status>On</span>
+                        </div>
+                        <div class="mockup-module-detail">18 people across 3 roles</div>
+                      </div>
+                      <button class="mockup-switch" type="button" role="switch" aria-label="Intended Parents module" aria-checked="true" aria-pressed="true"></button>
+                    </div>
+
+                    <div class="mockup-module-row" data-module-row data-module-name="Donors" data-people="0" data-roles="3">
+                      <div>
+                        <div class="mockup-module-name">
+                          Donors
+                          <span class="mockup-badge" data-module-status>Off</span>
+                        </div>
+                        <div class="mockup-module-detail">Role settings saved for 3 roles</div>
+                      </div>
+                      <button class="mockup-switch" type="button" role="switch" aria-label="Donors module" aria-checked="false" aria-pressed="false"></button>
+                    </div>
+
+                    <div class="mockup-module-row" data-module-row data-module-name="AI Assistant" data-people="12" data-roles="2">
+                      <div>
+                        <div class="mockup-module-name">
+                          AI Assistant
+                          <span class="mockup-badge on" data-module-status>On</span>
+                        </div>
+                        <div class="mockup-module-detail">12 people across 2 roles</div>
+                      </div>
+                      <button class="mockup-switch" type="button" role="switch" aria-label="AI Assistant module" aria-checked="true" aria-pressed="true"></button>
+                    </div>
+
+                    <div class="mockup-module-row" data-module-row data-module-name="Tickets" data-people="2" data-roles="1">
+                      <div>
+                        <div class="mockup-module-name">
+                          Tickets
+                          <span class="mockup-badge locked" data-module-status>Platform managed</span>
+                        </div>
+                        <div class="mockup-module-detail">Restricted to platform operations</div>
+                      </div>
+                      <button class="mockup-switch" type="button" role="switch" aria-label="Tickets module is platform managed" aria-checked="true" aria-pressed="true" disabled></button>
+                    </div>
+                  </div>
+
+                  <aside class="mockup-card mockup-summary" aria-label="Pending access changes">
+                    <div class="mockup-card-header">
+                      <div class="mockup-card-title">Change summary</div>
+                    </div>
+                    <div class="mockup-summary-body">
+                      <div class="mockup-summary-count" data-change-count>0</div>
+                      <div class="mockup-summary-label">pending changes</div>
+                      <div class="mockup-summary-list" data-change-list>No pending changes.</div>
+                      <button class="mockup-button primary" type="button" data-review-changes disabled>Review changes</button>
+                      <div class="mockup-module-detail" style="margin-top: 10px;" aria-live="polite" data-change-status>Changes are applied only after review.</div>
+                    </div>
+                  </aside>
+                </div>
+              </div>
+
+              <div
+                class="mockup-panel"
+                id="mock-panel-roles"
+                role="tabpanel"
+                aria-labelledby="mock-tab-roles"
+                data-mock-panel="roles"
+                hidden
+              >
+                <div class="mockup-role-layout">
+                  <div class="mockup-card" aria-label="Role list">
+                    <button class="mockup-role-option" type="button" data-role-name="Intake Specialist" data-role-meta="18 people · 2 modules · 14 capabilities" data-role-levels="2,0,1,0" data-active="false">Intake Specialist</button>
+                    <button class="mockup-role-option" type="button" data-role-name="Case Manager" data-role-meta="9 people · 3 modules · 27 capabilities" data-role-levels="2,2,1,0" data-active="true">Case Manager</button>
+                    <button class="mockup-role-option" type="button" data-role-name="Agency Admin" data-role-meta="3 people · 4 modules · 43 capabilities" data-role-levels="2,2,2,2" data-active="false">Agency Admin</button>
+                    <button class="mockup-role-option" type="button" data-role-name="Read-only Auditor" data-role-meta="2 people · 4 modules · 9 capabilities" data-role-levels="1,1,0,1" data-active="false">Read-only Auditor</button>
+                    <button class="mockup-role-option" type="button" data-role-name="Developer" data-role-meta="2 people · Platform managed" data-role-levels="2,2,2,2" data-role-locked="true" data-active="false">Developer · Locked</button>
+                  </div>
+
+                  <div class="mockup-card">
+                    <div class="mockup-role-detail">
+                      <div class="mockup-role-heading">
+                        <div>
+                          <div class="mockup-role-name" data-selected-role>Case Manager</div>
+                          <div class="mockup-card-meta" data-selected-role-meta>9 people · 3 modules · 27 capabilities</div>
+                        </div>
+                        <span class="mockup-badge" data-selected-role-badge>Organization role</span>
+                      </div>
+
+                      <div class="mockup-level-row">
+                        <div>
+                          <div class="mockup-level-name">Surrogates</div>
+                          <div class="mockup-level-detail">Records, notes, assignments, and stage changes</div>
+                        </div>
+                        <div class="mockup-level-group" aria-label="Surrogates access level">
+                          <button class="mockup-level" type="button" data-active="false">None</button>
+                          <button class="mockup-level" type="button" data-active="false">View</button>
+                          <button class="mockup-level" type="button" data-active="true">Manage</button>
+                        </div>
+                      </div>
+
+                      <div class="mockup-level-row">
+                        <div>
+                          <div class="mockup-level-name">Intended Parents</div>
+                          <div class="mockup-level-detail">Profiles and match proposals</div>
+                        </div>
+                        <div class="mockup-level-group" aria-label="Intended Parents access level">
+                          <button class="mockup-level" type="button" data-active="false">None</button>
+                          <button class="mockup-level" type="button" data-active="false">View</button>
+                          <button class="mockup-level" type="button" data-active="true">Manage</button>
+                        </div>
+                      </div>
+
+                      <div class="mockup-level-row">
+                        <div>
+                          <div class="mockup-level-name">AI Assistant</div>
+                          <div class="mockup-level-detail">Chat and approved actions</div>
+                        </div>
+                        <div class="mockup-level-group" aria-label="AI Assistant access level">
+                          <button class="mockup-level" type="button" data-active="false">None</button>
+                          <button class="mockup-level" type="button" data-active="true">Use</button>
+                          <button class="mockup-level" type="button" data-active="false">Configure</button>
+                        </div>
+                      </div>
+
+                      <div class="mockup-level-row">
+                        <div>
+                          <div class="mockup-level-name">Administration</div>
+                          <div class="mockup-level-detail">Team, settings, integrations, and audit</div>
+                        </div>
+                        <div class="mockup-level-group" aria-label="Administration access level">
+                          <button class="mockup-level" type="button" data-active="true">None</button>
+                          <button class="mockup-level" type="button" data-active="false">View</button>
+                          <button class="mockup-level" type="button" data-active="false">Manage</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                class="mockup-panel"
+                id="mock-panel-people"
+                role="tabpanel"
+                aria-labelledby="mock-tab-people"
+                data-mock-panel="people"
+                hidden
+              >
+                <div class="mockup-card">
+                  <div class="mockup-card-header">
+                    <div>
+                      <div class="mockup-card-title">People</div>
+                      <div class="mockup-card-meta">Assign roles first; use exceptions only for unusual cases.</div>
+                    </div>
+                    <input class="mockup-search" type="search" placeholder="Search people or roles" aria-label="Search people or roles" data-people-search>
+                  </div>
+                  <div class="mockup-table-wrap">
+                    <table class="mockup-table">
+                      <thead>
+                        <tr>
+                          <th>Person</th>
+                          <th>Role</th>
+                          <th>Access summary</th>
+                          <th>Exceptions</th>
+                        </tr>
+                      </thead>
+                      <tbody data-people-list>
+                        <tr data-person-row>
+                          <td><div class="mockup-person-name">Maya Chen</div><div class="mockup-person-email">maya.chen@example.test</div></td>
+                          <td><span class="mockup-badge">Case Manager</span></td>
+                          <td>3 modules · Manage cases</td>
+                          <td>None</td>
+                        </tr>
+                        <tr data-person-row>
+                          <td><div class="mockup-person-name">Alex Rivera</div><div class="mockup-person-email">alex.rivera@example.test</div></td>
+                          <td><span class="mockup-badge">Intake Specialist</span></td>
+                          <td>2 modules · Intake workflow</td>
+                          <td><span class="mockup-badge locked">1 exception</span></td>
+                        </tr>
+                        <tr data-person-row>
+                          <td><div class="mockup-person-name">Priya Shah</div><div class="mockup-person-email">priya.shah@example.test</div></td>
+                          <td><span class="mockup-badge">Read-only Auditor</span></td>
+                          <td>4 modules · View only</td>
+                          <td>None</td>
+                        </tr>
+                        <tr data-person-row>
+                          <td><div class="mockup-person-name">Jordan Kim</div><div class="mockup-person-email">jordan.kim@example.test</div></td>
+                          <td><span class="mockup-badge">Agency Admin</span></td>
+                          <td>4 modules · Organization admin</td>
+                          <td>None</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <dialog class="mockup-dialog" data-review-dialog>
+            <div class="mockup-dialog-header">
+              <div class="mockup-dialog-title">Review access changes</div>
+            </div>
+            <div class="mockup-dialog-body">
+              <p data-review-copy></p>
+              <div class="mockup-dialog-impact" data-review-impact></div>
+            </div>
+            <div class="mockup-dialog-footer">
+              <button class="mockup-button" type="button" data-close-review>Cancel</button>
+              <button class="mockup-button primary" type="button" data-apply-review>Apply changes</button>
+            </div>
+          </dialog>
+        </div>
+
+        <div class="mockup-principles">
+          <div class="mockup-principle">
+            <strong>Progressive disclosure</strong>
+            <p>Most administrators work with modules and role access levels, not a flat list of 56 capabilities.</p>
+          </div>
+          <div class="mockup-principle">
+            <strong>Impact before save</strong>
+            <p>Every module change shows the affected roles and people before it is applied.</p>
+          </div>
+          <div class="mockup-principle">
+            <strong>Exceptions stay exceptional</strong>
+            <p>Per-person grants and revokes appear in People, away from the primary role workflow.</p>
+          </div>
+          <div class="mockup-principle">
+            <strong>Protected controls are visible</strong>
+            <p>Platform-managed access is labeled and locked instead of silently disappearing.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="migration">
+        <div class="section-heading">
+          <div class="eyebrow">07 / Migration sequence</div>
+          <h2>Dual evaluation makes the upgrade reversible and exposes policy mismatches before enforcement changes.</h2>
+        </div>
+
+        <div class="phases">
+          <article class="phase">
+            <div class="phase-code">Phase 0</div>
+            <h3>Freeze the vocabulary</h3>
+            <ul>
+              <li>Inventory every API route, page, navigation item, query, and action.</li>
+              <li>Classify each rule as tenant, module, capability, resource scope, or safety constraint.</li>
+              <li>Record current allowed/denied fixtures for all four roles.</li>
+            </ul>
+            <div class="phase-time">1 week</div>
+          </article>
+          <article class="phase">
+            <div class="phase-code">Phase 1</div>
+            <h3>Unify contracts</h3>
+            <ul>
+              <li>Add structured capability metadata and generate TypeScript keys.</li>
+              <li>Create the frontend surface manifest and <code>useAuthorization()</code>.</li>
+              <li>Return stable 403 reason codes and authorization version.</li>
+            </ul>
+            <div class="phase-time">2 weeks</div>
+          </article>
+          <article class="phase">
+            <div class="phase-code">Phase 2</div>
+            <h3>Introduce the kernel</h3>
+            <ul>
+              <li>Wrap existing permission resolution in <code>decide()</code>.</li>
+              <li>Move inline resource checks into named policy functions.</li>
+              <li>Shadow-log old/new decision mismatches without changing enforcement.</li>
+            </ul>
+            <div class="phase-time">2–3 weeks</div>
+          </article>
+          <article class="phase">
+            <div class="phase-code">Phase 3</div>
+            <h3>Add modules and roles</h3>
+            <ul>
+              <li>Seed current roles as immutable system templates.</li>
+              <li>Migrate memberships to role assignments and preserve effective access exactly.</li>
+              <li>Add organization modules, custom-role UI, previews, and lockout protection.</li>
+            </ul>
+            <div class="phase-time">3–4 weeks</div>
+          </article>
+          <article class="phase">
+            <div class="phase-code">Phase 4</div>
+            <h3>Cut over and simplify</h3>
+            <ul>
+              <li>Require zero unexplained shadow mismatches.</li>
+              <li>Switch endpoints by module behind a reversible flag.</li>
+              <li>Remove legacy role branches only after route, UI, tenancy, and audit gates pass.</li>
+            </ul>
+            <div class="phase-time">1–2 weeks</div>
+          </article>
+        </div>
+
+        <div class="component" style="margin-top: 16px;">
+          <div class="component-label">Separate identity checkpoint</div>
+          <div class="component-value">Design sessions around <code>membership_id</code> now; lift the one-organization constraint later only if needed.</div>
+          <p>A multi-organization launch requires organization selection, safe tenant switching, host/cookie behavior, invite reuse, MFA/session semantics, support access, audit attribution, and cross-organization negative tests. It should not be bundled into the permission refactor by default.</p>
+        </div>
+      </section>
+
+      <section id="gates">
+        <div class="section-heading">
+          <div class="eyebrow">08 / Acceptance gates</div>
+          <h2>The upgrade is complete only when enforcement, UI behavior, and operational safety agree.</h2>
+        </div>
+
+        <div class="gates">
+          <div class="gate">
+            <strong>Tenant isolation</strong>
+            <p>Every new access path has an explicit cross-organization denial test. No module, role, override, or external policy result can bypass membership-derived scope.</p>
+          </div>
+          <div class="gate">
+            <strong>Policy coverage</strong>
+            <p>Every protected API operation maps to a typed action; every contextual check has a named policy test; unknown actions deny by default.</p>
+          </div>
+          <div class="gate">
+            <strong>Frontend parity</strong>
+            <p>Navigation, route loading, prefetch, data queries, buttons, and denied states use the same surface manifest and are verified for each role fixture.</p>
+          </div>
+          <div class="gate">
+            <strong>Change propagation</strong>
+            <p>Permission and module mutations increment an authorization version, invalidate the acting admin’s queries, and cause affected clients to refresh on focus or the next denied response.</p>
+          </div>
+          <div class="gate">
+            <strong>Safe administration</strong>
+            <p>Admins see an impact preview, cannot remove the last role administrator, cannot grant a capability they cannot delegate, and cannot edit protected platform capabilities.</p>
+          </div>
+          <div class="gate">
+            <strong>Auditability</strong>
+            <p>Role, assignment, module, and override changes are atomic and audited. Decision telemetry stores identifiers, result, reason, and policy version without raw PII.</p>
+          </div>
+          <div class="gate">
+            <strong>Migration parity</strong>
+            <p>Current fixtures produce identical effective access under old and new evaluators before any endpoint cuts over. Every mismatch is dispositioned.</p>
+          </div>
+          <div class="gate">
+            <strong>Failure posture</strong>
+            <p>Protected API decisions fail closed. Frontend projection failures hide privileged controls and show a recoverable error; they never manufacture permissions.</p>
+          </div>
+          <div class="gate">
+            <strong>Rollback</strong>
+            <p>Each module can return to the legacy evaluator without reversing data migrations. New tables remain additive until the final cleanup release.</p>
+          </div>
+        </div>
+
+        <div class="do-not" style="margin-top: 20px;">
+          <h3>Boundaries to preserve</h3>
+          <ul style="margin-top: 10px;">
+            <li>Do not treat frontend hiding as authorization.</li>
+            <li>Do not make tenant isolation, CSRF, MFA, human-review requirements, or developer/platform controls tenant-configurable.</li>
+            <li>Do not let organization admins create arbitrary permission keys or upload policy code; capabilities remain versioned application contracts.</li>
+            <li>Do not store raw PII or request bodies in decision logs.</li>
+            <li>Do not introduce OpenFGA, OPA, Cedar, or another service until a measured use case exceeds the in-process kernel.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="sources">
+        <div class="section-heading">
+          <div class="eyebrow">09 / Research basis</div>
+          <h2>Primary sources used to shape the options.</h2>
+        </div>
+
+        <div class="sources">
+          <div class="source-item">
+            <div class="source-tag">RBAC foundation</div>
+            <a href="https://csrc.nist.gov/projects/role-based-access-control" target="_blank" rel="noreferrer">NIST — Role Based Access Control</a>
+            <p>Supports roles as the stable administrative layer connecting users to permissions, while recognizing hierarchical roles and constraints.</p>
+          </div>
+          <div class="source-item">
+            <div class="source-tag">Authorization modeling</div>
+            <a href="https://docs.aws.amazon.com/verifiedpermissions/latest/userguide/design-authz-strategy.html" target="_blank" rel="noreferrer">AWS Verified Permissions — Authorization Model Design</a>
+            <p>Frames authorization around principals, resources, actions, context, tenant strategy, UX queries, and lockout prevention.</p>
+          </div>
+          <div class="source-item">
+            <div class="source-tag">Policy boundary</div>
+            <a href="https://www.openpolicyagent.org/docs" target="_blank" rel="noreferrer">Open Policy Agent — Documentation</a>
+            <p>Separates policy decision-making from enforcement, the same seam proposed for the in-process kernel and a possible later external service.</p>
+          </div>
+          <div class="source-item">
+            <div class="source-tag">Custom roles</div>
+            <a href="https://openfga.dev/docs/best-practices/modeling-roles" target="_blank" rel="noreferrer">OpenFGA — Modeling Roles</a>
+            <p>Compares static roles, organization-defined roles, and object-specific role assignments, including their increasing flexibility and complexity.</p>
+          </div>
+          <div class="source-item">
+            <div class="source-tag">Domain modeling</div>
+            <a href="https://openfga.dev/docs/best-practices/modeling-design-principles" target="_blank" rel="noreferrer">OpenFGA — Authorization Model Design Principles</a>
+            <p>Recommends modeling the real domain instead of a generic authorization meta-model; this supports explicit modules, resources, and actions.</p>
+          </div>
+          <div class="source-item">
+            <div class="source-tag">ReBAC scale trigger</div>
+            <a href="https://research.google/pubs/zanzibar-googles-consistent-global-authorization-system/" target="_blank" rel="noreferrer">Google Research — Zanzibar</a>
+            <p>Provides the relationship-based model behind external authorization systems; relevant when sharing graphs and service count outgrow local policies.</p>
+          </div>
+          <div class="source-item">
+            <div class="source-tag">Typed policy schema</div>
+            <a href="https://docs.cedarpolicy.com/policies/validation.html" target="_blank" rel="noreferrer">Cedar — Policy Validation</a>
+            <p>Treats the schema as a contract between application requests and policies, reinforcing generated action types and validation before enforcement.</p>
+          </div>
+          <div class="source-item">
+            <div class="source-tag">Adoption pattern</div>
+            <a href="https://openfga.dev/docs/best-practices/adoption-patterns" target="_blank" rel="noreferrer">OpenFGA — Adoption Patterns</a>
+            <p>Supports staged adoption and compatibility approaches rather than an all-at-once replacement of existing authorization checks.</p>
+          </div>
+        </div>
+
+        <div class="footer-meta">
+          <span>Scope: architecture research and proposal only</span>
+          <span>No application behavior, schema, or permissions changed</span>
+          <span>Repository state reviewed locally on 2026-08-30</span>
+        </div>
+      </section>
+    </article>
+  </main>
+  <script>
+    (() => {
+      const root = document.querySelector("[data-access-mockup]");
+      if (!root) return;
+
+      const tabs = Array.from(root.querySelectorAll("[data-mock-tab]"));
+      const panels = Array.from(root.querySelectorAll("[data-mock-panel]"));
+
+      function selectTab(name) {
+        tabs.forEach((tab) => {
+          const active = tab.dataset.mockTab === name;
+          tab.dataset.active = String(active);
+          tab.setAttribute("aria-selected", String(active));
+          tab.tabIndex = active ? 0 : -1;
+        });
+        panels.forEach((panel) => {
+          panel.hidden = panel.dataset.mockPanel !== name;
+        });
+      }
+
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => selectTab(tab.dataset.mockTab));
+      });
+
+      const moduleRows = Array.from(root.querySelectorAll("[data-module-row]"));
+      const baseline = new Map();
+      const changeCount = root.querySelector("[data-change-count]");
+      const changeList = root.querySelector("[data-change-list]");
+      const changeStatus = root.querySelector("[data-change-status]");
+      const reviewButton = root.querySelector("[data-review-changes]");
+      const reviewDialog = root.querySelector("[data-review-dialog]");
+      const reviewCopy = root.querySelector("[data-review-copy]");
+      const reviewImpact = root.querySelector("[data-review-impact]");
+
+      moduleRows.forEach((row) => {
+        const control = row.querySelector(".mockup-switch");
+        baseline.set(control, control.getAttribute("aria-pressed") === "true");
+
+        control.addEventListener("click", () => {
+          if (control.disabled) return;
+          const next = control.getAttribute("aria-pressed") !== "true";
+          control.setAttribute("aria-pressed", String(next));
+          control.setAttribute("aria-checked", String(next));
+          const status = row.querySelector("[data-module-status]");
+          status.textContent = next ? "On" : "Off";
+          status.classList.toggle("on", next);
+          changeStatus.textContent = "Changes are applied only after review.";
+          updateChanges();
+        });
+      });
+
+      function pendingChanges() {
+        return moduleRows.flatMap((row) => {
+          const control = row.querySelector(".mockup-switch");
+          const current = control.getAttribute("aria-pressed") === "true";
+          if (current === baseline.get(control)) return [];
+          return [{
+            name: row.dataset.moduleName,
+            enabled: current,
+            people: Number(row.dataset.people || 0),
+            roles: Number(row.dataset.roles || 0),
+          }];
+        });
+      }
+
+      function updateChanges() {
+        const changes = pendingChanges();
+        changeCount.textContent = String(changes.length);
+        reviewButton.disabled = changes.length === 0;
+        changeList.textContent = changes.length === 0
+          ? "No pending changes."
+          : changes.map((change) => `${change.name}: ${change.enabled ? "turn on" : "turn off"}`).join(" · ");
+      }
+
+      reviewButton.addEventListener("click", () => {
+        const changes = pendingChanges();
+        if (changes.length === 0) return;
+        reviewCopy.textContent = changes.map((change) => `${change.name} will be turned ${change.enabled ? "on" : "off"}.`).join(" ");
+        const affectedPeople = changes.reduce((total, change) => total + change.people, 0);
+        const affectedRoles = changes.reduce((total, change) => total + change.roles, 0);
+        reviewImpact.textContent = `${affectedPeople} people and ${affectedRoles} role configurations are affected. Saved role settings are preserved when a module is off.`;
+        reviewDialog.showModal();
+      });
+
+      root.querySelector("[data-close-review]").addEventListener("click", () => reviewDialog.close());
+      root.querySelector("[data-apply-review]").addEventListener("click", () => {
+        moduleRows.forEach((row) => {
+          const control = row.querySelector(".mockup-switch");
+          baseline.set(control, control.getAttribute("aria-pressed") === "true");
+        });
+        reviewDialog.close();
+        updateChanges();
+        changeStatus.textContent = "Changes applied in this prototype.";
+      });
+
+      const roleOptions = Array.from(root.querySelectorAll("[data-role-name]"));
+      const selectedRole = root.querySelector("[data-selected-role]");
+      const selectedRoleMeta = root.querySelector("[data-selected-role-meta]");
+      const selectedRoleBadge = root.querySelector("[data-selected-role-badge]");
+      const levelGroups = Array.from(root.querySelectorAll(".mockup-level-group"));
+
+      function applyRolePreset(option) {
+        roleOptions.forEach((role) => {
+          role.dataset.active = String(role === option);
+        });
+        selectedRole.textContent = option.dataset.roleName;
+        selectedRoleMeta.textContent = option.dataset.roleMeta;
+        const locked = option.dataset.roleLocked === "true";
+        selectedRoleBadge.textContent = locked ? "Platform managed" : "Organization role";
+        selectedRoleBadge.classList.toggle("locked", locked);
+
+        const presets = option.dataset.roleLevels.split(",").map(Number);
+        levelGroups.forEach((group, groupIndex) => {
+          const levels = Array.from(group.querySelectorAll(".mockup-level"));
+          levels.forEach((level, levelIndex) => {
+            level.dataset.active = String(levelIndex === presets[groupIndex]);
+            level.disabled = locked;
+          });
+        });
+      }
+
+      roleOptions.forEach((option) => {
+        option.addEventListener("click", () => applyRolePreset(option));
+      });
+
+      levelGroups.forEach((group) => {
+        const levels = Array.from(group.querySelectorAll(".mockup-level"));
+        levels.forEach((level) => {
+          level.addEventListener("click", () => {
+            if (level.disabled) return;
+            levels.forEach((candidate) => {
+              candidate.dataset.active = String(candidate === level);
+            });
+          });
+        });
+      });
+
+      const peopleSearch = root.querySelector("[data-people-search]");
+      const peopleRows = Array.from(root.querySelectorAll("[data-person-row]"));
+      peopleSearch.addEventListener("input", () => {
+        const query = peopleSearch.value.trim().toLowerCase();
+        peopleRows.forEach((row) => {
+          row.hidden = query.length > 0 && !row.textContent.toLowerCase().includes(query);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
