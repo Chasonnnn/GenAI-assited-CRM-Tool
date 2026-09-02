@@ -65,6 +65,30 @@ def test_ci_builds_every_production_image_with_deployment_inputs() -> None:
     for build in expected_builds:
         assert build in workflow
 
+    assert "matrix:\n        include:" in workflow
+    assert "needs: production-artifact-builds" in workflow
+    assert "name: Production Artifacts" in workflow
+
+
+def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations() -> None:
+    workflow = CI_WORKFLOW.read_text()
+    pyproject = (ROOT / "apps/api/pyproject.toml").read_text()
+
+    assert '"pytest-xdist==3.8.0"' in pyproject
+    assert "--ignore-glob 'tests/test_migration_*.py'" in workflow
+    assert "-n 4 --dist loadscope" in workflow
+    assert "tests/test_migration_*.py" in workflow
+    assert "--cov-append" in workflow
+
+
+def test_ci_shards_frontend_tests_and_preserves_aggregate_gate() -> None:
+    workflow = CI_WORKFLOW.read_text()
+
+    assert "shard: [1, 2]" in workflow
+    assert 'pnpm test --shard=${{ matrix.shard }}/2' in workflow
+    assert "needs: [frontend-build, frontend-test-shards]" in workflow
+    assert "name: Frontend Tests" in workflow
+
 
 def test_ci_uses_the_repository_pnpm_release() -> None:
     workflow = CI_WORKFLOW.read_text()
