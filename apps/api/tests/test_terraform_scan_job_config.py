@@ -128,6 +128,30 @@ def test_cloudbuild_resolves_and_deploys_one_digest_image_set() -> None:
     assert '"--image", "$_IMAGE_WORKER"' not in content
 
 
+def test_cloudbuild_parallelizes_api_and_worker_images_on_high_cpu() -> None:
+    api = _read("cloudbuild/api.yaml")
+    web = _read("cloudbuild/web.yaml")
+
+    for step_id in [
+        "pull-api-cache",
+        "pull-worker-cache",
+        "build-api",
+        "build-worker",
+        "push-api",
+        "push-worker",
+    ]:
+        assert f"id: {step_id}" in api
+
+    assert 'waitFor: ["validate-release"]' in api
+    assert 'waitFor: ["pull-api-cache"]' in api
+    assert 'waitFor: ["pull-worker-cache"]' in api
+    assert 'waitFor: ["build-api"]' in api
+    assert 'waitFor: ["build-worker"]' in api
+    assert 'waitFor: ["push-api", "push-worker"]' in api
+    assert "machineType: E2_HIGHCPU_8" in api
+    assert "machineType: E2_HIGHCPU_8" in web
+
+
 def test_cloudbuild_preserves_worker_configuration_and_repairs_monitoring_identity() -> None:
     content = _read("cloudbuild/api.yaml")
     worker_update = content.index('gcloud run services update "$_WORKER_SERVICE"')
