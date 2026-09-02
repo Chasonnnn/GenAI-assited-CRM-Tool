@@ -232,32 +232,40 @@ def normalize_filter_criteria(
     stage_ids: list[UUID] = []
     raw_stage_ids = normalized.get("stage_ids") or []
     donor_recipient = recipient_type in DONOR_RECIPIENT_TYPES
+    valid_raw_stage_ids = []
     for value in raw_stage_ids:
         try:
-            stage_id = UUID(str(value))
+            valid_raw_stage_ids.append(UUID(str(value)))
         except ValueError:
             continue
+
+    if valid_raw_stage_ids:
         if donor_recipient:
-            stage = (
+            stages = (
                 db.query(PipelineStage)
                 .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
                 .filter(
-                    PipelineStage.id == stage_id,
+                    PipelineStage.id.in_(valid_raw_stage_ids),
                     PipelineStage.is_active.is_(True),
                     Pipeline.organization_id == org_id,
                     Pipeline.entity_type == pipeline_entity_type,
                     Pipeline.is_default.is_(True),
                 )
-                .first()
+                .all()
             )
-            if stage is None:
-                raise ValueError(
-                    f"Stage filter not found in {recipient_type.replace('_', ' ')} pipeline"
-                )
+            stage_map = {s.id: s for s in stages}
+            for stage_id in valid_raw_stage_ids:
+                if stage_id not in stage_map:
+                    raise ValueError(
+                        f"Stage filter not found in {recipient_type.replace('_', ' ')} pipeline"
+                    )
+                if stage_id not in stage_ids:
+                    stage_ids.append(stage_id)
         else:
-            stage = pipeline_service.get_stage_by_id(db, stage_id)
-        if stage and stage.is_active and stage_id not in stage_ids:
-            stage_ids.append(stage.id)
+            stages = db.query(PipelineStage).filter(PipelineStage.id.in_(valid_raw_stage_ids)).all()
+            for stage in stages:
+                if stage and stage.is_active and stage.id not in stage_ids:
+                    stage_ids.append(stage.id)
 
     stage_refs = [
         *[str(value) for value in normalized.get("stage_keys") or []],
@@ -296,24 +304,28 @@ def normalize_filter_criteria(
             stage_ids.append(stage_id)
 
     stage_keys: list[str] = []
-    for stage_id in stage_ids:
+    if stage_ids:
         if donor_recipient:
-            stage = (
+            stages = (
                 db.query(PipelineStage)
                 .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
                 .filter(
-                    PipelineStage.id == stage_id,
+                    PipelineStage.id.in_(stage_ids),
                     PipelineStage.is_active.is_(True),
                     Pipeline.organization_id == org_id,
                     Pipeline.entity_type == pipeline_entity_type,
                     Pipeline.is_default.is_(True),
                 )
-                .first()
+                .all()
             )
         else:
-            stage = pipeline_service.get_stage_by_id(db, stage_id)
-        if stage and stage.is_active and stage.stage_key and stage.stage_key not in stage_keys:
-            stage_keys.append(stage.stage_key)
+            stages = db.query(PipelineStage).filter(PipelineStage.id.in_(stage_ids)).all()
+
+        stage_map = {s.id: s for s in stages}
+        for stage_id in stage_ids:
+            stage = stage_map.get(stage_id)
+            if stage and stage.is_active and stage.stage_key and stage.stage_key not in stage_keys:
+                stage_keys.append(stage.stage_key)
 
     normalized["stage_ids"] = [str(stage_id) for stage_id in stage_ids]
     normalized["stage_keys"] = stage_keys
@@ -2737,8 +2749,8 @@ def retry_failed_campaign_run(
 
             from app.services import email_composition_service
 
-            cleaned_body_template = (
-                email_composition_service.strip_legacy_unsubscribe_placeholders(template.body)
+            cleaned_body_template = email_composition_service.strip_legacy_unsubscribe_placeholders(
+                template.body
             )
             subject, body = email_service.render_template(
                 template.subject, cleaned_body_template, variables
