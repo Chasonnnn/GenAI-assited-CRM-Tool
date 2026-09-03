@@ -1,0 +1,20 @@
+--- apps/api/app/services/permission_service.py
++++ apps/api/app/services/permission_service.py
+@@ -306,14 +306,17 @@
+         if role == "developer":
+             continue  # Developer is immutable, no DB rows needed
+
++        # Optimization: Fetch all existing permissions for this role in one bulk query
++        # instead of individually checking each permission (avoids N+1 problem)
+         existing_perms = db.scalars(
+             select(RolePermission.permission).where(
+                 RolePermission.organization_id == org_id,
+                 RolePermission.role == role,
+             )
+         ).all()
+         existing_perms_set = set(existing_perms)
+
++        # Filter out the permissions that already exist to only insert the missing ones
+         perms_to_add = set(permissions) - existing_perms_set
+         for permission in perms_to_add:
+             db.add(
