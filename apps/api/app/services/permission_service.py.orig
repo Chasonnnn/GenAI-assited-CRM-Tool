@@ -307,8 +307,6 @@ def seed_role_defaults(db: Session, org_id: uuid.UUID) -> int:
         if role == "developer":
             continue  # Developer is immutable, no DB rows needed
 
-        # Optimization: Fetch all existing permissions for this role in one bulk query
-        # instead of individually checking each permission (avoids N+1 problem)
         existing_perms = db.scalars(
             select(RolePermission.permission).where(
                 RolePermission.organization_id == org_id,
@@ -317,7 +315,6 @@ def seed_role_defaults(db: Session, org_id: uuid.UUID) -> int:
         ).all()
         existing_perms_set = set(existing_perms)
 
-        # Filter out the permissions that already exist to only insert the missing ones
         perms_to_add = set(permissions) - existing_perms_set
         for permission in perms_to_add:
             db.add(
