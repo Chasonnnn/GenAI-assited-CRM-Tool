@@ -25,6 +25,7 @@ def test_security_headers_present():
     # Other headers
     assert headers["x-content-type-options"] == "nosniff"
     assert headers["x-frame-options"] == "DENY"
+    assert headers["cross-origin-embedder-policy"] == "require-corp"
     assert headers["cross-origin-opener-policy"] == "same-origin"
     assert headers["cross-origin-resource-policy"] == "same-origin"
     assert headers["referrer-policy"] == "strict-origin-when-cross-origin"
