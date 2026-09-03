@@ -341,6 +341,13 @@ describe("Dependency security guards", () => {
         }
     })
 
+    it("pins browserslist to a non-vulnerable version in pnpm overrides", () => {
+        const browserslistOverride = readPnpmOverrides().browserslist
+
+        expect(browserslistOverride).toBeDefined()
+        expect(compareVersions(browserslistOverride!, "4.28.7")).toBeGreaterThanOrEqual(0)
+    })
+
     it("resolves only non-vulnerable @babel/core versions in pnpm-lock.yaml", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
@@ -352,6 +359,20 @@ describe("Dependency security guards", () => {
 
         for (const resolvedVersion of resolvedVersions) {
             expect(compareVersions(resolvedVersion, "7.29.6")).toBeGreaterThanOrEqual(0)
+        }
+    })
+
+    it("resolves only non-vulnerable browserslist versions in pnpm-lock.yaml", () => {
+        const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
+        const resolvedVersions = Array.from(
+            lockfile.matchAll(/^\s{2}browserslist@(\d+\.\d+\.\d+):/gm),
+            (match) => match[1],
+        )
+
+        expect(resolvedVersions.length).toBeGreaterThan(0)
+
+        for (const resolvedVersion of resolvedVersions) {
+            expect(compareVersions(resolvedVersion, "4.28.7")).toBeGreaterThanOrEqual(0)
         }
     })
 })
