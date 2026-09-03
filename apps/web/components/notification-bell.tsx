@@ -115,6 +115,7 @@ export function NotificationBell() {
             <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
             <DropdownMenuTrigger
                 aria-label={triggerLabel}
+                aria-expanded={isOpen}
                 className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "relative")}
             >
                 <Bell className="size-5" aria-hidden="true" />
