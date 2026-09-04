@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from time import perf_counter
 from uuid import UUID
@@ -13,7 +14,6 @@ from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
-from starlette.concurrency import run_in_threadpool
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.core import migrations as db_migrations
@@ -117,6 +117,11 @@ from app.routers import (
     websocket as ws_router,
 )
 from app.services import alert_service, metrics_service
+
+_metrics_executor = ThreadPoolExecutor(
+    max_workers=1,
+    thread_name_prefix="request-metrics",
+)
 
 # ============================================================================
 # GCP Monitoring (Cloud Logging + Error Reporting)
@@ -328,6 +333,21 @@ def _record_metrics(request: Request, status_code: int, duration_ms: int) -> Non
         db.close()
 
 
+async def _record_metrics_async(
+    request: Request,
+    status_code: int,
+    duration_ms: int,
+) -> None:
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(
+        _metrics_executor,
+        _record_metrics,
+        request,
+        status_code,
+        duration_ms,
+    )
+
+
 def _is_mutation_method(method: str) -> bool:
     return method in {"POST", "PUT", "PATCH", "DELETE"}
 
@@ -433,12 +453,11 @@ async def metrics_middleware(request: Request, call_next):
         response = await call_next(request)
     except HTTPException as exc:
         duration_ms = int((perf_counter() - start) * 1000)
-        await run_in_threadpool(_record_metrics, request, exc.status_code, duration_ms)
+        await _record_metrics_async(request, exc.status_code, duration_ms)
         raise
     except RateLimitExceeded:
         duration_ms = int((perf_counter() - start) * 1000)
-        await run_in_threadpool(
-            _record_metrics,
+        await _record_metrics_async(
             request,
             status.HTTP_429_TOO_MANY_REQUESTS,
             duration_ms,
@@ -446,8 +465,7 @@ async def metrics_middleware(request: Request, call_next):
         raise
     except Exception:
         duration_ms = int((perf_counter() - start) * 1000)
-        await run_in_threadpool(
-            _record_metrics,
+        await _record_metrics_async(
             request,
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             duration_ms,
@@ -455,7 +473,7 @@ async def metrics_middleware(request: Request, call_next):
         raise
 
     duration_ms = int((perf_counter() - start) * 1000)
-    await run_in_threadpool(_record_metrics, request, response.status_code, duration_ms)
+    await _record_metrics_async(request, response.status_code, duration_ms)
     return response
 
 

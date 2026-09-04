@@ -1,6 +1,8 @@
 """Tests for request metrics rollups and AI conversation constraints."""
 
+import asyncio
 import logging
+import threading
 import uuid
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -52,7 +54,7 @@ def test_request_metrics_use_isolated_session(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_metrics_middleware_offloads_database_write(monkeypatch):
+async def test_metrics_middleware_dispatches_database_write(monkeypatch):
     """A slow metrics write must not block the event loop."""
     from app import main as main_module
 
@@ -63,22 +65,58 @@ async def test_metrics_middleware_offloads_database_write(monkeypatch):
     async def _call_next(_request):
         return response
 
-    def _record_metrics(*args):
-        calls.append(("record", args))
-
-    async def _run_in_threadpool(func, *args):
+    async def _record_metrics_async(*args):
         calls.append(("offload", args))
-        func(*args)
 
-    monkeypatch.setattr(main_module, "_record_metrics", _record_metrics)
     monkeypatch.setattr(
-        main_module, "run_in_threadpool", _run_in_threadpool, raising=False
+        main_module, "_record_metrics_async", _record_metrics_async, raising=False
     )
 
     result = await main_module.metrics_middleware(request, _call_next)
 
     assert result is response
-    assert [call[0] for call in calls] == ["offload", "record"]
+    assert [call[0] for call in calls] == ["offload"]
+
+
+@pytest.mark.asyncio
+async def test_metrics_contention_does_not_starve_liveness_threads(monkeypatch):
+    """Blocked metrics writes must not consume FastAPI's shared worker tokens."""
+    from httpx import ASGITransport, AsyncClient
+
+    from app import main as main_module
+
+    loop = asyncio.get_running_loop()
+    metrics_started = asyncio.Event()
+    release_metrics = threading.Event()
+    request = SimpleNamespace(url=SimpleNamespace(path="/tests/metrics"))
+    response = SimpleNamespace(status_code=200)
+
+    async def _call_next(_request):
+        return response
+
+    def _blocked_record_metrics(*_args):
+        loop.call_soon_threadsafe(metrics_started.set)
+        release_metrics.wait(timeout=2)
+
+    monkeypatch.setattr(main_module, "_record_metrics", _blocked_record_metrics)
+
+    metrics_tasks = [
+        asyncio.create_task(main_module.metrics_middleware(request, _call_next))
+        for _ in range(40)
+    ]
+    try:
+        await asyncio.wait_for(metrics_started.wait(), timeout=0.5)
+        async with AsyncClient(
+            transport=ASGITransport(app=main_module.app), base_url="https://test"
+        ) as client:
+            health_response = await asyncio.wait_for(
+                client.get("/health/live"), timeout=0.25
+            )
+
+        assert health_response.status_code == 200
+    finally:
+        release_metrics.set()
+        await asyncio.gather(*metrics_tasks)
 
 
 def test_record_request_dedupes_null_org(db, monkeypatch):
