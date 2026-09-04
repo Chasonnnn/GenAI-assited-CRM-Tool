@@ -39,6 +39,7 @@ coverage/
 *.local
 .turbo
 cookies.txt
+/docs/
 apps/api/.attachments/
 report_json.json
 report_md.md
