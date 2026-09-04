@@ -1,7 +1,27 @@
 """Tests for Health endpoint."""
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
+
+
+@pytest.mark.asyncio
+async def test_liveness_does_not_depend_on_metrics_database(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import app.main as main
+
+    def unavailable_metrics_database():
+        raise RuntimeError("metrics database unavailable")
+
+    monkeypatch.setattr(main, "MetricsSessionLocal", unavailable_metrics_database)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=main.app), base_url="https://test"
+    ) as client:
+        response = await client.get("/health/live")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
 
 
 @pytest.mark.asyncio

@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
+from starlette.concurrency import run_in_threadpool
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.core import migrations as db_migrations
@@ -38,7 +39,7 @@ from app.core.structured_logging import (
 )
 from app.core.telemetry import configure_telemetry
 from app.db.enums import AlertSeverity, AlertType, AuditEventType
-from app.db.session import SessionLocal, engine
+from app.db.session import MetricsSessionLocal, SessionLocal, engine
 from app.routers import (
     admin_exports,
     admin_imports,
@@ -313,7 +314,7 @@ def _record_metrics(request: Request, status_code: int, duration_ms: int) -> Non
     route_path = getattr(route, "path", request.url.path)
     session = getattr(request.state, "user_session", None)
     org_id = session.org_id if session else None
-    db = SessionLocal()
+    db = MetricsSessionLocal()
     try:
         metrics_service.record_request(
             db=db,
@@ -424,24 +425,37 @@ def _emit_mutation_fallback_audit(request: Request, status_code: int | None) -> 
 
 @app.middleware("http")
 async def metrics_middleware(request: Request, call_next):
+    if request.url.path in {"/healthz", "/health/live"}:
+        return await call_next(request)
+
     start = perf_counter()
     try:
         response = await call_next(request)
     except HTTPException as exc:
         duration_ms = int((perf_counter() - start) * 1000)
-        _record_metrics(request, exc.status_code, duration_ms)
+        await run_in_threadpool(_record_metrics, request, exc.status_code, duration_ms)
         raise
     except RateLimitExceeded:
         duration_ms = int((perf_counter() - start) * 1000)
-        _record_metrics(request, status.HTTP_429_TOO_MANY_REQUESTS, duration_ms)
+        await run_in_threadpool(
+            _record_metrics,
+            request,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            duration_ms,
+        )
         raise
     except Exception:
         duration_ms = int((perf_counter() - start) * 1000)
-        _record_metrics(request, status.HTTP_500_INTERNAL_SERVER_ERROR, duration_ms)
+        await run_in_threadpool(
+            _record_metrics,
+            request,
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            duration_ms,
+        )
         raise
 
     duration_ms = int((perf_counter() - start) * 1000)
-    _record_metrics(request, response.status_code, duration_ms)
+    await run_in_threadpool(_record_metrics, request, response.status_code, duration_ms)
     return response
 
 

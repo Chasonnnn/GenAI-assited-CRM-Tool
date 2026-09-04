@@ -3,6 +3,7 @@
 import logging
 import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import inspect
@@ -10,6 +11,74 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db.models import AIConversation, RequestMetricsRollup
 from app.services import metrics_service
+
+
+def test_request_metrics_use_isolated_session(monkeypatch):
+    """Metrics must not consume the request pool or its active transaction."""
+    from app import main as main_module
+
+    request_db = object()
+    metrics_db = SimpleNamespace(closed=False)
+    metrics_db.close = lambda: setattr(metrics_db, "closed", True)
+    request = SimpleNamespace(
+        method="GET",
+        scope={"route": SimpleNamespace(path="/tests/metrics")},
+        state=SimpleNamespace(request_db=request_db, user_session=None),
+        url=SimpleNamespace(path="/tests/metrics"),
+    )
+    recorded = {}
+
+    def _unexpected_session():
+        raise AssertionError("metrics used the request database pool")
+
+    def _metrics_session():
+        return metrics_db
+
+    def _record_request(**kwargs):
+        recorded.update(kwargs)
+
+    monkeypatch.setattr(main_module, "SessionLocal", _unexpected_session)
+    monkeypatch.setattr(
+        main_module, "MetricsSessionLocal", _metrics_session, raising=False
+    )
+    monkeypatch.setattr(main_module.metrics_service, "record_request", _record_request)
+
+    main_module._record_metrics(request, status_code=200, duration_ms=12)
+
+    assert recorded["db"] is metrics_db
+    assert recorded["route"] == "/tests/metrics"
+    assert recorded["status_code"] == 200
+    assert metrics_db.closed is True
+
+
+@pytest.mark.asyncio
+async def test_metrics_middleware_offloads_database_write(monkeypatch):
+    """A slow metrics write must not block the event loop."""
+    from app import main as main_module
+
+    request = SimpleNamespace(url=SimpleNamespace(path="/tests/metrics"))
+    response = SimpleNamespace(status_code=200)
+    calls = []
+
+    async def _call_next(_request):
+        return response
+
+    def _record_metrics(*args):
+        calls.append(("record", args))
+
+    async def _run_in_threadpool(func, *args):
+        calls.append(("offload", args))
+        func(*args)
+
+    monkeypatch.setattr(main_module, "_record_metrics", _record_metrics)
+    monkeypatch.setattr(
+        main_module, "run_in_threadpool", _run_in_threadpool, raising=False
+    )
+
+    result = await main_module.metrics_middleware(request, _call_next)
+
+    assert result is response
+    assert [call[0] for call in calls] == ["offload", "record"]
 
 
 def test_record_request_dedupes_null_org(db, monkeypatch):
