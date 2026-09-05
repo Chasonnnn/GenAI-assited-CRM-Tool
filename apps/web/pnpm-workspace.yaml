@@ -12,6 +12,7 @@ overrides:
   d3-color: ">=3.1.0"
   esbuild: 0.28.1
   flatted: 3.4.2
+  browserslist: 4.28.7
   markdown-it: 14.2.0
   minimatch: 10.2.5
   nanoid: 3.3.18
