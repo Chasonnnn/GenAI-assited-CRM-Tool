@@ -1,0 +1,260 @@
+[
+  {
+    "kind": "donor",
+    "theme": "light",
+    "width": 1440,
+    "label": {
+      "font": "14px",
+      "line": "20px",
+      "color": "lab(45.248 0 0)"
+    },
+    "value": {
+      "font": "16px",
+      "line": "24px"
+    },
+    "icon": 20,
+    "order": [
+      "Owner",
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity"
+    ]
+  },
+  {
+    "kind": "ip",
+    "theme": "light",
+    "width": 1440,
+    "label": {
+      "font": "14px",
+      "line": "20px",
+      "color": "lab(45.248 0 0)"
+    },
+    "value": {
+      "font": "16px",
+      "line": "24px"
+    },
+    "icon": 20,
+    "order": [
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity"
+    ]
+  },
+  {
+    "kind": "donor",
+    "theme": "dark",
+    "width": 1440,
+    "label": {
+      "font": "14px",
+      "line": "20px",
+      "color": "lab(66.94 0 0)"
+    },
+    "value": {
+      "font": "16px",
+      "line": "24px"
+    },
+    "icon": 20,
+    "order": [
+      "Owner",
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity"
+    ]
+  },
+  {
+    "kind": "ip",
+    "theme": "dark",
+    "width": 1440,
+    "label": {
+      "font": "14px",
+      "line": "20px",
+      "color": "lab(66.94 0 0)"
+    },
+    "value": {
+      "font": "16px",
+      "line": "24px"
+    },
+    "icon": 20,
+    "order": [
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity"
+    ]
+  },
+  {
+    "kind": "donor",
+    "theme": "light",
+    "width": 768,
+    "label": {
+      "font": "14px",
+      "line": "20px",
+      "color": "lab(45.248 0 0)"
+    },
+    "value": {
+      "font": "16px",
+      "line": "24px"
+    },
+    "icon": 20,
+    "order": [
+      "Owner",
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity"
+    ]
+  },
+  {
+    "kind": "ip",
+    "theme": "light",
+    "width": 768,
+    "label": {
+      "font": "14px",
+      "line": "20px",
+      "color": "lab(45.248 0 0)"
+    },
+    "value": {
+      "font": "16px",
+      "line": "24px"
+    },
+    "icon": 20,
+    "order": [
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity"
+    ]
+  },
+  {
+    "kind": "donor",
+    "theme": "dark",
+    "width": 768,
+    "label": {
+      "font": "14px",
+      "line": "20px",
+      "color": "lab(66.94 0 0)"
+    },
+    "value": {
+      "font": "16px",
+      "line": "24px"
+    },
+    "icon": 20,
+    "order": [
+      "Owner",
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity"
+    ]
+  },
+  {
+    "kind": "ip",
+    "theme": "dark",
+    "width": 768,
+    "label": {
+      "font": "14px",
+      "line": "20px",
+      "color": "lab(66.94 0 0)"
+    },
+    "value": {
+      "font": "16px",
+      "line": "24px"
+    },
+    "icon": 20,
+    "order": [
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity"
+    ]
+  },
+  {
+    "kind": "donor",
+    "theme": "light",
+    "width": 390,
+    "label": {
+      "font": "14px",
+      "line": "20px",
+      "color": "lab(45.248 0 0)"
+    },
+    "value": {
+      "font": "16px",
+      "line": "24px"
+    },
+    "icon": 20,
+    "order": [
+      "Owner",
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity"
+    ]
+  },
+  {
+    "kind": "ip",
+    "theme": "light",
+    "width": 390,
+    "label": {
+      "font": "14px",
+      "line": "20px",
+      "color": "lab(45.248 0 0)"
+    },
+    "value": {
+      "font": "16px",
+      "line": "24px"
+    },
+    "icon": 20,
+    "order": [
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity"
+    ]
+  },
+  {
+    "kind": "donor",
+    "theme": "dark",
+    "width": 390,
+    "label": {
+      "font": "14px",
+      "line": "20px",
+      "color": "lab(66.94 0 0)"
+    },
+    "value": {
+      "font": "16px",
+      "line": "24px"
+    },
+    "icon": 20,
+    "order": [
+      "Owner",
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity"
+    ]
+  },
+  {
+    "kind": "ip",
+    "theme": "dark",
+    "width": 390,
+    "label": {
+      "font": "14px",
+      "line": "20px",
+      "color": "lab(66.94 0 0)"
+    },
+    "value": {
+      "font": "16px",
+      "line": "24px"
+    },
+    "icon": 20,
+    "order": [
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity"
+    ]
+  }
+]
