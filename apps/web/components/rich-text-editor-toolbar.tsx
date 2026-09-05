@@ -63,7 +63,7 @@ export function RichTextEditorToolbar({
     }
 
     return (
-        <div className="flex items-center gap-1 border-b bg-muted/30 px-2 py-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-1 border-b bg-muted/30 px-2 py-1.5">
             <Toggle
                 size="sm"
                 pressed={editor.isActive("bold")}

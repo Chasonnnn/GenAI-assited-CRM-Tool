@@ -14,7 +14,7 @@ export function RichTextEditorLoading({
     showSubmit,
 }: RichTextEditorLoadingProps) {
     return (
-        <div className={cn("border rounded-md", className)}>
+        <div className={cn("min-w-0 max-w-full border rounded-md", className)}>
             <div className="flex h-10 items-center gap-1 border-b bg-muted/30 px-2 py-1.5">
                 <div className="size-6 animate-pulse rounded bg-muted" />
                 <div className="size-6 animate-pulse rounded bg-muted" />

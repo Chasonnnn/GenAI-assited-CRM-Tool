@@ -243,6 +243,7 @@ export interface EntityNote {
     entity_type: string
     entity_id: string
     author_id: string
+    author_name?: string | null
     content: string
     created_at: string
 }
@@ -250,6 +251,7 @@ export interface EntityNote {
 export interface EntityNoteListItem {
     id: string
     author_id: string
+    author_name?: string | null
     content: string
     created_at: string
 }

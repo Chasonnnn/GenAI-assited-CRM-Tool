@@ -89,6 +89,7 @@ export interface DonorStatusChangeResponse {
 export interface DonorNoteListItem {
     id: string
     author_id: string
+    author_name?: string | null
     content: string
     created_at: string
 }
