@@ -105,19 +105,6 @@ def create_note(
         content=data.body,
     )
 
-    # Log to surrogate activity
-    from app.services import activity_service
-
-    activity_service.log_note_added(
-        db=db,
-        surrogate_id=surrogate_id,
-        organization_id=session.org_id,
-        actor_user_id=session.user_id,
-        note_id=note.id,
-        content=note.content,
-    )
-    db.commit()
-
     return note_service.to_note_read(note)
 
 
@@ -136,34 +123,17 @@ def delete_note(
     Access: Respects role-based surrogate access (intake can't delete on handed-off surrogates)
     """
     note = note_service.get_note(db, note_id, session.org_id)
-    if not note:
+    if not note or note.entity_type != "surrogate":
         raise HTTPException(status_code=404, detail="Note not found")
 
-    # Access control: check surrogate access if note is linked to a surrogate
-    if note.entity_type == "surrogate":
-        surrogate = surrogate_service.get_surrogate(db, session.org_id, note.entity_id)
-        if surrogate:
-            check_surrogate_access(
-                surrogate, session.role, session.user_id, db=db, org_id=session.org_id
-            )
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, note.entity_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
     # Permission: author or admin+
     if not is_owner_or_can_manage(session, note.author_id):
         raise HTTPException(status_code=403, detail="Not authorized to delete this note")
-
-    # Log to surrogate activity before delete (only for surrogate notes)
-    if note.entity_type == "surrogate":
-        from app.services import activity_service
-
-        activity_service.log_note_deleted(
-            db=db,
-            surrogate_id=note.entity_id,
-            organization_id=session.org_id,
-            actor_user_id=session.user_id,
-            note_id=note.id,
-            content_preview=note.content[:200] if note.content else "",
-        )
-        db.commit()
 
     note_service.delete_note(db, note, actor_user_id=session.user_id)
     return None

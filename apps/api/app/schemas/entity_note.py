@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, AliasPath, BaseModel, ConfigDict, Field
 
 
 class EntityNoteCreate(BaseModel):
@@ -33,5 +33,9 @@ class EntityNoteListItem(BaseModel):
 
     id: UUID
     author_id: UUID
+    author_name: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("author_name", AliasPath("author", "display_name")),
+    )
     content: str
     created_at: datetime

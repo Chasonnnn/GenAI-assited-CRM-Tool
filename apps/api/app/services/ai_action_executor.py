@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime
 from sqlalchemy.orm import Session
 
 from app.db.enums import OwnerType, TaskType
-from app.db.models import AIActionApproval, EntityNote, Surrogate, Task
+from app.db.models import AIActionApproval, Surrogate, Task
 from app.types import JsonObject
 
 logger = logging.getLogger(__name__)
@@ -118,15 +118,16 @@ class AddNoteExecutor(ActionExecutor):
                 "error": "Surrogate not found",
             }
 
-        clean_content = note_service.sanitize_html(content)
-        note = EntityNote(
+        note = note_service.create_note(
+            db=db,
             entity_type="surrogate",
             entity_id=entity_id,
-            organization_id=org_id,
+            org_id=org_id,
             author_id=user_id,
-            content=clean_content,
+            content=content,
+            commit=False,
+            emit_events=False,
         )
-        db.add(note)
 
         # Update surrogate last_contacted
         surrogate.last_contacted_at = datetime.now(UTC)
@@ -403,16 +404,16 @@ class SendEmailExecutor(ActionExecutor):
 """
         from app.services import note_service, workflow_triggers
 
-        clean_content = note_service.sanitize_html(email_content)
-
-        note = EntityNote(
+        note = note_service.create_note(
+            db=db,
             entity_type="surrogate",
             entity_id=entity_id,
-            organization_id=org_id,
+            org_id=org_id,
             author_id=user_id,
-            content=clean_content,
+            content=email_content,
+            commit=False,
+            emit_events=False,
         )
-        db.add(note)
 
         # Update surrogate last_contacted
         surrogate.last_contacted_at = datetime.now(UTC)

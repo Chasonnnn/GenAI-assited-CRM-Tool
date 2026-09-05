@@ -4,14 +4,18 @@ Per "No Backward Compatibility" rule, SurrogateNote has been removed.
 All notes use the polymorphic EntityNote model with entity_type field.
 """
 
+import logging
 from uuid import UUID
 
 import nh3
+from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.enums import EntityType
-from app.db.models import EntityNote
+from app.db.models import Donor, EntityNote, IntendedParent, Surrogate
 from app.schemas.note import NoteRead
+
+logger = logging.getLogger(__name__)
 
 # Allowed HTML tags for TipTap rich text
 ALLOWED_TAGS = {
@@ -43,6 +47,74 @@ def sanitize_html(html: str) -> str:
 # =============================================================================
 
 
+def _record_note_activity(
+    db: Session,
+    note: EntityNote,
+    *,
+    deleted: bool,
+    actor_user_id: UUID | None,
+) -> None:
+    if note.entity_type == EntityType.SURROGATE.value:
+        from app.services import activity_service
+
+        if deleted:
+            activity_service.log_note_deleted(
+                db=db,
+                surrogate_id=note.entity_id,
+                organization_id=note.organization_id,
+                actor_user_id=actor_user_id,
+                note_id=note.id,
+                content_preview=note.content[:200] if note.content else "",
+            )
+        else:
+            activity_service.log_note_added(
+                db=db,
+                surrogate_id=note.entity_id,
+                organization_id=note.organization_id,
+                actor_user_id=actor_user_id,
+                note_id=note.id,
+                content=note.content,
+            )
+    elif note.entity_type in {EntityType.INTENDED_PARENT.value, EntityType.DONOR.value}:
+        from app.services import entity_activity_service
+
+        entity_activity_service.record_activity(
+            db,
+            org_id=note.organization_id,
+            entity_type=note.entity_type,
+            entity_id=note.entity_id,
+            activity_type="note_deleted" if deleted else "note_added",
+            actor_user_id=actor_user_id,
+            details={"note_id": str(note.id)},
+        )
+
+
+def _dispatch_note_added(db: Session, note: EntityNote) -> None:
+    """Isolate post-commit automation failures from the saved note."""
+    from app.db.session import SessionLocal
+    from app.services.workflow_triggers import trigger_note_added
+
+    bind = db.get_bind()
+    side_effect_db = (
+        Session(bind=bind, autoflush=False, join_transaction_mode="create_savepoint")
+        if isinstance(bind, Connection)
+        else SessionLocal()
+    )
+    try:
+        persisted_note = get_note(side_effect_db, note.id, note.organization_id)
+        if persisted_note is None:
+            raise ValueError("Saved note unavailable for workflow dispatch")
+        trigger_note_added(side_effect_db, persisted_note)
+    except Exception as exc:
+        side_effect_db.rollback()
+        logger.error(
+            "Note workflow trigger failed",
+            extra={"note_id": str(note.id), "error_class": type(exc).__name__},
+        )
+    finally:
+        side_effect_db.close()
+
+
 def create_note(
     db: Session,
     org_id: UUID,
@@ -50,41 +122,58 @@ def create_note(
     entity_id: UUID,
     author_id: UUID,
     content: str,
+    *,
+    commit: bool = True,
+    emit_events: bool = True,
 ) -> EntityNote:
-    """Create a note on any entity type."""
-    clean_content = sanitize_html(content)
+    """Persist a sanitized note and its activity in one transaction.
 
-    # Convert enum to string if needed
+    Composed callers use commit=False and emit_events=False, then own both the
+    transaction and any later workflow dispatch.
+    """
+    if emit_events and not commit:
+        raise ValueError("Uncommitted notes cannot dispatch workflow events")
     type_str = entity_type.value if isinstance(entity_type, EntityType) else entity_type
-
-    note = EntityNote(
-        organization_id=org_id,
-        entity_type=type_str,
-        entity_id=entity_id,
-        author_id=author_id,
-        content=clean_content,
-    )
-    db.add(note)
-    db.flush()
-    if type_str in {EntityType.INTENDED_PARENT.value, EntityType.DONOR.value}:
-        from app.services import entity_activity_service
-
-        entity_activity_service.record_activity(
-            db,
-            org_id=org_id,
+    subject_models = {
+        EntityType.SURROGATE.value: Surrogate,
+        EntityType.INTENDED_PARENT.value: IntendedParent,
+        EntityType.DONOR.value: Donor,
+    }
+    subject_model = subject_models.get(type_str)
+    if subject_model is None:
+        raise ValueError("Unsupported note entity type")
+    try:
+        subject = (
+            db.query(subject_model)
+            .filter(subject_model.id == entity_id, subject_model.organization_id == org_id)
+            .first()
+        )
+        if subject is None:
+            raise ValueError("Note subject not found in organization")
+        note = EntityNote(
+            organization_id=org_id,
             entity_type=type_str,
             entity_id=entity_id,
-            activity_type="note_added",
-            actor_user_id=author_id,
-            details={"note_id": str(note.id)},
+            author_id=author_id,
+            content=sanitize_html(content),
         )
-    db.commit()
-    db.refresh(note)
+        db.add(note)
+        db.flush()
+        _record_note_activity(db, note, deleted=False, actor_user_id=author_id)
+        if isinstance(subject, IntendedParent):
+            subject.last_activity = note.created_at
+        if commit:
+            db.commit()
+            db.refresh(note)
+        else:
+            db.flush()
+    except Exception:
+        if commit:
+            db.rollback()
+        raise
 
-    # Trigger workflow automation after successful commit
-    from app.services.workflow_triggers import trigger_note_added
-
-    trigger_note_added(db, note)
+    if emit_events:
+        _dispatch_note_added(db, note)
 
     return note
 
@@ -161,19 +250,22 @@ def to_note_read(note: EntityNote) -> NoteRead:
     )
 
 
-def delete_note(db: Session, note: EntityNote, *, actor_user_id: UUID | None = None) -> None:
-    """Delete a note."""
-    if note.entity_type in {EntityType.INTENDED_PARENT.value, EntityType.DONOR.value}:
-        from app.services import entity_activity_service
-
-        entity_activity_service.record_activity(
-            db,
-            org_id=note.organization_id,
-            entity_type=note.entity_type,
-            entity_id=note.entity_id,
-            activity_type="note_deleted",
-            actor_user_id=actor_user_id,
-            details={"note_id": str(note.id)},
-        )
-    db.delete(note)
-    db.commit()
+def delete_note(
+    db: Session,
+    note: EntityNote,
+    *,
+    actor_user_id: UUID | None = None,
+    commit: bool = True,
+) -> None:
+    """Delete a note and retain its activity in the same transaction."""
+    try:
+        _record_note_activity(db, note, deleted=True, actor_user_id=actor_user_id)
+        db.delete(note)
+        if commit:
+            db.commit()
+        else:
+            db.flush()
+    except Exception:
+        if commit:
+            db.rollback()
+        raise

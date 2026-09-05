@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.enums import EntityType, OwnerType, TaskType
-from app.db.models import EntityNote, Task
+from app.db.models import Task
 from app.db.models import ZoomMeeting as ZoomMeetingModel
 from app.services import oauth_service
 from app.services.http_service import request_with_retries
@@ -260,8 +260,8 @@ async def schedule_zoom_meeting(
         db: Database session
         user_id: User scheduling the meeting
         org_id: Organization ID
-        entity_type: CASE or INTENDED_PARENT
-        entity_id: ID of the case or intended parent
+        entity_type: SURROGATE or INTENDED_PARENT
+        entity_id: ID of the surrogate or intended parent
         topic: Meeting topic
         start_time: When meeting starts (None = instant)
         duration: Duration in minutes
@@ -346,31 +346,16 @@ async def schedule_zoom_meeting(
     if contact_name:
         note_content += f"<p><strong>With:</strong> {escape(contact_name)}</p>"
 
-    note_content = note_service.sanitize_html(note_content)
-
-    # Create note
-    note = EntityNote(
-        organization_id=org_id,
-        entity_type=entity_type.value,
+    note = note_service.create_note(
+        db=db,
+        org_id=org_id,
+        entity_type=entity_type,
         entity_id=entity_id,
         content=note_content,
         author_id=user_id,
+        commit=False,
+        emit_events=False,
     )
-    db.add(note)
-    db.flush()  # get note.id for activity log
-
-    # Log case activity (case only)
-    if entity_type == EntityType.CASE:
-        from app.services import activity_service
-
-        activity_service.log_note_added(
-            db=db,
-            surrogate_id=entity_id,
-            organization_id=org_id,
-            actor_user_id=user_id,
-            note_id=note.id,
-            content=note_content,
-        )
 
     # Always create a meeting task aligned with the scheduled time + duration.
     task = Task(
@@ -384,8 +369,8 @@ async def schedule_zoom_meeting(
         owner_type=OwnerType.USER.value,
         owner_id=user_id,
         created_by_user_id=user_id,
-        surrogate_id=entity_id if entity_type == EntityType.CASE else None,
-        # Note: intended_parent_id would need to be added to Task model
+        surrogate_id=entity_id if entity_type == EntityType.SURROGATE else None,
+        intended_parent_id=entity_id if entity_type == EntityType.INTENDED_PARENT else None,
     )
     db.add(task)
     db.flush()
@@ -395,7 +380,7 @@ async def schedule_zoom_meeting(
     zoom_meeting_record = ZoomMeetingModel(
         organization_id=org_id,
         user_id=user_id,
-        surrogate_id=entity_id if entity_type == EntityType.CASE else None,
+        surrogate_id=entity_id if entity_type == EntityType.SURROGATE else None,
         intended_parent_id=entity_id if entity_type == EntityType.INTENDED_PARENT else None,
         zoom_meeting_id=str(meeting.id),
         idempotency_key=idempotency_key,

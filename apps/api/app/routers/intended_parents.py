@@ -744,10 +744,6 @@ def create_note(
         content=data.content,
     )
 
-    # Bump last_activity
-    ip.last_activity = note.created_at
-    db.commit()
-
     return note
 
 
