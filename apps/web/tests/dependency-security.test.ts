@@ -43,6 +43,13 @@ function compareVersions(left: string, right: string): number {
 }
 
 describe("Dependency security guards", () => {
+    it("pins browserslist to a non-vulnerable version in pnpm overrides", () => {
+        const browserslistOverride = readPnpmOverrides().browserslist
+
+        expect(browserslistOverride).toBeDefined()
+        expect(compareVersions(browserslistOverride!, "4.28.7")).toBeGreaterThanOrEqual(0)
+    })
+
     it("pins flatted to a non-vulnerable version in pnpm overrides", () => {
         const flattedOverride = readPnpmOverrides().flatted
 
@@ -173,6 +180,20 @@ describe("Dependency security guards", () => {
         expect(reactDomVersion).toBe("19.2.7")
         expect(typescriptVersion).toBeDefined()
         expect(compareVersions(typescriptVersion!, "6.1.0")).toBeLessThan(0)
+    })
+
+    it("resolves only non-vulnerable browserslist versions in pnpm-lock.yaml", () => {
+        const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
+        const resolvedVersions = Array.from(
+            lockfile.matchAll(/^\s{2}browserslist@(\d+\.\d+\.\d+):/gm),
+            (match) => match[1],
+        )
+
+        expect(resolvedVersions.length).toBeGreaterThan(0)
+
+        for (const resolvedVersion of resolvedVersions) {
+            expect(compareVersions(resolvedVersion, "4.28.7")).toBeGreaterThanOrEqual(0)
+        }
     })
 
     it("resolves only non-vulnerable flatted versions in pnpm-lock.yaml", () => {
