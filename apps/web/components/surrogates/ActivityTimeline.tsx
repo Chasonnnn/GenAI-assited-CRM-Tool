@@ -1,6 +1,7 @@
 "use client"
 
 import { EntityActivityTimeline } from "@/components/activity/EntityActivityTimeline"
+import { getStageSemantics } from "@/lib/surrogate-stage-context"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import type { SurrogateActivity } from "@/lib/api/surrogates"
 import { useSurrogateHistory } from "@/lib/hooks/use-surrogates"
@@ -41,7 +42,7 @@ export function ActivityTimeline({
     return (
         <EntityActivityTimeline
             currentStageId={currentStageId}
-            stages={stages}
+            stages={stages.map((stage) => ({ ...stage, semantics: getStageSemantics(stage) }))}
             stageHistory={historyQuery.data ?? []}
             status={status}
             onRetry={() => {

@@ -19,17 +19,15 @@ import {
     UserPlusIcon,
     CalendarIcon,
 } from "lucide-react"
-import { OutcomeBadge } from "@/components/surrogates/OutcomeBadge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Button } from "@/components/ui/button"
-import type { SurrogateActivity, SurrogateStatusHistory } from "@/lib/api/surrogates"
+import type { EntityActivity, EntityStageHistory } from "@/lib/api/activity"
 import type { PipelineStage } from "@/lib/api/pipelines"
-import { getSurrogateOutcomePresentation, type SurrogateOutcomeKind } from "@/lib/surrogate-outcome-presentation"
+import { getActivityOutcomePresentation, type ActivityOutcomeKind } from "@/components/activity/activity-outcomes"
 import type { TaskListItem } from "@/lib/types/task"
 import type { LucideIcon } from "lucide-react"
-import { isTerminalStage } from "@/lib/surrogate-stage-context"
 import { cn } from "@/lib/utils"
 
 // ============================================================================
@@ -70,7 +68,7 @@ interface ActivityItem {
     actorName?: string
     timestamp: string
     exactTimestamp?: string
-    outcomeKind?: SurrogateOutcomeKind
+    outcomeKind?: ActivityOutcomeKind
     outcomeValue?: string
 }
 
@@ -163,7 +161,7 @@ function formatActivityTimestamp(value: unknown): string | null {
     return activityTimestampFormatter.format(date)
 }
 
-function getActivityPreview(activity: SurrogateActivity): string {
+function getActivityPreview(activity: EntityActivity): string {
     const details = activity.details as Record<string, unknown> | null
     const type = activity.activity_type
 
@@ -300,13 +298,13 @@ function getActivityPreview(activity: SurrogateActivity): string {
     }
 }
 
-function getActivityTitle(activity: SurrogateActivity): string {
+function getActivityTitle(activity: EntityActivity): string {
     const config = getActivityConfig(activity.activity_type)
     return config.label
 }
 
-function getActivityOutcomeMeta(activity: SurrogateActivity): {
-    outcomeKind?: SurrogateOutcomeKind
+function getActivityOutcomeMeta(activity: EntityActivity): {
+    outcomeKind?: ActivityOutcomeKind
     outcomeValue?: string
 } {
     const details = activity.details as Record<string, unknown> | null
@@ -332,11 +330,11 @@ function getActivityOutcomeMeta(activity: SurrogateActivity): {
 // Stage Assignment Logic
 // ============================================================================
 
-function getEntryTimestamp(entry: SurrogateStatusHistory): string {
+function getEntryTimestamp(entry: EntityStageHistory): string {
     return entry.effective_at || entry.changed_at
 }
 
-function isBackdatedEntry(entry: SurrogateStatusHistory): boolean {
+function isBackdatedEntry(entry: EntityStageHistory): boolean {
     if (!entry.effective_at || !entry.recorded_at) return false
     const effectiveTime = new Date(entry.effective_at).getTime()
     const recordedTime = new Date(entry.recorded_at).getTime()
@@ -344,9 +342,9 @@ function isBackdatedEntry(entry: SurrogateStatusHistory): boolean {
     return Math.abs(effectiveTime - recordedTime) > 60000
 }
 
-function dedupeStageHistory(history: SurrogateStatusHistory[]): SurrogateStatusHistory[] {
+function dedupeStageHistory(history: EntityStageHistory[]): EntityStageHistory[] {
     const seenStages = new Set<string>()
-    const deduped: SurrogateStatusHistory[] = []
+    const deduped: EntityStageHistory[] = []
 
     const sortedHistory = history.toSorted(
         (a, b) => new Date(getEntryTimestamp(b)).getTime() - new Date(getEntryTimestamp(a)).getTime()
@@ -363,7 +361,7 @@ function dedupeStageHistory(history: SurrogateStatusHistory[]): SurrogateStatusH
 }
 
 function getStageTransitionLabel(
-    entry: SurrogateStatusHistory,
+    entry: EntityStageHistory,
     stageLabelById: Map<string, string>
 ): string | null {
     const toLabel =
@@ -379,8 +377,8 @@ function getStageTransitionLabel(
 }
 
 function assignActivityToStage(
-    activity: SurrogateActivity,
-    stageHistory: SurrogateStatusHistory[]
+    activity: EntityActivity,
+    stageHistory: EntityStageHistory[]
 ): string | null {
     // Sort history by entry timestamp DESC (most recent first)
     const sortedHistory = stageHistory.toSorted(
@@ -409,8 +407,8 @@ function findStageIdByKey(stages: PipelineStage[], key: string): string | null {
 }
 
 function resolveActivityStageId(
-    activity: SurrogateActivity,
-    stageHistory: SurrogateStatusHistory[],
+    activity: EntityActivity,
+    stageHistory: EntityStageHistory[],
     allPipelineStages: PipelineStage[]
 ): string | null {
     if (activity.activity_type === "interview_scheduled") {
@@ -471,8 +469,8 @@ function getVisibleStages(
 
 function buildTimelineData(
     allPipelineStages: PipelineStage[],
-    stageHistory: SurrogateStatusHistory[],
-    activities: SurrogateActivity[],
+    stageHistory: EntityStageHistory[],
+    activities: EntityActivity[],
     currentStageId: string,
     effectiveStageId?: string
 ): { stageGroups: StageGroup[] } {
@@ -543,14 +541,14 @@ function buildTimelineData(
 
     // 7. Create StageGroup for ALL pipeline stages (preserve full story)
     const displayStages = activeStages.filter((stage) => {
-        const terminalStage = stage.stage_type === "terminal" || isTerminalStage(stage)
+        const terminalStage = stage.stage_type === "terminal" || (Boolean(stage.semantics?.terminal_outcome) && stage.semantics?.terminal_outcome !== "none")
         return !terminalStage || stage.id === currentStageId
     })
     const stageGroups: StageGroup[] = displayStages.map((stage) => {
         const allActivities = activitiesByStage.get(stage.id) || []
         const entryMeta = stageEntryMeta.get(stage.id)
         const entryAt = entryMeta?.entryAt || null
-        const terminalStage = stage.stage_type === "terminal" || isTerminalStage(stage)
+        const terminalStage = stage.stage_type === "terminal" || (Boolean(stage.semantics?.terminal_outcome) && stage.semantics?.terminal_outcome !== "none")
 
         return {
             id: stage.id,
@@ -582,7 +580,7 @@ function ActivityRow({ item }: { item: ActivityItem }) {
     const baseConfig = getActivityConfig(item.type)
     const outcomePresentation =
         item.outcomeKind && item.outcomeValue
-            ? getSurrogateOutcomePresentation(item.outcomeKind, item.outcomeValue)
+            ? getActivityOutcomePresentation(item.outcomeKind, item.outcomeValue)
             : null
     const config = outcomePresentation
         ? {
@@ -607,9 +605,7 @@ function ActivityRow({ item }: { item: ActivityItem }) {
             <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                     <div className="text-sm font-medium truncate">{item.title}</div>
-                    {item.outcomeKind && item.outcomeValue && (
-                        <OutcomeBadge kind={item.outcomeKind} outcome={item.outcomeValue} />
-                    )}
+                    {outcomePresentation?.badge}
                 </div>
                 {item.preview && (
                     <div className="text-xs text-muted-foreground line-clamp-2">{item.preview}</div>
@@ -631,7 +627,7 @@ export function ActivityEventRow({
     activity,
     showExactTimestamp = false,
 }: {
-    activity: SurrogateActivity
+    activity: EntityActivity
     showExactTimestamp?: boolean
 }) {
     return (
@@ -969,8 +965,8 @@ export interface EntityActivityTimelineProps {
     currentStageId: string
     effectiveStageId?: string
     stages: PipelineStage[]
-    stageHistory: SurrogateStatusHistory[]
-    activities?: SurrogateActivity[]
+    stageHistory: EntityStageHistory[]
+    activities?: EntityActivity[]
     tasks?: TaskListItem[]
     tasksStatus?: "loading" | "error" | "ready"
     onRetryTasks?: () => void
@@ -980,7 +976,7 @@ export interface EntityActivityTimelineProps {
     notesHref?: string
 }
 
-const EMPTY_ACTIVITIES: SurrogateActivity[] = []
+const EMPTY_ACTIVITIES: EntityActivity[] = []
 const EMPTY_TASKS: TaskListItem[] = []
 
 export function EntityActivityTimeline({

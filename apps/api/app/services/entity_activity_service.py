@@ -147,7 +147,10 @@ def _status_items(
     org_id: UUID,
     entity_type: ActivityEntityType,
     entity_id: UUID,
+    history_ids: set[UUID],
 ) -> list[ActivityItem]:
+    if not history_ids:
+        return []
     if entity_type == EntityType.INTENDED_PARENT.value:
         rows = (
             db.query(IntendedParentStatusHistory)
@@ -159,6 +162,7 @@ def _status_items(
                 IntendedParent.organization_id == org_id,
                 IntendedParentStatusHistory.organization_id == org_id,
                 IntendedParentStatusHistory.intended_parent_id == entity_id,
+                IntendedParentStatusHistory.id.in_(history_ids),
             )
             .all()
         )
@@ -199,6 +203,7 @@ def _status_items(
         .filter(
             DonorStatusHistory.organization_id == org_id,
             DonorStatusHistory.donor_id == entity_id,
+            DonorStatusHistory.id.in_(history_ids),
         )
         .all()
     )
@@ -236,6 +241,23 @@ def list_entity_activity(
     include_task_previews: bool = False,
 ) -> tuple[list[ActivityItem], int]:
     """Combine shared entity sources into one deterministic, paginated feed."""
+    from app.services.entity_activity_query import select_activity_page
+
+    page_rows, total = select_activity_page(
+        db,
+        org_id=org_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        page=page,
+        per_page=per_page,
+    )
+    if not page_rows:
+        return [], total
+    selected = {(row["source"], row["source_id"], row["activity_type"]) for row in page_rows}
+    source_ids = {
+        source: {row["source_id"] for row in page_rows if row["source"] == source}
+        for source in ("activity", "status", "note", "task", "attachment")
+    }
     entity_id_column = (
         Task.intended_parent_id
         if entity_type == EntityType.INTENDED_PARENT.value
@@ -257,15 +279,31 @@ def list_entity_activity(
         .filter(
             EntityActivityLog.organization_id == org_id,
             activity_id_column == entity_id,
+            EntityActivityLog.id.in_(source_ids["activity"]),
         )
         .all()
     )
+    for activity in activity_rows:
+        for source, allowed in (
+            ("note", include_note_previews),
+            ("task", include_task_previews),
+            ("attachment", True),
+        ):
+            if not allowed:
+                continue
+            source_id = (activity.details or {}).get(f"{source}_id")
+            if source_id:
+                try:
+                    source_ids[source].add(UUID(str(source_id)))
+                except TypeError, ValueError:
+                    pass
     notes = (
         db.query(EntityNote)
         .filter(
             EntityNote.organization_id == org_id,
             EntityNote.entity_type == entity_type,
             EntityNote.entity_id == entity_id,
+            EntityNote.id.in_(source_ids["note"]),
         )
         .all()
     )
@@ -274,6 +312,7 @@ def list_entity_activity(
         .filter(
             Task.organization_id == org_id,
             entity_id_column == entity_id,
+            Task.id.in_(source_ids["task"]),
         )
         .all()
     )
@@ -282,6 +321,7 @@ def list_entity_activity(
         .filter(
             Attachment.organization_id == org_id,
             attachment_id_column == entity_id,
+            Attachment.id.in_(source_ids["attachment"]),
         )
         .all()
     )
@@ -295,6 +335,7 @@ def list_entity_activity(
         org_id=org_id,
         entity_type=entity_type,
         entity_id=entity_id,
+        history_ids=source_ids["status"],
     )
     logged_events: set[tuple[str, str]] = set()
     for activity in activity_rows:
@@ -356,10 +397,14 @@ def list_entity_activity(
             "created_at": note.created_at,
         }
         for note in notes
-        if ("note_added", str(note.id)) not in logged_events
+        if ("note", note.id, "note_added") in selected
+        and ("note_added", str(note.id)) not in logged_events
     )
     for task in tasks:
-        if ("task_created", str(task.id)) not in logged_events:
+        if ("task", task.id, "task_created") in selected and (
+            "task_created",
+            str(task.id),
+        ) not in logged_events:
             items.append(
                 {
                     "id": _synthetic_event_id(task.id, "task_created"),
@@ -380,7 +425,11 @@ def list_entity_activity(
                     "created_at": task.created_at,
                 }
             )
-        if task.completed_at is not None and ("task_completed", str(task.id)) not in logged_events:
+        if (
+            ("task", task.id, "task_completed") in selected
+            and task.completed_at is not None
+            and ("task_completed", str(task.id)) not in logged_events
+        ):
             items.append(
                 {
                     "id": _synthetic_event_id(task.id, "task_completed"),
@@ -395,7 +444,10 @@ def list_entity_activity(
                 }
             )
     for attachment in attachments:
-        if ("attachment_added", str(attachment.id)) not in logged_events:
+        if ("attachment", attachment.id, "attachment_added") in selected and (
+            "attachment_added",
+            str(attachment.id),
+        ) not in logged_events:
             items.append(
                 {
                     "id": _synthetic_event_id(attachment.id, "attachment_added"),
@@ -410,7 +462,8 @@ def list_entity_activity(
                 }
             )
         if (
-            attachment.deleted_at is not None
+            ("attachment", attachment.id, "attachment_deleted") in selected
+            and attachment.deleted_at is not None
             and ("attachment_deleted", str(attachment.id)) not in logged_events
         ):
             items.append(
@@ -437,6 +490,4 @@ def list_entity_activity(
         item["actor_name"] = names.get(actor_user_id) if actor_user_id else None
 
     items.sort(key=lambda item: (item["created_at"], str(item["id"])), reverse=True)
-    total = len(items)
-    offset = (page - 1) * per_page
-    return items[offset : offset + per_page], total
+    return items, total
