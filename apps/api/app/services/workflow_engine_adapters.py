@@ -52,6 +52,10 @@ TriggerCallback = Callable[..., list[WorkflowExecution]]
 class WorkflowDomainAdapter(Protocol):
     def get_entity(self, db: Session, entity_type: str, entity_id: UUID) -> Any: ...
 
+    def resolve_donor_subject(
+        self, db: Session, org_id: UUID, subject_type: str, subject_id: UUID | None
+    ) -> Donor | None: ...
+
     def resolve_subject_context(
         self, db: Session, entity_type: str, entity_id: UUID
     ) -> tuple[str, UUID] | None: ...
@@ -120,6 +124,24 @@ class DefaultWorkflowDomainAdapter:
         WorkflowActionType.UPDATE_FIELD.value,
         WorkflowActionType.ADD_NOTE.value,
     }
+
+    def resolve_donor_subject(
+        self, db: Session, org_id: UUID, subject_type: str, subject_id: UUID | None
+    ) -> Donor | None:
+        """Reload an active donor within the workflow's exact tenant and subtype."""
+        if subject_type not in {"egg_donor", "sperm_donor"} or subject_id is None:
+            return None
+        return (
+            db.query(Donor)
+            .filter(
+                Donor.id == subject_id,
+                Donor.organization_id == org_id,
+                Donor.donor_type == subject_type.removesuffix("_donor"),
+                Donor.is_archived.is_(False),
+            )
+            .populate_existing()
+            .first()
+        )
 
     def get_entity(self, db: Session, entity_type: str, entity_id: UUID) -> Any:
         """Get entity by type and ID."""
@@ -258,15 +280,11 @@ class DefaultWorkflowDomainAdapter:
         org = db.query(Organization).filter(Organization.id == execution.organization_id).first()
         donor = None
         if execution.subject_type in {"egg_donor", "sperm_donor"} and execution.subject_id:
-            donor = (
-                db.query(Donor)
-                .filter(
-                    Donor.id == execution.subject_id,
-                    Donor.organization_id == execution.organization_id,
-                    Donor.donor_type == execution.subject_type.removesuffix("_donor"),
-                )
-                .first()
+            donor = self.resolve_donor_subject(
+                db, execution.organization_id, execution.subject_type, execution.subject_id
             )
+            if donor is None:
+                return None
 
         # Build sanitized preview (no PII)
         preview = build_action_preview(db, action, donor or entity)
@@ -376,14 +394,8 @@ class DefaultWorkflowDomainAdapter:
                 return _with_action_type(
                     {"success": False, "error": "Donor subject is missing", "skipped": True}
                 )
-            action_entity = (
-                db.query(Donor)
-                .filter(
-                    Donor.id == subject_id,
-                    Donor.organization_id == entity.organization_id,
-                    Donor.donor_type == subject_type.removesuffix("_donor"),
-                )
-                .first()
+            action_entity = self.resolve_donor_subject(
+                db, entity.organization_id, subject_type, subject_id
             )
             if action_entity is None:
                 return _with_action_type(
@@ -425,8 +437,7 @@ class DefaultWorkflowDomainAdapter:
                 isinstance(entity, FormSubmission)
                 and entity.lead_kind in {"egg_donor", "sperm_donor"}
             ) or (
-                isinstance(entity, IntakeLead)
-                and entity.lead_type in {"egg_donor", "sperm_donor"}
+                isinstance(entity, IntakeLead) and entity.lead_type in {"egg_donor", "sperm_donor"}
             )
             if isinstance(action_entity, Donor) or donor_intake_entity:
                 return _with_action_type(
@@ -806,7 +817,7 @@ class DefaultWorkflowDomainAdapter:
                     UUID(recipient_id) if isinstance(recipient_id, str) else recipient_id
                     for recipient_id in recipients
                 ]
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return []
         elif recipients != "all_admins":
             return []
@@ -821,9 +832,7 @@ class DefaultWorkflowDomainAdapter:
             )
         )
         if recipients == "all_admins":
-            query = query.filter(
-                Membership.role.in_([Role.ADMIN.value, Role.DEVELOPER.value])
-            )
+            query = query.filter(Membership.role.in_([Role.ADMIN.value, Role.DEVELOPER.value]))
         else:
             if not recipient_ids:
                 return []
@@ -1604,45 +1613,32 @@ class DefaultWorkflowDomainAdapter:
                 "error": "No user available to author note",
             }
 
-        note = EntityNote(
-            organization_id=entity.organization_id,
+        from app.services import note_service
+
+        note = note_service.create_note(
+            db,
+            org_id=entity.organization_id,
             entity_type=(
                 EntityType.DONOR.value if isinstance(entity, Donor) else EntityType.SURROGATE.value
             ),
             entity_id=entity.id,
             content=content,
             author_id=author_id,
+            commit=False,
+            emit_events=False,
         )
-        db.add(note)
-        db.commit()
 
         return {
             "success": True,
             "note_id": str(note.id),
-            "description": f"Added note: {content[:50]}...",
+            "description": "Added note",
         }
 
     def _resolve_email_variables(self, db: Session, subject: Surrogate | Donor) -> dict:
         """Resolve allowlisted email variables from the workflow subject."""
-        if isinstance(subject, Donor):
-            owner_name = ""
-            if subject.owner_type == OwnerType.USER.value and subject.owner_id:
-                owner = db.query(User).filter(User.id == subject.owner_id).first()
-                owner_name = owner.display_name if owner else ""
-            org = db.query(Organization).filter(Organization.id == subject.organization_id).first()
-            return {
-                "full_name": subject.full_name or "",
-                "email": subject.email or "",
-                "phone": subject.phone or "",
-                "surrogate_number": "",
-                "donor_number": subject.donor_number,
-                "donor_type": subject.donor_type,
-                "education": subject.education or "",
-                "status_label": subject.status_label,
-                "state": subject.state or "",
-                "owner_name": owner_name,
-                "org_name": org.name if org else "",
-            }
         from app.services import email_service
+
+        if isinstance(subject, Donor):
+            return email_service.build_donor_template_variables(db, subject)
 
         return email_service.build_surrogate_template_variables(db, subject)

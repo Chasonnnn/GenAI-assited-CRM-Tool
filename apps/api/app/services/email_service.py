@@ -25,7 +25,9 @@ from app.db.models import (
     EmailLog,
     EmailLogAttachment,
     EmailTemplate,
+    IntendedParent,
     Job,
+    Organization,
     Surrogate,
 )
 from app.services import email_sender, version_service
@@ -889,33 +891,10 @@ def find_unresolved_template_variables(
 def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dict[str, str]:
     """Build flat template variables for a surrogate context."""
     from app.db.enums import FormPurpose, FormStatus, OwnerType
-    from app.db.models import BookingLink, Form, Organization, Queue, User
-    from app.services import media_service
+    from app.db.models import BookingLink, Form
 
     org = db.query(Organization).filter(Organization.id == surrogate.organization_id).first()
-    org_logo_url = media_service.get_signed_media_url(org.signature_logo_url) if org else None
-
-    owner_name = ""
-    if surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id:
-        owner = db.query(User).filter(User.id == surrogate.owner_id).first()
-        owner_name = owner.display_name if owner else ""
-    elif surrogate.owner_type == OwnerType.QUEUE.value and surrogate.owner_id:
-        queue = db.query(Queue).filter(Queue.id == surrogate.owner_id).first()
-        owner_name = queue.name if queue else ""
-
-    full_name = surrogate.full_name or ""
-    first_name = full_name.split()[0] if full_name else ""
-    email = surrogate.email or ""
-    unsubscribe_url = ""
-    if email:
-        from app.services import org_service, unsubscribe_service
-
-        unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
-            db,
-            org_id=surrogate.organization_id,
-            email=email,
-            base_url=org_service.get_org_portal_base_url(org),
-        )
+    contact_variables = _build_record_contact_template_variables(db, surrogate, org)
 
     form_link = ""
     appointment_link = ""
@@ -1058,14 +1037,9 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
         )
 
     return {
-        "first_name": first_name,
-        "full_name": full_name,
-        "email": email,
-        "phone": surrogate.phone or "",
+        **contact_variables,
         "surrogate_number": surrogate.surrogate_number or "",
         "status_label": surrogate.status_label or "",
-        "state": surrogate.state or "",
-        "owner_name": owner_name,
         "form_link": form_link,
         "appointment_link": appointment_link,
         "appointment_manage_url": appointment_manage_url,
@@ -1074,100 +1048,79 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
         "appointment_date": appointment_date,
         "appointment_time": appointment_time,
         "appointment_location": appointment_location,
-        "org_name": org.name if org else "",
-        "org_logo_url": org_logo_url or "",
-        "unsubscribe_url": unsubscribe_url,
     }
 
 
-def build_intended_parent_template_variables(db: Session, intended_parent) -> dict[str, str]:
+def build_intended_parent_template_variables(
+    db: Session, intended_parent: IntendedParent
+) -> dict[str, str]:
     """Build flat template variables for an intended parent context."""
-    from app.db.enums import OwnerType
-    from app.db.models import Organization, Queue, User
-    from app.services import media_service
-
     org = db.query(Organization).filter(Organization.id == intended_parent.organization_id).first()
-    org_logo_url = media_service.get_signed_media_url(org.signature_logo_url) if org else None
-
-    owner_name = ""
-    if intended_parent.owner_type == OwnerType.USER.value and intended_parent.owner_id:
-        owner = db.query(User).filter(User.id == intended_parent.owner_id).first()
-        owner_name = owner.display_name if owner else ""
-    elif intended_parent.owner_type == OwnerType.QUEUE.value and intended_parent.owner_id:
-        queue = db.query(Queue).filter(Queue.id == intended_parent.owner_id).first()
-        owner_name = queue.name if queue else ""
-
-    full_name = intended_parent.full_name or ""
-    first_name = full_name.split()[0] if full_name else ""
-    email = intended_parent.email or ""
-    unsubscribe_url = ""
-    if email:
-        from app.services import org_service, unsubscribe_service
-
-        unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
-            db,
-            org_id=intended_parent.organization_id,
-            email=email,
-            base_url=org_service.get_org_portal_base_url(org),
-        )
-
     return {
-        "first_name": first_name,
-        "full_name": full_name,
-        "email": email,
-        "phone": intended_parent.phone or "",
+        **_build_record_contact_template_variables(db, intended_parent, org),
         "intended_parent_number": intended_parent.intended_parent_number or "",
         "status_label": humanize_identifier(intended_parent.status),
-        "state": intended_parent.state or "",
-        "owner_name": owner_name,
-        "org_name": org.name if org else "",
-        "org_logo_url": org_logo_url or "",
-        "unsubscribe_url": unsubscribe_url,
     }
 
 
 def build_donor_template_variables(db: Session, donor: Donor) -> dict[str, str]:
     """Build flat template variables for an egg or sperm donor context."""
+    org = db.query(Organization).filter(Organization.id == donor.organization_id).first()
+    return {
+        **_build_record_contact_template_variables(db, donor, org),
+        "donor_number": donor.donor_number or "",
+        "donor_type": humanize_identifier(donor.pipeline_entity_type),
+        "education": donor.education or "",
+        "status_label": donor.status_label or "",
+    }
+
+
+def _build_record_contact_template_variables(
+    db: Session,
+    record: Surrogate | IntendedParent | Donor,
+    org: Organization | None,
+) -> dict[str, str]:
+    """Resolve contact, owner, branding, and unsubscribe context consistently."""
     from app.db.enums import OwnerType
-    from app.db.models import Membership, Organization, Queue, User
+    from app.db.models import Membership, Queue, User
     from app.services import media_service
 
-    org = db.query(Organization).filter(Organization.id == donor.organization_id).first()
     org_logo_url = media_service.get_signed_media_url(org.signature_logo_url) if org else None
 
     owner_name = ""
-    if donor.owner_type == OwnerType.USER.value and donor.owner_id:
+    if record.owner_type == OwnerType.USER.value and record.owner_id:
         owner = (
             db.query(User)
             .join(Membership, Membership.user_id == User.id)
             .filter(
-                User.id == donor.owner_id,
-                Membership.organization_id == donor.organization_id,
+                User.id == record.owner_id,
+                User.is_active.is_(True),
+                Membership.organization_id == record.organization_id,
                 Membership.is_active.is_(True),
             )
             .first()
         )
         owner_name = owner.display_name if owner else ""
-    elif donor.owner_type == OwnerType.QUEUE.value and donor.owner_id:
+    elif record.owner_type == OwnerType.QUEUE.value and record.owner_id:
         queue = (
             db.query(Queue)
             .filter(
-                Queue.id == donor.owner_id,
-                Queue.organization_id == donor.organization_id,
+                Queue.id == record.owner_id,
+                Queue.organization_id == record.organization_id,
             )
             .first()
         )
         owner_name = queue.name if queue else ""
 
-    full_name = donor.full_name or ""
-    email = donor.email or ""
+    full_name = record.full_name or ""
+    email = record.email or ""
     unsubscribe_url = ""
     if email:
         from app.services import org_service, unsubscribe_service
 
         unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
             db,
-            org_id=donor.organization_id,
+            org_id=record.organization_id,
             email=email,
             base_url=org_service.get_org_portal_base_url(org),
         )
@@ -1176,12 +1129,8 @@ def build_donor_template_variables(db: Session, donor: Donor) -> dict[str, str]:
         "first_name": full_name.split()[0] if full_name else "",
         "full_name": full_name,
         "email": email,
-        "phone": donor.phone or "",
-        "donor_number": donor.donor_number or "",
-        "donor_type": humanize_identifier(donor.pipeline_entity_type),
-        "education": donor.education or "",
-        "status_label": donor.status_label or "",
-        "state": donor.state or "",
+        "phone": record.phone or "",
+        "state": record.state or "",
         "owner_name": owner_name,
         "org_name": org.name if org else "",
         "org_logo_url": org_logo_url or "",

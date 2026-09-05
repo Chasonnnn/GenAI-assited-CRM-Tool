@@ -99,15 +99,58 @@ class RecipientSuppressed(RuntimeError):
 class DeliveryNoLongerEligible(RuntimeError):
     """The source operation was cancelled after this message was queued."""
 
-    def __init__(self, reason_type: str, reason_message: str):
+    def __init__(
+        self, reason_type: str, reason_message: str, *, requires_reconciliation: bool = False
+    ):
         super().__init__(reason_message)
         self.reason_type = reason_type
         self.reason_message = reason_message
+        self.requires_reconciliation = requires_reconciliation
 
 
 def _raise_if_source_ineligible(db: Session, delivery: EmailDelivery) -> None:
     email_log = delivery.email_log
-    if email_log.source_type == "campaign_recipient":
+    if email_log.source_type == "workflow_job":
+        from uuid import UUID
+
+        from app.db.models import Job
+        from app.services.workflow_engine_adapters import DefaultWorkflowDomainAdapter
+
+        job = (
+            db.query(Job)
+            .filter(Job.id == email_log.source_id, Job.organization_id == delivery.organization_id)
+            .populate_existing()
+            .first()
+        )
+        if job is None and email_log.surrogate_id is not None:
+            # Legacy surrogate deliveries can outlive their source Job. Donor
+            # emails never populate this relationship, so their guard remains closed.
+            return
+        subject_available = job is not None
+        if job is not None and job.payload.get("subject_type") in {
+            "donor",
+            "egg_donor",
+            "sperm_donor",
+        }:
+            try:
+                subject_id = UUID(str(job.payload.get("subject_id")))
+            except TypeError, ValueError:
+                subject_id = None
+            subject_available = (
+                DefaultWorkflowDomainAdapter().resolve_donor_subject(
+                    db, delivery.organization_id, job.payload["subject_type"], subject_id
+                )
+                is not None
+            )
+        if not subject_available:
+            # Earlier provider attempts may have succeeded despite a timeout.
+            # Stop further sends while preserving that uncertainty for reconciliation.
+            raise DeliveryNoLongerEligible(
+                "workflow_subject_unavailable",
+                "Workflow subject unavailable before email delivery",
+                requires_reconciliation=delivery.attempt_count > 1,
+            )
+    elif email_log.source_type == "campaign_recipient":
         if email_log.source_id is None:
             raise DeliveryConfigurationError("Campaign recipient delivery source is missing")
         from app.services import campaign_service
@@ -388,6 +431,10 @@ async def dispatch_claim(
         return record_delivery_suppressed(db, claim=claim)
     except DeliveryNoLongerEligible as exc:
         db.commit()
+        if exc.requires_reconciliation:
+            return record_delivery_reconciliation_required(
+                db, claim=claim, error_type=exc.reason_type, error_message=exc.reason_message
+            )
         return record_delivery_cancelled(
             db,
             claim=claim,
@@ -497,6 +544,10 @@ async def dispatch_claim(
         return record_delivery_suppressed(db, claim=claim)
     except DeliveryNoLongerEligible as exc:
         db.commit()
+        if exc.requires_reconciliation:
+            return record_delivery_reconciliation_required(
+                db, claim=claim, error_type=exc.reason_type, error_message=exc.reason_message
+            )
         return record_delivery_cancelled(
             db,
             claim=claim,

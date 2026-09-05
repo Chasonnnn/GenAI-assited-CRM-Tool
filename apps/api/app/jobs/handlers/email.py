@@ -317,6 +317,44 @@ async def process_workflow_email(db, job) -> None:
             purpose="configuration_diagnostic",
         )
 
+    subject_type = job.payload.get("subject_type")
+
+    def donor_subject_available() -> bool:
+        if subject_type not in {"donor", "egg_donor", "sperm_donor"}:
+            return True
+        from app.services.workflow_engine_adapters import DefaultWorkflowDomainAdapter
+
+        try:
+            subject_id = UUID(str(job.payload.get("subject_id")))
+        except TypeError, ValueError:
+            subject_id = None
+        return (
+            DefaultWorkflowDomainAdapter().resolve_donor_subject(
+                db, job.organization_id, subject_type, subject_id
+            )
+            is not None
+        )
+
+    if not donor_subject_available():
+        # A repeated source job must not rewrite an already-admitted delivery,
+        # especially one whose provider acceptance is not yet known locally.
+        existing_email_log = (
+            db.query(EmailLog.id)
+            .filter(
+                EmailLog.organization_id == job.organization_id,
+                EmailLog.idempotency_key == idempotency_key,
+            )
+            .first()
+        )
+        if existing_email_log is None:
+            upsert_terminal_email_log(
+                occurrence_key=idempotency_key,
+                status="skipped",
+                error_message="donor_subject_unavailable",
+                purpose="transactional",
+            )
+        return
+
     if workflow_scope == "personal" and email_service.is_email_suppressed(
         db,
         job.organization_id,
@@ -482,6 +520,11 @@ async def process_workflow_email(db, job) -> None:
         idempotency_key=idempotency_key,
     )
     db.add(email_log)
+    db.commit()
+
+    if not donor_subject_available():
+        email_service.mark_email_skipped(db, email_log, "donor_subject_unavailable")
+        return
     db.commit()
 
     try:
