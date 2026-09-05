@@ -10,6 +10,13 @@ const mockUseTasks = vi.fn()
 const mockUseIPAttachments = vi.fn()
 const mockUseEntityActivity = vi.fn()
 
+vi.mock("@/components/rich-text-editor", () => ({
+    RichTextEditor: ({ content, onChange, ariaLabel }: { content: string; onChange: (html: string) => void; ariaLabel: string }) => <textarea aria-label={ariaLabel} value={content} onChange={(event) => onChange(event.target.value)} />,
+}))
+vi.mock("@/lib/hooks/use-permissions", () => ({
+    useEffectivePermissions: () => ({ data: { permissions: ["edit_intended_parents", "view_tasks", "create_tasks", "edit_tasks", "delete_tasks"] } }),
+}))
+
 vi.mock('next/link', () => ({
     default: ({ children, href }: { children: React.ReactNode; href: string }) => (
         <a href={href}>{children}</a>
@@ -85,6 +92,13 @@ vi.mock('@/lib/hooks/use-metadata', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-tasks', () => ({
+    useCreateTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useCreateTaskBatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useUpdateTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useCompleteTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useUncompleteTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useDeleteTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
+
     useTasks: (...args: unknown[]) => mockUseTasks(...args),
 }))
 
@@ -93,6 +107,10 @@ vi.mock('@/lib/hooks/use-entity-activity', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-attachments', () => ({
+    useUploadIPAttachment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useDeleteIPAttachment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useDownloadAttachment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+
     useIPAttachments: (...args: unknown[]) => mockUseIPAttachments(...args),
 }))
 

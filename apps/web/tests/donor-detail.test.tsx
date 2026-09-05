@@ -25,6 +25,12 @@ const mockUseAttachmentPreviewUrl = vi.fn()
 const mockUseAuth = vi.fn()
 const mockDetailSearchParams = new URLSearchParams()
 
+vi.mock("@/components/rich-text-editor", () => ({
+    RichTextEditor: ({ content, onChange, placeholder, ariaLabel }: { content: string; onChange: (html: string) => void; placeholder: string; ariaLabel: string }) => (
+        <textarea aria-label={ariaLabel} placeholder={placeholder} value={content} onChange={(event) => onChange(event.target.value)} />
+    ),
+}))
+
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => mockUseAuth(),
 }))
@@ -63,6 +69,7 @@ vi.mock("@/components/ui/avatar", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-donors", () => ({
+    useDonorOwnerOptions: () => ({ data: { users: [], queues: [] }, isLoading: false, isError: false }),
     useDonor: (id: string) => mockUseDonor(id),
     useDonorNotes: () => mockUseDonorNotes(),
     useDonorHistory: () => ({
@@ -139,6 +146,12 @@ vi.mock("@/lib/hooks/use-pipelines", () => ({
 vi.mock("@/lib/hooks/use-tasks", () => ({
     useTasks: (params: unknown, options: unknown) => mockUseTasks(params, options),
     useCreateTask: () => ({ mutateAsync: mockCreateTask, isPending: false }),
+    useCreateTaskBatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useUpdateTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useCompleteTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useUncompleteTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useDeleteTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
+
 }))
 
 vi.mock("@/lib/hooks/use-attachments", () => ({
@@ -291,7 +304,7 @@ describe("DonorDetailPage", () => {
 
         const header = screen.getByRole("banner")
         const layout = header.firstElementChild
-        expect(layout).toHaveClass("flex-col", "sm:flex-row")
+        expect(layout).toHaveClass("flex-col", "lg:flex-row")
         expect(within(header).getByRole("link", { name: "Back to donors" })).toBeInTheDocument()
         expect(within(header).getByRole("heading", { name: "Maya Thompson" })).toBeInTheDocument()
         expect(
@@ -299,7 +312,7 @@ describe("DonorDetailPage", () => {
         ).toBeInTheDocument()
         const changeStage = within(header).getByRole("button", { name: "Change Stage" })
         expect(changeStage).toBeInTheDocument()
-        expect(changeStage.parentElement).toHaveClass("w-full", "sm:w-auto")
+        expect(changeStage.parentElement).toHaveClass("w-full", "lg:w-auto")
 
         fireEvent.click(within(header).getByRole("button", { name: "Actions for Maya Thompson" }))
         expect(await screen.findByRole("menuitem", { name: "Edit" })).toBeInTheDocument()
@@ -316,7 +329,7 @@ describe("DonorDetailPage", () => {
         expect(within(details).queryByText("Egg Donor")).not.toBeInTheDocument()
         expect(within(details).getByRole("heading", { name: "Notes" })).toBeInTheDocument()
         expect(within(details).getByRole("heading", { name: "Documents" })).toBeInTheDocument()
-        expect(within(details).getByRole("heading", { name: "Open Tasks" })).toBeInTheDocument()
+        expect(within(details).getByRole("heading", { name: "Tasks" })).toBeInTheDocument()
 
         const activity = screen.getByRole("complementary", { name: "Donor activity" })
         expect(within(activity).getByRole("heading", { name: "Activity" })).toBeInTheDocument()
@@ -338,12 +351,9 @@ describe("DonorDetailPage", () => {
         expect(screen.getByRole("heading", { name: "Activity" })).toBeInTheDocument()
         expect(screen.getByText("Screening completed")).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Change Stage" })).toBeInTheDocument()
-        expect(screen.getByRole("heading", { name: "Open Tasks" })).toBeInTheDocument()
+        expect(screen.getByRole("heading", { name: "Tasks" })).toBeInTheDocument()
         expect(screen.getAllByText("Review profile photo").length).toBeGreaterThanOrEqual(1)
-        expect(screen.getByRole("link", { name: "Egg Donor D10001" })).toHaveAttribute(
-            "href",
-            "/donors/donor-1",
-        )
+        expect(screen.getByRole("button", { name: "Review profile photo" })).toBeInTheDocument()
         expect(mockUseTasks).toHaveBeenCalledWith(
             expect.objectContaining({ donor_id: "donor-1", is_completed: false, per_page: 10 }),
             { enabled: true },
@@ -357,7 +367,6 @@ describe("DonorDetailPage", () => {
     })
 
     it("adds and deletes donor notes", async () => {
-        vi.spyOn(window, "confirm").mockReturnValueOnce(true)
         render(<DonorDetailPage />)
 
         fireEvent.change(screen.getByPlaceholderText("Add a note..."), {
@@ -373,7 +382,8 @@ describe("DonorDetailPage", () => {
             expect(screen.getByPlaceholderText("Add a note...")).toHaveValue("")
         })
 
-        fireEvent.click(screen.getByRole("button", { name: /Delete note from/ }))
+        fireEvent.click(screen.getByRole("button", { name: /Delete note by/ }))
+        fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete Note" }))
         await vi.waitFor(() => expect(mockDeleteDonorNote).toHaveBeenCalledWith({
             donorId: "donor-1",
             noteId: "note-1",
@@ -420,7 +430,7 @@ describe("DonorDetailPage", () => {
         })
         const first = render(<DonorDetailPage />)
         expect(screen.queryByPlaceholderText("Add a note...")).not.toBeInTheDocument()
-        expect(screen.queryByRole("button", { name: /Delete note from/ })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /Delete note by/ })).not.toBeInTheDocument()
         first.unmount()
 
         mockUseAuth.mockReturnValueOnce({ user: { user_id: "user-2", role: "case_manager" } })
@@ -429,7 +439,7 @@ describe("DonorDetailPage", () => {
         })
         render(<DonorDetailPage />)
         expect(screen.getByPlaceholderText("Add a note...")).toBeInTheDocument()
-        expect(screen.queryByRole("button", { name: /Delete note from/ })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /Delete note by/ })).not.toBeInTheDocument()
     })
 
     it("renders and replaces the donor profile photo", async () => {
@@ -498,12 +508,12 @@ describe("DonorDetailPage", () => {
     })
 
     it("downloads and deletes donor documents", async () => {
-        vi.spyOn(window, "confirm").mockReturnValueOnce(true)
         render(<DonorDetailPage />)
 
         fireEvent.click(screen.getByRole("button", { name: "Download screening.pdf" }))
         expect(mockDownloadAttachment).toHaveBeenCalledWith("attachment-1")
         fireEvent.click(screen.getByRole("button", { name: "Delete screening.pdf" }))
+        fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete" }))
 
         await vi.waitFor(() => expect(mockDeleteDonorAttachment).toHaveBeenCalledWith({
             donorId: "donor-1",
@@ -729,7 +739,7 @@ describe("DonorDetailPage", () => {
         expect(await screen.findByRole("menuitem", { name: "Edit" })).toBeInTheDocument()
         expect(screen.queryByRole("menuitem", { name: "Archive" })).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Change Stage" })).not.toBeInTheDocument()
-        expect(screen.queryByRole("heading", { name: "Open Tasks" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("heading", { name: "Tasks" })).not.toBeInTheDocument()
     })
 
     it("keeps donor attachment mutations behind edit permission", () => {

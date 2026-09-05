@@ -18,23 +18,21 @@ import {
     IntendedParentLoadingState,
     IntendedParentNotFoundState,
     MaritalStatusCard,
-    NotesCard,
     PartnerCard,
 } from "./components/IntendedParentDetailSections"
 import {
     useIntendedParent,
     useIntendedParentHistory,
-    useIntendedParentNotes,
     useUpdateIntendedParent,
     useUpdateIntendedParentStatus,
     useArchiveIntendedParent,
     useRestoreIntendedParent,
     useDeleteIntendedParent,
-    useCreateIntendedParentNote,
 } from "@/lib/hooks/use-intended-parents"
 import { useIntendedParentStatuses } from "@/lib/hooks/use-metadata"
 import { useEntityActivity } from "@/lib/hooks/use-entity-activity"
 import { useTasks } from "@/lib/hooks/use-tasks"
+import { EntityTasksSection } from "@/components/tasks/EntityTasksSection"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { ProposeMatchFromIPDialog } from "@/components/matches/ProposeMatchFromIPDialog"
 import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
@@ -46,13 +44,14 @@ import {
 } from "@/lib/intended-parent-stage-utils"
 import { getMaritalStatusOptions } from "@/lib/intended-parent-marital-status"
 import type { IntendedParent } from "@/lib/types/intended-parent"
-import { parseDateInput } from "@/lib/utils/date"
 import { toast } from "@/components/ui/toast"
 import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
+import { IntendedParentDocumentsSection } from "@/components/intended-parents/IntendedParentDocumentsSection"
+import { IntendedParentNotesSection } from "@/components/intended-parents/IntendedParentNotesSection"
 
 type IntendedParentDetailState = {
     isEditOpen: boolean
-    newNote: string
     formData: IntendedParentFormValues
     proposeMatchOpen: boolean
     changeStatusModalOpen: boolean
@@ -62,14 +61,11 @@ type IntendedParentDetailAction =
     | { type: "edit.open"; formData: IntendedParentFormValues }
     | { type: "edit.close" }
     | { type: "form.update"; field: keyof IntendedParentFormValues; value: IntendedParentFormValues[keyof IntendedParentFormValues] }
-    | { type: "note.update"; value: string }
-    | { type: "note.clear" }
     | { type: "proposeMatch.set"; open: boolean }
     | { type: "changeStatus.set"; open: boolean }
 
 const initialDetailState: IntendedParentDetailState = {
     isEditOpen: false,
-    newNote: "",
     formData: EMPTY_INTENDED_PARENT_FORM_VALUES,
     proposeMatchOpen: false,
     changeStatusModalOpen: false,
@@ -92,28 +88,11 @@ function intendedParentDetailReducer(
                     [action.field]: action.value,
                 },
             }
-        case "note.update":
-            return { ...state, newNote: action.value }
-        case "note.clear":
-            return { ...state, newNote: "" }
         case "proposeMatch.set":
             return { ...state, proposeMatchOpen: action.open }
         case "changeStatus.set":
             return { ...state, changeStatusModalOpen: action.open }
     }
-}
-
-function formatDetailDate(dateStr?: string | null) {
-    if (!dateStr) return "—"
-    const parsed = parseDateInput(dateStr)
-    if (Number.isNaN(parsed.getTime())) return "—"
-    return parsed.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-    })
 }
 
 function buildEditFormValues(ip: IntendedParent): IntendedParentFormValues {
@@ -150,17 +129,21 @@ export default function IntendedParentDetailPage() {
 
     const [detailState, dispatch] = useReducer(intendedParentDetailReducer, initialDetailState)
     const { user } = useAuth()
+    const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
+    const canEdit = user?.role === "developer" || (permissionsQuery.data?.permissions ?? []).includes("edit_intended_parents")
+
+    const canViewTasks = user?.role === "developer" || (permissionsQuery.data?.permissions ?? []).includes("view_tasks")
+    const canCreateTasks = user?.role === "developer" || (permissionsQuery.data?.permissions ?? []).includes("create_tasks")
 
     // Queries
     const { data: ip, isLoading } = useIntendedParent(id)
     const historyQuery = useIntendedParentHistory(id)
     const activityQuery = useEntityActivity("intended_parent", id)
-    const { data: notes } = useIntendedParentNotes(id)
     const stageOptionsQuery = useIntendedParentStatuses()
     const stageOptionsResponse = stageOptionsQuery.data
     const tasksQuery = useTasks(
         { intended_parent_id: id, exclude_approvals: true },
-        { enabled: !!id },
+        { enabled: !!id && canViewTasks },
     )
 
     // Mutations
@@ -169,7 +152,6 @@ export default function IntendedParentDetailPage() {
     const archiveMutation = useArchiveIntendedParent()
     const restoreMutation = useRestoreIntendedParent()
     const deleteMutation = useDeleteIntendedParent()
-    const createNoteMutation = useCreateIntendedParentNote()
 
     // Set AI context for this intended parent
     useSetAIContext(
@@ -288,11 +270,6 @@ export default function IntendedParentDetailPage() {
         }
     }
 
-    const handleAddNote = async () => {
-        if (!detailState.newNote.trim()) return
-        await createNoteMutation.mutateAsync({ id, data: { content: detailState.newNote } })
-        dispatch({ type: "note.clear" })
-    }
 
     if (isLoading) {
         return <IntendedParentLoadingState />
@@ -327,9 +304,9 @@ export default function IntendedParentDetailPage() {
                 onDelete={handleDelete}
             />
 
-            <div className="flex-1 p-6">
-                <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-3">
-                    <div className="space-y-6 lg:col-span-2">
+            <div className="min-w-0 flex-1 p-6">
+                <div className="mx-auto grid min-w-0 max-w-6xl grid-cols-1 gap-6 lg:grid-cols-3">
+                    <div className="min-w-0 space-y-6 lg:col-span-2">
                         <ContactInformationCard
                             intendedParent={ip}
                             onDateOfBirthChange={async (value) => {
@@ -367,17 +344,12 @@ export default function IntendedParentDetailPage() {
                             }}
                         />
 
-                        <NotesCard
-                            notes={notes}
-                            newNote={detailState.newNote}
-                            isPending={createNoteMutation.isPending}
-                            onNewNoteChange={(value) => dispatch({ type: "note.update", value })}
-                            onAddNote={handleAddNote}
-                            formatDate={formatDetailDate}
-                        />
+                        <IntendedParentNotesSection intendedParentId={id} canEdit={canEdit} />
+                        <EntityTasksSection key={id} subject={{ intended_parent_id: id }} record={{ intended_parent_id: id }} canView={canViewTasks} canCreate={canCreateTasks} archived={ip.is_archived} />
+                        <IntendedParentDocumentsSection intendedParentId={id} canEdit={canEdit} />
                     </div>
 
-                    <div className="space-y-6">
+                    <div className="min-w-0 space-y-6">
                         <EntityActivityTimeline
                             currentStageId={ip.stage_id ?? ""}
                             stages={statusStages}

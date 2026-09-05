@@ -72,9 +72,9 @@ function SummaryField({
     className?: string
 }) {
     return (
-        <div className={className ?? "flex items-start gap-3"}>
+        <div className={`min-w-0 ${className ?? "flex items-start gap-3"}`}>
             <div className="mt-0.5 shrink-0 text-muted-foreground">{icon}</div>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
                 <p className="text-sm text-muted-foreground">{label}</p>
                 {children}
             </div>
@@ -164,7 +164,7 @@ function TrustAddressField({
         return (
             <Button unstyled
                 type="button"
-                className="group flex items-center gap-1 -mx-1 cursor-pointer appearance-none rounded border-0 bg-transparent px-1 text-left text-inherit transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="group flex min-w-0 max-w-full items-center gap-1 -mx-1 cursor-pointer appearance-none rounded border-0 bg-transparent px-1 text-left text-inherit transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={openAddressEditor}
                 aria-label="Edit Trust address"
             >
@@ -332,7 +332,7 @@ function TrustNotesField({
         return (
             <Button unstyled
                 type="button"
-                className="group flex items-start gap-1 -mx-1 cursor-pointer appearance-none rounded border-0 bg-transparent px-1 text-left text-inherit transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="group flex min-w-0 max-w-full items-start gap-1 -mx-1 cursor-pointer appearance-none rounded border-0 bg-transparent px-1 text-left text-inherit transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={openNotesEditor}
                 aria-label="Edit Trust notes"
             >
@@ -473,7 +473,7 @@ export function TrustInfoCard({ intendedParent, onUpdate }: TrustInfoCardProps) 
                             })
                         }}
                     >
-                        <SelectTrigger aria-label="Trust funding status" className="w-full sm:w-[240px]">
+                        <SelectTrigger aria-label="Trust funding status" className="min-w-0 w-full max-w-[240px]">
                             <SelectValue placeholder="Not provided">
                                 {(value: string | null) =>
                                     value === "__none__" ? "Not provided" : getTrustFundingStatusLabel(value)
