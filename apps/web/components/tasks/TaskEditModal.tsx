@@ -121,10 +121,12 @@ export function TaskEditModal({
     const activeTaskId = task?.id ?? null
     const [draft, setDraft] = useState<TaskEditDraft>(() => createTaskEditDraft(task))
     const [isSaving, setIsSaving] = useState(false)
+    const [error, setError] = useState<string | null>(null)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
     if (draft.taskId !== activeTaskId) {
         setDraft(createTaskEditDraft(task))
+        setError(null)
     }
 
     const updateDraft = (updates: Partial<Omit<TaskEditDraft, "taskId">>) => {
@@ -136,6 +138,7 @@ export function TaskEditModal({
         if (!task) return
 
         setIsSaving(true)
+        setError(null)
         try {
             await onSave(task.id, {
                 title: draft.title,
@@ -146,7 +149,7 @@ export function TaskEditModal({
                 ...toTaskRelatedRecordPayload(draft.relatedRecord),
             })
         } catch (error) {
-            console.error("Failed to save task:", error)
+            setError(error instanceof Error ? error.message : "Failed to save task")
             setIsSaving(false)
             return
         }
@@ -161,9 +164,14 @@ export function TaskEditModal({
 
     const confirmDelete = async () => {
         if (!task || !onDelete) return
-        await onDelete(task.id)
-        setDeleteDialogOpen(false)
-        onClose()
+        setError(null)
+        try {
+            await onDelete(task.id)
+            setDeleteDialogOpen(false)
+            onClose()
+        } catch (error) {
+            setError(error instanceof Error ? error.message : "Failed to delete task")
+        }
     }
 
     return (
@@ -274,6 +282,7 @@ export function TaskEditModal({
                         </div>
                     </div>
 
+                    {error && !deleteDialogOpen ? <p role="alert" className="mb-3 text-sm text-destructive">{error}</p> : null}
                     <DialogFooter>
                         {onDelete && (
                             <Button
@@ -305,10 +314,11 @@ export function TaskEditModal({
                                 This action cannot be undone. This will permanently delete the task.
                             </AlertDialogDescription>
                         </AlertDialogHeader>
+                        {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
                         <AlertDialogFooter>
                             <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
                             <AlertDialogAction
-                                onClick={confirmDelete}
+                                onClick={(event) => { event.preventDefault(); void confirmDelete() }}
                                 disabled={isDeleting}
                                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                             >

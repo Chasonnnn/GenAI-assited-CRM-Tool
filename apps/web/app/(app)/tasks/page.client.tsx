@@ -15,7 +15,7 @@ import { PlusIcon, Loader2Icon, ListIcon, CalendarIcon } from "lucide-react"
 import { TasksCalendarView } from "@/components/tasks/TasksCalendarView"
 import { TasksListView } from "@/components/tasks/TasksListView"
 import { TasksApprovalsSection } from "@/components/tasks/TasksApprovalsSection"
-import { TaskEditModal } from "@/components/tasks/TaskEditModal"
+import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog"
 import { AddTaskDialog, type TaskFormData } from "@/components/tasks/AddTaskDialog"
 import { useTasks, useCompleteTask, useUncompleteTask, useUpdateTask, useCreateTask, useCreateTaskBatch, useDeleteTask, useBulkCompleteTasks } from "@/lib/hooks/use-tasks"
 import { useStatusChangeRequests } from "@/lib/hooks/use-status-change-requests"
@@ -332,22 +332,7 @@ function useTasksPageController() {
         completedTasks: completedTasks ?? null,
         currentUserId,
         deleteTaskPending: deleteTask.isPending,
-        editModalTask: editingTask ? {
-            id: editingTask.id,
-            title: editingTask.title,
-            description: editingTask.description ?? null,
-            task_type: editingTask.task_type,
-            due_date: editingTask.due_date,
-            due_time: editingTask.due_time ?? null,
-            is_completed: editingTask.is_completed,
-            surrogate_id: editingTask.surrogate_id,
-            surrogate_number: editingTask.surrogate_number,
-            intended_parent_id: editingTask.intended_parent_id,
-            donor_id: editingTask.donor_id,
-            donor_number: editingTask.donor_number,
-            donor_type: editingTask.donor_type,
-            donor_name: editingTask.donor_name,
-        } : null,
+        editingTaskId: editingTask?.id ?? null,
         filter,
         hasError,
         incompleteTasks: incompleteTasks?.items ?? [],
@@ -515,14 +500,13 @@ function TasksPageContent({ controller }: { controller: TasksPageController }) {
 function TasksPageDialogs({ controller }: { controller: TasksPageController }) {
     return (
         <>
-            <TaskEditModal
-                task={controller.editModalTask}
-                open={!!controller.editModalTask}
+            {controller.editingTaskId ? <TaskDetailDialog
+                taskId={controller.editingTaskId}
                 onClose={controller.onCloseEditModal}
                 onSave={controller.handleSaveTask}
                 onDelete={controller.handleDeleteTask}
                 isDeleting={controller.deleteTaskPending}
-            />
+            /> : null}
             {controller.addTaskDialogOpen ? (
                 <AddTaskDialog
                     open

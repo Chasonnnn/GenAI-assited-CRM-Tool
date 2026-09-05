@@ -27,7 +27,7 @@ export type TaskStatus =
 export interface TaskListItem {
     id: string;
     title: string;
-    description: string | null;
+    description?: string | null;
     task_type: TaskType;
     surrogate_id: string | null;
     intended_parent_id: string | null;
@@ -57,6 +57,7 @@ export interface TaskListItem {
 
 // Full task detail
 export interface TaskRead extends TaskListItem {
+    description: string | null;
     completed_by_user_id: string | null;
     updated_at: string;
     workflow_execution_id?: string | null;
