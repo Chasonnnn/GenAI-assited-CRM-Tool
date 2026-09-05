@@ -14,6 +14,8 @@ const enableRustReactCompiler =
 
 module.exports = withBundleAnalyzer({
   output: "standalone",
+  // Keep agent instructions in the repository root.
+  agentRules: false,
   // Cache Components changes rendering semantics globally. Keep it paired with Partial
   // Prefetching and behind a build-time adoption gate until every tenant route passes
   // the production-prerender and authenticated-navigation gates documented in docs/.

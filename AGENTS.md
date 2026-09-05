@@ -1,6 +1,6 @@
 # Surrogacy Force Platform
 
-Multi-tenant operations platform for surrogacy agencies. This root guide contains durable invariants and routing. Inspect live code, tests, manifests, and nested guidance before changing an unfamiliar surface.
+Multi-tenant operations platform for surrogacy agencies. This is the repository's only agent instruction file; root `CLAUDE.md` symlinks here. Inspect relevant live code, tests, and manifests before changing an unfamiliar surface.
 
 ## Priorities
 
@@ -18,9 +18,10 @@ Use a cheap prototype or artifact when the user can recognize the right answer m
 
 ## Non-negotiables
 
-- Never commit or expose secrets; never log raw PII.
+- Never commit or expose secrets; never log raw PII, message bodies, provider credentials, or tokens. Keep provider failures sanitized at the API boundary.
 - Never send AI-authored messages without human review.
 - Every tenant-owned read, write, relationship traversal, export, job, and cache key derives organization scope from authenticated membership—not a client-supplied organization id. New access paths need a cross-org negative test. Platform-global entities must be explicit.
+- Public token flows derive scope from the validated token or its bound resource, never from a client-supplied organization id.
 - Use centralized membership, role, and CSRF dependencies. Cookie-authenticated mutations keep the repository's CSRF contract; browser API calls preserve credentials.
 - Never merge, release, deploy, send externally, or irreversibly transform production data without explicit authorization.
 
@@ -32,13 +33,21 @@ This is an internal product: do not preserve legacy behavior by default. Before 
 
 ## Architecture and local gotchas
 
-- Keep FastAPI routers thin. Services own use-case logic and transaction boundaries. Use timezone-aware UTC.
-- TanStack Query owns server state; Zustand owns UI-only state.
+- Keep FastAPI routers focused on transport and dependency wiring. Services own use-case logic and transaction boundaries. Domain writes and their audit/activity records must commit or roll back atomically; do not split transaction control across layers without a documented reason. Preserve timezone-aware UTC and existing Pydantic v2 / SQLAlchemy 2.0 idioms.
+- TanStack Query owns server state; Zustand owns UI-only state. Do not mirror query data into a store.
 - Extend the customized shadcn/Base UI primitives; do not replace the component system in a focused feature change.
-- Shared Base UI `SelectValue` may expose a stored id, enum, slug, or sentinel. Map it through one label helper everywhere it appears—triggers, chips, badges, summaries, and empty states. When one filter leaks a raw value, audit siblings and test the trigger plus related labels.
+- Shared Base UI `SelectValue` may expose a stored id, enum, slug, or sentinel. Map it through one label helper everywhere it appears—triggers, chips, badges, summaries, cells, and empty/default states. When one filter leaks a raw value, audit siblings in the feature area and test the trigger plus related labels.
 - UI descriptions: Do not add subtitles, helper text, or descriptive copy beneath headings, labels, cards, or settings by default. Prefer one concise, self-explanatory heading or label. Only add supporting copy when the user explicitly asks for it or when it is necessary to prevent misunderstanding or error, and never use it to restate the heading.
 - Pipeline stages are configurable. Treat `apps/api/app/core/stage_definitions.py` and pipeline services as the source of truth; keep generated frontend constants synchronized. Trace API, automation, analytics, and frontend consumers when stage semantics change.
+- When backend stage or surrogate contracts change, run the existing generators and include synchronized frontend outputs in the same logical change. Do not hand-edit generated contracts such as `apps/web/lib/constants/stages.generated.ts`.
 - Prefer nearby production code and behavior tests as references. Match local naming, comment density, transaction ownership, errors, and composition.
+- For visual work, read `docs/layouts.md` and match established component composition, loading/error states, and responsive behavior. Use a standalone HTML prototype when user taste or layout direction is the main unknown.
+
+## Migrations
+
+- Use Alembic revision ids and filenames in `YYYYMMDD_HHMM_<slug>` form.
+- Inspect generated migrations before running them. Cover upgrade behavior and schema invariants in tests.
+- Follow `docs/migration-runbook.md` for recovery, consolidation, or baseline work. Do not perform a baseline reset as part of an ordinary schema change.
 
 ## Verification
 
@@ -50,23 +59,26 @@ Run validation proportionate to blast radius:
 - Cross-cutting: full affected suites.
 - Migration, auth, tenancy, or release: invariant and negative tests.
 
+Run Ruff for changed Python surfaces. Add denied and cross-organization tests for new protected operations, plus CSRF, idempotency, and retry tests when relevant.
+
+For UI changes, verify the rendered states that changed, including loading, empty, error, and populated states when applicable.
+
 Use parallel agents only when independent work is useful and supported; they are not part of the product invariant.
 
 ## Commands and routing
 
 Use repo-pinned runtimes in `mise.toml` and `mise.lock`, plus existing package scripts. Inspect manifests before adding commands.
 
-- Backend setup/test: `cd apps/api && uv sync --extra test`, then `cd apps/api && uv run -m pytest -v`.
-- Frontend validation: `cd apps/web && pnpm run check`; use `pnpm run test:all` for cross-cutting or integration changes.
+- Backend setup: `cd apps/api && uv sync --extra test`. Run focused tests while iterating; use `cd apps/api && uv run -m pytest -v` for cross-cutting API changes.
+- Frontend validation: focused Vitest files while iterating; `cd apps/web && pnpm run check` runs type checking, lint, and the test suite. `test:all` aliases the same test command and adds no coverage after `check`.
 - Migrations and recovery: `docs/migration-runbook.md`.
 - Runtime versions: `mise.toml`; dependencies: manifests under `apps/`.
 - Environment contract: `apps/api/.env.example`; never put secrets in `NEXT_PUBLIC_*`.
 - Release policy: `release-please-config.json` and release CI tests; do not edit versions manually unless that workflow requires it.
-- Backend-specific guidance: `apps/api/AGENTS.md`.
-- Frontend-specific guidance: `apps/web/AGENTS.md`. For Next.js work, search `.next-docs` and read only the relevant local documentation before coding.
+- For Next.js routing, rendering, caching, framework API, or upgrade work, read the relevant version-matched guide in `apps/web/node_modules/next/dist/docs/`. Read only what the change requires. Keep `agentRules: false` in `apps/web/next.config.js` so Next.js does not generate nested instruction files.
 
 ## Delivery and cleanup
 
 Do not create a branch, commit, push, or PR unless the user requests it. Work on the current branch unless told otherwise. Before a requested commit, inspect staged files, include only task-owned work, run appropriate validation, and use `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, or `chore:`.
 
-Start local servers only for active QA. Record their PIDs, stop only processes started for this task, verify they exited, remove temporary QA artifacts, and report any service intentionally left running.
+Start local servers only for active QA; start Postgres or workers only when verification needs them. Record their PIDs, stop only processes started for this task, verify they exited, remove temporary QA artifacts, and report any service intentionally left running.
