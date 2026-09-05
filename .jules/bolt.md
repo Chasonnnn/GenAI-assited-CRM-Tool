@@ -1,0 +1,3 @@
+## 2024-11-20 - False Positive N+1 Query Identification with AST
+**Learning:** When using AST to hunt for N+1 queries by looking for `db.query` inside loops, simple recursive traversal often flags SQLAlchemy `.in_()` operations because the `db.query(...).filter(...in_(...))` itself is evaluated inside the loop's setup or list comprehension, even if it's technically a single batch query.
+**Action:** When building custom static analysis for N+1 issues in SQLAlchemy, always ensure the script explicitly checks the `node.body` of the `ast.For` loop (ignoring the iterable setup) and actively filters out statements that contain an `.in_` attribute access to prevent false positives.
