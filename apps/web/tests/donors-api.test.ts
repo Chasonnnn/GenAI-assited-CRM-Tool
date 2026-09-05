@@ -6,6 +6,7 @@ import {
     createDonor,
     deleteDonorNote,
     getDonorHistory,
+    getDonorOwnerOptions,
     listDonorNotes,
     listDonors,
     restoreDonor,
@@ -33,6 +34,13 @@ describe("donors API client", () => {
         mockPost.mockReset().mockResolvedValue({})
         mockPatch.mockReset().mockResolvedValue({})
         mockDelete.mockReset().mockResolvedValue(undefined)
+    })
+
+    it("loads organization-scoped donor owner options", async () => {
+        const options = { users: [{ id: "member-1", display_name: "Alex" }], queues: [] }
+        mockGet.mockResolvedValueOnce(options)
+        await expect(getDonorOwnerOptions()).resolves.toEqual(options)
+        expect(mockGet).toHaveBeenCalledWith("/donors/owner-options")
     })
 
     it("lists one donor type with the supported filters", async () => {

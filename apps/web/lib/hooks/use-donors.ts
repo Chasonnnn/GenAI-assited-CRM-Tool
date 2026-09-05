@@ -6,6 +6,7 @@ import {
     createDonor,
     deleteDonorNote,
     getDonor,
+    getDonorOwnerOptions,
     getDonorHistory,
     listDonorNotes,
     listDonors,
@@ -163,5 +164,13 @@ export function useDeleteDonorNote() {
                 queryKey: entityActivityKeys.entity("donor", donorId),
             })
         },
+    })
+}
+
+export function useDonorOwnerOptions(enabled: boolean) {
+    return useQuery({
+        queryKey: [...donorKeys.all, "owner-options"],
+        queryFn: getDonorOwnerOptions,
+        enabled,
     })
 }

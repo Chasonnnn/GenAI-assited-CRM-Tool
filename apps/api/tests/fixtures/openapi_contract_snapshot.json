@@ -1083,6 +1083,11 @@
       "422"
     ]
   },
+  "/donors/owner-options": {
+    "GET": [
+      "200"
+    ]
+  },
   "/donors/{donor_id}": {
     "GET": [
       "200",
