@@ -99,6 +99,7 @@ class TaskListItem(BaseModel):
     """Compact task for list views."""
 
     id: UUID
+    created_by_user_id: UUID
     surrogate_id: UUID | None
     intended_parent_id: UUID | None
     donor_id: UUID | None

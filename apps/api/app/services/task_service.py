@@ -521,14 +521,7 @@ def bulk_complete_tasks(
     from fastapi import HTTPException
 
     from app.core.deps import is_owner_or_assignee_or_admin
-    from app.core.policies import POLICIES
-    from app.core.surrogate_access import check_surrogate_access
-    from app.services import (
-        dashboard_service,
-        donor_service,
-        permission_service,
-        surrogate_service,
-    )
+    from app.services import dashboard_service
 
     results: dict = {"completed": 0, "failed": []}
     completed_tasks_to_sync: list[Task] = []
@@ -540,29 +533,7 @@ def bulk_complete_tasks(
                 results["failed"].append({"task_id": str(task_id), "reason": "Task not found"})
                 continue
 
-            if task.surrogate_id:
-                surrogate = surrogate_service.get_surrogate(db, session.org_id, task.surrogate_id)
-                if surrogate:
-                    check_surrogate_access(
-                        surrogate,
-                        session.role,
-                        session.user_id,
-                        db=db,
-                        org_id=session.org_id,
-                    )
-
-            if task.donor_id:
-                can_view_donors = permission_service.check_permission(
-                    db,
-                    session.org_id,
-                    session.user_id,
-                    session.role.value,
-                    POLICIES["donors"].default.value,
-                )
-                donor = donor_service.get_donor(db, session.org_id, task.donor_id)
-                if not can_view_donors or not donor:
-                    results["failed"].append({"task_id": str(task_id), "reason": "Not authorized"})
-                    continue
+            check_task_subject_access(db, task, session)
 
             if not is_owner_or_assignee_or_admin(
                 session, task.created_by_user_id, task.owner_type, task.owner_id
@@ -617,44 +588,16 @@ def get_task(db: Session, task_id: UUID, org_id: UUID) -> Task | None:
 
 def check_task_subject_access(db: Session, task: Task, session: UserSession) -> None:
     """Validate tenant ownership and record access for every linked task subject."""
-    from app.core.surrogate_access import check_surrogate_access
-    from app.services import donor_service, ip_service, surrogate_service
+    from app.services import record_access_service
 
     if task.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    if task.surrogate_id:
-        surrogate = surrogate_service.get_surrogate(db, session.org_id, task.surrogate_id)
-        if not surrogate:
-            raise HTTPException(status_code=404, detail="Task subject not found")
-        check_surrogate_access(
-            surrogate,
-            session.role,
-            session.user_id,
-            db=db,
-            org_id=session.org_id,
-        )
-
-    if task.intended_parent_id:
-        intended_parent = ip_service.get_intended_parent(
-            db,
-            task.intended_parent_id,
-            session.org_id,
-        )
-        if not intended_parent:
-            raise HTTPException(status_code=404, detail="Task subject not found")
-
-    if task.donor_id:
-        if not user_can_view_donors(
-            db,
-            session.org_id,
-            session.user_id,
-            session.role,
-        ):
-            raise HTTPException(status_code=403, detail="Missing permission: view_donors")
-        donor = donor_service.get_donor(db, session.org_id, task.donor_id)
-        if not donor:
-            raise HTTPException(status_code=404, detail="Task subject not found")
+    # Match tasks may link both a surrogate and an intended parent.
+    for kind in ("surrogate", "intended_parent", "donor"):
+        record_id = getattr(task, f"{kind}_id")
+        if record_id:
+            record_access_service.get_record_with_access(db, session, kind, record_id)
 
 
 def delete_task(
@@ -880,6 +823,7 @@ def to_task_list_item(
 
     return TaskListItem(
         id=task.id,
+        created_by_user_id=task.created_by_user_id,
         surrogate_id=task.surrogate_id,
         intended_parent_id=task.intended_parent_id,
         donor_id=task.donor_id,
@@ -925,6 +869,8 @@ def list_tasks(
     my_tasks_user_id: UUID | None = None,
     exclude_approvals: bool = False,
     can_view_donors: bool = False,
+    can_view_surrogates: bool = True,
+    can_view_intended_parents: bool = True,
 ):
     """
     List tasks with filters and pagination.
@@ -958,6 +904,10 @@ def list_tasks(
     # predicate below. A NULL surrogate_id must never make donor tasks public.
     if not can_view_donors:
         query = query.filter(Task.donor_id.is_(None))
+    if not can_view_surrogates:
+        query = query.filter(Task.surrogate_id.is_(None))
+    if not can_view_intended_parents:
+        query = query.filter(Task.intended_parent_id.is_(None))
 
     # Role-based surrogate access filtering for intake specialists:
     # filter out tasks linked to surrogates they can't access.
@@ -1117,44 +1067,32 @@ def list_tasks_for_session(
     exclude_approvals: bool = False,
 ) -> TaskListResponse:
     """List tasks scoped to the current session with access checks and PHI auditing."""
-    from app.core.surrogate_access import check_surrogate_access
-    from app.services import (
-        donor_service,
-        ip_service,
-        phi_access_service,
-        surrogate_service,
-    )
+    from app.services import phi_access_service, record_access_service
 
-    can_view_donors = user_can_view_donors(
+    can_view_donors = user_can_view_donors(db, session.org_id, session.user_id, session.role)
+    can_view_surrogates = permission_service.check_permission(
         db,
         session.org_id,
         session.user_id,
-        session.role,
+        session.role.value,
+        P.SURROGATES_VIEW.value,
     )
-
-    if surrogate_id:
-        surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
-        if surrogate:
-            check_surrogate_access(
-                surrogate,
-                session.role,
-                session.user_id,
-                db=db,
-                org_id=session.org_id,
-            )
-
-    if intended_parent_id:
-        ip = ip_service.get_intended_parent(db, intended_parent_id, session.org_id)
-        if not ip:
-            raise HTTPException(status_code=404, detail="Intended parent not found")
-
-    if donor_id or donor_type:
-        if not can_view_donors:
-            raise HTTPException(status_code=403, detail="Missing permission: view_donors")
-    if donor_id:
-        donor = donor_service.get_donor(db, session.org_id, donor_id)
-        if not donor:
-            raise HTTPException(status_code=404, detail="Donor not found")
+    can_view_intended_parents = permission_service.check_permission(
+        db,
+        session.org_id,
+        session.user_id,
+        session.role.value,
+        P.INTENDED_PARENTS_VIEW.value,
+    )
+    if donor_type and not can_view_donors:
+        raise HTTPException(status_code=403, detail="Missing permission: view_donors")
+    for kind, record_id in (
+        ("surrogate", surrogate_id),
+        ("intended_parent", intended_parent_id),
+        ("donor", donor_id),
+    ):
+        if record_id:
+            record_access_service.get_record_with_access(db, session, kind, record_id)
 
     tasks, total = list_tasks(
         db=db,
@@ -1178,6 +1116,8 @@ def list_tasks_for_session(
         my_tasks_user_id=session.user_id if my_tasks else None,
         exclude_approvals=exclude_approvals,
         can_view_donors=can_view_donors,
+        can_view_surrogates=can_view_surrogates,
+        can_view_intended_parents=can_view_intended_parents,
     )
 
     phi_access_service.log_phi_access(
