@@ -5,6 +5,7 @@ packages:
   - "."
 
 overrides:
+  browserslist: ">=4.28.7"
   "@types/react": 19.2.17
   "@types/react-dom": 19.2.3
   ajv: 6.14.0
