@@ -1,5 +1,7 @@
 "use client"
 
+import { getAppointmentStatusLabel } from "@/lib/appointment-status-labels"
+
 /**
  * Unified Calendar View - Combined view of appointments and tasks
  * 
@@ -536,7 +538,7 @@ function AppointmentStatusPill({
     return (
         <div className="flex items-center gap-2">
             <Badge className={`${statusColor} text-white`}>
-                {appointment.status.replace("_", " ")}
+                {getAppointmentStatusLabel(appointment.status)}
             </Badge>
         </div>
     )
@@ -1634,7 +1636,7 @@ function UnifiedCalendarLegend({
             {includeAppointments && Object.entries(STATUS_COLORS).map(([status, color]) => (
                 <Badge key={status} variant="outline" className="gap-1.5 rounded-full font-normal">
                     <span className={`size-2 rounded-full ${color}`} />
-                    <span className="capitalize">{status.replace("_", " ")}</span>
+                    <span className="capitalize">{getAppointmentStatusLabel(status)}</span>
                 </Badge>
             ))}
             {includeGoogleEvents && (

@@ -24,14 +24,7 @@ const PRIORITY_OPTIONS = ['low', 'normal', 'high', 'urgent'] as const
 type TicketStatusFilter = TicketStatus | 'all'
 type TicketPriorityFilter = TicketPriority | 'all'
 
-const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
-    new: 'New',
-    open: 'Open',
-    pending: 'Pending',
-    resolved: 'Resolved',
-    closed: 'Closed',
-    spam: 'Spam',
-}
+import { TICKET_STATUS_LABELS } from "@/lib/ticket-status-labels"
 
 const TICKET_PRIORITY_LABELS: Record<TicketPriority, string> = {
     low: 'Low',
