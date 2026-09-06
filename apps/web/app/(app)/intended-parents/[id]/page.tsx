@@ -1,5 +1,10 @@
 "use client"
 
+import { RelatedMatchesCard } from "@/components/matches/RelatedMatchesCard"
+import { RecordAppointmentsCard } from "@/components/records/RecordAppointmentsCard"
+import { RecordCorrespondenceCard } from "@/components/records/RecordCorrespondenceCard"
+
+
 import { useReducer } from "react"
 import { useParams, useRouter } from "next/navigation"
 import {
@@ -344,6 +349,9 @@ export default function IntendedParentDetailPage() {
                             }}
                         />
 
+                        <RelatedMatchesCard key={`matches-${id}`} kind="intended_parent" recordId={id} name={ip.full_name} canView={user?.role === "developer" || (permissionsQuery.data?.permissions ?? []).includes("view_matches")} canPropose={user?.role === "developer" || (permissionsQuery.data?.permissions ?? []).includes("propose_matches")} archived={ip.is_archived} />
+                        <RecordAppointmentsCard key={`appointments-${id}`} record={{ kind: "intended_parent", id, name: ip.full_name, email: ip.email, phone: ip.phone }} canView={user?.role === "developer" || (permissionsQuery.data?.permissions ?? []).includes("manage_appointments")} canViewMatches={user?.role === "developer" || (permissionsQuery.data?.permissions ?? []).includes("view_matches")} canCreate={canEdit} archived={ip.is_archived} />
+                        <RecordCorrespondenceCard key={`correspondence-${id}`} kind="intended_parent" recordId={id} canView={user?.role === "developer"} canEdit={canEdit && !ip.is_archived} />
                         <IntendedParentNotesSection intendedParentId={id} canEdit={canEdit} />
                         <EntityTasksSection key={id} subject={{ intended_parent_id: id }} record={{ intended_parent_id: id }} canView={canViewTasks} canCreate={canCreateTasks} archived={ip.is_archived} />
                         <IntendedParentDocumentsSection intendedParentId={id} canEdit={canEdit} />

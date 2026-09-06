@@ -14,6 +14,11 @@ import {
     TagIcon,
 } from "lucide-react"
 
+import { RelatedMatchesCard } from "@/components/matches/RelatedMatchesCard"
+import { RecordAppointmentsCard } from "@/components/records/RecordAppointmentsCard"
+import { RecordCorrespondenceCard } from "@/components/records/RecordCorrespondenceCard"
+import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import Link from "@/components/app-link"
 import { RecordDetailField } from "@/components/RecordDetailField"
 import { EntityActivityTimeline } from "@/components/activity/EntityActivityTimeline"
@@ -90,6 +95,10 @@ export function DonorDetailSections({
     }
     currentUserId: string | null
 }) {
+    const { user } = useAuth()
+    const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
+    const permissions = permissionsQuery.data?.permissions ?? []
+    const hasPermission = (permission: string) => user?.role === "developer" || permissions.includes(permission)
     const {
         edit: canEdit,
         archive: canArchive,
@@ -200,6 +209,9 @@ export function DonorDetailSections({
                             </CardContent>
                         </Card>
                         <DonorOwnershipSection donor={donor} canEdit={canEdit} />
+                        <RelatedMatchesCard key={`matches-${donor.id}`} kind="donor" recordId={donor.id} name={donor.full_name} canView={hasPermission("view_matches")} canPropose={hasPermission("propose_matches")} archived={donor.is_archived} />
+                        <RecordAppointmentsCard key={`appointments-${donor.id}`} record={{ kind: "donor", id: donor.id, name: donor.full_name, email: donor.email, phone: donor.phone }} canView={hasPermission("manage_appointments")} canViewMatches={hasPermission("view_matches")} canCreate={canEdit} archived={donor.is_archived} />
+                        <RecordCorrespondenceCard key={`correspondence-${donor.id}`} kind="donor" recordId={donor.id} canView={user?.role === "developer"} canEdit={canEdit && !donor.is_archived} />
                         <DonorNotesSection
                             donorId={donor.id}
                             canEdit={canEdit}

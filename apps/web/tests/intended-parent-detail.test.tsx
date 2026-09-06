@@ -780,3 +780,7 @@ describe('IntendedParentDetailPage', () => {
         expect(screen.getByTestId("ip-medical-sections-grid")).toHaveClass("grid", "gap-4", "md:grid-cols-2")
     })
 })
+
+vi.mock("@/components/records/RecordAppointmentsCard", () => ({ RecordAppointmentsCard: () => null }))
+vi.mock("@/components/records/RecordCorrespondenceCard", () => ({ RecordCorrespondenceCard: () => null }))
+vi.mock("@/components/matches/RelatedMatchesCard", () => ({ RelatedMatchesCard: () => null }))

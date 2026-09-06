@@ -753,3 +753,7 @@ describe("DonorDetailPage", () => {
         expect(screen.queryByRole("button", { name: "Upload donor profile photo" })).not.toBeInTheDocument()
     })
 })
+
+vi.mock("@/components/records/RecordAppointmentsCard", () => ({ RecordAppointmentsCard: () => null }))
+vi.mock("@/components/records/RecordCorrespondenceCard", () => ({ RecordCorrespondenceCard: () => null }))
+vi.mock("@/components/matches/RelatedMatchesCard", () => ({ RelatedMatchesCard: () => null }))
