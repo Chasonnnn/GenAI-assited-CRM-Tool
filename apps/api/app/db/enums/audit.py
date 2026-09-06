@@ -16,6 +16,14 @@ class AuditEventType(str, Enum):
     - INTEGRATION_*: Third-party connections
     """
 
+    APPOINTMENT_APPROVED = "appointment_approved"
+    APPOINTMENT_CREATED = "appointment_created"
+    APPOINTMENT_RESCHEDULED = "appointment_rescheduled"
+    APPOINTMENT_CANCELLED = "appointment_cancelled"
+    APPOINTMENT_LINK_UPDATED = "appointment_link_updated"
+    RECORD_CORRESPONDENCE_LINKED = "record_correspondence_linked"
+    RECORD_CORRESPONDENCE_UNLINKED = "record_correspondence_unlinked"
+
     MATCH_NOTE_ADDED = "match_note_added"
     MATCH_NOTE_DELETED = "match_note_deleted"
 

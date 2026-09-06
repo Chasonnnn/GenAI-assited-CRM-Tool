@@ -540,6 +540,10 @@
     "GET": [
       "200",
       "422"
+    ],
+    "POST": [
+      "201",
+      "422"
     ]
   },
   "/appointments/availability": {
@@ -4180,6 +4184,22 @@
   "/matches/{match_id}/work": {
     "GET": [
       "200",
+      "422"
+    ]
+  },
+  "/records/{kind}/{record_id}/correspondence": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/records/{kind}/{record_id}/correspondence/{ticket_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "PUT": [
+      "204",
       "422"
     ]
   }

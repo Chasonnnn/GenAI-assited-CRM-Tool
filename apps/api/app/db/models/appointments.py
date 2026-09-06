@@ -12,6 +12,7 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -245,6 +246,19 @@ class Appointment(Base):
 
     __tablename__ = "appointments"
     __table_args__ = (
+        CheckConstraint(
+            "attempt_id IS NULL OR match_id IS NOT NULL", name="ck_appointments_attempt_match"
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "match_id"],
+            ["matches.organization_id", "matches.id"],
+            name="fk_appointments_match_org",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "match_id", "attempt_id"],
+            ["match_attempts.organization_id", "match_attempts.match_id", "match_attempts.id"],
+            name="fk_appointments_attempt_context",
+        ),
         Index("idx_appointments_user_date", "user_id", "scheduled_start"),
         Index("idx_appointments_org_status", "organization_id", "status"),
         Index("idx_appointments_org_status_surrogate", "organization_id", "status", "surrogate_id"),
@@ -289,6 +303,16 @@ class Appointment(Base):
         UUID(as_uuid=True),
         ForeignKey("intended_parents.id", ondelete="SET NULL"),
         nullable=True,
+    )
+
+    donor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("donors.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    match_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("matches.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    attempt_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("match_attempts.id", ondelete="RESTRICT"), nullable=True
     )
 
     # Client info

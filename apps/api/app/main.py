@@ -93,6 +93,7 @@ from app.routers import (
     profile,
     public,
     queues,
+    record_correspondence,
     resend,
     search,
     status_change_requests,
@@ -789,6 +790,7 @@ app.include_router(zapier.router)
 
 # Appointments (internal, authenticated)
 app.include_router(appointments.router)
+app.include_router(record_correspondence.router)
 
 # Public Booking (unauthenticated)
 app.include_router(booking.router)

@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
+    DateTime,
     Enum,
     ForeignKey,
     Index,
@@ -679,3 +681,37 @@ class SurrogateEmailContact(Base):
     organization: Mapped[Organization] = relationship()
     surrogate: Mapped[Surrogate] = relationship()
     created_by: Mapped[User | None] = relationship()
+
+
+class RecordTicketLink(Base):
+    """Staff-confirmed correspondence association; email equality is not a link."""
+
+    __tablename__ = "record_ticket_links"
+    __table_args__ = (
+        CheckConstraint(
+            "num_nonnulls(donor_id, intended_parent_id) = 1", name="ck_record_ticket_one_record"
+        ),
+        UniqueConstraint("ticket_id", "donor_id", name="uq_record_ticket_donor"),
+        UniqueConstraint("ticket_id", "intended_parent_id", name="uq_record_ticket_ip"),
+        Index("ix_record_ticket_org_donor", "organization_id", "donor_id"),
+        Index("ix_record_ticket_org_ip", "organization_id", "intended_parent_id"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    ticket_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False
+    )
+    donor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("donors.id", ondelete="CASCADE")
+    )
+    intended_parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("intended_parents.id", ondelete="CASCADE")
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()"), nullable=False
+    )

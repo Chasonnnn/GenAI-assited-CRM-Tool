@@ -37,6 +37,7 @@ from app.schemas.appointment import (
     AvailableSlotsResponse,
     BookingLinkRead,
     PublicBookingPageRead,
+    StaffAppointmentCreate,
     StaffInfoRead,
     TimeSlotRead,
 )
@@ -486,6 +487,48 @@ def get_booking_preview_slots(
 # =============================================================================
 
 
+def _appointment_links(appt):
+    return {
+        field: getattr(appt, field)
+        for field in ("surrogate_id", "intended_parent_id", "donor_id", "match_id", "attempt_id")
+    }
+
+
+@router.post(
+    "", response_model=AppointmentRead, status_code=201, dependencies=[Depends(require_csrf_header)]
+)
+def create_staff_appointment(
+    data: StaffAppointmentCreate,
+    session: Annotated[UserSession, Depends(get_current_session)],
+    db: Annotated[Session, Depends(get_db)],
+) -> AppointmentRead:
+    links = {
+        field: getattr(data, field)
+        for field in ("surrogate_id", "intended_parent_id", "donor_id", "match_id", "attempt_id")
+    }
+    if not any(links.values()):
+        raise HTTPException(status_code=400, detail="Select a record for this appointment")
+    appointment_service.validate_record_links(db, session, links, action="edit")
+    appt_type = appointment_service.get_appointment_type(
+        db, data.appointment_type_id, session.org_id
+    )
+    if not appt_type or appt_type.user_id != session.user_id or not appt_type.is_active:
+        raise HTTPException(status_code=404, detail="Appointment type not found")
+    try:
+        appt = appointment_service.create_booking(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            **data.model_dump(exclude=set(links)),
+            record_links=links,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return appointment_service.to_appointment_read(
+        appt, appointment_service.get_appointment_context(db, [appt])
+    )
+
+
 @router.get("", response_model=AppointmentListResponse)
 def list_appointments(
     request: Request,
@@ -498,12 +541,26 @@ def list_appointments(
     date_end: date | None = None,
     surrogate_id: UUID | None = None,
     intended_parent_id: UUID | None = None,
+    donor_id: UUID | None = None,
+    match_id: UUID | None = None,
+    attempt_id: UUID | None = None,
 ):
     """List appointments for the current user.
 
     Optionally filter by surrogate_id and/or intended_parent_id for match-scoped views.
     When both are provided, returns appointments matching EITHER.
     """
+    appointment_service.validate_record_links(
+        db,
+        session,
+        {
+            "surrogate_id": surrogate_id,
+            "intended_parent_id": intended_parent_id,
+            "donor_id": donor_id,
+            "match_id": match_id,
+            "attempt_id": attempt_id,
+        },
+    )
     offset = (page - 1) * per_page
     appointments, total = appointment_service.list_appointments(
         db=db,
@@ -514,6 +571,9 @@ def list_appointments(
         date_end=date_end,
         surrogate_id=surrogate_id,
         intended_parent_id=intended_parent_id,
+        donor_id=donor_id,
+        match_id=match_id,
+        attempt_id=attempt_id,
         limit=per_page,
         offset=offset,
     )
@@ -561,6 +621,7 @@ def get_appointment(
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
+    appointment_service.validate_record_links(db, session, _appointment_links(appt))
     context = appointment_service.get_appointment_context(db, [appt])
     audit_service.log_phi_access(
         db=db,
@@ -586,42 +647,20 @@ def update_appointment_link(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
-    """Update surrogate/intended parent linkage for an appointment."""
-    from app.core.surrogate_access import check_surrogate_access
-    from app.services import ip_service, surrogate_service
-
+    """Update explicit record and case associations."""
     appt = appointment_service.get_appointment(db, appointment_id, session.org_id)
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
-
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-
-    if "surrogate_id" in data.model_fields_set:
-        if data.surrogate_id is None:
-            appt.surrogate_id = None
-        else:
-            surrogate = surrogate_service.get_surrogate(db, session.org_id, data.surrogate_id)
-            if not surrogate:
-                raise HTTPException(status_code=404, detail="Surrogate not found")
-            check_surrogate_access(
-                surrogate, session.role, session.user_id, db=db, org_id=session.org_id
-            )
-            appt.surrogate_id = surrogate.id
-
-    if "intended_parent_id" in data.model_fields_set:
-        if data.intended_parent_id is None:
-            appt.intended_parent_id = None
-        else:
-            ip = ip_service.get_intended_parent(db, data.intended_parent_id, session.org_id)
-            if not ip:
-                raise HTTPException(status_code=404, detail="Intended parent not found")
-            appt.intended_parent_id = ip.id
-
-    db.commit()
-    db.refresh(appt)
-    context = appointment_service.get_appointment_context(db, [appt])
-    return appointment_service.to_appointment_read(appt, context)
+    links = _appointment_links(appt)
+    appointment_service.validate_record_links(db, session, links, action="edit")
+    links.update(data.model_dump(exclude_unset=True))
+    appointment_service.validate_record_links(db, session, links, action="edit")
+    appointment_service.update_record_links(db, appt, links, session.user_id)
+    return appointment_service.to_appointment_read(
+        appt, appointment_service.get_appointment_context(db, [appt])
+    )
 
 
 @router.post(
@@ -641,6 +680,7 @@ def approve_appointment(
 
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
+    appointment_service.validate_record_links(db, session, _appointment_links(appt), action="edit")
 
     try:
         appt = appointment_service.approve_booking(
@@ -678,6 +718,7 @@ def get_reschedule_slots(
 
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
+    appointment_service.validate_record_links(db, session, _appointment_links(appt), action="edit")
 
     try:
         slots, appt_type = appointment_service.get_reschedule_slots_for_appointment(
@@ -714,6 +755,7 @@ def reschedule_appointment(
 
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
+    appointment_service.validate_record_links(db, session, _appointment_links(appt), action="edit")
 
     try:
         old_start = appt.scheduled_start  # Save for email
@@ -722,6 +764,7 @@ def reschedule_appointment(
             appointment=appt,
             new_start=data.scheduled_start,
             by_client=False,
+            actor_user_id=session.user_id,
         )
 
         # Send reschedule notification email
@@ -753,6 +796,7 @@ def cancel_appointment(
 
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
+    appointment_service.validate_record_links(db, session, _appointment_links(appt), action="edit")
 
     try:
         appt = appointment_service.cancel_booking(
@@ -760,6 +804,7 @@ def cancel_appointment(
             appointment=appt,
             reason=data.reason,
             by_client=False,
+            actor_user_id=session.user_id,
         )
 
         # Send cancellation notification email

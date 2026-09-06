@@ -167,6 +167,7 @@ from app.db.models.ticketing import (
     EmailRawBlob,
     Mailbox,
     MailboxCredential,
+    RecordTicketLink,
     SurrogateEmailContact,
     Ticket,
     TicketEvent,
@@ -354,6 +355,7 @@ __all__ = [
     "WorkflowResumeJob",
     "WorkflowTemplate",
     "WorkflowTemplateTarget",
+    "RecordTicketLink",
     "ZoomMeeting",
     "ZoomWebhookEvent",
 ]
