@@ -1128,6 +1128,7 @@ export default function PlatformSystemEmailTemplatePage() {
                                             <Checkbox
                                                 checked={allFilteredSelected}
                                                 onCheckedChange={() => toggleSelectAllOrgs()}
+                                                aria-label="Select all organizations"
                                             />
                                             Select all
                                         </Label>
@@ -1161,6 +1162,7 @@ export default function PlatformSystemEmailTemplatePage() {
                                                                         onCheckedChange={(next) =>
                                                                             toggleOrg(org.id, next === true)
                                                                         }
+                                                                        aria-label={`Select ${org.name}`}
                                                                     />
                                                                     <div>
                                                                         <div className="font-medium text-stone-900 dark:text-stone-100">

@@ -9,3 +9,6 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+## 2025-05-20 - Table Checkbox Accessibility (Continued)
+**Learning:** In the `ops/templates/system/[systemKey]/page.client.tsx`, table row selection checkboxes lacked accessible names. When rendering `<Checkbox>` components iteratively without directly associated `<label>` tags (via `htmlFor`), a dynamically generated `aria-label` is required.
+**Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data (e.g., `aria-label={\`Select ${org.name}\`}`).
