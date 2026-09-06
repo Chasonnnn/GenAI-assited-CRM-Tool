@@ -2405,6 +2405,10 @@
     "PATCH": [
       "200",
       "422"
+    ],
+    "POST": [
+      "201",
+      "422"
     ]
   },
   "/matches/{match_id}/reject": {
@@ -4139,6 +4143,12 @@
       "422"
     ]
   },
+  "/matches/{match_id}/attachments": {
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
   "/matches/{match_id}/attempts": {
     "GET": [
       "200",
@@ -4157,6 +4167,18 @@
   },
   "/matches/{match_id}/complete": {
     "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/notes/{note_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/work": {
+    "GET": [
       "200",
       "422"
     ]

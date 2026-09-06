@@ -20,6 +20,8 @@ from app.schemas.auth import UserSession
 from app.services import (
     activity_service,
     attachment_service,
+    match_service,
+    match_work_service,
     record_access_service,
 )
 from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
@@ -537,6 +539,7 @@ def download_attachment(
                 POLICIES["surrogates"].default,
                 POLICIES["intended_parents"].default,
                 POLICIES["donors"].default,
+                POLICIES["matches"].default,
             ]
         )
     ),
@@ -552,6 +555,8 @@ def download_attachment(
         raise HTTPException(status_code=404, detail="Attachment not found")
 
     # Authorize the actual attachment subject, in addition to the route permission.
+    if attachment.match_id:
+        match_service.get_match_with_access(db, session, attachment.match_id)
     if attachment.surrogate_id:
         _get_surrogate_with_access(db, attachment.surrogate_id, session)
     elif attachment.intended_parent_id:
@@ -618,6 +623,7 @@ def delete_attachment(
                 POLICIES["surrogates"].actions["edit"],
                 POLICIES["intended_parents"].actions["edit"],
                 POLICIES["donors"].actions["edit"],
+                POLICIES["matches"].actions["propose"],
             ]
         )
     ),
@@ -633,6 +639,9 @@ def delete_attachment(
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
+    if attachment.match_id:
+        match_work_service.require_permission(db, session, POLICIES["matches"].actions["propose"])
+
     # Access control: uploader or Admin+
     is_admin = session.role in (Role.ADMIN, Role.DEVELOPER)
     is_uploader = attachment.uploaded_by_user_id == session.user_id
@@ -641,6 +650,8 @@ def delete_attachment(
         raise HTTPException(status_code=403, detail="Only uploader or admin can delete")
 
     surrogate = None
+    if attachment.match_id:
+        match_service.get_match_with_access(db, session, attachment.match_id)
     if attachment.surrogate_id:
         surrogate = _get_surrogate_with_access(
             db, attachment.surrogate_id, session, require_write=True
@@ -689,6 +700,7 @@ def download_local_attachment(
                 POLICIES["surrogates"].default,
                 POLICIES["intended_parents"].default,
                 POLICIES["donors"].default,
+                POLICIES["matches"].default,
             ]
         )
     ),
@@ -719,6 +731,8 @@ def download_local_attachment(
         raise HTTPException(status_code=409, detail="File is still being scanned")
 
     # Authorize the actual attachment subject, in addition to the route permission.
+    if attachment.match_id:
+        match_service.get_match_with_access(db, session, attachment.match_id)
     if attachment.surrogate_id:
         _get_surrogate_with_access(db, attachment.surrogate_id, session)
     elif attachment.intended_parent_id:

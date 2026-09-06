@@ -16,6 +16,9 @@ class AuditEventType(str, Enum):
     - INTEGRATION_*: Third-party connections
     """
 
+    MATCH_NOTE_ADDED = "match_note_added"
+    MATCH_NOTE_DELETED = "match_note_deleted"
+
     # Authentication
     AUTH_LOGIN_SUCCESS = "auth_login_success"
     AUTH_LOGIN_FAILED = "auth_login_failed"

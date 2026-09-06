@@ -16,6 +16,8 @@ class TaskCreate(BaseModel):
     description: str | None = Field(None, max_length=2000)
     task_type: TaskType = TaskType.OTHER
     match_id: UUID | None = None
+    attempt_id: UUID | None = None
+    work_source: Literal["match", "surrogate", "ip", "donor"] | None = None
     surrogate_id: UUID | None = None
     intended_parent_id: UUID | None = None
     donor_id: UUID | None = None
@@ -48,6 +50,9 @@ class TaskRead(BaseModel):
     """Full task response."""
 
     id: UUID
+    match_id: UUID | None = None
+    attempt_id: UUID | None = None
+    work_source: Literal["match", "surrogate", "ip", "donor"] | None = None
     surrogate_id: UUID | None
     intended_parent_id: UUID | None
     donor_id: UUID | None
@@ -99,6 +104,9 @@ class TaskListItem(BaseModel):
     """Compact task for list views."""
 
     id: UUID
+    match_id: UUID | None = None
+    attempt_id: UUID | None = None
+    work_source: Literal["match", "surrogate", "ip", "donor"] | None = None
     created_by_user_id: UUID
     surrogate_id: UUID | None
     intended_parent_id: UUID | None

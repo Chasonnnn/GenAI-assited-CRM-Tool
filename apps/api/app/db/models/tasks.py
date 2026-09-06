@@ -12,6 +12,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -69,8 +70,22 @@ class Task(Base):
         ),
         Index("idx_tasks_intended_parent", "intended_parent_id"),
         Index("idx_tasks_donor", "donor_id"),
+        Index("idx_tasks_match_attempt", "organization_id", "match_id", "attempt_id"),
+        ForeignKeyConstraint(
+            ["organization_id", "match_id"],
+            ["matches.organization_id", "matches.id"],
+            name="fk_tasks_match_org",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "match_id", "attempt_id"],
+            ["match_attempts.organization_id", "match_attempts.match_id", "match_attempts.id"],
+            name="fk_tasks_attempt_context",
+        ),
         CheckConstraint(
-            "donor_id IS NULL OR (surrogate_id IS NULL AND intended_parent_id IS NULL)",
+            "attempt_id IS NULL OR match_id IS NOT NULL", name="ck_tasks_attempt_match"
+        ),
+        CheckConstraint(
+            "donor_id IS NULL OR (surrogate_id IS NULL AND (intended_parent_id IS NULL OR match_id IS NOT NULL))",
             name="ck_tasks_donor_subject_exclusive",
         ),
         Index(
@@ -113,6 +128,12 @@ class Task(Base):
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
+    match_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("matches.id", ondelete="RESTRICT"), nullable=True
+    )
+    attempt_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("match_attempts.id", ondelete="RESTRICT"), nullable=True
+    )
 
     # Ownership (Salesforce-style single owner model)
     # owner_type="user" + owner_id=user_id, or owner_type="queue" + owner_id=queue_id
@@ -120,6 +141,7 @@ class Task(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    work_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     task_type: Mapped[str] = mapped_column(
         String(50), server_default=text(f"'{TaskType.OTHER.value}'"), nullable=False
@@ -211,6 +233,24 @@ class EntityNote(Base):
     __table_args__ = (
         Index("idx_entity_notes_lookup", "entity_type", "entity_id", "created_at"),
         Index("idx_entity_notes_org", "organization_id", "created_at"),
+        Index("idx_entity_notes_match_attempt", "organization_id", "match_id", "attempt_id"),
+        ForeignKeyConstraint(
+            ["organization_id", "match_id"],
+            ["matches.organization_id", "matches.id"],
+            name="fk_entity_notes_match_org",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "match_id", "attempt_id"],
+            ["match_attempts.organization_id", "match_attempts.match_id", "match_attempts.id"],
+            name="fk_entity_notes_attempt_context",
+        ),
+        CheckConstraint(
+            "match_id IS NULL OR (entity_type = 'match' AND entity_id = match_id)",
+            name="ck_entity_notes_match_subject",
+        ),
+        CheckConstraint(
+            "attempt_id IS NULL OR match_id IS NOT NULL", name="ck_entity_notes_attempt_match"
+        ),
         # GIN index for full-text search
         Index(
             "ix_entity_notes_search_vector",
@@ -233,12 +273,19 @@ class EntityNote(Base):
         String(50), nullable=False
     )  # 'case', 'intended_parent'
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    match_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("matches.id", ondelete="RESTRICT"), nullable=True
+    )
+    attempt_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("match_attempts.id", ondelete="RESTRICT"), nullable=True
+    )
 
     # Note content
     author_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)  # HTML allowed, sanitized
+    work_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 

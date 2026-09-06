@@ -12,7 +12,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.enums import EntityType
-from app.db.models import Donor, EntityNote, IntendedParent, Surrogate
+from app.db.models import Donor, EntityNote, IntendedParent, Match, Surrogate
 from app.schemas.note import NoteRead
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,22 @@ def _record_note_activity(
     deleted: bool,
     actor_user_id: UUID | None,
 ) -> None:
+    if note.match_id:
+        from app.db.enums import AuditEventType
+        from app.services import audit_service
+
+        audit_service.log_event(
+            db,
+            note.organization_id,
+            AuditEventType.MATCH_NOTE_DELETED if deleted else AuditEventType.MATCH_NOTE_ADDED,
+            actor_user_id=actor_user_id,
+            target_type="match",
+            target_id=note.match_id,
+            details={
+                "note_id": str(note.id),
+                "attempt_id": str(note.attempt_id) if note.attempt_id else None,
+            },
+        )
     if note.entity_type == EntityType.SURROGATE.value:
         from app.services import activity_service
 
@@ -125,6 +141,8 @@ def create_note(
     *,
     commit: bool = True,
     emit_events: bool = True,
+    match_id: UUID | None = None,
+    attempt_id: UUID | None = None,
 ) -> EntityNote:
     """Persist a sanitized note and its activity in one transaction.
 
@@ -138,6 +156,7 @@ def create_note(
         EntityType.SURROGATE.value: Surrogate,
         EntityType.INTENDED_PARENT.value: IntendedParent,
         EntityType.DONOR.value: Donor,
+        "match": Match,
     }
     subject_model = subject_models.get(type_str)
     if subject_model is None:
@@ -156,6 +175,8 @@ def create_note(
             entity_id=entity_id,
             author_id=author_id,
             content=sanitize_html(content),
+            match_id=match_id,
+            attempt_id=attempt_id,
         )
         db.add(note)
         db.flush()

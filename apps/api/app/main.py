@@ -72,6 +72,7 @@ from app.routers import (
     jobs,
     journey,
     mailboxes,
+    match_work,
     matches,
     messaging,
     messaging_inbox,
@@ -722,6 +723,7 @@ app.include_router(permissions.router)
 
 # Matches (Surrogate ↔ Intended Parent pairing)
 app.include_router(matches.router)
+app.include_router(match_work.router)
 
 # Automation Workflows (Manager+)
 app.include_router(workflows.router)  # Router already has prefix="/workflows"

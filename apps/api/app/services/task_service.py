@@ -46,6 +46,22 @@ def _record_shared_entity_activity(
     *,
     occurred_at: datetime | None = None,
 ) -> None:
+    if task.match_id:
+        from app.db.enums import AuditEventType
+        from app.services import audit_service
+
+        audit_service.log_event(
+            db,
+            task.organization_id,
+            AuditEventType(activity_type),
+            actor_user_id=actor_user_id,
+            target_type="match",
+            target_id=task.match_id,
+            details={
+                "task_id": str(task.id),
+                "attempt_id": str(task.attempt_id) if task.attempt_id else None,
+            },
+        )
     entity_type = (
         "donor" if task.donor_id else "intended_parent" if task.intended_parent_id else None
     )
@@ -93,13 +109,14 @@ def validate_task_subject_ids(
     surrogate_id: UUID | None,
     intended_parent_id: UUID | None,
     donor_id: UUID | None,
+    match_id: UUID | None = None,
 ) -> None:
     """Reject donor tasks linked to any other subject.
 
     Surrogate and intended-parent IDs may coexist because match tasks intentionally
     carry both sides of a match.
     """
-    if donor_id and (surrogate_id or intended_parent_id):
+    if donor_id and (surrogate_id or (intended_parent_id and not match_id)):
         raise ValueError("donor_id cannot be combined with surrogate_id or intended_parent_id")
 
 
@@ -141,6 +158,11 @@ def validate_task_subject_update(task: Task, data: TaskUpdate) -> None:
     subject_fields = {"surrogate_id", "intended_parent_id", "donor_id"}
     if not subject_fields.intersection(update_data):
         return
+    if task.match_id and any(
+        update_data[field] != getattr(task, field)
+        for field in subject_fields.intersection(update_data)
+    ):
+        raise ValueError("Match task participants cannot be changed")
 
     next_surrogate_id = update_data.get("surrogate_id", task.surrogate_id)
     next_intended_parent_id = update_data.get(
@@ -152,6 +174,7 @@ def validate_task_subject_update(task: Task, data: TaskUpdate) -> None:
         surrogate_id=next_surrogate_id,
         intended_parent_id=next_intended_parent_id,
         donor_id=next_donor_id,
+        match_id=task.match_id,
     )
 
     current_subject = (task.surrogate_id, task.intended_parent_id, task.donor_id)
@@ -219,13 +242,34 @@ def create_task(
     data: TaskCreate,
     *,
     emit_events: bool = False,
+    commit: bool = True,
 ) -> Task:
     """Create a new task."""
     validate_task_subject_ids(
         surrogate_id=data.surrogate_id,
         intended_parent_id=data.intended_parent_id,
         donor_id=data.donor_id,
+        match_id=data.match_id,
     )
+    if data.match_id:
+        from app.services.match_work_service import validate_context
+
+        match = validate_context(db, org_id, data.match_id, data.attempt_id, write=True)
+        if (
+            data.work_source == "donor"
+            and not match.donor_id
+            or data.work_source == "surrogate"
+            and not match.surrogate_id
+        ):
+            raise ValueError("Task source is not a party in this match")
+        if (data.surrogate_id, data.intended_parent_id, data.donor_id) != (
+            match.surrogate_id,
+            match.intended_parent_id,
+            match.donor_id,
+        ):
+            raise ValueError("Task participants must match its case")
+    elif data.attempt_id or data.work_source:
+        raise ValueError("attempt_id and work_source require match_id")
     # Determine owner - default to creator if not provided
     owner_type = data.owner_type or "user"
     if owner_type == "queue":
@@ -246,6 +290,9 @@ def create_task(
         surrogate_id=data.surrogate_id,
         intended_parent_id=data.intended_parent_id,
         donor_id=data.donor_id,
+        match_id=data.match_id,
+        attempt_id=data.attempt_id,
+        work_source=data.work_source or ("match" if data.match_id else None),
         owner_type=owner_type,
         owner_id=owner_id,
         title=data.title,
@@ -258,8 +305,19 @@ def create_task(
     db.add(task)
     db.flush()
     _record_shared_entity_activity(db, task, "task_created", user_id)
+    if not commit:
+        return task
     db.commit()
     db.refresh(task)
+
+    dispatch_task_created(db, task, emit_events=emit_events)
+    return task
+
+
+def dispatch_task_created(db: Session, task: Task, *, emit_events: bool = False) -> None:
+    """Run task integrations only after the owning transaction has committed."""
+    user_id = task.created_by_user_id
+    owner_type, owner_id, org_id = task.owner_type, task.owner_id, task.organization_id
 
     _sync_task_to_google_best_effort(db, task)
 
@@ -278,8 +336,6 @@ def create_task(
         from app.services import dashboard_service
 
         dashboard_service.push_dashboard_stats(db, org_id)
-
-    return task
 
 
 def update_task(
@@ -592,6 +648,10 @@ def check_task_subject_access(db: Session, task: Task, session: UserSession) -> 
 
     if task.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Task not found")
+    if task.match_id:
+        from app.services.match_service import get_match_with_access
+
+        get_match_with_access(db, session, task.match_id)
 
     # Match tasks may link both a surrogate and an intended parent.
     for kind in ("surrogate", "intended_parent", "donor"):
@@ -772,6 +832,9 @@ def to_task_read(task: Task, context: dict[str, dict]) -> TaskRead:
     donor_metadata = context["donor_metadata"].get(task.donor_id, {})
 
     return TaskRead(
+        work_source=task.work_source,
+        match_id=task.match_id,
+        attempt_id=task.attempt_id,
         id=task.id,
         surrogate_id=task.surrogate_id,
         intended_parent_id=task.intended_parent_id,
@@ -822,6 +885,9 @@ def to_task_list_item(
     donor_metadata = context["donor_metadata"].get(task.donor_id, {})
 
     return TaskListItem(
+        work_source=task.work_source,
+        match_id=task.match_id,
+        attempt_id=task.attempt_id,
         id=task.id,
         created_by_user_id=task.created_by_user_id,
         surrogate_id=task.surrogate_id,
@@ -860,6 +926,8 @@ def list_tasks(
     intended_parent_id: UUID | None = None,
     donor_id: UUID | None = None,
     donor_type: Literal["egg", "sperm"] | None = None,
+    match_id: UUID | None = None,
+    attempt_id: UUID | None = None,
     pipeline_id: UUID | None = None,
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
@@ -899,6 +967,19 @@ def list_tasks(
         Task.organization_id == org_id,
         task_subjects_belong_to_org(org_id),
     )
+
+    if match_id:
+        query = query.filter(Task.match_id == match_id)
+    if attempt_id:
+        query = query.filter(Task.attempt_id == attempt_id)
+    if user_id and not permission_service.check_permission(
+        db,
+        org_id,
+        user_id,
+        user_role.value if isinstance(user_role, Role) else user_role,
+        P.MATCHES_VIEW.value,
+    ):
+        query = query.filter(Task.match_id.is_(None))
 
     # Donor task access fails closed independently of the surrogate visibility
     # predicate below. A NULL surrogate_id must never make donor tasks public.
@@ -1057,6 +1138,8 @@ def list_tasks_for_session(
     intended_parent_id: UUID | None = None,
     donor_id: UUID | None = None,
     donor_type: Literal["egg", "sperm"] | None = None,
+    match_id: UUID | None = None,
+    attempt_id: UUID | None = None,
     pipeline_id: UUID | None = None,
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
@@ -1094,6 +1177,14 @@ def list_tasks_for_session(
         if record_id:
             record_access_service.get_record_with_access(db, session, kind, record_id)
 
+    if match_id:
+        from app.services import match_service, match_work_service
+
+        match_service.get_match_with_access(db, session, match_id)
+        match_work_service.validate_context(db, session.org_id, match_id, attempt_id)
+    elif attempt_id:
+        raise HTTPException(status_code=400, detail="attempt_id requires match_id")
+
     tasks, total = list_tasks(
         db=db,
         org_id=session.org_id,
@@ -1107,6 +1198,8 @@ def list_tasks_for_session(
         intended_parent_id=intended_parent_id,
         donor_id=donor_id,
         donor_type=donor_type,
+        match_id=match_id,
+        attempt_id=attempt_id,
         pipeline_id=pipeline_id,
         is_completed=is_completed,
         task_type=task_type,

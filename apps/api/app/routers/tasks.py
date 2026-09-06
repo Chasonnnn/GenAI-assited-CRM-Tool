@@ -64,6 +64,8 @@ def list_tasks(
     surrogate_id: UUID | None = None,
     intended_parent_id: UUID | None = None,
     donor_id: UUID | None = None,
+    match_id: UUID | None = None,
+    attempt_id: UUID | None = None,
     donor_type: Literal["egg", "sperm"] | None = None,
     pipeline_id: Annotated[UUID | None, "fastapi_param"] = Query(
         None, description="Filter tasks by pipeline UUID"
@@ -99,6 +101,8 @@ def list_tasks(
         surrogate_id=surrogate_id,
         intended_parent_id=intended_parent_id,
         donor_id=donor_id,
+        match_id=match_id,
+        attempt_id=attempt_id,
         donor_type=donor_type,
         pipeline_id=pipeline_id,
         is_completed=is_completed,
@@ -149,14 +153,18 @@ def create_task(
         )
 
     if data.match_id:
-        match = match_service.get_match(db, data.match_id, session.org_id)
-        if not match:
-            raise HTTPException(status_code=400, detail="Match not found")
+        try:
+            match = match_service.get_match_with_access(db, session, data.match_id)
+        except HTTPException as exc:
+            if exc.status_code == 404:
+                raise HTTPException(status_code=400, detail="Match not found") from exc
+            raise
 
         data = data.model_copy(
             update={
                 "surrogate_id": match.surrogate_id,
                 "intended_parent_id": match.intended_parent_id,
+                "donor_id": match.donor_id,
             }
         )
 
@@ -184,6 +192,7 @@ def create_task(
             user_id=session.user_id,
             data=data,
             emit_events=True,
+            commit=False,
         )
     except ValueError as exc:
         db.rollback()
@@ -206,6 +215,7 @@ def create_task(
         request=request,
     )
     db.commit()
+    task_service.dispatch_task_created(db, task, emit_events=True)
     context = task_service.get_task_context(db, session.org_id, [task])
     return task_service.to_task_read(task, context)
 
