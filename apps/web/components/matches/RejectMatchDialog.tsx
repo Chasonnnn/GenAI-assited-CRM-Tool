@@ -27,11 +27,13 @@ export function RejectMatchDialog({
     onConfirm,
     isPending = false,
 }: RejectMatchDialogProps) {
+    const [error, setError] = useState<string | null>(null)
     const [reason, setReason] = useState("")
 
     const handleConfirm = async () => {
         if (!reason.trim()) return
-        await onConfirm(reason.trim())
+        setError(null)
+        try { await onConfirm(reason.trim()) } catch (error) { setError(error instanceof Error ? error.message : "Unable to update match"); return }
         setReason("")
         onOpenChange(false)
     }
@@ -39,6 +41,7 @@ export function RejectMatchDialog({
     const handleOpenChange = (isOpen: boolean) => {
         if (!isOpen) {
             setReason("")
+            setError(null)
         }
         onOpenChange(isOpen)
     }
@@ -58,6 +61,7 @@ export function RejectMatchDialog({
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
+                    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
                     <div className="grid gap-2">
                         <Label htmlFor="reason">Rejection Reason</Label>
                         <Textarea

@@ -27,11 +27,13 @@ export function CancelMatchDialog({
     onConfirm,
     isPending = false,
 }: CancelMatchDialogProps) {
+    const [error, setError] = useState<string | null>(null)
     const [reason, setReason] = useState("")
 
     const handleConfirm = async () => {
         const trimmed = reason.trim()
-        await onConfirm(trimmed ? trimmed : undefined)
+        setError(null)
+        try { await onConfirm(trimmed ? trimmed : undefined) } catch (error) { setError(error instanceof Error ? error.message : "Unable to update match"); return }
         setReason("")
         onOpenChange(false)
     }
@@ -39,6 +41,7 @@ export function CancelMatchDialog({
     const handleOpenChange = (isOpen: boolean) => {
         if (!isOpen) {
             setReason("")
+            setError(null)
         }
         onOpenChange(isOpen)
     }
@@ -54,11 +57,11 @@ export function CancelMatchDialog({
                 <DialogHeader>
                     <DialogTitle>Cancel Match</DialogTitle>
                     <DialogDescription>
-                        This will request admin approval to cancel the match and return both records
-                        to Ready to Match.
+                        Request admin approval to cancel this match.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
+                    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
                     <div className="grid gap-2">
                         <Label htmlFor="reason">Reason (optional)</Label>
                         <Textarea

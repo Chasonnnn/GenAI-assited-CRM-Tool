@@ -35,6 +35,15 @@ import {
 } from "../hooks/useMatchDetailTabState"
 
 type MatchDetailOverviewTabsProps = {
+    participantKind?: "surrogate" | "donor"
+    canViewNotes?: boolean
+    canViewTasks?: boolean
+    page?: number
+    onPageChange?: (page: number) => void
+    hasMore?: boolean
+    isLoading?: boolean
+    error?: string | null
+    onRetry?: () => void
     activeTab: TabType
     sourceFilter: SourceFilter
     filteredNotes: CombinedNote[]
@@ -43,20 +52,21 @@ type MatchDetailOverviewTabsProps = {
     filteredActivity: CombinedActivity[]
     onTabChange: (tab: TabType) => void
     onSourceFilterChange: (source: SourceFilter) => void
-    onAddTask: () => void
-    onAddNote: () => void
-    onUploadFile: () => void
+    onAddTask?: (() => void) | undefined
+    onAddNote?: (() => void) | undefined
+    onUploadFile?: (() => void) | undefined
     onDownloadFile: (attachmentId: string) => void
-    onDeleteFile: (attachmentId: string, source: "surrogate" | "ip") => void
+    onDeleteFile: (attachmentId: string, source: SourceKind) => void
     isDownloadPending: boolean
     isDeletePending: boolean
     formatDate: (dateStr: string | null | undefined) => string
     formatDateTime: (dateStr: string | null | undefined) => string
 }
 
-type SourceKind = "surrogate" | "ip" | "match"
+type SourceKind = "surrogate" | "donor" | "ip" | "match"
 
 function sourceBadgeClassName(source: SourceKind) {
+    if (source === "donor") return "border-green-500/50 text-green-600 bg-green-500/5"
     if (source === "surrogate") {
         return "border-green-500/50 text-green-600 bg-green-500/5"
     }
@@ -73,6 +83,7 @@ function sourceDotClassName(source: SourceKind) {
 }
 
 function compactSourceLabel(source: SourceKind) {
+    if (source === "donor") return "Donor"
     if (source === "surrogate") return "Surrogate"
     if (source === "ip") return "IP"
     return "Match"
@@ -92,7 +103,8 @@ function SourceBadge({ source, className = "" }: { source: SourceKind; className
 function SourceFilterBar({
     sourceFilter,
     onSourceFilterChange,
-}: Pick<MatchDetailOverviewTabsProps, "sourceFilter" | "onSourceFilterChange">) {
+    participantKind = "surrogate",
+}: Pick<MatchDetailOverviewTabsProps, "sourceFilter" | "onSourceFilterChange" | "participantKind">) {
     return (
         <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
             <Select
@@ -109,7 +121,7 @@ function SourceFilterBar({
                     </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                    {SOURCE_OPTIONS.map((option) => (
+                    {SOURCE_OPTIONS.filter((option) => option.value !== (participantKind === "donor" ? "surrogate" : "donor")).map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                             {option.label}
                         </SelectItem>
@@ -165,7 +177,7 @@ function NotesTab({
 }: Pick<MatchDetailOverviewTabsProps, "filteredNotes" | "onAddNote" | "formatDateTime">) {
     return (
         <div className="space-y-2">
-            <Button
+            {onAddNote && <Button
                 variant="outline"
                 size="sm"
                 className="w-full h-8 text-xs mb-3"
@@ -173,7 +185,7 @@ function NotesTab({
             >
                 <StickyNoteIcon className="size-3.5 mr-1.5" />
                 Add Note
-            </Button>
+            </Button>}
             {filteredNotes.length > 0 ? (
                 <div className="space-y-2">
                     {filteredNotes.map((note) => (
@@ -229,7 +241,7 @@ function FilesTab({
 >) {
     return (
         <div className="space-y-2">
-            <Button
+            {onUploadFile && <Button
                 variant="outline"
                 size="sm"
                 className="w-full h-8 text-xs mb-3"
@@ -237,7 +249,7 @@ function FilesTab({
             >
                 <UploadIcon className="size-3.5 mr-1.5" />
                 Upload File
-            </Button>
+            </Button>}
             {filteredFiles.length > 0 ? (
                 filteredFiles.map((file) => {
                     const deletableSource = isDeletableSource(file.source) ? file.source : null
@@ -294,7 +306,7 @@ function TasksTab({
 }: Pick<MatchDetailOverviewTabsProps, "filteredTasks" | "onAddTask" | "formatDate">) {
     return (
         <div className="space-y-2">
-            <Button
+            {onAddTask && <Button
                 variant="outline"
                 size="sm"
                 className="w-full h-8 text-xs mb-3"
@@ -302,7 +314,7 @@ function TasksTab({
             >
                 <CheckSquareIcon className="size-3.5 mr-1.5" />
                 Add Task
-            </Button>
+            </Button>}
             {filteredTasks.length > 0 ? (
                 filteredTasks.map((task) => (
                     <div key={task.id} className="p-2 rounded bg-muted/30 flex items-center gap-2">
@@ -365,6 +377,7 @@ function ActivityTab({
 }
 
 function ActiveTabContent(props: MatchDetailOverviewTabsProps) {
+    if ((props.activeTab === "notes" && props.canViewNotes === false) || (props.activeTab === "tasks" && props.canViewTasks === false)) return <p className="text-sm text-muted-foreground" role="status">You do not have permission to view these {props.activeTab}.</p>
     if (props.activeTab === "notes") {
         return (
             <NotesTab
@@ -408,13 +421,24 @@ export function MatchDetailOverviewTabs(props: MatchDetailOverviewTabsProps) {
     return (
         <div className="min-w-0 border rounded-lg flex flex-col overflow-hidden">
             <SourceFilterBar
+                participantKind={props.participantKind ?? "surrogate"}
                 sourceFilter={props.sourceFilter}
                 onSourceFilterChange={props.onSourceFilterChange}
             />
             <OverviewTabButtons activeTab={props.activeTab} onTabChange={props.onTabChange} />
             <div className="flex-1 p-3 overflow-y-auto">
-                <ActiveTabContent {...props} />
+                {props.isLoading ? <p role="status" className="text-sm text-muted-foreground">Loading case work…</p> : props.error ? (
+                    <div role="alert" className="space-y-2 text-sm">
+                        <p>{props.error}</p>
+                        <Button variant="outline" size="sm" onClick={props.onRetry}>Retry</Button>
+                    </div>
+                ) : <ActiveTabContent {...props} />}
             </div>
+            {((props.page ?? 1) > 1 || props.hasMore) && <div className="border-t px-3 py-2 flex items-center justify-between gap-2">
+                <Button size="sm" variant="outline" disabled={(props.page ?? 1) <= 1 || props.isLoading} onClick={() => props.onPageChange?.((props.page ?? 1) - 1)}>Previous</Button>
+                <span className="text-xs text-muted-foreground">Page {props.page ?? 1}</span>
+                <Button size="sm" variant="outline" disabled={!props.hasMore || props.isLoading} onClick={() => props.onPageChange?.((props.page ?? 1) + 1)}>Next</Button>
+            </div>}
         </div>
     )
 }

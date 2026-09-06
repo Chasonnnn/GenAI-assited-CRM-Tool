@@ -75,6 +75,7 @@ describe('MatchesPage', () => {
         mockSearchParams.delete('page')
         mockSearchParams.delete('status')
         mockSearchParams.delete('q')
+        mockSearchParams.delete('match_kind')
         mockRouterReplace.mockReset()
         mockUseMatches.mockReturnValue({
             data: mockMatchData,
@@ -98,12 +99,12 @@ describe('MatchesPage', () => {
     it('renders match table with data', () => {
         render(<MatchesPage />)
         // Table headers
-        expect(screen.getByText('Surrogate')).toBeInTheDocument()
-        expect(screen.getByText('Surrogate #')).toBeInTheDocument()
+        expect(screen.getByText('Participant')).toBeInTheDocument()
+        expect(screen.getByText('Participant #')).toBeInTheDocument()
         expect(screen.getByText('Intended Parents')).toBeInTheDocument()
         expect(screen.queryByText('Compatibility')).not.toBeInTheDocument()
         expect(screen.getByText('Match Stage')).toBeInTheDocument()
-        expect(screen.getByText('Surrogate Stage')).toBeInTheDocument()
+        expect(screen.getByText('Participant Stage')).toBeInTheDocument()
 
         // Match data
         expect(screen.getByText('Jane Doe')).toBeInTheDocument()
@@ -131,7 +132,7 @@ describe('MatchesPage', () => {
         })
         render(<MatchesPage />)
         expect(screen.getByText('No matches found')).toBeInTheDocument()
-        expect(screen.getByText('Matches will appear here when surrogates are paired with intended parents')).toBeInTheDocument()
+        expect(screen.getByText('Matches will appear here when surrogates or donors are paired with intended parents')).toBeInTheDocument()
     })
 
     it('shows a permission message when matches are forbidden', () => {
@@ -192,7 +193,7 @@ describe('MatchesPage', () => {
 
         render(<MatchesPage />)
 
-        expect(screen.getByPlaceholderText(/search case/i)).toHaveValue('smith')
+        expect(screen.getByPlaceholderText(/search match/i)).toHaveValue('smith')
         expect(mockUseMatches).toHaveBeenCalledWith(
             expect.objectContaining({
                 page: 3,
@@ -210,7 +211,7 @@ describe('MatchesPage', () => {
 
         render(<MatchesPage />)
 
-        fireEvent.change(screen.getByPlaceholderText(/search case/i), {
+        fireEvent.change(screen.getByPlaceholderText(/search match/i), {
             target: { value: 'alice' },
         })
 
@@ -244,4 +245,16 @@ describe('MatchesPage', () => {
         render(<MatchesPage />)
         expect(screen.queryByText(/Showing/)).not.toBeInTheDocument()
     })
+    it('renders donor cases without surrogate fields and restores the kind filter from URL', () => {
+        mockSearchParams.set('match_kind', 'donor')
+        mockUseMatches.mockReturnValue({ data: { ...mockMatchData, items: [{ ...mockMatchData.items[0], match_kind: 'donor', donor_id: 'donor1', donor_name: 'Taylor Donor', donor_number: 'D10001', donor_stage_label: 'Ready', surrogate_id: null, surrogate_name: null, surrogate_number: null, status: 'completed' }] }, isLoading: false })
+        render(<MatchesPage />)
+        expect(mockUseMatches).toHaveBeenCalledWith(expect.objectContaining({ match_kind: 'donor' }))
+        expect(screen.getByText('Taylor Donor')).toBeInTheDocument()
+        expect(screen.getByText('D10001')).toBeInTheDocument()
+        expect(screen.getByText('Completed')).toBeInTheDocument()
+        expect(screen.getByText('Ready')).toBeInTheDocument()
+        expect(screen.getByRole('combobox', { name: 'Match kind' })).toHaveTextContent('Donor')
+    })
+
 })

@@ -149,6 +149,9 @@ export function useAppointments(
     status?: string;
     date_start?: string;
     date_end?: string;
+    donor_id?: string;
+    match_id?: string;
+    attempt_id?: string;
     surrogate_id?: string;
     intended_parent_id?: string;
     },

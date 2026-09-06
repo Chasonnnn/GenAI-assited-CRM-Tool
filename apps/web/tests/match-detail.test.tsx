@@ -45,6 +45,13 @@ vi.mock('@tanstack/react-query', async () => {
 })
 
 // Mock match hooks
+const mockUseMatchAttempts = vi.fn()
+const mockCompleteMatchMutateAsync = vi.fn()
+const mockSaveAttemptMutateAsync = vi.fn()
+const mockUseMatchWork = vi.fn()
+const mockUseDonor = vi.fn()
+const mockCreateMatchNote = vi.fn()
+const mockUploadMatchFile = vi.fn()
 const mockUseMatch = vi.fn()
 const mockUseAcceptMatch = vi.fn()
 const mockUseRejectMatch = vi.fn()
@@ -53,11 +60,23 @@ const mockUseUpdateMatchNotes = vi.fn()
 
 vi.mock('@/lib/hooks/use-matches', () => ({
     useMatch: (id: string) => mockUseMatch(id),
+    useMatchWork: (id: string, attemptId?: string, page?: number) => mockUseMatchWork(id, attemptId, page),
+    useMatchAttempts: () => mockUseMatchAttempts(),
+    useCompleteMatch: () => ({ mutateAsync: mockCompleteMatchMutateAsync, isPending: false }),
+    useSaveMatchAttempt: () => ({ mutateAsync: mockSaveAttemptMutateAsync, isPending: false }),
+    useCreateMatchNote: () => ({ mutateAsync: mockCreateMatchNote, isPending: false }),
+    useUploadMatchFile: () => ({ mutateAsync: mockUploadMatchFile, isPending: false }),
+    matchWorkKeys: { all: (id: string) => ['matches', 'detail', id, 'work'] },
     useAcceptMatch: () => mockUseAcceptMatch(),
     useRejectMatch: () => mockUseRejectMatch(),
     useCancelMatch: () => mockUseCancelMatch(),
     useUpdateMatchNotes: () => mockUseUpdateMatchNotes(),
-    matchKeys: { detail: (id: string) => ['matches', 'detail', id] },
+    matchKeys: { detail: (id: string) => ['matches', 'detail', id], lists: () => ['matches', 'list'] },
+}))
+
+vi.mock('@/lib/hooks/use-donors', () => ({
+    useDonor: (id: string | null) => mockUseDonor(id),
+    donorKeys: { detail: (id: string) => ['donors', 'detail', id] },
 }))
 
 // Mock surrogate hooks
@@ -154,6 +173,21 @@ describe('MatchDetailPage', () => {
         notes_internal: 'Internal notes about the match',
     }
 
+    it.each(['completed', 'cancelled', 'cancel_pending', 'rejected'])('keeps %s case work readable without creation actions', async (status) => {
+        mockUseMatch.mockReturnValue({ data: { ...mockMatch, status, outcome: 'Finished.', closed_at: '2026-09-05T12:00:00Z' }, isLoading: false })
+        mockUseMatchWork.mockReturnValue({ data: { notes: [{ id: 'note1', content: 'Existing case note', source: 'match', created_at: '2026-09-05T12:00:00Z', author_name: 'Admin' }], files: [], tasks: [], activity: [] }, isLoading: false })
+        render(<MatchDetailPage />)
+        expect(screen.getByText('Existing case note')).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Add Note' })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Files' }))
+        expect(screen.queryByRole('button', { name: 'Upload File' })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Tasks' }))
+        expect(screen.queryByRole('button', { name: 'Add Task' })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('tab', { name: 'Calendar' }))
+        expect(screen.queryByRole('button', { name: 'Add Task' })).not.toBeInTheDocument()
+        expect(screen.getByText(/Finished\./).textContent).toContain('Finished. · ')
+    })
+
     const mockSurrogate = {
         id: 'surrogate1',
         surrogate_number: 'S10001',
@@ -196,6 +230,9 @@ describe('MatchDetailPage', () => {
 
     beforeEach(() => {
         vi.clearAllMocks()
+        mockUseMatchAttempts.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
+        mockUseDonor.mockReturnValue({ data: undefined, isLoading: false, isError: false })
+        mockUseMatchWork.mockReturnValue({ data: { notes: [], files: [], tasks: [], activity: [] }, isLoading: false, error: null, refetch: vi.fn() })
         mockInvalidateQueries.mockReset()
         mockAcceptMatchMutateAsync.mockReset()
 
@@ -303,6 +340,7 @@ describe('MatchDetailPage', () => {
                 title: 'Coordinate next steps',
                 task_type: 'other',
                 match_id: 'match1',
+                work_source: 'match',
             })
         )
     })
@@ -316,21 +354,79 @@ describe('MatchDetailPage', () => {
             intended_parent_id: 'ip1',
         }
 
-        mockUseTasks.mockImplementation((params: { surrogate_id?: string; intended_parent_id?: string }) => {
-            if (params?.surrogate_id) {
-                return { data: { items: [dualLinkedTask], total: 1 }, isLoading: false }
-            }
-            if (params?.intended_parent_id) {
-                return { data: { items: [dualLinkedTask], total: 1 }, isLoading: false }
-            }
-            return { data: { items: [], total: 0 }, isLoading: false }
-        })
+        mockUseMatchWork.mockReturnValue({ data: { notes: [], files: [], activity: [], tasks: [{ ...dualLinkedTask, source: 'match' }] }, isLoading: false })
 
         render(<MatchDetailPage />)
         fireEvent.click(screen.getByRole('button', { name: /^tasks$/i }))
 
         expect(screen.getAllByText('Coordinate next steps')).toHaveLength(1)
         expect(screen.getByText('Match')).toBeInTheDocument()
+    })
+
+    it('loads only the exact case work endpoint and renders a donor participant safely', () => {
+        mockUseMatch.mockReturnValue({ data: { ...mockMatch, match_kind: 'donor', surrogate_id: null, surrogate_name: null, donor_id: 'donor1', donor_name: 'Taylor Donor' }, isLoading: false })
+        mockUseMatchAttempts.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
+        mockUseDonor.mockReturnValue({ data: { id: 'donor1', full_name: 'Taylor Donor', donor_number: 'D10001', email: 'donor@example.com', donor_type: 'egg', status_label: 'Ready' }, isLoading: false })
+        render(<MatchDetailPage />)
+        expect(mockUseMatchWork).toHaveBeenCalledWith('match1', undefined, 1)
+        expect(mockUseSurrogate).toHaveBeenCalledWith('')
+        expect(mockUseSurrogateActivity).not.toHaveBeenCalled()
+        expect(mockUseIntendedParentHistory).not.toHaveBeenCalled()
+        expect(screen.getByRole('heading', { name: 'Donor' })).toBeInTheDocument()
+        expect(screen.getByRole('link', { name: 'Taylor Donor' })).toHaveAttribute('href', '/donors/donor1')
+        expect(screen.queryByRole('button', { name: 'Parse Schedule' })).not.toBeInTheDocument()
+    })
+
+    it('shows a case work failure without presenting an empty history', () => {
+        mockUseMatchWork.mockReturnValue({ data: undefined, error: new Error('Forbidden'), isLoading: false, refetch: vi.fn() })
+        render(<MatchDetailPage />)
+        expect(screen.getByRole('alert')).toHaveTextContent('Unable to load case work')
+        expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    })
+
+    it('records completion outcome through the existing match action area', async () => {
+        mockUseMatch.mockReturnValue({ data: { ...mockMatch, status: 'accepted' }, isLoading: false })
+        mockCompleteMatchMutateAsync.mockResolvedValue({ ...mockMatch, status: 'completed' })
+        render(<MatchDetailPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'Complete Match' }))
+        fireEvent.change(screen.getByLabelText('Outcome'), { target: { value: 'Relationship completed' } })
+        fireEvent.click(screen.getAllByRole('button', { name: 'Complete Match' }).at(-1)!)
+        await waitFor(() => expect(mockCompleteMatchMutateAsync).toHaveBeenCalledWith({ matchId: 'match1', data: { outcome: 'Relationship completed' } }))
+    })
+
+    it('shows work pagination and requests the next page without changing case identity', () => {
+        mockUseMatchWork.mockReturnValue({ data: { notes: [], files: [], tasks: [], activity: [], has_more: true }, isLoading: false })
+        render(<MatchDetailPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+        expect(mockUseMatchWork).toHaveBeenLastCalledWith('match1', undefined, 2)
+    })
+
+    it('keeps note permission denial distinct from an empty notes list', () => {
+        mockUseMatchWork.mockReturnValue({ data: { notes: [], files: [], tasks: [], activity: [], can_view_notes: false }, isLoading: false })
+        render(<MatchDetailPage />)
+        expect(screen.getByText('You do not have permission to view these notes.')).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Add Note' })).not.toBeInTheDocument()
+    })
+
+    it('propagates selected attempt to case work and task creation', async () => {
+        mockUseMatchAttempts.mockReturnValue({ data: [{ id: 'attempt2', match_id: 'match1', sequence: 2, attempt_type: 'embryo_transfer', status: 'planned', started_at: null, ended_at: null, outcome: null }], isLoading: false })
+        render(<MatchDetailPage />)
+        fireEvent.click(screen.getByRole('combobox', { name: 'Treatment attempt' }))
+        fireEvent.mouseMove(screen.getByRole('option', { name: 'Attempt 2 · Embryo Transfer · Planned' }))
+        fireEvent.click(screen.getByRole('option', { name: 'Attempt 2 · Embryo Transfer · Planned' }))
+        expect(mockUseMatchWork).toHaveBeenLastCalledWith('match1', 'attempt2', 1)
+        fireEvent.click(screen.getByRole('button', { name: /^tasks$/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add task/i }))
+        fireEvent.change(screen.getByLabelText(/title/i), { target: { value: 'Attempt follow-up' } })
+        fireEvent.click(screen.getByRole('button', { name: /create task/i }))
+        await waitFor(() => expect(mockCreateTaskMutateAsync).toHaveBeenCalledWith({ title: 'Attempt follow-up', task_type: 'other', match_id: 'match1', work_source: 'match', attempt_id: 'attempt2' }))
+    })
+
+    it('keeps a rejected concurrent acceptance visible without an unhandled promise', async () => {
+        mockAcceptMatchMutateAsync.mockRejectedValue(new Error('Surrogate already has an active match'))
+        render(<MatchDetailPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'Accept Match' }))
+        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Surrogate already has an active match'))
     })
 
     it('displays surrogate name when loaded', () => {

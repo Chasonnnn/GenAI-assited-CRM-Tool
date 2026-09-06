@@ -1,5 +1,8 @@
 "use client"
 
+import { useQuery } from "@tanstack/react-query"
+import { listDonors } from "@/lib/api/donors"
+import type { DonorType } from "@/lib/types/donor"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -32,6 +35,10 @@ export function ProposeMatchFromIPDialog({
     ipName,
     onSuccess,
 }: ProposeMatchFromIPDialogProps) {
+    const [kind, setKind] = useState<"surrogate" | "donor">("surrogate")
+    const [donorType, setDonorType] = useState<DonorType>("egg")
+    const [selectedDonorId, setSelectedDonorId] = useState("")
+    const donorQuery = useQuery({ queryKey: ["donors", "match-candidates", donorType], queryFn: () => listDonors({ donor_type: donorType, per_page: 100 }), enabled: open && kind === "donor" })
     const [selectedSurrogateId, setSelectedSurrogateId] = useState<string>("")
     const [notes, setNotes] = useState("")
     const [error, setError] = useState<string | null>(null)
@@ -50,18 +57,19 @@ export function ProposeMatchFromIPDialog({
         : []
 
     const handleSubmit = async () => {
-        if (!selectedSurrogateId) return
+        if (!(kind === "donor" ? selectedDonorId : selectedSurrogateId)) return
         setError(null)
 
         try {
             await createMatch.mutateAsync({
-                surrogate_id: selectedSurrogateId,
+                ...(kind === "donor" ? { donor_id: selectedDonorId, match_kind: kind } : { surrogate_id: selectedSurrogateId }),
                 intended_parent_id: intendedParentId,
                 ...(notes.trim() ? { notes: notes.trim() } : {}),
             })
             toast.success("Match proposed successfully!")
             onOpenChange(false)
             setSelectedSurrogateId("")
+            setSelectedDonorId("")
             setNotes("")
             onSuccess?.()
         } catch (e: unknown) {
@@ -73,6 +81,7 @@ export function ProposeMatchFromIPDialog({
     const handleClose = () => {
         onOpenChange(false)
         setSelectedSurrogateId("")
+        setSelectedDonorId("")
         setNotes("")
         setError(null)
     }
@@ -96,6 +105,29 @@ export function ProposeMatchFromIPDialog({
                     )}
 
                     <div className="space-y-2">
+                        <Label htmlFor="match-kind">Match Kind</Label>
+                        <Select value={kind} onValueChange={(value) => { if (value === "surrogate" || value === "donor") { setKind(value); setError(null) } }}>
+                            <SelectTrigger id="match-kind"><SelectValue>{(value: string | null) => value === "donor" ? "Donor" : "Surrogate"}</SelectValue></SelectTrigger>
+                            <SelectContent><SelectItem value="surrogate">Surrogate</SelectItem><SelectItem value="donor">Donor</SelectItem></SelectContent>
+                        </Select>
+                    </div>
+                    {kind === "donor" ? <>
+                        <div className="space-y-2">
+                            <Label htmlFor="match-donor-type">Donor Type</Label>
+                            <Select value={donorType} onValueChange={(value) => { if (value === "egg" || value === "sperm") { setDonorType(value); setSelectedDonorId("") } }}>
+                                <SelectTrigger id="match-donor-type"><SelectValue>{(value: string | null) => value === "sperm" ? "Sperm Donor" : "Egg Donor"}</SelectValue></SelectTrigger>
+                                <SelectContent><SelectItem value="egg">Egg Donor</SelectItem><SelectItem value="sperm">Sperm Donor</SelectItem></SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="match-donor">Donor</Label>
+                            {donorQuery.isLoading ? <p role="status" className="text-sm text-muted-foreground">Loading donors…</p> : donorQuery.isError ? <p role="alert" className="text-sm text-destructive">Unable to load donors</p> : !donorQuery.data?.items.length ? <p className="text-sm text-muted-foreground">No donors found</p> : <Select value={selectedDonorId} onValueChange={(value) => setSelectedDonorId(value ?? "")}>
+                                <SelectTrigger id="match-donor"><SelectValue>{(value: string | null) => donorQuery.data?.items.find((donor) => donor.id === value)?.full_name ?? "Select a donor"}</SelectValue></SelectTrigger>
+                                <SelectContent>{donorQuery.data.items.map((donor) => <SelectItem value={donor.id} key={donor.id}>{donor.full_name} #{donor.donor_number}</SelectItem>)}</SelectContent>
+                            </Select>}
+                        </div>
+                    </> : (
+                    <div className="space-y-2">
                         <Label htmlFor="surrogate-select">{`Surrogate (${eligibleStageLabel} Only)`}</Label>
                         {surrogatesLoading ? (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -109,7 +141,7 @@ export function ProposeMatchFromIPDialog({
                         ) : (
                             <Select value={selectedSurrogateId} onValueChange={(v) => setSelectedSurrogateId(v || "")}>
                                 <SelectTrigger className="w-full">
-                                    <SelectValue placeholder="Select a surrogate" />
+                                    <SelectValue placeholder="Select a surrogate">{(value: string | null) => eligibleSurrogates.find((surrogate) => surrogate.id === value)?.full_name ?? "Select a surrogate"}</SelectValue>
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[300px]">
                                     {eligibleSurrogates.map((s) => (
@@ -123,6 +155,8 @@ export function ProposeMatchFromIPDialog({
                             </Select>
                         )}
                     </div>
+
+                    )}
 
                     <div className="space-y-2">
                         <Label htmlFor="notes">Notes (optional)</Label>
@@ -142,8 +176,7 @@ export function ProposeMatchFromIPDialog({
                     </Button>
                     <Button
                         onClick={handleSubmit}
-                        disabled={!selectedSurrogateId || createMatch.isPending}
-                        className="bg-teal-600 hover:bg-teal-700"
+                        disabled={!(kind === "donor" ? selectedDonorId : selectedSurrogateId) || createMatch.isPending}
                     >
                         {createMatch.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
                         Propose Match

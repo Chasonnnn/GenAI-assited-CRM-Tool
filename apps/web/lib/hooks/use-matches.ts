@@ -70,6 +70,7 @@ export function useCreateMatch() {
         mutationFn: (data: MatchCreate) => createMatch(data),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: matchKeys.stats() })
         },
     })
 }
@@ -85,6 +86,7 @@ export function useAcceptMatch() {
             acceptMatch(matchId, data),
         onSuccess: (result) => {
             void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: matchKeys.stats() })
             queryClient.setQueryData(matchKeys.detail(result.id), result)
         },
     })
@@ -101,6 +103,7 @@ export function useRejectMatch() {
             rejectMatch(matchId, data),
         onSuccess: (result) => {
             void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: matchKeys.stats() })
             queryClient.setQueryData(matchKeys.detail(result.id), result)
         },
     })
@@ -117,6 +120,7 @@ export function useCancelMatch() {
             cancelMatch(matchId, data),
         onSuccess: (result) => {
             void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: matchKeys.stats() })
             queryClient.setQueryData(matchKeys.detail(result.id), result)
         },
     })
@@ -209,6 +213,63 @@ export function useDeleteMatchEvent(matchId: string) {
         mutationFn: (eventId: string) => deleteMatchEvent(matchId, eventId),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: matchEventKeys.list(matchId) })
+        },
+    })
+}
+
+import { getMatchWork, createMatchNote, uploadMatchFile, type MatchWorkSource } from '@/lib/api/matches'
+
+export const matchWorkKeys = {
+    all: (matchId: string) => [...matchKeys.detail(matchId), 'work'] as const,
+    list: (matchId: string, attemptId?: string, page = 1) => [...matchWorkKeys.all(matchId), attemptId ?? null, page] as const,
+}
+
+export function useMatchWork(matchId: string, attemptId?: string, page = 1) {
+    return useQuery({
+        queryKey: matchWorkKeys.list(matchId, attemptId, page),
+        queryFn: () => getMatchWork(matchId, attemptId, page),
+        enabled: !!matchId,
+    })
+}
+
+export function useCreateMatchNote(matchId: string) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (data: { content: string; source: MatchWorkSource; attempt_id?: string }) => createMatchNote(matchId, data),
+        onSuccess: () => { void queryClient.invalidateQueries({ queryKey: matchWorkKeys.all(matchId) }) },
+    })
+}
+
+export function useUploadMatchFile(matchId: string) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ file, source, attemptId }: { file: File; source: MatchWorkSource; attemptId?: string }) => uploadMatchFile(matchId, file, source, attemptId),
+        onSuccess: () => { void queryClient.invalidateQueries({ queryKey: matchWorkKeys.all(matchId) }) },
+    })
+}
+
+import { completeMatch, listMatchAttempts, createMatchAttempt, updateMatchAttempt, type MatchCompleteRequest, type MatchAttemptInput } from '@/lib/api/matches'
+export const matchAttemptKeys = { list: (matchId: string) => [...matchKeys.detail(matchId), 'attempts'] as const }
+export function useMatchAttempts(matchId: string) {
+    return useQuery({ queryKey: matchAttemptKeys.list(matchId), queryFn: () => listMatchAttempts(matchId), enabled: !!matchId })
+}
+export function useCompleteMatch() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ matchId, data }: { matchId: string; data: MatchCompleteRequest }) => completeMatch(matchId, data),
+        onSuccess: (result) => {
+            queryClient.setQueryData(matchKeys.detail(result.id), result)
+            void queryClient.invalidateQueries({ queryKey: matchKeys.all })
+        },
+    })
+}
+export function useSaveMatchAttempt(matchId: string) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ attemptId, data }: { attemptId?: string; data: MatchAttemptInput }) => attemptId ? updateMatchAttempt(matchId, attemptId, data) : createMatchAttempt(matchId, data),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: matchAttemptKeys.list(matchId) })
+            void queryClient.invalidateQueries({ queryKey: matchWorkKeys.all(matchId) })
         },
     })
 }

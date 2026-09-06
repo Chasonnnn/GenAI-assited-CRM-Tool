@@ -29,6 +29,7 @@ import {
 import {
     getMatchStatusBadgeClassName,
     getMatchStatusLabel,
+    getMatchKindLabel,
     isMatchStatus,
     MATCH_STATUS_DEFINITIONS,
 } from "@/lib/match-status-definitions"
@@ -55,11 +56,11 @@ function MatchRow({ match }: { match: MatchListItem }) {
             </TableCell>
             <TableCell>
                 <div className="space-y-1">
-                    <Link href={`/surrogates/${match.surrogate_id}`} className="font-medium text-teal-600 hover:underline">
-                        {match.surrogate_name || "Unknown Surrogate"}
+                    <Link href={match.match_kind === "donor" ? `/donors/${match.donor_id}` : `/surrogates/${match.surrogate_id}`} className="font-medium text-teal-600 hover:underline">
+                        {(match.match_kind === "donor" ? match.donor_name : match.surrogate_name) || getMatchKindLabel(match.match_kind)}
                     </Link>
-                    {match.surrogate_number && (
-                        <p className="text-xs text-muted-foreground">{match.surrogate_number}</p>
+                    {(match.match_kind === "donor" ? match.donor_number : match.surrogate_number) && (
+                        <p className="text-xs text-muted-foreground">{match.match_kind === "donor" ? match.donor_number : match.surrogate_number}</p>
                     )}
                 </div>
             </TableCell>
@@ -190,7 +191,7 @@ function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) 
                         ) : (
                             <Select value={selectedSurrogateId} onValueChange={(v) => setSelectedSurrogateId(v || "")}>
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Select a surrogate" />
+                                    <SelectValue placeholder="Select a surrogate">{(value: string | null) => eligibleSurrogates.find((surrogate) => surrogate.id === value)?.full_name ?? "Select a surrogate"}</SelectValue>
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[200px]">
                                     {eligibleSurrogates.map((s) => (
@@ -216,7 +217,7 @@ function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) 
                         ) : (
                             <Select value={selectedIpId} onValueChange={(v) => setSelectedIpId(v || "")}>
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Select intended parents" />
+                                    <SelectValue placeholder="Select intended parents">{(value: string | null) => ipsData?.items.find((ip) => ip.id === value)?.full_name ?? "Select intended parents"}</SelectValue>
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[200px]">
                                     {ipsData?.items?.map((ip) => (
@@ -265,12 +266,13 @@ function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) 
 // Match Table
 // =============================================================================
 
-function MatchTable({ status, search }: { status?: MatchStatus; search?: string }) {
+function MatchTable({ status, search, kind }: { status?: MatchStatus; search?: string; kind: "all" | "surrogate" | "donor" }) {
     const { data, isLoading, isError } = useMatches({
         per_page: 50,
         sort_by: "match_number",
         sort_order: "desc",
         ...(status ? { status } : {}),
+        ...(kind !== "all" ? { match_kind: kind } : {}),
         ...(search ? { q: search } : {}),
     })
 
@@ -304,7 +306,7 @@ function MatchTable({ status, search }: { status?: MatchStatus; search?: string 
             <TableHeader>
                 <TableRow>
                     <TableHead>Match #</TableHead>
-                    <TableHead>Surrogate</TableHead>
+                    <TableHead>Participant</TableHead>
                     <TableHead>Intended Parent</TableHead>
                     <TableHead>Stage</TableHead>
                     <TableHead>Proposed</TableHead>
@@ -321,6 +323,7 @@ function MatchTable({ status, search }: { status?: MatchStatus; search?: string 
 }
 
 export default function MatchesPage() {
+    const [kind, setKind] = useState<"all" | "surrogate" | "donor">("all")
     const [activeTab, setActiveTab] = useState<string>("proposed")
     const [search, setSearch] = useState("")
     const debouncedSearch = useDebouncedValue(search, 300)
@@ -403,6 +406,10 @@ export default function MatchesPage() {
                             <CardTitle>Match Pipeline</CardTitle>
                             <CardDescription>View and manage match proposals</CardDescription>
                         </div>
+                        <Select value={kind} onValueChange={(value) => setKind(value === "donor" || value === "surrogate" ? value : "all")}>
+                            <SelectTrigger aria-label="Match kind" className="w-[160px]"><SelectValue>{(value: string | null) => !value || value === "all" ? "All Kinds" : getMatchKindLabel(value)}</SelectValue></SelectTrigger>
+                            <SelectContent><SelectItem value="all">All Kinds</SelectItem><SelectItem value="surrogate">Surrogate</SelectItem><SelectItem value="donor">Donor</SelectItem></SelectContent>
+                        </Select>
                         <div className="relative w-full max-w-sm">
                             <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
@@ -427,11 +434,11 @@ export default function MatchesPage() {
 
                         {MATCH_STATUS_DEFINITIONS.map((status) => (
                             <TabsContent key={status.value} value={status.value}>
-                                <MatchTable status={status.value} search={debouncedSearch} />
+                                <MatchTable kind={kind} status={status.value} search={debouncedSearch} />
                             </TabsContent>
                         ))}
                         <TabsContent value="all">
-                            <MatchTable search={debouncedSearch} />
+                            <MatchTable kind={kind} search={debouncedSearch} />
                         </TabsContent>
                     </Tabs>
                 </CardContent>

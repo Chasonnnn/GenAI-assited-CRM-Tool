@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type ComponentProps } from "react"
+import { useState, type ComponentProps, type ReactNode } from "react"
 import { useParams } from "next/navigation"
 import Link from "@/components/app-link"
 import { toast } from "@/components/ui/toast"
@@ -22,19 +22,20 @@ import {
     UsersIcon,
     CalendarPlusIcon,
 } from "lucide-react"
-import { useMatch, matchKeys, useAcceptMatch, useRejectMatch, useCancelMatch } from "@/lib/hooks/use-matches"
-import type { MatchRead } from "@/lib/api/matches"
+import { useMatch, matchKeys, useAcceptMatch, useRejectMatch, useCancelMatch, useMatchWork, useCreateMatchNote, useUploadMatchFile, matchWorkKeys, useCompleteMatch } from "@/lib/hooks/use-matches"
+import type { MatchRead, MatchWorkSource } from "@/lib/api/matches"
+import { CompleteMatchDialog } from "@/components/matches/CompleteMatchDialog"
+import { MatchAttemptControl } from "@/components/matches/MatchAttemptControl"
 import { MatchTasksCalendar } from "@/components/matches/MatchTasksCalendar"
 import { RejectMatchDialog } from "@/components/matches/RejectMatchDialog"
 import { CancelMatchDialog } from "@/components/matches/CancelMatchDialog"
 import { AddNoteDialog } from "@/components/matches/AddNoteDialog"
 import { UploadFileDialog } from "@/components/matches/UploadFileDialog"
 import { AddTaskDialog, type TaskFormData } from "@/components/matches/AddTaskDialog"
-import { useSurrogate, useSurrogateActivity, surrogateKeys } from "@/lib/hooks/use-surrogates"
-import { useNotes, useCreateNote } from "@/lib/hooks/use-notes"
-import { useIntendedParent, useIntendedParentNotes, useIntendedParentHistory, intendedParentKeys, useCreateIntendedParentNote } from "@/lib/hooks/use-intended-parents"
-import { useTasks, useCreateTask, taskKeys } from "@/lib/hooks/use-tasks"
-import { useAttachments, useIPAttachments, useUploadAttachment, useUploadIPAttachment, useDeleteAttachment, useDownloadAttachment } from "@/lib/hooks/use-attachments"
+import { useSurrogate, surrogateKeys } from "@/lib/hooks/use-surrogates"
+import { useIntendedParent, intendedParentKeys } from "@/lib/hooks/use-intended-parents"
+import { useCreateTask, taskKeys } from "@/lib/hooks/use-tasks"
+import { useDeleteAttachment, useDownloadAttachment } from "@/lib/hooks/use-attachments"
 import { useAuth } from "@/lib/auth-context"
 import { useQueryClient } from "@tanstack/react-query"
 import { ScheduleParserDialog } from "@/components/ai/ScheduleParserDialog"
@@ -55,7 +56,9 @@ import {
 } from "@/lib/match-status-definitions"
 import { MatchDetailOverviewTabs } from "./components/MatchDetailOverviewTabs"
 import { useMatchDetailTabState, type SourceFilter } from "./hooks/useMatchDetailTabState"
-import { useMatchDetailTabData } from "./hooks/useMatchDetailTabData"
+import { selectMatchDetailTabData } from "./hooks/useMatchDetailTabData"
+import { useDonor, donorKeys } from "@/lib/hooks/use-donors"
+import type { Donor } from "@/lib/types/donor"
 import type { SurrogateRead } from "@/lib/types/surrogate"
 import type { IntendedParent } from "@/lib/types/intended-parent"
 
@@ -94,6 +97,7 @@ function MatchDetailHeader({
     onAcceptMatch,
     onRejectClick,
     onCancelClick,
+    onCompleteClick,
 }: {
     match: MatchRead
     canChangeStatus: boolean
@@ -103,10 +107,11 @@ function MatchDetailHeader({
     onAcceptMatch: () => void
     onRejectClick: () => void
     onCancelClick: () => void
+    onCompleteClick: () => void
 }) {
     return (
         <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex h-14 items-center gap-4 px-6">
+            <div className="flex min-h-14 flex-wrap items-center gap-3 px-6 py-2">
                 <Button
                     render={<Link href="/intended-parents/matches" />}
                     variant="ghost"
@@ -116,9 +121,9 @@ function MatchDetailHeader({
                     <ArrowLeftIcon className="mr-1 size-3" />
                     Matches
                 </Button>
-                <div className="flex-1 flex items-center gap-2">
+                <div className="min-w-0 flex-1 flex flex-wrap items-center gap-2">
                     <h1 className="text-xl font-semibold">
-                        {match.surrogate_name || "Surrogate"} ↔ {match.ip_name || "Intended Parents"}
+                        {(match.match_kind === "donor" ? match.donor_name || "Donor" : match.surrogate_name || "Surrogate")} ↔ {match.ip_name || "Intended Parents"}
                     </h1>
                     <span className="text-sm text-muted-foreground">
                         {match.match_number ? `Match #${match.match_number}` : "—"}
@@ -155,6 +160,8 @@ function MatchDetailHeader({
                     </>
                 )}
                 {canChangeStatus && match.status === "accepted" && (
+                    <>
+                    <Button size="sm" className="h-7 text-xs" onClick={onCompleteClick}>Complete Match</Button>
                     <Button
                         variant="destructive"
                         size="sm"
@@ -164,6 +171,7 @@ function MatchDetailHeader({
                     >
                         {cancelPending ? "Requesting..." : "Cancel Match"}
                     </Button>
+                    </>
                 )}
             </div>
         </div>
@@ -172,6 +180,13 @@ function MatchDetailHeader({
 
 function MatchDetailMainTabs({
     userAiEnabled,
+    attemptControls,
+    matchId,
+    attemptId,
+    participantKind,
+    donorData,
+    donorLoading,
+    donorError,
     surrogateId,
     intendedParentId,
     surrogateData,
@@ -183,7 +198,14 @@ function MatchDetailMainTabs({
     onAddTask,
 }: {
     userAiEnabled: boolean
-    surrogateId: string
+    attemptControls: ReactNode
+    matchId: string
+    attemptId?: string
+    participantKind: "surrogate" | "donor"
+    donorData: Donor | undefined
+    donorLoading: boolean
+    donorError: boolean
+    surrogateId: string | null
     intendedParentId: string
     surrogateData: SurrogateRead | undefined
     surrogateLoading: boolean
@@ -191,17 +213,18 @@ function MatchDetailMainTabs({
     intendedParentLoading: boolean
     overviewTabsProps: MatchDetailOverviewTabsProps
     onShowScheduleParser: () => void
-    onAddTask: () => void
+    onAddTask?: (() => void) | undefined
 }) {
     return (
         <div className="flex-1 p-4">
             <Tabs defaultValue="overview" className="w-full">
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                     <TabsList>
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="calendar">Calendar</TabsTrigger>
                     </TabsList>
-                    {userAiEnabled && (
+                    {attemptControls}
+                    {userAiEnabled && participantKind === "surrogate" && (
                         <Button
                             variant="outline"
                             size="sm"
@@ -215,11 +238,11 @@ function MatchDetailMainTabs({
                 </div>
 
                 <TabsContent value="overview" className="h-[calc(100vh-145px)]">
-                    <div className="grid h-full gap-4 grid-cols-[minmax(0,35fr)_minmax(0,35fr)_minmax(0,30fr)]">
-                        <SurrogateProfileColumn
+                    <div className="grid h-full gap-4 grid-cols-1 lg:grid-cols-[minmax(0,35fr)_minmax(0,35fr)_minmax(0,30fr)]">
+                        {participantKind === "donor" ? <DonorProfileColumn donor={donorData} isLoading={donorLoading} isError={donorError} /> : <SurrogateProfileColumn
                             surrogateData={surrogateData}
                             isLoading={surrogateLoading}
-                        />
+                        />}
                         <IntendedParentProfileColumn
                             intendedParentData={intendedParentData}
                             isLoading={intendedParentLoading}
@@ -230,14 +253,38 @@ function MatchDetailMainTabs({
 
                 <TabsContent value="calendar" className="h-[calc(100vh-145px)]">
                     <MatchTasksCalendar
-                        surrogateId={surrogateId}
+                        matchId={matchId}
+                        participantKind={participantKind}
+                        {...(attemptId ? { attemptId } : {})}
+                        surrogateId={surrogateId ?? ""}
                         ipId={intendedParentId}
-                        onAddTask={onAddTask}
+                        {...(onAddTask ? { onAddTask } : {})}
                     />
                 </TabsContent>
             </Tabs>
         </div>
     )
+}
+
+function DonorProfileColumn({ donor, isLoading, isError }: { donor: Donor | undefined; isLoading: boolean; isError: boolean }) {
+    return <div className="min-w-0 border rounded-lg p-4 overflow-y-auto">
+        <div className="flex items-center gap-2 mb-3"><UserIcon className="size-4 text-purple-500" /><h2 className="text-sm font-semibold text-purple-500">Donor</h2></div>
+        {isLoading ? <div role="status" className="flex justify-center h-32 items-center"><Loader2Icon className="size-5 animate-spin" /></div> : isError ? <p role="alert" className="text-sm text-muted-foreground">Unable to load donor profile</p> : donor ? <div className="space-y-3">
+            <div className="flex items-start gap-3">
+                <Avatar className="size-10"><AvatarFallback className="bg-purple-500/10 text-purple-500 text-sm">{donor.full_name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
+                <div className="min-w-0"><h3 className="text-base font-semibold truncate"><Link href={`/donors/${donor.id}`} className="hover:underline">{donor.full_name}</Link></h3><div className="flex flex-wrap gap-1 mt-0.5"><Badge variant="outline" className="text-xs px-1.5 py-0">#{donor.donor_number}</Badge><Badge variant="secondary" className="text-xs px-1.5 py-0">{donor.status_label}</Badge></div></div>
+            </div>
+            <Separator />
+            <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2"><MailIcon className="size-3.5 shrink-0 text-muted-foreground" /><span className="[overflow-wrap:anywhere]">{donor.email}</span></div>
+                {donor.phone && <div className="flex items-center gap-2"><PhoneIcon className="size-3.5 text-muted-foreground" /><span>{donor.phone}</span></div>}
+                {donor.state && <div className="flex items-center gap-2"><MapPinIcon className="size-3.5 text-muted-foreground" /><span>{donor.state}</span></div>}
+                <p>{donor.donor_type === "egg" ? "Egg Donor" : "Sperm Donor"}</p>
+                {donor.education && <p>{donor.education}</p>}
+            </div>
+            <Button render={<Link href={`/donors/${donor.id}`} />} variant="outline" size="sm" className="w-full text-xs h-7">View Full Profile</Button>
+        </div> : <p className="text-sm text-muted-foreground">No donor data</p>}
+    </div>
 }
 
 function SurrogateProfileColumn({
@@ -436,6 +483,7 @@ function MatchDetailDialogs({
     matchId,
     matchName,
     surrogateName,
+    participantKind,
     intendedParentName,
     rejectPending,
     cancelPending,
@@ -463,6 +511,7 @@ function MatchDetailDialogs({
     matchId: string
     matchName: string
     surrogateName: string
+    participantKind: "surrogate" | "donor"
     intendedParentName: string
     rejectPending: boolean
     cancelPending: boolean
@@ -477,9 +526,9 @@ function MatchDetailDialogs({
     onScheduleParserOpenChange: (open: boolean) => void
     onReject: (reason: string) => Promise<void>
     onCancel: (reason?: string) => Promise<void>
-    onAddNote: (target: "surrogate" | "ip", content: string) => Promise<void>
-    onUploadFile: (target: "surrogate" | "ip", file: File) => Promise<void>
-    onAddTask: (target: "match" | "surrogate" | "ip", data: TaskFormData) => Promise<void>
+    onAddNote: (target: MatchWorkSource, content: string) => Promise<void>
+    onUploadFile: (target: MatchWorkSource, file: File) => Promise<void>
+    onAddTask: (target: MatchWorkSource, data: TaskFormData) => Promise<void>
 }) {
     return (
         <>
@@ -503,6 +552,7 @@ function MatchDetailDialogs({
                 onSubmit={onAddNote}
                 isPending={addNotePending}
                 surrogateName={surrogateName}
+                participantKind={participantKind}
                 ipName={intendedParentName}
             />
 
@@ -512,10 +562,12 @@ function MatchDetailDialogs({
                 onUpload={onUploadFile}
                 isPending={uploadFilePending}
                 surrogateName={surrogateName}
+                participantKind={participantKind}
                 ipName={intendedParentName}
             />
 
             <AddTaskDialog
+                participantKind={participantKind}
                 open={addTaskDialogOpen}
                 onOpenChange={onAddTaskOpenChange}
                 onSubmit={onAddTask}
@@ -537,58 +589,30 @@ function MatchDetailDialogs({
     )
 }
 
-function useMatchDetailRelatedData(match: MatchRead | undefined, sourceFilter: SourceFilter) {
+function useMatchDetailRelatedData(match: MatchRead | undefined, sourceFilter: SourceFilter, attemptId?: string, workPage = 1) {
     const { data: surrogateData, isLoading: surrogateLoading } = useSurrogate(match?.surrogate_id || "")
     const { data: ipData, isLoading: ipLoading } = useIntendedParent(match?.intended_parent_id || "")
-
-    const { data: surrogateNotes = [] } = useNotes(match?.surrogate_id || "")
-    const { data: ipNotes = [] } = useIntendedParentNotes(match?.intended_parent_id || "")
-    const { data: surrogateFiles = [] } = useAttachments(match?.surrogate_id || null)
-    const { data: ipFiles = [] } = useIPAttachments(match?.intended_parent_id || null)
-    const { data: surrogateTasks } = useTasks(
-        match?.surrogate_id ? { surrogate_id: match.surrogate_id, exclude_approvals: true } : { exclude_approvals: true },
-        { enabled: !!match?.surrogate_id }
-    )
-    const { data: ipTasks } = useTasks(
-        match?.intended_parent_id
-            ? { intended_parent_id: match.intended_parent_id, exclude_approvals: true }
-            : { exclude_approvals: true },
-        { enabled: !!match?.intended_parent_id }
-    )
-    const { data: surrogateActivity } = useSurrogateActivity(match?.surrogate_id || "", 1, 50)
-    const { data: ipHistory } = useIntendedParentHistory(match?.intended_parent_id || null)
-
-    const { filteredNotes, filteredFiles, filteredTasks, filteredActivity } = useMatchDetailTabData({
-        sourceFilter,
-        surrogateNotes,
-        intendedParentNotes: ipNotes,
-        surrogateFiles,
-        intendedParentFiles: ipFiles,
-        surrogateTasks,
-        intendedParentTasks: ipTasks,
-        surrogateActivity,
-        intendedParentHistory: ipHistory,
-        match,
-    })
-
+    const donorQuery = useDonor(match?.donor_id ?? null)
+    const work = useMatchWork(match?.id ?? "", attemptId, workPage)
     return {
-        surrogateData,
-        surrogateLoading,
-        ipData,
-        ipLoading,
-        filteredNotes,
-        filteredFiles,
-        filteredTasks,
-        filteredActivity,
+        surrogateData, surrogateLoading, ipData, ipLoading,
+        donorData: donorQuery.data, donorLoading: donorQuery.isLoading, donorError: donorQuery.isError,
+        hasMoreWork: work.data?.has_more ?? false,
+        canViewNotes: work.data?.can_view_notes ?? true, canViewTasks: work.data?.can_view_tasks ?? true,
+        workLoading: work.isLoading, workError: work.error, refetchWork: work.refetch,
+        ...selectMatchDetailTabData(work.data, sourceFilter),
     }
 }
 
-export default function MatchDetailPage() {
-    const params = useParams<{ id: string }>()
-    const matchId = params.id
+function MatchDetailPageContent({ matchId }: { matchId: string }) {
 
     const { activeTab, sourceFilter, handleTabChange, handleSourceFilterChange } =
         useMatchDetailTabState(matchId)
+    const [actionError, setActionError] = useState<string | null>(null)
+    const [workPage, setWorkPage] = useState(1)
+    const [selectedAttemptId, setSelectedAttemptId] = useState("")
+    const [completeDialogOpen, setCompleteDialogOpen] = useState(false)
+    const completeMutation = useCompleteMatch()
     const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
     const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
     const [addNoteDialogOpen, setAddNoteDialogOpen] = useState(false)
@@ -608,36 +632,37 @@ export default function MatchDetailPage() {
     const acceptMatchMutation = useAcceptMatch()
     const rejectMatchMutation = useRejectMatch()
     const cancelMatchMutation = useCancelMatch()
-    const createNoteMutation = useCreateNote()
-    const createIPNoteMutation = useCreateIntendedParentNote()
-    const uploadAttachmentMutation = useUploadAttachment()
-    const uploadIPAttachmentMutation = useUploadIPAttachment()
+    const createNoteMutation = useCreateMatchNote(matchId)
+    const uploadAttachmentMutation = useUploadMatchFile(matchId)
     const deleteAttachmentMutation = useDeleteAttachment()
     const downloadAttachmentMutation = useDownloadAttachment()
     const createTaskMutation = useCreateTask()
 
     // Set AI context for this page.
     // NOTE: The chat API currently supports surrogate/task/global. For match pages, we attach AI to the surrogate.
-    const matchName = match ? `${match.surrogate_name} & ${match.ip_name}` : ""
+    const matchName = match ? `${match.match_kind === "donor" ? match.donor_name : match.surrogate_name} & ${match.ip_name}` : ""
     useSetAIContext(match?.surrogate_id ? { entityType: "surrogate", entityId: match.surrogate_id, entityName: matchName } : null)
 
     const {
         surrogateData,
         surrogateLoading,
+        donorData, donorLoading, donorError, workLoading, workError, refetchWork, hasMoreWork, canViewNotes, canViewTasks,
         ipData,
         ipLoading,
         filteredNotes,
         filteredFiles,
         filteredTasks,
         filteredActivity,
-    } = useMatchDetailRelatedData(match, sourceFilter)
+    } = useMatchDetailRelatedData(match, sourceFilter, selectedAttemptId || undefined, workPage)
 
     // Check if user can change surrogate status (case_manager+)
     const canChangeStatus = !!user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
+    const canCreateWork = match?.status === "proposed" || match?.status === "accepted"
 
     const invalidateMatchSourceQueries = (
         entityIds?: {
             surrogate_id?: string | null
+            donor_id?: string | null
             intended_parent_id?: string | null
         } | null,
     ) => {
@@ -655,6 +680,8 @@ export default function MatchDetailPage() {
             })
         }
 
+        const donorId = entityIds?.donor_id ?? match?.donor_id
+        if (donorId) { void queryClient.invalidateQueries({ queryKey: donorKeys.detail(donorId) }) }
         if (intendedParentId) {
             void queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(intendedParentId) })
             void queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
@@ -664,9 +691,12 @@ export default function MatchDetailPage() {
 
     // Handle Accept match
     const handleAcceptMatch = async () => {
-        const updatedMatch = await acceptMatchMutation.mutateAsync({ matchId })
-        invalidateMatchSourceQueries(updatedMatch)
-        void queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
+        setActionError(null)
+        try {
+            const updatedMatch = await acceptMatchMutation.mutateAsync({ matchId })
+            invalidateMatchSourceQueries(updatedMatch)
+            void queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
+        } catch (error) { setActionError(error instanceof Error ? error.message : "Unable to accept match") }
     }
 
     // Handle Reject match
@@ -690,85 +720,33 @@ export default function MatchDetailPage() {
         void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
     }
 
-    // Handle Add Note
-    const handleAddNote = async (target: "surrogate" | "ip", content: string) => {
+    const handleAddNote = async (source: MatchWorkSource, content: string) => {
         try {
-            if (target === "surrogate" && match?.surrogate_id) {
-                await createNoteMutation.mutateAsync({ surrogateId: match.surrogate_id, body: content })
-            } else if (target === "ip" && match?.intended_parent_id) {
-                await createIPNoteMutation.mutateAsync({ id: match.intended_parent_id, data: { content } })
-            }
+            await createNoteMutation.mutateAsync({ source, content, ...(selectedAttemptId ? { attempt_id: selectedAttemptId } : {}) })
             toast.success("Note added successfully")
-        } catch {
-            toast.error("Failed to add note")
-        }
+        } catch (error) { toast.error("Failed to add note"); throw error }
     }
-
-    // Handle File Upload
-    const handleUploadFile = async (target: "surrogate" | "ip", file: File) => {
+    const handleUploadFile = async (source: MatchWorkSource, file: File) => {
         try {
-            if (target === "surrogate" && match?.surrogate_id) {
-                await uploadAttachmentMutation.mutateAsync({ surrogateId: match.surrogate_id, file })
-            } else if (target === "ip" && match?.intended_parent_id) {
-                await uploadIPAttachmentMutation.mutateAsync({ ipId: match.intended_parent_id, file })
-            }
+            await uploadAttachmentMutation.mutateAsync({ source, file, ...(selectedAttemptId ? { attemptId: selectedAttemptId } : {}) })
             toast.success("File uploaded successfully")
-        } catch {
-            toast.error("Failed to upload file")
-        }
+        } catch (error) { toast.error("Failed to upload file"); throw error }
     }
-
-    // Handle Delete File
-    const handleDeleteFile = async (attachmentId: string, source: "surrogate" | "ip") => {
+    const handleDeleteFile = async (attachmentId: string, _source: MatchWorkSource) => {
         if (!confirm("Are you sure you want to delete this file?")) return
         try {
-            const surrogateId = source === "surrogate" ? match?.surrogate_id : undefined
-            await deleteAttachmentMutation.mutateAsync({ attachmentId, surrogateId: surrogateId || "" })
-            // Invalidate the appropriate query based on source
-            if (source === "surrogate" && match?.surrogate_id) {
-                void queryClient.invalidateQueries({ queryKey: ["attachments", match.surrogate_id] })
-            } else if (source === "ip" && match?.intended_parent_id) {
-                void queryClient.invalidateQueries({ queryKey: ["ip-attachments", match.intended_parent_id] })
-            }
+            await deleteAttachmentMutation.mutateAsync({ attachmentId, surrogateId: match?.surrogate_id || "" })
+            void queryClient.invalidateQueries({ queryKey: matchWorkKeys.all(matchId) })
             toast.success("File deleted successfully")
-        } catch {
-            toast.error("Failed to delete file")
-        }
+        } catch { toast.error("Failed to delete file") }
     }
-
-    // Handle Add Task
-    const handleAddTask = async (target: "match" | "surrogate" | "ip", data: TaskFormData) => {
+    const handleAddTask = async (target: MatchWorkSource, data: TaskFormData) => {
         try {
-            if (target === "match") {
-                await createTaskMutation.mutateAsync({
-                    title: data.title,
-                    task_type: data.task_type,
-                    match_id: matchId,
-                    ...(data.description ? { description: data.description } : {}),
-                    ...(data.due_date ? { due_date: data.due_date } : {}),
-                })
-            } else if (target === "surrogate" && match?.surrogate_id) {
-                await createTaskMutation.mutateAsync({
-                    title: data.title,
-                    task_type: data.task_type,
-                    surrogate_id: match.surrogate_id,
-                    ...(data.description ? { description: data.description } : {}),
-                    ...(data.due_date ? { due_date: data.due_date } : {}),
-                })
-            } else if (target === "ip" && match?.intended_parent_id) {
-                await createTaskMutation.mutateAsync({
-                    title: data.title,
-                    task_type: data.task_type,
-                    intended_parent_id: match.intended_parent_id,
-                    ...(data.description ? { description: data.description } : {}),
-                    ...(data.due_date ? { due_date: data.due_date } : {}),
-                })
-            }
+            await createTaskMutation.mutateAsync({ ...data, match_id: matchId, work_source: target, ...(selectedAttemptId ? { attempt_id: selectedAttemptId } : {}) })
             void queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: matchWorkKeys.all(matchId) })
             toast.success("Task created successfully")
-        } catch {
-            toast.error("Failed to create task")
-        }
+        } catch (error) { toast.error("Failed to create task"); throw error }
     }
 
     if (matchLoading) {
@@ -805,10 +783,20 @@ export default function MatchDetailPage() {
                     onAcceptMatch={handleAcceptMatch}
                     onRejectClick={() => setRejectDialogOpen(true)}
                     onCancelClick={() => setCancelDialogOpen(true)}
+                    onCompleteClick={() => setCompleteDialogOpen(true)}
                 />
 
+                {actionError && <p role="alert" className="px-6 py-2 text-sm text-destructive">{actionError}</p>}
+                {match.outcome && <div className="px-6 py-2 text-sm border-b"><span className="font-medium">Outcome: </span>{match.outcome}{match.closed_at && <span className="text-muted-foreground"> · {formatMatchDate(match.closed_at)}</span>}</div>}
                 <MatchDetailMainTabs
-                    userAiEnabled={!!user?.ai_enabled}
+                    attemptControls={<MatchAttemptControl match={match} selectedId={selectedAttemptId} onSelect={(id) => { setSelectedAttemptId(id); setWorkPage(1) }} canEdit={canChangeStatus} />}
+                    {...(selectedAttemptId ? { attemptId: selectedAttemptId } : {})}
+                    matchId={matchId}
+                    participantKind={match.match_kind ?? "surrogate"}
+                    donorData={donorData}
+                    donorLoading={donorLoading}
+                    donorError={donorError}
+                    userAiEnabled={!!user?.ai_enabled && canCreateWork}
                     surrogateId={match.surrogate_id}
                     intendedParentId={match.intended_parent_id}
                     surrogateData={surrogateData}
@@ -816,6 +804,13 @@ export default function MatchDetailPage() {
                     intendedParentData={ipData}
                     intendedParentLoading={ipLoading}
                     overviewTabsProps={{
+                        participantKind: match.match_kind ?? "surrogate",
+                        hasMore: hasMoreWork,
+                        page: workPage, onPageChange: setWorkPage,
+                        canViewNotes, canViewTasks,
+                        isLoading: workLoading,
+                        error: workError ? "Unable to load case work" : null,
+                        onRetry: () => { void refetchWork() },
                         activeTab,
                         sourceFilter,
                         filteredNotes,
@@ -824,9 +819,9 @@ export default function MatchDetailPage() {
                         filteredActivity,
                         onTabChange: handleTabChange,
                         onSourceFilterChange: handleSourceFilterChange,
-                        onAddTask: () => setAddTaskDialogOpen(true),
-                        onAddNote: () => setAddNoteDialogOpen(true),
-                        onUploadFile: () => setUploadFileDialogOpen(true),
+                        onAddTask: canCreateWork ? () => setAddTaskDialogOpen(true) : undefined,
+                        onAddNote: canCreateWork ? () => setAddNoteDialogOpen(true) : undefined,
+                        onUploadFile: canCreateWork ? () => setUploadFileDialogOpen(true) : undefined,
                         onDownloadFile: (attachmentId) => downloadAttachmentMutation.mutate(attachmentId),
                         onDeleteFile: (attachmentId, source) => {
                             void handleDeleteFile(attachmentId, source)
@@ -837,25 +832,27 @@ export default function MatchDetailPage() {
                         formatDateTime: formatMatchDateTime,
                     }}
                     onShowScheduleParser={() => setShowScheduleParser(true)}
-                    onAddTask={() => setAddTaskDialogOpen(true)}
+                    onAddTask={canCreateWork ? () => setAddTaskDialogOpen(true) : undefined}
                 />
             </div>
 
+            {completeDialogOpen && <CompleteMatchDialog onClose={() => setCompleteDialogOpen(false)} isPending={completeMutation.isPending} onComplete={async (data) => { const result = await completeMutation.mutateAsync({ matchId, data }); invalidateMatchSourceQueries(result) }} />}
             <MatchDetailDialogs
                 rejectDialogOpen={rejectDialogOpen}
                 cancelDialogOpen={cancelDialogOpen}
-                addNoteDialogOpen={addNoteDialogOpen}
-                uploadFileDialogOpen={uploadFileDialogOpen}
-                addTaskDialogOpen={addTaskDialogOpen}
-                showScheduleParser={showScheduleParser}
+                addNoteDialogOpen={addNoteDialogOpen && canCreateWork}
+                uploadFileDialogOpen={uploadFileDialogOpen && canCreateWork}
+                addTaskDialogOpen={addTaskDialogOpen && canCreateWork}
+                showScheduleParser={showScheduleParser && canCreateWork}
                 matchId={matchId}
                 matchName={matchName}
-                surrogateName={surrogateData?.full_name || "Surrogate"}
+                surrogateName={match.match_kind === "donor" ? donorData?.full_name || "Donor" : surrogateData?.full_name || "Surrogate"}
+                participantKind={match.match_kind ?? "surrogate"}
                 intendedParentName={ipData?.full_name || "Intended Parent"}
                 rejectPending={rejectMatchMutation.isPending}
                 cancelPending={cancelMatchMutation.isPending}
-                addNotePending={createNoteMutation.isPending || createIPNoteMutation.isPending}
-                uploadFilePending={uploadAttachmentMutation.isPending || uploadIPAttachmentMutation.isPending}
+                addNotePending={createNoteMutation.isPending}
+                uploadFilePending={uploadAttachmentMutation.isPending}
                 addTaskPending={createTaskMutation.isPending}
                 onRejectOpenChange={setRejectDialogOpen}
                 onCancelOpenChange={setCancelDialogOpen}
@@ -871,4 +868,9 @@ export default function MatchDetailPage() {
             />
         </>
     )
+}
+
+export default function MatchDetailPage() {
+    const params = useParams<{ id: string }>()
+    return <MatchDetailPageContent key={params.id} matchId={params.id} />
 }
