@@ -527,6 +527,8 @@ describe("DonorDetailPage", () => {
         fireEvent.click(screen.getByRole("button", { name: "Actions for Maya Thompson" }))
         fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
         expect(screen.queryByLabelText("Donor type")).not.toBeInTheDocument()
+        expect(screen.getByLabelText("Email")).toHaveValue("maya@example.com")
+        expect(screen.getByLabelText("Phone")).toHaveValue("(415) 555-0142")
         fireEvent.change(screen.getByLabelText("Education"), {
             target: { value: "M.S. Biology" },
         })
@@ -538,6 +540,7 @@ describe("DonorDetailPage", () => {
                 data: expect.objectContaining({
                     full_name: "Maya Thompson",
                     email: "maya@example.com",
+                    phone: "(415) 555-0142",
                     education: "M.S. Biology",
                 }),
             })
