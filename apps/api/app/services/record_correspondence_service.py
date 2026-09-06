@@ -7,8 +7,18 @@ from fastapi import HTTPException
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, load_only
 
-from app.db.enums import AuditEventType
-from app.db.models import Appointment, AppointmentEmailLog, EmailLog, RecordTicketLink, Ticket
+from app.db.enums import AuditEventType, JobType
+from app.db.models import (
+    Appointment,
+    AppointmentEmailLog,
+    Campaign,
+    CampaignRecipient,
+    CampaignRun,
+    EmailLog,
+    Job,
+    RecordTicketLink,
+    Ticket,
+)
 from app.schemas.auth import UserSession
 from app.services import audit_service
 from app.services.record_access_service import get_record_with_access
@@ -17,7 +27,7 @@ from app.services.record_access_service import get_record_with_access
 def list_correspondence(
     db: Session, session: UserSession, kind: str, record_id: UUID, *, limit: int, offset: int
 ) -> dict:
-    get_record_with_access(db, session, kind, record_id)
+    record = get_record_with_access(db, session, kind, record_id)
     column = getattr(RecordTicketLink, f"{kind}_id")
     ticket_query = (
         db.query(Ticket)
@@ -55,12 +65,50 @@ def list_correspondence(
         AppointmentEmailLog.organization_id == session.org_id,
         AppointmentEmailLog.appointment_id.in_(appointment_ids),
     )
-    email_query = db.query(EmailLog).filter(
-        EmailLog.organization_id == session.org_id,
-        or_(
-            (EmailLog.source_type == kind) & (EmailLog.source_id == record_id),
-            EmailLog.id.in_(appointment_log_ids),
-        ),
+    email_links = [
+        (EmailLog.source_type == kind) & (EmailLog.source_id == record_id),
+        EmailLog.id.in_(appointment_log_ids),
+    ]
+    if kind == "donor":
+        recipients = (
+            db.query(CampaignRecipient)
+            .join(CampaignRun, CampaignRun.id == CampaignRecipient.run_id)
+            .join(Campaign, Campaign.id == CampaignRun.campaign_id)
+            .filter(
+                CampaignRun.organization_id == session.org_id,
+                Campaign.organization_id == session.org_id,
+                Campaign.recipient_type == record.pipeline_entity_type,
+                CampaignRecipient.entity_type == record.pipeline_entity_type,
+                CampaignRecipient.entity_id == record_id,
+            )
+        )
+        workflow_ids = db.query(Job.id).filter(
+            Job.organization_id == session.org_id,
+            Job.job_type == JobType.WORKFLOW_EMAIL.value,
+            Job.payload["subject_type"].astext == record.pipeline_entity_type,
+            Job.payload["subject_id"].astext == str(record_id),
+        )
+        # Source references retain previous sends; the recipient pointer covers older logs.
+        email_links.extend(
+            [
+                (EmailLog.source_type == "campaign_recipient")
+                & EmailLog.source_id.in_(recipients.with_entities(CampaignRecipient.id)),
+                EmailLog.id.in_(recipients.with_entities(CampaignRecipient.email_log_id)),
+                (EmailLog.source_type == "workflow_job") & EmailLog.source_id.in_(workflow_ids),
+            ]
+        )
+    email_query = (
+        db.query(EmailLog)
+        .options(
+            load_only(
+                EmailLog.id,
+                EmailLog.subject,
+                EmailLog.status,
+                EmailLog.recipient_email,
+                EmailLog.created_at,
+            )
+        )
+        .filter(EmailLog.organization_id == session.org_id, or_(*email_links))
     )
     email_total = email_query.count()
     emails = (

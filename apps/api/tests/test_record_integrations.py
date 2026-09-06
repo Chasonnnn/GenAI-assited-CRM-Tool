@@ -179,6 +179,129 @@ async def test_correspondence_includes_explicit_outbound_logs(authed_client, db,
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("donor_type", ["egg", "sperm"])
+@pytest.mark.parametrize("source_type", ["campaign_recipient", "workflow_job"])
+async def test_donor_automated_correspondence_scope_and_pagination(
+    authed_client, db, test_org, donor_type, source_type
+):
+    from app.db.models import Campaign, CampaignRecipient, CampaignRun, EmailTemplate, Job
+
+    response = await authed_client.post(
+        "/donors",
+        json={
+            "donor_type": donor_type,
+            "full_name": "Automated history donor",
+            "email": f"history-{uuid4().hex}@example.com",
+        },
+    )
+    assert response.status_code == 201, response.text
+    donor = response.json()
+    donor_id = UUID(donor["id"])
+    subject_type = f"{donor_type}_donor"
+    foreign_org = Organization(name="Foreign history", slug=f"history-{uuid4().hex}")
+    db.add(foreign_org)
+    db.flush()
+
+    def source(org_id, entity_id, entity_type, *, parent_org_id=None):
+        if source_type == "workflow_job":
+            row = Job(
+                organization_id=org_id,
+                job_type="workflow_email",
+                payload={"subject_type": entity_type, "subject_id": str(entity_id)},
+            )
+        else:
+            campaign_org_id = parent_org_id or org_id
+            template = EmailTemplate(
+                organization_id=campaign_org_id,
+                name=f"History-{uuid4().hex}",
+                subject="History",
+                body="Synthetic history",
+            )
+            db.add(template)
+            db.flush()
+            campaign = Campaign(
+                organization_id=campaign_org_id,
+                name=f"History-{uuid4().hex}",
+                email_template_id=template.id,
+                recipient_type=entity_type,
+            )
+            db.add(campaign)
+            db.flush()
+            run = CampaignRun(organization_id=org_id, campaign_id=campaign.id)
+            db.add(run)
+            db.flush()
+            row = CampaignRecipient(
+                run_id=run.id,
+                entity_id=entity_id,
+                entity_type=entity_type,
+                recipient_email=donor["email"],
+            )
+        db.add(row)
+        db.flush()
+        return row
+
+    now = datetime.now(UTC)
+
+    def email(row, minute, *, org_id=None):
+        log = EmailLog(
+            organization_id=org_id or test_org.id,
+            recipient_email=donor["email"],
+            subject="Synthetic automated history",
+            body="Do not expose message bodies in history",
+            source_type=source_type,
+            source_id=row.id,
+            status="sent",
+            created_at=now + timedelta(minutes=minute),
+        )
+        db.add(log)
+        db.flush()
+        return log
+
+    linked = source(test_org.id, donor_id, subject_type)
+    first = email(linked, 0)
+    retry = email(linked, 1)
+    if source_type == "campaign_recipient":
+        # Current pointer and source both identify one log; previous sends stay visible.
+        linked.email_log_id = retry.id
+        # A legacy log can retain only the durable recipient pointer.
+        legacy = source(test_org.id, donor_id, subject_type)
+        legacy_log = email(legacy, 2)
+        legacy_log.source_type = None
+        legacy_log.source_id = None
+        legacy.email_log_id = legacy_log.id
+        expected_ids = [str(legacy_log.id), str(retry.id), str(first.id)]
+        email(source(test_org.id, donor_id, subject_type, parent_org_id=foreign_org.id), 3)
+    else:
+        expected_ids = [str(retry.id), str(first.id)]
+        wrong_job = source(test_org.id, donor_id, subject_type)
+        wrong_job.job_type = "send_email"
+        email(wrong_job, 3)
+
+    # Matching addresses never authorize history, and every traversed owner is scoped.
+    email(source(test_org.id, uuid4(), subject_type), 4)
+    email(source(test_org.id, donor_id, "intended_parent"), 5)
+    email(source(foreign_org.id, donor_id, subject_type), 6)
+    email(linked, 7, org_id=foreign_org.id)
+    db.flush()
+    changed = await authed_client.patch(
+        f"/donors/{donor_id}", json={"email": f"changed-{uuid4().hex}@example.com"}
+    )
+    assert changed.status_code == 200, changed.text
+    path = f"/records/donor/{donor_id}/correspondence"
+    history = await authed_client.get(path)
+    assert history.status_code == 200, history.text
+    assert history.json()["total"] == len(expected_ids)
+    assert [row["id"] for row in history.json()["items"]] == expected_ids
+    assert all("body" not in row for row in history.json()["items"])
+    paged_ids = []
+    for offset in range(len(expected_ids) + 1):
+        page = (await authed_client.get(path, params={"limit": 1, "offset": offset})).json()
+        assert page["total"] == len(expected_ids)
+        paged_ids.extend(row["id"] for row in page["items"])
+    assert paged_ids == expected_ids
+
+
+@pytest.mark.asyncio
 async def test_correspondence_cross_org_and_csrf_denied(authed_client, db, test_org):
     donor = await create_donor(authed_client)
     other_org = Organization(id=uuid4(), name="Other", slug=f"other-{uuid4().hex}")
