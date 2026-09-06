@@ -114,6 +114,10 @@ class SurrogateActivityType(str, Enum):
     TASK_DELETED = "task_deleted"  # Task deleted for surrogate
     MATCH_PROPOSED = "match_proposed"  # New match proposed
     MATCH_REVIEWING = "match_reviewing"  # Match entered review
+    MATCH_COMPLETED = "match_completed"
+    MATCH_ATTEMPT_CREATED = "match_attempt_created"
+    MATCH_ATTEMPT_UPDATED = "match_attempt_updated"
+    MATCH_CANCEL_REQUESTED = "match_cancel_requested"
     MATCH_ACCEPTED = "match_accepted"  # Match accepted
     MATCH_REJECTED = "match_rejected"  # Match rejected
     MATCH_CANCELLED = "match_cancelled"  # Match cancelled/withdrawn

@@ -33,9 +33,7 @@ from app.db.models import (
 
 logger = logging.getLogger(__name__)
 
-DONOR_NOTIFICATION_ENTITY_TYPES = frozenset(
-    {"donor", "egg_donor", "sperm_donor", "donor_task"}
-)
+DONOR_NOTIFICATION_ENTITY_TYPES = frozenset({"donor", "egg_donor", "sperm_donor", "donor_task"})
 
 
 def _visible_without_donor_access():
@@ -44,6 +42,17 @@ def _visible_without_donor_access():
         or_(
             Notification.entity_type.is_(None),
             Notification.entity_type.notin_(DONOR_NOTIFICATION_ENTITY_TYPES),
+        ),
+        or_(
+            Notification.entity_type.is_(None),
+            Notification.entity_type != "match",
+            exists()
+            .where(
+                Match.id == Notification.entity_id,
+                Match.organization_id == Notification.organization_id,
+                Match.donor_id.is_(None),
+            )
+            .correlate(Notification),
         ),
         or_(
             Notification.entity_type.is_(None),
@@ -116,6 +125,13 @@ def _notification_target_is_donor_related(
         if task is None:
             return None
         return entity_type == "donor_task" or task.donor_id is not None
+    if entity_type == "match":
+        match = (
+            db.query(Match.donor_id)
+            .filter(Match.id == entity_id, Match.organization_id == org_id)
+            .first()
+        )
+        return match.donor_id is not None if match else None
     if entity_type == "form_submission":
         if not entity_id:
             return None
@@ -148,6 +164,7 @@ def _user_can_view_donors(db: Session, org_id: UUID, user_id: UUID) -> bool:
     from app.services import task_service
 
     return task_service.user_can_view_donors(db, org_id, user_id)
+
 
 # =============================================================================
 # Notification Settings
@@ -424,13 +441,10 @@ def mark_read(
     org_id: UUID,
 ) -> Notification | None:
     """Mark a notification as read (scoped by org for tenant isolation)."""
-    query = (
-        db.query(Notification)
-        .filter(
-            Notification.id == notification_id,
-            Notification.user_id == user_id,
-            Notification.organization_id == org_id,
-        )
+    query = db.query(Notification).filter(
+        Notification.id == notification_id,
+        Notification.user_id == user_id,
+        Notification.organization_id == org_id,
     )
     if not _user_can_view_donors(db, org_id, user_id):
         query = query.filter(_visible_without_donor_access())
@@ -452,13 +466,10 @@ def mark_all_read(
     org_id: UUID,
 ) -> int:
     """Mark all notifications as read. Returns count updated."""
-    query = (
-        db.query(Notification)
-        .filter(
-            Notification.user_id == user_id,
-            Notification.organization_id == org_id,
-            Notification.read_at.is_(None),
-        )
+    query = db.query(Notification).filter(
+        Notification.user_id == user_id,
+        Notification.organization_id == org_id,
+        Notification.read_at.is_(None),
     )
     if not _user_can_view_donors(db, org_id, user_id):
         query = query.filter(_visible_without_donor_access())
@@ -796,8 +807,7 @@ def notify_donor_status_change_request_pending(
             user_id=membership.user_id,
             type=NotificationType.STATUS_CHANGE_REQUESTED,
             title=(
-                f"Stage regression approval needed for {donor_type_label} "
-                f"#{donor.donor_number}"
+                f"Stage regression approval needed for {donor_type_label} #{donor.donor_number}"
             ),
             body=(
                 f"{requester_name} requested {current_stage_label} → "
@@ -813,7 +823,7 @@ def notify_match_cancel_request_pending(
     db: Session,
     request: StatusChangeRequest,
     match: Match,
-    surrogate: Surrogate,
+    surrogate: Surrogate | Donor,
     intended_parent: IntendedParent,
     requester_name: str,
 ) -> None:
@@ -981,10 +991,7 @@ def notify_donor_status_change_request_resolved(
         org_id=donor.organization_id,
         user_id=request.requested_by_user_id,
         type=notification_type,
-        title=(
-            f"Stage regression {status_label} for {donor_type_label} "
-            f"#{donor.donor_number}"
-        ),
+        title=(f"Stage regression {status_label} for {donor_type_label} #{donor.donor_number}"),
         body=body,
         entity_type="donor",
         entity_id=donor.id,

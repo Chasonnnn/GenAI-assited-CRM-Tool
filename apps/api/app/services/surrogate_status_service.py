@@ -3,8 +3,9 @@
 import calendar
 import logging
 import secrets
+from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
@@ -45,6 +46,7 @@ class StatusChangeResult(TypedDict):
     surrogate: Surrogate | None
     request_id: UUID | None
     message: str | None
+    after_commit: NotRequired[Callable[[], None]]
 
 
 UNDO_GRACE_PERIOD = timedelta(minutes=5)
@@ -313,6 +315,7 @@ def change_status(
     trigger_workflows: bool = True,
     *,
     emit_events: bool = False,
+    commit: bool = True,
 ) -> StatusChangeResult:
     """
     Change surrogate stage and record history with backdating support.
@@ -480,6 +483,7 @@ def change_status(
                 on_hold_follow_up_months=on_hold_follow_up_months,
                 interview_scheduled_at=normalized_interview_scheduled_at,
                 trigger_workflows=trigger_workflows,
+                commit=commit,
             )
             if emit_events:
                 from app.services import dashboard_service
@@ -516,6 +520,7 @@ def change_status(
                 on_hold_follow_up_months=on_hold_follow_up_months,
                 interview_scheduled_at=normalized_interview_scheduled_at,
                 trigger_workflows=trigger_workflows,
+                commit=commit,
             )
             if emit_events:
                 from app.services import dashboard_service
@@ -523,6 +528,8 @@ def change_status(
                 dashboard_service.push_dashboard_stats(db, surrogate.organization_id)
             return result
 
+        if not commit:
+            raise ValueError("Surrogate stage requires approval before accepting this match")
         request = StatusChangeRequest(
             organization_id=surrogate.organization_id,
             entity_type="surrogate",
@@ -611,6 +618,7 @@ def change_status(
         on_hold_follow_up_months=on_hold_follow_up_months,
         interview_scheduled_at=normalized_interview_scheduled_at,
         trigger_workflows=trigger_workflows,
+        commit=commit,
     )
     if emit_events:
         from app.services import dashboard_service
@@ -641,6 +649,7 @@ def apply_status_change(
     on_hold_follow_up_months: int | None = None,
     interview_scheduled_at: datetime | None = None,
     trigger_workflows: bool = True,
+    commit: bool = True,
 ) -> StatusChangeResult:
     """
     Apply a status change to a surrogate.
@@ -739,37 +748,49 @@ def apply_status_change(
             },
         )
         scheduled_activity.created_at = max(datetime.now(UTC), effective_at)
+
+    def after_commit() -> None:
+        if deleted_follow_up_task is not None:
+            from app.services import task_service
+
+            task_service._delete_task_from_google_best_effort(db, deleted_follow_up_task)
+        if created_follow_up_task is not None:
+            from app.services import task_service
+
+            task_service._sync_task_to_google_best_effort(db, created_follow_up_task)
+
+        from app.services import surrogate_events
+
+        surrogate_events.handle_status_changed(
+            db=db,
+            surrogate=surrogate,
+            new_stage=new_stage,
+            old_stage_id=old_stage_id,
+            old_label=old_label,
+            old_slug=old_slug,
+            user_id=user_id,
+            effective_at=effective_at,
+            recorded_at=recorded_at,
+            is_undo=is_undo,
+            request_id=request_id,
+            approved_by_user_id=approved_by_user_id,
+            approved_at=approved_at,
+            requested_at=requested_at,
+            trigger_workflows=trigger_workflows,
+        )
+
+    if not commit:
+        db.flush()
+        return StatusChangeResult(
+            status="applied",
+            surrogate=surrogate,
+            request_id=None,
+            message=None,
+            after_commit=after_commit,
+        )
     db.commit()
     db.refresh(surrogate)
-
-    if deleted_follow_up_task is not None:
-        from app.services import task_service
-
-        task_service._delete_task_from_google_best_effort(db, deleted_follow_up_task)
-    if created_follow_up_task is not None:
-        from app.services import task_service
-
-        task_service._sync_task_to_google_best_effort(db, created_follow_up_task)
-
-    from app.services import surrogate_events
-
-    surrogate_events.handle_status_changed(
-        db=db,
-        surrogate=surrogate,
-        new_stage=new_stage,
-        old_stage_id=old_stage_id,
-        old_label=old_label,
-        old_slug=old_slug,
-        user_id=user_id,
-        effective_at=effective_at,
-        recorded_at=recorded_at,
-        is_undo=is_undo,
-        request_id=request_id,
-        approved_by_user_id=approved_by_user_id,
-        approved_at=approved_at,
-        requested_at=requested_at,
-        trigger_workflows=trigger_workflows,
-    )
+    after_commit()
 
     return StatusChangeResult(
         status="applied",

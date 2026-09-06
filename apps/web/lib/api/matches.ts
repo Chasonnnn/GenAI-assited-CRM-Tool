@@ -84,7 +84,7 @@ export interface MatchUpdateNotesRequest {
     notes: string
 }
 
-export type MatchStatus = 'proposed' | 'reviewing' | 'accepted' | 'cancel_pending' | 'rejected' | 'cancelled'
+export type MatchStatus = 'proposed' | 'reviewing' | 'accepted' | 'cancel_pending' | 'rejected' | 'cancelled' | 'completed'
 
 // =============================================================================
 // API Functions

@@ -7,8 +7,12 @@ from datetime import date, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -33,11 +37,30 @@ class Match(Base):
 
     __tablename__ = "matches"
     __table_args__ = (
-        UniqueConstraint(
+        UniqueConstraint("organization_id", "id", name="uq_matches_org_id"),
+        CheckConstraint(
+            "(surrogate_id IS NOT NULL AND donor_id IS NULL) OR (surrogate_id IS NULL AND donor_id IS NOT NULL)",
+            name="ck_match_two_parties",
+        ),
+        CheckConstraint(
+            "(match_kind = 'surrogate' AND surrogate_id IS NOT NULL) OR (match_kind = 'donor' AND donor_id IS NOT NULL)",
+            name="ck_match_kind",
+        ),
+        Index(
+            "uq_match_open_surrogate_ip",
             "organization_id",
             "surrogate_id",
             "intended_parent_id",
-            name="uq_match_org_surrogate_ip",
+            unique=True,
+            postgresql_where=text("status IN ('proposed','reviewing','accepted','cancel_pending')"),
+        ),
+        Index(
+            "uq_match_open_donor_ip",
+            "organization_id",
+            "donor_id",
+            "intended_parent_id",
+            unique=True,
+            postgresql_where=text("status IN ('proposed','reviewing','accepted','cancel_pending')"),
         ),
         UniqueConstraint(
             "organization_id",
@@ -50,7 +73,7 @@ class Match(Base):
             "organization_id",
             "surrogate_id",
             unique=True,
-            postgresql_where=text("status = 'accepted'"),
+            postgresql_where=text("status IN ('accepted', 'cancel_pending')"),
         ),
         Index("ix_matches_match_number", "match_number"),
         Index("ix_matches_surrogate_id", "surrogate_id"),
@@ -67,14 +90,26 @@ class Match(Base):
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
     )
-    surrogate_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=False
+    surrogate_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=True
     )
     intended_parent_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("intended_parents.id", ondelete="CASCADE"),
         nullable=False,
     )
+    donor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("donors.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    match_kind: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="surrogate", server_default="surrogate"
+    )
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    closure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
     match_number: Mapped[str] = mapped_column(String(10), nullable=False)
 
     # Status workflow: proposed → reviewing → accepted/rejected/cancelled
@@ -101,7 +136,7 @@ class Match(Base):
 
     # Relationships
     organization: Mapped[Organization] = relationship()
-    surrogate: Mapped[Surrogate] = relationship()
+    surrogate: Mapped[Surrogate | None] = relationship()
     intended_parent: Mapped[IntendedParent] = relationship()
     proposed_by: Mapped[User] = relationship(foreign_keys=[proposed_by_user_id])
     reviewed_by: Mapped[User] = relationship(foreign_keys=[reviewed_by_user_id])
@@ -181,3 +216,57 @@ class MatchEvent(Base):
 # =============================================================================
 # Attachments
 # =============================================================================
+
+
+class MatchAttempt(Base):
+    """An independently recorded treatment attempt in one match case."""
+
+    __tablename__ = "match_attempts"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "match_id", "id", name="uq_match_attempts_org_match_id"
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "match_id"],
+            ["matches.organization_id", "matches.id"],
+            name="fk_match_attempts_org_match",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("match_id", "sequence", name="uq_match_attempt_sequence"),
+        CheckConstraint("sequence > 0", name="ck_match_attempt_sequence"),
+        CheckConstraint(
+            "attempt_type IN ('embryo_transfer','retrieval','collection','other')",
+            name="ck_match_attempt_type",
+        ),
+        CheckConstraint(
+            "status IN ('planned','in_progress','completed','cancelled')",
+            name="ck_match_attempt_status",
+        ),
+        CheckConstraint(
+            "ended_at IS NULL OR started_at IS NULL OR ended_at >= started_at",
+            name="ck_match_attempt_dates",
+        ),
+        Index("ix_match_attempts_org_match", "organization_id", "match_id"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    match_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("matches.id", ondelete="CASCADE"), nullable=False
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    attempt_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="planned")
+    started_at: Mapped[date | None] = mapped_column(nullable=True)
+    ended_at: Mapped[date | None] = mapped_column(nullable=True)
+    outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()"), nullable=False
+    )

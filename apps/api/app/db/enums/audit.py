@@ -113,6 +113,10 @@ class AuditEventType(str, Enum):
     TASK_RESOLVED = "task_resolved"
 
     MATCH_PROPOSED = "match_proposed"
+    MATCH_COMPLETED = "match_completed"
+    MATCH_ATTEMPT_CREATED = "match_attempt_created"
+    MATCH_ATTEMPT_UPDATED = "match_attempt_updated"
+    MATCH_CANCEL_REQUESTED = "match_cancel_requested"
     MATCH_ACCEPTED = "match_accepted"
     MATCH_REJECTED = "match_rejected"
     MATCH_CANCELLED = "match_cancelled"

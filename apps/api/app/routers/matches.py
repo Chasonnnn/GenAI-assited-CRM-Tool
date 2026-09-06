@@ -2,11 +2,11 @@
 
 from datetime import UTC, datetime, timedelta
 from datetime import date as date_type
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -35,9 +35,16 @@ router = APIRouter(
 class MatchCreate(BaseModel):
     """Request to propose a match."""
 
-    surrogate_id: UUID
+    surrogate_id: UUID | None = None
+    donor_id: UUID | None = None
     intended_parent_id: UUID
     notes: str | None = None
+
+    @model_validator(mode="after")
+    def validate_participants(self):
+        if (self.surrogate_id is None) == (self.donor_id is None):
+            raise ValueError("Exactly one surrogate or donor is required")
+        return self
 
 
 class MatchRead(BaseModel):
@@ -45,7 +52,15 @@ class MatchRead(BaseModel):
 
     id: str
     match_number: str
-    surrogate_id: str
+    surrogate_id: str | None
+    donor_id: str | None = None
+    donor_name: str | None = None
+    donor_number: str | None = None
+    donor_stage_label: str | None = None
+    match_kind: Literal["surrogate", "donor"] = "surrogate"
+    closed_at: str | None = None
+    closure_reason: str | None = None
+    outcome: str | None = None
     intended_parent_id: str
     status: str
     proposed_by_user_id: str | None
@@ -72,7 +87,15 @@ class MatchListItem(BaseModel):
 
     id: str
     match_number: str
-    surrogate_id: str
+    surrogate_id: str | None
+    donor_id: str | None = None
+    donor_name: str | None = None
+    donor_number: str | None = None
+    donor_stage_label: str | None = None
+    match_kind: Literal["surrogate", "donor"] = "surrogate"
+    closed_at: str | None = None
+    closure_reason: str | None = None
+    outcome: str | None = None
     surrogate_number: str | None
     surrogate_name: str | None
     intended_parent_id: str
@@ -146,10 +169,25 @@ def _match_to_read(match: Any, db: Session, org_id: str | None = None) -> MatchR
         UUID(org_id) if org_id else None,
     )
 
+    donor = (
+        match_service.get_donor(
+            db, match.donor_id, UUID(org_id) if org_id else match.organization_id
+        )
+        if match.donor_id
+        else None
+    )
     return MatchRead(
         id=str(match.id),
         match_number=match.match_number,
-        surrogate_id=str(match.surrogate_id),
+        surrogate_id=str(match.surrogate_id) if match.surrogate_id else None,
+        donor_id=str(match.donor_id) if match.donor_id else None,
+        donor_name=donor.full_name if donor else None,
+        donor_number=donor.donor_number if donor else None,
+        donor_stage_label=donor.stage.label if donor and donor.stage else None,
+        match_kind=match.match_kind,
+        closed_at=match.closed_at.isoformat() if match.closed_at else None,
+        closure_reason=match.closure_reason,
+        outcome=match.outcome,
         intended_parent_id=str(match.intended_parent_id),
         status=match.status,
         proposed_by_user_id=str(match.proposed_by_user_id) if match.proposed_by_user_id else None,
@@ -170,12 +208,22 @@ def _match_to_read(match: Any, db: Session, org_id: str | None = None) -> MatchR
     )
 
 
-def _match_to_list_item(match: Any, surrogate: Any | None, ip: Any | None) -> MatchListItem:
+def _match_to_list_item(
+    match: Any, surrogate: Any | None, ip: Any | None, donor: Any | None = None
+) -> MatchListItem:
     """Convert Match to list item."""
     return MatchListItem(
         id=str(match.id),
         match_number=match.match_number,
-        surrogate_id=str(match.surrogate_id),
+        surrogate_id=str(match.surrogate_id) if match.surrogate_id else None,
+        donor_id=str(match.donor_id) if match.donor_id else None,
+        donor_name=donor.full_name if donor else None,
+        donor_number=donor.donor_number if donor else None,
+        donor_stage_label=donor.stage.label if donor and donor.stage else None,
+        match_kind=match.match_kind,
+        closed_at=match.closed_at.isoformat() if match.closed_at else None,
+        closure_reason=match.closure_reason,
+        outcome=match.outcome,
         surrogate_number=surrogate.surrogate_number if surrogate else None,
         surrogate_name=surrogate.full_name if surrogate else None,
         intended_parent_id=str(match.intended_parent_id),
@@ -212,11 +260,14 @@ def create_match(
 
     Requires: Manager+ role
     """
-    # Verify surrogate exists and belongs to org
-    surrogate = match_service.get_surrogate_with_stage(db, data.surrogate_id, session.org_id)
-    if not surrogate:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Surrogate not found")
+    from app.services import record_access_service
 
+    record_access_service.get_record_with_access(
+        db, session, "donor" if data.donor_id else "surrogate", data.donor_id or data.surrogate_id
+    )
+    record_access_service.get_record_with_access(
+        db, session, "intended_parent", data.intended_parent_id
+    )
     # Verify IP exists and belongs to org
     ip = match_service.get_intended_parent(db, data.intended_parent_id, session.org_id)
     if not ip:
@@ -229,6 +280,7 @@ def create_match(
         db=db,
         org_id=session.org_id,
         surrogate_id=data.surrogate_id,
+        donor_id=data.donor_id,
         intended_parent_id=data.intended_parent_id,
     )
     if existing:
@@ -243,23 +295,31 @@ def create_match(
         org_id=session.org_id,
         surrogate_id=data.surrogate_id,
     )
-    if accepted_match:
+    if data.surrogate_id and accepted_match:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Surrogate already has an accepted match",
         )
 
-    match = match_service.create_match(
-        db=db,
-        org_id=session.org_id,
-        surrogate_id=data.surrogate_id,
-        intended_parent_id=data.intended_parent_id,
-        proposed_by_user_id=session.user_id,
-        notes=data.notes,
-    )
+    try:
+        match = match_service.create_match(
+            db=db,
+            org_id=session.org_id,
+            surrogate_id=data.surrogate_id,
+            donor_id=data.donor_id,
+            intended_parent_id=data.intended_parent_id,
+            proposed_by_user_id=session.user_id,
+            notes=data.notes,
+        )
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail="An open match already exists for these participants"
+        )
 
     # Fire workflow trigger for match proposed
-    workflow_triggers.trigger_match_proposed(db, match)
+    if match.surrogate_id:
+        workflow_triggers.trigger_match_proposed(db, match)
 
     return _match_to_read(match, db, str(session.org_id))
 
@@ -276,6 +336,8 @@ def list_matches(
     intended_parent_id: Annotated[UUID | None, "fastapi_param"] = Query(
         None, description="Filter by intended parent ID"
     ),
+    donor_id: Annotated[UUID | None, "fastapi_param"] = Query(None),
+    match_kind: Annotated[Literal["surrogate", "donor"] | None, "fastapi_param"] = Query(None),
     q: Annotated[str | None, "fastapi_param"] = Query(
         None, max_length=100, description="Search surrogate/IP names"
     ),
@@ -297,6 +359,8 @@ def list_matches(
         db=db,
         org_id=session.org_id,
         status_filter=status_filter,
+        donor_id=donor_id,
+        match_kind=match_kind,
         surrogate_id=surrogate_id,
         intended_parent_id=intended_parent_id,
         q=q,
@@ -304,6 +368,7 @@ def list_matches(
         per_page=per_page,
         sort_by=sort_by,
         sort_order=sort_order,
+        session=session,
     )
 
     # Batch load surrogates and IPs (org-scoped), with eager load for stage
@@ -321,11 +386,14 @@ def list_matches(
         intended_parent_ids=ip_ids,
     )
 
+    donor_ids = {m.donor_id for m in matches if m.donor_id}
+    donors = match_service.get_donors_by_ids(db, session.org_id, donor_ids)
     items = [
         _match_to_list_item(
             m,
             surrogates.get(m.surrogate_id),
             ips.get(m.intended_parent_id),
+            donors.get(m.donor_id),
         )
         for m in matches
     ]
@@ -360,7 +428,7 @@ def get_match_stats(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MatchStatsResponse:
     """Get match counts by status for the org."""
-    total, counts = match_service.get_match_stats(db, session.org_id)
+    total, counts = match_service.get_match_stats(db, session.org_id, session=session)
     return MatchStatsResponse(total=total, by_status=counts)
 
 
@@ -371,7 +439,7 @@ def get_match(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MatchRead:
     """Get match details. Auto-transitions to 'reviewing' on first view by non-proposer."""
-    match = match_service.get_match(db, match_id, session.org_id)
+    match = match_service.get_match_with_access(db, session, match_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
@@ -424,7 +492,7 @@ def accept_match(
 
     Requires: Manager+ role
     """
-    match = match_service.get_match(db, match_id, session.org_id)
+    match = match_service.get_match_with_access(db, session, match_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
@@ -446,7 +514,8 @@ def accept_match(
         )
 
     # Fire workflow trigger for match accepted
-    workflow_triggers.trigger_match_accepted(db, match)
+    if match.surrogate_id:
+        workflow_triggers.trigger_match_accepted(db, match)
 
     return _match_to_read(match, db, str(session.org_id))
 
@@ -469,7 +538,7 @@ def reject_match(
 
     Requires: Manager+ role
     """
-    match = match_service.get_match(db, match_id, session.org_id)
+    match = match_service.get_match_with_access(db, session, match_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
@@ -486,7 +555,8 @@ def reject_match(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     # Fire workflow trigger for match rejected
-    workflow_triggers.trigger_match_rejected(db, match)
+    if match.surrogate_id:
+        workflow_triggers.trigger_match_rejected(db, match)
 
     return _match_to_read(match, db, str(session.org_id))
 
@@ -511,7 +581,7 @@ def request_cancel_match(
     - Create a pending status change request tied to the match
     - Mark the match as cancel_pending
     """
-    match = match_service.get_match(db, match_id, session.org_id)
+    match = match_service.get_match_with_access(db, session, match_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
     try:
@@ -549,7 +619,7 @@ def cancel_match(
     Only proposed/reviewing matches can be cancelled.
     Requires: Manager+ role
     """
-    match = match_service.get_match(db, match_id, session.org_id)
+    match = match_service.get_match_with_access(db, session, match_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
     try:
@@ -577,7 +647,7 @@ def update_match_notes(
     ),
 ) -> MatchRead:
     """Update match notes. Requires: Manager+ role."""
-    match = match_service.get_match(db, match_id, session.org_id)
+    match = match_service.get_match_with_access(db, session, match_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
@@ -594,7 +664,7 @@ def update_match_notes(
 class MatchEventCreate(BaseModel):
     """Request to create a match event."""
 
-    person_type: str = Field(pattern="^(surrogate|ip)$")
+    person_type: str = Field(pattern="^(surrogate|donor|ip)$")
     event_type: str = Field(pattern="^(medication|medical_exam|legal|delivery|custom)$")
     title: str = Field(min_length=1, max_length=200)
     description: str | None = None
@@ -609,7 +679,7 @@ class MatchEventCreate(BaseModel):
 class MatchEventUpdate(BaseModel):
     """Request to update a match event."""
 
-    person_type: str | None = Field(None, pattern="^(surrogate|ip)$")
+    person_type: str | None = Field(None, pattern="^(surrogate|donor|ip)$")
     event_type: str | None = Field(
         None, pattern="^(medication|medical_exam|legal|delivery|custom)$"
     )
@@ -688,7 +758,7 @@ def list_match_events(
     Requires: Case Manager+ role
     """
     # Verify match exists and belongs to org
-    match = match_service.get_match(db, match_id, session.org_id)
+    match = match_service.get_match_with_access(db, session, match_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
@@ -745,10 +815,12 @@ def create_match_event(
     Requires: Case Manager+ role
     """
     # Verify match exists and belongs to org
-    match = match_service.get_match(db, match_id, session.org_id)
+    match = match_service.get_match_with_access(db, session, match_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
+    if data.person_type not in (match.match_kind, "ip"):
+        raise HTTPException(status_code=400, detail="Event participant is not in this case")
     if data.all_day:
         if not data.start_date:
             raise HTTPException(status_code=400, detail="start_date is required for all-day events")
@@ -800,6 +872,7 @@ def get_match_event(
 
     Requires: Case Manager+ role
     """
+    match_service.get_match_with_access(db, session, match_id)
     event = match_service.get_match_event(
         db=db,
         match_id=match_id,
@@ -831,6 +904,7 @@ def update_match_event(
 
     Requires: Case Manager+ role
     """
+    match = match_service.get_match_with_access(db, session, match_id)
     event = match_service.get_match_event(
         db=db,
         match_id=match_id,
@@ -840,6 +914,8 @@ def update_match_event(
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
 
+    if data.person_type is not None and data.person_type not in (match.match_kind, "ip"):
+        raise HTTPException(status_code=400, detail="Event participant is not in this case")
     next_all_day = data.all_day if data.all_day is not None else event.all_day
     next_start_date = None
     next_end_date = None
@@ -902,6 +978,7 @@ def delete_match_event(
 
     Requires: Case Manager+ role
     """
+    match_service.get_match_with_access(db, session, match_id)
     event = match_service.get_match_event(
         db=db,
         match_id=match_id,
@@ -912,3 +989,123 @@ def delete_match_event(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
 
     match_service.delete_match_event(db, event)
+
+
+class MatchCompleteRequest(BaseModel):
+    outcome: str = Field(min_length=1, max_length=2000)
+    reason: str | None = Field(None, max_length=2000)
+
+
+class AttemptCreate(BaseModel):
+    attempt_type: Literal["embryo_transfer", "retrieval", "collection", "other"]
+    status: Literal["planned", "in_progress", "completed", "cancelled"] = "planned"
+    started_at: date_type | None = None
+    ended_at: date_type | None = None
+    outcome: str | None = Field(None, max_length=2000)
+
+
+class AttemptUpdate(BaseModel):
+    attempt_type: Literal["embryo_transfer", "retrieval", "collection", "other"] | None = None
+    status: Literal["planned", "in_progress", "completed", "cancelled"] | None = None
+    started_at: date_type | None = None
+    ended_at: date_type | None = None
+    outcome: str | None = Field(None, max_length=2000)
+
+    @model_validator(mode="after")
+    def reject_null_required(self):
+        if any(
+            field in self.model_fields_set and getattr(self, field) is None
+            for field in ("attempt_type", "status")
+        ):
+            raise ValueError("Attempt type and status cannot be null")
+        return self
+
+
+class AttemptRead(AttemptCreate):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    match_id: UUID
+    sequence: int
+    created_at: datetime
+    updated_at: datetime
+
+
+@router.put(
+    "/{match_id}/complete", response_model=MatchRead, dependencies=[Depends(require_csrf_header)]
+)
+def complete_match(
+    match_id: UUID,
+    data: MatchCompleteRequest,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["matches"].actions["propose"])
+    ),
+) -> MatchRead:
+    match = match_service.get_match_with_access(db, session, match_id, write=True)
+    try:
+        match = match_service.complete_match(
+            db, match, actor_user_id=session.user_id, org_id=session.org_id, **data.model_dump()
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _match_to_read(match, db, str(session.org_id))
+
+
+@router.get("/{match_id}/attempts", response_model=list[AttemptRead])
+def list_attempts(
+    match_id: UUID,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+):
+    match = match_service.get_match_with_access(db, session, match_id)
+    return match_service.list_attempts(db, match)
+
+
+@router.post(
+    "/{match_id}/attempts",
+    response_model=AttemptRead,
+    status_code=201,
+    dependencies=[Depends(require_csrf_header)],
+)
+def create_attempt(
+    match_id: UUID,
+    data: AttemptCreate,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["matches"].actions["propose"])
+    ),
+):
+    match = match_service.get_match_with_access(db, session, match_id, write=True)
+    try:
+        return match_service.save_attempt(
+            db, match, actor_user_id=session.user_id, values=data.model_dump()
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.patch(
+    "/{match_id}/attempts/{attempt_id}",
+    response_model=AttemptRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def update_attempt(
+    match_id: UUID,
+    attempt_id: UUID,
+    data: AttemptUpdate,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["matches"].actions["propose"])
+    ),
+):
+    match = match_service.get_match_with_access(db, session, match_id, write=True)
+    try:
+        return match_service.save_attempt(
+            db,
+            match,
+            actor_user_id=session.user_id,
+            values=data.model_dump(exclude_unset=True),
+            attempt_id=attempt_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))

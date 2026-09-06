@@ -4138,5 +4138,27 @@
       "200",
       "422"
     ]
+  },
+  "/matches/{match_id}/attempts": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/attempts/{attempt_id}": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/complete": {
+    "PUT": [
+      "200",
+      "422"
+    ]
   }
 }

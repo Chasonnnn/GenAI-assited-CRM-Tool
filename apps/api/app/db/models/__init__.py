@@ -90,7 +90,7 @@ from app.db.models.intelligent_suggestions import (
 )
 from app.db.models.intended_parents import IntendedParent, IntendedParentStatusHistory
 from app.db.models.jobs import ExportJob, Job
-from app.db.models.matches import Match, MatchEvent
+from app.db.models.matches import Match, MatchAttempt, MatchEvent
 from app.db.models.messaging import (
     MessagingConsentEvidence,
     MessagingConsentState,
@@ -259,6 +259,7 @@ __all__ = [
     "MailboxCredential",
     "LegalHold",
     "Match",
+    "MatchAttempt",
     "MatchEvent",
     "Membership",
     "MetaAd",

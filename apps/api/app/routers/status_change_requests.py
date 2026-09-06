@@ -242,6 +242,10 @@ def get_request(
     if not req or req.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Request not found")
     _require_donor_request_access(db, session, req.entity_type)
+    if req.entity_type == "match":
+        from app.services import match_service
+
+        match_service.get_match_with_access(db, session, req.entity_id)
 
     details = status_change_request_service.get_request_with_details(
         db=db,
@@ -305,6 +309,10 @@ def approve_request(
     if not req or req.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Request not found")
     _require_donor_request_access(db, session, req.entity_type)
+    if req.entity_type == "match":
+        from app.services import match_service
+
+        match_service.get_match_with_access(db, session, req.entity_id)
 
     try:
         result = status_change_request_service.approve_request(
@@ -365,6 +373,10 @@ def reject_request(
     if not req or req.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Request not found")
     _require_donor_request_access(db, session, req.entity_type)
+    if req.entity_type == "match":
+        from app.services import match_service
+
+        match_service.get_match_with_access(db, session, req.entity_id)
 
     try:
         result = status_change_request_service.reject_request(
@@ -406,9 +418,7 @@ def reject_request(
 )
 def cancel_request(
     request_id: UUID,
-    session: Annotated[UserSession, "fastapi_param"] = Depends(
-        get_current_session
-    ),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
