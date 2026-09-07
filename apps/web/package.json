@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "typecheck:compat": "tsc6 --noEmit",
     "test": "NODE_OPTIONS=--localstorage-file=/tmp/vitest-localstorage vitest run",
+    "test:doctor": "NODE_OPTIONS=--localstorage-file=/tmp/vitest-localstorage vitest doctor",
     "test:watch": "NODE_OPTIONS=--localstorage-file=/tmp/vitest-localstorage vitest",
     "test:all": "pnpm run test",
     "check": "pnpm run typecheck && pnpm run lint && pnpm run test",
@@ -61,7 +62,6 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@next/bundle-analyzer": "16.3.0",
-    "@typescript/native": "npm:typescript@7.0.2",
     "@tailwindcss/postcss": "^4.3.3",
     "@tanstack/react-query-devtools": "^5.101.2",
     "@testing-library/jest-dom": "^6.9.1",
@@ -70,6 +70,7 @@
     "@types/node": "^26.0.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "@typescript/native": "npm:typescript@7.0.2",
     "@vitejs/plugin-react": "^6.0.3",
     "babel-plugin-react-compiler": "^1.0.0",
     "eslint": "^10.6.0",
@@ -82,6 +83,6 @@
     "typescript": "npm:@typescript/typescript6@6.0.2",
     "typescript-eslint": "^8.62.1",
     "vite": "8.1.0",
-    "vitest": "^4.1.9"
+    "vitest": "^5.0.0"
   }
 }
