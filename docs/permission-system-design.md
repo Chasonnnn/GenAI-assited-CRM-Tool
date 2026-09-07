@@ -1,178 +1,151 @@
 # Permission system design
 
-Status: discovery. Initial product direction accepted; detailed access rules remain open.
+Status: product model awaiting final review. Application code and production permissions are unchanged.
 
-## Confirmed context
+This milestone covers internal agency staff. External professionals and participants are outside scope, and a new platform-support access mechanism is deferred because no concrete use case was identified.
 
-- The user finds the current permission system difficult to manage.
-- The platform needs deeper donor integration and continued workflow and campaign modularization.
-- This discussion will define the desired permission behavior before implementation.
-- Organization isolation, centralized enforcement, CSRF, and human review of AI-authored messages remain repository requirements.
+## Roles and individual additions
 
-## Decision tree
+Each staff member has one supplied role. Agencies cannot create custom roles or combine multiple roles for a person.
 
-| Decision | Status | Dependent decisions |
+| Role | Default donor/surrogate record access | Configuration |
 |---|---|---|
-| Primary problems and success criteria | Predictable access and easier setup; Intake follow-up and Case Manager matching are concrete acceptance scenarios | Migration priority, administration experience |
-| Organization control over internal staff access | Agency edits Intake/Case roles; Admin and Dev protected; one role plus removable action/scope additions | Delegation limits, effects of role changes |
-| People included in the first redesign | Internal staff prioritized; no concrete platform-support access use case identified | Existing developer-access compatibility review; new support mechanism deferred in the proposal |
-| Module and action permissions | Campaign editing/sending separate; workflow editing/activation share Manage Workflows | Other action groups, shared capabilities, dependency rules, configuration UI |
-| Record and sensitive-data access | Broad Case post-approval scope; retained Intake access covers existing sections; linked match/IP content requires both parties' access | Phase exception, exports, migration |
-| Approval and background execution | Applicant approval explicit; approved donors enter claim pool; org work survives creator access loss and personal work stops | Agency authorization, runtime checks, ownership transfer, migration |
-| Personal and organization content | Personal scope private from peers with audited Admin access; org management delegable by module; publication creates a copy | Template dependencies, ownership transfer, audience validation |
-| Migration and verification | Awaiting target behavior | Existing access comparison, rollout, recovery, completion criteria |
+| Intake Specialist | Assigned applicants before approval, plus retained Intake-collaborator records after handoff | Admin/Dev can edit the role baseline and add individual permissions |
+| Case Manager | All Approved-and-later records, regardless of owner, for matching and case work | Admin/Dev can edit the role baseline and add individual permissions |
+| Admin | Full agency authority within organization and domain rules | Protected baseline |
+| Dev | Platform-controlled authority within existing organization boundaries | Protected baseline; not configurable by agency users |
 
-## Round 1 decisions
+Individual additions can grant actions or explicitly widen record scope. They cannot deny permissions inherited from the role. Removing an addition restores the baseline without overriding another valid source of access.
 
-1. Prioritize both predictable staff access and easier permission configuration.
-2. Agency administrators need editable role presets and individual permission additions. A selected person may need more access than others with the same role.
-3. Limit the first redesign to internal agency staff and platform support.
+Only Admin and Dev can change role baselines or individual action/scope additions. Case Managers may manage the agreed per-record Intake collaborators; that does not let them change someone's role or module permissions.
 
-Interview questions use the native tool that waits for a response.
+Changing a person's role requires an Admin to review their additions and collaborator access and choose what carries over.
 
-## Round 2 decisions
+## Record scope and actions
 
-1. Individual exceptions add permissions. An administrator can remove an addition to restore the role baseline; this does not deny a permission inherited from the role.
-2. Configure record scope separately from action permissions. Exact scope options and combinations remain open.
-3. The user has no concrete platform-support record-access use case. Defer a new support-access mechanism in the proposal; do not infer new standing access or changes to existing developer access.
+Record scope is configured separately for each module. It defines the same record set for viewing and editing; action permissions determine what the person may do within that set.
 
-## Round 3 decisions
+A Case Manager with Edit can therefore edit information on every post-approval record they can view, including records owned by another Case Manager.
 
-1. Agencies edit the supplied role presets; they do not create custom roles.
-2. Each person has one role preset plus individual additions, rather than combining multiple roles.
-3. Record scope is configured per module. A role can cover all donor records while covering only assigned surrogate records.
-4. The supplied roles are Intake Specialist, Case Manager, Admin, and Dev.
+Within a configured scope rule, assignment and phase/stage restrictions combine with AND. Separate grants, including an individual scope addition or Intake collaboration, add access to their explicitly covered records.
 
-## Round 4 decisions
+The Intake default resolves the handoff requirement through two routes:
 
-1. First-release record scopes support assignment, pipeline stages, and all agency records. Queue membership does not introduce an additional visibility rule in this milestone; existing queue workflows still need compatibility review.
-2. Viewing and editing share one record scope within each module. Their action permissions remain distinct.
-3. Campaign editing and sending are separate permissions. Human approval requirements remain a separate decision.
+- Before approval: currently assigned applicant records.
+- After handoff: records with an active Intake-collaborator relationship.
 
-## Round 5 decisions
+The collaborator route permits the agreed information follow-up despite the normal before-approval Intake boundary. It does not grant phase-wide access to unrelated post-approval records.
 
-1. Surrogate, egg-donor, and sperm-donor pipelines each support before-approval, post-approval, or both for access, with a boundary defined for each pipeline.
-2. Individual additions can explicitly widen a module's record scope. Adding an action alone never widens scope.
-3. Agency administrators can edit Intake Specialist and Case Manager baselines. Admin retains full agency authority; Dev remains controlled by the platform. Repository invariants still apply to every role.
+Stage changes, reassignment, applicant approval, exports, and other actions retain their own permissions and domain rules. A view or information-edit permission does not authorize these actions.
 
-## Round 6 decisions
-
-1. Applicant approval is an explicit permission, granted to Intake and Admin by default and configurable for Intake. No separate reviewer is required for ordinary applicant approval; protected Dev authority remains unchanged.
-2. Approved donors enter a shared pool for Case Managers to claim, mirroring the surrogate handoff. Whether egg and sperm donors share a physical pool remains an implementation/design detail to resolve.
-3. The Approved milestone starts the post-approval phase. A person authorized to approve a record may lose ordinary access after the transition; default post-handoff access and the approval transition contract still need agreement.
-
-## Round 7 decisions
-
-1. Assignment and phase/stage limits must both match when configured together.
-2. Case Managers need access to all relevant records for matching. Assigned-only access is not their intended default; whether all includes before-approval records and which other modules are needed remains open. No pool-summary restriction was accepted.
-3. Workflow editing and activation use one Manage Workflows permission. Unlike campaign editing/sending, these actions are not separated.
-
-## Round 8 decisions and requirements
-
-1. Case Managers see all Approved-and-later donor/surrogate records regardless of owner; before-approval records are outside the default scope.
-2. Retain shared view/edit scope: a Case Manager with Edit can edit all records within that scope.
-3. Intake works from New through before-approval, then hands off to a Case Manager or pool. Some Intake Specialists continue following records previously assigned to them and update information at a Case Manager's request. An assigned-before-approval-only default does not satisfy this requirement; the retained relationship and actions still need agreement.
-4. Preserve personal and organization separation for campaigns, workflows, and templates. Their content visibility and authority to act on records must be resolved separately.
-
-## Round 9 decisions
-
-1. Automatically retain the Intake owner at the approval handoff as an Intake collaborator; other people can be added explicitly when needed. Do not infer continuing access for everyone who ever owned the record.
-2. The Intake collaborator can view and update normal information without an additional system approval step. Stage changes and reassignment remain separate permissions; this is not full Case Manager authority.
-3. Retained access lasts while the person is eligible staff, until a Case Manager or Admin removes it. There is no automatic expiry period or later-stage cutoff.
-
-## Round 10 decisions
-
-1. Personal and organization scope apply to campaigns, workflows, and templates. Personal campaign support is part of the redesign.
-2. Agency Admins may inspect and manage personal work with an audit trail. Personal work is private from peers, not from agency administrators.
-3. Personal workflows and campaigns may act on currently assigned records and records where their owner is an Intake collaborator. Visibility of other records does not extend personal automation/campaign reach; underlying action permissions remain relevant.
-
-## Round 11 decisions
-
-1. Organization-work management defaults to Admin, with explicit delegation by module to selected roles or people.
-2. Publishing personal work creates a separate organization copy. Later edits to the personal original do not change the published copy.
-3. After reconsideration, organization workflows/campaigns continue under agency authority when their creator leaves or loses permissions; personal work stops when its owner loses required access. This supersedes the initial choice to pause both scopes. Agency-work cancellation and authority to configure its actions remain separate controls.
-
-## Round 12 decisions
-
-1. Retained Intake access covers existing profile, notes, documents, and correspondence sections under their action permissions. Do not add field-level restrictions in this milestone.
-2. Shared match details and joint documents require access to both parties. Donor/surrogate collaboration does not automatically grant Intended Parent access.
-3. When a member changes roles, the Admin reviews individual additions and collaborator access and explicitly chooses what to retain; neither automatic carryover nor automatic clearing is the default.
-
-## Organization attribution
-
-- Organization ownership, not the original proposer's membership, governs the continued operation of enabled/scheduled organization work. Staff departure does not pause it.
-- The Details tab shows Proposed by to credit the original contributor. Publishing a personal copy preserves that original attribution even when someone else publishes or later edits the organization copy.
-- Attribution remains historical after the proposer leaves. Attribution does not give the proposer continuing edit rights or expose the private source item to peers.
-- Creation, publication, and later edits retain their actual actor attribution in audit history; publication does not automatically send a campaign.
-
-## Round 13 pending
-
-1. Whether activation of an organization workflow requires the configuring person's underlying action permissions, beyond Manage Workflows.
-2. Whether personal work skips a record after losing access to it or pauses the entire affected run.
-3. How to handle existing negative user overrides and uncertain historical collaborator assignments during migration.
-
-No answers were received for this round. Recommendations remain unaccepted: validate underlying action authority at activation, skip unauthorized records while continuing authorized personal work, and review unmappable access before migration.
-
-## Remaining decisions
-
-- Interaction of retained Intake access with phase constraints, and claim behavior for nondefault assigned-only scopes.
-- Publication dependencies and personal-work ownership changes.
-- Agency-work authorization, runtime checks, and personal-work ownership transfer.
-- Permission administration limits, revocation timing, and migration defaults. Role-change review and both-party access for linked records are settled.
-
-## Approval baseline from current source
-
-- Surrogates have a protected Approved gate and move to the Surrogate Pool at the gate. Current code categorizes Approved as intake while Case Manager visibility begins there; the accepted target instead makes Approved the first post-approval milestone.
-- Egg donors enter the post-approval category at Ready to Match; sperm donors enter it at Available. Neither donor pipeline currently has a protected approval gate or equivalent ownership handoff.
-- Donor stage-correction approval concerns requested backward stage changes. It is not applicant acceptance.
-- Sources: `apps/api/app/core/stage_definitions.py`, `apps/api/app/core/surrogate_access.py`, `apps/api/app/services/surrogate_events.py`, `apps/api/app/services/donor_service.py`. Source inspection only; live organization configuration was not checked.
-
-## Personal and organization baseline from current source
-
-- Workflows and email templates have explicit personal/org scope. Campaigns currently have organization ownership and creator attribution, without personal scope.
-- Personal workflows currently restrict editing to their owner; personal templates allow Admin/Dev editing as well. The accepted target gives agency Admins audited management of both.
-- Personal workflows currently act on records owned by the workflow owner, not every record the person can view. Campaign recipient filters are organization-wide today.
-- Sources: `apps/api/app/services/workflow_access.py`, `apps/api/app/services/workflow_triggers.py`, `apps/api/app/routers/email_templates.py`, `apps/api/app/schemas/campaign.py`, `apps/api/app/services/campaign_service.py`. Source inspection only.
-
-## Working glossary
-
-These definitions are discussion terms, not an approved data model.
-
-| Term | Meaning |
+| Work | Permission distinction |
 |---|---|
-| Organization | An agency whose data and access are isolated from other agencies |
-| Membership | A person's association with an organization |
-| Module | A product area such as donors, surrogates, workflows, or campaigns |
-| Action permission | Authority to perform an operation such as viewing, editing, exporting, or activating |
-| Role preset | One supplied staff role; agencies edit Intake/Case baselines while Admin/Dev baselines remain protected |
-| Record scope | Which records an action permission applies to |
-| Override | A removable individual permission addition; it cannot deny a role permission in the proposed model |
-| Effective access | The final access a person has after applicable rules are evaluated |
-| Approval boundary | The Approved milestone, which begins post-approval access |
-| Applicant approval | An authorized decision that the applicant has reached the Approved milestone; distinct from approval of a requested correction |
-| Intake collaborator | A former Intake owner retained at handoff, or another explicitly added collaborator, with continued access for information follow-up |
-| Action approval | Human authorization for a requested operation, separate from applicant approval |
-| Module availability | Whether an organization has a feature enabled, separate from a member's authority to use it |
+| Applicant approval | Explicit approval permission; enabled for Intake and Admin by default, with Intake configurable |
+| Campaigns | Editing and sending are separate |
+| Workflows | One Manage Workflows permission covers editing and activation |
+| Organization content | Management can be delegated by module; defaults to Admin |
+| Linked matches and joint documents | Require access to both parties as well as the relevant action |
 
-## Decision log
+Intake collaboration does not grant access to the matched Intended Parent. Existing profile, notes, documents, and correspondence sections are available under their action permissions; new field-level restrictions are outside this milestone.
 
-- Accepted: editable role presets with removable individual permission additions. Role-wide changes alone cannot cover a person who needs higher access than peers; removing an addition restores inherited permissions. Administration limits remain open.
-- Accepted: configure record scope separately from permitted actions.
-- Accepted: agencies edit supplied roles instead of creating custom roles; each staff member has exactly one role plus individual additions. This keeps role inheritance simpler while retaining person-specific flexibility.
-- Accepted: record scope can differ by module, with the same scope for viewing and editing. First-release controls include assignment, stages, and all agency records; simultaneous constraints combine with AND.
-- Accepted: campaign editing and sending are separate permissions.
-- Accepted: individual record scope may be explicitly widened and later restored; action additions do not implicitly widen scope.
-- Accepted: agency configuration applies to Intake Specialist and Case Manager baselines; Admin and Dev baselines remain protected.
-- Accepted: surrogate and both donor pipelines use before/post-approval permission concepts with their own approval boundary.
-- Accepted: applicant approval requires an explicit permission, without a separate reviewer; Approved begins post-approval and approved donors enter a shared claim pool.
-- Accepted: assignment and phase/stage limits combine with AND; Case Manager access should support matching across relevant records rather than defaulting to assigned-only.
-- Accepted: one Manage Workflows permission covers workflow editing and activation.
-- Accepted: Case Manager default scope includes all Approved-and-later donor/surrogate records regardless of owner, shared by viewing and editing.
-- Accepted: retain the owner at approval handoff as an Intake collaborator, with viewing/information-update access until a Case Manager or Admin removes it; other collaborators require explicit addition.
-- Accepted: personal and organization scope for campaigns, workflows, and templates, including new personal campaigns. Admin management of personal work is audited; peers cannot access another person's personal work.
-- Accepted: personal workflows/campaigns act on currently assigned or Intake-collaborator records, subject to action permissions.
-- Accepted: organization management is delegable by module and publication creates an independent organization copy.
-- Accepted after reconsideration: organization work continues under agency authority after creator access loss; personal work stops when its owner lacks required access. The earlier pause-both choice is superseded.
-- Accepted: retained Intake access covers existing sections under action permissions; joint match/IP content requires both parties' access; role changes require explicit review of additions and collaborator access.
-- Accepted: the organization Details tab credits the original contributor with Proposed by, independently of ownership, current membership, and execution authority.
-- Accepted initially: internal staff and platform support form the first-release scope. Round 2 identified no support use case, so the proposal defers a new support mechanism. External professionals and participants remain outside this milestone.
+## Approval and handoff
+
+Surrogate, egg-donor, and sperm-donor pipelines each have an approval boundary. Approved itself is the first post-approval milestone.
+
+Ordinary applicant approval does not require a separate reviewer when the actor has approval authority. Approval of a requested backward stage correction remains a separate operation.
+
+At approval handoff:
+
+1. The record enters its approved pool for Case Managers to claim, or follows an authorized direct assignment.
+2. The Intake owner at handoff becomes an Intake collaborator.
+3. That collaborator can continue viewing and updating normal information.
+4. Other collaborators can be added explicitly; prior ownership alone does not grant access.
+5. A Case Manager or Admin can remove collaborator access. There is no automatic time or later-stage expiry.
+
+Removing collaboration ends that access route on the next action. Access through another valid route, such as current assignment or an individual addition, is evaluated independently.
+
+A member's departure ends personal access. Role changes require the agreed review of retained relationships.
+
+## Personal and organization work
+
+Campaigns, workflows, and templates support personal and organization scope. Personal campaign support is new work.
+
+| Rule | Personal | Organization |
+|---|---|---|
+| Ownership | One staff member | The agency |
+| Visibility and management | Private from peers; Admin management is audited | Governed by module permissions |
+| Workflow/campaign reach | Owner's currently assigned or Intake-collaborator records, within permitted actions | Authorized organization configuration |
+| Creator leaves or loses permissions | Unauthorized personal actions stop | Enabled/scheduled work continues under agency authority |
+| Reuse after departure | Admin can publish an organization copy | Organization keeps managing its own copy |
+
+Being able to view a record does not by itself make it eligible for a personal workflow or campaign. Admin editing of a personal item does not silently replace its owner or expand its audience.
+
+Organization-work management can be granted to selected roles or people. Activating an organization workflow requires both management authority and the configuring person's authority for its actions. Changes to executable actions, subjects, audiences, or triggers that expand execution reach need the same validation before taking effect.
+
+Explicit organization-work authority may target agency-wide records in authorized modules, beyond the configuring person's ordinary personal record scope. Required action permissions still apply. After authorization, execution does not depend on the original proposer's current role or membership; current organization configuration and domain restrictions still apply.
+
+Publishing personal work creates an independent organization copy. Workflow copies start disabled and campaign copies start as drafts. Personal-template dependencies are copied or replaced with authorized organization templates, so the shared item has no live private-template dependency. Later personal edits do not change the shared version. Direct personal-to-person ownership transfer is outside this milestone.
+
+## Attribution
+
+Organization Details shows Proposed by for the original contributor, including work published from a personal original.
+
+Credit survives departure and later edits. It does not give the proposer ongoing ownership or access. Creation, publication, and edits retain their actual actor attribution in audit history.
+
+An organization reader does not gain access to the private source item through its attribution or publication history.
+
+## Revocation and execution
+
+Permission and collaborator removals take effect on the next server request and queued personal action. Already completed or externally dispatched actions cannot be undone by revoking a permission.
+
+If personal work loses access to one record, skip unauthorized actions for that record, continue authorized work elsewhere, and report the skipped count. Loss of required owner authority across all records stops all affected personal work.
+
+Organization work is stopped through organization controls, not through departure or permission changes of its original contributor.
+
+## Acceptance examples
+
+| Situation | Expected behavior |
+|---|---|
+| Alice in Intake approves her assigned donor | Donor enters the approved pool; Alice remains an Intake collaborator and can update information |
+| Bob claims that donor | Bob becomes owner; Alice's collaborator access continues |
+| Carol is another Case Manager | Carol can see the approved donor for matching and edit information if she has Edit |
+| Alice opens a joint document with an IP she cannot access | Access is denied until she has the required access to both parties |
+| Bob removes Alice as collaborator | Alice loses that route on her next action; her personal work skips the donor unless another eligible ownership/collaboration route remains |
+| Alice leaves after contributing an organization workflow | Her personal work stops; the organization workflow continues and still credits Alice |
+| Someone manages workflows but lacks applicant-approval authority | They cannot activate an organization workflow that approves applicants |
+| Alice changes roles | The Admin reviews her additions and collaborator links before choosing what carries over |
+
+## Migration
+
+Before switching an organization to the new model:
+
+- Compare current and proposed effective access, including role overrides, individual denials, stage rules, assignments, and linked-record access.
+- Resolve existing individual denials that additions-only rules cannot represent. Do not silently broaden access, reset users, or retain hidden legacy exceptions.
+- Verify the Intake owner at historical approval handoff before proposing collaborator access. Uncertain history goes to Admin review; do not grant access to every past owner.
+- Preview role changes, new approval boundaries, and donor pool handoffs without modifying existing records.
+- Verify tenant isolation, denied operations, publication, next-action revocation, queued personal work, and organization execution after creator departure.
+- Validate surrogate, egg-donor, and sperm-donor handoff journeys in the rendered application.
+
+Implementation, migration execution, and deployment require subsequent work. No provider calls, messages, or production changes are part of this design interview.
+
+## Restricted Case Manager scope
+
+If an agency deliberately configures a Case Manager as assigned-only, unclaimed records outside that scope remain hidden until an authorized person assigns them. There is no implicit pool-review exception. The default all-post-approval Case Manager role still sees the approved pool.
+
+## Operations role under discussion
+
+The user proposed adding a supplied Operations role for organization work. Its default responsibilities, record access, and campaign sending authority remain open; this would be a fifth platform-supplied role rather than agency-created custom roles.
+
+## Administration proposal
+
+Group actions and record scope by module on the role screen. On the person screen, distinguish inherited permissions, individual additions, collaborator relationships, and effective access. Detailed screen design remains a subsequent design task.
+
+## Source and decision records
+
+- [Interview decisions](permission-system-interview.md)
+- [One supplied role with individual additions](adr/0001-staff-role-baseline-and-individual-additions.md)
+- [Retained Intake collaboration](adr/0002-retain-intake-collaboration-after-handoff.md)
+- [Organization authority and proposer credit](adr/0003-organization-authority-and-proposer-credit.md)
+- [Domain glossary](../CONTEXT.md)
+
+Current source inspection found personal/org support for workflows and templates, organization-only campaigns, and donor phase categories without the surrogate approval gate/handoff. The interview record contains the source references. These observations are not live runtime or deployment verification.
