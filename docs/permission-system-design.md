@@ -138,7 +138,7 @@ The user proposed adding a supplied Operations role for organization work. Its d
 
 ## Administration proposal
 
-Group actions and record scope by module on the role screen. On the person screen, distinguish inherited permissions, individual additions, collaborator relationships, and effective access. Detailed screen design remains a subsequent design task.
+Group actions and record scope by module on the role screen. On the person screen, distinguish inherited permissions, individual additions, collaborator relationships, and effective access. [Three UI mock-ups](mockups/permissions/README.md) cover role configuration, individual access, and access explanations. They await design feedback; interaction details and Operations defaults remain open.
 
 ## Source and decision records
 
