@@ -104,6 +104,17 @@ def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations() -> None:
     assert "--cov-append" in workflow
 
 
+def test_ci_runs_committed_outbox_tests_outside_shared_database_workers() -> None:
+    workflow = CI_WORKFLOW.read_text()
+    parallel = workflow.split("- name: Run parallel-safe tests", 1)[1].split("- name:", 1)[0]
+    serial = workflow.split("- name: Run shared-database tests serially", 1)[1].split("- name:", 1)[0]
+
+    assert "--ignore tests/test_email_delivery_outbox.py" in parallel
+    assert "tests/test_email_delivery_outbox.py" in serial
+    assert "-n 4" not in serial
+    assert "--cov-append" in serial
+
+
 def test_ci_shards_frontend_tests_and_preserves_aggregate_gate() -> None:
     workflow = CI_WORKFLOW.read_text()
 

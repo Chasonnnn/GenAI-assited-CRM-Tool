@@ -99,19 +99,21 @@ jobs:
         working-directory: apps/api
         run: uv run -m alembic check
 
-      # Migration tests change the shared schema and must not overlap xdist workers.
+      # Migrations change the schema; outbox tests commit rows visible to global claimers.
+      # Neither may overlap other workers on the shared test database.
       - name: Run parallel-safe tests
         working-directory: apps/api
         run: |
           PYTHONPATH=. uv run -m pytest tests/ -v --tb=short \
             --ignore-glob 'tests/test_migration_*.py' \
+            --ignore tests/test_email_delivery_outbox.py \
             -n 4 --dist loadscope \
             --cov=app --cov-branch --cov-report=
 
-      - name: Run migration tests serially and finalize coverage
+      - name: Run shared-database tests serially and finalize coverage
         working-directory: apps/api
         run: |
-          PYTHONPATH=. uv run -m pytest tests/test_migration_*.py -v --tb=short \
+          PYTHONPATH=. uv run -m pytest tests/test_email_delivery_outbox.py tests/test_migration_*.py -v --tb=short \
             --cov=app --cov-branch --cov-append \
             --cov-report=xml --cov-report=term-missing:skip-covered
 
