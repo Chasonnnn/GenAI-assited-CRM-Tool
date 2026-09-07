@@ -9,6 +9,7 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
-## 2025-05-20 - Table Checkbox Accessibility (Continued)
-**Learning:** In the `ops/templates/system/[systemKey]/page.client.tsx`, table row selection checkboxes lacked accessible names. When rendering `<Checkbox>` components iteratively without directly associated `<label>` tags (via `htmlFor`), a dynamically generated `aria-label` is required.
-**Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data (e.g., `aria-label={\`Select ${org.name}\`}`).
+
+## 2025-05-20 - False Positive on Base UI Checkboxes
+**Learning:** Components from Base UI (like `@base-ui/react/checkbox`) automatically derive their accessible name when wrapped in a native HTML `<label>`. Adding a redundant `aria-label` is unnecessary.
+**Action:** Do not blindly add `aria-label` to Base UI `<Checkbox>` components if they are already wrapped by a semantic `<label>` tag.
