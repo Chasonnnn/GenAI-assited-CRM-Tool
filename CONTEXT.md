@@ -28,4 +28,14 @@
 
 **Record scope**: The set of agency records a staff member may access within a module, shared by viewing and editing and defined separately from action permissions. A person's scope can differ between modules.
 
-**Approval boundary**: The milestone in a surrogate, egg-donor, or sperm-donor pipeline that separates before-approval and post-approval access.
+**Approval boundary**: The Approved milestone in a surrogate, egg-donor, or sperm-donor pipeline, which begins post-approval access.
+
+**Applicant approval**: An authorized decision that a surrogate or donor applicant has reached the Approved milestone. It is distinct from approval of a requested stage correction.
+
+**Approved donor pool**: A shared pool of approved donors awaiting ownership by a Case Manager.
+
+**Intake collaborator**: The Intake owner retained at approval handoff, or another Intake staff member explicitly added to continue follow-up. The collaborator may view and update normal information until removed by a Case Manager or Admin; stage changes and reassignment require separate permissions.
+
+**Personal work**: A workflow, campaign, or template belonging to one staff member and private from peers, with audited agency-Admin management. Personal workflows and campaigns operate on the owner's currently assigned records or records where the owner is an Intake collaborator.
+
+**Organization work**: A workflow, campaign, or template belonging to the agency rather than an individual staff member.
