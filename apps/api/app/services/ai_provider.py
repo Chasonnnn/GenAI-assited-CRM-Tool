@@ -44,7 +44,7 @@ class ChatResponse:
         """Estimate cost based on model pricing (approximate)."""
         # Introductory pricing per 1M tokens through December 31, 2026.
         pricing = {
-            "gemini-3.7-flash": {"input": Decimal("0.75"), "output": Decimal("3.75")},
+            "gemini-3.8-flash": {"input": Decimal("0.75"), "output": Decimal("3.75")},
         }
 
         model_pricing = pricing.get(self.model, {"input": Decimal("0"), "output": Decimal("0")})
@@ -291,7 +291,7 @@ class GoogleGenAIProvider(AIProvider):
 class GeminiProvider(GoogleGenAIProvider):
     """Google Gemini API provider."""
 
-    def __init__(self, api_key: str, default_model: str = "gemini-3.7-flash") -> None:
+    def __init__(self, api_key: str, default_model: str = "gemini-3.8-flash") -> None:
         self.api_key = api_key
         client = genai.Client(api_key=api_key)
         super().__init__(client, default_model)
@@ -402,7 +402,7 @@ class VertexWIFProvider(GoogleGenAIProvider):
     """Vertex AI provider using Workload Identity Federation (OIDC)."""
 
     def __init__(
-        self, config: VertexWIFConfig, default_model: str = "gemini-3.7-flash"
+        self, config: VertexWIFConfig, default_model: str = "gemini-3.8-flash"
     ) -> None:
         self.config = config
         self._credentials = VertexWIFCredentials(config)
@@ -474,7 +474,7 @@ class VertexAPIKeyProvider(GoogleGenAIProvider):
     def __init__(
         self,
         config: VertexAPIKeyConfig,
-        default_model: str = "gemini-3.7-flash",
+        default_model: str = "gemini-3.8-flash",
     ) -> None:
         self.config = config
         self._is_express = not (config.project_id and config.location)
@@ -509,13 +509,13 @@ def get_provider(
 ) -> AIProvider:
     """Factory function to get the appropriate AI provider."""
     if provider_name == "gemini":
-        return GeminiProvider(api_key, default_model=model or "gemini-3.7-flash")
+        return GeminiProvider(api_key, default_model=model or "gemini-3.8-flash")
     elif provider_name == "vertex_api_key":
         config = VertexAPIKeyConfig(
             api_key=api_key,
             project_id=kwargs.get("project_id"),
             location=kwargs.get("location"),
         )
-        return VertexAPIKeyProvider(config, default_model=model or "gemini-3.7-flash")
+        return VertexAPIKeyProvider(config, default_model=model or "gemini-3.8-flash")
     else:
         raise ValueError(f"Unknown provider: {provider_name}")

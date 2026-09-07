@@ -432,17 +432,17 @@ const AI_PROVIDERS = [
     {
         value: "gemini",
         label: "Google Gemini",
-        models: ["gemini-3.7-flash"],
+        models: ["gemini-3.8-flash"],
     },
     {
         value: "vertex_api_key",
         label: "Vertex AI (API Key)",
-        models: ["gemini-3.7-flash"],
+        models: ["gemini-3.8-flash"],
     },
     {
         value: "vertex_wif",
         label: "Vertex AI (WIF)",
-        models: ["gemini-3.7-flash"],
+        models: ["gemini-3.8-flash"],
     },
 ] as const
 

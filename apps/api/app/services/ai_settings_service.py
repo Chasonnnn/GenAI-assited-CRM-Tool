@@ -23,8 +23,8 @@ from app.services.ai_provider import (
 
 ENTITY_TYPE = "ai_settings"
 
-GEMINI_MODELS = {"gemini-3.7-flash"}
-DEFAULT_GEMINI_MODEL = "gemini-3.7-flash"
+GEMINI_MODELS = {"gemini-3.8-flash"}
+DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
 GEMINI_VERTEX_LOCATIONS = {"global", "us", "eu"}
 
 
@@ -167,7 +167,7 @@ def update_ai_settings(
     )
     if target_provider == "vertex_wif" and target_vertex_location not in GEMINI_VERTEX_LOCATIONS:
         raise ValueError(
-            "Vertex AI location must be global, us, or eu for gemini-3.7-flash."
+            "Vertex AI location must be global, us, or eu for gemini-3.8-flash."
         )
     if (
         target_provider == "vertex_api_key"
@@ -175,7 +175,7 @@ def update_ai_settings(
         and target_vertex_location not in GEMINI_VERTEX_LOCATIONS
     ):
         raise ValueError(
-            "Vertex AI location must be global, us, or eu for gemini-3.7-flash."
+            "Vertex AI location must be global, us, or eu for gemini-3.8-flash."
         )
 
     if is_enabled is not None:
@@ -190,7 +190,7 @@ def update_ai_settings(
         ai_settings.api_key_encrypted = encrypt_api_key(api_key)
     if ai_settings.provider in ("gemini", "vertex_wif", "vertex_api_key"):
         if model is not None and model not in GEMINI_MODELS:
-            raise ValueError("Only gemini-3.7-flash is supported for this provider.")
+            raise ValueError("Only gemini-3.8-flash is supported for this provider.")
         if model is None and ai_settings.model not in GEMINI_MODELS:
             ai_settings.model = DEFAULT_GEMINI_MODEL
     else:
