@@ -14,6 +14,7 @@ async def test_liveness_does_not_depend_on_metrics_database(
         raise RuntimeError("metrics database unavailable")
 
     monkeypatch.setattr(main, "SessionLocal", unavailable_metrics_database)
+    monkeypatch.setattr(main, "MetricsSessionLocal", unavailable_metrics_database)
 
     async with AsyncClient(
         transport=ASGITransport(app=main.app), base_url="https://test"

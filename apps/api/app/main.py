@@ -3,7 +3,9 @@
 import asyncio
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from threading import BoundedSemaphore
 from time import perf_counter
 from uuid import UUID
 
@@ -38,7 +40,7 @@ from app.core.structured_logging import (
 )
 from app.core.telemetry import configure_telemetry
 from app.db.enums import AlertSeverity, AlertType, AuditEventType
-from app.db.session import SessionLocal, engine
+from app.db.session import MetricsSessionLocal, SessionLocal, engine, metrics_engine
 from app.routers import (
     admin_exports,
     admin_imports,
@@ -118,6 +120,9 @@ from app.routers import (
     websocket as ws_router,
 )
 from app.services import alert_service, metrics_service
+
+_metrics_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="request-metrics")
+_metrics_capacity = BoundedSemaphore(1)
 
 # ============================================================================
 # GCP Monitoring (Cloud Logging + Error Reporting)
@@ -213,6 +218,7 @@ if settings.SENTRY_DSN.get_secret_value() and settings.ENV != "dev":
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _metrics_executor, _metrics_capacity
     from app.core.websocket import (
         manager,
         start_session_revocation_listener,
@@ -231,7 +237,14 @@ async def lifespan(app: FastAPI):
     manager.set_event_loop(asyncio.get_running_loop())
     await start_session_revocation_listener()
     await start_websocket_event_listener()
-    yield
+    _metrics_executor.shutdown(wait=False, cancel_futures=True)
+    _metrics_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="request-metrics")
+    _metrics_capacity = BoundedSemaphore(1)
+    try:
+        yield
+    finally:
+        _metrics_executor.shutdown(wait=False, cancel_futures=True)
+        metrics_engine.dispose()
 
 
 app = FastAPI(
@@ -310,23 +323,52 @@ async def gcp_error_reporting_middleware(request, call_next):
         raise
 
 
-def _record_metrics(request: Request, status_code: int, duration_ms: int) -> None:
-    route = request.scope.get("route")
-    route_path = getattr(route, "path", request.url.path)
-    session = getattr(request.state, "user_session", None)
-    org_id = session.org_id if session else None
-    db = SessionLocal()
+def _record_metrics(request: Request, status_code: int, duration_ms: int) -> bool:
+    """Best-effort metrics: drop on contention instead of queuing or delaying requests."""
+    capacity = _metrics_capacity
+    if not capacity.acquire(blocking=False):
+        return False
     try:
+        route = request.scope.get("route")
+        session = getattr(request.state, "user_session", None)
+        future = _metrics_executor.submit(
+            _write_metrics,
+            route=getattr(route, "path", request.url.path),
+            method=request.method,
+            status_code=status_code,
+            duration_ms=duration_ms,
+            org_id=session.org_id if session else None,
+        )
+        future.add_done_callback(lambda _future: capacity.release())
+        return True
+    except Exception:
+        capacity.release()
+        logging.warning("Request metrics submission failed")
+        return False
+
+
+def _write_metrics(
+    *, route: str, method: str, status_code: int, duration_ms: int, org_id: UUID | None
+) -> None:
+    db = None
+    try:
+        db = MetricsSessionLocal()
         metrics_service.record_request(
             db=db,
-            route=route_path,
-            method=request.method,
+            route=route,
+            method=method,
             status_code=status_code,
             duration_ms=duration_ms,
             org_id=org_id,
         )
+    except Exception:
+        logging.warning("Request metrics write failed")
     finally:
-        db.close()
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                logging.warning("Request metrics session cleanup failed")
 
 
 def _is_mutation_method(method: str) -> bool:

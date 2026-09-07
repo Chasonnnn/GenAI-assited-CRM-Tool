@@ -83,10 +83,10 @@ def record_request(
     try:
         db.execute(stmt)
         db.commit()
-    except Exception as exc:
+    except Exception:
         # Best effort - don't fail requests on metrics errors
         db.rollback()
-        logger.warning("Failed to record request metrics: %s", exc)
+        logger.warning("Failed to record request metrics")
 
 
 def get_request_metrics(
