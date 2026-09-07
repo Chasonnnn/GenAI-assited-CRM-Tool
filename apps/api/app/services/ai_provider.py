@@ -343,7 +343,11 @@ class VertexWIFCredentials(Credentials):
 
     def refresh(self, request: Request) -> None:  # noqa: ARG002
         now = datetime.now(UTC)
-        if self.token and self.expiry and self.expiry > now + timedelta(minutes=2):
+        if (
+            self.token
+            and self.expiry
+            and self.expiry.replace(tzinfo=UTC) > now + timedelta(minutes=2)
+        ):
             return
 
         from app.services import wif_oidc_service
@@ -392,22 +396,22 @@ class VertexWIFCredentials(Credentials):
         access_token = iam_payload["accessToken"]
         expires_at = iam_payload.get("expireTime")
         if expires_at:
-            self.expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+            expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
         else:
-            self.expiry = now + timedelta(hours=1)
+            expiry = now + timedelta(hours=1)
+        # google-auth Credentials requires naive UTC at its expiry boundary.
+        self.expiry = expiry.astimezone(UTC).replace(tzinfo=None)
         self.token = access_token
 
 
 class VertexWIFProvider(GoogleGenAIProvider):
     """Vertex AI provider using Workload Identity Federation (OIDC)."""
 
-    def __init__(
-        self, config: VertexWIFConfig, default_model: str = "gemini-3.8-flash"
-    ) -> None:
+    def __init__(self, config: VertexWIFConfig, default_model: str = "gemini-3.8-flash") -> None:
         self.config = config
         self._credentials = VertexWIFCredentials(config)
         client = genai.Client(
-            vertexai=True,
+            enterprise=True,
             project=config.project_id,
             location=config.location,
             credentials=self._credentials,
@@ -479,7 +483,7 @@ class VertexAPIKeyProvider(GoogleGenAIProvider):
         self.config = config
         self._is_express = not (config.project_id and config.location)
         client_kwargs: dict[str, object] = {
-            "vertexai": True,
+            "enterprise": True,
             "api_key": config.api_key,
             "http_options": types.HttpOptions(api_version="v1"),
         }

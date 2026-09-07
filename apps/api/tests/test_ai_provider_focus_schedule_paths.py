@@ -166,6 +166,8 @@ def test_vertex_wif_credentials_refresh(monkeypatch):
     creds.refresh(SimpleNamespace())
     assert creds.token == "iam-token"
     assert creds.expiry is not None
+    assert creds.expiry.tzinfo is None
+    assert isinstance(creds.expired, bool)
     assert creds._normalize_audience("projects/1/providers/x").startswith("//iam.googleapis.com/")
     assert creds._normalize_audience("//iam.googleapis.com/projects/1/providers/x").startswith("//")
 
