@@ -39,7 +39,10 @@ The production-copy rehearsal verified the prior migration source and preserved 
 - Metrics regressions cover request-pool exhaustion, response and event-loop responsiveness, saturation, immutable tenant metadata, sanitized failures, and bounded shutdown.
 - The initial backend run exposed the expected request-pool query reduction (8 to 7) and a missing declared Starlette test transport. Both were corrected and the complete backend suite rerun.
 - UI label regressions failed before the fixes. React Doctor noted the unchanged booking-URL hydration fallback; no new issue was introduced by the labels.
-- GitHub [main-branch CI](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions?query=branch%3Amain) remains mandatory before closing superseded fixes or considering release approval.
+- Protected `main` rejected direct push because eight checks are required. The committed work is published through [PR #679](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/pull/679) on `codex/release-readiness-0906`; it has not been merged.
+- The first PR CI run passed seven required gates, including security scans and all production image builds. Its backend failure reproduced locally with `ATTACHMENT_SCAN_ENABLED=false`: the case download test depended on local scan configuration. The test now explicitly enables scanning; 34 case/attachment regressions passed under CI defaults. Product behavior is unchanged.
+- PRs #629, #659, #664, and #678 were closed with validation evidence. Thirteen valid or mixed PRs are listed for closure after #679 merges; #673 remains open for the separate documentation decision.
+- Passing CI on the final PR head remains mandatory before merge or release approval.
 
 ## Replacement commits
 

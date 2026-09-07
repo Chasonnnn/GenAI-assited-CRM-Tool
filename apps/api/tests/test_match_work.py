@@ -359,7 +359,10 @@ async def test_wrong_attempt_source_and_closed_case_are_rejected(authed_client, 
 
 
 @pytest.mark.asyncio
-async def test_case_file_upload_download_and_delete(authed_client, db, cases):
+async def test_case_file_upload_download_and_delete(authed_client, db, cases, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", True)
     _, current, attempt = cases
     from io import BytesIO
 
