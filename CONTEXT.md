@@ -36,6 +36,10 @@
 
 **Intake collaborator**: The Intake owner retained at approval handoff, or another Intake staff member explicitly added to continue follow-up. The collaborator may view and update normal information until removed by a Case Manager or Admin; stage changes and reassignment require separate permissions.
 
-**Personal work**: A workflow, campaign, or template belonging to one staff member and private from peers, with audited agency-Admin management. Personal workflows and campaigns operate on the owner's currently assigned records or records where the owner is an Intake collaborator.
+**Personal work**: A workflow, campaign, or template belonging to one staff member and private from peers, with audited agency-Admin management. Personal workflows and campaigns operate on the owner's currently assigned or Intake-collaborator records within the owner's permitted actions.
 
-**Organization work**: A workflow, campaign, or template belonging to the agency rather than an individual staff member.
+**Organization work**: A workflow, campaign, or template belonging to the agency rather than an individual staff member. Enabled or scheduled organization work continues independently of the original proposer's membership.
+
+**Organization publication**: An independent organization-owned copy of personal work. Changes to the personal original do not change the published copy.
+
+**Proposer**: The original contributor credited for organization work, including work shared from a personal original. Attribution remains after departure and does not confer ownership or access rights.

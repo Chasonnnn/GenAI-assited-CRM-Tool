@@ -13,13 +13,13 @@ Status: discovery. Initial product direction accepted; detailed access rules rem
 
 | Decision | Status | Dependent decisions |
 |---|---|---|
-| Primary problems and success criteria | Predictable staff access and easier configuration accepted; concrete scenarios pending | Acceptance scenarios, migration priority, administration experience |
+| Primary problems and success criteria | Predictable access and easier setup; Intake follow-up and Case Manager matching are concrete acceptance scenarios | Migration priority, administration experience |
 | Organization control over internal staff access | Agency edits Intake/Case roles; Admin and Dev protected; one role plus removable action/scope additions | Delegation limits, effects of role changes |
 | People included in the first redesign | Internal staff prioritized; no concrete platform-support access use case identified | Existing developer-access compatibility review; new support mechanism deferred in the proposal |
 | Module and action permissions | Campaign editing/sending separate; workflow editing/activation share Manage Workflows | Other action groups, shared capabilities, dependency rules, configuration UI |
-| Record and sensitive-data access | Case Managers see/edit all Approved-and-later records; owner at handoff retains Intake collaborator access for information updates until removed | Interaction with phase limits, sensitive data, linked records, exports |
-| Approval and background execution | Applicant approval is an explicit permission; approved donors enter a shared claim pool | Workflow activation, retries, revocation, background authority |
-| Personal and organization content | All three support both scopes; personal work private from peers with audited Admin management; personal actions limited to assigned/collaborated records | Organization management, publication, background authority |
+| Record and sensitive-data access | Broad Case post-approval scope; retained Intake access covers existing sections; linked match/IP content requires both parties' access | Phase exception, exports, migration |
+| Approval and background execution | Applicant approval explicit; approved donors enter claim pool; org work survives creator access loss and personal work stops | Agency authorization, runtime checks, ownership transfer, migration |
+| Personal and organization content | Personal scope private from peers with audited Admin access; org management delegable by module; publication creates a copy | Template dependencies, ownership transfer, audience validation |
 | Migration and verification | Awaiting target behavior | Existing access comparison, rollout, recovery, completion criteria |
 
 ## Round 1 decisions
@@ -86,22 +86,43 @@ Interview questions use the native tool that waits for a response.
 2. Agency Admins may inspect and manage personal work with an audit trail. Personal work is private from peers, not from agency administrators.
 3. Personal workflows and campaigns may act on currently assigned records and records where their owner is an Intake collaborator. Visibility of other records does not extend personal automation/campaign reach; underlying action permissions remain relevant.
 
-## Round 11 pending
+## Round 11 decisions
 
-1. Who can manage or publish organization content.
-2. Whether publishing personal content creates an organization copy or changes/shares the original.
-3. How enabled/scheduled work responds when its creator loses needed access or leaves the agency.
+1. Organization-work management defaults to Admin, with explicit delegation by module to selected roles or people.
+2. Publishing personal work creates a separate organization copy. Later edits to the personal original do not change the published copy.
+3. After reconsideration, organization workflows/campaigns continue under agency authority when their creator leaves or loses permissions; personal work stops when its owner loses required access. This supersedes the initial choice to pause both scopes. Agency-work cancellation and authority to configure its actions remain separate controls.
+
+## Round 12 decisions
+
+1. Retained Intake access covers existing profile, notes, documents, and correspondence sections under their action permissions. Do not add field-level restrictions in this milestone.
+2. Shared match details and joint documents require access to both parties. Donor/surrogate collaboration does not automatically grant Intended Parent access.
+3. When a member changes roles, the Admin reviews individual additions and collaborator access and explicitly chooses what to retain; neither automatic carryover nor automatic clearing is the default.
+
+## Organization attribution
+
+- Organization ownership, not the original proposer's membership, governs the continued operation of enabled/scheduled organization work. Staff departure does not pause it.
+- The Details tab shows Proposed by to credit the original contributor. Publishing a personal copy preserves that original attribution even when someone else publishes or later edits the organization copy.
+- Attribution remains historical after the proposer leaves. Attribution does not give the proposer continuing edit rights or expose the private source item to peers.
+- Creation, publication, and later edits retain their actual actor attribution in audit history; publication does not automatically send a campaign.
+
+## Round 13 pending
+
+1. Whether activation of an organization workflow requires the configuring person's underlying action permissions, beyond Manage Workflows.
+2. Whether personal work skips a record after losing access to it or pauses the entire affected run.
+3. How to handle existing negative user overrides and uncertain historical collaborator assignments during migration.
+
+No answers were received for this round. Recommendations remain unaccepted: validate underlying action authority at activation, skip unauthorized records while continuing authorized personal work, and review unmappable access before migration.
 
 ## Remaining decisions
 
 - Interaction of retained Intake access with phase constraints, and claim behavior for nondefault assigned-only scopes.
-- Organization ownership, publication, and sharing rules for campaigns, workflows, and templates.
-- Whose authority governs background execution and how revocation affects queued work.
-- Permission administration limits, role changes, revocation timing, linked-record access, and migration defaults.
+- Publication dependencies and personal-work ownership changes.
+- Agency-work authorization, runtime checks, and personal-work ownership transfer.
+- Permission administration limits, revocation timing, and migration defaults. Role-change review and both-party access for linked records are settled.
 
 ## Approval baseline from current source
 
-- Surrogates have a protected Approved gate and move to the Surrogate Pool at the gate. Approved is categorized as intake, while Case Manager record visibility begins at Approved; these overlapping rules need one explicit target definition.
+- Surrogates have a protected Approved gate and move to the Surrogate Pool at the gate. Current code categorizes Approved as intake while Case Manager visibility begins there; the accepted target instead makes Approved the first post-approval milestone.
 - Egg donors enter the post-approval category at Ready to Match; sperm donors enter it at Available. Neither donor pipeline currently has a protected approval gate or equivalent ownership handoff.
 - Donor stage-correction approval concerns requested backward stage changes. It is not applicant acceptance.
 - Sources: `apps/api/app/core/stage_definitions.py`, `apps/api/app/core/surrogate_access.py`, `apps/api/app/services/surrogate_events.py`, `apps/api/app/services/donor_service.py`. Source inspection only; live organization configuration was not checked.
@@ -109,7 +130,7 @@ Interview questions use the native tool that waits for a response.
 ## Personal and organization baseline from current source
 
 - Workflows and email templates have explicit personal/org scope. Campaigns currently have organization ownership and creator attribution, without personal scope.
-- Personal workflows restrict editing to their owner; personal templates allow Admin/Dev editing as well. The target administrator policy needs one explicit definition.
+- Personal workflows currently restrict editing to their owner; personal templates allow Admin/Dev editing as well. The accepted target gives agency Admins audited management of both.
 - Personal workflows currently act on records owned by the workflow owner, not every record the person can view. Campaign recipient filters are organization-wide today.
 - Sources: `apps/api/app/services/workflow_access.py`, `apps/api/app/services/workflow_triggers.py`, `apps/api/app/routers/email_templates.py`, `apps/api/app/schemas/campaign.py`, `apps/api/app/services/campaign_service.py`. Source inspection only.
 
@@ -138,7 +159,7 @@ These definitions are discussion terms, not an approved data model.
 - Accepted: editable role presets with removable individual permission additions. Role-wide changes alone cannot cover a person who needs higher access than peers; removing an addition restores inherited permissions. Administration limits remain open.
 - Accepted: configure record scope separately from permitted actions.
 - Accepted: agencies edit supplied roles instead of creating custom roles; each staff member has exactly one role plus individual additions. This keeps role inheritance simpler while retaining person-specific flexibility.
-- Accepted: record scope can differ by module, with the same scope for viewing and editing. First-release controls include assignment, stages, and all agency records; their combination remains open.
+- Accepted: record scope can differ by module, with the same scope for viewing and editing. First-release controls include assignment, stages, and all agency records; simultaneous constraints combine with AND.
 - Accepted: campaign editing and sending are separate permissions.
 - Accepted: individual record scope may be explicitly widened and later restored; action additions do not implicitly widen scope.
 - Accepted: agency configuration applies to Intake Specialist and Case Manager baselines; Admin and Dev baselines remain protected.
@@ -150,4 +171,8 @@ These definitions are discussion terms, not an approved data model.
 - Accepted: retain the owner at approval handoff as an Intake collaborator, with viewing/information-update access until a Case Manager or Admin removes it; other collaborators require explicit addition.
 - Accepted: personal and organization scope for campaigns, workflows, and templates, including new personal campaigns. Admin management of personal work is audited; peers cannot access another person's personal work.
 - Accepted: personal workflows/campaigns act on currently assigned or Intake-collaborator records, subject to action permissions.
+- Accepted: organization management is delegable by module and publication creates an independent organization copy.
+- Accepted after reconsideration: organization work continues under agency authority after creator access loss; personal work stops when its owner lacks required access. The earlier pause-both choice is superseded.
+- Accepted: retained Intake access covers existing sections under action permissions; joint match/IP content requires both parties' access; role changes require explicit review of additions and collaborator access.
+- Accepted: the organization Details tab credits the original contributor with Proposed by, independently of ownership, current membership, and execution authority.
 - Accepted initially: internal staff and platform support form the first-release scope. Round 2 identified no support use case, so the proposal defers a new support mechanism. External professionals and participants remain outside this milestone.
