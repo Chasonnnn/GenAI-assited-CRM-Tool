@@ -129,6 +129,20 @@ export function useUploadIPAttachment() {
     })
 }
 
+export function useDeleteIPAttachment() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ attachmentId }: { ipId: string; attachmentId: string }) =>
+            attachmentsApi.delete(attachmentId),
+        onSuccess: (_, { ipId }) => {
+            void queryClient.invalidateQueries({ queryKey: ["ip-attachments", ipId] })
+            void queryClient.invalidateQueries({
+                queryKey: entityActivityKeys.entity("intended_parent", ipId),
+            })
+        },
+    })
+}
+
 export const donorAttachmentKeys = {
     all: ["donor-attachments"] as const,
     list: (donorId: string) => [...donorAttachmentKeys.all, donorId] as const,

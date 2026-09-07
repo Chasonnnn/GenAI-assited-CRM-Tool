@@ -97,6 +97,18 @@ def test_web_dockerfile_runs_non_root_and_has_healthcheck() -> None:
     assert "/health" in content[health_idx:], "HEALTHCHECK should target /health"
 
 
+def test_web_runtime_uses_minimal_next_standalone_output() -> None:
+    next_config = _read("apps/web/next.config.js")
+    dockerfile = _read("apps/web/Dockerfile")
+    runner = dockerfile.split("AS runner", 1)[1]
+
+    assert 'output: "standalone"' in next_config
+    assert "RUN pnpm prune --prod" not in dockerfile
+    assert "/app/apps/web/.next/standalone ./" in runner
+    assert "/app/apps/web/.next/static ./.next/static" in runner
+    assert 'CMD ["node", "server.js"]' in runner
+
+
 def test_compose_uses_postgres_18_1_with_new_pgdata() -> None:
     content = _read("docker-compose.yml")
     assert "image: postgres:18.1" in content

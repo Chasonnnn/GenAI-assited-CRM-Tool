@@ -4,6 +4,7 @@
  * UploadFileDialog - Dialog for uploading files to Surrogate or IP from Match detail page
  */
 
+import type { MatchWorkSource } from "@/lib/api/matches"
 import { useState, useRef, useId } from "react"
 import {
     Dialog,
@@ -20,9 +21,10 @@ import { UploadIcon, FileIcon, XIcon, Loader2Icon } from "lucide-react"
 interface UploadFileDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    onUpload: (target: "surrogate" | "ip", file: File) => Promise<void>
+    onUpload: (target: MatchWorkSource, file: File) => Promise<void>
     isPending: boolean
     surrogateName: string
+    participantKind?: "surrogate" | "donor"
     ipName: string
 }
 
@@ -38,9 +40,10 @@ export function UploadFileDialog({
     onUpload,
     isPending,
     surrogateName,
+    participantKind = "surrogate",
     ipName,
 }: UploadFileDialogProps) {
-    const [target, setTarget] = useState<"surrogate" | "ip">("surrogate")
+    const [target, setTarget] = useState<MatchWorkSource>("match")
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const fileInputId = useId()
@@ -48,9 +51,9 @@ export function UploadFileDialog({
     const handleSubmit = async () => {
         if (!selectedFile) return
 
-        await onUpload(target, selectedFile)
+        try { await onUpload(target, selectedFile) } catch { return }
         setSelectedFile(null)
-        setTarget("surrogate")
+        setTarget("match")
         onOpenChange(false)
     }
 
@@ -71,7 +74,7 @@ export function UploadFileDialog({
     const handleClose = (isOpen: boolean) => {
         if (!isOpen) {
             setSelectedFile(null)
-            setTarget("surrogate")
+            setTarget("match")
         }
         onOpenChange(isOpen)
     }
@@ -86,16 +89,20 @@ export function UploadFileDialog({
                 <div className="space-y-4 py-4">
                     {/* Target selection */}
                     <div className="space-y-2">
-                        <Label>Upload to</Label>
+                        <Label>Related to</Label>
                         <RadioGroup
                             value={target}
-                            onValueChange={(v) => setTarget(v as "surrogate" | "ip")}
-                            className="flex gap-4"
+                            onValueChange={(v) => setTarget(v as MatchWorkSource)}
+                            className="flex flex-col gap-3"
                         >
                             <div className="flex items-center gap-2">
-                                <RadioGroupItem value="surrogate" id="target-surrogate" />
+                                <RadioGroupItem value="match" id="target-match" />
+                                <Label htmlFor="target-match" className="font-normal cursor-pointer">Match</Label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <RadioGroupItem value={participantKind} id="target-surrogate" />
                                 <Label htmlFor="target-surrogate" className="font-normal cursor-pointer">
-                                    {surrogateName} (Surrogate)
+                                    {surrogateName} ({participantKind === "donor" ? "Donor" : "Surrogate"})
                                 </Label>
                             </div>
                             <div className="flex items-center gap-2">

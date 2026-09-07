@@ -27,6 +27,7 @@ from app.schemas.donor import (
     DonorUpdate,
 )
 from app.schemas.entity_note import EntityNoteCreate, EntityNoteListItem, EntityNoteRead
+from app.schemas.record_owner import RecordOwnerOptions
 from app.services import (
     audit_service,
     donor_service,
@@ -34,6 +35,7 @@ from app.services import (
     note_service,
     permission_service,
     phi_access_service,
+    record_owner_service,
     user_service,
 )
 
@@ -160,6 +162,16 @@ def create_donor(
     except ValueError as exc:
         _raise_domain_error(exc)
     return DonorRead.model_validate(donor)
+
+
+@router.get("/owner-options", response_model=RecordOwnerOptions)
+def get_donor_owner_options(
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[
+        UserSession, Depends(require_permission(POLICIES["donors"].actions["edit"]))
+    ],
+) -> RecordOwnerOptions:
+    return record_owner_service.list_owner_options(db, session.org_id)
 
 
 @router.get("/{donor_id}", response_model=DonorRead)

@@ -8,8 +8,12 @@ import api from '../api'
 // Types
 // =============================================================================
 
+export type MatchKind = 'surrogate' | 'donor'
+
 export interface MatchCreate {
-    surrogate_id: string
+    surrogate_id?: string
+    donor_id?: string
+    match_kind?: MatchKind
     intended_parent_id: string
     notes?: string
 }
@@ -17,7 +21,15 @@ export interface MatchCreate {
 export interface MatchRead {
     id: string
     match_number: string
-    surrogate_id: string
+    surrogate_id: string | null
+    donor_id?: string | null
+    match_kind?: MatchKind
+    donor_name?: string | null
+    donor_number?: string | null
+    donor_stage_label?: string | null
+    closed_at?: string | null
+    closure_reason?: string | null
+    outcome?: string | null
     intended_parent_id: string
     status: string
     proposed_by_user_id: string | null
@@ -41,7 +53,15 @@ export interface MatchRead {
 export interface MatchListItem {
     id: string
     match_number: string
-    surrogate_id: string
+    surrogate_id: string | null
+    donor_id?: string | null
+    match_kind?: MatchKind
+    donor_name?: string | null
+    donor_number?: string | null
+    donor_stage_label?: string | null
+    closed_at?: string | null
+    closure_reason?: string | null
+    outcome?: string | null
     surrogate_number: string | null
     surrogate_name: string | null
     intended_parent_id: string
@@ -84,7 +104,7 @@ export interface MatchUpdateNotesRequest {
     notes: string
 }
 
-export type MatchStatus = 'proposed' | 'reviewing' | 'accepted' | 'cancel_pending' | 'rejected' | 'cancelled'
+export type MatchStatus = 'proposed' | 'reviewing' | 'accepted' | 'cancel_pending' | 'rejected' | 'cancelled' | 'completed'
 
 // =============================================================================
 // API Functions
@@ -93,6 +113,8 @@ export type MatchStatus = 'proposed' | 'reviewing' | 'accepted' | 'cancel_pendin
 export interface ListMatchesParams {
     status?: MatchStatus
     surrogate_id?: string
+    donor_id?: string
+    match_kind?: MatchKind
     intended_parent_id?: string
     q?: string  // Search match/surrogate/IP names or numbers
     page?: number
@@ -107,6 +129,8 @@ export interface ListMatchesParams {
 export async function listMatches(params: ListMatchesParams = {}): Promise<MatchListResponse> {
     const searchParams = new URLSearchParams()
     if (params.status) searchParams.set('status', params.status)
+    if (params.donor_id) searchParams.set('donor_id', params.donor_id)
+    if (params.match_kind) searchParams.set('match_kind', params.match_kind)
     if (params.surrogate_id) searchParams.set('surrogate_id', params.surrogate_id)
     if (params.intended_parent_id) searchParams.set('intended_parent_id', params.intended_parent_id)
     if (params.q) searchParams.set('q', params.q)
@@ -171,7 +195,7 @@ export async function updateMatchNotes(matchId: string, data: MatchUpdateNotesRe
 // Match Events Types
 // =============================================================================
 
-export type MatchEventPersonType = 'surrogate' | 'ip'
+export type MatchEventPersonType = 'surrogate' | 'donor' | 'ip'
 export type MatchEventType = 'medication' | 'medical_exam' | 'legal' | 'delivery' | 'custom'
 
 export interface MatchEventCreate {
@@ -237,4 +261,97 @@ export async function updateMatchEvent(matchId: string, eventId: string, data: M
  */
 export async function deleteMatchEvent(matchId: string, eventId: string): Promise<void> {
     await api.delete(`/matches/${matchId}/events/${eventId}`)
+}
+
+export type MatchWorkSource = 'surrogate' | 'donor' | 'ip' | 'match'
+export interface MatchWorkNote {
+    id: string
+    content: string
+    created_at: string
+    author_name?: string | null
+    source: MatchWorkSource
+    scope?: 'case' | 'record'
+}
+export interface MatchWorkFile {
+    id: string
+    filename: string
+    file_size: number
+    created_at: string
+    source: MatchWorkSource
+    scope?: 'case' | 'record'
+}
+export interface MatchWorkTask {
+    id: string
+    title: string
+    due_date: string | null
+    is_completed: boolean
+    source: MatchWorkSource
+    scope?: 'case' | 'record'
+}
+export interface MatchWorkActivity {
+    id: string
+    event_type: string
+    description: string
+    actor_name: string | null
+    created_at: string
+    source: MatchWorkSource
+    scope?: 'case' | 'record'
+}
+export interface MatchWork {
+    has_more?: boolean
+    can_view_notes?: boolean
+    can_view_tasks?: boolean
+    notes: MatchWorkNote[]
+    files: MatchWorkFile[]
+    tasks: MatchWorkTask[]
+    activity: MatchWorkActivity[]
+}
+export async function getMatchWork(matchId: string, attemptId?: string, page = 1): Promise<MatchWork> {
+    const params = new URLSearchParams()
+    if (attemptId) params.set('attempt_id', attemptId)
+    params.set('page', String(page))
+    return api.get<MatchWork>(`/matches/${matchId}/work${params.size ? `?${params}` : ''}`)
+}
+export async function createMatchNote(matchId: string, data: { content: string; source: MatchWorkSource; attempt_id?: string }): Promise<MatchWorkNote> {
+    return api.post<MatchWorkNote>(`/matches/${matchId}/notes`, data)
+}
+export async function uploadMatchFile(matchId: string, file: File, source: MatchWorkSource, attemptId?: string): Promise<MatchWorkFile> {
+    const params = new URLSearchParams({ source })
+    if (attemptId) params.set('attempt_id', attemptId)
+    const body = new FormData()
+    body.append('file', file)
+    return api.upload<MatchWorkFile>(`/matches/${matchId}/attachments?${params}`, body)
+}
+
+export interface MatchCompleteRequest { outcome: string; reason?: string }
+export function completeMatch(matchId: string, data: MatchCompleteRequest): Promise<MatchRead> {
+    return api.put<MatchRead>(`/matches/${matchId}/complete`, data)
+}
+export type MatchAttemptType = 'embryo_transfer' | 'retrieval' | 'collection' | 'other'
+export type MatchAttemptStatus = 'planned' | 'in_progress' | 'completed' | 'cancelled'
+export interface MatchAttemptInput {
+    attempt_type: MatchAttemptType
+    status?: MatchAttemptStatus
+    started_at?: string | null
+    ended_at?: string | null
+    outcome?: string | null
+}
+export interface MatchAttempt {
+    id: string
+    match_id: string
+    sequence: number
+    attempt_type: MatchAttemptType
+    status: MatchAttemptStatus
+    started_at: string | null
+    ended_at: string | null
+    outcome: string | null
+}
+export function listMatchAttempts(matchId: string): Promise<MatchAttempt[]> {
+    return api.get<MatchAttempt[]>(`/matches/${matchId}/attempts`)
+}
+export function createMatchAttempt(matchId: string, data: MatchAttemptInput): Promise<MatchAttempt> {
+    return api.post<MatchAttempt>(`/matches/${matchId}/attempts`, data)
+}
+export function updateMatchAttempt(matchId: string, attemptId: string, data: Partial<MatchAttemptInput>): Promise<MatchAttempt> {
+    return api.patch<MatchAttempt>(`/matches/${matchId}/attempts/${attemptId}`, data)
 }

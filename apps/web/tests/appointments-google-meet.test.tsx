@@ -213,6 +213,12 @@ describe("Appointments Google Meet UI", () => {
         expect(screen.getByRole("button", { name: "Copy booking link" })).toBeInTheDocument()
     })
 
+    it("labels the readonly booking link field", () => {
+        render(<AppointmentSettings />)
+        expect(screen.getByRole("textbox", { name: "Your booking link" })).toHaveAttribute("readonly")
+        expect(screen.getByRole("textbox", { name: "Your booking link" })).toHaveValue("https://example.com/book/abc")
+    })
+
     it("saves refreshed availability for days the user did not edit", () => {
         let rules = [
             {

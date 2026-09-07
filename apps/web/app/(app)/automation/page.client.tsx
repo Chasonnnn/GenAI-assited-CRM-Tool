@@ -1978,7 +1978,9 @@ function useAutomationPageView({
                                                 }}
                                             >
                                                 <SelectTrigger className="flex-1">
-                                                    <SelectValue placeholder="Select field to add" />
+                                                    <SelectValue placeholder="Select field to add">
+                                                        {(value: string | null) => value ? getConditionFieldLabel(value) : "Select field to add"}
+                                                    </SelectValue>
                                                 </SelectTrigger>
                                                 <SelectContent>
                                                     {availableConditionFields.map((field) => (
@@ -2986,7 +2988,9 @@ function useAutomationPageView({
                                         <p className="text-sm font-medium">Actions that would run:</p>
                                         {testResult.actions_preview.map((action) => (
                                             <div key={`${action.action_type}-${action.description}`} className="rounded bg-muted/50 px-3 py-2 text-sm">
-                                                <span className="font-medium">{action.action_type}:</span> {action.description}
+                                                {action.description.startsWith(`${action.action_type}: `)
+                                                    ? action.description.slice(action.action_type.length + 2)
+                                                    : action.description}
                                             </div>
                                         ))}
                                     </div>

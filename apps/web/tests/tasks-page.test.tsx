@@ -43,6 +43,7 @@ Object.defineProperty(window, 'localStorage', {
     writable: true,
 })
 
+const mockUseTask = vi.fn()
 const mockUseTasks = vi.fn()
 const mockCompleteTask = vi.fn()
 const mockUncompleteTask = vi.fn()
@@ -66,7 +67,10 @@ const mockSetAIContext = vi.fn()
 const mockClearAIContext = vi.fn()
 const mockUseDonors = vi.fn()
 
+vi.mock("@/lib/hooks/use-permissions", () => ({ useEffectivePermissions: () => ({ data: { permissions: ["edit_tasks", "delete_tasks"] } }) }))
+
 vi.mock('@/lib/hooks/use-tasks', () => ({
+    useTask: (id: string) => mockUseTask(id),
     useTasks: (params: unknown) => mockUseTasks(params),
     useCompleteTask: () => ({ mutateAsync: mockCompleteTask }),
     useUncompleteTask: () => ({ mutateAsync: mockUncompleteTask }),
@@ -124,6 +128,7 @@ vi.mock('@/components/appointments/UnifiedCalendar', () => ({
 
 describe('TasksPage', () => {
     beforeEach(() => {
+        mockUseTask.mockReset().mockReturnValue({ isLoading: true })
         mockNavigation.searchParams = new URLSearchParams()
         mockNavigation.push.mockReset()
         mockNavigation.replace.mockReset()
@@ -337,6 +342,21 @@ describe('TasksPage', () => {
         expect(screen.getByLabelText('Select task Follow up with surrogate')).not.toBeChecked()
     })
 
+    it("preserves full task description when editing from the global list", async () => {
+        mockUseTask.mockReturnValue({ data: {
+            id: "t1", title: "Follow up with surrogate", description: "Existing follow-up instructions", task_type: "follow_up", surrogate_id: "s1", surrogate_number: "S12345", intended_parent_id: null, donor_id: null,
+            owner_type: "user", owner_id: "u1", created_by_user_id: "u1", due_date: null, due_time: null, is_completed: false,
+        }, isError: false })
+        mockUpdateTask.mockResolvedValue({})
+        render(<TasksPage />)
+        fireEvent.click(screen.getByText("Follow up with surrogate"))
+        expect(mockUseTask).toHaveBeenCalledWith("t1")
+        expect(screen.getByLabelText("Description")).toHaveValue("Existing follow-up instructions")
+        fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Updated follow-up" } })
+        fireEvent.click(screen.getByRole("button", { name: "Save Changes" }))
+        await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith({ taskId: "t1", data: expect.objectContaining({ title: "Updated follow-up", description: "Existing follow-up instructions" }) }))
+    })
+
     it('updates AI context directly from the task editor lifecycle', () => {
         render(<TasksPage />)
 
@@ -350,7 +370,7 @@ describe('TasksPage', () => {
             entityName: 'Follow up with surrogate',
         })
 
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
         expect(mockClearAIContext).toHaveBeenCalledTimes(1)
     })

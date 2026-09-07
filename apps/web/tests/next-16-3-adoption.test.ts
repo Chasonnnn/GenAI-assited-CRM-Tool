@@ -49,8 +49,8 @@ describe("Next.js 16.3 adoption contracts", () => {
     })
 
     it("routes frontend agents to the version-matched bundled Next.js documentation", () => {
-        const agentsPath = join(process.cwd(), "AGENTS.md")
-        const claudePath = join(process.cwd(), "CLAUDE.md")
+        const agentsPath = join(process.cwd(), "../../AGENTS.md")
+        const claudePath = join(process.cwd(), "../../CLAUDE.md")
 
         expect(existsSync(agentsPath)).toBe(true)
         expect(existsSync(claudePath)).toBe(true)
@@ -58,11 +58,11 @@ describe("Next.js 16.3 adoption contracts", () => {
         const agents = readFileSync(agentsPath, "utf8")
         const claude = readFileSync(claudePath, "utf8")
 
-        expect(agents).toContain("../../AGENTS.md")
-        expect(agents).toContain("<!-- BEGIN:nextjs-agent-rules -->")
-        expect(agents).toContain("node_modules/next/dist/docs/")
-        expect(agents).toContain("<!-- END:nextjs-agent-rules -->")
-        expect(claude.trim()).toBe("@AGENTS.md")
+        expect(agents).toContain("apps/web/node_modules/next/dist/docs/")
+        expect(claude).toBe(agents)
+        expect(existsSync(join(process.cwd(), "AGENTS.md"))).toBe(false)
+        expect(existsSync(join(process.cwd(), "CLAUDE.md"))).toBe(false)
+        expect(require("../next.config.js").agentRules).toBe(false)
     })
 
     it("keeps experimental profiles off by default and enables each one explicitly", () => {

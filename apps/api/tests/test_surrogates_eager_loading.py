@@ -175,6 +175,7 @@ async def test_list_surrogates_endpoint_uses_batched_activity_query(
         response = await authed_client.get("/surrogates", params={"include_total": "false"})
 
     assert response.status_code == 200, response.text
+    # Metrics use a separate engine and are excluded from request-pool SQL.
     assert counter["n"] == 7, "\n".join(counter["statements"])
     assert any("surrogate_activity_log" in stmt for stmt in counter["statements"])
 

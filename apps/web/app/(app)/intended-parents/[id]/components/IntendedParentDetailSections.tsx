@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from "react"
 import Link from "@/components/app-link"
-import { SafeHtmlContent } from "@/components/safe-html-content"
+import { RecordDetailField } from "@/components/RecordDetailField"
 import { IntendedParentFormFields } from "@/components/intended-parents/IntendedParentFormFields"
 import type { IntendedParentFormValues } from "@/components/intended-parents/intended-parent-form-values"
 import { InlineDateField } from "@/components/inline-date-field"
@@ -31,8 +31,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
-import { Textarea } from "@/components/ui/textarea"
 import type { IntendedParent } from "@/lib/types/intended-parent"
 import {
     ArchiveIcon,
@@ -49,11 +47,7 @@ import {
     UserIcon,
 } from "lucide-react"
 
-type IntendedParentNote = {
-    id: string
-    content: string
-    created_at: string
-}
+
 
 type MaritalStatusOption = {
     value: string
@@ -110,48 +104,49 @@ export function IntendedParentHeader({
 }) {
     return (
         <div className="border-b border-border bg-background/95 backdrop-blur">
-            <div className="flex h-16 items-center justify-between px-6">
-                <div className="flex items-center gap-4">
+            <div className="flex min-h-16 min-w-0 flex-col gap-3 px-6 py-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+                <div className="flex min-w-0 items-center gap-4 lg:flex-1">
                     <Link
                         href="/intended-parents"
                         aria-label="Back to intended parents"
-                        className="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground size-9"
+                        className="inline-flex shrink-0 items-center justify-center rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground size-9"
                     >
                         <ArrowLeftIcon className="size-5" />
                         <span className="sr-only">Back to intended parents</span>
                     </Link>
-                    <div>
-                        <h1 className="text-2xl font-semibold">{intendedParent.full_name}</h1>
-                        <p className="text-sm text-muted-foreground">
+                    <div className="min-w-0">
+                        <h1 className="truncate text-2xl font-semibold">{intendedParent.full_name}</h1>
+                        <p className="truncate text-sm text-muted-foreground">
                             {intendedParent.intended_parent_number ? `${intendedParent.intended_parent_number} • ` : ""}
                             {intendedParent.email}
                         </p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
                     <Button
                         variant="outline"
-                        size="sm"
+                        className="px-2 sm:px-4"
                         onClick={onProposeMatch}
                         disabled={intendedParent.is_archived}
                     >
-                        <HeartHandshakeIcon className="size-4 mr-2" />
+                        <HeartHandshakeIcon className="hidden size-4 sm:block" />
                         Propose Match
                     </Button>
                     <Button
                         variant="outline"
+                        className="px-2 sm:px-4"
                         onClick={onChangeStage}
                         disabled={isStatusPending || intendedParent.is_archived}
                     >
                         Change Stage
                     </Button>
-                    <Badge variant="outline" style={statusStyle}>
-                        {statusLabel}
+                    <Badge className="min-w-0 max-w-full" variant="outline" style={statusStyle}>
+                        <span className="truncate">{statusLabel}</span>
                     </Badge>
                     <DropdownMenu>
                         <DropdownMenuTrigger
                             aria-label={`Actions for ${intendedParent.full_name}`}
-                            className="inline-flex items-center justify-center size-10 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+                            className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
                         >
                             <MoreVerticalIcon className="size-4" aria-hidden="true" />
                         </DropdownMenuTrigger>
@@ -193,56 +188,24 @@ export function ContactInformationCard({
                 <CardTitle>Contact Information</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
-                <div className="flex items-center gap-3">
-                    <MailIcon className="size-5 text-muted-foreground" />
-                    <div>
-                        <p className="text-sm text-muted-foreground">Email</p>
-                        <p className="font-medium">{intendedParent.email}</p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-3">
-                    <PhoneIcon className="size-5 text-muted-foreground" />
-                    <div>
-                        <p className="text-sm text-muted-foreground">Phone</p>
-                        <p className="font-medium">{intendedParent.phone || "Not provided"}</p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-3">
-                    <UserIcon className="size-5 text-muted-foreground" />
-                    <div>
-                        <p className="text-sm text-muted-foreground">Pronouns</p>
-                        <p className="font-medium">{intendedParent.pronouns || "Not provided"}</p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-3">
-                    <CalendarIcon className="size-5 text-muted-foreground" />
-                    <div>
-                        <p className="text-sm text-muted-foreground">Date of Birth</p>
-                        <InlineDateField
-                            value={intendedParent.date_of_birth}
-                            onSave={onDateOfBirthChange}
-                            placeholder="Not provided"
-                            label="Date of Birth"
-                        />
-                    </div>
-                </div>
-                <div className="flex items-center gap-3">
-                    <MapPinIcon className="size-5 text-muted-foreground" />
-                    <div>
-                        <p className="text-sm text-muted-foreground">Address</p>
-                        <p className="font-medium">
-                            {[
-                                intendedParent.address_line1,
-                                intendedParent.address_line2,
-                                intendedParent.city,
-                                intendedParent.state,
-                                intendedParent.postal,
-                            ]
-                                .filter(Boolean)
-                                .join(", ") || "Not provided"}
-                        </p>
-                    </div>
-                </div>
+                <RecordDetailField icon={MailIcon} label="Email" value={intendedParent.email} />
+                <RecordDetailField icon={PhoneIcon} label="Phone" value={intendedParent.phone} />
+                <RecordDetailField icon={UserIcon} label="Pronouns" value={intendedParent.pronouns} />
+                <RecordDetailField icon={CalendarIcon} label="Date of Birth" value={
+                    <InlineDateField
+                        value={intendedParent.date_of_birth}
+                        onSave={onDateOfBirthChange}
+                        placeholder="Not provided"
+                        label="Date of Birth"
+                    />
+                } />
+                <RecordDetailField icon={MapPinIcon} label="Address" value={[
+                    intendedParent.address_line1,
+                    intendedParent.address_line2,
+                    intendedParent.city,
+                    intendedParent.state,
+                    intendedParent.postal,
+                ].filter(Boolean).join(", ")} />
             </CardContent>
         </Card>
     )
@@ -270,41 +233,19 @@ export function PartnerCard({
                 <CardTitle>Partner</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
-                <div className="flex items-center gap-3">
-                    <UserIcon className="size-5 text-muted-foreground" />
-                    <div>
-                        <p className="text-sm text-muted-foreground">Name</p>
-                        <p className="font-medium">{intendedParent.partner_name || "Not provided"}</p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-3">
-                    <MailIcon className="size-5 text-muted-foreground" />
-                    <div>
-                        <p className="text-sm text-muted-foreground">Email</p>
-                        <p className="font-medium">{intendedParent.partner_email || "Not provided"}</p>
-                    </div>
-                </div>
+                <RecordDetailField icon={UserIcon} label="Name" value={intendedParent.partner_name} />
+                <RecordDetailField icon={MailIcon} label="Email" value={intendedParent.partner_email} />
                 {intendedParent.partner_pronouns && (
-                    <div className="flex items-center gap-3">
-                        <UserIcon className="size-5 text-muted-foreground" />
-                        <div>
-                            <p className="text-sm text-muted-foreground">Pronouns</p>
-                            <p className="font-medium">{intendedParent.partner_pronouns}</p>
-                        </div>
-                    </div>
+                    <RecordDetailField icon={UserIcon} label="Pronouns" value={intendedParent.partner_pronouns} />
                 )}
-                <div className="flex items-center gap-3">
-                    <CalendarIcon className="size-5 text-muted-foreground" />
-                    <div>
-                        <p className="text-sm text-muted-foreground">Date of Birth</p>
-                        <InlineDateField
-                            value={intendedParent.partner_date_of_birth}
-                            onSave={onPartnerDateOfBirthChange}
-                            placeholder="Not provided"
-                            label="Partner date of birth"
-                        />
-                    </div>
-                </div>
+                <RecordDetailField icon={CalendarIcon} label="Date of Birth" value={
+                    <InlineDateField
+                        value={intendedParent.partner_date_of_birth}
+                        onSave={onPartnerDateOfBirthChange}
+                        placeholder="Not provided"
+                        label="Partner date of birth"
+                    />
+                } />
             </CardContent>
         </Card>
     )
@@ -334,7 +275,7 @@ export function MaritalStatusCard({
                     }}
                     disabled={disabled}
                 >
-                    <SelectTrigger aria-label="Marital status" className="w-full sm:w-[240px]">
+                    <SelectTrigger aria-label="Marital status" className="w-full max-w-[240px]">
                         <SelectValue placeholder="Not provided">
                             {(selectedValue: string | null) =>
                                 options.find((option) => option.value === selectedValue)?.label ??
@@ -351,65 +292,6 @@ export function MaritalStatusCard({
                         ))}
                     </SelectContent>
                 </Select>
-            </CardContent>
-        </Card>
-    )
-}
-
-export function NotesCard({
-    notes,
-    newNote,
-    isPending,
-    onNewNoteChange,
-    onAddNote,
-    formatDate,
-}: {
-    notes: IntendedParentNote[] | undefined
-    newNote: string
-    isPending: boolean
-    onNewNoteChange: (value: string) => void
-    onAddNote: () => void
-    formatDate: (dateStr?: string | null) => string
-}) {
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Notes</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                    <Textarea
-                        placeholder="Add a note..."
-                        value={newNote}
-                        onChange={(event) => onNewNoteChange(event.target.value)}
-                        rows={2}
-                    />
-                    <Button
-                        onClick={onAddNote}
-                        disabled={!newNote.trim() || isPending}
-                        className="bg-teal-600 hover:bg-teal-700"
-                    >
-                        Add
-                    </Button>
-                </div>
-                <Separator />
-                {notes?.length ? (
-                    <div className="space-y-3">
-                        {notes.map((note) => (
-                            <div key={note.id} className="rounded-lg border p-3">
-                                <SafeHtmlContent
-                                    html={note.content}
-                                    className="text-sm prose prose-sm max-w-none dark:prose-invert"
-                                />
-                                <p className="mt-2 text-xs text-muted-foreground">
-                                    {formatDate(note.created_at)}
-                                </p>
-                            </div>
-                        ))}
-                    </div>
-                ) : (
-                    <p className="text-sm text-muted-foreground">No notes yet.</p>
-                )}
             </CardContent>
         </Card>
     )
@@ -449,7 +331,6 @@ export function EditIntendedParentDialog({
                         Cancel
                     </Button>
                     <Button
-                        className="bg-teal-600 hover:bg-teal-700"
                         onClick={onSave}
                         disabled={isPending}
                     >

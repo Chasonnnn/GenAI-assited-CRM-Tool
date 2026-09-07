@@ -131,6 +131,10 @@ export interface Appointment {
     meeting_started_at: string | null;
     meeting_ended_at: string | null;
     // Linkage fields
+    donor_id?: string | null;
+    donor_name?: string | null;
+    match_id?: string | null;
+    attempt_id?: string | null;
     surrogate_id: string | null;
     surrogate_number: string | null;
     intended_parent_id: string | null;
@@ -156,6 +160,10 @@ export interface AppointmentListItem {
     zoom_join_url: string | null;
     google_meet_url: string | null;
     // Linkage fields
+    donor_id?: string | null;
+    donor_name?: string | null;
+    match_id?: string | null;
+    attempt_id?: string | null;
     surrogate_id: string | null;
     surrogate_number: string | null;
     intended_parent_id: string | null;
@@ -277,6 +285,10 @@ export function getAppointments(params: {
     status?: string;
     date_start?: string;
     date_end?: string;
+    donor_id?: string;
+    match_id?: string;
+    attempt_id?: string;
+    include_record_history?: boolean;
     surrogate_id?: string;
     intended_parent_id?: string;
 }): Promise<AppointmentListResponse> {
@@ -286,6 +298,10 @@ export function getAppointments(params: {
     if (params.status) searchParams.append('status', params.status);
     if (params.date_start) searchParams.append('date_start', params.date_start);
     if (params.date_end) searchParams.append('date_end', params.date_end);
+    if (params.donor_id) searchParams.append('donor_id', params.donor_id);
+    if (params.match_id) searchParams.append('match_id', params.match_id);
+    if (params.attempt_id) searchParams.append('attempt_id', params.attempt_id);
+    if (params.include_record_history) searchParams.append('include_record_history', 'true');
     if (params.surrogate_id) searchParams.append('surrogate_id', params.surrogate_id);
     if (params.intended_parent_id) searchParams.append('intended_parent_id', params.intended_parent_id);
     const query = searchParams.toString() ? `?${searchParams}` : '';
@@ -331,6 +347,9 @@ export function cancelAppointment(
 }
 
 export interface AppointmentLinkUpdate {
+    donor_id?: string | null;
+    match_id?: string | null;
+    attempt_id?: string | null;
     surrogate_id?: string | null;
     intended_parent_id?: string | null;
 }
@@ -532,4 +551,8 @@ export function getGoogleCalendarEvents(
         params.set('timezone', timezone)
     }
     return api.get<GoogleCalendarEventsResponse>(`/integrations/google/calendar/events?${params}`);
+}
+
+export function createStaffAppointment(data: BookingCreate & AppointmentLinkUpdate): Promise<Appointment> {
+    return api.post<Appointment>("/appointments", data);
 }

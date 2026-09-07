@@ -273,6 +273,7 @@ function BookingLinkCard() {
                         readOnly
                         value={link?.full_url || `${typeof window !== 'undefined' ? window.location.origin : ''}/book/${link?.public_slug || ''}`}
                         className="font-mono text-sm"
+                        aria-label="Your booking link"
                     />
                     <Button variant="outline" onClick={copyLink} aria-label="Copy booking link">
                         {copied ? (

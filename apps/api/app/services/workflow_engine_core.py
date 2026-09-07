@@ -347,12 +347,10 @@ class WorkflowEngineCore:
 
         condition_entity = entity
         if subject_type in {"egg_donor", "sperm_donor"}:
-            donor = self.adapter.get_entity(db, "donor", subject_id)
-            if (
-                donor is None
-                or donor.organization_id != workflow.organization_id
-                or donor.pipeline_entity_type != subject_type
-            ):
+            donor = self.adapter.resolve_donor_subject(
+                db, workflow.organization_id, subject_type, subject_id
+            )
+            if donor is None:
                 logger.warning(f"Donor subject {subject_type}:{subject_id} is invalid")
                 return None
             condition_entity = donor
@@ -601,6 +599,21 @@ class WorkflowEngineCore:
             db.commit()
             return
 
+        if task.status == TaskStatus.COMPLETED.value and execution.subject_type in {
+            "egg_donor",
+            "sperm_donor",
+        }:
+            donor = self.adapter.resolve_donor_subject(
+                db, workflow.organization_id, execution.subject_type, execution.subject_id
+            )
+            if donor is None:
+                execution.status = WorkflowExecutionStatus.FAILED.value
+                execution.error_message = "Donor subject unavailable during resume"
+                execution.paused_at_action_index = None
+                execution.paused_task_id = None
+                db.commit()
+                return
+
         # Clear paused state
         action_index = execution.paused_at_action_index
         execution.paused_at_action_index = None
@@ -813,12 +826,10 @@ class WorkflowEngineCore:
         approval_owner: User | None = None
 
         if subject_type in {"egg_donor", "sperm_donor"} and subject_id:
-            donor = self.adapter.get_entity(db, "donor", subject_id)
-            if (
-                donor is None
-                or donor.organization_id != workflow.organization_id
-                or donor.pipeline_entity_type != subject_type
-            ):
+            donor = self.adapter.resolve_donor_subject(
+                db, workflow.organization_id, subject_type, subject_id
+            )
+            if donor is None:
                 return None, None, "Workflow donor subject could not be resolved"
             requires_user_owner = has_approval_actions or workflow.scope == "personal"
             if requires_user_owner and (

@@ -1,0 +1,449 @@
+[
+  {
+    "insertId": "6a9e1b5c000b6de3cb883067",
+    "jsonPayload": {
+      "commitment_conflicts": 0,
+      "database_bytes": 932615871,
+      "rehearsal": "inventory",
+      "revision": "20260830_0100",
+      "tables": 171
+    },
+    "labels": {
+      "instanceId": "00a41e8c1d7e6d59eb20c1604e00ba120026deec49665e0fec2208b5ae4c180fd96971fcbf03cec6a7015aa52837aacb79695735949b3318abca963e0dbedc623196aff902d500d5cbf4843389ff659b410aab58af995c299e6097",
+      "run.googleapis.com/execution_name": "crm-match-rehearsal-0906-v4xhm",
+      "run.googleapis.com/task_attempt": "0",
+      "run.googleapis.com/task_index": "0"
+    },
+    "logName": "projects/probable-dream-484923-n7/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-09-07T02:03:08.756279596Z",
+    "resource": {
+      "labels": {
+        "job_name": "crm-match-rehearsal-0906",
+        "location": "us-central1",
+        "project_id": "probable-dream-484923-n7"
+      },
+      "type": "cloud_run_job"
+    },
+    "timestamp": "2026-09-07T02:03:08.749027Z"
+  },
+  {
+    "insertId": "6a9e1b7b00067e124adc2d31",
+    "jsonPayload": {
+      "counts": {
+        "admin_action_logs": 548,
+        "ai_action_approvals": 18,
+        "ai_bulk_task_requests": 0,
+        "ai_conversations": 9,
+        "ai_entity_summaries": 5,
+        "ai_messages": 46,
+        "ai_settings": 3,
+        "ai_studio_drafts": 0,
+        "ai_studio_settings": 1,
+        "ai_usage_log": 23,
+        "analytics_snapshots": 9942,
+        "appointment_email_logs": 11,
+        "appointment_types": 6,
+        "appointments": 2644,
+        "attachments": 283,
+        "audit_logs": 354398,
+        "auth_identities": 10,
+        "automation_workflows": 2,
+        "availability_overrides": 0,
+        "availability_rules": 35,
+        "booking_links": 10,
+        "campaign_recipients": 2,
+        "campaign_runs": 2,
+        "campaign_tracking_events": 0,
+        "campaigns": 2,
+        "consent_records": 7,
+        "custom_field_values": 0,
+        "custom_fields": 0,
+        "data_retention_policies": 8,
+        "donor_status_history": 0,
+        "donors": 0,
+        "email_deliveries": 437,
+        "email_delivery_attempts": 437,
+        "email_log_attachments": 0,
+        "email_logs": 5792,
+        "email_message_attachments": 0,
+        "email_message_contents": 3330,
+        "email_message_occurrences": 0,
+        "email_message_thread_refs": 3330,
+        "email_messages": 3330,
+        "email_provider_admission": 2,
+        "email_raw_blobs": 0,
+        "email_reconciliation_cases": 1,
+        "email_suppressions": 24,
+        "email_template_drafts": 0,
+        "email_templates": 84,
+        "embed_sessions": 253,
+        "entity_activity_logs": 0,
+        "entity_notes": 1683,
+        "entity_versions": 151,
+        "export_jobs": 0,
+        "form_field_mappings": 31,
+        "form_intake_drafts": 2,
+        "form_intake_links": 2,
+        "form_logos": 0,
+        "form_submission_drafts": 0,
+        "form_submission_files": 0,
+        "form_submission_match_candidates": 0,
+        "form_submissions": 7,
+        "forms": 4,
+        "import_mapping_corrections": 39,
+        "import_templates": 0,
+        "intake_leads": 6,
+        "intake_pool_access_grants": 0,
+        "integration_error_rollup": 7,
+        "integration_health": 5,
+        "intended_parent_status_history": 57,
+        "intended_parents": 25,
+        "interview_attachments": 0,
+        "interview_notes": 0,
+        "interview_transcript_versions": 0,
+        "jobs": 317148,
+        "journey_featured_images": 0,
+        "lead_attribution": 7,
+        "legal_holds": 0,
+        "mailbox_credentials": 0,
+        "mailboxes": 0,
+        "match_events": 0,
+        "matches": 27,
+        "memberships": 10,
+        "message_deliveries": 0,
+        "message_delivery_attempts": 0,
+        "message_media_assets": 0,
+        "message_media_links": 0,
+        "message_reconciliation_cases": 0,
+        "message_templates": 0,
+        "message_webhook_events": 0,
+        "messages": 0,
+        "messaging_consent_evidence": 0,
+        "messaging_consent_states": 0,
+        "messaging_contacts": 0,
+        "messaging_conversations": 0,
+        "messaging_global_suppressions": 0,
+        "messaging_provider_admission": 0,
+        "meta_ad_accounts": 0,
+        "meta_ad_platform_daily": 0,
+        "meta_ads": 0,
+        "meta_adsets": 0,
+        "meta_campaigns": 0,
+        "meta_crm_dataset_events": 3877,
+        "meta_crm_dataset_settings": 1,
+        "meta_daily_spend": 0,
+        "meta_form_legal_snapshots": 0,
+        "meta_form_versions": 13,
+        "meta_forms": 6,
+        "meta_leads": 2469,
+        "meta_oauth_connections": 0,
+        "meta_page_mappings": 0,
+        "notifications": 2313,
+        "org_counters": 6,
+        "org_intelligent_suggestion_rules": 2,
+        "org_intelligent_suggestion_settings": 1,
+        "org_invites": 24,
+        "organization_subscriptions": 3,
+        "organizations": 4,
+        "pipeline_stages": 204,
+        "pipelines": 16,
+        "platform_branding": 1,
+        "platform_email_template_targets": 0,
+        "platform_email_templates": 9,
+        "platform_form_template_hidden_orgs": 0,
+        "platform_form_template_targets": 0,
+        "platform_form_templates": 2,
+        "platform_system_email_templates": 2,
+        "published_intake_versions": 3,
+        "queue_members": 4,
+        "queues": 4,
+        "request_metrics_rollup": 803277,
+        "resend_readiness_snapshots": 1,
+        "resend_settings": 2,
+        "resend_webhook_events": 898,
+        "role_permissions": 0,
+        "status_change_requests": 259,
+        "support_sessions": 4,
+        "surrogate_activity_log": 28652,
+        "surrogate_contact_attempts": 4980,
+        "surrogate_email_contacts": 0,
+        "surrogate_imports": 20,
+        "surrogate_interviews": 0,
+        "surrogate_profile_hidden_fields": 0,
+        "surrogate_profile_overrides": 0,
+        "surrogate_profile_states": 0,
+        "surrogate_status_history": 11736,
+        "surrogates": 8759,
+        "system_alerts": 51,
+        "tasks": 117,
+        "ticket_events": 6660,
+        "ticket_messages": 3330,
+        "ticket_notes": 0,
+        "ticket_saved_views": 0,
+        "ticket_surrogate_link_candidates": 0,
+        "tickets": 3330,
+        "tracking_event_logs": 0,
+        "twilio_routes": 2,
+        "twilio_settings": 1,
+        "unsubscribe_tokens": 3168,
+        "user_integrations": 13,
+        "user_notification_settings": 0,
+        "user_permission_overrides": 0,
+        "user_sessions": 0,
+        "user_workflow_preferences": 0,
+        "users": 13,
+        "workflow_executions": 2368,
+        "workflow_resume_jobs": 2,
+        "workflow_template_targets": 0,
+        "workflow_templates": 7,
+        "zapier_inbound_webhooks": 5,
+        "zapier_outbound_events": 3270,
+        "zapier_webhook_settings": 2,
+        "zoom_meetings": 0,
+        "zoom_webhook_events": 0
+      },
+      "rehearsal": "baseline_counts"
+    },
+    "labels": {
+      "instanceId": "00a41e8c1d7e6d59eb20c1604e00ba120026deec49665e0fec2208b5ae4c180fd96971fcbf03cec6a7015aa52837aacb79695735949b3318abca963e0dbedc623196aff902d500d5cbf4843389ff659b410aab58af995c299e6097",
+      "run.googleapis.com/execution_name": "crm-match-rehearsal-0906-v4xhm",
+      "run.googleapis.com/task_attempt": "0",
+      "run.googleapis.com/task_index": "0"
+    },
+    "logName": "projects/probable-dream-484923-n7/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-09-07T02:03:39.431665149Z",
+    "resource": {
+      "labels": {
+        "job_name": "crm-match-rehearsal-0906",
+        "location": "us-central1",
+        "project_id": "probable-dream-484923-n7"
+      },
+      "type": "cloud_run_job"
+    },
+    "timestamp": "2026-09-07T02:03:39.425490Z"
+  },
+  {
+    "insertId": "6a9e1b830000dacc2e771731",
+    "jsonPayload": {
+      "rehearsal": "contention_abort",
+      "sqlstate": "55P03"
+    },
+    "labels": {
+      "instanceId": "00a41e8c1d7e6d59eb20c1604e00ba120026deec49665e0fec2208b5ae4c180fd96971fcbf03cec6a7015aa52837aacb79695735949b3318abca963e0dbedc623196aff902d500d5cbf4843389ff659b410aab58af995c299e6097",
+      "run.googleapis.com/execution_name": "crm-match-rehearsal-0906-v4xhm",
+      "run.googleapis.com/task_attempt": "0",
+      "run.googleapis.com/task_index": "0"
+    },
+    "logName": "projects/probable-dream-484923-n7/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-09-07T02:03:47.089090961Z",
+    "resource": {
+      "labels": {
+        "job_name": "crm-match-rehearsal-0906",
+        "location": "us-central1",
+        "project_id": "probable-dream-484923-n7"
+      },
+      "type": "cloud_run_job"
+    },
+    "timestamp": "2026-09-07T02:03:47.056012Z"
+  },
+  {
+    "insertId": "6a9e1b9e0006b07cd49cfc6d",
+    "jsonPayload": {
+      "changed_tables": [],
+      "rehearsal": "failed_upgrade_preservation",
+      "rows": 1594137,
+      "unchanged_tables": 171
+    },
+    "labels": {
+      "instanceId": "00a41e8c1d7e6d59eb20c1604e00ba120026deec49665e0fec2208b5ae4c180fd96971fcbf03cec6a7015aa52837aacb79695735949b3318abca963e0dbedc623196aff902d500d5cbf4843389ff659b410aab58af995c299e6097",
+      "run.googleapis.com/execution_name": "crm-match-rehearsal-0906-v4xhm",
+      "run.googleapis.com/task_attempt": "0",
+      "run.googleapis.com/task_index": "0"
+    },
+    "logName": "projects/probable-dream-484923-n7/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-09-07T02:04:14.443246218Z",
+    "resource": {
+      "labels": {
+        "job_name": "crm-match-rehearsal-0906",
+        "location": "us-central1",
+        "project_id": "probable-dream-484923-n7"
+      },
+      "type": "cloud_run_job"
+    },
+    "timestamp": "2026-09-07T02:04:14.438396Z"
+  },
+  {
+    "insertId": "6a9e1b9f0000a6ca1941d0c8",
+    "jsonPayload": {
+      "rehearsal": "upgrade",
+      "seconds": 0.604
+    },
+    "labels": {
+      "instanceId": "00a41e8c1d7e6d59eb20c1604e00ba120026deec49665e0fec2208b5ae4c180fd96971fcbf03cec6a7015aa52837aacb79695735949b3318abca963e0dbedc623196aff902d500d5cbf4843389ff659b410aab58af995c299e6097",
+      "run.googleapis.com/execution_name": "crm-match-rehearsal-0906-v4xhm",
+      "run.googleapis.com/task_attempt": "0",
+      "run.googleapis.com/task_index": "0"
+    },
+    "logName": "projects/probable-dream-484923-n7/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-09-07T02:04:15.111597858Z",
+    "resource": {
+      "labels": {
+        "job_name": "crm-match-rehearsal-0906",
+        "location": "us-central1",
+        "project_id": "probable-dream-484923-n7"
+      },
+      "type": "cloud_run_job"
+    },
+    "timestamp": "2026-09-07T02:04:15.042698Z"
+  },
+  {
+    "insertId": "6a9e1bba000493be31c8b401",
+    "jsonPayload": {
+      "changed_tables": [],
+      "rehearsal": "upgrade_preservation",
+      "rows": 1594137,
+      "unchanged_tables": 171
+    },
+    "labels": {
+      "instanceId": "00a41e8c1d7e6d59eb20c1604e00ba120026deec49665e0fec2208b5ae4c180fd96971fcbf03cec6a7015aa52837aacb79695735949b3318abca963e0dbedc623196aff902d500d5cbf4843389ff659b410aab58af995c299e6097",
+      "run.googleapis.com/execution_name": "crm-match-rehearsal-0906-v4xhm",
+      "run.googleapis.com/task_attempt": "0",
+      "run.googleapis.com/task_index": "0"
+    },
+    "logName": "projects/probable-dream-484923-n7/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-09-07T02:04:42.305133776Z",
+    "resource": {
+      "labels": {
+        "job_name": "crm-match-rehearsal-0906",
+        "location": "us-central1",
+        "project_id": "probable-dream-484923-n7"
+      },
+      "type": "cloud_run_job"
+    },
+    "timestamp": "2026-09-07T02:04:42.299966Z"
+  },
+  {
+    "insertId": "6a9e1bba000aa600b1389a56",
+    "jsonPayload": {
+      "rehearsal": "downgrade",
+      "seconds": 0.398
+    },
+    "labels": {
+      "instanceId": "00a41e8c1d7e6d59eb20c1604e00ba120026deec49665e0fec2208b5ae4c180fd96971fcbf03cec6a7015aa52837aacb79695735949b3318abca963e0dbedc623196aff902d500d5cbf4843389ff659b410aab58af995c299e6097",
+      "run.googleapis.com/execution_name": "crm-match-rehearsal-0906-v4xhm",
+      "run.googleapis.com/task_attempt": "0",
+      "run.googleapis.com/task_index": "0"
+    },
+    "logName": "projects/probable-dream-484923-n7/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-09-07T02:04:42.971060392Z",
+    "resource": {
+      "labels": {
+        "job_name": "crm-match-rehearsal-0906",
+        "location": "us-central1",
+        "project_id": "probable-dream-484923-n7"
+      },
+      "type": "cloud_run_job"
+    },
+    "timestamp": "2026-09-07T02:04:42.697856Z"
+  },
+  {
+    "insertId": "6a9e1bd6000287439d7afd9f",
+    "jsonPayload": {
+      "changed_tables": [],
+      "rehearsal": "downgrade_preservation",
+      "rows": 1594137,
+      "unchanged_tables": 171
+    },
+    "labels": {
+      "instanceId": "00a41e8c1d7e6d59eb20c1604e00ba120026deec49665e0fec2208b5ae4c180fd96971fcbf03cec6a7015aa52837aacb79695735949b3318abca963e0dbedc623196aff902d500d5cbf4843389ff659b410aab58af995c299e6097",
+      "run.googleapis.com/execution_name": "crm-match-rehearsal-0906-v4xhm",
+      "run.googleapis.com/task_attempt": "0",
+      "run.googleapis.com/task_index": "0"
+    },
+    "logName": "projects/probable-dream-484923-n7/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-09-07T02:05:10.179118725Z",
+    "resource": {
+      "labels": {
+        "job_name": "crm-match-rehearsal-0906",
+        "location": "us-central1",
+        "project_id": "probable-dream-484923-n7"
+      },
+      "type": "cloud_run_job"
+    },
+    "timestamp": "2026-09-07T02:05:10.165699Z"
+  },
+  {
+    "insertId": "6a9e1bd6000971ef56a26e29",
+    "jsonPayload": {
+      "rehearsal": "reupgrade",
+      "seconds": 0.453
+    },
+    "labels": {
+      "instanceId": "00a41e8c1d7e6d59eb20c1604e00ba120026deec49665e0fec2208b5ae4c180fd96971fcbf03cec6a7015aa52837aacb79695735949b3318abca963e0dbedc623196aff902d500d5cbf4843389ff659b410aab58af995c299e6097",
+      "run.googleapis.com/execution_name": "crm-match-rehearsal-0906-v4xhm",
+      "run.googleapis.com/task_attempt": "0",
+      "run.googleapis.com/task_index": "0"
+    },
+    "logName": "projects/probable-dream-484923-n7/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-09-07T02:05:10.839019487Z",
+    "resource": {
+      "labels": {
+        "job_name": "crm-match-rehearsal-0906",
+        "location": "us-central1",
+        "project_id": "probable-dream-484923-n7"
+      },
+      "type": "cloud_run_job"
+    },
+    "timestamp": "2026-09-07T02:05:10.618991Z"
+  },
+  {
+    "insertId": "6a9e1bf20001433618bc0599",
+    "jsonPayload": {
+      "changed_tables": [],
+      "rehearsal": "reupgrade_preservation",
+      "rows": 1594137,
+      "unchanged_tables": 171
+    },
+    "labels": {
+      "instanceId": "00a41e8c1d7e6d59eb20c1604e00ba120026deec49665e0fec2208b5ae4c180fd96971fcbf03cec6a7015aa52837aacb79695735949b3318abca963e0dbedc623196aff902d500d5cbf4843389ff659b410aab58af995c299e6097",
+      "run.googleapis.com/execution_name": "crm-match-rehearsal-0906-v4xhm",
+      "run.googleapis.com/task_attempt": "0",
+      "run.googleapis.com/task_index": "0"
+    },
+    "logName": "projects/probable-dream-484923-n7/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-09-07T02:05:38.089343867Z",
+    "resource": {
+      "labels": {
+        "job_name": "crm-match-rehearsal-0906",
+        "location": "us-central1",
+        "project_id": "probable-dream-484923-n7"
+      },
+      "type": "cloud_run_job"
+    },
+    "timestamp": "2026-09-07T02:05:38.082742Z"
+  },
+  {
+    "insertId": "6a9e1bf2000143505e5a8f48",
+    "jsonPayload": {
+      "rehearsal": "success",
+      "scope": "database migration only; application rollout not tested"
+    },
+    "labels": {
+      "instanceId": "00a41e8c1d7e6d59eb20c1604e00ba120026deec49665e0fec2208b5ae4c180fd96971fcbf03cec6a7015aa52837aacb79695735949b3318abca963e0dbedc623196aff902d500d5cbf4843389ff659b410aab58af995c299e6097",
+      "run.googleapis.com/execution_name": "crm-match-rehearsal-0906-v4xhm",
+      "run.googleapis.com/task_attempt": "0",
+      "run.googleapis.com/task_index": "0"
+    },
+    "logName": "projects/probable-dream-484923-n7/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-09-07T02:05:38.089343867Z",
+    "resource": {
+      "labels": {
+        "job_name": "crm-match-rehearsal-0906",
+        "location": "us-central1",
+        "project_id": "probable-dream-484923-n7"
+      },
+      "type": "cloud_run_job"
+    },
+    "timestamp": "2026-09-07T02:05:38.082768Z"
+  }
+]

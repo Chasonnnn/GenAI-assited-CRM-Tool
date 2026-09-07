@@ -38,11 +38,13 @@ import { parseDateInput } from "@/lib/utils/date"
 import {
     getMatchStatusBadgeClassName,
     getMatchStatusLabel,
+    getMatchKindLabel,
     isMatchStatus,
     MATCH_STATUS_DEFINITIONS,
 } from "@/lib/match-status-definitions"
 import { isPermissionError } from "@/lib/error-utils"
 
+type MatchKindFilter = "all" | "surrogate" | "donor"
 type MatchStatusFilter = MatchStatus | "all"
 type RouterReplace = ReturnType<typeof useRouter>["replace"]
 type SearchParamsSnapshot = {
@@ -55,6 +57,7 @@ type QueryDraft<T> = {
 }
 type MatchListUrlState = {
     statusFilter: MatchStatusFilter
+    kindFilter: MatchKindFilter
     search: string
     page: number
 }
@@ -78,6 +81,7 @@ function readMatchListUrlState(searchParams: SearchParamsSnapshot): MatchListUrl
         statusFilter: rawStatus && (rawStatus === "all" || isMatchStatus(rawStatus))
             ? rawStatus
             : "all",
+        kindFilter: searchParams.get("match_kind") === "donor" ? "donor" : searchParams.get("match_kind") === "surrogate" ? "surrogate" : "all",
         search: searchParams.get("q") || "",
         page: parsePageParam(searchParams.get("page")),
     }
@@ -88,9 +92,12 @@ function updateMatchListUrl(
     searchParams: SearchParamsSnapshot,
     status: MatchStatusFilter,
     searchValue: string,
-    currentPage: number
+    currentPage: number,
+    kind: MatchKindFilter
 ) {
     const newParams = new URLSearchParams(searchParams.toString())
+    if (kind !== "all") newParams.set("match_kind", kind)
+    else newParams.delete("match_kind")
     if (status !== "all") {
         newParams.set("status", status)
     } else {
@@ -130,6 +137,8 @@ export default function MatchesPage() {
     const { replace } = useRouter()
     const currentQuery = searchParams.toString()
     const urlState = readMatchListUrlState(searchParams)
+    const [kindDraft, setKindDraft] = useState<QueryDraft<MatchKindFilter> | null>(null)
+    const kindFilter = resolveQueryDraft(kindDraft, currentQuery, urlState.kindFilter)
     const [statusDraft, setStatusDraft] = useState<QueryDraft<MatchStatusFilter> | null>(null)
     const [pageDraft, setPageDraft] = useState<QueryDraft<number> | null>(null)
     const [searchDraft, setSearchDraft] = useState<QueryDraft<string> | null>(null)
@@ -141,18 +150,25 @@ export default function MatchesPage() {
         schedule: scheduleSearchCommit,
     } = useDebouncedSearchCommit(currentQuery)
 
+    const handleKindChange = (kind: MatchKindFilter) => {
+        clearPendingSearchUpdate()
+        setKindDraft({ query: currentQuery, value: kind })
+        setPageDraft({ query: currentQuery, value: 1 })
+        updateMatchListUrl(replace, searchParams, statusFilter, search, 1, kind)
+    }
+
     const handleStatusChange = (value: string) => {
         const nextStatus = value === "all" || isMatchStatus(value) ? value : "all"
         clearPendingSearchUpdate()
         setStatusDraft({ query: currentQuery, value: nextStatus })
         setPageDraft({ query: currentQuery, value: 1 })
-        updateMatchListUrl(replace, searchParams, nextStatus, search, 1)
+        updateMatchListUrl(replace, searchParams, nextStatus, search, 1, kindFilter)
     }
 
     const handlePageChange = (nextPage: number) => {
         clearPendingSearchUpdate()
         setPageDraft({ query: currentQuery, value: nextPage })
-        updateMatchListUrl(replace, searchParams, statusFilter, search, nextPage)
+        updateMatchListUrl(replace, searchParams, statusFilter, search, nextPage, kindFilter)
     }
 
     const handleSearchChange = (nextSearch: string) => {
@@ -162,7 +178,7 @@ export default function MatchesPage() {
         const scheduledQuery = currentQuery
         scheduleSearchCommit(() => {
             if (searchParams.toString() !== scheduledQuery) return
-            updateMatchListUrl(replace, searchParams, statusFilter, nextSearch, 1)
+            updateMatchListUrl(replace, searchParams, statusFilter, nextSearch, 1, kindFilter)
         }, 300)
     }
 
@@ -174,6 +190,7 @@ export default function MatchesPage() {
         ...(statusFilter !== "all" && isMatchStatus(statusFilter)
             ? { status: statusFilter }
             : {}),
+        ...(kindFilter !== "all" ? { match_kind: kindFilter } : {}),
         ...(urlState.search ? { q: urlState.search } : {}),
     } satisfies ListMatchesParams
     const { data, isLoading, isError, error, refetch } = useMatches(filters)
@@ -220,6 +237,16 @@ export default function MatchesPage() {
 
                 {/* Filters */}
                 <div className="flex flex-col gap-4 md:flex-row md:items-center">
+                    <Select value={kindFilter} onValueChange={(value) => handleKindChange(value === "donor" || value === "surrogate" ? value : "all")}>
+                        <SelectTrigger className="w-[180px]" aria-label="Match kind">
+                            <SelectValue>{(value: string | null) => !value || value === "all" ? "All Kinds" : getMatchKindLabel(value)}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Kinds</SelectItem>
+                            <SelectItem value="surrogate">Surrogate</SelectItem>
+                            <SelectItem value="donor">Donor</SelectItem>
+                        </SelectContent>
+                    </Select>
                     <Select value={statusFilter} onValueChange={(v) => { if (v) { handleStatusChange(v) } }}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="All Stages">
@@ -243,7 +270,7 @@ export default function MatchesPage() {
                     <div className="relative w-full max-w-sm">
                         <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
-                            placeholder="Search case or IP name…"
+                            placeholder="Search match or participant…"
                             value={search}
                             onChange={(e) => {
                                 handleSearchChange(e.target.value)
@@ -281,7 +308,7 @@ export default function MatchesPage() {
                                 <p className="text-muted-foreground">
                                     {statusFilter !== "all"
                                         ? "Try adjusting your filter"
-                                        : "Matches will appear here when surrogates are paired with intended parents"}
+                                        : "Matches will appear here when surrogates or donors are paired with intended parents"}
                                 </p>
                             </div>
                         ) : (
@@ -289,11 +316,11 @@ export default function MatchesPage() {
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Match #</TableHead>
-                                        <TableHead>Surrogate</TableHead>
-                                        <TableHead>Surrogate #</TableHead>
+                                        <TableHead>Participant</TableHead>
+                                        <TableHead>Participant #</TableHead>
                                         <TableHead>Intended Parents</TableHead>
                                         <TableHead>Match Stage</TableHead>
-                                        <TableHead>Surrogate Stage</TableHead>
+                                        <TableHead>Participant Stage</TableHead>
                                         <TableHead>Proposed</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -313,11 +340,12 @@ export default function MatchesPage() {
                                                     href={`/intended-parents/matches/${match.id}`}
                                                     className="text-primary hover:underline underline-offset-4"
                                                 >
-                                                    {match.surrogate_name || "—"}
+                                                    {(match.match_kind === "donor" ? match.donor_name : match.surrogate_name) || "—"}
                                                 </Link>
+                                                <Badge variant="outline" className="ml-2 text-xs">{getMatchKindLabel(match.match_kind)}</Badge>
                                             </TableCell>
                                             <TableCell className="text-muted-foreground">
-                                                {match.surrogate_number || "—"}
+                                                {(match.match_kind === "donor" ? match.donor_number : match.surrogate_number) || "—"}
                                             </TableCell>
                                             <TableCell className="text-muted-foreground">
                                                 <Link
@@ -340,9 +368,9 @@ export default function MatchesPage() {
                                                 })()}
                                             </TableCell>
                                             <TableCell>
-                                                {match.surrogate_stage_label ? (
+                                                {(match.match_kind === "donor" ? match.donor_stage_label : match.surrogate_stage_label) ? (
                                                     <Badge variant="outline" className="text-xs">
-                                                        {match.surrogate_stage_label}
+                                                        {match.match_kind === "donor" ? match.donor_stage_label : match.surrogate_stage_label}
                                                     </Badge>
                                                 ) : (
                                                     <span className="text-muted-foreground">No stage</span>

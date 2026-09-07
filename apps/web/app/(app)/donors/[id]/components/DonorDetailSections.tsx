@@ -14,7 +14,13 @@ import {
     TagIcon,
 } from "lucide-react"
 
+import { RelatedMatchesCard } from "@/components/matches/RelatedMatchesCard"
+import { RecordAppointmentsCard } from "@/components/records/RecordAppointmentsCard"
+import { RecordCorrespondenceCard } from "@/components/records/RecordCorrespondenceCard"
+import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import Link from "@/components/app-link"
+import { RecordDetailField } from "@/components/RecordDetailField"
 import { EntityActivityTimeline } from "@/components/activity/EntityActivityTimeline"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -27,6 +33,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { DonorDocumentsSection } from "@/components/donors/DonorDocumentsSection"
+import { DonorOwnershipSection } from "@/components/donors/DonorOwnershipSection"
 import { DonorNotesSection } from "@/components/donors/DonorNotesSection"
 import { DonorProfilePhoto } from "@/components/donors/DonorProfilePhoto"
 import { DonorTasksSection } from "@/components/donors/DonorTasksSection"
@@ -41,26 +48,6 @@ import {
     type Donor,
     type DonorStatusHistoryItem,
 } from "@/lib/types/donor"
-
-function DetailRow({
-    icon: Icon,
-    label,
-    value,
-}: {
-    icon: typeof MailIcon
-    label: string
-    value: string | null
-}) {
-    return (
-        <div className="flex items-start gap-3">
-            <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className="break-words text-sm font-medium">{value || "—"}</p>
-            </div>
-        </div>
-    )
-}
 
 export function DonorDetailSections({
     donor,
@@ -108,6 +95,10 @@ export function DonorDetailSections({
     }
     currentUserId: string | null
 }) {
+    const { user } = useAuth()
+    const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
+    const permissions = permissionsQuery.data?.permissions ?? []
+    const hasPermission = (permission: string) => user?.role === "developer" || permissions.includes(permission)
     const {
         edit: canEdit,
         archive: canArchive,
@@ -122,8 +113,8 @@ export function DonorDetailSections({
     return (
         <div className="flex flex-1 flex-col">
             <header className="border-b border-border bg-background/95 backdrop-blur">
-                <div className="flex min-h-16 flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-2">
-                    <div className="flex w-full min-w-0 items-center gap-3 sm:w-auto sm:gap-4">
+                <div className="flex min-h-16 min-w-0 flex-col gap-3 px-6 py-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+                    <div className="flex min-w-0 items-center gap-4 lg:flex-1">
                         <Link
                             href={returnTo}
                             aria-label="Back to donors"
@@ -140,12 +131,12 @@ export function DonorDetailSections({
                             </p>
                         </div>
                     </div>
-                    <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:w-auto sm:shrink-0 sm:flex-nowrap">
+                    <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
                         {!donor.is_archived && canChangeStage ? (
-                            <Button className="shrink-0" variant="outline" onClick={onChangeStage}>Change Stage</Button>
+                            <Button className="shrink-0 px-2 sm:px-4" variant="outline" onClick={onChangeStage}>Change Stage</Button>
                         ) : null}
                         <Badge
-                            className="min-w-0 flex-1 sm:flex-none"
+                            className="min-w-0 max-w-full"
                             variant="outline"
                             style={getDonorStageStyle(stages, donor)}
                         >
@@ -156,7 +147,7 @@ export function DonorDetailSections({
                             <DropdownMenu>
                                 <DropdownMenuTrigger
                                     aria-label={`Actions for ${donor.full_name}`}
-                                    className="inline-flex size-10 items-center justify-center rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+                                    className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
                                 >
                                     <MoreVerticalIcon className="size-4" aria-hidden="true" />
                                 </DropdownMenuTrigger>
@@ -194,43 +185,47 @@ export function DonorDetailSections({
                 </div>
             </header>
 
-            <div className="flex-1 p-6">
-                <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-3">
-                    <section className="space-y-6 lg:col-span-2" aria-label="Donor details">
+            <div className="min-w-0 flex-1 p-6">
+                <div className="mx-auto grid min-w-0 max-w-6xl grid-cols-1 gap-6 lg:grid-cols-3">
+                    <section className="min-w-0 space-y-6 lg:col-span-2" aria-label="Donor details">
                         <Card>
                             <CardHeader><CardTitle>Contact Information</CardTitle></CardHeader>
-                            <CardContent className="grid gap-5 sm:grid-cols-2">
-                                <DetailRow icon={MailIcon} label="Email" value={donor.email} />
-                                <DetailRow icon={PhoneIcon} label="Phone" value={donor.phone} />
-                                <DetailRow icon={MapPinIcon} label="State" value={donor.state} />
+                            <CardContent className="grid gap-4 sm:grid-cols-2">
+                                <RecordDetailField icon={MailIcon} label="Email" value={donor.email} />
+                                <RecordDetailField icon={PhoneIcon} label="Phone" value={donor.phone} />
+                                <RecordDetailField icon={MapPinIcon} label="State" value={donor.state} />
                             </CardContent>
                         </Card>
                         <Card>
                             <CardHeader><CardTitle>Donor Information</CardTitle></CardHeader>
-                            <CardContent className="grid gap-5 sm:grid-cols-2">
-                                <DetailRow icon={GraduationCapIcon} label="Education" value={donor.education} />
-                                <DetailRow icon={TagIcon} label="Source" value={donor.source} />
-                                <DetailRow
+                            <CardContent className="grid gap-4 sm:grid-cols-2">
+                                <RecordDetailField icon={GraduationCapIcon} label="Education" value={donor.education} />
+                                <RecordDetailField icon={TagIcon} label="Source" value={donor.source} />
+                                <RecordDetailField
                                     icon={CalendarIcon}
                                     label="Created"
                                     value={formatDateTime(donor.created_at, "—")}
                                 />
                             </CardContent>
                         </Card>
+                        <DonorOwnershipSection donor={donor} canEdit={canEdit} />
+                        <RelatedMatchesCard key={`matches-${donor.id}`} kind="donor" recordId={donor.id} name={donor.full_name} canView={hasPermission("view_matches")} canPropose={hasPermission("propose_matches")} archived={donor.is_archived} />
+                        <RecordAppointmentsCard key={`appointments-${donor.id}`} record={{ kind: "donor", id: donor.id, name: donor.full_name, email: donor.email, phone: donor.phone }} canView={hasPermission("manage_appointments")} canViewMatches={hasPermission("view_matches")} canCreate={canEdit} archived={donor.is_archived} />
+                        <RecordCorrespondenceCard key={`correspondence-${donor.id}`} kind="donor" recordId={donor.id} canView={user?.role === "developer"} canEdit={canEdit && !donor.is_archived} />
                         <DonorNotesSection
                             donorId={donor.id}
                             canEdit={canEdit}
                             currentUserId={currentUserId}
                             canDeleteAny={canDeleteAnyNote}
                         />
-                        <DonorDocumentsSection donor={donor} canEdit={canEdit} />
                         <DonorTasksSection
                             donor={donor}
                             canView={canViewTasks}
                             canCreate={canCreateTasks}
                         />
+                        <DonorDocumentsSection donor={donor} canEdit={canEdit} />
                     </section>
-                    <aside className="space-y-6" aria-label="Donor activity">
+                    <aside className="min-w-0 space-y-6" aria-label="Donor activity">
                         <EntityActivityTimeline
                             currentStageId={donor.stage_id}
                             stages={stages}

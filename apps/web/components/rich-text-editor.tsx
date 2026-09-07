@@ -141,7 +141,7 @@ export function RichTextEditor({
     }
 
     return (
-        <div className={cn("border rounded-md", className)}>
+        <div className={cn("min-w-0 max-w-full border rounded-md", className)}>
             <RichTextEditorToolbar
                 editor={editor}
                 enableImages={enableImages}
@@ -154,7 +154,7 @@ export function RichTextEditor({
                 isSubmitting={isSubmitting}
             />
 
-            <div className="overflow-y-auto" style={{ maxHeight }} onFocusCapture={() => onFocus?.()}>
+            <div className="min-w-0 overflow-auto [overflow-wrap:anywhere]" style={{ maxHeight }} onFocusCapture={() => onFocus?.()}>
                 <EditorContent
                     editor={editor}
                     aria-label={ariaLabel}

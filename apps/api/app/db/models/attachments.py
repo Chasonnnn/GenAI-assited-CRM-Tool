@@ -6,7 +6,16 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, Integer, String, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    String,
+    text,
+)
 from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,6 +47,20 @@ class Attachment(Base):
         ),
         Index("idx_attachments_intended_parent", "intended_parent_id"),
         Index("idx_attachments_donor", "donor_id"),
+        Index("idx_attachments_match_attempt", "organization_id", "match_id", "attempt_id"),
+        ForeignKeyConstraint(
+            ["organization_id", "match_id"],
+            ["matches.organization_id", "matches.id"],
+            name="fk_attachments_match_org",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "match_id", "attempt_id"],
+            ["match_attempts.organization_id", "match_attempts.match_id", "match_attempts.id"],
+            name="fk_attachments_attempt_context",
+        ),
+        CheckConstraint(
+            "attempt_id IS NULL OR match_id IS NOT NULL", name="ck_attachments_attempt_match"
+        ),
         CheckConstraint(
             "donor_id IS NULL OR (surrogate_id IS NULL AND intended_parent_id IS NULL)",
             name="ck_attachments_donor_subject_exclusive",
@@ -71,6 +94,12 @@ class Attachment(Base):
     )
     uploaded_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    match_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("matches.id", ondelete="RESTRICT"), nullable=True
+    )
+    attempt_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("match_attempts.id", ondelete="RESTRICT"), nullable=True
     )
 
     # File metadata

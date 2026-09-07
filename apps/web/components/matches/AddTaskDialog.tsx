@@ -4,6 +4,7 @@
  * AddTaskDialog - Dialog for creating tasks for Surrogate or IP from Match detail page
  */
 
+import type { MatchWorkSource } from "@/lib/api/matches"
 import { useReducer } from "react"
 import {
     Dialog,
@@ -30,10 +31,11 @@ import { Loader2Icon } from "lucide-react"
 interface AddTaskDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    onSubmit: (target: "match" | "surrogate" | "ip", data: TaskFormData) => Promise<void>
+    onSubmit: (target: MatchWorkSource, data: TaskFormData) => Promise<void>
     isPending: boolean
     surrogateName: string
     ipName: string
+    participantKind?: "surrogate" | "donor"
 }
 
 export interface TaskFormData {
@@ -43,7 +45,7 @@ export interface TaskFormData {
     due_date?: string
 }
 
-type TaskTarget = "match" | "surrogate" | "ip"
+type TaskTarget = MatchWorkSource
 
 type TaskFormState = {
     target: TaskTarget
@@ -101,6 +103,7 @@ export function AddTaskDialog({
     isPending,
     surrogateName,
     ipName,
+    participantKind = "surrogate",
 }: AddTaskDialogProps) {
     const [formState, dispatchForm] = useReducer(taskFormReducer, INITIAL_TASK_FORM_STATE)
 
@@ -109,12 +112,12 @@ export function AddTaskDialog({
         if (!title) return
 
         const trimmedDescription = formState.description.trim()
-        await onSubmit(formState.target, {
+        try { await onSubmit(formState.target, {
             title,
             task_type: formState.taskType,
             ...(trimmedDescription ? { description: trimmedDescription } : {}),
             ...(formState.dueDate ? { due_date: formState.dueDate } : {}),
-        })
+        }) } catch { return }
 
         dispatchForm({ type: "reset" })
         onOpenChange(false)
@@ -133,7 +136,7 @@ export function AddTaskDialog({
                 <DialogHeader>
                     <DialogTitle>Add Task</DialogTitle>
                     <DialogDescription>
-                        Create a task for the full match or assign it to one side only.
+                        This task stays in the current match.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -156,9 +159,9 @@ export function AddTaskDialog({
                                 </Label>
                             </div>
                             <div className="flex items-center gap-2">
-                                <RadioGroupItem value="surrogate" id="task-target-surrogate" />
+                                <RadioGroupItem value={participantKind} id="task-target-surrogate" />
                                 <Label htmlFor="task-target-surrogate" className="font-normal cursor-pointer">
-                                    {surrogateName} (Surrogate)
+                                    {surrogateName} ({participantKind === "donor" ? "Donor" : "Surrogate"})
                                 </Label>
                             </div>
                             <div className="flex items-center gap-2">

@@ -1,5 +1,6 @@
 "use client"
 
+import type { MatchWorkSource } from "@/lib/api/matches"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
@@ -23,9 +24,10 @@ import { Loader2Icon } from "lucide-react"
 interface AddNoteDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    onSubmit: (target: "surrogate" | "ip", content: string) => Promise<void>
+    onSubmit: (target: MatchWorkSource, content: string) => Promise<void>
     isPending?: boolean
     surrogateName?: string
+    participantKind?: "surrogate" | "donor"
     ipName?: string
 }
 
@@ -35,29 +37,30 @@ export function AddNoteDialog({
     onSubmit,
     isPending = false,
     surrogateName = "Surrogate",
+    participantKind = "surrogate",
     ipName = "Intended Parent",
 }: AddNoteDialogProps) {
-    const [target, setTarget] = useState<"surrogate" | "ip">("surrogate")
+    const [target, setTarget] = useState<MatchWorkSource>("match")
     const [content, setContent] = useState("")
 
     const handleSubmit = async () => {
         if (!content.trim()) return
-        await onSubmit(target, content.trim())
+        try { await onSubmit(target, content.trim()) } catch { return }
         setContent("")
-        setTarget("surrogate")
+        setTarget("match")
         onOpenChange(false)
     }
 
     const handleCancel = () => {
         setContent("")
-        setTarget("surrogate")
+        setTarget("match")
         onOpenChange(false)
     }
 
     const handleOpenChange = (isOpen: boolean) => {
         if (!isOpen) {
             setContent("")
-            setTarget("surrogate")
+            setTarget("match")
         }
         onOpenChange(isOpen)
     }
@@ -70,13 +73,14 @@ export function AddNoteDialog({
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
-                        <Label htmlFor="target">Add note to</Label>
-                        <Select value={target} onValueChange={(v) => setTarget(v as "surrogate" | "ip")}>
+                        <Label htmlFor="target">Related to</Label>
+                        <Select value={target} onValueChange={(v) => setTarget(v as MatchWorkSource)}>
                             <SelectTrigger id="target">
-                                <SelectValue />
+                                <SelectValue>{(value: string | null) => value === "match" ? "Match" : value === "ip" ? ipName : surrogateName}</SelectValue>
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="surrogate">{surrogateName}</SelectItem>
+                                <SelectItem value="match">Match</SelectItem>
+                                <SelectItem value={participantKind}>{surrogateName}</SelectItem>
                                 <SelectItem value="ip">{ipName}</SelectItem>
                             </SelectContent>
                         </Select>

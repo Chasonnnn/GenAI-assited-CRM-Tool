@@ -4,6 +4,7 @@ import asyncio
 import logging
 import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -15,108 +16,167 @@ from app.db.models import AIConversation, RequestMetricsRollup
 from app.services import metrics_service
 
 
-def test_request_metrics_use_isolated_session(monkeypatch):
-    """Metrics must not consume the request pool or its active transaction."""
-    from app import main as main_module
+@pytest.fixture
+def metrics_runtime(monkeypatch):
+    from app import main
 
-    request_db = object()
-    metrics_db = SimpleNamespace(closed=False)
-    metrics_db.close = lambda: setattr(metrics_db, "closed", True)
-    request = SimpleNamespace(
+    executor = ThreadPoolExecutor(max_workers=1)
+    monkeypatch.setattr(main, "_metrics_executor", executor, raising=False)
+    monkeypatch.setattr(main, "_metrics_capacity", threading.BoundedSemaphore(1), raising=False)
+    yield main
+    executor.shutdown(wait=True, cancel_futures=True)
+
+
+def metrics_request(org_id=None):
+    return SimpleNamespace(
         method="GET",
-        scope={"route": SimpleNamespace(path="/tests/metrics")},
-        state=SimpleNamespace(request_db=request_db, user_session=None),
-        url=SimpleNamespace(path="/tests/metrics"),
+        scope={"route": SimpleNamespace(path="/records/{record_id}")},
+        state=SimpleNamespace(user_session=SimpleNamespace(org_id=org_id)),
+        url=SimpleNamespace(path="/records/private-id"),
     )
-    recorded = {}
-
-    def _unexpected_session():
-        raise AssertionError("metrics used the request database pool")
-
-    def _metrics_session():
-        return metrics_db
-
-    def _record_request(**kwargs):
-        recorded.update(kwargs)
-
-    monkeypatch.setattr(main_module, "SessionLocal", _unexpected_session)
-    monkeypatch.setattr(
-        main_module, "MetricsSessionLocal", _metrics_session, raising=False
-    )
-    monkeypatch.setattr(main_module.metrics_service, "record_request", _record_request)
-
-    main_module._record_metrics(request, status_code=200, duration_ms=12)
-
-    assert recorded["db"] is metrics_db
-    assert recorded["route"] == "/tests/metrics"
-    assert recorded["status_code"] == 200
-    assert metrics_db.closed is True
 
 
 @pytest.mark.asyncio
-async def test_metrics_middleware_dispatches_database_write(monkeypatch):
-    """A slow metrics write must not block the event loop."""
-    from app import main as main_module
-
-    request = SimpleNamespace(url=SimpleNamespace(path="/tests/metrics"))
-    response = SimpleNamespace(status_code=200)
+async def test_slow_metrics_do_not_delay_requests_or_queue_on_saturation(
+    metrics_runtime, monkeypatch
+):
+    main = metrics_runtime
+    started, release, finished = threading.Event(), threading.Event(), threading.Event()
     calls = []
+    org_id = uuid.uuid4()
+    request = metrics_request(org_id)
+    db = SimpleNamespace(close=finished.set)
+    monkeypatch.setattr(main, "SessionLocal", lambda: db)
+    monkeypatch.setattr(main, "MetricsSessionLocal", lambda: db, raising=False)
 
-    async def _call_next(_request):
+    def blocked_record(**kwargs):
+        calls.append(kwargs)
+        started.set()
+        release.wait(timeout=1)
+
+    monkeypatch.setattr(main.metrics_service, "record_request", blocked_record)
+    response = SimpleNamespace(status_code=200)
+
+    async def next_response(_request):
         return response
 
-    async def _record_metrics_async(*args):
-        calls.append(("offload", args))
+    try:
+        assert await main.metrics_middleware(request, next_response) is response
+        await asyncio.sleep(0.01)
+        assert started.is_set()
+        assert not finished.is_set(), "metrics blocked the event loop and request response"
+        from httpx import ASGITransport, AsyncClient
 
+        async with AsyncClient(
+            transport=ASGITransport(app=main.app), base_url="https://test"
+        ) as client:
+            liveness = await asyncio.wait_for(client.get("/health/live"), timeout=0.5)
+            assert liveness.status_code == 200
+        request.state.user_session.org_id = uuid.uuid4()
+        for _ in range(40):
+            assert main._record_metrics(request, 200, 12) is False
+        assert len(calls) == 1
+        assert calls[0]["org_id"] == org_id
+        assert calls[0]["route"] == "/records/{record_id}"
+    finally:
+        release.set()
+
+
+def test_metrics_writer_never_uses_request_pool(metrics_runtime, monkeypatch):
+    main = metrics_runtime
+    calls = []
+    closed = threading.Event()
+    db = SimpleNamespace(close=closed.set)
+
+    def fail_request_pool():
+        raise AssertionError("Request pool used for metrics")
+
+    monkeypatch.setattr(main, "SessionLocal", fail_request_pool)
+    monkeypatch.setattr(main, "MetricsSessionLocal", lambda: db, raising=False)
     monkeypatch.setattr(
-        main_module, "_record_metrics_async", _record_metrics_async, raising=False
+        main.metrics_service, "record_request", lambda **kwargs: calls.append(kwargs)
     )
+    assert main._record_metrics(metrics_request(), 201, 17) is True
+    assert closed.wait(timeout=1)
+    assert calls[0]["db"] is db
+    assert calls[0]["org_id"] is None
 
-    result = await main_module.metrics_middleware(request, _call_next)
 
-    assert result is response
-    assert [call[0] for call in calls] == ["offload"]
+@pytest.mark.parametrize("failure", ["factory", "write", "close"])
+def test_metrics_writer_failures_are_safe(metrics_runtime, monkeypatch, caplog, failure):
+    main = metrics_runtime
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("secret-token-should-not-appear")
+
+    db = SimpleNamespace(close=fail if failure == "close" else lambda: None)
+    monkeypatch.setattr(
+        main, "MetricsSessionLocal", fail if failure == "factory" else lambda: db, raising=False
+    )
+    monkeypatch.setattr(
+        main.metrics_service,
+        "record_request",
+        fail if failure == "write" else lambda **kwargs: None,
+    )
+    main._write_metrics(route="/test", method="GET", status_code=200, duration_ms=1, org_id=None)
+    assert "secret-token-should-not-appear" not in caplog.text
+
+
+def test_failed_metrics_submission_releases_capacity(metrics_runtime, monkeypatch):
+    main = metrics_runtime
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("Executor unavailable")
+
+    monkeypatch.setattr(main._metrics_executor, "submit", fail)
+    assert main._record_metrics(metrics_request(), 200, 1) is False
+    assert main._metrics_capacity.acquire(blocking=False)
+    main._metrics_capacity.release()
+
+
+def test_failed_metrics_write_releases_capacity(metrics_runtime, monkeypatch):
+    main = metrics_runtime
+
+    def fail():
+        raise RuntimeError("Metrics unavailable")
+
+    monkeypatch.setattr(main, "MetricsSessionLocal", fail)
+    assert main._record_metrics(metrics_request(), 200, 1) is True
+    assert main._metrics_capacity.acquire(timeout=1)
+    main._metrics_capacity.release()
 
 
 @pytest.mark.asyncio
-async def test_metrics_contention_does_not_starve_liveness_threads(monkeypatch):
-    """Blocked metrics writes must not consume FastAPI's shared worker tokens."""
-    from httpx import ASGITransport, AsyncClient
+async def test_metrics_shutdown_does_not_wait_for_blocked_write(metrics_runtime, monkeypatch):
+    from app.core import websocket
 
-    from app import main as main_module
+    main = metrics_runtime
+    started, release = threading.Event(), threading.Event()
 
-    loop = asyncio.get_running_loop()
-    metrics_started = asyncio.Event()
-    release_metrics = threading.Event()
-    request = SimpleNamespace(url=SimpleNamespace(path="/tests/metrics"))
-    response = SimpleNamespace(status_code=200)
+    async def no_listener():
+        pass
 
-    async def _call_next(_request):
-        return response
+    def blocked_write(**kwargs):
+        started.set()
+        release.wait(timeout=1)
 
-    def _blocked_record_metrics(*_args):
-        loop.call_soon_threadsafe(metrics_started.set)
-        release_metrics.wait(timeout=2)
-
-    monkeypatch.setattr(main_module, "_record_metrics", _blocked_record_metrics)
-
-    metrics_tasks = [
-        asyncio.create_task(main_module.metrics_middleware(request, _call_next))
-        for _ in range(40)
-    ]
+    monkeypatch.setattr(main.settings, "DB_MIGRATION_CHECK", False)
+    monkeypatch.setattr(main.settings, "DB_AUTO_MIGRATE", False)
+    monkeypatch.setattr(websocket, "start_session_revocation_listener", no_listener)
+    monkeypatch.setattr(websocket, "start_websocket_event_listener", no_listener)
+    monkeypatch.setattr(websocket.manager, "set_event_loop", lambda loop: None)
+    monkeypatch.setattr(main.metrics_engine, "dispose", lambda: None)
+    monkeypatch.setattr(main, "_write_metrics", blocked_write)
     try:
-        await asyncio.wait_for(metrics_started.wait(), timeout=0.5)
-        async with AsyncClient(
-            transport=ASGITransport(app=main_module.app), base_url="https://test"
-        ) as client:
-            health_response = await asyncio.wait_for(
-                client.get("/health/live"), timeout=0.25
-            )
-
-        assert health_response.status_code == 200
+        async with main.lifespan(main.app):
+            assert main._record_metrics(metrics_request(), 200, 1) is True
+            await asyncio.sleep(0.01)
+            assert started.is_set()
+            started_at = asyncio.get_running_loop().time()
+        assert asyncio.get_running_loop().time() - started_at < 0.5
     finally:
-        release_metrics.set()
-        await asyncio.gather(*metrics_tasks)
+        release.set()
+        main._metrics_executor.shutdown(wait=True, cancel_futures=True)
 
 
 def test_record_request_dedupes_null_org(db, monkeypatch):
@@ -230,4 +290,4 @@ def test_record_request_logs_warning_on_persist_failure(db, caplog, monkeypatch)
         for record in caplog.records
         if "Failed to record request metrics" in record.message
     ]
-    assert warning_messages == ["Failed to record request metrics: boom"]
+    assert warning_messages == ["Failed to record request metrics"]

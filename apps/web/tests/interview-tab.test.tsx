@@ -188,6 +188,14 @@ describe('SurrogateInterviewTab', () => {
         expect(screen.getByRole('button', { name: /add interview/i })).toBeDefined()
     })
 
+    it('labels the add interview button when interviews already exist', async () => {
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Add Interview' }))
+
+        expect(await screen.findByRole('combobox', { name: /interview type/i })).toBeInTheDocument()
+    })
+
     it('uses shadcn selects in the interview editor', async () => {
         mockUseInterviews.mockReturnValue({ data: [], isLoading: false })
 

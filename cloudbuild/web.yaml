@@ -28,6 +28,7 @@ images:
 options:
   # BYOSA (build.service_account) requires Cloud Logging or an explicit logs bucket.
   logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
 substitutions:
   _REGION: "us-central1"
   _WEB_SERVICE: "crm-web"

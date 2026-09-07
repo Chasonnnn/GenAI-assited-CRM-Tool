@@ -23,6 +23,7 @@ describe('MatchTasksCalendar', () => {
                 title: 'Medical Appointment',
                 description: 'Scheduled checkup',
                 task_type: 'medical_appointment',
+                work_source: 'surrogate',
                 surrogate_id: 'surrogate1',
                 due_date: format(new Date(), 'yyyy-MM-dd'),
                 due_time: '10:00:00',
@@ -36,6 +37,7 @@ describe('MatchTasksCalendar', () => {
                 title: 'Contract Review',
                 description: 'Review legal documents',
                 task_type: 'contract',
+                work_source: 'surrogate',
                 surrogate_id: 'surrogate1',
                 due_date: format(new Date(), 'yyyy-MM-dd'),
                 due_time: '14:00:00',
@@ -63,18 +65,18 @@ describe('MatchTasksCalendar', () => {
     })
 
     it('renders calendar header with current month', () => {
-        render(<MatchTasksCalendar surrogateId="surrogate1" />)
+        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         const currentMonthYear = format(new Date(), 'MMMM yyyy')
         expect(screen.getByText(currentMonthYear)).toBeInTheDocument()
     })
 
     it('renders navigation buttons', () => {
-        render(<MatchTasksCalendar surrogateId="surrogate1" />)
+        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         expect(screen.getByText('Today')).toBeInTheDocument()
     })
 
     it('labels calendar navigation controls and announces period changes politely', () => {
-        render(<MatchTasksCalendar surrogateId="surrogate1" />)
+        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         const currentMonthYear = format(new Date(), 'MMMM yyyy')
 
         expect(screen.getByRole('button', { name: 'Previous period' })).toBeInTheDocument()
@@ -86,13 +88,13 @@ describe('MatchTasksCalendar', () => {
     })
 
     it('renders filter buttons', () => {
-        render(<MatchTasksCalendar surrogateId="surrogate1" />)
+        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         expect(screen.getByText('All')).toBeInTheDocument()
         expect(screen.getByText('Surrogate')).toBeInTheDocument()
     })
 
     it('renders day of week headers in month view', () => {
-        render(<MatchTasksCalendar surrogateId="surrogate1" />)
+        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         expect(screen.getByText('Sun')).toBeInTheDocument()
         expect(screen.getByText('Mon')).toBeInTheDocument()
         expect(screen.getByText('Tue')).toBeInTheDocument()
@@ -103,8 +105,8 @@ describe('MatchTasksCalendar', () => {
     })
 
     it('renders legend with color indicators', () => {
-        render(<MatchTasksCalendar surrogateId="surrogate1" />)
-        expect(screen.getByText('Surrogate Tasks')).toBeInTheDocument()
+        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
+        expect(screen.getByText('Surrogate / Match Tasks')).toBeInTheDocument()
         expect(screen.getByText('IP Tasks')).toBeInTheDocument()
     })
 
@@ -113,28 +115,52 @@ describe('MatchTasksCalendar', () => {
             data: null,
             isLoading: true,
         })
-        render(<MatchTasksCalendar surrogateId="surrogate1" />)
+        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         expect(document.querySelector('.animate-spin')).toBeInTheDocument()
     })
 
-    it('calls useTasks with correct surrogate_id', () => {
-        render(<MatchTasksCalendar surrogateId="surrogate1" />)
+    it('requests unassigned participant history in the unfiltered match calendar', () => {
+        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         expect(mockUseTasks).toHaveBeenCalledWith({
-            surrogate_id: 'surrogate1',
+            match_id: 'match1',
+            include_record_history: true,
             is_completed: false,
             per_page: 100,
             exclude_approvals: true,
-            intended_parent_id: undefined,
         })
     })
 
     it('displays tasks on calendar', () => {
-        render(<MatchTasksCalendar surrogateId="surrogate1" />)
+        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         expect(screen.getByText(/Medical Appointment/)).toBeInTheDocument()
     })
 
+    it('shows appointment status labels in day view', () => {
+        mockUseAppointments.mockReturnValue({
+            data: { items: [{ id: 'appointment1', scheduled_start: new Date().toISOString(), client_name: 'Test Client', appointment_type_name: 'Consultation', status: 'no_show' }], total: 1 },
+            isLoading: false,
+        })
+        render(<MatchTasksCalendar matchId="match1" />)
+        fireEvent.click(screen.getByRole('combobox'))
+        const dayOption = screen.getByRole('option', { name: 'Day' })
+        fireEvent.mouseMove(dayOption)
+        fireEvent.click(dayOption)
+        expect(screen.getByText('No Show')).toBeInTheDocument()
+        expect(screen.getByText('IP record')).toBeInTheDocument()
+        expect(screen.getAllByText('Surrogate record')).toHaveLength(2)
+        expect(screen.queryByText('no_show')).not.toBeInTheDocument()
+    })
+
+    it('keeps attempt calendars restricted to explicitly assigned work', () => {
+        render(<MatchTasksCalendar matchId="match1" attemptId="attempt1" />)
+        expect(mockUseTasks).toHaveBeenCalledWith(expect.objectContaining({ match_id: 'match1', attempt_id: 'attempt1' }))
+        expect(mockUseTasks.mock.calls[0][0]).not.toHaveProperty('include_record_history')
+        expect(mockUseAppointments).toHaveBeenCalledWith(expect.objectContaining({ match_id: 'match1', attempt_id: 'attempt1' }))
+        expect(mockUseAppointments.mock.calls[0][0]).not.toHaveProperty('include_record_history')
+    })
+
     it('navigates to previous month', () => {
-        render(<MatchTasksCalendar surrogateId="surrogate1" />)
+        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         const prevButton = screen.getAllByRole('button')[0] // First button is prev
         fireEvent.click(prevButton)
         // Should now show previous month
@@ -143,7 +169,7 @@ describe('MatchTasksCalendar', () => {
     })
 
     it('navigates to next month', () => {
-        render(<MatchTasksCalendar surrogateId="surrogate1" />)
+        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         const buttons = screen.getAllByRole('button')
         const nextButton = buttons[1] // Second button is next
         fireEvent.click(nextButton)
@@ -153,7 +179,7 @@ describe('MatchTasksCalendar', () => {
     })
 
     it('returns to today when Today button clicked', () => {
-        render(<MatchTasksCalendar surrogateId="surrogate1" />)
+        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
 
         // Navigate away first
         const nextButton = screen.getAllByRole('button')[1]
@@ -169,7 +195,7 @@ describe('MatchTasksCalendar', () => {
     })
 
     it('filters tasks when Surrogate filter is clicked', () => {
-        render(<MatchTasksCalendar surrogateId="surrogate1" />)
+        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
 
         // Click Surrogate filter
         const surrogateButton = screen.getByText('Surrogate')
@@ -180,7 +206,7 @@ describe('MatchTasksCalendar', () => {
     })
 
     it('filters tasks when All filter is clicked', () => {
-        render(<MatchTasksCalendar surrogateId="surrogate1" />)
+        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
 
         // First click surrogate, then All
         const surrogateButton = screen.getByText('Surrogate')
@@ -207,15 +233,23 @@ describe('MatchTasksCalendar with empty state', () => {
     })
 
     it('renders calendar even with no tasks', () => {
-        render(<MatchTasksCalendar surrogateId="surrogate1" />)
+        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         // Should still show day headers
         expect(screen.getByText('Sun')).toBeInTheDocument()
         expect(screen.getByText('Mon')).toBeInTheDocument()
     })
 
     it('still shows filter buttons when no tasks', () => {
-        render(<MatchTasksCalendar surrogateId="surrogate1" />)
+        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         expect(screen.getByText('All')).toBeInTheDocument()
         expect(screen.getByText('Surrogate')).toBeInTheDocument()
     })
+    it('keeps calendar requests scoped to the selected treatment attempt', () => {
+        render(<MatchTasksCalendar matchId="match1" attemptId="attempt2" />)
+        expect(mockUseTasks).toHaveBeenCalledWith(expect.objectContaining({ match_id: 'match1', attempt_id: 'attempt2' }))
+        expect(mockUseAppointments).toHaveBeenCalledWith(expect.objectContaining({ match_id: 'match1', attempt_id: 'attempt2' }))
+        expect(mockUseAppointments.mock.calls[0][0]).not.toHaveProperty('surrogate_id')
+        expect(mockUseAppointments.mock.calls[0][0]).not.toHaveProperty('intended_parent_id')
+    })
+
 })

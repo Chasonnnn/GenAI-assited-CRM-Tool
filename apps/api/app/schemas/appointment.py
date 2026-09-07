@@ -206,6 +206,10 @@ class AppointmentRead(BaseModel):
     meeting_started_at: datetime | None = None
     meeting_ended_at: datetime | None = None
     # Linkage fields
+    donor_id: UUID | None = None
+    donor_name: str | None = None
+    match_id: UUID | None = None
+    attempt_id: UUID | None = None
     surrogate_id: UUID | None = None
     surrogate_number: str | None = None
     intended_parent_id: UUID | None = None
@@ -233,6 +237,10 @@ class AppointmentListItem(BaseModel):
     zoom_join_url: str | None = None
     google_meet_url: str | None = None
     # Linkage fields
+    donor_id: UUID | None = None
+    donor_name: str | None = None
+    match_id: UUID | None = None
+    attempt_id: UUID | None = None
     surrogate_id: UUID | None = None
     surrogate_number: str | None = None
     intended_parent_id: UUID | None = None
@@ -255,8 +263,20 @@ class AppointmentListResponse(BaseModel):
 # =============================================================================
 
 
+class StaffAppointmentCreate(AppointmentCreate):
+    donor_id: UUID | None = None
+    intended_parent_id: UUID | None = None
+    surrogate_id: UUID | None = None
+    match_id: UUID | None = None
+    attempt_id: UUID | None = None
+
+
 class AppointmentLinkUpdate(BaseModel):
-    """Update an appointment's case/intended parent linkage."""
+    """Update an appointment's record and case linkage."""
+
+    donor_id: UUID | None = None
+    match_id: UUID | None = None
+    attempt_id: UUID | None = None
 
     surrogate_id: UUID | None = None
     intended_parent_id: UUID | None = None

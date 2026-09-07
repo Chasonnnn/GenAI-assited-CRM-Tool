@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
-from app.db.enums import AppointmentEmailType, AppointmentStatus, MeetingMode
+from app.db.enums import AppointmentEmailType, AppointmentStatus, AuditEventType, MeetingMode
 from app.db.models import (
     Appointment,
     AppointmentEmailLog,
@@ -27,6 +27,7 @@ from app.db.models import (
     AvailabilityOverride,
     AvailabilityRule,
     BookingLink,
+    Donor,
     IntendedParent,
     Organization,
     Surrogate,
@@ -342,8 +343,21 @@ def get_appointment_context(
             "user_names": {},
             "surrogate_numbers": {},
             "intended_parent_names": {},
+            "donor_names": {},
         }
 
+    org_ids = {a.organization_id for a in appointments}
+    donor_ids = {a.donor_id for a in appointments if a.donor_id}
+    donor_names = (
+        {
+            d.id: d.full_name
+            for d in db.query(Donor)
+            .filter(Donor.organization_id.in_(org_ids), Donor.id.in_(donor_ids))
+            .all()
+        }
+        if donor_ids
+        else {}
+    )
     type_ids = {a.appointment_type_id for a in appointments if a.appointment_type_id}
     approved_by_ids = {a.approved_by_user_id for a in appointments if a.approved_by_user_id}
     surrogate_ids = {a.surrogate_id for a in appointments if a.surrogate_id}
@@ -351,7 +365,11 @@ def get_appointment_context(
 
     type_names = {}
     if type_ids:
-        types = db.query(AppointmentType).filter(AppointmentType.id.in_(type_ids)).all()
+        types = (
+            db.query(AppointmentType)
+            .filter(AppointmentType.organization_id.in_(org_ids), AppointmentType.id.in_(type_ids))
+            .all()
+        )
         type_names = {t.id: t.name for t in types}
 
     user_names = {}
@@ -363,12 +381,20 @@ def get_appointment_context(
 
     surrogate_numbers = {}
     if surrogate_ids:
-        cases = db.query(Surrogate).filter(Surrogate.id.in_(surrogate_ids)).all()
+        cases = (
+            db.query(Surrogate)
+            .filter(Surrogate.organization_id.in_(org_ids), Surrogate.id.in_(surrogate_ids))
+            .all()
+        )
         surrogate_numbers = {c.id: c.surrogate_number for c in cases}
 
     intended_parent_names = {}
     if ip_ids:
-        ips = db.query(IntendedParent).filter(IntendedParent.id.in_(ip_ids)).all()
+        ips = (
+            db.query(IntendedParent)
+            .filter(IntendedParent.organization_id.in_(org_ids), IntendedParent.id.in_(ip_ids))
+            .all()
+        )
         intended_parent_names = {ip.id: ip.full_name for ip in ips}
 
     return {
@@ -376,6 +402,7 @@ def get_appointment_context(
         "user_names": user_names,
         "surrogate_numbers": surrogate_numbers,
         "intended_parent_names": intended_parent_names,
+        "donor_names": donor_names,
     }
 
 
@@ -413,6 +440,10 @@ def to_appointment_read(
         google_meet_url=appt.google_meet_url,
         meeting_started_at=appt.meeting_started_at,
         meeting_ended_at=appt.meeting_ended_at,
+        donor_id=appt.donor_id,
+        donor_name=context.get("donor_names", {}).get(appt.donor_id),
+        match_id=appt.match_id,
+        attempt_id=appt.attempt_id,
         surrogate_id=appt.surrogate_id,
         surrogate_number=context["surrogate_numbers"].get(appt.surrogate_id),
         intended_parent_id=appt.intended_parent_id,
@@ -443,6 +474,10 @@ def to_appointment_list_item(
         status=appt.status,
         zoom_join_url=appt.zoom_join_url,
         google_meet_url=appt.google_meet_url,
+        donor_id=appt.donor_id,
+        donor_name=context.get("donor_names", {}).get(appt.donor_id),
+        match_id=appt.match_id,
+        attempt_id=appt.attempt_id,
         surrogate_id=appt.surrogate_id,
         surrogate_number=context["surrogate_numbers"].get(appt.surrogate_id),
         intended_parent_id=appt.intended_parent_id,
@@ -1132,6 +1167,7 @@ def create_booking(
     client_notes: str | None = None,
     idempotency_key: str | None = None,
     meeting_mode: str | None = None,
+    record_links: dict | None = None,
 ) -> Appointment:
     """
     Create a new appointment booking (pending approval).
@@ -1156,7 +1192,13 @@ def create_booking(
             .first()
         )
         if existing:
+            if record_links and any(
+                getattr(existing, field) != value for field, value in record_links.items()
+            ):
+                raise ValueError("Idempotency key belongs to another appointment context")
             return existing
+
+    _validate_new_record_context(db, org_id, record_links or {})
 
     # Get appointment type
     appt_type = (
@@ -1221,7 +1263,12 @@ def create_booking(
         cancel_token_expires_at=token_expires,
         idempotency_key=idempotency_key,
     )
+    for field, value in (record_links or {}).items():
+        setattr(appointment, field, value)
     db.add(appointment)
+    db.flush()
+    if record_links:
+        _audit_record_appointment(db, appointment, AuditEventType.APPOINTMENT_CREATED, user_id)
     db.commit()
     db.refresh(appointment)
 
@@ -1337,6 +1384,9 @@ def approve_booking(
     appointment.reschedule_token_expires_at = token_expires
     appointment.cancel_token_expires_at = token_expires
 
+    _audit_record_appointment(
+        db, appointment, AuditEventType.APPOINTMENT_APPROVED, approved_by_user_id
+    )
     db.commit()
     db.refresh(appointment)
 
@@ -1389,6 +1439,7 @@ def reschedule_booking(
     new_start: datetime,
     by_client: bool = False,
     token: str | None = None,
+    actor_user_id: UUID | None = None,
 ) -> Appointment:
     """Reschedule an appointment to a new time.
 
@@ -1515,6 +1566,9 @@ def reschedule_booking(
         ),
         commit=False,
     )
+    _audit_record_appointment(
+        db, appointment, AuditEventType.APPOINTMENT_RESCHEDULED, actor_user_id
+    )
     db.commit()
     db.refresh(appointment)
 
@@ -1567,6 +1621,7 @@ def cancel_booking(
     reason: str | None = None,
     by_client: bool = False,
     token: str | None = None,
+    actor_user_id: UUID | None = None,
 ) -> Appointment:
     """Cancel an appointment.
 
@@ -1622,6 +1677,7 @@ def cancel_booking(
         ),
         commit=False,
     )
+    _audit_record_appointment(db, appointment, AuditEventType.APPOINTMENT_CANCELLED, actor_user_id)
     db.commit()
     db.refresh(appointment)
 
@@ -1788,6 +1844,10 @@ def list_appointments(
     date_end: date | None = None,
     surrogate_id: UUID | None = None,
     intended_parent_id: UUID | None = None,
+    donor_id: UUID | None = None,
+    match_id: UUID | None = None,
+    attempt_id: UUID | None = None,
+    include_record_history: bool = False,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[Appointment], int]:
@@ -1833,7 +1893,24 @@ def list_appointments(
         end_dt = datetime.combine(date_end, time.max, tzinfo=UTC)
         query = query.filter(Appointment.scheduled_start <= end_dt)
 
-    # Filter by surrogate_id OR intended_parent_id (for match-scoped views)
+    if match_id:
+        context_filter = Appointment.match_id == match_id
+        if include_record_history and not attempt_id:
+            from app.services import match_service, match_work_service
+
+            match = match_service.get_match(db, match_id, org_id)
+            if match is None:
+                raise ValueError("Match not found")
+            context_filter = or_(
+                context_filter, match_work_service.record_history_filter(Appointment, match)
+            )
+        query = query.filter(context_filter)
+    if attempt_id:
+        query = query.filter(Appointment.attempt_id == attempt_id)
+    if donor_id:
+        query = query.filter(Appointment.donor_id == donor_id)
+
+    # Legacy combined record filter remains available. Exact case views use match_id.
     if surrogate_id and intended_parent_id:
         query = query.filter(
             or_(
@@ -1936,3 +2013,156 @@ def _check_gmail_connected(db: Session, user_id: UUID) -> bool:
         .first()
     )
     return integration is not None and integration.access_token_encrypted is not None
+
+
+def update_record_links(
+    db: Session, appointment: Appointment, links: dict, actor_user_id: UUID
+) -> None:
+    from app.services import audit_service
+
+    if any(
+        links.get(field) != getattr(appointment, field)
+        for field in ("donor_id", "match_id", "attempt_id")
+    ):
+        _validate_new_record_context(db, appointment.organization_id, links)
+    for field, value in links.items():
+        setattr(appointment, field, value)
+    audit_service.log_event(
+        db=db,
+        org_id=appointment.organization_id,
+        actor_user_id=actor_user_id,
+        event_type=AuditEventType.APPOINTMENT_LINK_UPDATED,
+        target_type="appointment",
+        target_id=appointment.id,
+        details={field: str(value) if value else None for field, value in links.items()},
+    )
+    db.commit()
+    db.refresh(appointment)
+
+
+def _validate_new_record_context(db, org_id, links):
+    if links.get("donor_id") or links.get("match_id") or links.get("attempt_id"):
+        from app.core.match_rollout import require_match_expansion
+
+        require_match_expansion()
+    if links.get("match_id"):
+        from app.services.match_work_service import validate_context
+
+        validate_context(db, org_id, links["match_id"], links.get("attempt_id"), write=True)
+
+
+def _audit_record_appointment(
+    db: Session, appointment: Appointment, event_type: AuditEventType, actor_user_id: UUID | None
+) -> None:
+    if not (appointment.donor_id or appointment.intended_parent_id or appointment.match_id):
+        return
+    from app.services import audit_service
+
+    audit_service.log_event(
+        db=db,
+        org_id=appointment.organization_id,
+        actor_user_id=actor_user_id,
+        event_type=event_type,
+        target_type="appointment",
+        target_id=appointment.id,
+        details={
+            field: str(getattr(appointment, field)) if getattr(appointment, field) else None
+            for field in ("donor_id", "intended_parent_id", "match_id", "attempt_id")
+        },
+    )
+
+
+def validate_existing_appointment_access(db, session, appointment, *, action="view"):
+    """Keep owner/admin lifecycle access for legacy record-linked appointments."""
+    from fastapi import HTTPException
+
+    from app.db.models import IntendedParent, Surrogate
+
+    if appointment.organization_id != session.org_id:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    if appointment.user_id != session.user_id and session.role not in ("admin", "developer"):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    links = {
+        field: getattr(appointment, field)
+        for field in ("surrogate_id", "intended_parent_id", "donor_id", "match_id", "attempt_id")
+    }
+    if appointment.donor_id or appointment.match_id or appointment.attempt_id:
+        validate_record_links(db, session, links, action=action)
+        return
+    # Ownership authorizes this appointment, not its participants' full records.
+    for model, record_id in (
+        (Surrogate, appointment.surrogate_id),
+        (IntendedParent, appointment.intended_parent_id),
+    ):
+        if (
+            record_id
+            and not db.query(model.id)
+            .filter(model.id == record_id, model.organization_id == session.org_id)
+            .first()
+        ):
+            raise HTTPException(status_code=404, detail="Appointment record not found")
+
+
+def validate_record_links(db, session, links, *, action="view"):
+    from fastapi import HTTPException
+
+    from app.core.policies import POLICIES
+    from app.db.models import Match, MatchAttempt
+    from app.services.record_access_service import get_record_with_access
+
+    if links.get("attempt_id") and not links.get("match_id"):
+        raise HTTPException(status_code=400, detail="An attempt requires a match case")
+    if links.get("match_id"):
+        from app.services import permission_service
+
+        if not permission_service.check_permission(
+            db,
+            session.org_id,
+            session.user_id,
+            session.role.value,
+            POLICIES["matches"].default.value,
+        ):
+            raise HTTPException(status_code=403, detail="Missing permission: view_matches")
+        match = (
+            db.query(Match)
+            .filter(Match.id == links["match_id"], Match.organization_id == session.org_id)
+            .first()
+        )
+        if match is None:
+            raise HTTPException(status_code=404, detail="Match not found")
+        for field in ("surrogate_id", "intended_parent_id", "donor_id"):
+            expected = getattr(match, field, None)
+            if links.get(field) and links[field] != expected:
+                raise HTTPException(
+                    status_code=400, detail="Appointment record does not belong to this match"
+                )
+            if expected:
+                get_record_with_access(
+                    db,
+                    session,
+                    field.removesuffix("_id"),
+                    expected,
+                    action=action,
+                    allow_archived=action == "view",
+                )
+        if (
+            links.get("attempt_id")
+            and not db.query(MatchAttempt)
+            .filter(
+                MatchAttempt.id == links["attempt_id"],
+                MatchAttempt.match_id == match.id,
+                MatchAttempt.organization_id == session.org_id,
+            )
+            .first()
+        ):
+            raise HTTPException(status_code=404, detail="Attempt not found")
+    for field in ("surrogate_id", "intended_parent_id", "donor_id"):
+        if links.get(field):
+            get_record_with_access(
+                db,
+                session,
+                field.removesuffix("_id"),
+                links[field],
+                action=action,
+                allow_archived=bool(links.get("match_id")) and action == "view",
+            )

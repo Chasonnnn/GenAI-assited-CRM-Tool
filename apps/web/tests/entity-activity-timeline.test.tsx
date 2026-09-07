@@ -7,7 +7,7 @@ import {
     EntityActivityTimeline,
 } from "@/components/activity/EntityActivityTimeline"
 import type { PipelineStage } from "@/lib/api/pipelines"
-import type { SurrogateActivity, SurrogateStatusHistory } from "@/lib/api/surrogates"
+import type { EntityActivity, EntityStageHistory } from "@/lib/api/activity"
 
 const mockUseInfiniteEntityActivity = vi.hoisted(() => vi.fn())
 
@@ -30,7 +30,7 @@ const stage: PipelineStage = {
     is_active: true,
 }
 
-const history: SurrogateStatusHistory = {
+const history: EntityStageHistory = {
     id: "history-1",
     from_stage_id: null,
     to_stage_id: stage.id,
@@ -47,7 +47,7 @@ const history: SurrogateStatusHistory = {
 function activity(
     activityType: string,
     details: Record<string, unknown> | null,
-): SurrogateActivity {
+): EntityActivity {
     return {
         id: `activity-${activityType}`,
         activity_type: activityType,
@@ -59,6 +59,14 @@ function activity(
 }
 
 describe("EntityActivityTimeline", () => {
+    it("uses entity pipeline semantics rather than surrogate stage-name defaults", () => {
+        render(<EntityActivityTimeline currentStageId={stage.id} stages={[
+            stage,
+            { ...stage, id: "custom-lost", stage_key: "lost", label: "Custom follow-up", order: 2 },
+        ]} stageHistory={[]} />)
+        expect(screen.getByText("Custom follow-up")).toBeInTheDocument()
+    })
+
     it("renders explicit loading and retryable error states", () => {
         const retry = vi.fn()
         const { rerender } = render(

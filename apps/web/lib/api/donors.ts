@@ -99,3 +99,12 @@ export async function createDonorNote(id: string, data: DonorNoteCreate): Promis
 export async function deleteDonorNote(donorId: string, noteId: string): Promise<void> {
     return api.delete(`/donors/${donorId}/notes/${noteId}`)
 }
+
+export interface DonorOwnerOptions {
+    users: { id: string; display_name: string }[]
+    queues: { id: string; name: string }[]
+}
+
+export function getDonorOwnerOptions(): Promise<DonorOwnerOptions> {
+    return api.get<DonorOwnerOptions>("/donors/owner-options")
+}

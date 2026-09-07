@@ -754,7 +754,12 @@ def delete_surrogate(
             status_code=400, detail="Surrogate must be archived before permanent deletion"
         )
 
-    surrogate_service.hard_delete_surrogate(db, surrogate, emit_events=True)
+    from app.services.record_preservation_service import PreservationDependencyError
+
+    try:
+        surrogate_service.hard_delete_surrogate(db, surrogate, emit_events=True)
+    except PreservationDependencyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     audit_service.log_event(
         db=db,
         org_id=session.org_id,

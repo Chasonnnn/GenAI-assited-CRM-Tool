@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 vi.mock("@/lib/hooks/use-donors", () => ({
@@ -33,6 +33,29 @@ vi.mock("@/components/ui/select", () => ({
 import { TaskEditModal } from "@/components/tasks/TaskEditModal"
 
 describe("TaskEditModal related record", () => {
+    it("preserves edited values and shows a failed save", async () => {
+        const onClose = vi.fn()
+        render(<TaskEditModal open onClose={onClose} onSave={vi.fn().mockRejectedValue(new Error("Save failed"))} task={{ id: "task-1", title: "Review", description: null, task_type: "review", due_date: null, due_time: null, is_completed: false, surrogate_id: null }} />)
+        fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Updated review" } })
+        fireEvent.click(screen.getByRole("button", { name: "Save Changes" }))
+        await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Save failed"))
+        expect(screen.getByLabelText("Title")).toHaveValue("Updated review")
+        expect(onClose).not.toHaveBeenCalled()
+    })
+
+    it("keeps a failed deletion open for retry", async () => {
+        const onClose = vi.fn()
+        const onDelete = vi.fn().mockRejectedValueOnce(new Error("Delete failed")).mockResolvedValueOnce(undefined)
+        render(<TaskEditModal open onClose={onClose} onSave={vi.fn()} onDelete={onDelete} task={{ id: "task-1", title: "Review", description: null, task_type: "review", due_date: null, due_time: null, is_completed: false, surrogate_id: null }} />)
+        fireEvent.click(screen.getByRole("button", { name: "Delete Task" }))
+        const dialog = screen.getByRole("alertdialog")
+        fireEvent.click(within(dialog).getByRole("button", { name: "Delete", exact: true }))
+        await waitFor(() => expect(within(dialog).getByRole("alert")).toHaveTextContent("Delete failed"))
+        expect(onClose).not.toHaveBeenCalled()
+        fireEvent.click(within(dialog).getByRole("button", { name: "Delete", exact: true }))
+        await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
+    })
+
     it("preselects a donor and sends explicit nulls when the link is removed", async () => {
         const onSave = vi.fn().mockResolvedValue(undefined)
         render(

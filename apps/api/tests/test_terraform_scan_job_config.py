@@ -128,14 +128,41 @@ def test_cloudbuild_resolves_and_deploys_one_digest_image_set() -> None:
     assert '"--image", "$_IMAGE_WORKER"' not in content
 
 
+def test_cloudbuild_parallelizes_api_and_worker_images_on_high_cpu() -> None:
+    api = _read("cloudbuild/api.yaml")
+    web = _read("cloudbuild/web.yaml")
+
+    for step_id in [
+        "pull-api-cache",
+        "pull-worker-cache",
+        "build-api",
+        "build-worker",
+        "push-api",
+        "push-worker",
+    ]:
+        assert f"id: {step_id}" in api
+
+    assert 'waitFor: ["validate-release"]' in api
+    assert 'waitFor: ["pull-api-cache"]' in api
+    assert 'waitFor: ["pull-worker-cache"]' in api
+    assert 'waitFor: ["build-api"]' in api
+    assert 'waitFor: ["build-worker"]' in api
+    assert 'waitFor: ["push-api", "push-worker"]' in api
+    assert "machineType: E2_HIGHCPU_8" in api
+    assert "machineType: E2_HIGHCPU_8" in web
+
+
 def test_cloudbuild_preserves_worker_configuration_and_repairs_monitoring_identity() -> None:
     content = _read("cloudbuild/api.yaml")
     worker_update = content.index('gcloud run services update "$_WORKER_SERVICE"')
-    api_update = content.index('gcloud run services update "$_API_SERVICE"')
-    worker_step = content[worker_update:api_update]
+    worker_step = content[worker_update : content.index("--quiet", worker_update)]
 
     assert '--image "$${worker_image_ref}"' in worker_step
-    assert '--update-env-vars "GCP_SERVICE_NAME=$_WORKER_SERVICE"' in worker_step
+    assert (
+        'worker_env="GCP_SERVICE_NAME=$_WORKER_SERVICE,DB_MIGRATION_CHECK=true,DB_AUTO_MIGRATE=false"'
+        in content
+    )
+    assert '--update-env-vars "$${worker_env}"' in worker_step
     assert worker_step.count("--update-env-vars") == 1
     assert "--remove-env-vars" not in worker_step
     assert "WORKER_CUTOVER_HOLD" not in worker_step

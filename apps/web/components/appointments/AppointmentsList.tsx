@@ -1,5 +1,7 @@
 "use client"
 
+import { getAppointmentStatusLabel } from "@/lib/appointment-status-labels"
+
 /**
  * Appointments List - Dashboard for viewing and managing appointments
  * 
@@ -173,7 +175,7 @@ function AppointmentCard({
                         <span className="flex items-center gap-2">
                             <span className="font-medium">{appointment.client_name}</span>
                             <Badge className={STATUS_STYLES[appointment.status as keyof typeof STATUS_STYLES]}>
-                                {appointment.status.replace("_", " ")}
+                                {getAppointmentStatusLabel(appointment.status)}
                             </Badge>
                         </span>
                         <span className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
@@ -451,7 +453,7 @@ function AppointmentStatusSummary({ appointment }: { appointment: Appointment })
     return (
         <div className="flex items-center gap-2">
             <Badge className={`${STATUS_STYLES[appointment.status]} text-sm px-3 py-1`}>
-                {appointment.status.replace("_", " ").toUpperCase()}
+                {getAppointmentStatusLabel(appointment.status)}
             </Badge>
             {appointment.status === "pending" && appointment.pending_expires_at && (
                 <span className="text-sm text-muted-foreground">

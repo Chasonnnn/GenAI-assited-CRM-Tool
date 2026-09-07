@@ -16,6 +16,7 @@ class MatchStatus(str, Enum):
     ACCEPTED = "accepted"  # Match finalized
     CANCEL_PENDING = "cancel_pending"  # Cancellation pending admin approval
     REJECTED = "rejected"  # Match declined with reason
+    COMPLETED = "completed"  # Relationship completed
     CANCELLED = "cancelled"  # Proposal withdrawn
 
 

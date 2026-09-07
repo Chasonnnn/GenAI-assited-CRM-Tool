@@ -17,7 +17,9 @@ import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 interface ProposeMatchDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    surrogateId: string
+    surrogateId?: string
+    donorId?: string
+    donorName?: string
     surrogateName?: string
     onSuccess?: () => void
 }
@@ -27,6 +29,8 @@ export function ProposeMatchDialog({
     onOpenChange,
     surrogateId,
     surrogateName,
+    donorId,
+    donorName,
     onSuccess,
 }: ProposeMatchDialogProps) {
     const [selectedIpId, setSelectedIpId] = useState<string>("")
@@ -47,12 +51,12 @@ export function ProposeMatchDialog({
     const createMatch = useCreateMatch()
 
     const handleSubmit = async () => {
-        if (!selectedIpId) return
+        if (!selectedIpId || (!surrogateId && !donorId)) return
         setError(null)
 
         try {
             await createMatch.mutateAsync({
-                surrogate_id: surrogateId,
+                ...(donorId ? { donor_id: donorId, match_kind: "donor" as const } : { surrogate_id: surrogateId! }),
                 intended_parent_id: selectedIpId,
                 ...(notes.trim() ? { notes: notes.trim() } : {}),
             })
@@ -79,7 +83,7 @@ export function ProposeMatchDialog({
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <UsersIcon className="size-5" />
-                        {surrogateName ? `Propose match for ${surrogateName}` : "Propose Match"}
+                        {(donorName || surrogateName) ? `Propose match for ${donorName || surrogateName}` : "Propose Match"}
                     </DialogTitle>
                 </DialogHeader>
 
@@ -107,7 +111,7 @@ export function ProposeMatchDialog({
                         ) : (
                             <Select value={selectedIpId} onValueChange={(v) => setSelectedIpId(v || "")}>
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Select intended parent(s)" />
+                                    <SelectValue placeholder="Select intended parent(s)">{(value: string | null) => { const selected = ipsData?.items.find((ip) => ip.id === value); return selected ? selected.full_name || selected.email || "Unknown" : "Select intended parent(s)" }}</SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
                                     {ipsData?.items.map((ip) => (

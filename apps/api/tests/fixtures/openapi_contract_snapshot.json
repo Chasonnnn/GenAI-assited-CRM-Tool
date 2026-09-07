@@ -540,6 +540,10 @@
     "GET": [
       "200",
       "422"
+    ],
+    "POST": [
+      "201",
+      "422"
     ]
   },
   "/appointments/availability": {
@@ -1081,6 +1085,11 @@
     "POST": [
       "201",
       "422"
+    ]
+  },
+  "/donors/owner-options": {
+    "GET": [
+      "200"
     ]
   },
   "/donors/{donor_id}": {
@@ -2399,6 +2408,10 @@
   "/matches/{match_id}/notes": {
     "PATCH": [
       "200",
+      "422"
+    ],
+    "POST": [
+      "201",
       "422"
     ]
   },
@@ -4131,6 +4144,62 @@
   "/workflows/{workflow_id}/toggle": {
     "POST": [
       "200",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/attachments": {
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/attempts": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/attempts/{attempt_id}": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/complete": {
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/notes/{note_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/work": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/records/{kind}/{record_id}/correspondence": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/records/{kind}/{record_id}/correspondence/{ticket_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "PUT": [
+      "204",
       "422"
     ]
   }

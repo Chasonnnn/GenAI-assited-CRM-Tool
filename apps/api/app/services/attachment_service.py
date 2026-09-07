@@ -503,6 +503,8 @@ def upload_attachment(
     donor_id: uuid.UUID | None = None,
     allowed_extensions: set[str] | None = None,
     allowed_mime_types: set[str] | None = None,
+    match_id: uuid.UUID | None = None,
+    attempt_id: uuid.UUID | None = None,
 ) -> Attachment:
     """
     Upload and store an attachment.
@@ -536,7 +538,7 @@ def upload_attachment(
     # Generate storage key
     attachment_id = uuid.uuid4()
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    entity_id = surrogate_id or intended_parent_id or donor_id
+    entity_id = surrogate_id or intended_parent_id or donor_id or match_id
     storage_key = f"{org_id}/{entity_id}/{attachment_id}.{ext}"
 
     # Store file
@@ -554,6 +556,8 @@ def upload_attachment(
         surrogate_id=surrogate_id,
         intended_parent_id=intended_parent_id,
         donor_id=donor_id,
+        match_id=match_id,
+        attempt_id=attempt_id,
         uploaded_by_user_id=user_id,
         filename=filename,
         storage_key=storage_key,
@@ -796,6 +800,7 @@ def list_attachments(
     query = db.query(Attachment).filter(
         Attachment.organization_id == org_id,
         Attachment.deleted_at.is_(None),
+        Attachment.match_id.is_(None),
     )
 
     if surrogate_id:
@@ -938,6 +943,20 @@ def soft_delete_attachment(
             "file_size": attachment.file_size,
         },
     )
+
+    if attachment.match_id:
+        audit_service.log_event(
+            db=db,
+            org_id=org_id,
+            event_type=AuditEventType.ATTACHMENT_DELETED,
+            actor_user_id=user_id,
+            target_type="match",
+            target_id=attachment.match_id,
+            details={
+                "attachment_id": str(attachment.id),
+                "attempt_id": str(attachment.attempt_id) if attachment.attempt_id else None,
+            },
+        )
 
     db.flush()
     return True

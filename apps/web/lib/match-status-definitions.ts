@@ -28,7 +28,7 @@ export const MATCH_STATUS_DEFINITIONS: MatchStatusDefinition[] = [
         label: "Accepted",
         order: 3,
         badgeClassName: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-        allowedTransitions: ["cancel_pending"],
+        allowedTransitions: ["cancel_pending", "completed"],
     },
     {
         value: "cancel_pending",
@@ -49,6 +49,13 @@ export const MATCH_STATUS_DEFINITIONS: MatchStatusDefinition[] = [
         label: "Cancelled",
         order: 6,
         badgeClassName: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+        allowedTransitions: [],
+    },
+    {
+        value: "completed",
+        label: "Completed",
+        order: 7,
+        badgeClassName: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
         allowedTransitions: [],
     },
 ]
@@ -74,4 +81,8 @@ export function getMatchStatusLabel(value: string | null | undefined): string {
 
 export function getMatchStatusBadgeClassName(value: string | null | undefined): string {
     return getMatchStatusDefinition(value).badgeClassName
+}
+
+export function getMatchKindLabel(kind: string | null | undefined): string {
+    return kind === "donor" ? "Donor" : "Surrogate"
 }

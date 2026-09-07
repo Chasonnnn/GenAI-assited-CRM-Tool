@@ -418,7 +418,7 @@ describe("AppSidebar permission visibility", () => {
         expect(html).toContain("Team")
     })
 
-    it("places AI Studio Preview directly under Automation when AI access is enabled", async () => {
+    it("places AI Studio (beta) directly under Automation when AI access is enabled", async () => {
         mockUseAuth.mockReturnValue({
             user: {
                 user_id: "user-ai",
@@ -441,7 +441,7 @@ describe("AppSidebar permission visibility", () => {
         )
 
         const automation = await screen.findByRole("button", { name: "Automation" })
-        const studio = screen.getByRole("link", { name: "AI Studio Preview" })
+        const studio = screen.getByRole("link", { name: "AI Studio (beta)" })
         const reports = screen.getByRole("link", { name: "Reports" })
 
         expect(automation.compareDocumentPosition(studio)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)

@@ -16,6 +16,17 @@ class AuditEventType(str, Enum):
     - INTEGRATION_*: Third-party connections
     """
 
+    APPOINTMENT_APPROVED = "appointment_approved"
+    APPOINTMENT_CREATED = "appointment_created"
+    APPOINTMENT_RESCHEDULED = "appointment_rescheduled"
+    APPOINTMENT_CANCELLED = "appointment_cancelled"
+    APPOINTMENT_LINK_UPDATED = "appointment_link_updated"
+    RECORD_CORRESPONDENCE_LINKED = "record_correspondence_linked"
+    RECORD_CORRESPONDENCE_UNLINKED = "record_correspondence_unlinked"
+
+    MATCH_NOTE_ADDED = "match_note_added"
+    MATCH_NOTE_DELETED = "match_note_deleted"
+
     # Authentication
     AUTH_LOGIN_SUCCESS = "auth_login_success"
     AUTH_LOGIN_FAILED = "auth_login_failed"
@@ -113,6 +124,10 @@ class AuditEventType(str, Enum):
     TASK_RESOLVED = "task_resolved"
 
     MATCH_PROPOSED = "match_proposed"
+    MATCH_COMPLETED = "match_completed"
+    MATCH_ATTEMPT_CREATED = "match_attempt_created"
+    MATCH_ATTEMPT_UPDATED = "match_attempt_updated"
+    MATCH_CANCEL_REQUESTED = "match_cancel_requested"
     MATCH_ACCEPTED = "match_accepted"
     MATCH_REJECTED = "match_rejected"
     MATCH_CANCELLED = "match_cancelled"

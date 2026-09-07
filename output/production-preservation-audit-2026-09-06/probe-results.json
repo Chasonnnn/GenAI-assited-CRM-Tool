@@ -1,0 +1,46 @@
+{
+  "full_chain_preservation": {
+    "passed": true,
+    "tables_compared": 171,
+    "nonempty_tables": [
+      "request_metrics_rollup",
+      "entity_versions",
+      "entity_notes",
+      "attachments",
+      "matches",
+      "users",
+      "platform_email_templates",
+      "platform_form_templates",
+      "appointments",
+      "workflow_templates",
+      "tasks",
+      "organizations",
+      "pipeline_stages",
+      "pipelines",
+      "intended_parents",
+      "surrogates"
+    ]
+  },
+  "legacy_work_without_match_context": {
+    "tasks": 1,
+    "entity_notes": 1,
+    "attachments": 1,
+    "appointments": 1
+  },
+  "closure_only_downgrade_data_loss_reproduced": true,
+  "standalone_1600_timeouts": {
+    "lock_timeout": "0",
+    "statement_timeout": "0"
+  },
+  "legacy_conflict_rejected": "uq_one_accepted_match_per_surrogate",
+  "conflict_rollback_preserves_rows": true,
+  "conflict_rollback_revision": "20260830_0100",
+  "donor_held_case_selected_for_purge": true,
+  "unrelated_surrogate_hold_excludes_donor_case": true,
+  "selected_donor_case_delete_cascades_attempt": true,
+  "case_work_blocks_bulk_delete": "fk_entity_notes_match_id",
+  "concurrent_downgrade_data_loss_reproduced": {
+    "writer_committed": true,
+    "attempt_table_dropped": true
+  }
+}

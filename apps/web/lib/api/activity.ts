@@ -35,3 +35,24 @@ export function getEntityActivity(
         `/${ENTITY_PATHS[entityType]}/${entityId}/activity?${params.toString()}`,
     )
 }
+
+/** Stage transitions consumed by entity activity timelines. */
+export interface EntityStageHistory {
+    id: string
+    from_stage_id: string | null
+    to_stage_id: string | null
+    from_label_snapshot: string | null
+    to_label_snapshot: string | null
+    changed_by_user_id: string | null
+    changed_by_name?: string | null
+    reason: string | null
+    changed_at: string
+    effective_at?: string | null
+    recorded_at?: string | null
+    requested_at?: string | null
+    approved_by_user_id?: string | null
+    approved_by_name?: string | null
+    approved_at?: string | null
+    is_undo?: boolean
+    request_id?: string | null
+}

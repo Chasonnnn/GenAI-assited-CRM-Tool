@@ -26,14 +26,14 @@ import {
     CheckSquareIcon,
     CalendarIcon,
     Loader2Icon,
-    UserIcon,
-    UsersIcon,
     PlusIcon,
 } from "lucide-react"
 import { useTasks } from "@/lib/hooks/use-tasks"
 import { useAppointments } from "@/lib/hooks/use-appointments"
 import type { TaskListItem } from "@/lib/api/tasks"
 import type { AppointmentListItem } from "@/lib/api/appointments"
+import { getMatchWorkSourceLabel } from "@/lib/match-work-labels"
+import { getAppointmentStatusLabel } from "@/lib/appointment-status-labels"
 import {
     format,
     startOfMonth,
@@ -54,10 +54,13 @@ const IP_COLOR = "bg-green-500"
 const APPOINTMENT_COLOR = "bg-blue-500"
 
 type ViewType = "month" | "week" | "day"
-type FilterType = "all" | "surrogate" | "ip" | "appointments"
+type FilterType = "all" | "match" | "surrogate" | "donor" | "ip" | "appointments"
 
 interface MatchTasksCalendarProps {
-    surrogateId: string
+    matchId: string
+    attemptId?: string
+    participantKind?: "surrogate" | "donor"
+    surrogateId?: string
     ipId?: string
     onAddTask?: () => void
 }
@@ -69,29 +72,30 @@ function TaskItem({
     compact = false,
 }: {
     task: TaskListItem
-    source: "surrogate" | "ip"
+    source: "match" | "surrogate" | "donor" | "ip"
     compact?: boolean
 }) {
-    const color = source === "surrogate" ? SURROGATE_COLOR : IP_COLOR
+    const color = source === "ip" ? IP_COLOR : SURROGATE_COLOR
+    const sourceLabel = getMatchWorkSourceLabel(source, task.match_id ? "case" : "record")
     const time = task.due_time ? format(parseISO(`2000-01-01T${task.due_time}`), "h:mm a") : ""
 
     if (compact) {
         return (
-            <div className={`w-full text-left px-2 py-1 rounded text-xs truncate ${color} text-white`}>
+            <div title={sourceLabel} className={`w-full text-left px-2 py-1 rounded text-xs truncate ${color} text-white`}>
                 {time && `${time} - `}📋 {task.title}
             </div>
         )
     }
 
     return (
-        <div className={`w-full text-left p-2 rounded-lg border-l-4 ${source === "surrogate" ? "border-purple-500" : "border-green-500"} bg-muted/50`}>
+        <div className={`w-full text-left p-2 rounded-lg border-l-4 ${source === "ip" ? "border-green-500" : "border-purple-500"} bg-muted/50`}>
             <p className="font-medium text-sm truncate flex items-center gap-1">
                 <CheckSquareIcon className="size-3" />
                 {task.title}
             </p>
             {time && <p className="text-xs text-muted-foreground">{time}</p>}
             <Badge variant="outline" className="text-xs mt-1">
-                {source === "surrogate" ? "Surrogate" : "IP"}
+                {sourceLabel}
             </Badge>
         </div>
     )
@@ -112,10 +116,11 @@ function AppointmentItem({
         time = "--:--"
     }
     const typeName = appointment.appointment_type_name || "Appointment"
+    const sourceLabel = getMatchWorkSourceLabel(appointment.match_id ? "match" : appointment.donor_id ? "donor" : appointment.surrogate_id ? "surrogate" : "ip", appointment.match_id ? "case" : "record")
 
     if (compact) {
         return (
-            <div className={`w-full text-left px-2 py-1 rounded text-xs truncate ${APPOINTMENT_COLOR} text-white`}>
+            <div title={sourceLabel} className={`w-full text-left px-2 py-1 rounded text-xs truncate ${APPOINTMENT_COLOR} text-white`}>
                 {time} - 📅 {appointment.client_name}
             </div>
         )
@@ -129,7 +134,10 @@ function AppointmentItem({
             </p>
             <p className="text-xs text-muted-foreground">{time} - {appointment.client_name}</p>
             <Badge variant="outline" className="text-xs mt-1">
-                {appointment.status}
+                {getAppointmentStatusLabel(appointment.status)}
+            </Badge>
+            <Badge variant="outline" className="text-xs mt-1 ml-1">
+                {sourceLabel}
             </Badge>
         </div>
     )
@@ -144,7 +152,7 @@ function MonthView({
 }: {
     currentDate: Date
     tasks: TaskListItem[]
-    taskSources: Map<string, "surrogate" | "ip">
+    taskSources: Map<string, "match" | "surrogate" | "donor" | "ip">
     appointments: AppointmentListItem[]
 }) {
     const monthStart = startOfMonth(currentDate)
@@ -244,7 +252,7 @@ function WeekView({
 }: {
     currentDate: Date
     tasks: TaskListItem[]
-    taskSources: Map<string, "surrogate" | "ip">
+    taskSources: Map<string, "match" | "surrogate" | "donor" | "ip">
     appointments: AppointmentListItem[]
 }) {
     const weekStart = startOfWeek(currentDate)
@@ -314,7 +322,7 @@ function DayView({
 }: {
     currentDate: Date
     tasks: TaskListItem[]
-    taskSources: Map<string, "surrogate" | "ip">
+    taskSources: Map<string, "match" | "surrogate" | "donor" | "ip">
     appointments: AppointmentListItem[]
 }) {
     const dateStr = format(currentDate, "yyyy-MM-dd")
@@ -360,7 +368,7 @@ function DayView({
 }
 
 // Main Component
-export function MatchTasksCalendar({ surrogateId, ipId, onAddTask }: MatchTasksCalendarProps) {
+export function MatchTasksCalendar({ matchId, attemptId, participantKind = "surrogate", onAddTask }: MatchTasksCalendarProps) {
     const [currentDate, setCurrentDate] = useState(new Date())
     const [viewType, setViewType] = useState<ViewType>("month")
     const [filter, setFilter] = useState<FilterType>("all")
@@ -384,62 +392,22 @@ export function MatchTasksCalendar({ surrogateId, ipId, onAddTask }: MatchTasksC
         dateEnd = format(currentDate, "yyyy-MM-dd")
     }
 
-    // Fetch tasks for surrogate
-    const { data: surrogateTasks, isLoading: loadingSurrogate } = useTasks({
-        surrogate_id: surrogateId,
+    const { data: matchTasks, isLoading: loadingTasks, isError: tasksError } = useTasks({
+        match_id: matchId,
+        ...(attemptId ? { attempt_id: attemptId } : { include_record_history: true }),
         is_completed: false,
         per_page: 100,
         exclude_approvals: true,
-    })
-
-    // Fetch tasks for IP (now supported via intended_parent_id filter)
-    const { data: ipTasks, isLoading: loadingIP } = useTasks(
-        ipId
-            ? {
-                intended_parent_id: ipId,
-                is_completed: false,
-                per_page: 100,
-                exclude_approvals: true,
-            }
-            : {
-                is_completed: false,
-                per_page: 100,
-                exclude_approvals: true,
-            },
-        { enabled: !!ipId }
-    )
-
-    // Fetch appointments for the calendar window (scoped to this match)
-    const { data: appointmentsData, isLoading: loadingAppointments } = useAppointments({
+    }, { enabled: !!matchId })
+    const { data: appointmentsData, isLoading: loadingAppointments, isError: appointmentsError } = useAppointments({
         date_start: dateStart,
         date_end: dateEnd,
-        surrogate_id: surrogateId,
+        match_id: matchId,
+        ...(attemptId ? { attempt_id: attemptId } : { include_record_history: true }),
         per_page: 100,
-        ...(ipId ? { intended_parent_id: ipId } : {}),
     })
-
-    // Build combined task list and source tracking
-    const taskSources = new Map<string, "surrogate" | "ip">()
-    const tasks: TaskListItem[] = []
-
-    // Add surrogate tasks
-    if (surrogateTasks?.items) {
-        surrogateTasks.items.forEach((task) => {
-            taskSources.set(task.id, "surrogate")
-            tasks.push(task)
-        })
-    }
-
-    // Add IP tasks
-    if (ipTasks?.items) {
-        ipTasks.items.forEach((task) => {
-            // Avoid duplicates (a task could theoretically have both surrogate_id and intended_parent_id)
-            if (!taskSources.has(task.id)) {
-                taskSources.set(task.id, "ip")
-                tasks.push(task)
-            }
-        })
-    }
+    const tasks = matchTasks?.items ?? []
+    const taskSources = new Map<string, "match" | "surrogate" | "donor" | "ip">(tasks.map((task) => [task.id, task.work_source ?? (task.match_id ? "match" : task.donor_id ? "donor" : task.surrogate_id ? "surrogate" : "ip")]))
 
     // Get appointments
     const appointments = appointmentsData?.items || []
@@ -447,15 +415,8 @@ export function MatchTasksCalendar({ surrogateId, ipId, onAddTask }: MatchTasksC
     // Filter based on selection
     let allTasks = tasks
     let allAppointments = appointments
-    if (filter === "surrogate") {
-        allTasks = tasks.filter((t) => taskSources.get(t.id) === "surrogate")
-        allAppointments = [] // No appointments in surrogate filter
-    } else if (filter === "ip") {
-        allTasks = tasks.filter((t) => taskSources.get(t.id) === "ip")
-        allAppointments = [] // No appointments in IP filter
-    } else if (filter === "appointments") {
-        allTasks = [] // Only show appointments
-    }
+    if (filter === "appointments") allTasks = []
+    else if (filter !== "all") { allTasks = tasks.filter((task) => taskSources.get(task.id) === filter); allAppointments = [] }
 
     // Navigation
     const navigate = (direction: "prev" | "next") => {
@@ -474,7 +435,7 @@ export function MatchTasksCalendar({ surrogateId, ipId, onAddTask }: MatchTasksC
         setCurrentDate(new Date())
     }
 
-    const isLoading = loadingSurrogate || loadingIP || loadingAppointments
+    const isLoading = loadingTasks || loadingAppointments
 
     return (
         <div className="space-y-4">
@@ -515,7 +476,7 @@ export function MatchTasksCalendar({ surrogateId, ipId, onAddTask }: MatchTasksC
 
                 <div className="flex items-center gap-2">
                     {/* Filter */}
-                    <div className="flex gap-1 border rounded-lg p-1">
+                    <div className="flex flex-wrap gap-1 border rounded-lg p-1">
                         <Button
                             variant={filter === "all" ? "secondary" : "ghost"}
                             size="sm"
@@ -524,24 +485,9 @@ export function MatchTasksCalendar({ surrogateId, ipId, onAddTask }: MatchTasksC
                         >
                             All
                         </Button>
-                        <Button
-                            variant={filter === "surrogate" ? "secondary" : "ghost"}
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={() => setFilter("surrogate")}
-                        >
-                            <UserIcon className="size-3 mr-1" />
-                            Surrogate
-                        </Button>
-                        <Button
-                            variant={filter === "ip" ? "secondary" : "ghost"}
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={() => setFilter("ip")}
-                        >
-                            <UsersIcon className="size-3 mr-1" />
-                            IP
-                        </Button>
+                        <Button variant={filter === participantKind ? "secondary" : "ghost"} size="sm" className="h-7 text-xs" onClick={() => setFilter(participantKind)}>{participantKind === "donor" ? "Donor" : "Surrogate"}</Button>
+                        <Button variant={filter === "ip" ? "secondary" : "ghost"} size="sm" className="h-7 text-xs" onClick={() => setFilter("ip")}>IP</Button>
+                        <Button variant={filter === "match" ? "secondary" : "ghost"} size="sm" className="h-7 text-xs" onClick={() => setFilter("match")}>Match</Button>
                         <Button
                             variant={filter === "appointments" ? "secondary" : "ghost"}
                             size="sm"
@@ -575,7 +521,7 @@ export function MatchTasksCalendar({ surrogateId, ipId, onAddTask }: MatchTasksC
             </div>
 
             {/* Calendar Content */}
-            {isLoading ? (
+            {tasksError || appointmentsError ? <p role="alert" className="text-sm">Unable to load case calendar</p> : isLoading ? (
                 <div className="py-12 flex items-center justify-center">
                     <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                 </div>
@@ -612,12 +558,9 @@ export function MatchTasksCalendar({ surrogateId, ipId, onAddTask }: MatchTasksC
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1">
                     <div className="size-3 rounded bg-purple-500"></div>
-                    <span>Surrogate Tasks</span>
+                    <span>{participantKind === "donor" ? "Donor" : "Surrogate"} / Match Tasks</span>
                 </div>
-                <div className="flex items-center gap-1">
-                    <div className="size-3 rounded bg-green-500"></div>
-                    <span>IP Tasks</span>
-                </div>
+                <div className="flex items-center gap-1"><div className="size-3 rounded bg-green-500"></div><span>IP Tasks</span></div>
                 <div className="flex items-center gap-1">
                     <div className="size-3 rounded bg-blue-500"></div>
                     <span>Appointments</span>

@@ -27,14 +27,7 @@ import { formatDateTime } from '@/lib/formatters'
 const STATUS_OPTIONS = ['new', 'open', 'pending', 'resolved', 'closed', 'spam'] as const
 const PRIORITY_OPTIONS = ['low', 'normal', 'high', 'urgent'] as const
 
-const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
-    new: 'New',
-    open: 'Open',
-    pending: 'Pending',
-    resolved: 'Resolved',
-    closed: 'Closed',
-    spam: 'Spam',
-}
+import { TICKET_STATUS_LABELS } from "@/lib/ticket-status-labels"
 
 const TICKET_PRIORITY_LABELS: Record<TicketPriority, string> = {
     low: 'Low',

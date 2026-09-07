@@ -1,4 +1,4 @@
-import type { SurrogateStatusHistory } from "@/lib/api/surrogates"
+import type { EntityStageHistory } from "@/lib/api/activity"
 import type { DonorStatusHistoryItem } from "@/lib/types/donor"
 import type { IntendedParentStatusHistoryItem } from "@/lib/types/intended-parent"
 
@@ -8,7 +8,7 @@ function labelFromStatus(value: string | null): string | null {
 
 export function normalizeIntendedParentHistory(
     history: IntendedParentStatusHistoryItem[],
-): SurrogateStatusHistory[] {
+): EntityStageHistory[] {
     return history.map((entry) => ({
         id: entry.id,
         from_stage_id: entry.old_stage_id ?? null,
@@ -32,7 +32,7 @@ export function normalizeIntendedParentHistory(
 
 export function normalizeDonorHistory(
     history: DonorStatusHistoryItem[],
-): SurrogateStatusHistory[] {
+): EntityStageHistory[] {
     return history.map((entry) => ({
         id: entry.id,
         from_stage_id: entry.old_stage_id,

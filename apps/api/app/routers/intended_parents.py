@@ -516,7 +516,12 @@ def delete_intended_parent(
     if not ip.is_archived:
         raise HTTPException(status_code=400, detail="Must archive before deleting")
 
-    ip_service.delete_intended_parent(db, ip)
+    from app.services.record_preservation_service import PreservationDependencyError
+
+    try:
+        ip_service.delete_intended_parent(db, ip)
+    except PreservationDependencyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     audit_service.log_event(
         db=db,
         org_id=session.org_id,
@@ -743,10 +748,6 @@ def create_note(
         author_id=session.user_id,
         content=data.content,
     )
-
-    # Bump last_activity
-    ip.last_activity = note.created_at
-    db.commit()
 
     return note
 

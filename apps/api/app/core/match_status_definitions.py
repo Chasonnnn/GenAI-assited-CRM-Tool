@@ -33,7 +33,7 @@ MATCH_STATUS_DEFINITIONS = [
         "label": "Accepted",
         "color": "#059669",
         "order": 3,
-        "allowed_transitions": [MatchStatus.CANCEL_PENDING.value],
+        "allowed_transitions": [MatchStatus.CANCEL_PENDING.value, MatchStatus.COMPLETED.value],
     },
     {
         "value": MatchStatus.CANCEL_PENDING.value,
@@ -54,6 +54,13 @@ MATCH_STATUS_DEFINITIONS = [
         "label": "Cancelled",
         "color": "#6B7280",
         "order": 6,
+        "allowed_transitions": [],
+    },
+    {
+        "value": MatchStatus.COMPLETED.value,
+        "label": "Completed",
+        "color": "#059669",
+        "order": 7,
         "allowed_transitions": [],
     },
 ]

@@ -5,12 +5,13 @@ import type { Route } from "next"
 import { useRouter, useSearchParams } from "next/navigation"
 
 export type TabType = "notes" | "files" | "tasks" | "activity"
-export type DataSource = "surrogate" | "ip" | "match"
+export type DataSource = "surrogate" | "donor" | "ip" | "match"
 export type SourceFilter = "all" | DataSource
 
 export const SOURCE_OPTIONS: { value: SourceFilter; label: string }[] = [
     { value: "all", label: "All Source" },
     { value: "surrogate", label: "Surrogate" },
+    { value: "donor", label: "Donor" },
     { value: "ip", label: "Intended Parent" },
     { value: "match", label: "Match" },
 ]
@@ -22,7 +23,7 @@ const isTabType = (value: string | null): value is TabType =>
     value === "notes" || value === "files" || value === "tasks" || value === "activity"
 
 export const isSourceFilter = (value: string | null): value is SourceFilter =>
-    value === "all" || value === "surrogate" || value === "ip" || value === "match"
+    value === "all" || value === "donor" || value === "surrogate" || value === "ip" || value === "match"
 
 type RouterReplace = ReturnType<typeof useRouter>["replace"]
 type SearchParamsSnapshot = {

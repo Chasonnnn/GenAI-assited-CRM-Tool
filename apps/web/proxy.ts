@@ -6,7 +6,7 @@ import { buildServerApiHeaders } from './lib/server-api-headers';
 const PLATFORM_BASE_DOMAIN =
     process.env.PLATFORM_BASE_DOMAIN || 'surrogacyforce.com';
 const ORG_CACHE_TTL_MS = 60_000;
-const ORG_LOOKUP_TIMEOUT_MS = 2000;
+const ORG_LOOKUP_TIMEOUT_MS = 5000;
 const ROUTE_LOOKUP_TIMEOUT_MS = 2000;
 const ORG_COOKIE_ID = 'sf_org_id';
 const ORG_COOKIE_SLUG = 'sf_org_slug';
@@ -147,6 +147,15 @@ function createHardFailureResponse(status: number, message: string): NextRespons
             'Content-Type': 'text/plain; charset=utf-8',
         },
     });
+}
+
+function createTenantUnavailableResponse(): NextResponse {
+    const response = createHardFailureResponse(
+        503,
+        'Tenant service temporarily unavailable'
+    );
+    response.headers.set('Retry-After', '5');
+    return response;
 }
 
 function createNotFoundRewrite(request: NextRequest): NextResponse {
@@ -447,7 +456,7 @@ export async function proxy(request: NextRequest) {
             console.error(
                 `[middleware] API error resolving org for ${hostname}: ${res.status}`
             );
-            return createHardFailureResponse(500, 'Tenant resolution failed');
+            return createTenantUnavailableResponse();
         }
 
         const org = (await res.json()) as OrgRecord;
@@ -467,7 +476,7 @@ export async function proxy(request: NextRequest) {
             `[middleware] Network error resolving org for ${hostname}:`,
             error
         );
-        return createHardFailureResponse(500, 'Tenant resolution failed');
+        return createTenantUnavailableResponse();
     }
 }
 

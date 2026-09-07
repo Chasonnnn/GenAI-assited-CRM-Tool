@@ -25,7 +25,6 @@ const expectedNativeInputExceptions = [
     "app/public/messaging-consent/[token]/page.tsx <input type=hidden>",
     "app/public/messaging-consent/[token]/page.tsx <input type=hidden>",
     "components/email/EmailAttachmentsPanel.tsx <input type=file>",
-    "components/donors/DonorDocumentsSection.tsx <input type=file>",
     "components/donors/DonorProfilePhoto.tsx <input type=file>",
     "components/forms/builder/AutomationFormSettingsPanel.tsx <input type=file>",
     "components/import/CSVUpload.tsx <input type=file>",

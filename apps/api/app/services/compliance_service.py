@@ -25,6 +25,7 @@ from app.db.models import (
     AIEntitySummary,
     AIMessage,
     AIUsageLog,
+    Appointment,
     Attachment,
     AuditLog,
     Campaign,
@@ -44,6 +45,8 @@ from app.db.models import (
     Job,
     LegalHold,
     Match,
+    MatchAttempt,
+    MatchEvent,
     MessageDelivery,
     MessageMediaAsset,
     MessageMediaLink,
@@ -69,6 +72,12 @@ from app.services import (
     google_tasks_cleanup_service,
     job_service,
     storage_cleanup_service,
+)
+from app.services.record_preservation_service import (
+    legal_hold_entity_types,
+    legal_hold_ids,
+    lock_org_preservation,
+    record_match_exists,
 )
 from app.utils.pagination import PaginationParams, paginate_query
 
@@ -740,6 +749,7 @@ def create_legal_hold(
     entity_id: UUID | None,
     reason: str,
 ) -> LegalHold:
+    lock_org_preservation(db, org_id)
     hold = LegalHold(
         organization_id=org_id,
         entity_type=entity_type,
@@ -748,8 +758,7 @@ def create_legal_hold(
         created_by_user_id=user_id,
     )
     db.add(hold)
-    db.commit()
-    db.refresh(hold)
+    db.flush()
 
     audit_service.log_compliance_legal_hold_created(
         db=db,
@@ -761,6 +770,7 @@ def create_legal_hold(
         reason=reason,
     )
     db.commit()
+    db.refresh(hold)
     return hold
 
 
@@ -770,6 +780,7 @@ def release_legal_hold(
     user_id: UUID,
     hold_id: UUID,
 ) -> LegalHold | None:
+    lock_org_preservation(db, org_id)
     hold = (
         db.query(LegalHold)
         .filter(
@@ -777,14 +788,13 @@ def release_legal_hold(
             LegalHold.id == hold_id,
             LegalHold.released_at.is_(None),
         )
+        .populate_existing()
         .first()
     )
     if not hold:
         return None
     hold.released_at = datetime.now(UTC)
     hold.released_by_user_id = user_id
-    db.commit()
-    db.refresh(hold)
 
     audit_service.log_compliance_legal_hold_released(
         db=db,
@@ -795,6 +805,7 @@ def release_legal_hold(
         entity_id=hold.entity_id,
     )
     db.commit()
+    db.refresh(hold)
     return hold
 
 
@@ -826,6 +837,59 @@ class PurgeResult:
     count: int
 
 
+def _held_match_ids(
+    org_id: UUID, surrogate_hold_ids: set[UUID], entity_hold_ids: dict[str, set[UUID]]
+):
+    """Resolve holds through the exact case, independent of work attribution."""
+    protected = [Match.id.in_(entity_hold_ids.get("match", set()))]
+    for column, ids in (
+        (Match.surrogate_id, surrogate_hold_ids | entity_hold_ids.get("surrogate", set())),
+        (Match.donor_id, entity_hold_ids.get("donor", set())),
+        (
+            Match.intended_parent_id,
+            legal_hold_ids(entity_hold_ids, "intended_parent"),
+        ),
+    ):
+        if ids:
+            protected.append(column.in_(ids))
+    for model, hold_type in (
+        (MatchAttempt, "match_attempt"),
+        (MatchEvent, "match_event"),
+        (Task, "task"),
+        (EntityNote, "entity_note"),
+        (Attachment, "attachment"),
+        (Appointment, "appointment"),
+    ):
+        ids = legal_hold_ids(entity_hold_ids, hold_type)
+        if ids:
+            protected.append(
+                select(model.id)
+                .where(
+                    model.organization_id == org_id,
+                    model.match_id == Match.id,
+                    model.id.in_(ids),
+                )
+                .exists()
+            )
+    return select(Match.id).where(Match.organization_id == org_id, or_(*protected))
+
+
+def _match_has_history():
+    # These records have independent retention rules, or no purge policy yet.
+    # Removing a case must not cascade them or rely on RESTRICT to abort the job.
+    return or_(
+        *(
+            select(model.id)
+            .where(
+                model.organization_id == Match.organization_id,
+                model.match_id == Match.id,
+            )
+            .exists()
+            for model in (MatchAttempt, MatchEvent, Task, EntityNote, Attachment, Appointment)
+        )
+    )
+
+
 def _build_retention_query(
     db: Session,
     org_id: UUID,
@@ -839,6 +903,7 @@ def _build_retention_query(
             Donor.organization_id == org_id,
             Donor.archived_at.is_not(None),
             Donor.archived_at < cutoff,
+            ~record_match_exists(Donor, "donor"),
         )
         if entity_hold_ids.get("donor"):
             query = query.filter(~Donor.id.in_(entity_hold_ids["donor"]))
@@ -911,11 +976,7 @@ def _build_retention_query(
                 )
                 .exists()
             )
-        note_hold_ids = set().union(
-            entity_hold_ids.get("entity_notes", set()),
-            entity_hold_ids.get("entity_note", set()),
-            entity_hold_ids.get("note", set()),
-        )
+        note_hold_ids = legal_hold_ids(entity_hold_ids, "entity_note")
         if note_hold_ids:
             query = query.filter(
                 ~select(EntityNote.id)
@@ -944,6 +1005,7 @@ def _build_retention_query(
             Surrogate.organization_id == org_id,
             Surrogate.archived_at.is_not(None),
             Surrogate.archived_at < cutoff,
+            ~record_match_exists(Surrogate, "surrogate"),
         )
         if surrogate_hold_ids:
             query = query.filter(~Surrogate.id.in_(surrogate_hold_ids))
@@ -952,11 +1014,12 @@ def _build_retention_query(
         query = db.query(Match).filter(
             Match.organization_id == org_id,
             Match.created_at < cutoff,
+            Match.status.in_(("completed", "cancelled", "rejected")),
+            Match.closed_at.is_not(None),
+            Match.closed_at < cutoff,
+            ~Match.id.in_(_held_match_ids(org_id, surrogate_hold_ids, entity_hold_ids)),
+            ~_match_has_history(),
         )
-        if surrogate_hold_ids:
-            query = query.filter(~Match.surrogate_id.in_(surrogate_hold_ids))
-        if entity_hold_ids.get("match"):
-            query = query.filter(~Match.id.in_(entity_hold_ids["match"]))
         return query
     if entity_type == "tasks":
         query = db.query(Task).filter(
@@ -964,6 +1027,10 @@ def _build_retention_query(
             Task.is_completed.is_(True),
             Task.completed_at.is_not(None),
             Task.completed_at < cutoff,
+            or_(
+                Task.match_id.is_(None),
+                ~Task.match_id.in_(_held_match_ids(org_id, surrogate_hold_ids, entity_hold_ids)),
+            ),
         )
         if surrogate_hold_ids:
             query = query.filter(
@@ -980,6 +1047,12 @@ def _build_retention_query(
         query = db.query(EntityNote).filter(
             EntityNote.organization_id == org_id,
             EntityNote.created_at < cutoff,
+            or_(
+                EntityNote.match_id.is_(None),
+                ~EntityNote.match_id.in_(
+                    _held_match_ids(org_id, surrogate_hold_ids, entity_hold_ids)
+                ),
+            ),
         )
         if surrogate_hold_ids:
             query = query.filter(
@@ -992,7 +1065,7 @@ def _build_retention_query(
         for hold_entity_type, hold_ids in entity_hold_ids.items():
             if not hold_ids:
                 continue
-            if hold_entity_type == "entity_notes":
+            if hold_entity_type in legal_hold_entity_types("entity_note"):
                 protected_notes.append(EntityNote.id.in_(hold_ids))
             else:
                 protected_notes.append(
@@ -1597,7 +1670,7 @@ def _donor_related_jobs(
             continue
         try:
             running_campaign_ids.add(UUID(str((job.payload or {}).get("campaign_id"))))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
     if running_campaign_ids:
         donor_campaign_running = (
@@ -2073,6 +2146,7 @@ def _purge_donor_dependents(
 
 
 def execute_purge(db: Session, org_id: UUID, user_id: UUID | None) -> list[PurgeResult]:
+    lock_org_preservation(db, org_id)
     org_hold, surrogate_hold_ids, entity_hold_ids = _get_active_legal_holds(db, org_id)
     if org_hold:
         return []
@@ -2118,9 +2192,19 @@ def execute_purge(db: Session, org_id: UUID, user_id: UUID | None) -> list[Purge
                     .all()
                 )
                 donor_ids = [donor_id for donor_id, _photo_id in donor_rows]
+                # Recheck after obtaining the parent locks: a match committed
+                # before the lock must be visible to the dependency predicate.
+                donor_ids = [
+                    value
+                    for (value,) in query.with_entities(Donor.id)
+                    .filter(Donor.id.in_(donor_ids))
+                    .all()
+                ]
                 count = len(donor_ids)
                 profile_photo_ids = [
-                    photo_id for _donor_id, photo_id in donor_rows if photo_id is not None
+                    photo_id
+                    for donor_id, photo_id in donor_rows
+                    if photo_id is not None and donor_id in donor_ids
                 ]
                 _purge_donor_dependents(
                     db,
@@ -2136,6 +2220,22 @@ def execute_purge(db: Session, org_id: UUID, user_id: UUID | None) -> list[Purge
                     db.query(Donor).filter(
                         Donor.organization_id == org_id,
                         Donor.id.in_(donor_ids),
+                    ).delete(synchronize_session=False)
+            elif policy.entity_type in {"matches", "surrogates"}:
+                model = Match if policy.entity_type == "matches" else Surrogate
+                locked_ids = [
+                    value for (value,) in query.with_entities(model.id).with_for_update().all()
+                ]
+                eligible_ids = [
+                    value
+                    for (value,) in query.with_entities(model.id)
+                    .filter(model.id.in_(locked_ids))
+                    .all()
+                ]
+                count = len(eligible_ids)
+                if eligible_ids:
+                    db.query(model).filter(
+                        model.organization_id == org_id, model.id.in_(eligible_ids)
                     ).delete(synchronize_session=False)
             elif policy.entity_type == "tasks":
                 task_rows = query.with_entities(Task.id, Task.donor_id).all()
@@ -2169,8 +2269,6 @@ def execute_purge(db: Session, org_id: UUID, user_id: UUID | None) -> list[Purge
         org_id=org_id,
         storage_keys=storage_keys_to_delete,
     )
-    db.commit()
-
     audit_service.log_compliance_purge_executed(
         db=db,
         org_id=org_id,

@@ -117,6 +117,8 @@ class Settings(BaseSettings):
     DB_POOL_PRE_PING: bool = True
     DB_MIGRATION_CHECK: bool = True
     DB_AUTO_MIGRATE: bool = False
+    # Enable only after API/worker cutover and migration verification.
+    MATCH_CASE_EXPANSION_ENABLED: bool = False
 
     # Session Token (supports key rotation)
     JWT_SECRET: SecretStr = SecretStr("")

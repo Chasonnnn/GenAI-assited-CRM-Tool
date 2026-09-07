@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button"
 import {
     Home,
     Inbox,
-    FolderOpen,
+    HandHeart,
     Users,
     CheckSquare,
     BarChart3,
@@ -37,7 +37,7 @@ import {
     HeartHandshake,
     Search,
     PanelLeftIcon,
-    CircleUserRound,
+    Heart,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
@@ -72,7 +72,7 @@ const navigation = [
     {
         title: "Surrogates",
         url: "/surrogates",
-        icon: FolderOpen,
+        icon: HandHeart,
     },
     {
         title: "Intended Parents",
@@ -83,7 +83,7 @@ const navigation = [
     {
         title: "Donors (beta)",
         url: "/donors",
-        icon: CircleUserRound,
+        icon: Heart,
         requiredPermission: "view_donors",
     },
     {
@@ -107,7 +107,7 @@ const aiNavigation = {
 }
 
 const aiStudioNavigation = {
-    title: "AI Studio Preview",
+    title: "AI Studio (beta)",
     url: "/ai-studio",
     icon: Sparkles,
 }

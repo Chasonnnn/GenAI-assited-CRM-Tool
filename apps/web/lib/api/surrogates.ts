@@ -4,7 +4,6 @@
 
 import api from '../api';
 import { getCsrfHeaders } from '@/lib/csrf';
-import type { JsonObject } from '../types/json';
 import type {
     SurrogateListResponse,
     SurrogateRead,
@@ -506,14 +505,7 @@ export function bulkArchiveSurrogates(surrogateIds: string[]): Promise<{ archive
 // Activity Log
 // =============================================================================
 
-export interface SurrogateActivity {
-    id: string;
-    activity_type: string;
-    actor_user_id: string | null;
-    actor_name: string | null;
-    details: JsonObject | null;
-    created_at: string;
-}
+export type SurrogateActivity = import("./activity").EntityActivity
 
 export interface SurrogateActivityResponse {
     items: SurrogateActivity[];

@@ -34,11 +34,11 @@ def test_dependency_pins_match_security_fixes():
         "idna": "3.15",
         "pillow": "12.3.0",
         "pydantic-settings": "2.14.2",
-        "pypdf": "6.16.1",
+        "pypdf": "6.17.0",
         "python-multipart": "0.0.31",
         "starlette": "1.3.1",
     }
-    expected_test_exact_pins = {"pytest": "9.0.3"}
+    expected_test_exact_pins = {"httpx2": "2.0.0", "pytest": "9.0.3"}
 
     for dependency_name, version in expected_minimum_pins.items():
         requirement = dependencies.get(dependency_name)

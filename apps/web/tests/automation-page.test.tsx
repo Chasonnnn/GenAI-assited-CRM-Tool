@@ -720,6 +720,11 @@ describe('AutomationPage', () => {
     })
 
     it('tests an egg donor workflow against egg donor records', async () => {
+        mockTestWorkflow.mutate.mockImplementation((_payload, callbacks) => callbacks.onSuccess({
+            conditions_matched: true,
+            conditions_evaluated: [],
+            actions_preview: [{ action_type: 'create_task', description: "create_task: Create task 'Call donor' due in 1 day(s)" }],
+        }))
         mockUseWorkflows.mockReturnValue({
             data: [{
                 id: 'workflow-egg',
@@ -779,6 +784,8 @@ describe('AutomationPage', () => {
             },
             expect.any(Object),
         )
+        expect(screen.getByText("Create task 'Call donor' due in 1 day(s)")).toBeInTheDocument()
+        expect(screen.queryByText(/create_task/)).not.toBeInTheDocument()
     })
 
     it('does not accept a free-form donor UUID in the test workflow picker', () => {

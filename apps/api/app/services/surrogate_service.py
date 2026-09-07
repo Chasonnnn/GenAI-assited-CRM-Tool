@@ -1918,6 +1918,9 @@ def hard_delete_surrogate(
     if not surrogate.is_archived:
         return False
 
+    from app.services.record_preservation_service import ensure_record_deletable
+
+    ensure_record_deletable(db, surrogate, "surrogate")
     db.delete(surrogate)
     db.commit()
     if emit_events:

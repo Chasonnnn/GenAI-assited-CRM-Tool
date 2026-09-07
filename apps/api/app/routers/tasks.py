@@ -26,7 +26,7 @@ from app.schemas.task import (
     TaskUpdate,
     WorkflowApprovalResolve,
 )
-from app.services import audit_service, task_service
+from app.services import audit_service, record_access_service, task_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
 router = APIRouter(
@@ -39,6 +39,15 @@ router = APIRouter(
 def _check_task_subject_access(task, session: UserSession, db: Session) -> None:
     """Check record access for the task's subject."""
     task_service.check_task_subject_access(db, task, session)
+
+
+def _check_related_record(db, session, kind, record_id):
+    try:
+        record_access_service.get_record_with_access(db, session, kind, record_id)
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            raise HTTPException(status_code=400, detail=exc.detail) from exc
+        raise
 
 
 @router.get("", response_model=TaskListResponse)
@@ -55,6 +64,9 @@ def list_tasks(
     surrogate_id: UUID | None = None,
     intended_parent_id: UUID | None = None,
     donor_id: UUID | None = None,
+    match_id: UUID | None = None,
+    attempt_id: UUID | None = None,
+    include_record_history: bool = False,
     donor_type: Literal["egg", "sperm"] | None = None,
     pipeline_id: Annotated[UUID | None, "fastapi_param"] = Query(
         None, description="Filter tasks by pipeline UUID"
@@ -90,6 +102,9 @@ def list_tasks(
         surrogate_id=surrogate_id,
         intended_parent_id=intended_parent_id,
         donor_id=donor_id,
+        match_id=match_id,
+        attempt_id=attempt_id,
+        include_record_history=include_record_history,
         donor_type=donor_type,
         pipeline_id=pipeline_id,
         is_completed=is_completed,
@@ -117,13 +132,8 @@ def create_task(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Create a new task (respects surrogate access control)."""
-    from app.core.surrogate_access import check_surrogate_access
     from app.services import (
-        donor_service,
-        ip_service,
         match_service,
-        permission_service,
-        surrogate_service,
     )
 
     if data.donor_id and (data.match_id or data.surrogate_id or data.intended_parent_id):
@@ -145,55 +155,25 @@ def create_task(
         )
 
     if data.match_id:
-        match = match_service.get_match(db, data.match_id, session.org_id)
-        if not match:
-            raise HTTPException(status_code=400, detail="Match not found")
-
-        if match.surrogate_id:
-            surrogate = surrogate_service.get_surrogate(db, session.org_id, match.surrogate_id)
-            if not surrogate:
-                raise HTTPException(status_code=400, detail="Surrogate not found")
-            check_surrogate_access(
-                surrogate, session.role, session.user_id, db=db, org_id=session.org_id
-            )
+        try:
+            match = match_service.get_match_with_access(db, session, data.match_id)
+        except HTTPException as exc:
+            if exc.status_code == 404:
+                raise HTTPException(status_code=400, detail="Match not found") from exc
+            raise
 
         data = data.model_copy(
             update={
                 "surrogate_id": match.surrogate_id,
                 "intended_parent_id": match.intended_parent_id,
+                "donor_id": match.donor_id,
             }
         )
 
-    # Verify surrogate belongs to org if specified
-    if data.surrogate_id:
-        surrogate = surrogate_service.get_surrogate(db, session.org_id, data.surrogate_id)
-        if not surrogate:
-            raise HTTPException(status_code=400, detail="Surrogate not found")
-        # Access control: checks ownership + post-approval permission
-        check_surrogate_access(
-            surrogate, session.role, session.user_id, db=db, org_id=session.org_id
-        )
-
-    # Verify intended parent belongs to org if specified
-    if data.intended_parent_id:
-        intended_parent = ip_service.get_intended_parent(
-            db, data.intended_parent_id, session.org_id
-        )
-        if not intended_parent:
-            raise HTTPException(status_code=400, detail="Intended parent not found")
-
-    if data.donor_id:
-        if not permission_service.check_permission(
-            db,
-            session.org_id,
-            session.user_id,
-            session.role.value,
-            POLICIES["donors"].default.value,
-        ):
-            raise HTTPException(status_code=403, detail="Missing permission: view_donors")
-        donor = donor_service.get_donor(db, session.org_id, data.donor_id)
-        if not donor:
-            raise HTTPException(status_code=400, detail="Donor not found")
+    for kind in ("surrogate", "intended_parent", "donor"):
+        record_id = getattr(data, f"{kind}_id")
+        if record_id:
+            _check_related_record(db, session, kind, record_id)
 
     # Verify owner belongs to org if specified
     try:
@@ -214,6 +194,7 @@ def create_task(
             user_id=session.user_id,
             data=data,
             emit_events=True,
+            commit=False,
         )
     except ValueError as exc:
         db.rollback()
@@ -236,6 +217,7 @@ def create_task(
         request=request,
     )
     db.commit()
+    task_service.dispatch_task_created(db, task, emit_events=True)
     context = task_service.get_task_context(db, session.org_id, [task])
     return task_service.to_task_read(task, context)
 
@@ -313,58 +295,11 @@ def update_task(
     update_fields = data.model_dump(exclude_unset=True)
     subject_fields = {"surrogate_id", "intended_parent_id", "donor_id"}
     if subject_fields.intersection(update_fields):
-        from app.core.surrogate_access import check_surrogate_access
-        from app.services import (
-            donor_service,
-            ip_service,
-            permission_service,
-            surrogate_service,
-        )
-
-        next_surrogate_id = update_fields.get("surrogate_id", task.surrogate_id)
-        next_intended_parent_id = update_fields.get(
-            "intended_parent_id",
-            task.intended_parent_id,
-        )
-        next_donor_id = update_fields.get("donor_id", task.donor_id)
-
-        if next_surrogate_id:
-            surrogate = surrogate_service.get_surrogate(
-                db,
-                session.org_id,
-                next_surrogate_id,
-            )
-            if not surrogate:
-                raise HTTPException(status_code=400, detail="Surrogate not found")
-            check_surrogate_access(
-                surrogate,
-                session.role,
-                session.user_id,
-                db=db,
-                org_id=session.org_id,
-            )
-
-        if next_intended_parent_id:
-            intended_parent = ip_service.get_intended_parent(
-                db,
-                next_intended_parent_id,
-                session.org_id,
-            )
-            if not intended_parent:
-                raise HTTPException(status_code=400, detail="Intended parent not found")
-
-        if next_donor_id:
-            if not permission_service.check_permission(
-                db,
-                session.org_id,
-                session.user_id,
-                session.role.value,
-                POLICIES["donors"].default.value,
-            ):
-                raise HTTPException(status_code=403, detail="Missing permission: view_donors")
-            donor = donor_service.get_donor(db, session.org_id, next_donor_id)
-            if not donor:
-                raise HTTPException(status_code=400, detail="Donor not found")
+        for kind in ("surrogate", "intended_parent", "donor"):
+            field = f"{kind}_id"
+            record_id = update_fields.get(field, getattr(task, field))
+            if record_id:
+                _check_related_record(db, session, kind, record_id)
 
     if "owner_type" in update_fields or "owner_id" in update_fields:
         owner_type = update_fields.get("owner_type", task.owner_type)

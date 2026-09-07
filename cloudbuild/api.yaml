@@ -1,5 +1,6 @@
 steps:
   - name: gcr.io/cloud-builders/gcloud
+    id: validate-release
     entrypoint: bash
     env: ["RELEASE_SHA=$COMMIT_SHA", "RELEASE_TAG=$COMMIT_SHA-$BUILD_ID"]
     args:
@@ -7,10 +8,18 @@ steps:
       - |
         test -n "$${RELEASE_SHA}"
         test -n "$${RELEASE_TAG}"
+        case "$_MATCH_EXPANSION_ROLLOUT" in true|false) ;; *) exit 1 ;; esac
+        if [[ "$_MATCH_EXPANSION_ROLLOUT" == "true" ]]; then
+          test "$_MATCH_EXPANSION_REHEARSED_SHA" = "$${RELEASE_SHA}"
+        fi
   - name: gcr.io/cloud-builders/docker
+    id: pull-api-cache
+    waitFor: ["validate-release"]
     entrypoint: sh
     args: ["-c", "docker pull $_IMAGE_API || true"]
   - name: gcr.io/cloud-builders/docker
+    id: build-api
+    waitFor: ["pull-api-cache"]
     entrypoint: bash
     env:
       [
@@ -30,6 +39,8 @@ steps:
           -t "$${api_image}" \
           apps/api
   - name: gcr.io/cloud-builders/docker
+    id: push-api
+    waitFor: ["build-api"]
     entrypoint: bash
     env: ["IMAGE_API_LATEST=$_IMAGE_API", "RELEASE_TAG=$COMMIT_SHA-$BUILD_ID"]
     args:
@@ -38,9 +49,13 @@ steps:
         api_image="$${IMAGE_API_LATEST%:*}:$${RELEASE_TAG}"
         docker push "$${api_image}"
   - name: gcr.io/cloud-builders/docker
+    id: pull-worker-cache
+    waitFor: ["validate-release"]
     entrypoint: sh
     args: ["-c", "docker pull $_IMAGE_WORKER || true"]
   - name: gcr.io/cloud-builders/docker
+    id: build-worker
+    waitFor: ["pull-worker-cache"]
     entrypoint: bash
     env:
       [
@@ -61,6 +76,8 @@ steps:
           -t "$${worker_image}" \
           apps/api
   - name: gcr.io/cloud-builders/docker
+    id: push-worker
+    waitFor: ["build-worker"]
     entrypoint: bash
     env: ["IMAGE_WORKER_LATEST=$_IMAGE_WORKER", "RELEASE_TAG=$COMMIT_SHA-$BUILD_ID"]
     args:
@@ -72,6 +89,8 @@ steps:
   # through every deployment step. This prevents a mutable tag from changing
   # the artifact deployed by a later step in the same release.
   - name: gcr.io/cloud-builders/gcloud
+    id: resolve-release-images
+    waitFor: ["push-api", "push-worker"]
     entrypoint: bash
     env:
       [
@@ -103,9 +122,12 @@ steps:
         read -r api_image_ref < /workspace/release-api-image-ref
         gcloud run jobs update "$_MIGRATE_JOB" \
           --image "$${api_image_ref}" \
+          --command python \
+          --args="-m,app.db.release_migration,--check-only,--allow-match-expansion=$_MATCH_EXPANSION_ROLLOUT" \
           --region "$_REGION" \
           --quiet
   - name: gcr.io/cloud-builders/gcloud
+    id: match-expansion-preflight
     entrypoint: bash
     args:
       - -ceu
@@ -114,6 +136,33 @@ steps:
           --region "$_REGION" \
           --wait \
           --quiet
+  # Old binaries cannot recognize the expanded Alembic head. Keep their normal
+  # DB health checks while temporarily disabling exact-head checks. New data
+  # remains fenced until an operator verifies cutover and activates it.
+  - name: gcr.io/cloud-builders/gcloud
+    id: match-compatibility-window
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        if [[ "$_MATCH_EXPANSION_ROLLOUT" == "true" ]]; then
+          for service in "$_WORKER_SERVICE" "$_API_SERVICE"; do
+            gcloud run services update "$${service}" \
+              --update-env-vars "DB_MIGRATION_CHECK=false,DB_AUTO_MIGRATE=false,MATCH_CASE_EXPANSION_ENABLED=false" \
+              --region "$_REGION" --quiet
+          done
+        fi
+  - name: gcr.io/cloud-builders/gcloud
+    id: migrate-release
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        gcloud run jobs update "$_MIGRATE_JOB" \
+          --args="-m,app.db.release_migration,--allow-match-expansion=$_MATCH_EXPANSION_ROLLOUT" \
+          --region "$_REGION" --quiet
+        gcloud beta run jobs execute "$_MIGRATE_JOB" \
+          --region "$_REGION" --wait --quiet
   # The scan runner accepts both legacy tokenless claims and new fenced claims.
   # Update it before either service can dispatch the new --claim-token argument.
   - name: gcr.io/cloud-builders/gcloud
@@ -134,9 +183,13 @@ steps:
       - -ceu
       - |
         read -r worker_image_ref < /workspace/release-worker-image-ref
+        worker_env="GCP_SERVICE_NAME=$_WORKER_SERVICE,DB_MIGRATION_CHECK=true,DB_AUTO_MIGRATE=false"
+        if [[ "$_MATCH_EXPANSION_ROLLOUT" == "true" ]]; then
+          worker_env="$${worker_env},MATCH_CASE_EXPANSION_ENABLED=false"
+        fi
         gcloud run services update "$_WORKER_SERVICE" \
           --image "$${worker_image_ref}" \
-          --update-env-vars "GCP_SERVICE_NAME=$_WORKER_SERVICE" \
+          --update-env-vars "$${worker_env}" \
           --region "$_REGION" \
           --quiet
   - name: gcr.io/cloud-builders/gcloud
@@ -145,8 +198,13 @@ steps:
       - -ceu
       - |
         read -r api_image_ref < /workspace/release-api-image-ref
+        rollout_env=(--update-env-vars "DB_MIGRATION_CHECK=true,DB_AUTO_MIGRATE=false")
+        if [[ "$_MATCH_EXPANSION_ROLLOUT" == "true" ]]; then
+          rollout_env=(--update-env-vars "DB_MIGRATION_CHECK=true,DB_AUTO_MIGRATE=false,MATCH_CASE_EXPANSION_ENABLED=false")
+        fi
         gcloud run services update "$_API_SERVICE" \
           --image "$${api_image_ref}" \
+          "$${rollout_env[@]}" \
           --region "$_REGION" \
           --quiet
   - name: gcr.io/cloud-builders/gcloud
@@ -165,7 +223,10 @@ images:
 options:
   # BYOSA (build.service_account) requires Cloud Logging or an explicit logs bucket.
   logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
 substitutions:
+  _MATCH_EXPANSION_ROLLOUT: "false"
+  _MATCH_EXPANSION_REHEARSED_SHA: ""
   _REGION: "us-central1"
   _API_SERVICE: "crm-api"
   _WORKER_SERVICE: "crm-worker"
