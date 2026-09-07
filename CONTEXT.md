@@ -22,8 +22,10 @@
 
 ## Staff access
 
-**Role preset**: One of the platform-supplied staff roles, with baseline permissions that an agency administrator can adjust. Each staff member has one role preset.
+**Role preset**: One of four supplied staff roles: Intake Specialist, Case Manager, Admin, or Dev. Each staff member has one role; agencies may edit Intake Specialist and Case Manager baselines, while Admin and Dev baselines remain protected.
 
-**Individual permission addition**: Removable extra authority assigned to a specific staff member beyond their role preset. Removing it restores inherited role access without changing anyone else's permissions.
+**Individual permission addition**: Removable extra authority assigned to a specific staff member beyond their role preset, consisting of additional actions or an explicit expansion of record scope. Removing it restores inherited role access without changing anyone else's permissions.
 
 **Record scope**: The set of agency records a staff member may access within a module, shared by viewing and editing and defined separately from action permissions. A person's scope can differ between modules.
+
+**Approval boundary**: The milestone in a surrogate, egg-donor, or sperm-donor pipeline that separates before-approval and post-approval access.
