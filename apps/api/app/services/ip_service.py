@@ -824,8 +824,11 @@ def restore_intended_parent(
 
 def delete_intended_parent(db: Session, ip: IntendedParent) -> None:
     """Hard delete an intended parent (must be archived first)."""
+    from app.services.record_preservation_service import ensure_record_deletable
+
     if not ip.is_archived:
         raise ValueError("Cannot delete non-archived intended parent")
+    ensure_record_deletable(db, ip, "intended_parent")
     db.delete(ip)
     db.commit()
 
