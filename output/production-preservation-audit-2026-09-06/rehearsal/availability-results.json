@@ -1,0 +1,172 @@
+[
+  {
+    "timestamp": "2026-09-07T02:10:40.765592Z",
+    "availability_probe": "model_select",
+    "model": "Surrogate",
+    "row_present": true,
+    "source": "/old",
+    "succeeded": true
+  },
+  {
+    "timestamp": "2026-09-07T02:10:40.786221Z",
+    "availability_probe": "model_select",
+    "model": "IntendedParent",
+    "row_present": true,
+    "source": "/old",
+    "succeeded": true
+  },
+  {
+    "timestamp": "2026-09-07T02:10:40.792107Z",
+    "availability_probe": "model_select",
+    "model": "Match",
+    "row_present": true,
+    "source": "/old",
+    "succeeded": true
+  },
+  {
+    "timestamp": "2026-09-07T02:10:40.794692Z",
+    "availability_probe": "configuration",
+    "lifespan_started": false,
+    "migration_check": false,
+    "provider_egress": false,
+    "source": "/old"
+  },
+  {
+    "timestamp": "2026-09-07T02:10:40.887304Z",
+    "availability_probe": "http",
+    "milliseconds": 89.53,
+    "path": "/healthz",
+    "phase": "baseline",
+    "source": "/old",
+    "status": 200
+  },
+  {
+    "timestamp": "2026-09-07T02:10:40.909594Z",
+    "availability_probe": "http",
+    "milliseconds": 19.64,
+    "path": "/health/live",
+    "phase": "baseline",
+    "source": "/old",
+    "status": 200
+  },
+  {
+    "timestamp": "2026-09-07T02:10:40.970521Z",
+    "availability_probe": "http",
+    "milliseconds": 58.41,
+    "path": "/readyz",
+    "phase": "baseline",
+    "source": "/old",
+    "status": 200
+  },
+  {
+    "timestamp": "2026-09-07T02:10:42.239847Z",
+    "availability_probe": "http",
+    "milliseconds": 1260.53,
+    "path": "/healthz",
+    "phase": "synthetic_metrics_contention",
+    "source": "/old",
+    "status": 200
+  },
+  {
+    "timestamp": "2026-09-07T02:10:43.508413Z",
+    "availability_probe": "http",
+    "milliseconds": 1259.9,
+    "path": "/health/live",
+    "phase": "synthetic_metrics_contention",
+    "source": "/old",
+    "status": 200
+  },
+  {
+    "timestamp": "2026-09-07T02:10:43.508465Z",
+    "availability_probe": "success",
+    "database_errors": 0,
+    "scope": "isolated ASGI code and synthetic metrics contention; deployment availability not measured",
+    "source": "/old",
+    "writes_rolled_back": true
+  },
+  {
+    "timestamp": "2026-09-07T02:11:03.965964Z",
+    "availability_probe": "model_select",
+    "model": "Surrogate",
+    "row_present": true,
+    "source": "/app",
+    "succeeded": true
+  },
+  {
+    "timestamp": "2026-09-07T02:11:03.974476Z",
+    "availability_probe": "model_select",
+    "model": "IntendedParent",
+    "row_present": true,
+    "source": "/app",
+    "succeeded": true
+  },
+  {
+    "timestamp": "2026-09-07T02:11:03.979731Z",
+    "availability_probe": "model_select",
+    "model": "Match",
+    "row_present": true,
+    "source": "/app",
+    "succeeded": true
+  },
+  {
+    "timestamp": "2026-09-07T02:11:03.982374Z",
+    "availability_probe": "configuration",
+    "lifespan_started": false,
+    "migration_check": true,
+    "provider_egress": false,
+    "source": "/app"
+  },
+  {
+    "timestamp": "2026-09-07T02:11:04.026707Z",
+    "availability_probe": "http",
+    "milliseconds": 43.8,
+    "path": "/healthz",
+    "phase": "baseline",
+    "source": "/app",
+    "status": 200
+  },
+  {
+    "timestamp": "2026-09-07T02:11:04.030688Z",
+    "availability_probe": "http",
+    "milliseconds": 3.92,
+    "path": "/health/live",
+    "phase": "baseline",
+    "source": "/app",
+    "status": 200
+  },
+  {
+    "timestamp": "2026-09-07T02:11:05.169704Z",
+    "availability_probe": "http",
+    "milliseconds": 1136.34,
+    "path": "/readyz",
+    "phase": "baseline",
+    "source": "/app",
+    "status": 200
+  },
+  {
+    "timestamp": "2026-09-07T02:11:05.179226Z",
+    "availability_probe": "http",
+    "milliseconds": 3.88,
+    "path": "/healthz",
+    "phase": "synthetic_metrics_contention",
+    "source": "/app",
+    "status": 200
+  },
+  {
+    "timestamp": "2026-09-07T02:11:06.440137Z",
+    "availability_probe": "http",
+    "milliseconds": 5.25,
+    "path": "/health/live",
+    "phase": "synthetic_metrics_contention",
+    "source": "/app",
+    "status": 200
+  },
+  {
+    "timestamp": "2026-09-07T02:11:07.688013Z",
+    "availability_probe": "success",
+    "database_errors": 0,
+    "scope": "isolated ASGI code and synthetic metrics contention; deployment availability not measured",
+    "source": "/app",
+    "writes_rolled_back": true
+  }
+]
