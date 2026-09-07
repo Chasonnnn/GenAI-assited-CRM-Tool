@@ -155,11 +155,14 @@ def test_cloudbuild_parallelizes_api_and_worker_images_on_high_cpu() -> None:
 def test_cloudbuild_preserves_worker_configuration_and_repairs_monitoring_identity() -> None:
     content = _read("cloudbuild/api.yaml")
     worker_update = content.index('gcloud run services update "$_WORKER_SERVICE"')
-    api_update = content.index('gcloud run services update "$_API_SERVICE"')
-    worker_step = content[worker_update:api_update]
+    worker_step = content[worker_update : content.index("--quiet", worker_update)]
 
     assert '--image "$${worker_image_ref}"' in worker_step
-    assert '--update-env-vars "GCP_SERVICE_NAME=$_WORKER_SERVICE"' in worker_step
+    assert (
+        'worker_env="GCP_SERVICE_NAME=$_WORKER_SERVICE,DB_MIGRATION_CHECK=true,DB_AUTO_MIGRATE=false"'
+        in content
+    )
+    assert '--update-env-vars "$${worker_env}"' in worker_step
     assert worker_step.count("--update-env-vars") == 1
     assert "--remove-env-vars" not in worker_step
     assert "WORKER_CUTOVER_HOLD" not in worker_step

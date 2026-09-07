@@ -5,6 +5,7 @@ on:
     branches: [main, develop]
     paths:
       - 'apps/**'
+      - 'cloudbuild/**'
       - 'infra/terraform/**'
       - 'scripts/**'
       - 'pyproject.toml'
@@ -22,6 +23,7 @@ on:
     branches: [main, develop]
     paths:
       - 'apps/**'
+      - 'cloudbuild/**'
       - 'infra/terraform/**'
       - 'scripts/**'
       - 'pyproject.toml'

@@ -10,6 +10,28 @@ CI_WORKFLOW = ROOT / ".github/workflows/ci.yml"
 RELEASE_WORKFLOW = ROOT / ".github/workflows/release-please.yml"
 
 
+def test_match_expansion_release_preflights_before_opening_compatibility_window():
+    build = (ROOT / "cloudbuild/api.yaml").read_text()
+    assert '_MATCH_EXPANSION_ROLLOUT: "false"' in build
+    assert "_MATCH_EXPANSION_REHEARSED_SHA" in build
+    assert "app.db.release_migration" in build
+    assert build.index("id: match-expansion-preflight") < build.index(
+        "id: match-compatibility-window"
+    )
+    assert build.index("id: match-compatibility-window") < build.index("id: migrate-release")
+    assert "MATCH_CASE_EXPANSION_ENABLED=false" in build
+    assert "MATCH_CASE_EXPANSION_ENABLED=true" not in build
+    assert "DB_MIGRATION_CHECK=true,DB_AUTO_MIGRATE=false" in build
+    # A normal retry after a partial expansion must restore readiness checks too.
+    assert (
+        'worker_env="GCP_SERVICE_NAME=$_WORKER_SERVICE,DB_MIGRATION_CHECK=true,DB_AUTO_MIGRATE=false"'
+        in build
+    )
+    assert (
+        'rollout_env=(--update-env-vars "DB_MIGRATION_CHECK=true,DB_AUTO_MIGRATE=false")' in build
+    )
+
+
 def _trigger_paths(workflow: str, event: str) -> set[str]:
     trigger_block = workflow.split("jobs:", 1)[0]
     event_match = re.search(
@@ -26,6 +48,7 @@ def test_ci_uses_safe_path_filters_and_cancels_stale_runs() -> None:
     pull_request_trigger = workflow.split("jobs:", 1)[0]
     expected_paths = {
         "apps/**",
+        "cloudbuild/**",
         "infra/terraform/**",
         "scripts/**",
         "pyproject.toml",
@@ -85,7 +108,7 @@ def test_ci_shards_frontend_tests_and_preserves_aggregate_gate() -> None:
     workflow = CI_WORKFLOW.read_text()
 
     assert "shard: [1, 2]" in workflow
-    assert 'pnpm test --shard=${{ matrix.shard }}/2' in workflow
+    assert "pnpm test --shard=${{ matrix.shard }}/2" in workflow
     assert "needs: [frontend-build, frontend-test-shards]" in workflow
     assert "name: Frontend Tests" in workflow
 
