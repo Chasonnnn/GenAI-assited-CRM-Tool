@@ -2,6 +2,8 @@
 
 Status: visual concepts awaiting feedback. Built-in Image Gen outputs with synthetic people and records; no application changes.
 
+The user preferred the role editor and selected [variant 2](role-variants/README.md) as its visual direction.
+
 ## 1. Roles
 
 [Full image](01-roles.png)
