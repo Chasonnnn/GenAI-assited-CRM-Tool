@@ -16,6 +16,8 @@ depends_on = None
 
 
 def upgrade() -> None:
+    op.execute("SET LOCAL lock_timeout = '3s'")
+    op.execute("SET LOCAL statement_timeout = '60s'")
     for field, table in (
         ("donor_id", "donors"),
         ("match_id", "matches"),
@@ -138,6 +140,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("SET LOCAL lock_timeout = '3s'")
+    op.execute("SET LOCAL statement_timeout = '60s'")
+    # Prevent inserts or context changes between the history guard and removal.
+    op.execute("LOCK TABLE appointments, record_ticket_links IN ACCESS EXCLUSIVE MODE")
     if (
         op.get_bind()
         .execute(

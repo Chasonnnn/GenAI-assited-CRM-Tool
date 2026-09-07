@@ -93,10 +93,19 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("SET LOCAL lock_timeout = '3s'")
+    op.execute("SET LOCAL statement_timeout = '60s'")
+    # Acquire every affected table before any guard so later-table writes cannot
+    # race a successful earlier check. Locks last through the destructive DDL.
+    op.execute("LOCK TABLE attachments, entity_notes, tasks IN ACCESS EXCLUSIVE MODE")
     connection = op.get_bind()
     for table in ("tasks", "entity_notes", "attachments"):
+        source_check = " OR work_source IS NOT NULL" if table != "attachments" else ""
         if connection.execute(
-            sa.text(f"SELECT EXISTS(SELECT 1 FROM {table} WHERE match_id IS NOT NULL)")
+            sa.text(
+                f"SELECT EXISTS(SELECT 1 FROM {table} WHERE match_id IS NOT NULL "
+                f"OR attempt_id IS NOT NULL{source_check})"
+            )
         ).scalar():
             raise RuntimeError("Case work exists; retain this schema and roll forward")
     for table in ("tasks", "attachments"):

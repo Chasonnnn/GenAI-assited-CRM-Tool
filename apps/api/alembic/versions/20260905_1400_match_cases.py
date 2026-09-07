@@ -24,6 +24,24 @@ OPEN = "status IN ('proposed','reviewing','accepted','cancel_pending')"
 def upgrade() -> None:
     op.execute("SET LOCAL lock_timeout = '3s'")
     op.execute("SET LOCAL statement_timeout = '60s'")
+    # Reserve writes before checking so an old writer cannot introduce a new
+    # commitment conflict between preflight and the stronger unique index.
+    op.execute("LOCK TABLE matches IN ACCESS EXCLUSIVE MODE")
+    if (
+        op.get_bind()
+        .execute(
+            sa.text(
+                "SELECT EXISTS (SELECT 1 FROM matches "
+                "WHERE status IN ('accepted', 'cancel_pending') "
+                "GROUP BY organization_id, surrogate_id HAVING count(*) > 1)"
+            )
+        )
+        .scalar()
+    ):
+        raise RuntimeError(
+            "Conflicting surrogate commitments exist. Reconcile accepted and "
+            "cancellation-pending cases before upgrading; no cases were changed."
+        )
     op.add_column("matches", sa.Column("donor_id", postgresql.UUID(as_uuid=True), nullable=True))
     op.add_column(
         "matches",
@@ -152,11 +170,15 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("SET LOCAL lock_timeout = '3s'")
+    op.execute("SET LOCAL statement_timeout = '60s'")
+    # Block writes before examining history, retaining the locks through DDL.
+    op.execute("LOCK TABLE matches, match_attempts IN ACCESS EXCLUSIVE MODE")
     # Old code cannot represent donor/repeat cases or attempts. Do not destroy them.
     bind = op.get_bind()
     incompatible = bind.execute(
         sa.text(
-            "SELECT EXISTS (SELECT 1 FROM match_attempts) OR EXISTS (SELECT 1 FROM matches WHERE donor_id IS NOT NULL OR status = 'completed') OR EXISTS (SELECT 1 FROM matches GROUP BY organization_id,surrogate_id,intended_parent_id HAVING count(*) > 1)"
+            "SELECT EXISTS (SELECT 1 FROM match_attempts) OR EXISTS (SELECT 1 FROM matches WHERE donor_id IS NOT NULL OR status = 'completed' OR closed_at IS NOT NULL OR closed_by_user_id IS NOT NULL OR closure_reason IS NOT NULL OR outcome IS NOT NULL) OR EXISTS (SELECT 1 FROM matches GROUP BY organization_id,surrogate_id,intended_parent_id HAVING count(*) > 1)"
         )
     ).scalar()
     if incompatible:
