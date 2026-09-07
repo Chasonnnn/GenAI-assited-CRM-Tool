@@ -2,6 +2,56 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.62](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.61...surrogacy-crm-platform-v0.91.62) (2026-09-07)
+
+
+### Features
+
+* add an explicit match expansion rollout switch ([aa37b39](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/aa37b3944c7369601854943a759a4b9bb1f9eb1d))
+* add donor cases and attempts to matching workspace ([221b45d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/221b45d03b3c113faaca110646e4920d98a60fb6))
+* add donor-authorized ownership options ([95fadc3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/95fadc330e4d258b8afb30025654a708adc4565d))
+* complete consistent light donor and intended-parent workspaces ([60753e2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/60753e2200771e35f321c7a7da01aa606b6d2733))
+* complete donor integration with production preservation gates ([c9f0a23](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c9f0a2351887825059a69a4c417cdcece4f1ace9))
+* link record appointments and correspondence history ([e6fc9e2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e6fc9e2b5458564b9d3e5d8f486711daf11d013f))
+* scope match work to cases and treatment attempts ([6bca5f0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6bca5f08ed519abb88680aff09cbd06255b4fb94))
+* share related work cards across IP and donor pages ([db11309](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/db113091d0ce5fbbce20881355501fe3956b67d9))
+* support donor match cases and treatment lifecycle ([ab32174](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ab32174d6f63ae3d268beffb97089875041977db))
+
+
+### Bug Fixes
+
+* clarify workflow field and preview labels ([3342788](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/33427884ba54b530fc3001d70fd92fd0952d1b01))
+* commit shared notes and activity atomically ([9536b07](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9536b07ec8bf2e27cd93e2e7842b59202a890223))
+* enforce shared record access for tasks and attachments ([8f72681](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8f72681908b0ecbfe7ae9f45ec75f7f6b3904fb7))
+* harden health and tenant resolution failures ([895b25b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/895b25b0404c1b306ebc0f46f045945a5c71dc57))
+* include automated donor correspondence history ([a4c3409](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a4c3409a352ec2c065f6f43756a28eb4d9200cf3))
+* isolate and bound best-effort request metrics ([f79a9d8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f79a9d8f1e339ffbe07abdc0d2dc6dedaccd1531))
+* isolate committed outbox tests from parallel CI workers ([0484271](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/04842710a65057943c126d407803b2f6ff61b499))
+* isolate metrics worker execution ([40c871d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/40c871db253aad2be0015f356e80e979cfd1012c))
+* isolate request metrics persistence ([dcbb64c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dcbb64c96bb4fa746c7433babbf046787b0e6d23))
+* label record history consistently in match work views ([2f83f35](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2f83f35a2c6a13fc3c444a05a07371562e0f83a6))
+* name interview creation and booking link controls ([27134f1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/27134f14d77ac6ef412a40dd00c0c31040753f39))
+* patch browserslist audit findings ([d337250](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d337250d9ef7f292d359d4590f2a1174110e72c2))
+* patch PDF dependency and declare Starlette test transport ([afb3464](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/afb34645e85b34595adae7e21d6637be90b43755))
+* pin patched Browserslist across frontend tooling ([e4b8324](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e4b83241baf67e704de63a31eedc1a78c105ff3d))
+* preserve existing data through match schema upgrades ([2fafe43](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2fafe439b9abfe7dd08bfa187989f88008cdf559))
+* preserve record history during gated match rollout ([9770e87](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9770e87c4487c27866ff76ac1206483749904512))
+* prevent metrics pool exhaustion and untrack local docs ([4c3c70a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4c3c70afff6f22c22ac2d273cf4de58444f9db45))
+* require checked migration gates for match expansion releases ([fd2ff17](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fd2ff177d2d94bce8acc75523dd5ecf108ae998b))
+* resolve CI failures ([31b21a4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/31b21a4d71a9313cf1810704b3312b746db5fa6c))
+* retain match history and serialize legal hold protection ([b4e70dc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b4e70dc8e1ab6cd87c95fb856bbec070947fa872))
+* unify record email context and recheck donor workflows ([13aea4b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/13aea4b630607b413ac81d745b8415be15605423))
+
+
+### Maintenance
+
+* consolidate agent instructions in repository root ([930cd7b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/930cd7b2e9643037768b91f1b14e38159f057d0e))
+* fix migration import ordering for release lint ([936e362](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/936e3624b3d1d321147fed6565779f4569683f67))
+* keep repository authentication bindings local ([60fad91](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/60fad91798a5a9f56e7e86de532dfdc521fee3e9))
+* reconcile release branch with current main ([a2b9dbf](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a2b9dbfc672c516faa870d1b7a729bf8b85a6f49))
+* refresh sidebar icons and AI Studio beta label ([c8d0935](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c8d0935c7709be35a056b5162dd0764560c66f18))
+* stop tracking local docs ([40fb524](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/40fb52433e45d0d249ab8f081aaaab72e1e3f6db))
+
 ## [0.91.61](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.60...surrogacy-crm-platform-v0.91.61) (2026-08-31)
 
 
