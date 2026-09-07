@@ -66,6 +66,7 @@ def list_tasks(
     donor_id: UUID | None = None,
     match_id: UUID | None = None,
     attempt_id: UUID | None = None,
+    include_record_history: bool = False,
     donor_type: Literal["egg", "sperm"] | None = None,
     pipeline_id: Annotated[UUID | None, "fastapi_param"] = Query(
         None, description="Filter tasks by pipeline UUID"
@@ -103,6 +104,7 @@ def list_tasks(
         donor_id=donor_id,
         match_id=match_id,
         attempt_id=attempt_id,
+        include_record_history=include_record_history,
         donor_type=donor_type,
         pipeline_id=pipeline_id,
         is_completed=is_completed,

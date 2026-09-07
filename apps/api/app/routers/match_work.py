@@ -33,6 +33,7 @@ class WorkNoteRead(BaseModel):
     created_at: datetime
     author_name: str | None = None
     source: Source
+    scope: Literal["case", "record"] = "case"
 
 
 class WorkFileRead(BaseModel):
@@ -41,6 +42,7 @@ class WorkFileRead(BaseModel):
     file_size: int
     created_at: datetime
     source: Source = "match"
+    scope: Literal["case", "record"] = "case"
 
 
 class WorkTaskRead(BaseModel):
@@ -49,6 +51,7 @@ class WorkTaskRead(BaseModel):
     due_date: date | None
     is_completed: bool
     source: Source = "match"
+    scope: Literal["case", "record"] = "case"
 
 
 class WorkActivityRead(BaseModel):
@@ -58,6 +61,7 @@ class WorkActivityRead(BaseModel):
     actor_name: str | None
     created_at: datetime
     source: Source = "match"
+    scope: Literal["case", "record"] = "case"
 
 
 class WorkRead(BaseModel):

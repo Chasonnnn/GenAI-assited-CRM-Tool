@@ -29,6 +29,7 @@ def get_record_with_access(
     record_id: UUID,
     *,
     action: RecordAction = "view",
+    allow_archived: bool = False,
 ) -> Surrogate | IntendedParent | Donor:
     """Resolve under authenticated organization scope and enforce the subject policy.
 
@@ -70,6 +71,7 @@ def get_record_with_access(
             session.user_id,
             db=db,
             org_id=session.org_id,
+            allow_archived=allow_archived and action == "view",
         )
         if action == "edit" and not can_modify_surrogate(
             record,

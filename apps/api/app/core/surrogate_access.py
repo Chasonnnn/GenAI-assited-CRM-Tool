@@ -105,6 +105,8 @@ def check_surrogate_access(
     user_id: UUID | None = None,
     db: Session | None = None,
     org_id: UUID | None = None,
+    *,
+    allow_archived: bool = False,
 ) -> None:
     """
     Check if user can access this surrogate based on ownership and permissions.
@@ -132,7 +134,7 @@ def check_surrogate_access(
     if role_str == Role.DEVELOPER.value:
         return
 
-    if surrogate.is_archived and role_str != Role.ADMIN.value:
+    if surrogate.is_archived and role_str != Role.ADMIN.value and not allow_archived:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have access to this surrogate",
@@ -159,7 +161,9 @@ def check_surrogate_access(
             detail="You don't have access to this surrogate",
         )
 
-    if not has_surrogate_record_access(db, surrogate, role_str, user_id, org_id):
+    if not has_surrogate_record_access(
+        db, surrogate, role_str, user_id, org_id, allow_archived=allow_archived
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have access to this surrogate",
@@ -189,6 +193,8 @@ def has_surrogate_record_access(
     user_role: Role | str | None,
     user_id: UUID | None,
     org_id: UUID,
+    *,
+    allow_archived: bool = False,
 ) -> bool:
     """Return whether the user can view this specific surrogate record."""
     role_str = _role_value(user_role)
@@ -196,7 +202,7 @@ def has_surrogate_record_access(
         return True
     if not user_id:
         return False
-    if surrogate.is_archived:
+    if surrogate.is_archived and not allow_archived:
         return False
 
     if role_str == Role.CASE_MANAGER.value:

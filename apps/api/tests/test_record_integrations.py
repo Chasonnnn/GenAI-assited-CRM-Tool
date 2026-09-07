@@ -129,6 +129,84 @@ async def test_appointment_context_denies_unknown_records_and_attempt_without_ca
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["surrogate", "intended_parent"])
+async def test_legacy_appointment_owner_can_manage_after_record_access_changes(
+    authed_client, db, test_org, test_user, default_stage, monkeypatch, kind
+):
+    from app.core.deps import get_current_session
+    from app.db.enums import Role
+    from app.main import app
+    from app.schemas.auth import UserSession
+    from app.services import appointment_email_service
+    from tests.test_tasks_match_scope import _create_intended_parent, _create_surrogate
+
+    record = (
+        _create_surrogate(db, test_org.id, test_user.id, default_stage)
+        if kind == "surrogate"
+        else _create_intended_parent(db, test_org.id)
+    )
+    if kind == "surrogate":
+        record.is_archived = True
+        record.owner_id = uuid4()
+    start = datetime.now(UTC) + timedelta(days=4)
+    appointment = Appointment(
+        organization_id=test_org.id,
+        user_id=test_user.id,
+        **{f"{kind}_id": record.id},
+        client_name="Owned appointment",
+        client_email="owned@example.com",
+        client_phone="6075550100",
+        client_timezone="UTC",
+        scheduled_start=start,
+        scheduled_end=start + timedelta(minutes=30),
+        duration_minutes=30,
+        meeting_mode="phone",
+        status="confirmed",
+    )
+    db.add(appointment)
+    db.flush()
+    session = UserSession(
+        user_id=test_user.id,
+        org_id=test_org.id,
+        role=Role.INTAKE_SPECIALIST,
+        email=test_user.email,
+        display_name=test_user.display_name,
+    )
+    monkeypatch.setattr(appointment_email_service, "send_cancelled", lambda *args, **kwargs: None)
+    app.dependency_overrides[get_current_session] = lambda: session
+    try:
+        for changes, expected_status in (
+            ({"user_id": uuid4()}, 403),
+            ({"org_id": uuid4()}, 404),
+        ):
+            denied_session = session.model_copy(update=changes)
+            app.dependency_overrides[get_current_session] = lambda: denied_session
+            assert (
+                await authed_client.get(f"/appointments/{appointment.id}")
+            ).status_code == expected_status
+            assert (
+                await authed_client.post(
+                    f"/appointments/{appointment.id}/cancel", json={"reason": "Denied"}
+                )
+            ).status_code == expected_status
+        app.dependency_overrides[get_current_session] = lambda: session
+        response = await authed_client.get(f"/appointments/{appointment.id}")
+        assert response.status_code == 200, response.text
+        cancelled = await authed_client.post(
+            f"/appointments/{appointment.id}/cancel", json={"reason": "Owner cancellation"}
+        )
+        assert cancelled.status_code == 200, cancelled.text
+        assert cancelled.json()["status"] == "cancelled"
+        # Appointment ownership does not authorize editing its linked record.
+        relink = await authed_client.patch(
+            f"/appointments/{appointment.id}/link", json={f"{kind}_id": None}
+        )
+        assert relink.status_code == 403, relink.text
+    finally:
+        app.dependency_overrides.pop(get_current_session, None)
+
+
+@pytest.mark.asyncio
 async def test_correspondence_requires_durable_link_and_survives_email_change(
     authed_client, db, test_org
 ):
@@ -391,11 +469,80 @@ async def test_appointment_case_attempt_scope_and_database_guards(
         db.add(item)
         db.flush()
         appointments.append(item)
+    general = Appointment(
+        organization_id=test_org.id,
+        user_id=test_user.id,
+        donor_id=UUID(donor["id"]),
+        client_name="Record history",
+        client_email="record@example.com",
+        client_phone="6075550100",
+        client_timezone="UTC",
+        scheduled_start=start,
+        scheduled_end=start + timedelta(minutes=30),
+        duration_minutes=30,
+        meeting_mode="phone",
+        status="confirmed",
+    )
+    db.add(general)
+    db.flush()
+    history = await authed_client.get(
+        "/appointments",
+        params={
+            "match_id": str(cases[0][0].id),
+            "include_record_history": True,
+        },
+    )
+    assert history.status_code == 200, history.text
+    assert {item["id"] for item in history.json()["items"]} == {
+        str(general.id),
+        str(appointments[0].id),
+    }
+    assert (
+        await authed_client.get("/appointments", params={"include_record_history": True})
+    ).status_code == 400
     result = await authed_client.get(
-        "/appointments", params={"match_id": str(cases[0][0].id), "attempt_id": str(cases[0][1].id)}
+        "/appointments",
+        params={
+            "match_id": str(cases[0][0].id),
+            "attempt_id": str(cases[0][1].id),
+            "include_record_history": True,
+        },
     )
     assert result.status_code == 200, result.text
     assert [item["id"] for item in result.json()["items"]] == [str(appointments[0].id)]
+    from app.core.config import settings
+
+    appointment_type = await authed_client.post(
+        "/appointments/types",
+        json={
+            "name": "Compatibility consultation",
+            "duration_minutes": 30,
+            "meeting_mode": "phone",
+        },
+    )
+    assert appointment_type.status_code == 201, appointment_type.text
+    create_payload = {
+        "appointment_type_id": appointment_type.json()["id"],
+        "donor_id": donor["id"],
+        "match_id": str(cases[0][0].id),
+        "client_name": "QA",
+        "client_email": "qa@example.com",
+        "client_phone": "6075550100",
+        "client_timezone": "UTC",
+        "scheduled_start": start.isoformat(),
+    }
+    for enabled, status_code in ((False, 503), (True, 409)):
+        monkeypatch.setattr(settings, "MATCH_CASE_EXPANSION_ENABLED", enabled)
+        created = await authed_client.post("/appointments", json=create_payload)
+        assert created.status_code == status_code, created.text
+        linked = await authed_client.patch(
+            f"/appointments/{general.id}/link",
+            json={
+                "match_id": str(cases[0][0].id),
+            },
+        )
+        assert linked.status_code == status_code, linked.text
+    assert general.match_id is None
     assert (
         await authed_client.get(
             "/appointments",

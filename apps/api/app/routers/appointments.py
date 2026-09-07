@@ -544,12 +544,15 @@ def list_appointments(
     donor_id: UUID | None = None,
     match_id: UUID | None = None,
     attempt_id: UUID | None = None,
+    include_record_history: bool = False,
 ):
     """List appointments for the current user.
 
     Optionally filter by surrogate_id and/or intended_parent_id for match-scoped views.
     When both are provided, returns appointments matching EITHER.
     """
+    if include_record_history and not match_id:
+        raise HTTPException(status_code=400, detail="Record history requires match_id")
     appointment_service.validate_record_links(
         db,
         session,
@@ -574,6 +577,7 @@ def list_appointments(
         donor_id=donor_id,
         match_id=match_id,
         attempt_id=attempt_id,
+        include_record_history=include_record_history,
         limit=per_page,
         offset=offset,
     )
@@ -621,7 +625,7 @@ def get_appointment(
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    appointment_service.validate_record_links(db, session, _appointment_links(appt))
+    appointment_service.validate_existing_appointment_access(db, session, appt)
     context = appointment_service.get_appointment_context(db, [appt])
     audit_service.log_phi_access(
         db=db,
@@ -680,7 +684,7 @@ def approve_appointment(
 
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-    appointment_service.validate_record_links(db, session, _appointment_links(appt), action="edit")
+    appointment_service.validate_existing_appointment_access(db, session, appt, action="edit")
 
     try:
         appt = appointment_service.approve_booking(
@@ -718,7 +722,7 @@ def get_reschedule_slots(
 
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-    appointment_service.validate_record_links(db, session, _appointment_links(appt), action="edit")
+    appointment_service.validate_existing_appointment_access(db, session, appt, action="edit")
 
     try:
         slots, appt_type = appointment_service.get_reschedule_slots_for_appointment(
@@ -755,7 +759,7 @@ def reschedule_appointment(
 
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-    appointment_service.validate_record_links(db, session, _appointment_links(appt), action="edit")
+    appointment_service.validate_existing_appointment_access(db, session, appt, action="edit")
 
     try:
         old_start = appt.scheduled_start  # Save for email
@@ -796,7 +800,7 @@ def cancel_appointment(
 
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-    appointment_service.validate_record_links(db, session, _appointment_links(appt), action="edit")
+    appointment_service.validate_existing_appointment_access(db, session, appt, action="edit")
 
     try:
         appt = appointment_service.cancel_booking(

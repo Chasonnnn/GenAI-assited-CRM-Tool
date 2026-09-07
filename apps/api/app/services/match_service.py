@@ -414,6 +414,18 @@ def create_match(
     )
     if not participant or not get_intended_parent(db, intended_parent_id, org_id):
         raise ValueError("Match participants not found")
+    from app.core.match_rollout import require_match_expansion
+
+    if donor_id or (
+        db.query(Match.id)
+        .filter(
+            Match.organization_id == org_id,
+            Match.surrogate_id == surrogate_id,
+            Match.intended_parent_id == intended_parent_id,
+        )
+        .first()
+    ):
+        require_match_expansion()
     clean_notes = note_service.sanitize_html(notes) if notes else None
 
     match = Match(
@@ -478,6 +490,14 @@ def mark_match_reviewing_if_needed(
 ) -> Match:
     """Auto-transition match to reviewing if viewed by non-proposer."""
     if match.status == MatchStatus.PROPOSED.value and match.proposed_by_user_id != actor_user_id:
+        participant = (
+            get_donor(db, match.donor_id, org_id)
+            if match.donor_id
+            else get_surrogate_with_stage(db, match.surrogate_id, org_id)
+        )
+        ip = get_intended_parent(db, match.intended_parent_id, org_id)
+        if (participant and participant.is_archived) or (ip and ip.is_archived):
+            return match
         match = lock_match(db, match, org_id)
         if match.status != MatchStatus.PROPOSED.value:
             return match
@@ -524,6 +544,19 @@ def accept_match(
 ) -> Match:
     """Accept a match and apply related side effects."""
     match = lock_match(db, match, org_id)
+    from app.core.match_rollout import require_match_expansion
+
+    if match.donor_id or (
+        db.query(Match.id)
+        .filter(
+            Match.organization_id == org_id,
+            Match.intended_parent_id == match.intended_parent_id,
+            Match.id != match.id,
+            Match.status.in_(COMMITTED_STATUSES),
+        )
+        .first()
+    ):
+        require_match_expansion()
     if match.status not in [MatchStatus.PROPOSED.value, MatchStatus.REVIEWING.value]:
         raise ValueError(f"Cannot accept match with status: {match.status}")
 
@@ -994,7 +1027,9 @@ def get_donor(db: Session, donor_id: UUID | None, org_id: UUID) -> Donor | None:
     )
 
 
-def get_match_with_access(db: Session, session, match_id: UUID, *, write: bool = False) -> Match:
+def get_match_with_access(
+    db: Session, session, match_id: UUID, *, write: bool = False, allow_archived: bool = False
+) -> Match:
     """Resolve exact case and both records under authenticated membership."""
     from fastapi import HTTPException
 
@@ -1021,6 +1056,7 @@ def get_match_with_access(db: Session, session, match_id: UUID, *, write: bool =
         session,
         "donor" if match.donor_id else "surrogate",
         match.donor_id or match.surrogate_id,
+        allow_archived=allow_archived and not write,
     )
     return match
 
@@ -1118,6 +1154,9 @@ def complete_match(
     outcome: str,
     reason: str | None = None,
 ) -> Match:
+    from app.core.match_rollout import require_match_expansion
+
+    require_match_expansion()
     match = lock_match(db, match, org_id)
     if match.status != MatchStatus.ACCEPTED.value:
         raise ValueError("Only accepted matches can be completed")
@@ -1159,6 +1198,9 @@ def list_attempts(db: Session, match: Match) -> list[MatchAttempt]:
 def save_attempt(
     db: Session, match: Match, *, actor_user_id: UUID, values: dict, attempt_id: UUID | None = None
 ) -> MatchAttempt:
+    from app.core.match_rollout import require_match_expansion
+
+    require_match_expansion()
     match = lock_match(db, match, match.organization_id)
     if match.status != MatchStatus.ACCEPTED.value:
         raise ValueError("Only accepted matches can change attempts")
@@ -1349,8 +1391,6 @@ def match_visibility_filter(db: Session, session):
             Surrogate.organization_id == session.org_id,
             build_surrogate_visibility_filter(db, session.org_id, session.role, session.user_id),
         )
-        if session.role.value not in ("admin", "developer"):
-            visible = visible.filter(Surrogate.is_archived.is_(False))
         clauses.append(Match.surrogate_id.in_(visible))
     return and_(
         Match.intended_parent_id.in_(

@@ -1198,6 +1198,8 @@ def create_booking(
                 raise ValueError("Idempotency key belongs to another appointment context")
             return existing
 
+    _validate_new_record_context(db, org_id, record_links or {})
+
     # Get appointment type
     appt_type = (
         db.query(AppointmentType)
@@ -1845,6 +1847,7 @@ def list_appointments(
     donor_id: UUID | None = None,
     match_id: UUID | None = None,
     attempt_id: UUID | None = None,
+    include_record_history: bool = False,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[Appointment], int]:
@@ -1891,7 +1894,17 @@ def list_appointments(
         query = query.filter(Appointment.scheduled_start <= end_dt)
 
     if match_id:
-        query = query.filter(Appointment.match_id == match_id)
+        context_filter = Appointment.match_id == match_id
+        if include_record_history and not attempt_id:
+            from app.services import match_service, match_work_service
+
+            match = match_service.get_match(db, match_id, org_id)
+            if match is None:
+                raise ValueError("Match not found")
+            context_filter = or_(
+                context_filter, match_work_service.record_history_filter(Appointment, match)
+            )
+        query = query.filter(context_filter)
     if attempt_id:
         query = query.filter(Appointment.attempt_id == attempt_id)
     if donor_id:
@@ -2007,6 +2020,11 @@ def update_record_links(
 ) -> None:
     from app.services import audit_service
 
+    if any(
+        links.get(field) != getattr(appointment, field)
+        for field in ("donor_id", "match_id", "attempt_id")
+    ):
+        _validate_new_record_context(db, appointment.organization_id, links)
     for field, value in links.items():
         setattr(appointment, field, value)
     audit_service.log_event(
@@ -2020,6 +2038,17 @@ def update_record_links(
     )
     db.commit()
     db.refresh(appointment)
+
+
+def _validate_new_record_context(db, org_id, links):
+    if links.get("donor_id") or links.get("match_id") or links.get("attempt_id"):
+        from app.core.match_rollout import require_match_expansion
+
+        require_match_expansion()
+    if links.get("match_id"):
+        from app.services.match_work_service import validate_context
+
+        validate_context(db, org_id, links["match_id"], links.get("attempt_id"), write=True)
 
 
 def _audit_record_appointment(
@@ -2041,6 +2070,37 @@ def _audit_record_appointment(
             for field in ("donor_id", "intended_parent_id", "match_id", "attempt_id")
         },
     )
+
+
+def validate_existing_appointment_access(db, session, appointment, *, action="view"):
+    """Keep owner/admin lifecycle access for legacy record-linked appointments."""
+    from fastapi import HTTPException
+
+    from app.db.models import IntendedParent, Surrogate
+
+    if appointment.organization_id != session.org_id:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    if appointment.user_id != session.user_id and session.role not in ("admin", "developer"):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    links = {
+        field: getattr(appointment, field)
+        for field in ("surrogate_id", "intended_parent_id", "donor_id", "match_id", "attempt_id")
+    }
+    if appointment.donor_id or appointment.match_id or appointment.attempt_id:
+        validate_record_links(db, session, links, action=action)
+        return
+    # Ownership authorizes this appointment, not its participants' full records.
+    for model, record_id in (
+        (Surrogate, appointment.surrogate_id),
+        (IntendedParent, appointment.intended_parent_id),
+    ):
+        if (
+            record_id
+            and not db.query(model.id)
+            .filter(model.id == record_id, model.organization_id == session.org_id)
+            .first()
+        ):
+            raise HTTPException(status_code=404, detail="Appointment record not found")
 
 
 def validate_record_links(db, session, links, *, action="view"):
@@ -2078,7 +2138,12 @@ def validate_record_links(db, session, links, *, action="view"):
                 )
             if expected:
                 get_record_with_access(
-                    db, session, field.removesuffix("_id"), expected, action=action
+                    db,
+                    session,
+                    field.removesuffix("_id"),
+                    expected,
+                    action=action,
+                    allow_archived=action == "view",
                 )
         if (
             links.get("attempt_id")
@@ -2094,5 +2159,10 @@ def validate_record_links(db, session, links, *, action="view"):
     for field in ("surrogate_id", "intended_parent_id", "donor_id"):
         if links.get(field):
             get_record_with_access(
-                db, session, field.removesuffix("_id"), links[field], action=action
+                db,
+                session,
+                field.removesuffix("_id"),
+                links[field],
+                action=action,
+                allow_archived=bool(links.get("match_id")) and action == "view",
             )

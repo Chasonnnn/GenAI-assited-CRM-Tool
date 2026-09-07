@@ -928,6 +928,7 @@ def list_tasks(
     donor_type: Literal["egg", "sperm"] | None = None,
     match_id: UUID | None = None,
     attempt_id: UUID | None = None,
+    include_record_history: bool = False,
     pipeline_id: UUID | None = None,
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
@@ -969,7 +970,17 @@ def list_tasks(
     )
 
     if match_id:
-        query = query.filter(Task.match_id == match_id)
+        context_filter = Task.match_id == match_id
+        if include_record_history and not attempt_id:
+            from app.services import match_service, match_work_service
+
+            match = match_service.get_match(db, match_id, org_id)
+            if match is None:
+                raise HTTPException(status_code=404, detail="Match not found")
+            context_filter = or_(
+                context_filter, match_work_service.record_history_filter(Task, match)
+            )
+        query = query.filter(context_filter)
     if attempt_id:
         query = query.filter(Task.attempt_id == attempt_id)
     if user_id and not permission_service.check_permission(
@@ -1140,6 +1151,7 @@ def list_tasks_for_session(
     donor_type: Literal["egg", "sperm"] | None = None,
     match_id: UUID | None = None,
     attempt_id: UUID | None = None,
+    include_record_history: bool = False,
     pipeline_id: UUID | None = None,
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
@@ -1180,10 +1192,10 @@ def list_tasks_for_session(
     if match_id:
         from app.services import match_service, match_work_service
 
-        match_service.get_match_with_access(db, session, match_id)
+        match_service.get_match_with_access(db, session, match_id, allow_archived=True)
         match_work_service.validate_context(db, session.org_id, match_id, attempt_id)
-    elif attempt_id:
-        raise HTTPException(status_code=400, detail="attempt_id requires match_id")
+    elif attempt_id or include_record_history:
+        raise HTTPException(status_code=400, detail="Attempt or record history requires match_id")
 
     tasks, total = list_tasks(
         db=db,
@@ -1200,6 +1212,7 @@ def list_tasks_for_session(
         donor_type=donor_type,
         match_id=match_id,
         attempt_id=attempt_id,
+        include_record_history=include_record_history,
         pipeline_id=pipeline_id,
         is_completed=is_completed,
         task_type=task_type,

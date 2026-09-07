@@ -439,7 +439,7 @@ def get_match(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MatchRead:
     """Get match details. Auto-transitions to 'reviewing' on first view by non-proposer."""
-    match = match_service.get_match_with_access(db, session, match_id)
+    match = match_service.get_match_with_access(db, session, match_id, allow_archived=True)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
@@ -758,7 +758,7 @@ def list_match_events(
     Requires: Case Manager+ role
     """
     # Verify match exists and belongs to org
-    match = match_service.get_match_with_access(db, session, match_id)
+    match = match_service.get_match_with_access(db, session, match_id, allow_archived=True)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
@@ -872,7 +872,7 @@ def get_match_event(
 
     Requires: Case Manager+ role
     """
-    match_service.get_match_with_access(db, session, match_id)
+    match_service.get_match_with_access(db, session, match_id, allow_archived=True)
     event = match_service.get_match_event(
         db=db,
         match_id=match_id,
@@ -1057,7 +1057,7 @@ def list_attempts(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
-    match = match_service.get_match_with_access(db, session, match_id)
+    match = match_service.get_match_with_access(db, session, match_id, allow_archived=True)
     return match_service.list_attempts(db, match)
 
 
