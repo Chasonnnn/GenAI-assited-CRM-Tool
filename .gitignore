@@ -46,6 +46,7 @@ report_html.html
 zap.yaml
 
 # Local gcloud config/credentials (never commit)
+.authmux.toml
 .gcloud/
 # Terraform (repo-local)
 infra/terraform/.terraform/
