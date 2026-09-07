@@ -19,3 +19,9 @@
 **Surrogate lifetime timeline**: The history associated with the surrogate across their involvement with the agency. The existing surrogate journey view represents this history across cases and attempts; it is not a parent container for match cases.
 
 **Organization SMS**: Messages sent on behalf of an agency through its organization-owned sender, configured by an administrator. Automated transactional messages may reference a record, match case, or treatment attempt.
+
+## Staff access
+
+**Role preset**: A reusable set of staff permissions that an agency administrator can adjust for a job function. People with the same role preset share its baseline permissions.
+
+**Individual permission addition**: Extra authority assigned to a specific staff member beyond their role preset. It does not change the permissions of other people with that role preset.
