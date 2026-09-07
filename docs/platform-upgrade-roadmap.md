@@ -11,7 +11,7 @@ Date: 2026-09-07. Status: proposed priorities; implementation and external activ
 | 3 | Modularize workflow and campaign execution | Apply the donor lessons before adding more builder features | Shared actions and delivery rules have clear owners; existing workflows, campaigns, approvals, and retries retain their behavior |
 | 4 | Complete permission migration and simplify administration | Apply the agreed model across the stabilized modules | Effective access is understandable and consistent across UI, API, jobs, and exports |
 | 5 | Simplify form and workflow creation | Stable behavior and permissions make the new creation experience easier to maintain | Representative staff can publish a form and configure a common workflow without developer assistance |
-| 6 | Rebuild reporting around decisions and reliable Meta data | Useful reporting needs agreed outcomes, attribution, and verified data | A reconciled acquisition report supports a real budget or follow-up decision |
+| 6 | Rebuild reporting with a Meta MCP connection per organization | The existing direct integration is blocked by Meta app approval; useful reporting needs verified organization-specific data | A reconciled acquisition report supports a real budget or follow-up decision |
 | 7 | Extend the shared UI improvements across the platform | Apply patterns proven in the earlier work | Priority journeys use consistent navigation, components, and onboarding, with measured usability and performance improvements |
 
 Twilio setup and controlled verification should start early as a bounded separate work item. Provider setup can take elapsed time without blocking donor email or the rest of the roadmap. Complete donor SMS after the applicable consent, record-access, and messaging paths are ready.
@@ -77,10 +77,14 @@ Keep refactor scope tied to a concrete behavior or maintenance problem. A full p
 
 Proposed first focus: acquisition performance. Operations reporting follows unless current user priorities change this order.
 
+Confirmed direction, 2026-09-07: the existing direct Meta integration is stale because Meta app approval could not be obtained. Use a separate Meta MCP connection for each organization. Existing spend-sync code is reference material for reusable data handling, not an available ingestion path or an alternative awaiting selection. The MCP provider and its supported authentication, tools, and unattended execution still need verification.
+
 - [ ] Select the first decisions the report must support: which source to fund, which leads need attention, or where the funnel stalls.
 - [ ] Define spend, leads, qualified leads, conversion, cost per qualified lead, and cost per conversion. Specify cohorts, dates, attribution, and subtype-specific stage mappings.
-- [ ] Audit existing Meta spend ingestion, scheduling, credentials, account mapping, and failure handling before adding a new integration.
-- [ ] Evaluate the proposed Meta MCP option against the existing API ingestion path when selecting the implementation. The repository already contains spend sync; no particular MCP provider has been selected or verified.
+- [ ] Select and verify a Meta MCP provider that supports organization-specific authorization, required spend and campaign data, and scheduled background reads. Confirm that its setup can work under the app-approval constraint.
+- [ ] Add organization-admin connection, account selection, connection testing, reconnection, and disconnection. Bind credentials and allowed ad accounts to authenticated organization membership; isolate jobs, stored data, and caches by organization.
+- [ ] Reuse applicable spend storage, normalization, reconciliation, and reporting code behind the MCP ingestion path. Identify and disable superseded direct-sync schedules during migration without deleting historical data.
+- [ ] Verify cross-organization denial, revoked credentials, partial responses, retries, and duplicate ingestion. Treat connection success and a successful scheduled refresh as separate checks.
 - [ ] Make refresh cadence configurable by organization. Proposed default: daily ingestion with weekly review; aggregation period and refresh cadence are separate settings.
 - [ ] Support retries, backfill, reconciliation, timezone/currency handling, attribution gaps, and visible freshness or sync failures.
 - [ ] Reconcile a sample period against Meta and CRM records; distinguish platform-reported outcomes from CRM-observed outcomes and avoid duplicate spend across breakdowns.
@@ -119,7 +123,7 @@ Every milestone records implementation, automated checks, browser checks, provid
 - `apps/api/app/services/template_seeder.py`: disabled system workflow seeding and default pipeline resolution.
 - `apps/api/tests/test_donor_workflows.py`: donor subject and workflow integration tests.
 - `apps/api/tests/test_donor_campaigns.py`: existing donor campaign test surface, identified but not rerun.
-- `apps/api/app/services/meta_sync_service.py`: hierarchy, daily spend, and standard spend sync schedule.
+- `apps/api/app/services/meta_sync_service.py`: existing hierarchy, daily spend, and schedule code; the direct integration is stale and blocked by Meta app approval according to the user's clarification.
 - `apps/api/app/services/analytics_meta_service.py`: existing Meta analytics with surrogate stage mapping in the inspected funnel path.
 - `apps/api/tests/test_twilio_readiness.py`: local cached readiness contracts, not live provider proof.
 - `docs/relationship-integration-plan.md`: accepted relationship rules, light record layouts, and SMS scope.
