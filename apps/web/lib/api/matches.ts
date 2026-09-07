@@ -270,6 +270,7 @@ export interface MatchWorkNote {
     created_at: string
     author_name?: string | null
     source: MatchWorkSource
+    scope?: 'case' | 'record'
 }
 export interface MatchWorkFile {
     id: string
@@ -277,6 +278,7 @@ export interface MatchWorkFile {
     file_size: number
     created_at: string
     source: MatchWorkSource
+    scope?: 'case' | 'record'
 }
 export interface MatchWorkTask {
     id: string
@@ -284,6 +286,7 @@ export interface MatchWorkTask {
     due_date: string | null
     is_completed: boolean
     source: MatchWorkSource
+    scope?: 'case' | 'record'
 }
 export interface MatchWorkActivity {
     id: string
@@ -292,6 +295,7 @@ export interface MatchWorkActivity {
     actor_name: string | null
     created_at: string
     source: MatchWorkSource
+    scope?: 'case' | 'record'
 }
 export interface MatchWork {
     has_more?: boolean

@@ -1,5 +1,6 @@
 "use client"
 
+import { getMatchWorkSourceLabel } from "@/lib/match-work-labels"
 import { SafeHtmlContent } from "@/components/safe-html-content"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -82,20 +83,13 @@ function sourceDotClassName(source: SourceKind) {
     return "bg-purple-500"
 }
 
-function compactSourceLabel(source: SourceKind) {
-    if (source === "donor") return "Donor"
-    if (source === "surrogate") return "Surrogate"
-    if (source === "ip") return "IP"
-    return "Match"
-}
-
-function SourceBadge({ source, className = "" }: { source: SourceKind; className?: string }) {
+function SourceBadge({ source, scope, className = "" }: { source: SourceKind; scope?: "case" | "record"; className?: string }) {
     return (
         <Badge
             variant="outline"
             className={`text-[10px] px-1 py-0 ${sourceBadgeClassName(source)} ${className}`}
         >
-            {compactSourceLabel(source)}
+            {getMatchWorkSourceLabel(source, scope)}
         </Badge>
     )
 }
@@ -194,7 +188,7 @@ function NotesTab({
                             className="p-3 rounded-lg border border-border bg-card hover:bg-accent/30 transition-colors"
                         >
                             <div className="flex items-center gap-1.5 mb-2">
-                                <SourceBadge source={note.source} className="px-1.5" />
+                                <SourceBadge source={note.source} scope={note.scope ?? "case"} className="px-1.5" />
                                 {note.author_name && (
                                     <span className="text-xs text-muted-foreground">
                                         by {note.author_name}
@@ -258,7 +252,7 @@ function FilesTab({
                             <FolderIcon className="size-4 text-muted-foreground flex-shrink-0" />
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1 mb-0.5">
-                                    <SourceBadge source={file.source} />
+                                    <SourceBadge source={file.source} scope={file.scope ?? "case"} />
                                 </div>
                                 <p className="text-sm font-medium truncate">{file.filename}</p>
                                 <p className="text-xs text-muted-foreground">
@@ -323,7 +317,7 @@ function TasksTab({
                         />
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1 mb-0.5">
-                                <SourceBadge source={task.source} />
+                                <SourceBadge source={task.source} scope={task.scope ?? "case"} />
                                 {task.is_completed && (
                                     <Badge variant="secondary" className="text-[10px] px-1 py-0">Done</Badge>
                                 )}
@@ -358,7 +352,7 @@ function ActivityTab({
                         <div className={`size-2 rounded-full mt-1.5 flex-shrink-0 ${sourceDotClassName(activity.source)}`} />
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1 mb-0.5">
-                                <SourceBadge source={activity.source} />
+                                <SourceBadge source={activity.source} scope={activity.scope ?? "case"} />
                             </div>
                             <p className="text-sm font-medium">{activity.event_type}</p>
                             <p className="text-xs text-muted-foreground">{activity.description}</p>

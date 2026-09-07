@@ -84,6 +84,7 @@ export interface TaskListResponse {
 export interface TaskListParams {
     match_id?: string;
     attempt_id?: string;
+    include_record_history?: boolean;
     page?: number;
     per_page?: number;
     q?: string;
@@ -149,6 +150,7 @@ export function getTasks(params: TaskListParams = {}): Promise<TaskListResponse>
     if (params.donor_id) searchParams.set('donor_id', params.donor_id);
     if (params.match_id) searchParams.set('match_id', params.match_id);
     if (params.attempt_id) searchParams.set('attempt_id', params.attempt_id);
+    if (params.include_record_history) searchParams.set('include_record_history', 'true');
     if (params.pipeline_id) searchParams.set('pipeline_id', params.pipeline_id);
     if (params.is_completed !== undefined) searchParams.set('is_completed', String(params.is_completed));
     if (params.task_type) searchParams.set('task_type', params.task_type);

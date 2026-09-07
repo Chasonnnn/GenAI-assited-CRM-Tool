@@ -1,6 +1,6 @@
 import type { PropsWithChildren, ReactNode } from "react"
 import { describe, expect, it, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 
 import { MatchDetailOverviewTabs } from "@/app/(app)/intended-parents/matches/[id]/components/MatchDetailOverviewTabs"
 
@@ -15,6 +15,33 @@ vi.mock("@/components/ui/select", () => ({
 }))
 
 describe("MatchDetailOverviewTabs", () => {
+    const historyProps = {
+        activeTab: "notes" as const, sourceFilter: "all" as const,
+        filteredNotes: [{ id: "legacy-note", content: "Retained participant history", created_at: "2026-01-01T00:00:00Z", source: "surrogate" as const, scope: "record" as const }],
+        filteredFiles: [], filteredTasks: [], filteredActivity: [],
+        onTabChange: vi.fn(), onSourceFilterChange: vi.fn(), onDownloadFile: vi.fn(), onDeleteFile: vi.fn(),
+        isDownloadPending: false, isDeletePending: false,
+        formatDate: () => "Jan 1, 2026", formatDateTime: () => "Jan 1, 2026",
+    }
+
+    it("attributes participant history without assigning it to the match", () => {
+        render(<MatchDetailOverviewTabs {...historyProps} />)
+        expect(screen.getByText("Surrogate record")).toBeInTheDocument()
+        expect(screen.getByText("Retained participant history")).toBeInTheDocument()
+    })
+
+    it("retains loading, empty and retry states for historical work", () => {
+        const retry = vi.fn()
+        const view = render(<MatchDetailOverviewTabs {...historyProps} isLoading />)
+        expect(screen.queryByText("Retained participant history")).not.toBeInTheDocument()
+        view.rerender(<MatchDetailOverviewTabs {...historyProps} filteredNotes={[]} />)
+        expect(screen.getByText("No notes yet")).toBeInTheDocument()
+        view.rerender(<MatchDetailOverviewTabs {...historyProps} error="History unavailable" onRetry={retry} />)
+        expect(screen.getByRole("alert")).toHaveTextContent("History unavailable")
+        fireEvent.click(screen.getByRole("button", { name: "Retry" }))
+        expect(retry).toHaveBeenCalledOnce()
+    })
+
     it("sanitizes note HTML before rendering match notes", () => {
         const { container } = render(
             <MatchDetailOverviewTabs

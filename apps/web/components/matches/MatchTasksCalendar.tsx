@@ -32,6 +32,7 @@ import { useTasks } from "@/lib/hooks/use-tasks"
 import { useAppointments } from "@/lib/hooks/use-appointments"
 import type { TaskListItem } from "@/lib/api/tasks"
 import type { AppointmentListItem } from "@/lib/api/appointments"
+import { getMatchWorkSourceLabel } from "@/lib/match-work-labels"
 import { getAppointmentStatusLabel } from "@/lib/appointment-status-labels"
 import {
     format,
@@ -75,11 +76,12 @@ function TaskItem({
     compact?: boolean
 }) {
     const color = source === "ip" ? IP_COLOR : SURROGATE_COLOR
+    const sourceLabel = getMatchWorkSourceLabel(source, task.match_id ? "case" : "record")
     const time = task.due_time ? format(parseISO(`2000-01-01T${task.due_time}`), "h:mm a") : ""
 
     if (compact) {
         return (
-            <div className={`w-full text-left px-2 py-1 rounded text-xs truncate ${color} text-white`}>
+            <div title={sourceLabel} className={`w-full text-left px-2 py-1 rounded text-xs truncate ${color} text-white`}>
                 {time && `${time} - `}📋 {task.title}
             </div>
         )
@@ -93,7 +95,7 @@ function TaskItem({
             </p>
             {time && <p className="text-xs text-muted-foreground">{time}</p>}
             <Badge variant="outline" className="text-xs mt-1">
-                {source === "match" ? "Match" : source === "surrogate" ? "Surrogate" : source === "donor" ? "Donor" : "IP"}
+                {sourceLabel}
             </Badge>
         </div>
     )
@@ -114,10 +116,11 @@ function AppointmentItem({
         time = "--:--"
     }
     const typeName = appointment.appointment_type_name || "Appointment"
+    const sourceLabel = getMatchWorkSourceLabel(appointment.match_id ? "match" : appointment.donor_id ? "donor" : appointment.surrogate_id ? "surrogate" : "ip", appointment.match_id ? "case" : "record")
 
     if (compact) {
         return (
-            <div className={`w-full text-left px-2 py-1 rounded text-xs truncate ${APPOINTMENT_COLOR} text-white`}>
+            <div title={sourceLabel} className={`w-full text-left px-2 py-1 rounded text-xs truncate ${APPOINTMENT_COLOR} text-white`}>
                 {time} - 📅 {appointment.client_name}
             </div>
         )
@@ -132,6 +135,9 @@ function AppointmentItem({
             <p className="text-xs text-muted-foreground">{time} - {appointment.client_name}</p>
             <Badge variant="outline" className="text-xs mt-1">
                 {getAppointmentStatusLabel(appointment.status)}
+            </Badge>
+            <Badge variant="outline" className="text-xs mt-1 ml-1">
+                {sourceLabel}
             </Badge>
         </div>
     )
@@ -388,7 +394,7 @@ export function MatchTasksCalendar({ matchId, attemptId, participantKind = "surr
 
     const { data: matchTasks, isLoading: loadingTasks, isError: tasksError } = useTasks({
         match_id: matchId,
-        ...(attemptId ? { attempt_id: attemptId } : {}),
+        ...(attemptId ? { attempt_id: attemptId } : { include_record_history: true }),
         is_completed: false,
         per_page: 100,
         exclude_approvals: true,
@@ -397,11 +403,11 @@ export function MatchTasksCalendar({ matchId, attemptId, participantKind = "surr
         date_start: dateStart,
         date_end: dateEnd,
         match_id: matchId,
-        ...(attemptId ? { attempt_id: attemptId } : {}),
+        ...(attemptId ? { attempt_id: attemptId } : { include_record_history: true }),
         per_page: 100,
     })
     const tasks = matchTasks?.items ?? []
-    const taskSources = new Map<string, "match" | "surrogate" | "donor" | "ip">(tasks.map((task) => [task.id, task.work_source ?? "match"]))
+    const taskSources = new Map<string, "match" | "surrogate" | "donor" | "ip">(tasks.map((task) => [task.id, task.work_source ?? (task.match_id ? "match" : task.donor_id ? "donor" : task.surrogate_id ? "surrogate" : "ip")]))
 
     // Get appointments
     const appointments = appointmentsData?.items || []

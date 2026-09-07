@@ -119,10 +119,11 @@ describe('MatchTasksCalendar', () => {
         expect(document.querySelector('.animate-spin')).toBeInTheDocument()
     })
 
-    it('loads tasks by exact match instead of participant IDs', () => {
+    it('requests unassigned participant history in the unfiltered match calendar', () => {
         render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         expect(mockUseTasks).toHaveBeenCalledWith({
             match_id: 'match1',
+            include_record_history: true,
             is_completed: false,
             per_page: 100,
             exclude_approvals: true,
@@ -145,7 +146,17 @@ describe('MatchTasksCalendar', () => {
         fireEvent.mouseMove(dayOption)
         fireEvent.click(dayOption)
         expect(screen.getByText('No Show')).toBeInTheDocument()
+        expect(screen.getByText('IP record')).toBeInTheDocument()
+        expect(screen.getAllByText('Surrogate record')).toHaveLength(2)
         expect(screen.queryByText('no_show')).not.toBeInTheDocument()
+    })
+
+    it('keeps attempt calendars restricted to explicitly assigned work', () => {
+        render(<MatchTasksCalendar matchId="match1" attemptId="attempt1" />)
+        expect(mockUseTasks).toHaveBeenCalledWith(expect.objectContaining({ match_id: 'match1', attempt_id: 'attempt1' }))
+        expect(mockUseTasks.mock.calls[0][0]).not.toHaveProperty('include_record_history')
+        expect(mockUseAppointments).toHaveBeenCalledWith(expect.objectContaining({ match_id: 'match1', attempt_id: 'attempt1' }))
+        expect(mockUseAppointments.mock.calls[0][0]).not.toHaveProperty('include_record_history')
     })
 
     it('navigates to previous month', () => {

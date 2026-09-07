@@ -152,6 +152,7 @@ export function useAppointments(
     donor_id?: string;
     match_id?: string;
     attempt_id?: string;
+    include_record_history?: boolean;
     surrogate_id?: string;
     intended_parent_id?: string;
     },

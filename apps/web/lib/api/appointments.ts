@@ -288,6 +288,7 @@ export function getAppointments(params: {
     donor_id?: string;
     match_id?: string;
     attempt_id?: string;
+    include_record_history?: boolean;
     surrogate_id?: string;
     intended_parent_id?: string;
 }): Promise<AppointmentListResponse> {
@@ -300,6 +301,7 @@ export function getAppointments(params: {
     if (params.donor_id) searchParams.append('donor_id', params.donor_id);
     if (params.match_id) searchParams.append('match_id', params.match_id);
     if (params.attempt_id) searchParams.append('attempt_id', params.attempt_id);
+    if (params.include_record_history) searchParams.append('include_record_history', 'true');
     if (params.surrogate_id) searchParams.append('surrogate_id', params.surrogate_id);
     if (params.intended_parent_id) searchParams.append('intended_parent_id', params.intended_parent_id);
     const query = searchParams.toString() ? `?${searchParams}` : '';
