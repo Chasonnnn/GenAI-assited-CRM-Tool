@@ -232,32 +232,37 @@ def normalize_filter_criteria(
     stage_ids: list[UUID] = []
     raw_stage_ids = normalized.get("stage_ids") or []
     donor_recipient = recipient_type in DONOR_RECIPIENT_TYPES
+    parsed_stage_ids: list[UUID] = []
     for value in raw_stage_ids:
         try:
-            stage_id = UUID(str(value))
+            parsed_stage_ids.append(UUID(str(value)))
         except ValueError:
             continue
-        if donor_recipient:
-            stage = (
-                db.query(PipelineStage)
-                .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
-                .filter(
-                    PipelineStage.id == stage_id,
-                    PipelineStage.is_active.is_(True),
-                    Pipeline.organization_id == org_id,
-                    Pipeline.entity_type == pipeline_entity_type,
-                    Pipeline.is_default.is_(True),
-                )
-                .first()
+    stage_by_id: dict[UUID, PipelineStage] = {}
+    if parsed_stage_ids:
+        query = (
+            db.query(PipelineStage)
+            .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
+            .filter(
+                PipelineStage.id.in_(parsed_stage_ids),
+                Pipeline.organization_id == org_id,
             )
-            if stage is None:
-                raise ValueError(
-                    f"Stage filter not found in {recipient_type.replace('_', ' ')} pipeline"
-                )
-        else:
-            stage = pipeline_service.get_stage_by_id(db, stage_id)
+        )
+        if donor_recipient:
+            query = query.filter(
+                PipelineStage.is_active.is_(True),
+                Pipeline.entity_type == pipeline_entity_type,
+                Pipeline.is_default.is_(True),
+            )
+        stage_by_id = {stage.id: stage for stage in query.all()}
+    for stage_id in parsed_stage_ids:
+        stage = stage_by_id.get(stage_id)
+        if donor_recipient and stage is None:
+            raise ValueError(
+                f"Stage filter not found in {recipient_type.replace('_', ' ')} pipeline"
+            )
         if stage and stage.is_active and stage_id not in stage_ids:
-            stage_ids.append(stage.id)
+            stage_ids.append(stage_id)
 
     stage_refs = [
         *[str(value) for value in normalized.get("stage_keys") or []],
@@ -272,46 +277,29 @@ def normalize_filter_criteria(
         )
         .scalar()
     )
-    resolved_ids = pipeline_service.get_stage_ids_by_keys_or_slugs(
-        db,
-        org_id,
-        stage_refs,
-        pipeline_id=default_pipeline_id,
-        entity_type=pipeline_entity_type,
+    if stage_refs and default_pipeline_id is None:
+        default_pipeline_id = pipeline_service.get_or_create_default_pipeline(
+            db, org_id, entity_type=pipeline_entity_type
+        ).id
+    resolved_stages = (
+        pipeline_service.resolve_stages_bulk(db, org_id, default_pipeline_id, stage_refs)
+        if stage_refs
+        else []
     )
-    if donor_recipient and stage_refs:
-        for stage_ref in stage_refs:
-            if not pipeline_service.get_stage_ids_by_keys_or_slugs(
-                db,
-                org_id,
-                [stage_ref],
-                pipeline_id=default_pipeline_id,
-                entity_type=pipeline_entity_type,
-            ):
+    for stage in resolved_stages:
+        if stage is None:
+            if donor_recipient:
                 raise ValueError(
                     f"Stage filter not found in {recipient_type.replace('_', ' ')} pipeline"
                 )
-    for stage_id in resolved_ids:
-        if stage_id not in stage_ids:
-            stage_ids.append(stage_id)
+            continue
+        stage_by_id[stage.id] = stage
+        if stage.id not in stage_ids:
+            stage_ids.append(stage.id)
 
     stage_keys: list[str] = []
     for stage_id in stage_ids:
-        if donor_recipient:
-            stage = (
-                db.query(PipelineStage)
-                .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
-                .filter(
-                    PipelineStage.id == stage_id,
-                    PipelineStage.is_active.is_(True),
-                    Pipeline.organization_id == org_id,
-                    Pipeline.entity_type == pipeline_entity_type,
-                    Pipeline.is_default.is_(True),
-                )
-                .first()
-            )
-        else:
-            stage = pipeline_service.get_stage_by_id(db, stage_id)
+        stage = stage_by_id.get(stage_id)
         if stage and stage.is_active and stage.stage_key and stage.stage_key not in stage_keys:
             stage_keys.append(stage.stage_key)
 
@@ -2437,8 +2425,8 @@ def execute_campaign_run(
 
             from app.services import email_composition_service
 
-            cleaned_body_template = email_composition_service.strip_legacy_unsubscribe_placeholders(
-                template.body
+            cleaned_body_template = (
+                email_composition_service.strip_legacy_unsubscribe_placeholders(template.body)
             )
             subject, body = email_service.render_template(
                 template.subject, cleaned_body_template, variables

@@ -300,23 +300,18 @@ def seed_role_defaults(db: Session, org_id: uuid.UUID) -> int:
     """
     from app.db.models import RolePermission
 
+    existing = set(
+        db.query(RolePermission.role, RolePermission.permission)
+        .filter(RolePermission.organization_id == org_id)
+        .all()
+    )
     count = 0
     for role, permissions in ROLE_DEFAULTS.items():
         if role == "developer":
             continue  # Developer is immutable, no DB rows needed
 
         for permission in permissions:
-            existing = (
-                db.query(RolePermission)
-                .filter(
-                    RolePermission.organization_id == org_id,
-                    RolePermission.role == role,
-                    RolePermission.permission == permission,
-                )
-                .first()
-            )
-
-            if not existing:
+            if (role, permission) not in existing:
                 db.add(
                     RolePermission(
                         organization_id=org_id,

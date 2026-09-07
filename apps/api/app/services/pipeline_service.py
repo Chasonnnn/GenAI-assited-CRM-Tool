@@ -1316,12 +1316,60 @@ def get_stage_ids_by_keys_or_slugs(
 
     stage_ids: list[UUID] = []
     seen: set[UUID] = set()
-    for ref in refs:
-        stage = resolve_stage(db, pipeline_id, ref)
+    for stage in resolve_stages_bulk(db, org_id, pipeline_id, refs):
         if stage and stage.id not in seen:
             seen.add(stage.id)
             stage_ids.append(stage.id)
     return stage_ids
+
+
+def resolve_stages_bulk(
+    db: Session, org_id: UUID, pipeline_id: UUID, refs: list[str | UUID | None]
+) -> list[PipelineStage | None]:
+    """Resolve references in input order with the same precedence as resolve_stage."""
+    normalized = [str(ref).strip() if ref is not None else "" for ref in refs]
+    keys = {_normalize_stage_key(ref) for ref in normalized if ref}
+    slugs = {_normalize_slug(ref) for ref in normalized if ref}
+    ref_ids: dict[str, UUID] = {}
+    for ref in normalized:
+        try:
+            ref_ids[ref] = UUID(ref)
+        except ValueError:
+            pass
+    if not keys and not slugs:
+        return [None for _ in refs]
+
+    stages = (
+        db.query(PipelineStage)
+        .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
+        .filter(
+            Pipeline.organization_id == org_id,
+            PipelineStage.pipeline_id == pipeline_id,
+            (PipelineStage.id.in_(ref_ids.values()))
+            | (PipelineStage.stage_key.in_(keys))
+            | (PipelineStage.slug.in_(slugs | keys)),
+        )
+        .all()
+    )
+    by_id = {stage.id: stage for stage in stages}
+    by_key = {stage.stage_key: stage for stage in stages if stage.stage_key}
+    by_slug = {stage.slug: stage for stage in stages}
+    legacy_by_slug = {stage.slug: stage for stage in stages if stage.stage_key is None}
+    results: list[PipelineStage | None] = []
+    for original_ref, ref in zip(refs, normalized):
+        if isinstance(original_ref, UUID):
+            results.append(by_id.get(original_ref))
+            continue
+        key = _normalize_stage_key(ref)
+        slug = _normalize_slug(ref)
+        results.append(
+            by_id.get(ref_ids.get(ref))
+            or by_key.get(key)
+            or legacy_by_slug.get(key)
+            or by_slug.get(slug)
+            or by_key.get(_normalize_stage_key(slug))
+        )
+    return results
 
 
 def validate_stage_slug(
