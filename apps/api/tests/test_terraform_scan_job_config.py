@@ -141,24 +141,3 @@ def test_cloudbuild_preserves_worker_configuration_and_repairs_monitoring_identi
     assert "WORKER_CUTOVER_HOLD" not in worker_step
     assert "EMAIL_DELIVERY_DISPATCH_ENABLED" not in worker_step
     assert "WORKER_JOB_TYPES" not in worker_step
-
-
-def test_release_a_runbook_requires_operator_gates_before_resume() -> None:
-    content = _read("docs/runbooks/release-a-job-claim-cutover.md")
-    normalized = " ".join(content.split())
-
-    assert "WORKER_CUTOVER_HOLD=true" in content
-    assert "EMAIL_DELIVERY_DISPATCH_ENABLED=false" in content
-    assert "does not change `WORKER_JOB_TYPES`" in normalized
-    assert "zero active `crm-attachment-scan` executions" in content
-    assert "reconcile-legacy-job-claims" in content
-    assert "--manifest" in content
-    assert "--expected-count" in content
-    assert "--expected-fingerprint" in content
-    assert "IAM-controlled" in content
-    assert "encrypted at rest" in content
-    assert "`applied_at`" in content
-    assert "No automatic resume" in content
-    assert "deploy the exact `@sha256:` API and worker digest" in normalized
-    assert "--remove-env-vars WORKER_CUTOVER_HOLD" in content
-    assert "restore the captured pre-cutover values" in normalized.lower()

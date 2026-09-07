@@ -1,8 +1,11 @@
 """Tests for request metrics rollups and AI conversation constraints."""
 
+import asyncio
 import logging
+import threading
 import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import inspect
@@ -10,6 +13,110 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db.models import AIConversation, RequestMetricsRollup
 from app.services import metrics_service
+
+
+def test_request_metrics_use_isolated_session(monkeypatch):
+    """Metrics must not consume the request pool or its active transaction."""
+    from app import main as main_module
+
+    request_db = object()
+    metrics_db = SimpleNamespace(closed=False)
+    metrics_db.close = lambda: setattr(metrics_db, "closed", True)
+    request = SimpleNamespace(
+        method="GET",
+        scope={"route": SimpleNamespace(path="/tests/metrics")},
+        state=SimpleNamespace(request_db=request_db, user_session=None),
+        url=SimpleNamespace(path="/tests/metrics"),
+    )
+    recorded = {}
+
+    def _unexpected_session():
+        raise AssertionError("metrics used the request database pool")
+
+    def _metrics_session():
+        return metrics_db
+
+    def _record_request(**kwargs):
+        recorded.update(kwargs)
+
+    monkeypatch.setattr(main_module, "SessionLocal", _unexpected_session)
+    monkeypatch.setattr(
+        main_module, "MetricsSessionLocal", _metrics_session, raising=False
+    )
+    monkeypatch.setattr(main_module.metrics_service, "record_request", _record_request)
+
+    main_module._record_metrics(request, status_code=200, duration_ms=12)
+
+    assert recorded["db"] is metrics_db
+    assert recorded["route"] == "/tests/metrics"
+    assert recorded["status_code"] == 200
+    assert metrics_db.closed is True
+
+
+@pytest.mark.asyncio
+async def test_metrics_middleware_dispatches_database_write(monkeypatch):
+    """A slow metrics write must not block the event loop."""
+    from app import main as main_module
+
+    request = SimpleNamespace(url=SimpleNamespace(path="/tests/metrics"))
+    response = SimpleNamespace(status_code=200)
+    calls = []
+
+    async def _call_next(_request):
+        return response
+
+    async def _record_metrics_async(*args):
+        calls.append(("offload", args))
+
+    monkeypatch.setattr(
+        main_module, "_record_metrics_async", _record_metrics_async, raising=False
+    )
+
+    result = await main_module.metrics_middleware(request, _call_next)
+
+    assert result is response
+    assert [call[0] for call in calls] == ["offload"]
+
+
+@pytest.mark.asyncio
+async def test_metrics_contention_does_not_starve_liveness_threads(monkeypatch):
+    """Blocked metrics writes must not consume FastAPI's shared worker tokens."""
+    from httpx import ASGITransport, AsyncClient
+
+    from app import main as main_module
+
+    loop = asyncio.get_running_loop()
+    metrics_started = asyncio.Event()
+    release_metrics = threading.Event()
+    request = SimpleNamespace(url=SimpleNamespace(path="/tests/metrics"))
+    response = SimpleNamespace(status_code=200)
+
+    async def _call_next(_request):
+        return response
+
+    def _blocked_record_metrics(*_args):
+        loop.call_soon_threadsafe(metrics_started.set)
+        release_metrics.wait(timeout=2)
+
+    monkeypatch.setattr(main_module, "_record_metrics", _blocked_record_metrics)
+
+    metrics_tasks = [
+        asyncio.create_task(main_module.metrics_middleware(request, _call_next))
+        for _ in range(40)
+    ]
+    try:
+        await asyncio.wait_for(metrics_started.wait(), timeout=0.5)
+        async with AsyncClient(
+            transport=ASGITransport(app=main_module.app), base_url="https://test"
+        ) as client:
+            health_response = await asyncio.wait_for(
+                client.get("/health/live"), timeout=0.25
+            )
+
+        assert health_response.status_code == 200
+    finally:
+        release_metrics.set()
+        await asyncio.gather(*metrics_tasks)
 
 
 def test_record_request_dedupes_null_org(db, monkeypatch):
