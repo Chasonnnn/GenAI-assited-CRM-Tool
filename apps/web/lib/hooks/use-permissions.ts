@@ -26,6 +26,7 @@ const KEYS = {
     permissions: ["permissions"] as const,
     members: ["permissions", "members"] as const,
     member: (id: string) => ["permissions", "members", id] as const,
+    effectivePermissions: ["permissions", "effective"] as const,
     effective: (userId: string) => ["permissions", "effective", userId] as const,
     roles: ["permissions", "roles"] as const,
     role: (role: string) => ["permissions", "roles", role] as const,
@@ -67,6 +68,7 @@ export function useUpdateMember() {
         onSuccess: (_, { memberId }) => {
             void queryClient.invalidateQueries({ queryKey: KEYS.member(memberId) })
             void queryClient.invalidateQueries({ queryKey: KEYS.members })
+            void queryClient.invalidateQueries({ queryKey: KEYS.effectivePermissions })
         },
     })
 }
@@ -78,13 +80,14 @@ export function useRemoveMember() {
         mutationFn: (memberId: string) => removeMember(memberId),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: KEYS.members })
+            void queryClient.invalidateQueries({ queryKey: KEYS.effectivePermissions })
         },
     })
 }
 
 export function useEffectivePermissions(userId: string | null) {
     return useQuery({
-        queryKey: KEYS.effective("me"),
+        queryKey: KEYS.effective(userId || ""),
         queryFn: getMyEffectivePermissions,
         enabled: !!userId,
     })
@@ -150,6 +153,8 @@ export function useUpdateRolePermissions() {
         onSuccess: (_, { role }) => {
             void queryClient.invalidateQueries({ queryKey: KEYS.role(role) })
             void queryClient.invalidateQueries({ queryKey: KEYS.roles })
+            void queryClient.invalidateQueries({ queryKey: KEYS.members })
+            void queryClient.invalidateQueries({ queryKey: KEYS.effectivePermissions })
         },
     })
 }
@@ -162,6 +167,7 @@ export function useBulkUpdateRoles() {
             bulkUpdateRoles(memberIds, role),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: KEYS.members })
+            void queryClient.invalidateQueries({ queryKey: KEYS.effectivePermissions })
         },
     })
 }
