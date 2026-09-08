@@ -20,6 +20,8 @@ Global UX discovery and shared visual rules also start early. Each feature adopt
 
 The role-editor visual direction is selected: variant 2. The [permission execution plan](permission-upgrade-execution-plan.md) defines the first implementation packages, parallel work, and activation gates. Operations defaults remain open; they do not block behavior-preserving extraction or work on the agreed roles.
 
+The first foundation batch is implemented and verified locally: permission resolution, workflow definition rules, template editing authorization, and permission-cache correction. The [module refactor plan](permission-module-refactor-plan.md) maps the remaining record, workflow, campaign, form, reporting, and UI work. The upgraded policy and administration UI are not yet active.
+
 ## 1. Permissions and module foundations
 
 - [ ] Inventory module availability, action permissions, record scope, ownership, field restrictions where needed, and approval requirements separately.

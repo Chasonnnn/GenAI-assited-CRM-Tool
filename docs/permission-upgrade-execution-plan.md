@@ -1,6 +1,16 @@
 # Permission upgrade execution plan
 
-Status: proposed implementation sequence. Permission behavior remains unchanged. Role-editor visual variant 2 is selected; Operations defaults and the complete permission matrix remain open.
+Status: implementation started. The first foundation batch is implemented and verified locally; server permission rules remain unchanged. Role-editor visual variant 2 is selected; Operations defaults and the complete permission matrix remain open.
+
+## First delivery
+
+- Extracted deterministic permission resolution while preserving scoped loading, existing precedence, audits, and transaction ownership.
+- Extracted workflow trigger and action-ordering rules from the workflow CRUD service.
+- Centralized template editing authorization across published templates and drafts.
+- Fixed effective-permission cache identity and refresh after role/member changes.
+- Passed 3,124 backend tests and 1,513 frontend tests, frontend type checking/lint, and changed-Python Ruff checks. Independent reviews found no actionable issues in these changes.
+
+The [module refactor plan](permission-module-refactor-plan.md) defines the next owned packages. The new record-scope model, approval handoff, administration UI, and production migration remain subsequent milestones.
 
 ## Order
 
