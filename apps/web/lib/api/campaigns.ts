@@ -27,6 +27,7 @@ export type CampaignRecipientType =
 
 export interface CampaignCreate {
     name: string
+    scope?: "personal" | "org"
     description?: string
     channel?: "email" | "messaging"
     email_template_id?: string
@@ -50,6 +51,13 @@ export interface CampaignUpdate {
 }
 
 export interface Campaign {
+    scope?: "personal" | "org"
+    owner_user_id?: string | null
+    proposed_by_user_id?: string | null
+    proposed_by_name?: string | null
+    can_edit?: boolean
+    can_send?: boolean
+    can_publish?: boolean
     id: string
     name: string
     description: string | null
@@ -77,6 +85,13 @@ export interface Campaign {
 }
 
 export interface CampaignListItem {
+    scope?: "personal" | "org"
+    owner_user_id?: string | null
+    proposed_by_user_id?: string | null
+    proposed_by_name?: string | null
+    can_edit?: boolean
+    can_send?: boolean
+    can_publish?: boolean
     id: string
     name: string
     channel: "email" | "messaging"
@@ -200,6 +215,7 @@ export async function duplicateCampaign(id: string): Promise<Campaign> {
     const original = await getCampaign(id)
     const payload: CampaignCreate = {
         name: `${original.name} (Copy)`,
+        scope: original.scope ?? "org",
         channel: original.channel,
         recipient_type: original.recipient_type,
         filter_criteria: original.filter_criteria,
@@ -236,11 +252,15 @@ export async function previewFilters(
     recipientType: CampaignRecipientType,
     filterCriteria: FilterCriteria,
     includeUnsubscribed: boolean,
-    limit?: number
+    limit?: number,
+    scope: "personal" | "org" = "org",
+    ownerUserId?: string
 ): Promise<CampaignPreview> {
     const query = limit ? `?limit=${limit}` : ""
     return api.post<CampaignPreview>(`/campaigns/preview-filters${query}`, {
         channel,
+        scope,
+        ...(ownerUserId ? { owner_user_id: ownerUserId } : {}),
         recipient_type: recipientType,
         filter_criteria: filterCriteria,
         include_unsubscribed: includeUnsubscribed,
@@ -318,4 +338,8 @@ export async function addSuppression(email: string, reason = "opt_out"): Promise
 
 export async function removeSuppression(email: string): Promise<void> {
     return api.delete(`/campaigns/suppressions/${encodeURIComponent(email)}`)
+}
+
+export async function publishCampaign(id: string): Promise<Campaign> {
+    return api.post<Campaign>(`/campaigns/${id}/publish`)
 }

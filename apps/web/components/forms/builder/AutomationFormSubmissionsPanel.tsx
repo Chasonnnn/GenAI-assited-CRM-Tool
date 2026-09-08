@@ -29,6 +29,8 @@ type RetryMatchOptions = {
 }
 
 type AutomationFormSubmissionsPanelProps = {
+    canReview?: boolean
+    showWorkflowApprovals?: boolean
     formId: string | null
     pendingSubmissionHistory: FormSubmissionRead[]
     processedSubmissionHistory: FormSubmissionRead[]
@@ -586,16 +588,19 @@ function SubmissionHistoryBadges({
 }
 
 function SubmissionHistoryActions({
+    canReview = true,
     submission,
     retrySubmissionMatchPending,
     onSelectQueueSubmission,
     onRetrySubmissionMatch,
 }: Pick<
     AutomationFormSubmissionsPanelProps,
+    "canReview" |
     "retrySubmissionMatchPending" | "onSelectQueueSubmission" | "onRetrySubmissionMatch"
 > & {
     submission: FormSubmissionRead
 }) {
+    if (!canReview) return null
     const canReviewCandidates =
         submission.source_mode === "shared" &&
         submission.match_status === "ambiguous_review" &&
@@ -685,6 +690,7 @@ function SubmissionHistoryActions({
 }
 
 function SubmissionHistoryEntry({
+    canReview = true,
     submission,
     readAnswerValue,
     formatSubmissionDateTime,
@@ -697,6 +703,7 @@ function SubmissionHistoryEntry({
     onRetrySubmissionMatch,
 }: Pick<
     AutomationFormSubmissionsPanelProps,
+    "canReview"
     | "readAnswerValue"
     | "formatSubmissionDateTime"
     | "submissionOutcomeLabel"
@@ -724,6 +731,7 @@ function SubmissionHistoryEntry({
                 formatSubmissionDateTime={formatSubmissionDateTime}
             />
             <SubmissionHistoryActions
+                canReview={canReview}
                 submission={submission}
                 retrySubmissionMatchPending={retrySubmissionMatchPending}
                 onSelectQueueSubmission={onSelectQueueSubmission}
@@ -734,6 +742,7 @@ function SubmissionHistoryEntry({
 }
 
 function SubmissionHistoryCard({
+    canReview = true,
     visibleSubmissionHistory,
     submissionHistoryFilter,
     isSubmissionHistoryLoading,
@@ -749,6 +758,7 @@ function SubmissionHistoryCard({
     onRetrySubmissionMatch,
 }: Pick<
     AutomationFormSubmissionsPanelProps,
+    "canReview"
     | "visibleSubmissionHistory"
     | "submissionHistoryFilter"
     | "isSubmissionHistoryLoading"
@@ -782,6 +792,7 @@ function SubmissionHistoryCard({
                     <div className="space-y-3">
                         {visibleSubmissionHistory.map((submission) => (
                             <SubmissionHistoryEntry
+                canReview={canReview}
                                 key={submission.id}
                                 submission={submission}
                                 readAnswerValue={readAnswerValue}
@@ -909,6 +920,8 @@ function SubmissionCandidateReviewCard({
 }
 
 export function AutomationFormSubmissionsPanel({
+    canReview = true,
+    showWorkflowApprovals = true,
     formId,
     pendingSubmissionHistory,
     processedSubmissionHistory,
@@ -944,14 +957,14 @@ export function AutomationFormSubmissionsPanel({
 }: AutomationFormSubmissionsPanelProps) {
     return (
         <div className="mx-auto max-w-6xl space-y-6">
-            <WorkflowApprovalCard onOpenApprovalQueue={onOpenApprovalQueue} />
+            {showWorkflowApprovals && <WorkflowApprovalCard onOpenApprovalQueue={onOpenApprovalQueue} />}
             <SubmissionMetricsGrid
                 pendingSubmissionHistory={pendingSubmissionHistory}
                 processedSubmissionHistory={processedSubmissionHistory}
                 ambiguousSubmissions={ambiguousSubmissions}
                 leadQueueSubmissions={leadQueueSubmissions}
             />
-            <SubmissionReviewQueues
+            {canReview && <SubmissionReviewQueues
                 formId={formId}
                 ambiguousSubmissions={ambiguousSubmissions}
                 leadQueueSubmissions={leadQueueSubmissions}
@@ -962,8 +975,9 @@ export function AutomationFormSubmissionsPanel({
                 onSelectQueueSubmission={onSelectQueueSubmission}
                 onResolveSubmissionToLead={onResolveSubmissionToLead}
                 onPromoteLeadFromSubmission={onPromoteLeadFromSubmission}
-            />
+            />}
             <SubmissionHistoryCard
+                canReview={canReview}
                 visibleSubmissionHistory={visibleSubmissionHistory}
                 submissionHistoryFilter={submissionHistoryFilter}
                 isSubmissionHistoryLoading={isSubmissionHistoryLoading}
@@ -978,7 +992,7 @@ export function AutomationFormSubmissionsPanel({
                 onSelectQueueSubmission={onSelectQueueSubmission}
                 onRetrySubmissionMatch={onRetrySubmissionMatch}
             />
-            <SubmissionCandidateReviewCard
+            {canReview && <SubmissionCandidateReviewCard
                 selectedQueueSubmissionId={selectedQueueSubmissionId}
                 selectedMatchCandidates={selectedMatchCandidates}
                 isMatchCandidatesLoading={isMatchCandidatesLoading}
@@ -989,7 +1003,7 @@ export function AutomationFormSubmissionsPanel({
                 onResolveReviewNotesChange={onResolveReviewNotesChange}
                 onLinkByManualSurrogateId={onLinkByManualSurrogateId}
                 onResolveSubmissionToSurrogate={onResolveSubmissionToSurrogate}
-            />
+            />}
         </div>
     )
 }

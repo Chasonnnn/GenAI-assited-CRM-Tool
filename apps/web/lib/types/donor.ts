@@ -14,6 +14,7 @@ export interface Donor {
     source: string | null
     owner_type: DonorOwnerType | null
     owner_id: string | null
+    owner_name?: string | null
     stage_id: string
     stage_key: string
     stage_slug: string

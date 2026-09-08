@@ -31,6 +31,7 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
         noteCount,
         taskCount,
         canViewProfile,
+        canEditSurrogate,
         navigateToList,
     } = useSurrogateDetailData()
     const {
@@ -111,7 +112,7 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
                         </TabsTrigger>
                     </TabsList>
 
-                    <SurrogateDetailProvider surrogate={surrogate}>
+                    <SurrogateDetailProvider surrogate={surrogate} canEditSurrogate={canEditSurrogate}>
                         {children}
                     </SurrogateDetailProvider>
                 </Tabs>

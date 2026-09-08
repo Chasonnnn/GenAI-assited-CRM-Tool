@@ -288,6 +288,7 @@ export function InterviewCommentsProvider({
 
     // Comment actions
     const startPendingComment = (selection: { text: string; range: Range }) => {
+        if (!canEdit) return
         const commentId = crypto.randomUUID()
         const rect = selection.range.getClientRects()[0]
         const transcriptRect = transcriptRef.current?.getBoundingClientRect()
@@ -315,6 +316,7 @@ export function InterviewCommentsProvider({
     }
 
     const startAddingGeneralNote = () => {
+        if (!canEdit) return
         setNewComment({ type: "adding_general" })
     }
 
@@ -325,7 +327,7 @@ export function InterviewCommentsProvider({
 
     // Mutations
     const submitComment = async (content: string) => {
-        if (newComment.type !== "pending" || !content.trim()) return
+        if (!canEdit || newComment.type !== "pending" || !content.trim()) return
 
         setIsSubmitting(true)
         const result = await resolveMutationResult(onAddNote({
@@ -341,7 +343,7 @@ export function InterviewCommentsProvider({
     }
 
     const submitGeneralNote = async () => {
-        if (!newNoteContent.trim()) return
+        if (!canEdit || !newNoteContent.trim()) return
 
         setIsSubmitting(true)
         const result = await resolveMutationResult(onAddNote({
@@ -358,6 +360,7 @@ export function InterviewCommentsProvider({
     }
 
     const submitReply = async (noteId: string, content: string) => {
+        if (!canEdit) return
         const parentNote = notes.find((n) => n.id === noteId)
         if (!parentNote) return
 
@@ -375,10 +378,12 @@ export function InterviewCommentsProvider({
     }
 
     const updateNote = async (noteId: string, content: string) => {
+        if (!canEdit) return
         await onUpdateNote(noteId, content)
     }
 
     const deleteNote = async (noteId: string) => {
+        if (!canEdit) return
         await onDeleteNote(noteId)
     }
 
@@ -392,7 +397,7 @@ export function InterviewCommentsProvider({
 
         // State
         interaction,
-        newComment,
+        newComment: canEdit ? newComment : { type: "none" },
         isSubmitting,
         commentPositions,
         layoutMinHeight,

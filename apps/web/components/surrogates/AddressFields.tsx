@@ -3,12 +3,13 @@
 import { InlineEditField } from "@/components/inline-edit-field"
 
 interface AddressFieldsProps<T extends object> {
+    readOnly?: boolean
     prefix: string  // e.g., 'clinic', 'monitoring_clinic', 'ob', 'delivery_hospital'
     data: T
     onUpdate: (field: string, value: string | null) => Promise<void>
 }
 
-export function AddressFields<T extends object>({ prefix, data, onUpdate }: AddressFieldsProps<T>) {
+export function AddressFields<T extends object>({ prefix, data, onUpdate, readOnly = false }: AddressFieldsProps<T>) {
     const field = (name: string) => `${prefix}_${name}`
     const dataRecord = data as unknown as Record<string, string | null | undefined>
     const getValue = (name: string) => dataRecord[field(name)] ?? null
@@ -18,6 +19,7 @@ export function AddressFields<T extends object>({ prefix, data, onUpdate }: Addr
             <div className="flex items-center gap-2">
                 <span className="text-muted-foreground w-16 shrink-0">Line 1:</span>
                 <InlineEditField
+                    readOnly={readOnly}
                     value={getValue('address_line1')}
                     onSave={(v) => onUpdate(field('address_line1'), v || null)}
                     placeholder="Street address"
@@ -26,6 +28,7 @@ export function AddressFields<T extends object>({ prefix, data, onUpdate }: Addr
             <div className="flex items-center gap-2">
                 <span className="text-muted-foreground w-16 shrink-0">Line 2:</span>
                 <InlineEditField
+                    readOnly={readOnly}
                     value={getValue('address_line2')}
                     onSave={(v) => onUpdate(field('address_line2'), v || null)}
                     placeholder="Suite, unit, etc."
@@ -34,6 +37,7 @@ export function AddressFields<T extends object>({ prefix, data, onUpdate }: Addr
             <div className="flex items-center gap-2">
                 <span className="text-muted-foreground w-16 shrink-0">City:</span>
                 <InlineEditField
+                    readOnly={readOnly}
                     value={getValue('city')}
                     onSave={(v) => onUpdate(field('city'), v || null)}
                     placeholder="City"
@@ -43,6 +47,7 @@ export function AddressFields<T extends object>({ prefix, data, onUpdate }: Addr
                 <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">State:</span>
                     <InlineEditField
+                        readOnly={readOnly}
                         value={getValue('state')}
                         onSave={(v) => onUpdate(field('state'), v || null)}
                         placeholder="XX"
@@ -52,6 +57,7 @@ export function AddressFields<T extends object>({ prefix, data, onUpdate }: Addr
                 <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">ZIP:</span>
                     <InlineEditField
+                        readOnly={readOnly}
                         value={getValue('postal')}
                         onSave={(v) => onUpdate(field('postal'), v || null)}
                         placeholder="00000"

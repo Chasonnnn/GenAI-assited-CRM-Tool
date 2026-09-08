@@ -5,6 +5,17 @@ import { InlineEditField } from "@/components/inline-edit-field"
 import { InlineDateField } from "@/components/inline-date-field"
 
 describe("Inline field accessibility", () => {
+    it('removes an open inline editor when it becomes read-only', () => {
+        const onSave = vi.fn()
+        const view = render(<InlineEditField value="Original" label="Name" onSave={onSave} />)
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Name' }))
+        view.rerender(<InlineEditField value="Original" label="Name" onSave={onSave} readOnly />)
+        expect(screen.getByText('Original')).toBeInTheDocument()
+        expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Edit Name' })).not.toBeInTheDocument()
+        expect(onSave).not.toHaveBeenCalled()
+    })
+
     it("uses a native button trigger for InlineEditField display mode", () => {
         render(
             <InlineEditField

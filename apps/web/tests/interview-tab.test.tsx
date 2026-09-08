@@ -2,6 +2,13 @@ import type { ReactNode, ButtonHTMLAttributes } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { SurrogateInterviewTab } from '../components/surrogates/interviews/SurrogateInterviewTab'
+import SurrogateInterviewsPage from '@/app/(app)/surrogates/[id]/interviews/page'
+
+const permissionState = vi.hoisted(() => ({
+    role: 'case_manager',
+    version: 1,
+    permissions: ['view_surrogates'] as string[],
+}))
 
 const mockUseInterviews = vi.fn()
 const mockUseInterview = vi.fn()
@@ -30,7 +37,15 @@ function deferred<T>(): Deferred<T> {
 }
 
 vi.mock('@/lib/auth-context', () => ({
-    useAuth: () => ({ user: { role: 'case_manager', user_id: 'u1' } }),
+    useAuth: () => ({ user: { role: permissionState.role, user_id: 'u1' } }),
+}))
+vi.mock('next/navigation', () => ({ useParams: () => ({ id: 'c1' }) }))
+vi.mock('@/components/ui/tabs', () => ({ TabsContent: ({ children }: { children: ReactNode }) => <div>{children}</div> }))
+vi.mock('@/components/surrogates/detail/SurrogateDetailLayout/context', () => ({
+    useSurrogateDetailData: () => ({
+        effectivePermissions: { policy_version: permissionState.version, permissions: permissionState.permissions },
+        canEditSurrogate: permissionState.version !== 2 || permissionState.permissions.includes('edit_surrogates'),
+    }),
 }))
 
 vi.mock('@/components/rich-text-editor', () => ({
@@ -42,7 +57,7 @@ vi.mock('@/components/rich-text-editor', () => ({
 }))
 
 vi.mock('@/components/surrogates/interviews/InterviewVersionHistory', () => ({
-    InterviewVersionHistory: () => <div data-testid="interview-version-history" />,
+    InterviewVersionHistory: ({ canRestore }: { canRestore: boolean }) => <div data-testid="interview-version-history"><button disabled={!canRestore}>Restore version</button></div>,
 }))
 
 // Simplify Base UI dropdowns/dialogs to avoid portal/focus issues in tests.
@@ -167,6 +182,9 @@ describe('SurrogateInterviewTab', () => {
     ]
 
     beforeEach(() => {
+        permissionState.role = 'case_manager'
+        permissionState.version = 1
+        permissionState.permissions = ['view_surrogates']
         mockUseInterviews.mockReturnValue({ data: interviewList, isLoading: false })
         mockUseInterview.mockImplementation((interviewId: string) => ({
             data: interviewId ? interviewDetail : null,
@@ -177,6 +195,72 @@ describe('SurrogateInterviewTab', () => {
             data: interviewId ? attachments : [],
         }))
         mockRequestTranscription.mockResolvedValue({})
+    })
+
+    it('keeps Operations interviews and attachments readable without write actions', async () => {
+        permissionState.role = 'operations'
+        permissionState.version = 2
+        render(<SurrogateInterviewsPage />)
+        expect(screen.queryByRole('button', { name: 'Add Interview' })).not.toBeInTheDocument()
+        fireEvent.click(screen.getAllByText('Phone')[0])
+        expect(await screen.findByText('Phone Interview')).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /^Edit$/ })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /^Delete$/ })).not.toBeInTheDocument()
+        fireEvent.click(screen.getAllByRole('button', { name: 'General Notes' })[0])
+        expect(screen.queryByRole('button', { name: 'Add general note' })).not.toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'AI Summary' })).toBeDisabled()
+        fireEvent.click(screen.getAllByRole('button', { name: /^Attachments/ })[0])
+        expect(await screen.findByText('audio.mp3')).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Upload' })).not.toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Transcribe' })).toBeDisabled()
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+        fireEvent.click(screen.getAllByRole('button', { name: 'Version History' })[0])
+        expect(screen.getByRole('button', { name: 'Restore version' })).toBeDisabled()
+    })
+
+    it('uses delegated edits for Operations and closes an editor after permission revocation', async () => {
+        permissionState.role = 'operations'
+        permissionState.version = 2
+        permissionState.permissions.push('edit_surrogates')
+        const view = render(<SurrogateInterviewsPage />)
+        fireEvent.click(screen.getAllByText('Phone')[0])
+        expect(await screen.findByText('Phone Interview')).toBeInTheDocument()
+        expect(screen.getAllByRole('button', { name: /^Delete$/ }).length).toBeGreaterThan(0)
+        fireEvent.click(screen.getAllByRole('button', { name: 'General Notes' })[0])
+        fireEvent.click(screen.getAllByRole('button', { name: 'Add general note' })[0])
+        expect(screen.getByPlaceholderText('Add a note...')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'AI Summary' })).toBeDisabled()
+        fireEvent.click(screen.getAllByRole('button', { name: /^Edit$/ })[0])
+        expect(await screen.findByRole('combobox', { name: /interview type/i })).toBeInTheDocument()
+        permissionState.permissions = ['view_surrogates']
+        view.rerender(<SurrogateInterviewsPage />)
+        expect(screen.queryByRole('combobox', { name: /interview type/i })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Add general note' })).not.toBeInTheDocument()
+        expect(screen.queryByPlaceholderText('Add a note...')).not.toBeInTheDocument()
+    })
+
+    it('does not allow Operations to add an interview from the empty state', () => {
+        permissionState.role = 'operations'
+        permissionState.version = 2
+        mockUseInterviews.mockReturnValue({ data: [], isLoading: false })
+        render(<SurrogateInterviewsPage />)
+        expect(screen.getByText('No Interviews')).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /add interview/i })).not.toBeInTheDocument()
+    })
+
+    it('allows delegated Operations to upload, transcribe, restore, and summarize with AI permission', async () => {
+        permissionState.role = 'operations'
+        permissionState.version = 2
+        permissionState.permissions.push('edit_surrogates', 'use_ai_assistant')
+        render(<SurrogateInterviewsPage />)
+        fireEvent.click(screen.getAllByText('Phone')[0])
+        expect(await screen.findByRole('button', { name: 'AI Summary' })).toBeEnabled()
+        fireEvent.click(screen.getAllByRole('button', { name: /^Attachments/ })[0])
+        expect(await screen.findByRole('button', { name: 'Upload' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Transcribe' })).toBeEnabled()
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+        fireEvent.click(screen.getAllByRole('button', { name: 'Version History' })[0])
+        expect(screen.getByRole('button', { name: 'Restore version' })).toBeEnabled()
     })
 
     it('renders empty state when no interviews exist', () => {

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { useSurrogateDetailData } from '@/components/surrogates/detail/SurrogateDetailLayout/context'
 import type { SurrogateEmailContactCreatePayload } from '@/lib/api/surrogate-emails'
 import {
     useCreateSurrogateEmailContact,
@@ -20,6 +21,8 @@ import {
 export default function SurrogateEmailsPage() {
     const params = useParams<{ id: string }>()
     const surrogateId = params.id
+    const { effectivePermissions } = useSurrogateDetailData()
+    const canManageContacts = effectivePermissions?.policy_version !== 2 || effectivePermissions.permissions.includes("link_ticket_surrogates")
 
     const { data: emailsData, isLoading: emailsLoading } = useSurrogateEmails(surrogateId)
     const { data: contactsData, isLoading: contactsLoading } = useSurrogateEmailContacts(surrogateId)
@@ -32,6 +35,7 @@ export default function SurrogateEmailsPage() {
     const [contactType, setContactType] = useState('')
 
     const handleAddContact = async () => {
+        if (!canManageContacts) return
         const email = contactEmail.trim()
         if (!email) {
             toast.error('Email is required')
@@ -61,6 +65,7 @@ export default function SurrogateEmailsPage() {
     }
 
     const handleDeactivate = async (contactId: string) => {
+        if (!canManageContacts) return
         try {
             await deactivateContact.mutateAsync(contactId)
             toast.success('Contact deactivated')
@@ -112,23 +117,26 @@ export default function SurrogateEmailsPage() {
                 <CardContent className="space-y-4">
                     <div className="grid gap-2 md:grid-cols-4">
                         <Input
+                            disabled={!canManageContacts}
                             placeholder="Email"
                             value={contactEmail}
                             onChange={(event) => setContactEmail(event.target.value)}
                             className="md:col-span-2"
                         />
                         <Input
+                            disabled={!canManageContacts}
                             placeholder="Label"
                             value={contactLabel}
                             onChange={(event) => setContactLabel(event.target.value)}
                         />
                         <Input
+                            disabled={!canManageContacts}
                             placeholder="Type"
                             value={contactType}
                             onChange={(event) => setContactType(event.target.value)}
                         />
                     </div>
-                    <Button onClick={handleAddContact} disabled={createContact.isPending}>
+                    <Button onClick={handleAddContact} disabled={!canManageContacts || createContact.isPending}>
                         {createContact.isPending ? 'Adding…' : 'Add Contact'}
                     </Button>
 
@@ -151,7 +159,7 @@ export default function SurrogateEmailsPage() {
                                             variant="outline"
                                             size="sm"
                                             onClick={() => handleDeactivate(contact.id)}
-                                            disabled={!contact.is_active || deactivateContact.isPending}
+                                            disabled={!canManageContacts || !contact.is_active || deactivateContact.isPending}
                                         >
                                             {contact.is_active ? 'Deactivate' : 'Inactive'}
                                         </Button>

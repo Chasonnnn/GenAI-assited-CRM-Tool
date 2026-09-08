@@ -103,10 +103,12 @@ function PregnancySummary({ pregnancy }: { pregnancy: PregnancyData }) {
 }
 
 function DueDateDisplay({
+    readOnly,
     pregnancy,
     hasManualDueDate,
     onEdit,
 }: {
+    readOnly: boolean
     pregnancy: PregnancyData | null
     hasManualDueDate: boolean
     onEdit: () => void
@@ -117,6 +119,7 @@ function DueDateDisplay({
                 type="button"
                 className="-mx-1 rounded px-1 text-left text-sm text-muted-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={onEdit}
+                disabled={readOnly}
                 aria-label="Edit due date"
             >
                 Select embryo stage to calculate
@@ -136,7 +139,8 @@ function DueDateDisplay({
                     render={
                         <Button unstyled
                             type="button"
-                            aria-label="Edit due date"
+                            disabled={readOnly}
+                aria-label="Edit due date"
                             className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         />
                     }
@@ -232,11 +236,13 @@ function usePregnancyTracker(
 }
 
 interface PregnancyTrackerCardProps {
+    readOnly?: boolean
     surrogateData: SurrogateRead
     onUpdate: (data: Partial<SurrogateUpdatePayload>) => Promise<void>
 }
 
 export function PregnancyTrackerCard({
+    readOnly = false,
     surrogateData,
     onUpdate,
 }: PregnancyTrackerCardProps) {
@@ -310,13 +316,13 @@ export function PregnancyTrackerCard({
                 <div className="space-y-3 pt-2 border-t">
                     <div className="flex items-center gap-2">
                         <span className="text-sm text-muted-foreground w-28 shrink-0">Embryo Stage:</span>
-                        {isEditingEmbryoStage ? (
+                        {isEditingEmbryoStage && !readOnly ? (
                             <div className="flex min-w-0 flex-col gap-1">
                                 <div className="flex items-center gap-1">
                                     <Select
                                         value={surrogateData.embryo_stage ?? "unknown"}
                                         onValueChange={(value) => void handleEmbryoStageChange(value)}
-                                        disabled={isSavingEmbryoStage}
+                                        disabled={readOnly || isSavingEmbryoStage}
                                     >
                                         <SelectTrigger
                                             aria-label="Embryo Stage"
@@ -348,7 +354,7 @@ export function PregnancyTrackerCard({
                                             setEmbryoStageError(null)
                                             setIsEditingEmbryoStage(false)
                                         }}
-                                        disabled={isSavingEmbryoStage}
+                                        disabled={readOnly || isSavingEmbryoStage}
                                         aria-label="Cancel Embryo Stage"
                                     >
                                         {isSavingEmbryoStage ? (
@@ -366,6 +372,7 @@ export function PregnancyTrackerCard({
                             <Button unstyled
                                 type="button"
                                 className="group -mx-1 flex w-fit cursor-pointer appearance-none items-center gap-1 rounded border-0 bg-transparent px-1 text-left text-inherit transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                disabled={readOnly}
                                 onClick={handleEditEmbryoStage}
                                 aria-label="Edit Embryo Stage"
                             >
@@ -385,6 +392,7 @@ export function PregnancyTrackerCard({
                         <span className="text-sm text-muted-foreground w-28 shrink-0">Transferred Date:</span>
                         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                             <InlineDateField
+                                disabled={readOnly}
                                 value={surrogateData.pregnancy_start_date}
                                 onSave={async (v) => {
                                     await onUpdate({ pregnancy_start_date: v })
@@ -405,8 +413,9 @@ export function PregnancyTrackerCard({
                         <div className="flex items-start gap-2">
                             <span className="text-sm text-muted-foreground w-28 shrink-0">Due Date:</span>
 
-                            {isEditingDueDate ? (
+                            {isEditingDueDate && !readOnly ? (
                                 <InlineDateField
+                                    disabled={readOnly}
                                     value={surrogateData.pregnancy_due_date || (pregnancy?.status === "known" ? format(pregnancy.calculatedDueDate, "yyyy-MM-dd") : "")}
                                     onSave={async (v) => {
                                         await onUpdate({ pregnancy_due_date: v })
@@ -417,6 +426,7 @@ export function PregnancyTrackerCard({
                                 />
                             ) : (
                                 <DueDateDisplay
+                                    readOnly={readOnly}
                                     pregnancy={pregnancy}
                                     hasManualDueDate={hasManualDueDate}
                                     onEdit={handleEditDueDate}
@@ -430,6 +440,7 @@ export function PregnancyTrackerCard({
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground w-28 shrink-0">Actual Delivery Date:</span>
                             <InlineDateField
+                                disabled={readOnly}
                                 value={surrogateData.actual_delivery_date}
                                 onSave={async (v) => {
                                     await onUpdate({ actual_delivery_date: v })
@@ -450,6 +461,7 @@ export function PregnancyTrackerCard({
                             <div className="flex items-center gap-2">
                                 <span className="text-sm text-muted-foreground w-28 shrink-0">Gender:</span>
                                 <InlineEditField
+                                    readOnly={readOnly}
                                     value={surrogateData.delivery_baby_gender ?? undefined}
                                     onSave={async (v) => {
                                         await onUpdate({ delivery_baby_gender: v || null })
@@ -461,6 +473,7 @@ export function PregnancyTrackerCard({
                             <div className="flex items-center gap-2">
                                 <span className="text-sm text-muted-foreground w-28 shrink-0">Weight:</span>
                                 <InlineEditField
+                                    readOnly={readOnly}
                                     value={surrogateData.delivery_baby_weight ?? undefined}
                                     onSave={async (v) => {
                                         await onUpdate({ delivery_baby_weight: v || null })

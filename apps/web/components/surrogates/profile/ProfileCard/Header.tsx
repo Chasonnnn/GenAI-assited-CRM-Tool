@@ -14,7 +14,7 @@ import { PROFILE_HEADER_NAME_KEY, PROFILE_HEADER_NOTE_KEY, renderProfileTemplate
 
 export function Header() {
     const { profile } = useProfileCardData()
-    const { mode, enterEditMode } = useProfileCardMode()
+    const { mode, enterEditMode, readOnly } = useProfileCardMode()
     const { editedFields, setFieldValue } = useProfileCardEdits()
     const {
         cancelAllChanges,
@@ -82,7 +82,7 @@ export function Header() {
                     variant="outline"
                     className="h-7"
                     onClick={syncProfile}
-                    disabled={isSyncing}
+                    disabled={readOnly || isSyncing}
                 >
                     {isSyncing ? (
                         <Loader2Icon className="size-3.5 animate-spin" />
@@ -105,6 +105,7 @@ export function Header() {
                         size="sm"
                         className="h-7"
                         onClick={enterEditMode}
+                        disabled={readOnly}
                     >
                         <EditIcon className="size-3.5 mr-1.5" />
                         Edit

@@ -46,6 +46,7 @@ export function EditorDialog() {
         createOrUpdateInterview,
         isCreatePending,
         isUpdatePending,
+        canEdit,
     } = useInterviewTab()
 
     const isOpen = dialog.type === "editor"
@@ -53,7 +54,7 @@ export function EditorDialog() {
     const isPending = isCreatePending || isUpdatePending
 
     return (
-        <Dialog open={isOpen} onOpenChange={(open) => !open && closeDialog()}>
+        <Dialog open={isOpen && canEdit} onOpenChange={(open) => !open && closeDialog()}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>{isEditing ? "Edit Interview" : "Add Interview"}</DialogTitle>

@@ -7,12 +7,14 @@ export function EmailTemplatesPageHeader({
     activeTab,
     canUseAI,
     canManageEmailTemplates,
+    canCreatePersonal,
     onCreatePersonal,
     onCreateOrganization,
 }: {
     activeTab: string
     canUseAI: boolean
     canManageEmailTemplates: boolean
+    canCreatePersonal: boolean
     onCreatePersonal: () => void
     onCreateOrganization: () => void
 }) {
@@ -23,12 +25,12 @@ export function EmailTemplatesPageHeader({
                 <div className="flex items-center gap-2">
                     {activeTab === "personal" && (
                         <>
-                            {canUseAI ? (
+                            {canUseAI && canCreatePersonal ? (
                                 <Button variant="outline" title="Generate email template with AI" render={<Link href="/automation/ai-builder?mode=email_template" />}><SparklesIcon className="mr-2 size-4" />Generate with AI</Button>
                             ) : (
                                 <Button variant="outline" disabled title="AI is disabled or permission is missing"><SparklesIcon className="mr-2 size-4" />Generate with AI</Button>
                             )}
-                            <Button onClick={onCreatePersonal}><PlusIcon className="mr-2 size-4" />Create Template</Button>
+                            <Button disabled={!canCreatePersonal} onClick={onCreatePersonal}><PlusIcon className="mr-2 size-4" />Create Template</Button>
                         </>
                     )}
                     {activeTab === "org" && canManageEmailTemplates && <Button onClick={onCreateOrganization}><PlusIcon className="mr-2 size-4" />Create Org Template</Button>}

@@ -3,7 +3,9 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { SurrogateDetailLayoutClient } from '@/components/surrogates/detail/SurrogateDetailLayoutClient'
 import { SurrogateOverviewTab } from '@/components/surrogates/detail/tabs/SurrogateOverviewTab'
 import { SurrogateDetailHeader } from '@/components/surrogates/detail/SurrogateDetailHeader'
+import { SurrogateDetailLayoutProvider, useSurrogateDetailData } from '@/components/surrogates/detail/SurrogateDetailLayout/context'
 import SurrogateJourneyPage from '../app/(app)/surrogates/[id]/journey/page'
+import SurrogateProfilePage from '../app/(app)/surrogates/[id]/profile/page'
 
 const mockPush = vi.fn()
 const mockReplace = vi.fn()
@@ -31,12 +33,21 @@ vi.mock('next/navigation', () => ({
     }),
 }))
 
+const mockUseAuth = vi.fn()
+const mockUseEffectivePermissions = vi.fn()
 vi.mock('@/lib/auth-context', () => ({
-    useAuth: () => ({ user: { role: 'developer' } }),
+    useAuth: () => mockUseAuth(),
+}))
+vi.mock('@/lib/hooks/use-permissions', () => ({
+    useEffectivePermissions: () => mockUseEffectivePermissions(),
 }))
 
 vi.mock('@/components/rich-text-editor', () => ({
     RichTextEditor: () => <div data-testid="rich-text-editor" />,
+}))
+
+vi.mock('@/components/surrogates/SurrogateProfileCard', () => ({
+    SurrogateProfileCard: ({ surrogateId }: { surrogateId: string }) => <div>Profile card for {surrogateId}</div>,
 }))
 
 vi.mock('@/components/surrogates/journey/SurrogateJourneyTab', () => ({
@@ -311,6 +322,8 @@ vi.mock('@/lib/hooks/use-matches', () => ({
 
 describe('SurrogateDetailPage', () => {
     beforeEach(() => {
+        mockUseAuth.mockReturnValue({ user: { role: 'developer' } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 1, permissions: [] } })
         mockPipelineStages = [...defaultPipelineStages]
         mockUseAssignees.mockReturnValue({ data: [] })
         mockUseSurrogate.mockReturnValue({
@@ -340,6 +353,117 @@ describe('SurrogateDetailPage', () => {
         mockRevealSurrogateSensitiveInfo.mockReset()
         const clipboardWriteText = navigator.clipboard.writeText as unknown as { mockClear?: () => void }
         clipboardWriteText.mockClear?.()
+    })
+
+    function AccessProbe() {
+        const access = useSurrogateDetailData()
+        return <>
+            <button disabled={!access.canChangeStage}>Change scoped stage</button>
+            <button disabled={!access.canManageQueue}>Assign scoped record</button>
+            <button disabled={!access.canClaimSurrogate}>Claim scoped record</button>
+            {access.canViewProfile && <span>Scoped profile</span>}
+            {access.visibleStageOptions.map((stage) => <span key={stage.id}>Option {stage.label}</span>)}
+        </>
+    }
+
+    it.each(['intake_specialist', 'case_manager'])('uses loaded record access for a v2 %s who is not the owner', (role) => {
+        mockUseAuth.mockReturnValue({ user: { role, user_id: 'member-1' } })
+        mockUseEffectivePermissions.mockReturnValue({ data: {
+            policy_version: 2,
+            permissions: ['view_surrogates', 'edit_surrogates', 'change_surrogate_status'],
+        } })
+        mockUseSurrogate.mockReturnValue({ data: {
+            ...baseSurrogateData, stage_id: 's2', owner_type: 'user', owner_id: 'other-member',
+        }, isLoading: false, error: null })
+
+        render(<SurrogateDetailLayoutProvider surrogateId="c1"><AccessProbe /></SurrogateDetailLayoutProvider>)
+
+        expect(screen.getByRole('button', { name: 'Change scoped stage' })).toBeEnabled()
+        expect(screen.getByText('Scoped profile')).toBeInTheDocument()
+        expect(screen.getByText('Option Ready to Match')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Assign scoped record' })).toBeDisabled()
+    })
+
+    it.each([
+        ['view_surrogates'],
+        ['view_surrogates', 'edit_surrogates'],
+        ['view_surrogates', 'change_surrogate_status'],
+    ])('requires both edit and stage actions under v2 (%j)', (...permissions) => {
+        mockUseAuth.mockReturnValue({ user: { role: 'case_manager', user_id: 'member-1' } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions } })
+        render(<SurrogateDetailLayoutProvider surrogateId="c1"><AccessProbe /></SurrogateDetailLayoutProvider>)
+        expect(screen.getByRole('button', { name: 'Change scoped stage' })).toBeDisabled()
+        expect(screen.getByText('Scoped profile')).toBeInTheDocument()
+    })
+
+    it('renders Operations overview fields and cards without writable controls under v2', () => {
+        mockUseAuth.mockReturnValue({ user: { role: 'operations', user_id: 'ops-1' } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ['view_surrogates'] } })
+        mockUseSurrogate.mockReturnValue({ data: {
+            ...baseSurrogateData,
+            stage_id: 's3', marital_status: 'married', partner_name: 'Partner Example',
+            insurance_company: 'Example Insurance', clinic_name: 'Example Clinic', clinic_address_line1: '10 Example Lane',
+            pregnancy_start_date: '2026-01-01', embryo_stage: 'day_5', ssn_masked: '***-**-1234',
+            is_age_eligible: true,
+            eligibility_checklist: [{ key: 'is_age_eligible', label: 'Age Eligible', type: 'boolean', value: true, display_value: 'Yes' }],
+        }, isLoading: false, error: null })
+        render(<SurrogateDetailLayoutClient><SurrogateOverviewTab /></SurrogateDetailLayoutClient>)
+        expect(screen.getByText('Jane Applicant')).toBeInTheDocument()
+        expect(screen.getByText('Example Insurance')).toBeInTheDocument()
+        expect(screen.getByText('Example Clinic')).toBeInTheDocument()
+        expect(screen.getByText('10 Example Lane')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Age Eligible: Yes' })).toBeDisabled()
+        for (const edit of screen.queryAllByRole('button', { name: /^Edit /i })) expect(edit).toBeDisabled()
+        expect(screen.queryByRole('button', { name: 'Edit Personal Information' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Edit Info' })).not.toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /copy email/i })).toBeEnabled()
+        expect(mockUpdateSurrogate).not.toHaveBeenCalled()
+    })
+
+    it('allows delegated edit permission for Operations overview fields under v2', () => {
+        mockUseAuth.mockReturnValue({ user: { role: 'operations', user_id: 'ops-1' } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ['view_surrogates', 'edit_surrogates'] } })
+        render(<SurrogateDetailLayoutClient><SurrogateOverviewTab /></SurrogateDetailLayoutClient>)
+        expect(screen.getByRole('button', { name: 'Edit Full name' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Edit Email' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Edit Personal Information' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Edit Info' })).toBeEnabled()
+    })
+
+    it('renders the profile page for retained Intake under v2', () => {
+        mockUseAuth.mockReturnValue({ user: { role: 'intake_specialist', user_id: 'member-1' } })
+        mockSegment.value = 'profile'
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ['view_surrogates'] } })
+        render(<SurrogateDetailLayoutClient><SurrogateProfilePage /></SurrogateDetailLayoutClient>)
+        expect(screen.getByText('Profile card for c1')).toBeInTheDocument()
+    })
+
+    it('keeps an Intake profile deep link while effective permissions are loading', () => {
+        mockUseAuth.mockReturnValue({ user: { role: 'intake_specialist', user_id: 'member-1' } })
+        mockSegment.value = 'profile'
+        mockUseEffectivePermissions.mockReturnValue({ data: undefined, isLoading: true })
+        const view = render(<SurrogateDetailLayoutProvider surrogateId="c1"><AccessProbe /></SurrogateDetailLayoutProvider>)
+        expect(mockRedirect).not.toHaveBeenCalled()
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ['view_surrogates'] }, isLoading: false })
+        view.rerender(<SurrogateDetailLayoutProvider surrogateId="c1"><AccessProbe /></SurrogateDetailLayoutProvider>)
+        expect(screen.getByText('Scoped profile')).toBeInTheDocument()
+        expect(mockRedirect).not.toHaveBeenCalled()
+    })
+
+    it('requires assign permission to claim and assign a loaded queue record under v2', () => {
+        mockUseAuth.mockReturnValue({ user: { role: 'case_manager', user_id: 'member-1' } })
+        mockUseSurrogate.mockReturnValue({ data: {
+            ...baseSurrogateData, owner_type: 'queue', owner_id: 'queue-1',
+        }, isLoading: false, error: null })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ['view_surrogates'] } })
+        const view = render(<SurrogateDetailLayoutProvider surrogateId="c1"><AccessProbe /></SurrogateDetailLayoutProvider>)
+        expect(screen.getByRole('button', { name: 'Claim scoped record' })).toBeDisabled()
+        expect(screen.getByRole('button', { name: 'Assign scoped record' })).toBeDisabled()
+
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ['view_surrogates', 'assign_surrogates'] } })
+        view.rerender(<SurrogateDetailLayoutProvider surrogateId="c1"><AccessProbe /></SurrogateDetailLayoutProvider>)
+        expect(screen.getByRole('button', { name: 'Claim scoped record' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Assign scoped record' })).toBeEnabled()
     })
 
     it('renders surrogate header and allows copying email', () => {

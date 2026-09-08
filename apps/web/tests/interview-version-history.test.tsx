@@ -53,6 +53,19 @@ vi.mock("@/lib/hooks/use-interviews", () => ({
 }))
 
 describe("InterviewVersionHistory", () => {
+    it("closes a restore confirmation when edit permission is revoked", () => {
+        mockUseInterviewVersions.mockReturnValue({
+            data: [{ version: 1, source: "manual", author_name: "Reviewer", created_at: "2026-02-10T12:00:00Z", content_size_bytes: 512 }],
+            isLoading: false,
+        })
+        const view = render(<InterviewVersionHistory interviewId="int-1" currentVersion={2} open onOpenChange={() => undefined} canRestore />)
+        fireEvent.click(screen.getByRole("button", { name: "Restore this version" }))
+        expect(screen.getByRole("button", { name: /^Restore$/ })).toBeEnabled()
+        view.rerender(<InterviewVersionHistory interviewId="int-1" currentVersion={2} open onOpenChange={() => undefined} canRestore={false} />)
+        expect(screen.queryByRole("button", { name: /^Restore$/ })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Restore this version" })).not.toBeInTheDocument()
+    })
+
     it("adds descriptive aria-labels to version action triggers", () => {
         mockUseInterviewVersions.mockReturnValue({
             data: [

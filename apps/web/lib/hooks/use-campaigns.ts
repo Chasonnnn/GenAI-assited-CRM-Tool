@@ -9,6 +9,7 @@ import {
     updateCampaign,
     deleteCampaign,
     duplicateCampaign,
+    publishCampaign,
     previewRecipients,
     previewFilters,
     sendCampaign,
@@ -106,13 +107,17 @@ export function usePreviewFilters() {
             filterCriteria,
             includeUnsubscribed,
             limit,
+            scope,
+            ownerUserId,
         }: {
             channel: "email" | "messaging";
             recipientType: CampaignRecipientType;
             filterCriteria: FilterCriteria;
             includeUnsubscribed: boolean;
             limit?: number;
-        }) => previewFilters(channel, recipientType, filterCriteria, includeUnsubscribed, limit),
+            scope?: "personal" | "org";
+            ownerUserId?: string;
+        }) => previewFilters(channel, recipientType, filterCriteria, includeUnsubscribed, limit, scope, ownerUserId),
     });
 }
 
@@ -272,4 +277,12 @@ export function useRemoveSuppression() {
             void queryClient.invalidateQueries({ queryKey: campaignKeys.suppressions });
         },
     });
+}
+
+export function usePublishCampaign() {
+    const queryClient = useQueryClient();
+    return useMutation({ mutationFn: publishCampaign, onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: campaignKeys.all });
+        void queryClient.invalidateQueries({ queryKey: ["email-templates"] });
+    } });
 }

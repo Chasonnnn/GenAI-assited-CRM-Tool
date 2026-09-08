@@ -1047,4 +1047,11 @@ describe("EmailTemplatesPage", () => {
         )
     })
 
+    it("disables personal creation when version 2 grants only template viewing", () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_email_templates"] } })
+        render(<EmailTemplatesPage />)
+        expect(screen.getByRole("button", { name: "Create Template", exact: true })).toBeDisabled()
+        expect(screen.queryByRole("button", { name: "Create Your First Template" })).not.toBeInTheDocument()
+    })
+
 })

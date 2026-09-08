@@ -38,15 +38,17 @@ export type { DialogState, UploadState, FormState } from "./context"
 
 interface SurrogateInterviewTabProps {
     surrogateId: string
+    editPermission?: boolean | undefined
+    canUseAI?: boolean
 }
 
 // ============================================================================
 // Main Component
 // ============================================================================
 
-export function SurrogateInterviewTab({ surrogateId }: SurrogateInterviewTabProps) {
+export function SurrogateInterviewTab({ surrogateId, editPermission, canUseAI = true }: SurrogateInterviewTabProps) {
     return (
-        <InterviewTabProvider surrogateId={surrogateId}>
+        <InterviewTabProvider surrogateId={surrogateId} editPermission={editPermission} canUseAI={canUseAI}>
             <InterviewTabContent />
         </InterviewTabProvider>
     )

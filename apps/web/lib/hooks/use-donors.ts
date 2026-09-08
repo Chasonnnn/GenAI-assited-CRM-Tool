@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
     archiveDonor,
+    claimDonor,
     createDonorNote,
     createDonor,
     deleteDonorNote,
@@ -81,12 +82,28 @@ export function useUpdateDonor() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: ({ id, data }: { id: string; data: DonorUpdate }) => updateDonor(id, data),
-        onSuccess: (donor) => {
+        onSuccess: (donor, { data }) => {
             queryClient.setQueryData(donorKeys.detail(donor.id), donor)
+            if ("owner_id" in data || "owner_type" in data) {
+                void queryClient.invalidateQueries()
+                return
+            }
+            void queryClient.invalidateQueries({ queryKey: donorKeys.detail(donor.id) })
             void queryClient.invalidateQueries({ queryKey: donorKeys.lists() })
             void queryClient.invalidateQueries({
                 queryKey: entityActivityKeys.entity("donor", donor.id),
             })
+        },
+    })
+}
+
+export function useClaimDonor() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (id: string) => claimDonor(id),
+        onSuccess: (donor) => {
+            queryClient.setQueryData(donorKeys.detail(donor.id), donor)
+            void queryClient.invalidateQueries()
         },
     })
 }
@@ -96,15 +113,11 @@ export function useUpdateDonorStatus() {
     return useMutation({
         mutationFn: ({ id, data }: { id: string; data: DonorStatusUpdate }) =>
             updateDonorStatus(id, data),
-        onSuccess: (response, { id }) => {
+        onSuccess: (response) => {
             if (response.donor) {
                 queryClient.setQueryData(donorKeys.detail(response.donor.id), response.donor)
             }
-            void queryClient.invalidateQueries({ queryKey: donorKeys.lists() })
-            void queryClient.invalidateQueries({ queryKey: donorKeys.history(id) })
-            void queryClient.invalidateQueries({
-                queryKey: entityActivityKeys.entity("donor", id),
-            })
+            void queryClient.invalidateQueries()
         },
     })
 }
@@ -115,10 +128,7 @@ export function useArchiveDonor() {
         mutationFn: (id: string) => archiveDonor(id),
         onSuccess: (donor) => {
             queryClient.setQueryData(donorKeys.detail(donor.id), donor)
-            void queryClient.invalidateQueries({ queryKey: donorKeys.lists() })
-            void queryClient.invalidateQueries({
-                queryKey: entityActivityKeys.entity("donor", donor.id),
-            })
+            void queryClient.invalidateQueries()
         },
     })
 }
@@ -129,10 +139,7 @@ export function useRestoreDonor() {
         mutationFn: (id: string) => restoreDonor(id),
         onSuccess: (donor) => {
             queryClient.setQueryData(donorKeys.detail(donor.id), donor)
-            void queryClient.invalidateQueries({ queryKey: donorKeys.lists() })
-            void queryClient.invalidateQueries({
-                queryKey: entityActivityKeys.entity("donor", donor.id),
-            })
+            void queryClient.invalidateQueries()
         },
     })
 }

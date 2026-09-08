@@ -76,6 +76,10 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
 }))
 
 // Mock Auth
+vi.mock('@/lib/hooks/use-permissions', () => ({
+    useEffectivePermissions: () => ({ data: { policy_version: 1, permissions: [] } }),
+}))
+
 vi.mock('@/lib/auth-context', () => ({
     useAuth: () => ({ user: { role: 'case_manager' } }), // Ensure role allows assign
 }))

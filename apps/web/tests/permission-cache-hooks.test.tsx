@@ -99,7 +99,7 @@ describe("permission cache hooks", () => {
     )
 
     it.each(["member", "removal", "role", "bulk"] as const)(
-        "refreshes effective permissions after a %s change without invalidating unrelated data",
+        "refreshes effective permissions and visible application data after a %s change",
         async (change) => {
             vi.mocked(getMyEffectivePermissions)
                 .mockResolvedValueOnce(originalPermissions)
@@ -185,7 +185,7 @@ describe("permission cache hooks", () => {
             expect(queryClient.getQueryState(inactiveEffectiveKey)?.isInvalidated).toBe(true)
             expect(queryClient.getQueryState(editorKey)?.isInvalidated).toBe(true)
             expect(queryClient.getQueryState(memberKey)?.isInvalidated).toBe(true)
-            expect(queryClient.getQueryState(["surrogates"])?.isInvalidated).toBe(false)
+            expect(queryClient.getQueryState(["surrogates"])?.isInvalidated).toBe(true)
         },
     )
 })

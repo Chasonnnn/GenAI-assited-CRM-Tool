@@ -6,6 +6,7 @@ import { InlineEditField } from "@/components/inline-edit-field"
 import { AddressFields } from "@/components/surrogates/AddressFields"
 
 interface MedicalContactSectionProps<T extends object> {
+    readOnly?: boolean
     title: string
     icon?: ReactNode
     prefix: string  // e.g., 'clinic', 'monitoring_clinic', 'ob', 'delivery_hospital'
@@ -19,6 +20,7 @@ interface MedicalContactSectionProps<T extends object> {
 
 export function MedicalContactSection<T extends object>({
     title,
+    readOnly = false,
     icon,
     prefix,
     data,
@@ -50,6 +52,7 @@ export function MedicalContactSection<T extends object>({
                 <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground w-16 shrink-0">Provider:</span>
                     <InlineEditField
+                        readOnly={readOnly}
                         value={dataRecord[resolvedProviderField] ?? null}
                         onSave={(v) => onUpdate(resolvedProviderField, v || null)}
                         placeholder="Doctor name"
@@ -61,6 +64,7 @@ export function MedicalContactSection<T extends object>({
                 <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground w-16 shrink-0">Name:</span>
                     <InlineEditField
+                        readOnly={readOnly}
                         value={getNameValue()}
                         onSave={(v) => onUpdate(resolvedNameField, v || null)}
                         placeholder="Clinic/Hospital name"
@@ -68,11 +72,12 @@ export function MedicalContactSection<T extends object>({
                 </div>
             )}
 
-            <AddressFields prefix={prefix} data={data} onUpdate={onUpdate} />
+            <AddressFields readOnly={readOnly} prefix={prefix} data={data} onUpdate={onUpdate} />
 
             <div className="flex items-center gap-2 pt-1 border-t">
                 <PhoneIcon className="size-3.5 text-muted-foreground shrink-0" />
                 <InlineEditField
+                    readOnly={readOnly}
                     value={getValue('phone')}
                     onSave={(v) => onUpdate(field('phone'), v || null)}
                     type="tel"
@@ -83,6 +88,7 @@ export function MedicalContactSection<T extends object>({
             <div className="flex items-center gap-2">
                 <PrinterIcon className="size-3.5 text-muted-foreground shrink-0" />
                 <InlineEditField
+                    readOnly={readOnly}
                     value={getValue('fax')}
                     onSave={(v) => onUpdate(field('fax'), v || null)}
                     type="tel"
@@ -94,6 +100,7 @@ export function MedicalContactSection<T extends object>({
                 <div className="flex items-center gap-2">
                     <MailIcon className="size-3.5 text-muted-foreground shrink-0" />
                     <InlineEditField
+                        readOnly={readOnly}
                         value={getValue('email')}
                         onSave={(v) => onUpdate(field('email'), v || null)}
                         type="email"

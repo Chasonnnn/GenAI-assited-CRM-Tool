@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     Table,
     TableBody,
@@ -65,6 +65,7 @@ import {
     useRunRecipients,
     useDeleteCampaign,
     useDuplicateCampaign,
+    usePublishCampaign,
     useCancelCampaign,
     useSendCampaign,
     useUpdateCampaign,
@@ -417,6 +418,8 @@ function CampaignDetailHeader({
     onCancel,
     onDuplicate,
     onDelete,
+    onPublish,
+    publishPending,
 }: {
     campaign: Campaign
     canEdit: boolean
@@ -426,6 +429,8 @@ function CampaignDetailHeader({
     onCancel: () => void
     onDuplicate: () => void
     onDelete: () => void
+    onPublish: () => void
+    publishPending: boolean
 }) {
     return (
         <div className="border-b bg-card">
@@ -442,6 +447,7 @@ function CampaignDetailHeader({
                     <div>
                         <div className="flex items-center gap-3">
                             <h1 className="text-2xl font-semibold">{campaign.name}</h1>
+                            <Badge variant="outline">{campaign.scope === "personal" ? "Personal" : "Organization"}</Badge>
                             <Badge
                                 variant={statusStyles[campaign.status]?.variant || "secondary"}
                                 className={statusStyles[campaign.status]?.className}
@@ -466,7 +472,7 @@ function CampaignDetailHeader({
                         Edit
                     </Button>
                     {campaign.status === "draft" && (
-                        <Button onClick={onSendNow}>
+                        <Button disabled={campaign.can_send === false} onClick={onSendNow}>
                             <SendIcon className="size-4" />
                             Send Now
                         </Button>
@@ -475,17 +481,18 @@ function CampaignDetailHeader({
                         <Button
                             variant="destructive"
                             onClick={onCancel}
-                            disabled={cancelPending}
+                            disabled={cancelPending || campaign.can_send === false}
                         >
                             Stop
                         </Button>
                     )}
-                    <Button variant="outline" onClick={onDuplicate}>
+                    <Button variant="outline" disabled={campaign.can_edit === false} onClick={onDuplicate}>
                         <CopyIcon className="size-4" />
                         Duplicate
                     </Button>
+                    {campaign.can_publish && <Button variant="outline" disabled={publishPending} onClick={onPublish}>Publish to organization</Button>}
                     {campaign.status === "draft" && (
-                        <Button variant="destructive" onClick={onDelete}>
+                        <Button variant="destructive" disabled={campaign.can_edit === false} onClick={onDelete}>
                             <TrashIcon className="size-4" />
                             Delete
                         </Button>
@@ -776,6 +783,7 @@ function CampaignRecipientsCard({
     recipients,
     recipientFilter,
     retryPending,
+    canSend,
     onRecipientFilterChange,
     onRetryFailed,
 }: {
@@ -784,6 +792,7 @@ function CampaignRecipientsCard({
     recipients: CampaignRecipient[] | undefined
     recipientFilter: string
     retryPending: boolean
+    canSend: boolean
     onRecipientFilterChange: (value: string) => void
     onRetryFailed: () => void
 }) {
@@ -804,7 +813,7 @@ function CampaignRecipientsCard({
                             variant="outline"
                             size="sm"
                             onClick={onRetryFailed}
-                            disabled={retryPending}
+                            disabled={retryPending || !canSend}
                         >
                             {retryPending ? (
                                 <Loader2Icon className="size-4 animate-spin" />
@@ -1282,7 +1291,7 @@ export default function CampaignDetailPage() {
     const minScheduleDate = toLocalDateTimeInput(new Date())
 
     // API hooks
-    const { data: campaign, isLoading } = useCampaign(campaignId)
+    const { data: campaign, isLoading, error: campaignError } = useCampaign(campaignId)
     const { data: runs } = useCampaignRuns(campaignId)
     const latestRun = runs?.[0]
     const { data: preview, isLoading: previewLoading, refetch: refetchPreview } = useCampaignPreview(campaignId)
@@ -1307,6 +1316,7 @@ export default function CampaignDetailPage() {
 
     const deleteCampaign = useDeleteCampaign()
     const duplicateCampaign = useDuplicateCampaign()
+    const publishCampaign = usePublishCampaign()
     const cancelCampaign = useCancelCampaign()
     const sendCampaign = useSendCampaign()
     const updateCampaign = useUpdateCampaign()
@@ -1342,7 +1352,7 @@ export default function CampaignDetailPage() {
         editDraft.recipientType === "intended_parent"
             ? intendedParentStageOptions
             : editPipelineStages.filter(stage => stage.is_active)
-    const canEdit = campaign?.status === "draft" || campaign?.status === "scheduled"
+    const canEdit = campaign?.can_edit !== false && (campaign?.status === "draft" || campaign?.status === "scheduled")
     const shouldAutoOpenEdit = searchParams.get("edit") === "1"
     const autoEditRequestKey =
         shouldAutoOpenEdit && canEdit && campaign
@@ -1375,13 +1385,13 @@ export default function CampaignDetailPage() {
         )
     }
 
-    if (!campaign) return null
+    if (!campaign) return <div role="alert" className="p-6">{campaignError ? "Could not load campaign" : "Campaign unavailable"}</div>
 
     const messageTemplate = messagingTemplates?.find(
         (candidate) => candidate.id === campaign.message_template_version_id,
     )
     const template = campaign.channel === "messaging" ? messageTemplate : emailTemplate
-    const templates = campaign.channel === "messaging" ? messagingTemplates : emailTemplates
+    const templates = campaign.channel === "messaging" ? messagingTemplates : emailTemplates?.filter((template) => template.scope !== "personal" || (campaign.scope === "personal" && template.owner_user_id === campaign.owner_user_id))
 
     // Calculate percentages
     const totalRecipients = campaign.total_recipients || 0
@@ -1442,9 +1452,25 @@ export default function CampaignDetailPage() {
                 onCancel={() => setShowCancelDialog(true)}
                 onDuplicate={handleDuplicate}
                 onDelete={() => setShowDeleteDialog(true)}
+                publishPending={publishCampaign.isPending}
+                onPublish={() => publishCampaign.mutate(campaign.id, {
+                    onSuccess: (published) => { toast.success("Organization campaign created"); push(`/automation/campaigns/${published.id}`) },
+                    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not publish campaign"),
+                })}
             />
 
-            <div className="flex-1 p-6 space-y-6">
+            <Tabs defaultValue="overview" className="flex-1 p-6">
+                <TabsList><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="details">Details</TabsTrigger></TabsList>
+                <TabsContent value="details">
+                    <Card><CardHeader><CardTitle>Details</CardTitle></CardHeader><CardContent>
+                        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm max-w-xl">
+                            <dt className="text-muted-foreground">Scope</dt><dd>{campaign.scope === "personal" ? "Personal" : "Organization"}</dd>
+                            <dt className="text-muted-foreground">Proposed by</dt><dd>{campaign.proposed_by_name ?? campaign.created_by_name ?? "—"}</dd>
+                            <dt className="text-muted-foreground">Created</dt><dd>{format(parseDateInput(campaign.created_at), "MMM d, yyyy")}</dd>
+                        </dl>
+                    </CardContent></Card>
+                </TabsContent>
+                <TabsContent value="overview" className="space-y-6">
                 <CampaignStatsGrid
                     campaign={campaign}
                     totalRecipients={totalRecipients}
@@ -1502,10 +1528,12 @@ export default function CampaignDetailPage() {
                     recipients={recipients}
                     recipientFilter={recipientFilter}
                     retryPending={retryFailed.isPending}
+                    canSend={campaign.can_send !== false}
                     onRecipientFilterChange={setRecipientFilter}
                     onRetryFailed={() => setShowRetryDialog(true)}
                 />
-            </div>
+                </TabsContent>
+            </Tabs>
 
             <CampaignEditDialog
                 open={showEditDialog}

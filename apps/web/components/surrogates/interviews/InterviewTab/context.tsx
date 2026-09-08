@@ -110,6 +110,8 @@ export interface InterviewTabContextValue {
     canEdit: boolean
     canDelete: boolean
     canEditNotes: boolean
+    canTranscribe: boolean
+    canSummarize: boolean
 }
 
 // ============================================================================
@@ -132,6 +134,8 @@ export function useInterviewTab() {
 
 interface InterviewTabProviderProps {
     surrogateId: string
+    editPermission?: boolean | undefined
+    canUseAI?: boolean
     children: React.ReactNode
 }
 
@@ -223,14 +227,14 @@ function useInterviewDialogFormState() {
     }
 }
 
-function useInterviewAttachmentActions(selectedId: string | null) {
+function useInterviewAttachmentActions(selectedId: string | null, editPermission: boolean | undefined) {
     const [upload, setUpload] = useState<UploadState>({ type: "idle" })
     const uploadInputRef = useRef<HTMLInputElement>(null)
     const uploadAttachmentMutation = useUploadInterviewAttachment()
     const requestTranscriptionMutation = useRequestTranscription()
 
     const uploadFiles = async (files: FileList | null) => {
-        if (!selectedId || !files?.length) return
+        if (editPermission === false || !selectedId || !files?.length) return
 
         setUpload({ type: "uploading" })
 
@@ -272,7 +276,7 @@ function useInterviewAttachmentActions(selectedId: string | null) {
     }
 
     const requestTranscription = async (attachmentId: string) => {
-        if (!selectedId) return
+        if (editPermission === false || !selectedId) return
 
         setUpload({ type: "transcribing", attachmentId })
         const result = await requestTranscriptionMutation.mutateAsync({
@@ -301,7 +305,7 @@ function useInterviewAttachmentActions(selectedId: string | null) {
     }
 }
 
-export function InterviewTabProvider({ surrogateId, children }: InterviewTabProviderProps) {
+export function InterviewTabProvider({ surrogateId, children, editPermission, canUseAI = true }: InterviewTabProviderProps) {
     const { user } = useAuth()
 
     // Selection state
@@ -325,7 +329,7 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
         uploadInputRef,
         uploadFiles,
         requestTranscription,
-    } = useInterviewAttachmentActions(selectedId)
+    } = useInterviewAttachmentActions(selectedId, editPermission)
 
     // Data fetching
     const { data: interviews = [], isLoading } = useInterviews(surrogateId)
@@ -348,9 +352,11 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
     const summarizeInterviewMutation = useSummarizeInterview()
 
     // Permissions
-    const canEdit = user?.role ? ["case_manager", "admin", "developer"].includes(user.role) : false
-    const canDelete = user?.role ? ["admin", "developer"].includes(user.role) : false
-    const canEditNotes = !!user
+    const canEdit = editPermission ?? (user?.role ? ["case_manager", "admin", "developer"].includes(user.role) : false)
+    const canDelete = editPermission ?? (user?.role ? ["admin", "developer"].includes(user.role) : false)
+    const canEditNotes = editPermission ?? !!user
+    const canTranscribe = editPermission ?? true
+    const canSummarize = (editPermission ?? true) && canUseAI
 
     // Selection
     const selectInterview = (id: string | null) => {
@@ -359,7 +365,7 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
 
     // Mutations
     const createOrUpdateInterview = async () => {
-        if (dialog.type !== "editor") return
+        if (!canEdit || dialog.type !== "editor") return
 
         const editingInterview = dialog.interview
         const data = {
@@ -395,7 +401,7 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
     }
 
     const deleteInterview = async () => {
-        if (dialog.type !== "delete") return
+        if (!canDelete || dialog.type !== "delete") return
 
         try {
             await deleteInterviewMutation.mutateAsync({
@@ -411,7 +417,7 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
     }
 
     const generateAISummary = async () => {
-        if (!selectedId) return
+        if (!canSummarize || !selectedId) return
 
         try {
             const result = await summarizeInterviewMutation.mutateAsync(selectedId)
@@ -442,7 +448,7 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
         anchorText: string
         parentId?: string
     }) => {
-        if (!selectedId) return
+        if (!canEditNotes || !selectedId) return
 
         try {
             await createNoteMutation.mutateAsync({
@@ -461,7 +467,7 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
     }
 
     const updateNote = async (noteId: string, content: string) => {
-        if (!selectedId) return
+        if (!canEditNotes || !selectedId) return
 
         try {
             await updateNoteMutation.mutateAsync({
@@ -476,7 +482,7 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
     }
 
     const deleteNote = async (noteId: string) => {
-        if (!selectedId) return
+        if (!canEditNotes || !selectedId) return
 
         try {
             await deleteNoteMutation.mutateAsync({
@@ -535,6 +541,8 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
         canEdit,
         canDelete,
         canEditNotes,
+        canTranscribe,
+        canSummarize,
     }
 
     return (

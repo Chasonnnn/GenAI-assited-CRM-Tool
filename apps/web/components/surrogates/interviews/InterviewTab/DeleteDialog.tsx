@@ -5,12 +5,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useInterviewTab } from "./context"
 
 export function DeleteDialog() {
-    const { dialog, closeDialog, deleteInterview, isDeletePending } = useInterviewTab()
+    const { dialog, closeDialog, deleteInterview, isDeletePending, canDelete } = useInterviewTab()
 
     const isOpen = dialog.type === "delete"
 
     return (
-        <Dialog open={isOpen} onOpenChange={(open) => !open && closeDialog()}>
+        <Dialog open={isOpen && canDelete} onOpenChange={(open) => !open && closeDialog()}>
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Delete Interview</DialogTitle>
