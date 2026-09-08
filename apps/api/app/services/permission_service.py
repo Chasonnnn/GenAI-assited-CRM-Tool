@@ -1,6 +1,6 @@
-"""Permission service for RBAC with precedence, caching, and seeding.
+"""Permission loading, mutation, and seeding for RBAC.
 
-Resolution order: revoke > grant > role_default
+Resolution order: role defaults, organization role overrides, user grants/revokes
 Developer role: always has all permissions (immutable, no DB lookup)
 Missing permission: defaults to False (deny)
 """
@@ -11,10 +11,9 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
+from app.core.permission_resolution import resolve_effective_permissions
 from app.core.permissions import (
-    PERMISSION_REGISTRY,
     ROLE_DEFAULTS,
-    get_role_default_permissions,
     is_developer_only,
     is_valid_permission,
 )
@@ -39,16 +38,13 @@ def get_effective_permissions(
     """
     Get effective permissions for a user.
 
-    Resolution: role_defaults + grants - revokes
+    Resolution: role defaults, organization role overrides, user grants/revokes.
     Developer role always gets all permissions.
     Developer-only permissions are filtered out for non-developers.
     """
     # Developer always has everything
     if role == "developer":
-        return set(PERMISSION_REGISTRY.keys())
-
-    # Start with role defaults
-    effective = get_role_default_permissions(role).copy()
+        return resolve_effective_permissions(role)
 
     # Apply org-level role overrides (if any exist)
     from app.db.models import RolePermission
@@ -62,12 +58,6 @@ def get_effective_permissions(
         .all()
     )
 
-    for rp in role_perms:
-        if rp.is_granted:
-            effective.add(rp.permission)
-        else:
-            effective.discard(rp.permission)
-
     # Apply user-level overrides
     from app.db.models import UserPermissionOverride
 
@@ -80,17 +70,13 @@ def get_effective_permissions(
         .all()
     )
 
-    for override in user_overrides:
-        if override.override_type == "grant":
-            effective.add(override.permission)
-        elif override.override_type == "revoke":
-            effective.discard(override.permission)
-
-    # Enforcement: Developer-only permissions cannot be granted to non-developers
-    # This is the final filter to ensure security even if override was created
-    effective = {p for p in effective if not is_developer_only(p)}
-
-    return effective
+    return resolve_effective_permissions(
+        role,
+        role_overrides=((rp.permission, rp.is_granted) for rp in role_perms),
+        user_overrides=(
+            (override.permission, override.override_type) for override in user_overrides
+        ),
+    )
 
 
 def check_permission(
