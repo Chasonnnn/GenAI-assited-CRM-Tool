@@ -1547,6 +1547,18 @@
       "422"
     ]
   },
+  "/forms/surrogates/{surrogate_id}/application-forms": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/surrogates/{surrogate_id}/application-forms/{form_id}/intake-links": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
   "/forms/templates": {
     "GET": [
       "200"

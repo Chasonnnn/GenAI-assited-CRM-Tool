@@ -77,6 +77,7 @@ from app.services import (
     donor_service,
     email_delivery_service,
     email_service,
+    form_application_access,
     form_draft_service,
     form_intake_service,
     form_service,
@@ -366,6 +367,44 @@ def list_submission_review_forms(
 ):
 
     return [_form_summary(form) for form in form_submission_access.list_review_forms(db, session)]
+
+
+@router.get(
+    "/surrogates/{surrogate_id}/application-forms",
+    response_model=list[FormSummary],
+)
+def list_surrogate_application_forms(
+    surrogate_id: UUID,
+    session: Annotated[UserSession, Depends(get_current_session)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    forms, default_form_id = form_application_access.list_application_forms(
+        db, session, surrogate_id
+    )
+    return [_form_summary(form, default_form_id=default_form_id) for form in forms]
+
+
+@router.get(
+    "/surrogates/{surrogate_id}/application-forms/{form_id}/intake-links",
+    response_model=list[FormIntakeLinkRead],
+)
+def list_surrogate_application_intake_links(
+    surrogate_id: UUID,
+    form_id: UUID,
+    session: Annotated[UserSession, Depends(get_current_session)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    links = form_application_access.list_application_intake_links(
+        db, session, surrogate_id, form_id
+    )
+    org = org_service.get_org_by_id(db, session.org_id)
+    base_url = org_service.get_org_portal_base_url(org)
+    return [
+        _intake_link_read(
+            link, intake_url=form_intake_service.build_shared_application_link(base_url, link.slug)
+        )
+        for link in links
+    ]
 
 
 @router.get(
@@ -1116,6 +1155,7 @@ def send_form_intake_link(
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Shared intake is disabled")
 
+    form_application_access.require_email_send(db, session)
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
         raise HTTPException(status_code=404, detail="Form not found")
