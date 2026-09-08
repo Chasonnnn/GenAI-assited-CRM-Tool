@@ -183,6 +183,13 @@ def _get_or_compute_snapshot(
     range_end: datetime | None = None,
 ) -> Any:
     snapshot_key = _build_snapshot_key({"snapshot_type": snapshot_type, **params})
+    from app.services.analytics_access_service import REQUEST_CACHE_KEY
+
+    if REQUEST_CACHE_KEY in db.info:
+        cache = db.info[REQUEST_CACHE_KEY]
+        if snapshot_key not in cache:
+            cache[snapshot_key] = compute()
+        return cache[snapshot_key]
     cached = _get_cached_snapshot(db, org_id, snapshot_type, snapshot_key)
     if cached is not None:
         return cached
@@ -209,6 +216,13 @@ async def _get_or_compute_snapshot_async(
     range_end: datetime | None = None,
 ) -> Any:
     snapshot_key = _build_snapshot_key({"snapshot_type": snapshot_type, **params})
+    from app.services.analytics_access_service import REQUEST_CACHE_KEY
+
+    if REQUEST_CACHE_KEY in db.info:
+        cache = db.info[REQUEST_CACHE_KEY]
+        if snapshot_key not in cache:
+            cache[snapshot_key] = await compute()
+        return cache[snapshot_key]
     cached = _get_cached_snapshot(db, org_id, snapshot_type, snapshot_key)
     if cached is not None:
         return cached

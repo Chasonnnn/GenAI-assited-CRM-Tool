@@ -14,6 +14,13 @@ from app.schemas.email import EmailTemplateUpdate
 from app.services import email_template_access
 
 
+@pytest.fixture(autouse=True)
+def legacy_policy(monkeypatch):
+    from app.services import permission_policy_service
+
+    monkeypatch.setattr(permission_policy_service, "is_enabled", lambda *_: False)
+
+
 @pytest.fixture
 def session():
     return UserSession(

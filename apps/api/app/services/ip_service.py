@@ -47,12 +47,23 @@ def _build_intended_parent_query(
     include_archived: bool = False,
     created_after: str | None = None,
     created_before: str | None = None,
+    session: UserSession | None = None,
 ):
     query = (
         db.query(IntendedParent)
         .options(selectinload(IntendedParent.stage))
         .filter(IntendedParent.organization_id == org_id)
     )
+
+    if session is not None:
+        from app.services import permission_policy_service, record_scope_service
+
+        if permission_policy_service.is_enabled(db, session.org_id):
+            query = query.filter(
+                record_scope_service.build_visibility_filter(
+                    db, session, "intended_parent", allow_archived=include_archived
+                )
+            )
 
     # Archive filter
     if not include_archived:
@@ -180,6 +191,7 @@ def list_intended_parents(
     per_page: int = 20,
     sort_by: str | None = None,
     sort_order: str = "desc",
+    session: UserSession | None = None,
 ) -> tuple[list[IntendedParent], int]:
     """
     List intended parents with filters and pagination.
@@ -191,6 +203,7 @@ def list_intended_parents(
     query = _build_intended_parent_query(
         db,
         org_id,
+        session=session,
         status=status,
         state=state,
         budget_min=budget_min,
@@ -245,11 +258,13 @@ def list_intended_parent_created_dates(
     q: str | None = None,
     owner_id: UUID | None = None,
     include_archived: bool = False,
+    session: UserSession | None = None,
 ) -> list[str]:
     """List distinct created_at dates (YYYY-MM-DD) for current filtered context."""
     query = _build_intended_parent_query(
         db,
         org_id,
+        session=session,
         status=status,
         state=state,
         budget_min=budget_min,
@@ -294,6 +309,7 @@ def list_intended_parents_for_session(
     items, total = list_intended_parents(
         db,
         org_id=session.org_id,
+        session=session,
         status=status,
         state=state,
         budget_min=budget_min,
@@ -342,14 +358,26 @@ def list_intended_parents_for_session(
     }
 
 
-def get_intended_parent(db: Session, ip_id: UUID, org_id: UUID) -> IntendedParent | None:
+def get_intended_parent(
+    db: Session, ip_id: UUID, org_id: UUID, *, session=None, allow_archived=False
+) -> IntendedParent | None:
     """Get a single intended parent by ID, scoped to organization."""
-    return (
+    query = (
         db.query(IntendedParent)
         .options(selectinload(IntendedParent.stage))
         .filter(IntendedParent.id == ip_id, IntendedParent.organization_id == org_id)
-        .first()
     )
+
+    if session is not None:
+        from app.services import permission_policy_service, record_scope_service
+
+        if permission_policy_service.is_enabled(db, session.org_id):
+            query = query.filter(
+                record_scope_service.build_visibility_filter(
+                    db, session, "intended_parent", allow_archived=allow_archived
+                )
+            )
+    return query.first()
 
 
 def create_intended_parent(
@@ -838,17 +866,21 @@ def delete_intended_parent(db: Session, ip: IntendedParent) -> None:
 # =============================================================================
 
 
-def get_ip_stats(db: Session, org_id: UUID) -> dict:
+def get_ip_stats(db: Session, org_id: UUID, *, session=None) -> dict:
     """Get IP counts by status."""
-    results = (
-        db.query(IntendedParent.status, func.count(IntendedParent.id))
-        .filter(
-            IntendedParent.organization_id == org_id,
-            IntendedParent.is_archived.is_(False),
-        )
-        .group_by(IntendedParent.status)
-        .all()
+    query = db.query(IntendedParent.status, func.count(IntendedParent.id)).filter(
+        IntendedParent.organization_id == org_id,
+        IntendedParent.is_archived.is_(False),
     )
+
+    if session is not None:
+        from app.services import permission_policy_service, record_scope_service
+
+        if permission_policy_service.is_enabled(db, session.org_id):
+            query = query.filter(
+                record_scope_service.build_visibility_filter(db, session, "intended_parent")
+            )
+    results = query.group_by(IntendedParent.status).all()
 
     by_status = {status: count for status, count in results}
     total = sum(by_status.values())

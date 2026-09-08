@@ -19,6 +19,7 @@ MAX_PENDING_INVITES_PER_ORG = 50
 INVITE_ALLOWED_ROLES = {
     Role.INTAKE_SPECIALIST.value,
     Role.CASE_MANAGER.value,
+    Role.OPERATIONS.value,
     Role.ADMIN.value,
 }
 INVITE_ALLOWED_ROLES_PLATFORM = INVITE_ALLOWED_ROLES | {Role.DEVELOPER.value}
@@ -94,11 +95,18 @@ def create_invite(
     invited_by_user_id: uuid.UUID,
 ) -> OrgInvite:
     """Create a new invitation or reactivate an expired pending invite."""
+    from app.services import permission_policy_service
+
+    permission_policy_service.lock_configuration(db, org_id)
+    if permission_policy_service.is_enabled(db, org_id):
+        permission_policy_service.require_administrator(db, org_id, invited_by_user_id)
     org = org_service.get_org_by_id(db, org_id)
     if not org:
         raise ValueError("Organization not found")
     email = email.lower().strip()
     role_value = validate_invite_role(role)
+    if role_value == "operations" and not permission_policy_service.is_enabled(db, org_id):
+        raise ValueError("Activate version 2 before inviting Operations")
     now = datetime.now(UTC)
 
     # Check org limit
@@ -285,6 +293,11 @@ def accept_invite(
     if not invite:
         raise ValueError("Invite not found")
 
+    from app.services import permission_policy_service
+
+    permission_policy_service.lock_configuration(db, invite.organization_id)
+    db.refresh(invite)
+
     status = get_invite_status(invite)
     if status == "accepted":
         raise ValueError("Invite already accepted")
@@ -316,6 +329,13 @@ def accept_invite(
     if existing:
         if existing.is_active:
             raise ValueError("Already a member of this organization")
+        if (
+            permission_policy_service.is_enabled(db, invite.organization_id)
+            and existing.role != role_value
+        ):
+            raise ValueError(
+                "An Admin must review the returning member's role and additions before this invitation can be accepted"
+            )
         existing.role = role_value
         existing.is_active = True
         invite.accepted_at = datetime.now(UTC)

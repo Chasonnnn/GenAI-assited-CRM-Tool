@@ -3,9 +3,12 @@
 from collections.abc import Iterable
 
 from app.core.permissions import (
+    ADMIN_ONLY_PERMISSIONS,
     PERMISSION_REGISTRY,
+    PROTECTED_ROLES,
     get_role_default_permissions,
     is_developer_only,
+    is_valid_permission,
 )
 
 
@@ -14,6 +17,7 @@ def resolve_effective_permissions(
     *,
     role_overrides: Iterable[tuple[str, bool]] = (),
     user_overrides: Iterable[tuple[str, str]] = (),
+    policy_version: int = 1,
 ) -> set[str]:
     """Apply role defaults, organization overrides, then user grants/revokes.
 
@@ -24,18 +28,29 @@ def resolve_effective_permissions(
     if role == "developer":
         return set(PERMISSION_REGISTRY)
 
-    effective = get_role_default_permissions(role).copy()
+    effective = get_role_default_permissions(role, policy_version=policy_version).copy()
+    if policy_version >= 2 and role in PROTECTED_ROLES:
+        return effective
 
     for permission, is_granted in role_overrides:
+        if policy_version >= 2 and not is_valid_permission(permission):
+            continue
         if is_granted:
             effective.add(permission)
         else:
             effective.discard(permission)
 
     for permission, override_type in user_overrides:
+        if policy_version >= 2 and not is_valid_permission(permission):
+            continue
         if override_type == "grant":
             effective.add(permission)
-        elif override_type == "revoke":
+        elif override_type == "revoke" and policy_version < 2:
             effective.discard(permission)
 
-    return {permission for permission in effective if not is_developer_only(permission)}
+    return {
+        permission
+        for permission in effective
+        if not is_developer_only(permission, policy_version=policy_version)
+        and (policy_version < 2 or permission not in ADMIN_ONLY_PERMISSIONS)
+    }

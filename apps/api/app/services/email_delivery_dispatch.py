@@ -122,6 +122,25 @@ def _raise_if_source_ineligible(db: Session, delivery: EmailDelivery) -> None:
             .populate_existing()
             .first()
         )
+        from app.services import workflow_execution_authority
+
+        if workflow_execution_authority.enabled(db, delivery.organization_id):
+            try:
+                if (
+                    job is None
+                    or job.payload.get("recipient_email", "").strip().lower()
+                    != (email_log.recipient_email or "").strip().lower()
+                ):
+                    raise workflow_execution_authority.WorkflowAuthorityError(
+                        "Workflow email source is unavailable"
+                    )
+                workflow_execution_authority.authorize_email_job(db, job)
+            except workflow_execution_authority.WorkflowAuthorityError as exc:
+                raise DeliveryNoLongerEligible(
+                    "workflow_authority_revoked",
+                    str(exc),
+                    requires_reconciliation=delivery.attempt_count > 1,
+                ) from exc
         if job is None and email_log.surrogate_id is not None:
             # Legacy surrogate deliveries can outlive their source Job. Donor
             # emails never populate this relationship, so their guard remains closed.
@@ -159,6 +178,7 @@ def _raise_if_source_ineligible(db: Session, delivery: EmailDelivery) -> None:
             db,
             delivery.organization_id,
             email_log.source_id,
+            email_log_id=email_log.id,
         ):
             raise DeliveryNoLongerEligible(
                 "campaign_ineligible",

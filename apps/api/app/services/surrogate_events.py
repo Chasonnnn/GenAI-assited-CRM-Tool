@@ -69,7 +69,13 @@ def handle_status_changed(
 ) -> None:
     """Dispatch surrogate status change side effects."""
     from app.db.enums import AlertType
-    from app.services import notification_facade, pipeline_service, queue_service, workflow_triggers
+    from app.services import (
+        notification_facade,
+        permission_policy_service,
+        pipeline_service,
+        queue_service,
+        workflow_triggers,
+    )
 
     actor = _get_org_user(db, surrogate.organization_id, user_id)
     actor_name = actor.display_name if actor else "Someone"
@@ -108,8 +114,14 @@ def handle_status_changed(
             pool_queue = queue_service.get_or_create_surrogate_pool_queue(
                 db, surrogate.organization_id
             )
-            if pool_queue and (
-                surrogate.owner_type != OwnerType.QUEUE.value or surrogate.owner_id != pool_queue.id
+            upgraded_policy = permission_policy_service.is_enabled(db, surrogate.organization_id)
+            if (
+                pool_queue
+                and not upgraded_policy
+                and (
+                    surrogate.owner_type != OwnerType.QUEUE.value
+                    or surrogate.owner_id != pool_queue.id
+                )
             ):
                 surrogate = queue_service.assign_surrogate_to_queue(
                     db=db,
@@ -120,7 +132,13 @@ def handle_status_changed(
                 )
                 db.commit()
                 db.refresh(surrogate)
-            if pool_queue:
+            if pool_queue and (
+                not upgraded_policy
+                or (
+                    surrogate.owner_type == OwnerType.QUEUE.value
+                    and surrogate.owner_id == pool_queue.id
+                )
+            ):
                 notification_facade.notify_surrogate_ready_for_claim(db=db, surrogate=surrogate)
         except Exception:
             logger.debug("surrogate_ready_for_claim_notify_failed", exc_info=True)

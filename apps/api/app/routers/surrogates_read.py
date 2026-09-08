@@ -8,9 +8,8 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_permission
+from app.core.deps import get_current_session, get_db
 from app.core.permissions import PermissionKey
-from app.core.policies import POLICIES
 from app.core.security import decode_export_token
 from app.core.surrogate_access import check_surrogate_access
 from app.db.enums import AuditEventType, Role, SurrogateSource
@@ -28,6 +27,7 @@ from app.services import (
     analytics_service,
     intelligent_suggestions_service,
     org_service,
+    permission_policy_service,
     permission_service,
     surrogate_service,
     user_service,
@@ -55,6 +55,8 @@ class IntelligentSuggestionSummaryRead(BaseModel):
 
 def _require_owner_filter_access(session: UserSession, db: Session, owner_id: UUID | None) -> None:
     if not owner_id or owner_id == session.user_id:
+        return
+    if permission_policy_service.is_enabled(db, session.org_id):
         return
     if session.role in (Role.ADMIN, Role.DEVELOPER):
         return
@@ -212,7 +214,7 @@ def list_surrogates(
         session.user_id,
         session.role.value,
         "view_post_approval_surrogates",
-    ):
+    ) and not permission_policy_service.is_enabled(db, session.org_id):
         exclude_stage_types.append("post_approval")
 
     include_total = include_total if include_total is not None else cursor is None
@@ -326,7 +328,7 @@ def list_surrogate_created_dates(
         session.user_id,
         session.role.value,
         "view_post_approval_surrogates",
-    ):
+    ) and not permission_policy_service.is_enabled(db, session.org_id):
         exclude_stage_types.append("post_approval")
 
     try:
@@ -375,20 +377,28 @@ def get_intelligent_suggestions_summary(
 
 @router.get("/claim-queue", response_model=SurrogateListResponse)
 def list_claim_queue(
-    session: Annotated[UserSession, "fastapi_param"] = Depends(
-        require_permission(POLICIES["surrogates"].actions["view_post_approval"])
-    ),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     page: Annotated[int, "fastapi_param"] = Query(1, ge=1),
     per_page: Annotated[int, "fastapi_param"] = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
 ):
     """List approved surrogates in Surrogate Pool (ready for claim)."""
+    permission = (
+        "assign_surrogates"
+        if permission_policy_service.is_enabled(db, session.org_id)
+        else "view_post_approval_surrogates"
+    )
+    if not permission_service.check_permission(
+        db, session.org_id, session.user_id, session.role.value, permission
+    ):
+        raise HTTPException(status_code=403, detail=f"Missing permission: {permission}")
     if session.role not in (Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER):
         raise HTTPException(status_code=403, detail="Only case managers can view the claim queue")
 
     surrogates, total = surrogate_service.list_claim_queue(
         db=db,
         org_id=session.org_id,
+        session=session,
         page=page,
         per_page=per_page,
     )

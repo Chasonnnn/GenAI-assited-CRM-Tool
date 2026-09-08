@@ -151,12 +151,21 @@ async def process_workflow_resume(db, job) -> None:
             return
 
     # Get task and execution
-    task = db.query(Task).filter(Task.id == UUID(task_id)).first()
+    task = (
+        db.query(Task)
+        .filter(Task.id == UUID(task_id), Task.organization_id == job.organization_id)
+        .first()
+    )
     if not task:
         raise Exception(f"Task {task_id} not found")
 
     execution = (
-        db.query(WorkflowExecution).filter(WorkflowExecution.id == UUID(execution_id)).first()
+        db.query(WorkflowExecution)
+        .filter(
+            WorkflowExecution.id == UUID(execution_id),
+            WorkflowExecution.organization_id == job.organization_id,
+        )
+        .first()
     )
     if not execution:
         raise Exception(f"Execution {execution_id} not found")
@@ -177,7 +186,12 @@ async def process_workflow_resume(db, job) -> None:
 
     # Get workflow
     workflow = (
-        db.query(AutomationWorkflow).filter(AutomationWorkflow.id == execution.workflow_id).first()
+        db.query(AutomationWorkflow)
+        .filter(
+            AutomationWorkflow.id == execution.workflow_id,
+            AutomationWorkflow.organization_id == job.organization_id,
+        )
+        .first()
     )
     if not workflow:
         raise Exception(f"Workflow {execution.workflow_id} not found")

@@ -16,8 +16,8 @@ def test_create_org_seeds_pipeline_and_queues(db):
     )
     pipelines_by_type = {pipeline.entity_type: pipeline for pipeline in pipelines}
     assert {"surrogate", "egg_donor", "sperm_donor"}.issubset(pipelines_by_type)
-    assert len(pipelines_by_type["egg_donor"].stages) == 13
-    assert len(pipelines_by_type["sperm_donor"].stages) == 13
+    assert len(pipelines_by_type["egg_donor"].stages) == 14
+    assert len(pipelines_by_type["sperm_donor"].stages) == 14
     assert pipelines_by_type["egg_donor"].id != pipelines_by_type["sperm_donor"].id
 
     queue_names = {

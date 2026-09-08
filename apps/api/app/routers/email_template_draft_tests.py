@@ -37,6 +37,7 @@ async def send_email_template_draft_test(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ) -> EmailTemplateDraftTestSendResponse:
+    email_template_access.require_send_permission(db, session)
     draft = email_template_draft_service.get_draft(
         db,
         org_id=session.org_id,

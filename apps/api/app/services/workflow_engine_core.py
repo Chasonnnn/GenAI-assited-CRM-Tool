@@ -19,7 +19,7 @@ from app.db.enums import (
     WorkflowTriggerType,
 )
 from app.db.models import AutomationWorkflow, Membership, User, WorkflowExecution
-from app.services import workflow_service
+from app.services import workflow_execution_authority, workflow_service
 from app.services.workflow_engine_adapters import WorkflowDomainAdapter
 
 logger = logging.getLogger(__name__)
@@ -183,6 +183,9 @@ class WorkflowEngineCore:
             ),
         )
 
+        if workflow_execution_authority.enabled(db, org_id):
+            # Eligibility is checked against current ownership/collaboration on the subject.
+            scope_filter = AutomationWorkflow.scope.in_(["org", "personal"])
         workflows = (
             db.query(AutomationWorkflow)
             .filter(
@@ -296,6 +299,9 @@ class WorkflowEngineCore:
         subject_id: UUID | None = None,
     ) -> WorkflowExecution | None:
         """Execute a single workflow and log the result."""
+        from app.services import permission_policy_service
+
+        permission_policy_service.lock_configuration(db, workflow.organization_id)
         start_time = time.time()
         if subject_type is None or subject_id is None or subject_type != workflow.subject_type:
             logger.warning(f"Workflow {workflow.id} received invalid subject context")
@@ -354,6 +360,30 @@ class WorkflowEngineCore:
                 logger.warning(f"Donor subject {subject_type}:{subject_id} is invalid")
                 return None
             condition_entity = donor
+
+        try:
+            authority_snapshot = workflow_execution_authority.execution_snapshot(db, workflow)
+        except workflow_execution_authority.WorkflowAuthorityError as exc:
+            execution = WorkflowExecution(
+                organization_id=workflow.organization_id,
+                workflow_id=workflow.id,
+                event_id=event_id,
+                depth=depth,
+                event_source=source.value,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                subject_type=subject_type,
+                subject_id=subject_id,
+                trigger_event=event_data,
+                dedupe_key=dedupe_key,
+                matched_conditions=False,
+                actions_executed=[],
+                status=WorkflowExecutionStatus.SKIPPED.value,
+                error_message=str(exc),
+            )
+            db.add(execution)
+            db.commit()
+            return execution
 
         # Evaluate conditions
         conditions_matched = self._evaluate_conditions(
@@ -448,6 +478,7 @@ class WorkflowEngineCore:
             dedupe_key=dedupe_key,
             matched_conditions=True,
             actions_executed=[],
+            authority_snapshot=authority_snapshot,
             status=WorkflowExecutionStatus.SUCCESS.value,  # Will update if needed
         )
         db.add(execution)
@@ -458,6 +489,11 @@ class WorkflowEngineCore:
         all_success = True
 
         for idx, action in enumerate(workflow.actions):
+            denied = self._action_authority_error(db, workflow, execution, action)
+            if denied:
+                action_results.append(denied)
+                all_success = False
+                continue
             # Check if this action requires approval
             if action.get("requires_approval"):
                 # Get the surrogate for approval task
@@ -505,7 +541,9 @@ class WorkflowEngineCore:
                 return execution
 
             # Execute non-approval action normally
-            result = self.adapter.execute_action(
+            result = self._execute_authorized_action(
+                workflow=workflow,
+                execution=execution,
                 db=db,
                 action=action,
                 entity=entity,
@@ -560,6 +598,16 @@ class WorkflowEngineCore:
         Called by the resume job processor after task is resolved.
         """
 
+        from app.services import permission_policy_service
+
+        resume_org = (
+            db.query(WorkflowExecution.organization_id)
+            .filter(WorkflowExecution.id == execution_id)
+            .scalar()
+        )
+        if resume_org is None:
+            return
+        permission_policy_service.lock_configuration(db, resume_org)
         # Lock execution row
         execution = (
             db.query(WorkflowExecution)
@@ -572,6 +620,16 @@ class WorkflowEngineCore:
             logger.error(f"Execution {execution_id} not found for resume")
             return
 
+        if (
+            workflow_execution_authority.enabled(db, execution.organization_id)
+            or hasattr(task, "organization_id")
+        ) and (
+            getattr(task, "organization_id", None) != execution.organization_id
+            or getattr(task, "workflow_execution_id", None) != execution.id
+            or execution.paused_task_id != task.id
+        ):
+            logger.warning("Invalid approval task binding for workflow resume")
+            return
         if execution.status != WorkflowExecutionStatus.PAUSED.value:
             logger.warning(
                 f"Execution {execution_id} not paused (status={execution.status}), skipping resume"
@@ -580,7 +638,10 @@ class WorkflowEngineCore:
 
         workflow = (
             db.query(AutomationWorkflow)
-            .filter(AutomationWorkflow.id == execution.workflow_id)
+            .filter(
+                AutomationWorkflow.id == execution.workflow_id,
+                AutomationWorkflow.organization_id == execution.organization_id,
+            )
             .first()
         )
 
@@ -597,6 +658,13 @@ class WorkflowEngineCore:
             execution.paused_at_action_index = None
             execution.paused_task_id = None
             db.commit()
+            return
+
+        if (
+            workflow_execution_authority.enabled(db, execution.organization_id)
+            or hasattr(entity, "organization_id")
+        ) and getattr(entity, "organization_id", None) != execution.organization_id:
+            logger.warning("Invalid entity organization for workflow resume")
             return
 
         if task.status == TaskStatus.COMPLETED.value and execution.subject_type in {
@@ -639,7 +707,9 @@ class WorkflowEngineCore:
                 return
 
             # Execute the approved action
-            result = self.adapter.execute_action(
+            result = self._execute_authorized_action(
+                workflow=workflow,
+                execution=execution,
                 db=db,
                 action=action,
                 entity=entity,
@@ -662,6 +732,10 @@ class WorkflowEngineCore:
             for idx, next_action in enumerate(remaining_actions):
                 actual_idx = action_index + 1 + idx
 
+                denied = self._action_authority_error(db, workflow, execution, next_action)
+                if denied:
+                    action_results.append(denied)
+                    continue
                 if next_action.get("requires_approval"):
                     # Need another approval - pause again
                     surrogate, owner, approval_error = self._resolve_approval_context(
@@ -713,7 +787,9 @@ class WorkflowEngineCore:
                         return
 
                 # Execute non-approval action
-                result = self.adapter.execute_action(
+                result = self._execute_authorized_action(
+                    workflow=workflow,
+                    execution=execution,
                     db=db,
                     action=next_action,
                     entity=entity,
@@ -784,6 +860,38 @@ class WorkflowEngineCore:
             execution.error_message = f"Unexpected task status: {task.status}"
             db.commit()
 
+    def _action_authority_error(self, db, workflow, execution, action):
+        try:
+            workflow_execution_authority.authorize_action(
+                db,
+                workflow,
+                action,
+                subject_type=execution.subject_type,
+                subject_id=execution.subject_id,
+                snapshot=execution.authority_snapshot,
+            )
+        except workflow_execution_authority.WorkflowAuthorityError as exc:
+            return {
+                "success": False,
+                "action_type": action.get("action_type"),
+                "skipped": True,
+                "error": str(exc),
+            }
+        return None
+
+    def _execute_authorized_action(self, *, workflow, execution, **kwargs):
+        denied = self._action_authority_error(kwargs["db"], workflow, execution, kwargs["action"])
+        if denied:
+            return denied
+        if (
+            workflow_execution_authority.enabled(kwargs["db"], workflow.organization_id)
+            and workflow.scope == "org"
+        ):
+            kwargs["execution_permissions"] = frozenset(
+                (execution.authority_snapshot or {}).get("permissions", [])
+            )
+        return self.adapter.execute_action(**kwargs)
+
     def _load_active_org_user(
         self,
         db: Session,
@@ -831,7 +939,10 @@ class WorkflowEngineCore:
             )
             if donor is None:
                 return None, None, "Workflow donor subject could not be resolved"
-            requires_user_owner = has_approval_actions or workflow.scope == "personal"
+            requires_user_owner = has_approval_actions or (
+                workflow.scope == "personal"
+                and not workflow_execution_authority.enabled(db, workflow.organization_id)
+            )
             if requires_user_owner and (
                 donor.owner_type != OwnerType.USER.value or not donor.owner_id
             ):
@@ -847,7 +958,10 @@ class WorkflowEngineCore:
             return None, approval_owner, None
 
         if surrogate:
-            requires_user_owner = has_approval_actions or workflow.scope == "personal"
+            requires_user_owner = has_approval_actions or (
+                workflow.scope == "personal"
+                and not workflow_execution_authority.enabled(db, workflow.organization_id)
+            )
             if requires_user_owner:
                 if surrogate.owner_type != OwnerType.USER.value or not surrogate.owner_id:
                     return surrogate, None, "Workflow requires surrogate owner to be a user"

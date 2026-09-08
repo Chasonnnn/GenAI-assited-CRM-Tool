@@ -36,6 +36,10 @@ class PermissionCategory(str, Enum):
     SETTINGS = "Settings"
     AI = "AI Assistant"
     COMPLIANCE = "Compliance"
+    WORKFLOWS = "Workflows"
+    CAMPAIGNS = "Campaigns"
+    TEMPLATES = "Templates"
+    COMMUNICATIONS = "Communications"
 
 
 class PermissionKey(str, Enum):
@@ -101,10 +105,23 @@ class PermissionKey(str, Enum):
     OPS_MANAGE = "manage_ops"
     JOBS_MANAGE = "manage_jobs"
     FORMS_MANAGE = "manage_forms"
+    FORM_SUBMISSIONS_VIEW = "view_form_submissions"
+    FORM_SUBMISSIONS_REVIEW = "review_form_submissions"
     ADMIN_EXPORTS_MANAGE = "manage_admin_exports"
     ADMIN_IMPORTS_MANAGE = "manage_admin_imports"
     ADMIN_VERSIONS_MANAGE = "manage_admin_versions"
     APPROVE_STATUS_CHANGE_REQUESTS = "approve_status_change_requests"
+    APPROVE_SURROGATES = "approve_surrogates"
+    APPROVE_DONORS = "approve_donors"
+    ASSIGN_DONORS = "assign_donors"
+    CAMPAIGNS_VIEW = "view_campaigns"
+    CAMPAIGNS_EDIT = "edit_campaigns"
+    CAMPAIGNS_SEND = "send_campaigns"
+    ORG_WORKFLOWS_MANAGE = "manage_org_workflows"
+    ORG_CAMPAIGNS_MANAGE = "manage_org_campaigns"
+    ORG_TEMPLATES_MANAGE = "manage_org_templates"
+    EMAIL_SEND = "send_email"
+    SMS_SEND = "send_sms"
 
 
 # =============================================================================
@@ -312,7 +329,7 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
     ),
     "manage_automation": PermissionDef(
         "manage_automation",
-        "Manage Automation",
+        "Manage Workflows",
         "Create and edit workflows",
         PermissionCategory.SETTINGS,
     ),
@@ -459,6 +476,90 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
 }
 
 
+V2_PERMISSION_DEFINITIONS = [
+    PermissionDef(
+        "view_form_submissions",
+        "View Form Submissions",
+        "Read submitted applications",
+        PermissionCategory.SETTINGS,
+    ),
+    PermissionDef(
+        "review_form_submissions",
+        "Review Form Submissions",
+        "Review and match submitted applications",
+        PermissionCategory.SETTINGS,
+    ),
+    PermissionDef(
+        "approve_surrogates",
+        "Approve Surrogates",
+        "Approve applicants and hand off to case management",
+        PermissionCategory.SURROGATES,
+    ),
+    PermissionDef(
+        "approve_donors",
+        "Approve Donors",
+        "Approve donor applicants and hand off to case management",
+        PermissionCategory.DONORS,
+    ),
+    PermissionDef(
+        "assign_donors",
+        "Assign Donors",
+        "Assign donors to staff or queues",
+        PermissionCategory.DONORS,
+    ),
+    PermissionDef(
+        "view_campaigns",
+        "View Campaigns",
+        "View accessible personal and organization campaigns",
+        PermissionCategory.CAMPAIGNS,
+    ),
+    PermissionDef(
+        "edit_campaigns",
+        "Edit Campaigns",
+        "Create and edit campaigns",
+        PermissionCategory.CAMPAIGNS,
+    ),
+    PermissionDef(
+        "send_campaigns",
+        "Send Campaigns",
+        "Schedule and send campaigns",
+        PermissionCategory.CAMPAIGNS,
+    ),
+    PermissionDef(
+        "manage_org_workflows",
+        "Manage Organization Workflows",
+        "Manage agency-owned workflows",
+        PermissionCategory.WORKFLOWS,
+    ),
+    PermissionDef(
+        "manage_org_campaigns",
+        "Manage Organization Campaigns",
+        "Manage agency-owned campaigns",
+        PermissionCategory.CAMPAIGNS,
+    ),
+    PermissionDef(
+        "manage_org_templates",
+        "Manage Organization Templates",
+        "Manage agency-owned templates",
+        PermissionCategory.TEMPLATES,
+    ),
+    PermissionDef(
+        "send_email",
+        "Send Email",
+        "Send reviewed email to accessible records",
+        PermissionCategory.COMMUNICATIONS,
+    ),
+    PermissionDef(
+        "send_sms",
+        "Send SMS",
+        "Send reviewed SMS to accessible records",
+        PermissionCategory.COMMUNICATIONS,
+    ),
+]
+V2_PERMISSION_KEYS = frozenset(definition.key for definition in V2_PERMISSION_DEFINITIONS)
+PERMISSION_REGISTRY.update({definition.key: definition for definition in V2_PERMISSION_DEFINITIONS})
+
+
 # =============================================================================
 # Default Role Permissions
 # =============================================================================
@@ -568,6 +669,61 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
     "developer": set(PERMISSION_REGISTRY.keys()),  # All permissions
 }
 
+PROTECTED_ROLES = frozenset({"admin", "developer"})
+ADMIN_ONLY_PERMISSIONS = frozenset({"manage_roles", "manage_team"})
+V2_ROLE_DEFAULTS: dict[str, set[str]] = {
+    "intake_specialist": ROLE_DEFAULTS["intake_specialist"]
+    | {
+        "approve_surrogates",
+        "approve_donors",
+        "manage_automation",
+        "manage_email_templates",
+        "view_campaigns",
+        "edit_campaigns",
+        "send_email",
+        "send_sms",
+        "view_form_submissions",
+        "review_form_submissions",
+    },
+    "case_manager": ROLE_DEFAULTS["case_manager"]
+    | {
+        "assign_donors",
+        "manage_automation",
+        "manage_email_templates",
+        "view_campaigns",
+        "edit_campaigns",
+        "send_email",
+        "send_sms",
+        "view_form_submissions",
+        "review_form_submissions",
+    },
+    "operations": {
+        "view_form_submissions",
+        "view_dashboard",
+        "view_surrogates",
+        "view_surrogate_notes",
+        "view_donors",
+        "view_intended_parents",
+        "view_matches",
+        "view_tasks",
+        "view_reports",
+        "view_campaigns",
+        "edit_campaigns",
+        "manage_automation",
+        "view_email_templates",
+        "manage_email_templates",
+        "manage_org_workflows",
+        "manage_org_campaigns",
+        "manage_org_templates",
+    },
+    "admin": {
+        key
+        for key, definition in PERMISSION_REGISTRY.items()
+        if not definition.developer_only or key == "manage_roles"
+    },
+    "developer": set(PERMISSION_REGISTRY),
+}
+
 
 # =============================================================================
 # Permission Bundles
@@ -634,15 +790,18 @@ def is_valid_permission(key: str) -> bool:
     return key in PERMISSION_REGISTRY
 
 
-def is_developer_only(key: str) -> bool:
+def is_developer_only(key: str, *, policy_version: int = 1) -> bool:
     """Check if permission can only be modified by developers."""
     perm = PERMISSION_REGISTRY.get(key)
+    if policy_version >= 2 and key == "manage_roles":
+        return False
     return perm.developer_only if perm else False
 
 
-def get_role_default_permissions(role: str) -> set[str]:
+def get_role_default_permissions(role: str, *, policy_version: int = 1) -> set[str]:
     """Get default permissions for a role."""
-    return ROLE_DEFAULTS.get(role, set())
+    defaults = V2_ROLE_DEFAULTS if policy_version >= 2 else ROLE_DEFAULTS
+    return defaults.get(role, set())
 
 
 def get_permission_bundle(bundle_key: str) -> set[str]:

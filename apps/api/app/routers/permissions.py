@@ -16,15 +16,27 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
 from app.core.permissions import (
+    ADMIN_ONLY_PERMISSIONS,
     PERMISSION_REGISTRY,
+    PROTECTED_ROLES,
     ROLE_DEFAULTS,
+    V2_PERMISSION_KEYS,
+    V2_ROLE_DEFAULTS,
     get_all_permissions,
     get_role_default_permissions,
+    is_developer_only,
 )
 from app.core.policies import POLICIES
 from app.db.enums import AuditEventType, Role
 from app.schemas.auth import UserSession
-from app.services import permission_service
+from app.schemas.permission_policy import (
+    PermissionPolicyActivate,
+    PermissionPolicyChanges,
+    PermissionPolicyConfiguration,
+    PermissionPolicyPreview,
+)
+from app.schemas.record_scope import RecordScopeRule
+from app.services import permission_policy_service, permission_service
 from app.utils.presentation import humanize_identifier
 
 router = APIRouter(prefix="/settings/permissions", tags=["Permissions"])
@@ -43,6 +55,7 @@ class PermissionInfo(BaseModel):
     description: str
     category: str
     developer_only: bool
+    assignable: bool = True
 
 
 class MemberRead(BaseModel):
@@ -53,6 +66,7 @@ class MemberRead(BaseModel):
     email: str
     display_name: str | None
     role: str
+    is_active: bool = True
     last_login_at: str | None
     created_at: str
 
@@ -65,10 +79,14 @@ class MemberDetail(BaseModel):
     email: str
     display_name: str | None
     role: str
+    is_active: bool = True
     last_login_at: str | None
     created_at: str
     effective_permissions: list[str]
     overrides: list[OverrideRead]
+    policy_version: int = 1
+    capabilities: dict[str, bool] = Field(default_factory=dict)
+    access_sources: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class OverrideRead(BaseModel):
@@ -86,6 +104,9 @@ class MemberUpdate(BaseModel):
     role: str | None = None
     add_overrides: list[OverrideCreate] | None = None
     remove_overrides: list[str] | None = None  # permission keys to remove
+    access_reviewed: bool = False
+    retain_additions: bool | None = None
+    retain_collaborators: bool | None = None
 
 
 class OverrideCreate(BaseModel):
@@ -102,6 +123,9 @@ class RoleSummary(BaseModel):
     label: str
     permission_count: int
     is_developer: bool
+    protected: bool = False
+    can_edit: bool = False
+    policy_version: int = 1
 
 
 class RoleDetail(BaseModel):
@@ -110,6 +134,9 @@ class RoleDetail(BaseModel):
     role: str
     label: str
     permissions_by_category: dict[str, list[RolePermissionRead]]
+    protected: bool = False
+    can_edit: bool = False
+    policy_version: int = 1
 
 
 class RolePermissionRead(BaseModel):
@@ -120,12 +147,14 @@ class RolePermissionRead(BaseModel):
     description: str
     is_granted: bool
     developer_only: bool
+    configurable: bool = True
 
 
 class RolePermissionUpdate(BaseModel):
     """Update role default permissions."""
 
     permissions: dict[str, bool]  # {permission_key: is_granted}
+    scope_rules: dict[str, RecordScopeRule] | None = None
 
 
 class EffectivePermissions(BaseModel):
@@ -135,6 +164,9 @@ class EffectivePermissions(BaseModel):
     role: str
     permissions: list[str]
     overrides: list[OverrideRead]
+    policy_version: int = 1
+    capabilities: dict[str, bool] = Field(default_factory=dict)
+    access_sources: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class IntakePoolGrantCreate(BaseModel):
@@ -169,6 +201,48 @@ def _require_intake_pool_admin(session: UserSession) -> None:
     raise HTTPException(status_code=403, detail="Only admins can manage intake pool access")
 
 
+def _require_policy_administrator(session: UserSession, db: Session | None = None) -> None:
+    if db is not None:
+        member = permission_service.get_membership_for_user(db, session.org_id, session.user_id)
+        if member is None:
+            raise HTTPException(status_code=403, detail="Active organization membership required")
+        session.role = Role(member.role)
+    if _role_value(session.role) not in PROTECTED_ROLES:
+        raise HTTPException(
+            status_code=403, detail="Only Admin and Developer can configure permissions"
+        )
+
+
+def _permission_sources(
+    db: Session, org_id: UUID, user_id: UUID, role: str, effective: set[str], version: int
+) -> dict[str, list[str]]:
+    from app.core.permission_resolution import resolve_effective_permissions
+
+    baseline = resolve_effective_permissions(
+        role,
+        role_overrides=permission_service.get_role_overrides(db, org_id, role).items(),
+        policy_version=version,
+    )
+    additions = {
+        row.permission
+        for row in permission_service.get_user_overrides(db, org_id, user_id)
+        if row.override_type == "grant"
+    }
+    return {
+        key: (
+            ["developer"]
+            if role == "developer"
+            else (["role_baseline"] if key in baseline else [])
+            + (
+                ["individual_addition"]
+                if key in additions and not (version >= 2 and role in PROTECTED_ROLES)
+                else []
+            )
+        )
+        for key in sorted(effective)
+    }
+
+
 def _intake_pool_grant_response(row: dict) -> IntakePoolGrantRead:
     return IntakePoolGrantRead(**row)
 
@@ -199,12 +273,110 @@ def _build_effective_permissions_response(
         )
         for o in overrides
     ]
+    version = permission_policy_service.get_version(db, org_id)
+    capabilities = permission_policy_service.administration_capabilities(role, effective, version)
+    capabilities["can_assign_developer"] = role == Role.DEVELOPER.value
+    if version >= 2:
+        from app.services import analytics_access_service
+
+        capabilities["can_view_org_reports"] = (
+            analytics_access_service.has_organization_record_scope(
+                db,
+                UserSession(org_id=org_id, user_id=user_id, role=role, email="", display_name=""),
+            )
+        )
+    else:
+        capabilities["can_view_org_reports"] = "view_reports" in effective
     return EffectivePermissions(
         user_id=user_id,
         role=role,
         permissions=sorted(effective),
         overrides=override_list,
+        policy_version=version,
+        capabilities=capabilities,
+        access_sources=_permission_sources(db, org_id, user_id, role, effective, version),
     )
+
+
+@router.get("/policy", response_model=PermissionPolicyConfiguration)
+@router.get("/policy/config", response_model=PermissionPolicyConfiguration)
+def get_policy_configuration(
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(get_current_session)],
+) -> PermissionPolicyConfiguration:
+    _require_policy_administrator(session, db)
+    return permission_policy_service.get_configuration(db, session.org_id)
+
+
+@router.post(
+    "/policy/preview",
+    response_model=PermissionPolicyPreview,
+    dependencies=[Depends(require_csrf_header)],
+)
+def preview_policy(
+    data: PermissionPolicyChanges,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(get_current_session)],
+) -> PermissionPolicyPreview:
+    _require_policy_administrator(session, db)
+    try:
+        return permission_policy_service.preview(db, session.org_id, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post(
+    "/policy/activate",
+    response_model=PermissionPolicyConfiguration,
+    dependencies=[Depends(require_csrf_header)],
+)
+def activate_policy(
+    data: PermissionPolicyActivate,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(get_current_session)],
+) -> PermissionPolicyConfiguration:
+    _require_policy_administrator(session, db)
+    try:
+        result = permission_policy_service.activate(
+            db,
+            session.org_id,
+            session.user_id,
+            PermissionPolicyChanges(
+                role_permissions=data.role_permissions,
+                revoke_resolutions=data.revoke_resolutions,
+                execution_resolutions=data.execution_resolutions,
+            ),
+            data.digest,
+        )
+    except permission_policy_service.PermissionPolicyConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    return result
+
+
+@router.patch(
+    "/policy/config",
+    response_model=PermissionPolicyConfiguration,
+    dependencies=[Depends(require_csrf_header)],
+)
+def update_policy_configuration(
+    data: PermissionPolicyChanges,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(get_current_session)],
+) -> PermissionPolicyConfiguration:
+    _require_policy_administrator(session, db)
+    try:
+        result = permission_policy_service.update_configuration(
+            db, session.org_id, session.user_id, data
+        )
+    except permission_policy_service.PermissionPolicyConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    return result
 
 
 # =============================================================================
@@ -343,21 +515,25 @@ def list_available_permissions(
     session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["team"].default)
     ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     List all available permissions with metadata.
 
     Requires: Manager+ role
     """
+    version = permission_policy_service.get_version(db, session.org_id)
     return [
         PermissionInfo(
             key=p.key,
             label=p.label,
             description=p.description,
             category=p.category,
-            developer_only=p.developer_only,
+            developer_only=is_developer_only(p.key, policy_version=version),
+            assignable=version < 2 or p.key not in ADMIN_ONLY_PERMISSIONS,
         )
         for p in get_all_permissions()
+        if version >= 2 or p.key not in V2_PERMISSION_KEYS
     ]
 
 
@@ -368,6 +544,7 @@ def list_available_permissions(
 
 @router.get("/members", response_model=list[MemberRead])
 def list_members(
+    include_inactive: Annotated[bool, "fastapi_param"] = Query(False),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["team"].default)
@@ -378,7 +555,9 @@ def list_members(
 
     Requires: Manager+ role
     """
-    members = permission_service.list_members(db, session.org_id)
+    if include_inactive:
+        _require_policy_administrator(session, db)
+    members = permission_service.list_members(db, session.org_id, include_inactive=include_inactive)
 
     return [
         MemberRead(
@@ -387,6 +566,7 @@ def list_members(
             email=u.email,
             display_name=u.display_name,
             role=m.role,
+            is_active=m.is_active,
             last_login_at=u.last_login_at.isoformat()
             if hasattr(u, "last_login_at") and u.last_login_at
             else None,
@@ -409,7 +589,12 @@ def get_member(
 
     Requires: Manager+ role
     """
-    result = permission_service.get_member(db, session.org_id, member_id)
+    result = permission_service.get_member(
+        db,
+        session.org_id,
+        member_id,
+        include_inactive=permission_policy_service.is_enabled(db, session.org_id),
+    )
 
     if not result:
         raise HTTPException(404, "Member not found")
@@ -437,18 +622,41 @@ def get_member(
         for o in overrides
     ]
 
+    version = permission_policy_service.get_version(db, session.org_id)
+    actor_permissions = permission_service.get_effective_permissions(
+        db, session.org_id, session.user_id, _role_value(session.role)
+    )
+    capabilities = permission_policy_service.administration_capabilities(
+        _role_value(session.role), actor_permissions, version
+    )
+    if session.user_id == user.id or (
+        membership.role == "developer" and _role_value(session.role) != "developer"
+    ):
+        capabilities = {key: False for key in capabilities}
+    capabilities["can_receive_collaboration"] = (
+        capabilities.get("can_add_permissions", False)
+        and membership.is_active
+        and user.is_active
+        and membership.role == Role.INTAKE_SPECIALIST.value
+    )
     return MemberDetail(
         id=membership.id,
         user_id=user.id,
         email=user.email,
         display_name=user.display_name,
         role=membership.role,
+        is_active=membership.is_active,
         last_login_at=user.last_login_at.isoformat()
         if hasattr(user, "last_login_at") and user.last_login_at
         else None,
         created_at=membership.created_at.isoformat(),
         effective_permissions=sorted(effective),
         overrides=override_list,
+        policy_version=version,
+        capabilities=capabilities,
+        access_sources=_permission_sources(
+            db, session.org_id, user.id, membership.role, effective, version
+        ),
     )
 
 
@@ -476,7 +684,13 @@ def update_member(
 
     Requires: Manager+ role
     """
-    result = permission_service.get_member(db, session.org_id, member_id)
+    permission_policy_service.lock_configuration(db, session.org_id)
+    version = permission_policy_service.get_version(db, session.org_id)
+    if version >= 2:
+        _require_policy_administrator(session, db)
+    result = permission_service.get_member(
+        db, session.org_id, member_id, include_inactive=version >= 2
+    )
 
     if not result:
         raise HTTPException(404, "Member not found")
@@ -501,6 +715,28 @@ def update_member(
     if data.role:
         if not Role.has_value(data.role):
             raise HTTPException(400, f"Invalid role: {data.role}")
+        if version < 2 and data.role == "operations":
+            raise HTTPException(409, "Activate version 2 before assigning Operations")
+        if version >= 2 and data.role != old_role:
+            if (
+                not data.access_reviewed
+                or data.retain_additions is None
+                or data.retain_collaborators is None
+            ):
+                raise HTTPException(
+                    409, "Review additions and collaborator access before changing this role"
+                )
+            from app.services import record_scope_service
+
+            if not data.retain_additions:
+                permission_service.delete_user_overrides(db, session.org_id, user.id)
+            record_scope_service.apply_member_access_review(
+                db,
+                session.org_id,
+                user.id,
+                retain_additions=data.retain_additions,
+                retain_collaborators=data.retain_collaborators,
+            )
 
         # Cannot promote to Developer unless you are Developer
         if data.role == "developer" and session.role != Role.DEVELOPER:
@@ -511,6 +747,8 @@ def update_member(
     # Add overrides
     if data.add_overrides:
         for override in data.add_overrides:
+            if version >= 2 and override.override_type != "grant":
+                raise HTTPException(400, "Version 2 permits individual additions only")
             # Escalation check
             if override.override_type == "grant":
                 if not permission_service.can_grant_permission(
@@ -576,6 +814,7 @@ def update_member(
         )
         if membership.role != Role.INTAKE_SPECIALIST.value:
             intake_pool_access_service.delete_user_grants(db, session.org_id, user.id)
+    permission_policy_service.touch_configuration(db, session.org_id)
     db.commit()
 
     # Return updated detail
@@ -599,6 +838,9 @@ def remove_member(
 
     Requires: Manager+ role
     """
+    permission_policy_service.lock_configuration(db, session.org_id)
+    if permission_policy_service.is_enabled(db, session.org_id):
+        _require_policy_administrator(session, db)
     result = permission_service.get_member(db, session.org_id, member_id)
 
     if not result:
@@ -634,6 +876,7 @@ def remove_member(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    permission_policy_service.touch_configuration(db, session.org_id)
     db.commit()
 
     return {"removed": True, "user_id": str(user.id)}
@@ -692,6 +935,7 @@ def get_effective_permissions(
 ROLE_LABELS = {
     "intake_specialist": "Intake Specialist",
     "case_manager": "Case Manager",
+    "operations": "Operations",
     "admin": "Admin",
     "developer": "Developer",
 }
@@ -702,20 +946,33 @@ def list_roles(
     session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["team"].actions["view_roles"])
     ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     List all roles with permission counts.
 
     Requires: Manager+ role
     """
+    version = permission_policy_service.get_version(db, session.org_id)
+    defaults = V2_ROLE_DEFAULTS if version >= 2 else ROLE_DEFAULTS
+    configuration = permission_policy_service.get_configuration(db, session.org_id)
+    can_manage = (
+        _role_value(session.role) in PROTECTED_ROLES
+        if version >= 2
+        else session.role == Role.DEVELOPER
+    )
     return [
         RoleSummary(
             role=role,
             label=ROLE_LABELS.get(role, humanize_identifier(role)),
-            permission_count=len(perms),
+            permission_count=sum(configuration.role_permissions[role].values()),
             is_developer=role == "developer",
+            protected=role in PROTECTED_ROLES if version >= 2 else role == "developer",
+            can_edit=can_manage
+            and (role not in PROTECTED_ROLES if version >= 2 else role != "developer"),
+            policy_version=version,
         )
-        for role, perms in ROLE_DEFAULTS.items()
+        for role in defaults
     ]
 
 
@@ -734,20 +991,32 @@ def get_role_detail(
 
     Requires: Manager+ role
     """
-    if role not in ROLE_DEFAULTS:
+    version = permission_policy_service.get_version(db, session.org_id)
+    defaults = V2_ROLE_DEFAULTS if version >= 2 else ROLE_DEFAULTS
+    if role not in defaults:
         raise HTTPException(404, f"Unknown role: {role}")
 
     org_overrides = permission_service.get_role_overrides(db, session.org_id, role)
 
     # Get global defaults
-    global_defaults = get_role_default_permissions(role)
+    global_defaults = get_role_default_permissions(role, policy_version=version)
+    if version >= 2:
+        from app.core.permission_resolution import resolve_effective_permissions
+
+        global_defaults = resolve_effective_permissions(
+            role, role_overrides=org_overrides.items(), policy_version=version
+        )
 
     # Build permissions by category
     perms_by_cat: dict[str, list[RolePermissionRead]] = {}
 
     for perm in get_all_permissions():
+        if version < 2 and perm.key in V2_PERMISSION_KEYS:
+            continue
         # Effective value: org override > global default
-        if perm.key in org_overrides:
+        if version >= 2:
+            is_granted = perm.key in global_defaults
+        elif perm.key in org_overrides:
             is_granted = org_overrides[perm.key]
         else:
             is_granted = perm.key in global_defaults
@@ -761,7 +1030,8 @@ def get_role_detail(
                 label=perm.label,
                 description=perm.description,
                 is_granted=is_granted,
-                developer_only=perm.developer_only,
+                developer_only=is_developer_only(perm.key, policy_version=version),
+                configurable=version < 2 or perm.key not in ADMIN_ONLY_PERMISSIONS,
             )
         )
 
@@ -769,6 +1039,11 @@ def get_role_detail(
         role=role,
         label=ROLE_LABELS.get(role, humanize_identifier(role)),
         permissions_by_category=perms_by_cat,
+        protected=role in PROTECTED_ROLES if version >= 2 else role == "developer",
+        can_edit=(_role_value(session.role) in PROTECTED_ROLES and role not in PROTECTED_ROLES)
+        if version >= 2
+        else session.role == Role.DEVELOPER and role != "developer",
+        policy_version=version,
     )
 
 
@@ -793,12 +1068,19 @@ def update_role_permissions(
 
     Requires: Developer role
     """
-    if role not in ROLE_DEFAULTS:
+    permission_policy_service.lock_configuration(db, session.org_id)
+    version = permission_policy_service.get_version(db, session.org_id)
+    defaults = V2_ROLE_DEFAULTS if version >= 2 else ROLE_DEFAULTS
+    if version >= 2:
+        _require_policy_administrator(session, db)
+    if role not in defaults:
         raise HTTPException(404, f"Unknown role: {role}")
 
-    if role == "developer":
-        raise HTTPException(400, "Developer role permissions cannot be modified")
+    if role == "developer" or (version >= 2 and role == "admin"):
+        raise HTTPException(400, f"The {role} role baseline is protected")
 
+    if data.scope_rules and version < 2:
+        raise HTTPException(409, "Activate version 2 before editing record scope")
     for permission, is_granted in data.permissions.items():
         try:
             permission_service.set_role_default(
@@ -807,6 +1089,14 @@ def update_role_permissions(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
+    if data.scope_rules:
+        from app.services import record_scope_service
+
+        try:
+            for module, rule in data.scope_rules.items():
+                record_scope_service.save_role_scope(db, session, role, module, rule, commit=False)
+        except (ValueError, LookupError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     db.commit()
 
     return get_role_detail(role, db, session)

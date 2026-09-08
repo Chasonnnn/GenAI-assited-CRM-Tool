@@ -125,6 +125,7 @@ from app.db.models.meta import (
     MetaPageMapping,
 )
 from app.db.models.notifications import Notification, UserNotificationSettings
+from app.db.models.permission_policy import OrganizationPermissionPolicy
 from app.db.models.pipelines import EntityVersion, Pipeline, PipelineStage
 from app.db.models.platform_templates import (
     PlatformBranding,
@@ -136,6 +137,12 @@ from app.db.models.platform_templates import (
     PlatformSystemEmailTemplate,
 )
 from app.db.models.queues import Queue, QueueMember
+from app.db.models.record_access import (
+    RecordCollaborator,
+    RecordScopeMigrationReview,
+    RoleRecordScope,
+    UserRecordScopeAddition,
+)
 from app.db.models.resend_readiness import ResendReadinessSnapshot
 from app.db.models.status_changes import StatusChangeRequest
 from app.db.models.surrogates import (
@@ -186,6 +193,11 @@ from app.db.models.workflows import (
 )
 
 __all__ = [
+    "OrganizationPermissionPolicy",
+    "RecordCollaborator",
+    "RecordScopeMigrationReview",
+    "RoleRecordScope",
+    "UserRecordScopeAddition",
     "AIActionApproval",
     "AIBulkTaskRequest",
     "AIConversation",

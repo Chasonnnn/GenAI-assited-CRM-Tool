@@ -185,6 +185,7 @@ def list_attachments(
 
     attachments = attachment_service.list_attachments(
         db=db,
+        session=session,
         org_id=surrogate.organization_id,
         surrogate_id=surrogate.id,
         include_quarantined=False,
@@ -348,6 +349,7 @@ def list_donor_attachments(
     donor = _get_donor_with_access(db, donor_id, session)
     attachments = attachment_service.list_attachments(
         db=db,
+        session=session,
         org_id=donor.organization_id,
         donor_id=donor.id,
         include_quarantined=False,
@@ -428,6 +430,7 @@ def list_ip_attachments(
 
     attachments = attachment_service.list_attachments(
         db=db,
+        session=session,
         org_id=ip.organization_id,
         intended_parent_id=ip.id,
         include_quarantined=False,

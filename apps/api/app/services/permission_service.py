@@ -13,7 +13,10 @@ from sqlalchemy.orm import Session
 
 from app.core.permission_resolution import resolve_effective_permissions
 from app.core.permissions import (
+    ADMIN_ONLY_PERMISSIONS,
+    PROTECTED_ROLES,
     ROLE_DEFAULTS,
+    V2_PERMISSION_KEYS,
     is_developer_only,
     is_valid_permission,
 )
@@ -46,6 +49,10 @@ def get_effective_permissions(
     if role == "developer":
         return resolve_effective_permissions(role)
 
+    from app.services import permission_policy_service
+
+    policy_version = permission_policy_service.get_version(db, org_id)
+
     # Apply org-level role overrides (if any exist)
     from app.db.models import RolePermission
 
@@ -76,6 +83,7 @@ def get_effective_permissions(
         user_overrides=(
             (override.permission, override.override_type) for override in user_overrides
         ),
+        policy_version=policy_version,
     )
 
 
@@ -135,9 +143,35 @@ def set_user_override(
     if not is_valid_permission(permission):
         raise ValueError(f"Invalid permission: {permission}")
 
+    from app.services import permission_policy_service
+
+    permission_policy_service.lock_configuration(db, org_id)
+    policy_version = permission_policy_service.get_version(db, org_id)
+    if policy_version >= 2:
+        actor = get_membership_for_user(db, org_id, actor_user_id)
+        if actor is None or actor.role not in PROTECTED_ROLES:
+            raise ValueError("Only Admin and Developer can manage individual additions")
+        if override_type not in ("grant", None):
+            raise ValueError(
+                "Version 2 permits individual additions only; inherited access cannot be denied"
+            )
+        target = get_membership_for_user(db, org_id, target_user_id)
+        if target is None:
+            raise ValueError("User not found in organization")
+        if (
+            override_type == "grant"
+            and permission in ADMIN_ONLY_PERMISSIONS
+            and target.role not in PROTECTED_ROLES
+        ):
+            raise ValueError(f"Permission '{permission}' is reserved for Admin and Developer")
+        if target.role == "developer" and actor.role != "developer":
+            raise ValueError("Only Developers can modify Developer accounts")
+    elif permission in V2_PERMISSION_KEYS and override_type is not None:
+        raise ValueError("Activate version 2 before configuring this permission")
+
     # Block granting developer_only permissions to non-developers
     # These permissions should ONLY ever be held by Developer role
-    if override_type == "grant" and is_developer_only(permission):
+    if override_type == "grant" and is_developer_only(permission, policy_version=policy_version):
         from app.db.models import Membership
 
         target_membership = (
@@ -205,6 +239,8 @@ def set_user_override(
         },
     )
 
+    permission_policy_service.touch_configuration(db, org_id)
+
     return True
 
 
@@ -223,6 +259,23 @@ def set_role_default(
     """
     if not is_valid_permission(permission):
         raise ValueError(f"Invalid permission: {permission}")
+
+    from app.services import permission_policy_service
+
+    permission_policy_service.lock_configuration(db, org_id)
+    policy_version = permission_policy_service.get_version(db, org_id)
+    if policy_version >= 2:
+        actor = get_membership_for_user(db, org_id, actor_user_id)
+        if actor is None or actor.role not in PROTECTED_ROLES:
+            raise ValueError("Only Admin and Developer can configure role baselines")
+        if role in PROTECTED_ROLES:
+            raise ValueError(f"The {role} role baseline is protected")
+        if is_granted and is_developer_only(permission, policy_version=2):
+            raise ValueError(f"Permission '{permission}' is developer-only")
+        if is_granted and permission in ADMIN_ONLY_PERMISSIONS:
+            raise ValueError(f"Permission '{permission}' is reserved for Admin and Developer")
+    elif role == "operations" or permission in V2_PERMISSION_KEYS:
+        raise ValueError("Activate version 2 before configuring this role or permission")
 
     from app.db.models import RolePermission
 
@@ -266,6 +319,8 @@ def set_role_default(
             "after": is_granted,
         },
     )
+
+    permission_policy_service.touch_configuration(db, org_id)
 
     return True
 
@@ -429,12 +484,7 @@ def _assert_no_google_donor_task_work(
         # This is the credential-disconnect path. It remains bound to the exact
         # authenticated user while intentionally scanning every organization.
         donor_task_query = donor_task_query.execution_options(skip_org_scope=True)
-    donor_tasks = (
-        donor_task_query
-        .order_by(Task.organization_id, Task.id)
-        .with_for_update()
-        .all()
-    )
+    donor_tasks = donor_task_query.order_by(Task.organization_id, Task.id).with_for_update().all()
     if any(google_task_id for _task_id, google_task_id in donor_tasks):
         raise ValueError(
             f"Cannot {operation} while synced donor tasks remain; "
@@ -445,9 +495,7 @@ def _assert_no_google_donor_task_work(
         org_ids=org_ids,
         user_id=user_id,
     ):
-        raise ValueError(
-            f"Cannot {operation} while donor-task Google cleanup is pending or failed"
-        )
+        raise ValueError(f"Cannot {operation} while donor-task Google cleanup is pending or failed")
 
 
 def get_user_overrides(
@@ -603,6 +651,8 @@ def deprovision_member(
 def list_members(
     db: Session,
     org_id: uuid.UUID,
+    *,
+    include_inactive: bool = False,
 ):
     """List memberships and users for an organization."""
     from app.db.models import Membership, User
@@ -612,7 +662,7 @@ def list_members(
         .join(User, Membership.user_id == User.id)
         .filter(
             Membership.organization_id == org_id,
-            Membership.is_active.is_(True),
+            True if include_inactive else Membership.is_active.is_(True),
         )
         .order_by(User.display_name, User.email)
         .all()
@@ -623,6 +673,8 @@ def get_member(
     db: Session,
     org_id: uuid.UUID,
     member_id: uuid.UUID,
+    *,
+    include_inactive: bool = False,
 ):
     """Get membership and user for a member id."""
     from app.db.models import Membership, User
@@ -633,7 +685,7 @@ def get_member(
         .filter(
             Membership.id == member_id,
             Membership.organization_id == org_id,
-            Membership.is_active.is_(True),
+            True if include_inactive else Membership.is_active.is_(True),
         )
         .first()
     )
@@ -645,15 +697,18 @@ def get_membership_for_user(
     user_id: uuid.UUID,
 ):
     """Get membership for user in org."""
-    from app.db.models import Membership
+    from app.db.models import Membership, User
 
     return (
         db.query(Membership)
+        .join(User, User.id == Membership.user_id)
         .filter(
             Membership.user_id == user_id,
             Membership.organization_id == org_id,
             Membership.is_active.is_(True),
+            User.is_active.is_(True),
         )
+        .populate_existing()
         .first()
     )
 

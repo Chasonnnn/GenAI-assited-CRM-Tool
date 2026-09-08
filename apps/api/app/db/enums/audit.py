@@ -43,6 +43,9 @@ class AuditEventType(str, Enum):
     # Versioned config changes (with before/after version links)
     CONFIG_PIPELINE_UPDATED = "config_pipeline_updated"
     CONFIG_TEMPLATE_UPDATED = "config_template_updated"
+    WORKFLOW_CONFIG_CHANGED = "workflow_config_changed"
+    WORKFLOW_PRIVATE_ACCESSED = "workflow_private_accessed"
+    WORKFLOW_PUBLISHED = "workflow_published"
     CONFIG_ROLLED_BACK = "config_rolled_back"
 
     # Data operations

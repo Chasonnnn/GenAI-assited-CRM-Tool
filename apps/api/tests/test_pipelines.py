@@ -151,9 +151,7 @@ def _create_surrogate_for_stage(
     return surrogate
 
 
-def _create_donor_for_stage(
-    db, *, org_id: UUID, donor_type: str, stage: PipelineStage
-) -> Donor:
+def _create_donor_for_stage(db, *, org_id: UUID, donor_type: str, stage: PipelineStage) -> Donor:
     email = f"pipeline-{donor_type}-donor-{uuid.uuid4().hex[:8]}@example.com"
     normalized_email = normalize_email(email)
     donor = Donor(
@@ -171,9 +169,7 @@ def _create_donor_for_stage(
     return donor
 
 
-def _create_intended_parent_for_stage(
-    db, *, org_id: UUID, stage: PipelineStage
-) -> IntendedParent:
+def _create_intended_parent_for_stage(db, *, org_id: UUID, stage: PipelineStage) -> IntendedParent:
     email = f"pipeline-ip-{uuid.uuid4().hex[:8]}@example.com"
     normalized_email = normalize_email(email)
     intended_parent = IntendedParent(
@@ -452,9 +448,7 @@ async def test_donor_pipeline_record_remaps_require_donor_change_status(
                 "stages": [
                     _draft_stage_payload(stage, index + 1)
                     for index, stage in enumerate(
-                        stage
-                        for stage in payload["stages"]
-                        if stage["id"] != str(custom_stage.id)
+                        stage for stage in payload["stages"] if stage["id"] != str(custom_stage.id)
                     )
                 ],
                 "feature_config": payload["feature_config"],
@@ -511,9 +505,7 @@ def test_donor_pipeline_rollback_rejects_snapshot_that_would_strand_active_donor
     db.commit()
     db.refresh(pipeline)
     version_before = pipeline.current_version
-    version_count_before = len(
-        pipeline_service.get_pipeline_versions(db, test_org.id, pipeline.id)
-    )
+    version_count_before = len(pipeline_service.get_pipeline_versions(db, test_org.id, pipeline.id))
 
     updated, error = pipeline_service.rollback_pipeline(
         db,
@@ -703,14 +695,12 @@ def test_donor_default_pipelines_are_created_and_listed_in_isolation(db, test_or
     assert egg_pipeline.id != sperm_pipeline.id
     assert egg_pipeline.entity_type == EGG_DONOR_PIPELINE_ENTITY
     assert sperm_pipeline.entity_type == SPERM_DONOR_PIPELINE_ENTITY
-    assert [stage.stage_key for stage in sorted(egg_pipeline.stages, key=lambda item: item.order)] == [
-        stage["stage_key"] for stage in get_default_stage_defs(EGG_DONOR_PIPELINE_ENTITY)
-    ]
+    assert [
+        stage.stage_key for stage in sorted(egg_pipeline.stages, key=lambda item: item.order)
+    ] == [stage["stage_key"] for stage in get_default_stage_defs(EGG_DONOR_PIPELINE_ENTITY)]
     assert [
         pipeline.id
-        for pipeline in pipeline_service.list_pipelines(
-            db, test_org.id, EGG_DONOR_PIPELINE_ENTITY
-        )
+        for pipeline in pipeline_service.list_pipelines(db, test_org.id, EGG_DONOR_PIPELINE_ENTITY)
     ] == [egg_pipeline.id]
     assert [
         pipeline.id
@@ -729,16 +719,17 @@ def test_donor_default_pipelines_are_created_and_listed_in_isolation(db, test_or
 
     assert {
         pipeline.id
-        for pipeline in pipeline_service.list_pipelines(
-            db, test_org.id, EGG_DONOR_PIPELINE_ENTITY
-        )
+        for pipeline in pipeline_service.list_pipelines(db, test_org.id, EGG_DONOR_PIPELINE_ENTITY)
     } == {egg_pipeline.id, custom_egg_pipeline.id}
-    assert pipeline_service.get_pipeline(
-        db,
-        test_org.id,
-        custom_egg_pipeline.id,
-        entity_type=SPERM_DONOR_PIPELINE_ENTITY,
-    ) is None
+    assert (
+        pipeline_service.get_pipeline(
+            db,
+            test_org.id,
+            custom_egg_pipeline.id,
+            entity_type=SPERM_DONOR_PIPELINE_ENTITY,
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize(
@@ -753,6 +744,7 @@ def test_donor_default_pipelines_are_created_and_listed_in_isolation(db, test_or
                 "application_submitted",
                 "medical_records_review",
                 "psychological_screening",
+                "approved",
                 "ready_to_match",
                 "matched",
                 "cycle_in_progress",
@@ -771,6 +763,7 @@ def test_donor_default_pipelines_are_created_and_listed_in_isolation(db, test_or
                 "application_submitted",
                 "semen_analysis",
                 "medical_genetic_screening",
+                "approved",
                 "available",
                 "matched",
                 "collection_in_progress",
@@ -825,9 +818,7 @@ def test_donor_dependency_graph_does_not_reuse_surrogate_workflow_references(
     assert all(stage["workflow_refs"] == [] for stage in graph["stages"])
 
 
-def test_donor_dependency_graph_includes_only_same_subtype_workflows(
-    db, test_org, test_user
-):
+def test_donor_dependency_graph_includes_only_same_subtype_workflows(db, test_org, test_user):
     egg_pipeline = pipeline_service.get_or_create_default_pipeline(
         db,
         test_org.id,
@@ -896,9 +887,7 @@ def test_surrogate_dependency_graph_does_not_reuse_donor_workflow_references(
     assert contacted["workflow_refs"] == []
 
 
-def test_donor_dependency_graph_counts_only_same_org_and_donor_type(
-    db, test_org, test_user
-):
+def test_donor_dependency_graph_counts_only_same_org_and_donor_type(db, test_org, test_user):
     egg_pipeline = pipeline_service.get_or_create_default_pipeline(
         db,
         test_org.id,
@@ -920,9 +909,7 @@ def test_donor_dependency_graph_counts_only_same_org_and_donor_type(
     egg_graph = pipeline_dependency_service.build_pipeline_dependency_graph(db, egg_pipeline)
     sperm_graph = pipeline_dependency_service.build_pipeline_dependency_graph(db, sperm_pipeline)
 
-    egg_new_dependency = next(
-        stage for stage in egg_graph["stages"] if stage["stage_key"] == "new"
-    )
+    egg_new_dependency = next(stage for stage in egg_graph["stages"] if stage["stage_key"] == "new")
     sperm_new_dependency = next(
         stage for stage in sperm_graph["stages"] if stage["stage_key"] == "new"
     )
@@ -1001,9 +988,7 @@ def test_apply_egg_pipeline_remap_moves_only_egg_donors_and_refreshes_stage_stat
     assert sperm_donor.stage.id == sperm_stage.id
 
 
-def test_apply_donor_pipeline_remap_updates_only_same_subtype_workflows(
-    db, test_org, test_user
-):
+def test_apply_donor_pipeline_remap_updates_only_same_subtype_workflows(db, test_org, test_user):
     egg_pipeline = pipeline_service.get_or_create_default_pipeline(
         db, test_org.id, test_user.id, entity_type=EGG_DONOR_PIPELINE_ENTITY
     )
@@ -1126,9 +1111,7 @@ def test_delete_donor_stage_migrates_matching_subtype_records(db, test_org, test
     )
     target_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "semen_analysis")
     assert target_stage is not None
-    donor = _create_donor_for_stage(
-        db, org_id=test_org.id, donor_type="sperm", stage=custom_stage
-    )
+    donor = _create_donor_for_stage(db, org_id=test_org.id, donor_type="sperm", stage=custom_stage)
     assert donor.stage.id == custom_stage.id
     db.commit()
 

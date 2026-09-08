@@ -146,6 +146,14 @@ def list_email_template_drafts(
         scope_filter=scope,
         show_all_personal=show_all_personal and _is_admin(session),
     )
+    audited = [
+        email_template_access.audit_private_read(
+            db, session, draft, target_type="email_template_draft"
+        )
+        for draft in drafts
+    ]
+    if any(audited):
+        db.commit()
     return [_build_draft_response(draft) for draft in drafts]
 
 
@@ -233,6 +241,10 @@ def get_email_template_draft(
     if draft is None:
         raise HTTPException(status_code=404, detail="Draft not found")
     _require_draft_editor(db, session, draft)
+    if email_template_access.audit_private_read(
+        db, session, draft, target_type="email_template_draft"
+    ):
+        db.commit()
     return _build_draft_response(draft)
 
 

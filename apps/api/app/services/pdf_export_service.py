@@ -2000,6 +2000,8 @@ async def export_analytics_pdf_async(
     start_dt: datetime | None,
     end_dt: datetime | None,
     date_range_str: str,
+    *,
+    include_organization_spend: bool = True,
 ) -> bytes:
     """
     Export analytics report as PDF using Playwright (async version).
@@ -2024,15 +2026,16 @@ async def export_analytics_pdf_async(
         end_dt=end_dt,
     )
 
-    # Fetch meta spend data asynchronously
-    meta_start = start_dt or datetime(1970, 1, 1, tzinfo=UTC)
-    meta_end = end_dt or datetime.now(UTC)
-    meta_spend = await analytics_service.get_meta_spend_summary(
-        db=db,
-        organization_id=organization_id,
-        start=meta_start,
-        end=meta_end,
-    )
+    meta_spend = None
+    if include_organization_spend:
+        meta_start = start_dt or datetime(1970, 1, 1, tzinfo=UTC)
+        meta_end = end_dt or datetime.now(UTC)
+        meta_spend = await analytics_service.get_meta_spend_summary(
+            db=db,
+            organization_id=organization_id,
+            start=meta_start,
+            end=meta_end,
+        )
 
     # Generate HTML
     html_content = _generate_analytics_html(

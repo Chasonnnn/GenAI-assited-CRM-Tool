@@ -32,6 +32,7 @@ from app.services import (
     activity_service,
     audit_service,
     membership_service,
+    permission_policy_service,
     queue_service,
     surrogate_service,
 )
@@ -39,6 +40,18 @@ from app.services import (
 from .surrogates_shared import _surrogate_to_read
 
 router = APIRouter()
+
+
+def _check_v2_record_access(db, session, surrogate, *, allow_archived=False):
+    if permission_policy_service.is_enabled(db, session.org_id):
+        check_surrogate_access(
+            surrogate,
+            session.role,
+            session.user_id,
+            db=db,
+            org_id=session.org_id,
+            allow_archived=allow_archived,
+        )
 
 
 def create_surrogate(
@@ -129,6 +142,10 @@ def claim_surrogate(
         "assign_surrogates",
     ):
         raise HTTPException(status_code=403, detail="Missing permission: assign_surrogates")
+
+    from app.services import record_scope_service
+
+    record_scope_service.require_mutation_scope(db, session, "surrogate", surrogate_id)
 
     try:
         surrogate = queue_service.claim_surrogate(
@@ -388,6 +405,10 @@ def assign_surrogate(
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
 
+    from app.services import record_scope_service
+
+    record_scope_service.require_mutation_scope(db, session, "surrogate", surrogate_id)
+
     if data.owner_type == OwnerType.USER:
         membership = membership_service.get_membership_for_org(db, session.org_id, data.owner_id)
         if not membership:
@@ -468,6 +489,7 @@ def bulk_assign_surrogates(
             continue
 
         try:
+            _check_v2_record_access(db, session, surrogate)
             surrogate_service.assign_surrogate(
                 db, surrogate, data.owner_type, data.owner_id, session.user_id
             )
@@ -677,6 +699,7 @@ def archive_surrogate(
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
 
+    _check_v2_record_access(db, session, surrogate, allow_archived=True)
     surrogate = surrogate_service.archive_surrogate(
         db, surrogate, session.user_id, emit_events=True
     )
@@ -711,6 +734,7 @@ def restore_surrogate(
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
 
+    _check_v2_record_access(db, session, surrogate, allow_archived=True)
     surrogate, error = surrogate_service.restore_surrogate(
         db, surrogate, session.user_id, emit_events=True
     )
@@ -749,6 +773,7 @@ def delete_surrogate(
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
 
+    _check_v2_record_access(db, session, surrogate, allow_archived=True)
     if not surrogate.is_archived:
         raise HTTPException(
             status_code=400, detail="Surrogate must be archived before permanent deletion"

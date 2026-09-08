@@ -106,7 +106,7 @@ def get_stats(
     session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get IP counts by status."""
-    return ip_service.get_ip_stats(db, org_id=session.org_id)
+    return ip_service.get_ip_stats(db, org_id=session.org_id, session=session)
 
 
 @router.get("/created-dates", response_model=list[str])
@@ -128,6 +128,7 @@ def list_created_dates(
     """List distinct created_at dates for the current intended parent filter context."""
     return ip_service.list_intended_parent_created_dates(
         db=db,
+        session=session,
         org_id=session.org_id,
         status=status,
         state=state,
@@ -242,7 +243,9 @@ def get_intended_parent(
     session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get an intended parent by ID."""
-    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
+    ip = ip_service.get_intended_parent(
+        db, ip_id, session.org_id, session=session, allow_archived=True
+    )
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     from app.services import audit_service
@@ -274,7 +277,7 @@ def update_intended_parent(
     ),
 ):
     """Update an intended parent."""
-    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id, session=session)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
 
@@ -331,7 +334,7 @@ def update_status(
     ),
 ):
     """Change status of an intended parent."""
-    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id, session=session)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
 
@@ -432,7 +435,7 @@ def archive_intended_parent(
     ),
 ):
     """Archive (soft delete) an intended parent."""
-    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id, session=session)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     if ip.is_archived:
@@ -467,7 +470,9 @@ def restore_intended_parent(
     ),
 ):
     """Restore an archived intended parent (admin only)."""
-    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
+    ip = ip_service.get_intended_parent(
+        db, ip_id, session.org_id, session=session, allow_archived=True
+    )
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     if not ip.is_archived:
@@ -510,7 +515,7 @@ def delete_intended_parent(
     ),
 ) -> Response:
     """Hard delete an archived intended parent (admin only)."""
-    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id, session=session)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     if not ip.is_archived:
@@ -549,7 +554,9 @@ def get_activity(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> EntityActivityResponse:
     """Get comprehensive intended-parent activity."""
-    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
+    ip = ip_service.get_intended_parent(
+        db, ip_id, session.org_id, session=session, allow_archived=True
+    )
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     can_view_task_previews = permission_service.check_permission(
@@ -630,7 +637,9 @@ def get_status_history(
     session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get status history for an intended parent."""
-    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
+    ip = ip_service.get_intended_parent(
+        db, ip_id, session.org_id, session=session, allow_archived=True
+    )
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
 
@@ -689,7 +698,9 @@ def list_notes(
     session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """List notes for an intended parent."""
-    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
+    ip = ip_service.get_intended_parent(
+        db, ip_id, session.org_id, session=session, allow_archived=True
+    )
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
 
@@ -736,7 +747,7 @@ def create_note(
     ),
 ):
     """Add a note to an intended parent."""
-    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id, session=session)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
 
@@ -766,7 +777,7 @@ def delete_note(
     ),
 ) -> Response:
     """Delete a note (author or admin only)."""
-    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id, session=session)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
 

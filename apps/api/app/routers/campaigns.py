@@ -10,7 +10,6 @@ from app.core.deps import (
     get_current_session,
     get_db,
     require_csrf_header,
-    require_permission,
 )
 from app.core.policies import POLICIES
 from app.db.enums import Role
@@ -30,14 +29,58 @@ from app.schemas.campaign import (
     SuppressionCreate,
     SuppressionResponse,
 )
-from app.services import campaign_service, permission_service
+from app.services import campaign_access, campaign_service, permission_service
 
 csrf_header_dependency = require_csrf_header
 
 
+def _require_campaign_view(
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+):
+    key = (
+        "view_campaigns" if campaign_access.enabled(db, session.org_id) else "view_email_templates"
+    )
+    if not campaign_access._has(db, session, key):
+        raise HTTPException(status_code=403, detail="Cannot view campaigns")
+    return session
+
+
+def _require_campaign_edit(
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+):
+    key = (
+        "edit_campaigns"
+        if campaign_access.enabled(db, session.org_id)
+        else "manage_email_templates"
+    )
+    if not campaign_access._has(db, session, key):
+        raise HTTPException(status_code=403, detail="Cannot edit campaigns")
+    return session
+
+
+def _require_access(db, session, campaign, action="view"):
+    allowed = (
+        campaign_access.can_view(db, session, campaign)
+        if action == "view"
+        else campaign_access.can_manage(db, session, campaign, action)
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Cannot access this campaign")
+    if (
+        campaign_access.enabled(db, session.org_id)
+        and campaign.scope == "personal"
+        and campaign.owner_user_id != session.user_id
+    ):
+        campaign_access.audit(db, campaign, session.user_id, action)
+        if action == "view":
+            db.commit()
+
+
 router = APIRouter(
     tags=["Campaigns"],
-    dependencies=[Depends(require_permission(POLICIES["email_templates"].default))],
+    dependencies=[Depends(_require_campaign_view)],
     prefix="/campaigns",
 )
 
@@ -52,13 +95,15 @@ def _require_donor_recipient_access(
     require_write: bool = False,
 ) -> None:
     """Require donor access before reading or mutating a donor campaign."""
+    if campaign_access.enabled(db, session.org_id):
+        if not campaign_access._has(db, session, "view_" + campaign_access._module(recipient_type)):
+            raise HTTPException(status_code=403, detail="Missing recipient module permission")
+        return
     if recipient_type not in DONOR_RECIPIENT_TYPES:
         return
-    permission = (
-        POLICIES["donors"].actions["edit"]
-        if require_write
-        else POLICIES["donors"].default
-    )
+    if campaign_access.enabled(db, session.org_id):
+        require_write = False
+    permission = POLICIES["donors"].actions["edit"] if require_write else POLICIES["donors"].default
     role = getattr(session.role, "value", session.role)
     if not permission_service.check_permission(
         db,
@@ -70,7 +115,9 @@ def _require_donor_recipient_access(
         raise HTTPException(status_code=403, detail=f"Missing permission: {permission.value}")
 
 
-def _require_messaging_operator(session: UserSession) -> None:
+def _require_messaging_operator(session: UserSession, db: Session) -> None:
+    if campaign_access.enabled(db, session.org_id):
+        return
     if session.role not in {Role.ADMIN, Role.DEVELOPER}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -106,8 +153,10 @@ def list_campaigns(
         status=status,
         limit=limit,
         offset=offset,
+        viewer_session=session,
         exclude_recipient_types=None if can_view_donors else DONOR_RECIPIENT_TYPES,
     )
+    db.commit()
     return campaigns
 
 
@@ -115,14 +164,14 @@ def list_campaigns(
 def create_campaign(
     data: CampaignCreate,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[object, "fastapi_param"] = Depends(
-        require_permission(POLICIES["email_templates"].actions["manage"])
-    ),
+    session: Annotated[object, "fastapi_param"] = Depends(_require_campaign_edit),
     _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
 ):
     """Create a new campaign (draft status)."""
+    if not campaign_access.can_create(db, session, data.scope):
+        raise HTTPException(status_code=403, detail="Cannot create campaigns in this scope")
     if data.channel == "messaging":
-        _require_messaging_operator(session)
+        _require_messaging_operator(session, db)
     _require_donor_recipient_access(
         db,
         session,
@@ -134,7 +183,7 @@ def create_campaign(
             db, org_id=session.org_id, user_id=session.user_id, data=data
         )
         db.commit()
-        return _campaign_to_response(db, campaign)
+        return _campaign_to_response(db, campaign, session)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -149,9 +198,10 @@ def get_campaign(
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    _require_access(db, session, campaign, "view")
     _require_donor_recipient_access(db, session, campaign.recipient_type)
 
-    return _campaign_to_response(db, campaign)
+    return _campaign_to_response(db, campaign, session)
 
 
 @router.patch("/{campaign_id}", response_model=CampaignResponse)
@@ -159,17 +209,16 @@ def update_campaign(
     campaign_id: UUID,
     data: CampaignUpdate,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[object, "fastapi_param"] = Depends(
-        require_permission(POLICIES["email_templates"].actions["manage"])
-    ),
+    session: Annotated[object, "fastapi_param"] = Depends(_require_campaign_edit),
     _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
 ):
     """Update a draft or scheduled campaign."""
     current = campaign_service.get_campaign(db, session.org_id, campaign_id)
     if current is None:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    _require_access(db, session, current, "edit")
     if current.channel == "messaging" or data.channel == "messaging":
-        _require_messaging_operator(session)
+        _require_messaging_operator(session, db)
     _require_donor_recipient_access(
         db,
         session,
@@ -185,7 +234,11 @@ def update_campaign(
         )
     try:
         campaign = campaign_service.update_campaign(
-            db, org_id=session.org_id, campaign_id=campaign_id, data=data
+            db,
+            org_id=session.org_id,
+            campaign_id=campaign_id,
+            data=data,
+            actor_user_id=session.user_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -196,29 +249,30 @@ def update_campaign(
         )
 
     db.commit()
-    return _campaign_to_response(db, campaign)
+    return _campaign_to_response(db, campaign, session)
 
 
 @router.delete("/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_campaign(
     campaign_id: UUID,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[object, "fastapi_param"] = Depends(
-        require_permission(POLICIES["email_templates"].actions["manage"])
-    ),
+    session: Annotated[object, "fastapi_param"] = Depends(_require_campaign_edit),
     _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
 ) -> Response:
     """Delete a draft campaign."""
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
     if campaign is not None and campaign.channel == "messaging":
-        _require_messaging_operator(session)
+        _require_messaging_operator(session, db)
     if campaign is not None:
+        _require_access(db, session, campaign, "edit")
         _require_donor_recipient_access(
             db,
             session,
             campaign.recipient_type,
             require_write=True,
         )
+    if campaign is not None:
+        campaign_access.audit(db, campaign, session.user_id, "delete")
     deleted = campaign_service.delete_campaign(db, session.org_id, campaign_id)
     if not deleted:
         raise HTTPException(
@@ -238,17 +292,20 @@ def preview_filters(
     data: PreviewFiltersRequest,
     limit: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=100),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[object, "fastapi_param"] = Depends(
-        require_permission(POLICIES["email_templates"].actions["manage"])
-    ),
+    session: Annotated[object, "fastapi_param"] = Depends(_require_campaign_edit),
 ):
     """
     Preview recipients that match filter criteria BEFORE creating a campaign.
 
     Returns total count and sample recipients.
     """
+    if not campaign_access.can_create(db, session, data.scope):
+        raise HTTPException(status_code=403, detail="Cannot preview this campaign scope")
+    preview_owner = data.owner_user_id or session.user_id
+    if preview_owner != session.user_id and not campaign_access._administrator(session):
+        raise HTTPException(status_code=403, detail="Cannot preview another user's campaign")
     if data.channel == "messaging":
-        _require_messaging_operator(session)
+        _require_messaging_operator(session, db)
     _require_donor_recipient_access(db, session, data.recipient_type)
     # Convert FilterCriteria to dict for service call
     filter_dict = data.filter_criteria.model_dump(exclude_none=True) if data.filter_criteria else {}
@@ -260,6 +317,8 @@ def preview_filters(
         filter_criteria=filter_dict,
         limit=limit,
         ignore_opt_out=bool(getattr(data, "include_unsubscribed", False)),
+        scope=data.scope,
+        owner_user_id=preview_owner,
         channel=data.channel,
     )
 
@@ -269,16 +328,15 @@ def preview_recipients(
     campaign_id: UUID,
     limit: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=100),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[object, "fastapi_param"] = Depends(
-        require_permission(POLICIES["email_templates"].actions["manage"])
-    ),
+    session: Annotated[object, "fastapi_param"] = Depends(_require_campaign_edit),
 ):
     """Preview recipients that match the campaign filter."""
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    _require_access(db, session, campaign, "edit")
     if campaign.channel == "messaging":
-        _require_messaging_operator(session)
+        _require_messaging_operator(session, db)
     _require_donor_recipient_access(db, session, campaign.recipient_type)
 
     return campaign_service.preview_recipients(
@@ -288,6 +346,7 @@ def preview_recipients(
         filter_criteria=campaign.filter_criteria,
         limit=limit,
         ignore_opt_out=bool(getattr(campaign, "include_unsubscribed", False)),
+        campaign=campaign,
         channel=campaign.channel,
     )
 
@@ -301,9 +360,7 @@ def send_campaign(
     campaign_id: UUID,
     data: CampaignSendRequest | None = None,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[object, "fastapi_param"] = Depends(
-        require_permission(POLICIES["email_templates"].actions["manage"])
-    ),
+    session: Annotated[object, "fastapi_param"] = Depends(_require_campaign_view),
     _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
 ):
     """
@@ -316,8 +373,9 @@ def send_campaign(
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
     if campaign is None:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    _require_access(db, session, campaign, "send")
     if campaign.channel == "messaging":
-        _require_messaging_operator(session)
+        _require_messaging_operator(session, db)
     _require_donor_recipient_access(
         db,
         session,
@@ -348,22 +406,23 @@ def send_campaign(
 def cancel_campaign(
     campaign_id: UUID,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[object, "fastapi_param"] = Depends(
-        require_permission(POLICIES["email_templates"].actions["manage"])
-    ),
+    session: Annotated[object, "fastapi_param"] = Depends(_require_campaign_view),
     _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
 ) -> object:
     """Cancel a scheduled or in-progress campaign."""
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
     if campaign is not None and campaign.channel == "messaging":
-        _require_messaging_operator(session)
+        _require_messaging_operator(session, db)
     if campaign is not None:
+        _require_access(db, session, campaign, "send")
         _require_donor_recipient_access(
             db,
             session,
             campaign.recipient_type,
             require_write=True,
         )
+    if campaign is not None:
+        campaign_access.audit(db, campaign, session.user_id, "cancel")
     cancelled = campaign_service.cancel_campaign(db, session.org_id, campaign_id)
     if not cancelled:
         raise HTTPException(
@@ -390,6 +449,7 @@ def list_campaign_runs(
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
     if campaign is None:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    _require_access(db, session, campaign, "view")
     _require_donor_recipient_access(db, session, campaign.recipient_type)
     return campaign_service.list_campaign_runs(
         db, org_id=session.org_id, campaign_id=campaign_id, limit=limit
@@ -410,6 +470,7 @@ def get_campaign_run(
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
     if campaign is None:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    _require_access(db, session, campaign, "view")
     _require_donor_recipient_access(db, session, campaign.recipient_type)
 
     return CampaignRunResponse.model_validate(run)
@@ -425,15 +486,14 @@ def retry_failed_campaign_run(
     campaign_id: UUID,
     run_id: UUID,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[object, "fastapi_param"] = Depends(
-        require_permission(POLICIES["email_templates"].actions["manage"])
-    ),
+    session: Annotated[object, "fastapi_param"] = Depends(_require_campaign_view),
 ):
     """Retry failed recipients for a campaign run."""
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
     if campaign is not None and campaign.channel == "messaging":
-        _require_messaging_operator(session)
+        _require_messaging_operator(session, db)
     if campaign is not None:
+        _require_access(db, session, campaign, "send")
         _require_donor_recipient_access(
             db,
             session,
@@ -481,6 +541,7 @@ def list_run_recipients(
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
     if campaign is None:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    _require_access(db, session, campaign, "view")
     _require_donor_recipient_access(db, session, campaign.recipient_type)
 
     recipients = campaign_service.list_run_recipients(
@@ -504,11 +565,13 @@ def list_suppressions(
     limit: Annotated[int, "fastapi_param"] = Query(100, ge=1, le=500),
     offset: Annotated[int, "fastapi_param"] = Query(0, ge=0),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[object, "fastapi_param"] = Depends(
-        require_permission(POLICIES["email_templates"].actions["manage"])
-    ),
+    session: Annotated[object, "fastapi_param"] = Depends(_require_campaign_edit),
 ):
     """List suppressed emails for the organization."""
+    if campaign_access.enabled(db, session.org_id) and not campaign_access._has(
+        db, session, "manage_org_campaigns"
+    ):
+        raise HTTPException(status_code=403, detail="Cannot manage organization suppression")
     items, total = campaign_service.list_suppressions(
         db, org_id=session.org_id, limit=limit, offset=offset
     )
@@ -523,12 +586,14 @@ def list_suppressions(
 def add_suppression(
     data: SuppressionCreate,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[object, "fastapi_param"] = Depends(
-        require_permission(POLICIES["email_templates"].actions["manage"])
-    ),
+    session: Annotated[object, "fastapi_param"] = Depends(_require_campaign_edit),
     _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
 ):
     """Add an email to the suppression list."""
+    if campaign_access.enabled(db, session.org_id) and not campaign_access._has(
+        db, session, "manage_org_campaigns"
+    ):
+        raise HTTPException(status_code=403, detail="Cannot manage organization suppression")
     suppression = campaign_service.add_to_suppression(
         db, org_id=session.org_id, email=data.email, reason=data.reason
     )
@@ -540,12 +605,14 @@ def add_suppression(
 def remove_suppression(
     email: str,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[object, "fastapi_param"] = Depends(
-        require_permission(POLICIES["email_templates"].actions["manage"])
-    ),
+    session: Annotated[object, "fastapi_param"] = Depends(_require_campaign_edit),
     _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
 ) -> Response:
     """Remove an email from the suppression list."""
+    if campaign_access.enabled(db, session.org_id) and not campaign_access._has(
+        db, session, "manage_org_campaigns"
+    ):
+        raise HTTPException(status_code=403, detail="Cannot manage organization suppression")
     removed = campaign_service.remove_from_suppression(db, session.org_id, email)
     if not removed:
         raise HTTPException(status_code=404, detail="Email not found in suppression list")
@@ -557,12 +624,41 @@ def remove_suppression(
 # =============================================================================
 
 
-def _campaign_to_response(db: Session, campaign) -> CampaignResponse:
+@router.post(
+    "/{campaign_id}/publish",
+    response_model=CampaignResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def publish_campaign(
+    campaign_id: UUID,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(_require_campaign_edit),
+):
+    campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
+    if campaign is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    _require_access(db, session, campaign, "edit")
+    if not campaign_access.can_create(db, session, "org"):
+        raise HTTPException(status_code=403, detail="Cannot publish organization campaigns")
+    try:
+        published = campaign_access.publish_campaign(db, campaign, session.user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    return _campaign_to_response(db, published, session)
+
+
+def _campaign_to_response(db: Session, campaign, session=None) -> CampaignResponse:
     """Convert campaign model to response with stats."""
     # Get latest run stats
     latest_run = campaign_service.get_latest_run_for_campaign(db, campaign.id)
 
     return CampaignResponse(
+        scope=campaign.scope,
+        owner_user_id=campaign.owner_user_id,
+        proposed_by_user_id=campaign.proposed_by_user_id,
+        proposed_by_name=campaign.proposed_by_name,
+        **campaign_access.capabilities(db, session, campaign),
         id=campaign.id,
         name=campaign.name,
         description=campaign.description,

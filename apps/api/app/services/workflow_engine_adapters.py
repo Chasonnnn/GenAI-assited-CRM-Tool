@@ -96,6 +96,7 @@ class WorkflowDomainAdapter(Protocol):
         workflow_action_index: int | None = None,
         subject_type: str | None = None,
         subject_id: UUID | None = None,
+        execution_permissions: frozenset[str] | None = None,
     ) -> dict: ...
 
 
@@ -371,10 +372,19 @@ class DefaultWorkflowDomainAdapter:
         workflow_action_index: int | None = None,
         subject_type: str | None = None,
         subject_id: UUID | None = None,
+        execution_permissions: frozenset[str] | None = None,
     ) -> dict:
         """Execute a single action."""
         action_type = action.get("action_type")
         action_entity = entity
+        from app.services.workflow_execution_authority import enabled
+
+        v2_authority = bool(workflow_execution_id) and enabled(db, entity.organization_id)
+        workflow_actor_id = (
+            (workflow_owner_id if workflow_scope == "personal" else SYSTEM_USER_ID)
+            if v2_authority
+            else (workflow_owner_id or workflow_creator_user_id)
+        )
 
         def _with_action_type(result: dict) -> dict:
             if action_type and "action_type" not in result:
@@ -414,7 +424,14 @@ class DefaultWorkflowDomainAdapter:
                             "skipped": True,
                         }
                     )
-                action_entity = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
+                action_entity = (
+                    db.query(Surrogate)
+                    .filter(
+                        Surrogate.id == surrogate_id,
+                        Surrogate.organization_id == entity.organization_id,
+                    )
+                    .first()
+                )
                 if not action_entity:
                     return _with_action_type(
                         {
@@ -528,7 +545,8 @@ class DefaultWorkflowDomainAdapter:
                     db,
                     action,
                     action_entity,
-                    workflow_actor_id=workflow_owner_id or workflow_creator_user_id,
+                    workflow_actor_id=workflow_actor_id,
+                    use_workflow_actor=v2_authority,
                 )
                 return _with_action_type(result)
 
@@ -554,7 +572,15 @@ class DefaultWorkflowDomainAdapter:
 
             if action_type == WorkflowActionType.UPDATE_FIELD.value:
                 result = self._action_update_field(
-                    db, action, action_entity, event_id, depth, trigger_callback
+                    db,
+                    action,
+                    action_entity,
+                    event_id,
+                    depth,
+                    trigger_callback,
+                    workflow_actor_id=workflow_actor_id,
+                    execution_permissions=execution_permissions,
+                    v2_authority=v2_authority,
                 )
                 return _with_action_type(result)
 
@@ -563,7 +589,8 @@ class DefaultWorkflowDomainAdapter:
                     db,
                     action,
                     action_entity,
-                    workflow_actor_id=workflow_owner_id or workflow_creator_user_id,
+                    workflow_actor_id=workflow_actor_id,
+                    use_workflow_actor=v2_authority,
                 )
                 return _with_action_type(result)
 
@@ -950,6 +977,7 @@ class DefaultWorkflowDomainAdapter:
         action: dict,
         entity: Surrogate | Donor,
         workflow_actor_id: UUID | None = None,
+        use_workflow_actor: bool = False,
     ) -> dict:
         """Create a task linked to the workflow subject."""
         from datetime import timedelta
@@ -980,7 +1008,9 @@ class DefaultWorkflowDomainAdapter:
 
         due_date = datetime.now(UTC) + timedelta(days=due_days)
 
-        actor_user_id = getattr(entity, "created_by_user_id", None)
+        actor_user_id = (
+            workflow_actor_id if use_workflow_actor else getattr(entity, "created_by_user_id", None)
+        )
         if not actor_user_id and entity.owner_type == OwnerType.USER.value:
             actor_user_id = entity.owner_id
         if not actor_user_id:
@@ -1135,7 +1165,14 @@ class DefaultWorkflowDomainAdapter:
         if not hasattr(entity, "owner_type"):
             surrogate_id = getattr(entity, "surrogate_id", None)
             if surrogate_id:
-                target = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
+                target = (
+                    db.query(Surrogate)
+                    .filter(
+                        Surrogate.id == surrogate_id,
+                        Surrogate.organization_id == entity.organization_id,
+                    )
+                    .first()
+                )
                 if target:
                     target_entity_type = "surrogate"
             elif isinstance(entity, IntakeLead):
@@ -1402,6 +1439,10 @@ class DefaultWorkflowDomainAdapter:
         event_id: UUID,
         depth: int,
         trigger_callback: TriggerCallback | None,
+        *,
+        workflow_actor_id: UUID | None = None,
+        execution_permissions: frozenset[str] | None = None,
+        v2_authority: bool = False,
     ) -> dict:
         """Update an allowlisted subject field."""
         from app.db.models import SurrogateStatusHistory
@@ -1424,14 +1465,22 @@ class DefaultWorkflowDomainAdapter:
                 if new_stage_id == entity.stage_id:
                     return {"success": True, "description": "Stage unchanged"}
                 old_stage = entity.stage
+                from app.services.workflow_execution_authority import active_session
+
+                actor_session = (
+                    active_session(db, entity.organization_id, workflow_actor_id)
+                    if v2_authority and execution_permissions is None
+                    else None
+                )
                 result = donor_service.change_status(
                     db,
                     entity,
                     new_stage_id,
-                    SYSTEM_USER_ID,
+                    workflow_actor_id if v2_authority else SYSTEM_USER_ID,
                     reason="Workflow update",
-                    user_role=Role.DEVELOPER,
+                    user_role=actor_session.role if actor_session else Role.DEVELOPER,
                     emit_workflow_events=False,
+                    **({"execution_permissions": execution_permissions} if v2_authority else {}),
                 )
                 updated = result["donor"]
                 if updated is None:
@@ -1522,22 +1571,49 @@ class DefaultWorkflowDomainAdapter:
             old_stage = pipeline_service.get_stage_by_id(db, old_stage_id) if old_stage_id else None
             old_slug = old_stage.slug if old_stage else None
             old_stage_key = old_stage.stage_key if old_stage else None
-            entity.stage_id = stage.id
-            entity.status_label = stage.label
-            entity.updated_at = datetime.now(UTC)
+            if v2_authority:
+                from app.services import surrogate_status_service
+                from app.services.workflow_execution_authority import active_session
 
-            history = SurrogateStatusHistory(
-                surrogate_id=entity.id,
-                organization_id=entity.organization_id,
-                from_stage_id=old_stage_id,
-                to_stage_id=stage.id,
-                from_label_snapshot=old_label,
-                to_label_snapshot=stage.label,
-                changed_by_user_id=None,
-                reason="Workflow update",
-            )
-            db.add(history)
-            db.commit()
+                actor_session = (
+                    active_session(db, entity.organization_id, workflow_actor_id)
+                    if execution_permissions is None
+                    else None
+                )
+                from app.db.enums import Role
+
+                result = surrogate_status_service.change_status(
+                    db,
+                    entity,
+                    stage.id,
+                    workflow_actor_id,
+                    actor_session.role if actor_session else Role.DEVELOPER,
+                    reason="Workflow update",
+                    trigger_workflows=False,
+                    execution_permissions=execution_permissions,
+                )
+                if result.status != "applied":
+                    return {
+                        "success": False,
+                        "error": "Workflow stage change requires regression approval",
+                    }
+            else:
+                entity.stage_id = stage.id
+                entity.status_label = stage.label
+                entity.updated_at = datetime.now(UTC)
+
+                history = SurrogateStatusHistory(
+                    surrogate_id=entity.id,
+                    organization_id=entity.organization_id,
+                    from_stage_id=old_stage_id,
+                    to_stage_id=stage.id,
+                    from_label_snapshot=old_label,
+                    to_label_snapshot=stage.label,
+                    changed_by_user_id=None,
+                    reason="Workflow update",
+                )
+                db.add(history)
+                db.commit()
 
             # Trigger status_changed workflow with loop protection
             if trigger_callback:
@@ -1594,13 +1670,16 @@ class DefaultWorkflowDomainAdapter:
         action: dict,
         entity: Surrogate | Donor,
         workflow_actor_id: UUID | None = None,
+        use_workflow_actor: bool = False,
     ) -> dict:
         """Add a note to a surrogate or donor subject."""
         content = action.get("content", "")
 
         # Determine author (prefer owner, fall back to creator)
-        author_id = None
-        if entity.owner_type == OwnerType.USER.value and entity.owner_id:
+        author_id = workflow_actor_id if use_workflow_actor else None
+        if author_id:
+            pass
+        elif entity.owner_type == OwnerType.USER.value and entity.owner_id:
             author_id = entity.owner_id
         elif getattr(entity, "created_by_user_id", None):
             author_id = entity.created_by_user_id

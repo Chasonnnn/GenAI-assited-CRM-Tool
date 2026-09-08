@@ -660,6 +660,14 @@ def copy_template_to_personal(
     Raises:
         ValueError: If source template not found or name already exists
     """
+    from app.services import permission_policy_service, permission_service
+
+    if permission_policy_service.is_enabled(db, org_id):
+        member = permission_service.get_membership_for_user(db, org_id, user_id)
+        if member is None or not permission_service.check_permission(
+            db, org_id, user_id, member.role, "manage_email_templates"
+        ):
+            raise PermissionError("Template editing permission required")
     # Get source template
     source = (
         db.query(EmailTemplate)
@@ -744,6 +752,16 @@ def share_template_with_org(
     Raises:
         ValueError: If source template not found, not owned by user, or name exists
     """
+    from app.services import email_template_publication, permission_policy_service
+
+    if permission_policy_service.is_enabled(db, org_id):
+        published = email_template_publication.publish_template_to_org(
+            db, org_id=org_id, actor_user_id=user_id, template_id=template_id, name=new_name
+        )
+        db.commit()
+        db.refresh(published)
+        return published
+
     # Get source template (must be owned by user)
     source = (
         db.query(EmailTemplate)

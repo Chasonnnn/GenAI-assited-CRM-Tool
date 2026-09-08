@@ -143,3 +143,56 @@ def test_resolution_does_not_mutate_defaults_inputs_or_subsequent_results():
         resolve_effective_permissions("intake_specialist") == original_defaults["intake_specialist"]
     )
     assert resolve_effective_permissions("developer") == set(PERMISSION_REGISTRY)
+
+
+@pytest.mark.parametrize("role", ["admin", "developer"])
+def test_v2_protected_baselines_ignore_role_and_individual_denials(role):
+    effective = resolve_effective_permissions(
+        role,
+        policy_version=2,
+        role_overrides=[("view_surrogates", False)],
+        user_overrides=[("view_reports", "revoke")],
+    )
+    assert {"view_surrogates", "view_reports", "manage_roles"} <= effective
+
+
+def test_v2_operations_manages_org_content_without_sending_or_record_writes():
+    effective = resolve_effective_permissions("operations", policy_version=2)
+    assert {
+        "manage_org_workflows",
+        "manage_org_campaigns",
+        "manage_org_templates",
+        "manage_automation",
+        "edit_campaigns",
+        "view_reports",
+        "view_surrogates",
+        "view_donors",
+    } <= effective
+    assert not effective & {
+        "send_campaigns",
+        "send_email",
+        "send_sms",
+        "edit_surrogates",
+        "edit_donors",
+        "approve_surrogates",
+        "approve_donors",
+        "manage_roles",
+    }
+    assert resolve_effective_permissions("operations") == set()
+
+
+def test_v2_individual_grants_are_additive_and_unregistered_keys_are_denied():
+    effective = resolve_effective_permissions(
+        "operations",
+        policy_version=2,
+        role_overrides=[("view_reports", False), ("unregistered", True)],
+        user_overrides=[
+            ("view_reports", "grant"),
+            ("view_donors", "revoke"),
+            ("send_campaigns", "grant"),
+            ("unregistered_user", "grant"),
+        ],
+    )
+    assert {"view_reports", "view_donors", "send_campaigns"} <= effective
+    assert "unregistered" not in effective
+    assert "unregistered_user" not in effective

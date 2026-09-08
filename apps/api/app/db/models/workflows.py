@@ -145,6 +145,13 @@ class AutomationWorkflow(Base):
         nullable=True,
     )
 
+    # Organization execution grants are independent of contributor membership.
+    execution_authority: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    proposed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    proposed_by_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     # First-run review tracking
     requires_review: Mapped[bool] = mapped_column(
         Boolean, server_default=text("FALSE"), nullable=False
@@ -228,6 +235,7 @@ class WorkflowExecution(Base):
     subject_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     subject_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     trigger_event: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    authority_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     # Dedupe (for scheduled/sweep triggers)
     dedupe_key: Mapped[str | None] = mapped_column(String(200), nullable=True)

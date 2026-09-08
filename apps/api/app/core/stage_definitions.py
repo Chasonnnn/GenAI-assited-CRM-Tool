@@ -102,6 +102,7 @@ EGG_DONOR_DEFAULT_COLORS = {
     "on_hold": "#B4536A",
     "disqualified": "#EF4444",
     "closed": "#64748B",
+    "approved": "#22C55E",
 }
 
 SPERM_DONOR_DEFAULT_COLORS = {
@@ -118,6 +119,7 @@ SPERM_DONOR_DEFAULT_COLORS = {
     "on_hold": "#B4536A",
     "disqualified": "#EF4444",
     "closed": "#64748B",
+    "approved": "#22C55E",
 }
 
 SURROGATE_STAGE_TYPE_MAP = {
@@ -168,6 +170,7 @@ EGG_DONOR_STAGE_TYPE_MAP = {
     "on_hold": "paused",
     "disqualified": "terminal",
     "closed": "terminal",
+    "approved": "post_approval",
 }
 
 SPERM_DONOR_STAGE_TYPE_MAP = {
@@ -184,6 +187,7 @@ SPERM_DONOR_STAGE_TYPE_MAP = {
     "on_hold": "paused",
     "disqualified": "terminal",
     "closed": "terminal",
+    "approved": "post_approval",
 }
 
 # Backward-compatible surrogate aggregate used by legacy generators and tests.
@@ -292,6 +296,11 @@ PROTECTED_SYSTEM_STAGES_BY_ENTITY = {
         ),
     },
     EGG_DONOR_PIPELINE_ENTITY: {
+        "approved": ProtectedSystemStageDefinition(
+            system_role="approval_gate",
+            lock_reason="This is a protected system stage used by platform workflows.",
+            locked_fields=DONOR_SYSTEM_STAGE_LOCKED_FIELDS,
+        ),
         "new": ProtectedSystemStageDefinition(
             system_role="intake_entry",
             lock_reason="This is a protected system stage used by platform workflows.",
@@ -304,6 +313,11 @@ PROTECTED_SYSTEM_STAGES_BY_ENTITY = {
         ),
     },
     SPERM_DONOR_PIPELINE_ENTITY: {
+        "approved": ProtectedSystemStageDefinition(
+            system_role="approval_gate",
+            lock_reason="This is a protected system stage used by platform workflows.",
+            locked_fields=DONOR_SYSTEM_STAGE_LOCKED_FIELDS,
+        ),
         "new": ProtectedSystemStageDefinition(
             system_role="intake_entry",
             lock_reason="This is a protected system stage used by platform workflows.",
@@ -362,6 +376,7 @@ DEFAULT_STAGE_ORDER_BY_ENTITY = {
         "application_submitted",
         "medical_records_review",
         "psychological_screening",
+        "approved",
         "ready_to_match",
         "matched",
         "cycle_in_progress",
@@ -377,6 +392,7 @@ DEFAULT_STAGE_ORDER_BY_ENTITY = {
         "application_submitted",
         "semen_analysis",
         "medical_genetic_screening",
+        "approved",
         "available",
         "matched",
         "collection_in_progress",

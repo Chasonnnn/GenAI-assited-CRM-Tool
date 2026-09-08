@@ -10,9 +10,10 @@ Admins can view (but not edit) other users' personal workflows.
 from sqlalchemy.orm import Session
 
 from app.core.permissions import PermissionKey as P
+from app.db.enums import Role
 from app.db.models import AutomationWorkflow
 from app.schemas.auth import UserSession
-from app.services import permission_service
+from app.services import permission_policy_service, permission_service
 
 DONOR_SUBJECT_TYPES = frozenset({"donor", "egg_donor", "sperm_donor"})
 
@@ -22,6 +23,24 @@ def _has_manage_automation(db: Session, session: UserSession) -> bool:
     return permission_service.check_permission(
         db, session.org_id, session.user_id, session.role.value, P.AUTOMATION_MANAGE.value
     )
+
+
+def _v2_can_manage(db: Session, session: UserSession, scope: str) -> bool:
+    keys = ["manage_automation"]
+    if scope == "org":
+        keys.append("manage_org_workflows")
+    return all(
+        permission_service.check_permission(
+            db, session.org_id, session.user_id, session.role.value, key
+        )
+        for key in keys
+    )
+
+
+def can_inspect_personal(db: Session, session: UserSession) -> bool:
+    if permission_policy_service.is_enabled(db, session.org_id):
+        return session.role in {Role.ADMIN, Role.DEVELOPER}
+    return _has_manage_automation(db, session)
 
 
 def can_view_subject(db: Session, session: UserSession, subject_type: str | None) -> bool:
@@ -64,6 +83,8 @@ def can_create(db: Session, session: UserSession, scope: str) -> bool:
     Returns:
         True if user can create a workflow with this scope
     """
+    if permission_policy_service.is_enabled(db, session.org_id):
+        return _v2_can_manage(db, session, scope)
     if scope == "org":
         # Org workflows require manage_automation permission
         return _has_manage_automation(db, session)
@@ -88,6 +109,21 @@ def can_edit(
     Returns:
         True if user can edit this workflow
     """
+    if workflow.organization_id != session.org_id:
+        return False
+    if permission_policy_service.is_enabled(db, session.org_id):
+        subject = (
+            effective_subject_type if effective_subject_type is not None else workflow.subject_type
+        )
+        return (
+            can_view_subject(db, session, subject)
+            and _v2_can_manage(db, session, workflow.scope)
+            and (
+                workflow.scope == "org"
+                or workflow.owner_user_id == session.user_id
+                or session.role in {Role.ADMIN, Role.DEVELOPER}
+            )
+        )
     if not can_edit_subject(
         db,
         session,
@@ -120,6 +156,17 @@ def can_view(
     Returns:
         True if user can view this workflow
     """
+    if workflow.organization_id != session.org_id:
+        return False
+    if permission_policy_service.is_enabled(db, session.org_id):
+        subject = (
+            effective_subject_type if effective_subject_type is not None else workflow.subject_type
+        )
+        return can_view_subject(db, session, subject) and (
+            workflow.scope == "org"
+            or workflow.owner_user_id == session.user_id
+            or session.role in {Role.ADMIN, Role.DEVELOPER}
+        )
     if not can_view_subject(
         db,
         session,
@@ -205,6 +252,11 @@ def can_duplicate(
     Returns:
         True if user can duplicate this workflow
     """
+    if permission_policy_service.is_enabled(db, session.org_id):
+        # Peer personal transfer is outside the published organization-copy flow.
+        return can_edit(db, session, workflow, effective_subject_type) and (
+            workflow.scope == "org" or workflow.owner_user_id == session.user_id
+        )
     # Must be able to view the source workflow
     subject_type = (
         effective_subject_type if effective_subject_type is not None else workflow.subject_type
@@ -235,7 +287,7 @@ def get_editable_scope(db: Session, session: UserSession) -> str:
     Returns:
         'org' if user has manage_automation, else 'personal'
     """
-    if _has_manage_automation(db, session):
+    if can_create(db, session, "org"):
         return "org"
     return "personal"
 

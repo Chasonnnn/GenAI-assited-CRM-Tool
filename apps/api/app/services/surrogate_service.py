@@ -961,6 +961,7 @@ def change_status(
     effective_at: datetime | None = None,
     *,
     emit_events: bool = False,
+    execution_permissions: frozenset[str] | None = None,
 ) -> StatusChangeResult:
     """
     Change surrogate stage and record history with backdating support.
@@ -989,6 +990,7 @@ def change_status(
         reason=reason,
         effective_at=effective_at,
         emit_events=emit_events,
+        execution_permissions=execution_permissions,
     )
 
 
@@ -1799,6 +1801,8 @@ def list_claim_queue(
     org_id: UUID,
     page: int = 1,
     per_page: int = 20,
+    *,
+    session=None,
 ) -> tuple[list[Surrogate], int]:
     """List approved surrogates in the Surrogate Pool queue (org-scoped)."""
     from app.db.enums import OwnerType
@@ -1825,6 +1829,13 @@ def list_claim_queue(
         Surrogate.owner_id == pool_queue.id,
         Surrogate.stage_id == approved_stage.id,
     )
+    if session is not None:
+        from app.services import permission_policy_service, record_scope_service
+
+        if permission_policy_service.is_enabled(db, session.org_id):
+            base_query = base_query.filter(
+                record_scope_service.build_visibility_filter(db, session, "surrogate")
+            )
     query = base_query.options(
         joinedload(Surrogate.stage).load_only(
             PipelineStage.stage_key,

@@ -144,11 +144,7 @@ class DonorStatusCount(BaseModel):
     "/donors/by-status",
     response_model=list[DonorStatusCount],
     dependencies=[
-        Depends(
-            require_all_permissions(
-                [PermissionKey.VIEW_DASHBOARD, PermissionKey.DONORS_VIEW]
-            )
-        )
+        Depends(require_all_permissions([PermissionKey.VIEW_DASHBOARD, PermissionKey.DONORS_VIEW]))
     ],
 )
 def get_dashboard_donors_by_status(
@@ -163,10 +159,16 @@ def get_dashboard_donors_by_status(
     include_archived: Annotated[bool, Query()] = False,
 ) -> list[DonorStatusCount]:
     """Get subtype pipeline distribution for the dashboard card."""
-    from app.services import analytics_donor_service, analytics_service
+    from app.services import (
+        analytics_access_service,
+        analytics_donor_service,
+        analytics_service,
+        permission_policy_service,
+    )
 
     if (
-        owner_id
+        not permission_policy_service.is_enabled(db, session.org_id)
+        and owner_id
         and owner_id != session.user_id
         and session.role not in (Role.ADMIN, Role.DEVELOPER, Role.CASE_MANAGER)
     ):
@@ -180,17 +182,18 @@ def get_dashboard_donors_by_status(
             inclusive_date_end=True,
         )
     try:
-        data = analytics_donor_service.get_cached_donors_by_status(
-            db,
-            session.org_id,
-            donor_type,
-            start=start,
-            end=end,
-            pipeline_id=pipeline_id,
-            owner_id=owner_id,
-            state=state,
-            include_archived=include_archived,
-        )
+        with analytics_access_service.authorized_dataset(db, session):
+            data = analytics_donor_service.get_cached_donors_by_status(
+                db,
+                session.org_id,
+                donor_type,
+                start=start,
+                end=end,
+                pipeline_id=pipeline_id,
+                owner_id=owner_id,
+                state=state,
+                include_archived=include_archived,
+            )
     except analytics_donor_service.DonorAnalyticsPipelineNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Pipeline not found") from exc
     return [DonorStatusCount(**item) for item in data]
@@ -247,6 +250,7 @@ def get_upcoming(
         user_id=target_user_id,
         days=days,
         include_overdue=include_overdue,
+        session=session,
         pipeline_id=pipeline_id,
         can_view_donors=can_view_donors,
     )
@@ -364,8 +368,6 @@ def get_attention(
         stuck_count=data["stuck_count"],
         stuck_donors=[StuckDonor(**item) for item in data["stuck_donors"]],
         stuck_donor_count=data["stuck_donor_count"],
-        stuck_donor_counts=data.get(
-            "stuck_donor_counts", {"egg": 0, "sperm": 0}
-        ),
+        stuck_donor_counts=data.get("stuck_donor_counts", {"egg": 0, "sperm": 0}),
         total_count=data["total_count"],
     )

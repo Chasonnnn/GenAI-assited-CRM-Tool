@@ -19,6 +19,7 @@ from app.db.models import (
     Task,
 )
 from app.schemas.workflow import is_supported_simple_cron
+from app.services import workflow_execution_authority
 from app.services.workflow_engine import engine
 
 
@@ -35,16 +36,24 @@ def _get_donor_owner_id(donor: Donor) -> UUID | None:
     return None
 
 
-def _workflow_applies_to_owner(workflow, entity_owner_id: UUID | None) -> bool:
+def _workflow_applies_to_owner(
+    workflow, entity_owner_id: UUID | None, db=None, subject_type=None, subject_id=None
+) -> bool:
     """Return whether one org or personal workflow applies to an entity owner."""
     if workflow.scope == "org":
         return True
+    if db is not None and workflow_execution_authority.enabled(db, workflow.organization_id):
+        return workflow_execution_authority.personal_subject_allowed(
+            db, workflow, subject_type, subject_id
+        )
     return workflow.scope == "personal" and workflow.owner_user_id == entity_owner_id
 
 
-def _workflow_applies_to_surrogate(workflow, surrogate: Surrogate) -> bool:
+def _workflow_applies_to_surrogate(workflow, surrogate: Surrogate, db=None) -> bool:
     """Return whether one org or personal workflow applies to this surrogate."""
-    return _workflow_applies_to_owner(workflow, _get_entity_owner_id(surrogate))
+    return _workflow_applies_to_owner(
+        workflow, _get_entity_owner_id(surrogate), db, "surrogate", surrogate.id
+    )
 
 
 def _get_owner_id_for_surrogate_id(
@@ -587,7 +596,9 @@ def trigger_scheduled_workflows(
         if _should_run_cron(cron, now, tz):
             if workflow.subject_type in {"egg_donor", "sperm_donor"}:
                 for donor in _iter_donors(db, org_id, workflow.subject_type):
-                    if not _workflow_applies_to_owner(workflow, _get_donor_owner_id(donor)):
+                    if not _workflow_applies_to_owner(
+                        workflow, _get_donor_owner_id(donor), db, workflow.subject_type, donor.id
+                    ):
                         continue
                     engine.execute_workflow(
                         db=db,
@@ -601,7 +612,7 @@ def trigger_scheduled_workflows(
                     )
             elif workflow.subject_type == "surrogate":
                 for surrogate in _iter_surrogates(db, org_id):
-                    if not _workflow_applies_to_surrogate(workflow, surrogate):
+                    if not _workflow_applies_to_surrogate(workflow, surrogate, db):
                         continue
                     engine.execute_workflow(
                         db=db,
@@ -640,7 +651,9 @@ def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
 
         if workflow.subject_type in {"egg_donor", "sperm_donor"}:
             for donor in _iter_donors(db, org_id, workflow.subject_type, updated_before=threshold):
-                if not _workflow_applies_to_owner(workflow, _get_donor_owner_id(donor)):
+                if not _workflow_applies_to_owner(
+                    workflow, _get_donor_owner_id(donor), db, workflow.subject_type, donor.id
+                ):
                     continue
                 engine.execute_workflow(
                     db=db,
@@ -657,7 +670,7 @@ def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
                 )
         elif workflow.subject_type == "surrogate":
             for surrogate in _iter_surrogates(db, org_id, updated_before=threshold):
-                if not _workflow_applies_to_surrogate(workflow, surrogate):
+                if not _workflow_applies_to_surrogate(workflow, surrogate, db):
                     continue
                 engine.execute_workflow(
                     db=db,
@@ -771,7 +784,9 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
                 subject_type, subject_id = "surrogate", task.id
             if subject_type != workflow.subject_type or subject_id is None:
                 continue
-            if not _workflow_applies_to_owner(workflow, entity_owner_id):
+            if not _workflow_applies_to_owner(
+                workflow, entity_owner_id, db, subject_type, subject_id
+            ):
                 continue
             donor_subject = subject_type in {"egg_donor", "sperm_donor"}
             engine.execute_workflow(

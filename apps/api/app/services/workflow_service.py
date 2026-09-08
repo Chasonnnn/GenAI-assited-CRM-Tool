@@ -50,7 +50,7 @@ from app.schemas.workflow import (
     WorkflowStats,
     WorkflowUpdate,
 )
-from app.services import user_service
+from app.services import user_service, workflow_execution_authority
 from app.services.workflow_definition_rules import (
     normalize_actions_for_trigger as _normalize_actions_for_trigger,
 )
@@ -143,7 +143,7 @@ def resolve_effective_workflow_subject_type(
     if form_id:
         try:
             parsed_form_id = UUID(str(form_id))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             parsed_form_id = None
         if parsed_form_id is not None:
             form_kind = (
@@ -208,9 +208,7 @@ def _workflow_is_donor_related():
         and_(
             AutomationWorkflow.trigger_type == WorkflowTriggerType.FORM_SUBMITTED.value,
             or_(
-                AutomationWorkflow.trigger_config["lead_kind"].astext.in_(
-                    DONOR_SUBJECT_TYPES
-                ),
+                AutomationWorkflow.trigger_config["lead_kind"].astext.in_(DONOR_SUBJECT_TYPES),
                 donor_form,
                 and_(
                     AutomationWorkflow.trigger_config["lead_kind"].astext.is_(None),
@@ -224,9 +222,7 @@ def _workflow_is_donor_related():
         and_(
             AutomationWorkflow.trigger_type == WorkflowTriggerType.INTAKE_LEAD_CREATED.value,
             or_(
-                AutomationWorkflow.trigger_config["lead_type"].astext.in_(
-                    DONOR_SUBJECT_TYPES
-                ),
+                AutomationWorkflow.trigger_config["lead_type"].astext.in_(DONOR_SUBJECT_TYPES),
                 donor_form,
                 and_(
                     AutomationWorkflow.trigger_config["lead_type"].astext.is_(None),
@@ -441,9 +437,7 @@ def _canonicalize_trigger_config(
             raise ValueError("Workflow form not found in organization")
         configured_kind = config.get(intake_context_key)
         if configured_kind is not None and configured_kind != form.lead_kind:
-            raise ValueError(
-                f"Workflow {intake_context_key} must match the selected form"
-            )
+            raise ValueError(f"Workflow {intake_context_key} must match the selected form")
         config[intake_context_key] = form.lead_kind
 
     if trigger_type not in {
@@ -680,6 +674,9 @@ def create_workflow(
     data: WorkflowCreate,
 ) -> AutomationWorkflow:
     """Create a new workflow with validation."""
+    from app.services import permission_policy_service
+
+    permission_policy_service.lock_configuration(db, org_id)
     subject_type = data.subject_type
     if "subject_type" not in data.model_fields_set:
         subject_type = LEGACY_TRIGGER_SUBJECT_TYPES.get(data.trigger_type.value, "surrogate")
@@ -752,7 +749,14 @@ def create_workflow(
         updated_by_user_id=user_id,
     )
 
+    if workflow.is_enabled:
+        workflow_execution_authority.authorize_configuration(db, workflow, user_id)
+    workflow.proposed_by_user_id = user_id
+    proposer = user_service.get_user_by_id(db, user_id)
+    workflow.proposed_by_name = proposer.display_name if proposer else None
     db.add(workflow)
+    db.flush()
+    workflow_execution_authority.audit_configuration(db, workflow, user_id, "create")
     db.commit()
     db.refresh(workflow)
     return workflow
@@ -770,6 +774,9 @@ def update_workflow(
     data: WorkflowUpdate,
 ) -> AutomationWorkflow:
     """Update an existing workflow with validation."""
+    from app.services import permission_policy_service
+
+    permission_policy_service.lock_configuration(db, workflow.organization_id)
     trigger_type = data.trigger_type or WorkflowTriggerType(workflow.trigger_type)
     subject_type = workflow.subject_type
     _validate_subject_trigger(subject_type, trigger_type)
@@ -883,6 +890,17 @@ def update_workflow(
     workflow.updated_by_user_id = user_id
     workflow.updated_at = datetime.now(UTC)
 
+    authority_fields = {
+        "actions",
+        "trigger_type",
+        "trigger_config",
+        "conditions",
+        "condition_logic",
+        "is_enabled",
+    }
+    if workflow.is_enabled and authority_fields.intersection(data.model_fields_set):
+        workflow_execution_authority.authorize_configuration(db, workflow, user_id)
+    workflow_execution_authority.audit_configuration(db, workflow, user_id, "update")
     db.commit()
     db.refresh(workflow)
     return workflow
@@ -890,6 +908,9 @@ def update_workflow(
 
 def delete_workflow(db: Session, workflow: AutomationWorkflow) -> None:
     """Delete a workflow and all related data."""
+    from app.services import permission_policy_service
+
+    permission_policy_service.lock_configuration(db, workflow.organization_id)
     db.delete(workflow)
     db.commit()
 
@@ -989,9 +1010,15 @@ def toggle_workflow(
     user_id: UUID,
 ) -> AutomationWorkflow:
     """Toggle a workflow's enabled state."""
+    from app.services import permission_policy_service
+
+    permission_policy_service.lock_configuration(db, workflow.organization_id)
     workflow.is_enabled = not workflow.is_enabled
     workflow.updated_by_user_id = user_id
     workflow.updated_at = datetime.now(UTC)
+    if workflow.is_enabled:
+        workflow_execution_authority.authorize_configuration(db, workflow, user_id)
+    workflow_execution_authority.audit_configuration(db, workflow, user_id, "toggle")
     db.commit()
     db.refresh(workflow)
     return workflow
@@ -1014,6 +1041,9 @@ def duplicate_workflow(
             - Org workflows stay org (requires permission check upstream)
             - Personal workflows become owned by the duplicating user
     """
+    from app.services import permission_policy_service
+
+    permission_policy_service.lock_configuration(db, workflow.organization_id)
     # Determine scope and owner for duplicate
     scope = new_scope or workflow.scope
     owner_user_id = user_id if scope == "personal" else None
@@ -1057,9 +1087,131 @@ def duplicate_workflow(
     return new_workflow
 
 
+def publish_workflow(
+    db: Session, workflow: AutomationWorkflow, user_id: UUID
+) -> AutomationWorkflow:
+    """Publish a disabled organization copy with independent template dependencies."""
+    from app.services import permission_policy_service
+
+    permission_policy_service.lock_configuration(db, workflow.organization_id)
+    from app.services import email_template_publication, workflow_access
+
+    session = workflow_execution_authority.active_session(db, workflow.organization_id, user_id)
+    if not workflow_execution_authority.enabled(db, workflow.organization_id):
+        raise ValueError("Workflow publication requires the upgraded permission model")
+    if (
+        session is None
+        or workflow.scope != "personal"
+        or not workflow_access.can_edit(db, session, workflow)
+        or not workflow_access.can_create(db, session, "org")
+    ):
+        raise ValueError("Cannot publish this workflow")
+    with db.begin_nested():
+        actions = deepcopy(workflow.actions)
+        templates = {}
+        for action in actions:
+            if action.get("action_type") != "send_email":
+                continue
+            template_id = UUID(str(action["template_id"]))
+            template = (
+                db.query(EmailTemplate)
+                .filter(
+                    EmailTemplate.id == template_id,
+                    EmailTemplate.organization_id == workflow.organization_id,
+                )
+                .first()
+            )
+            if template is None:
+                raise ValueError("Workflow template is unavailable")
+            if template.scope == "personal":
+                if template.owner_user_id != workflow.owner_user_id:
+                    raise ValueError("Workflow template belongs to another owner")
+                if template_id not in templates:
+                    templates[template_id] = email_template_publication.publish_template_to_org(
+                        db,
+                        org_id=workflow.organization_id,
+                        template_id=template_id,
+                        actor_user_id=user_id,
+                    ).id
+                action["template_id"] = str(templates[template_id])
+        base_name = workflow.name[:80] + " (Published)"
+        name, counter = base_name, 1
+        while (
+            db.query(AutomationWorkflow.id)
+            .filter(
+                AutomationWorkflow.organization_id == workflow.organization_id,
+                AutomationWorkflow.name == name,
+            )
+            .first()
+        ):
+            counter += 1
+            name = f"{base_name} {counter}"
+        proposer_id = workflow.proposed_by_user_id or workflow.owner_user_id
+        proposer = user_service.get_user_by_id(db, proposer_id) if proposer_id else None
+        published = AutomationWorkflow(
+            organization_id=workflow.organization_id,
+            name=name,
+            description=workflow.description,
+            icon=workflow.icon,
+            scope="org",
+            owner_user_id=None,
+            subject_type=workflow.subject_type,
+            trigger_type=workflow.trigger_type,
+            trigger_config=deepcopy(workflow.trigger_config),
+            conditions=deepcopy(workflow.conditions),
+            condition_logic=workflow.condition_logic,
+            actions=actions,
+            is_enabled=False,
+            created_by_user_id=user_id,
+            updated_by_user_id=user_id,
+            proposed_by_user_id=proposer_id,
+            proposed_by_name=workflow.proposed_by_name
+            or (proposer.display_name if proposer else None),
+            recurrence_mode=workflow.recurrence_mode,
+            recurrence_interval_hours=workflow.recurrence_interval_hours,
+            recurrence_stop_on_status=workflow.recurrence_stop_on_status,
+            rate_limit_per_hour=workflow.rate_limit_per_hour,
+            rate_limit_per_entity_per_day=workflow.rate_limit_per_entity_per_day,
+        )
+        db.add(published)
+        db.flush()
+        from app.db.enums import AuditEventType
+        from app.services import audit_service
+
+        audit_service.log_event(
+            db,
+            workflow.organization_id,
+            AuditEventType.WORKFLOW_PUBLISHED,
+            actor_user_id=user_id,
+            target_type="workflow",
+            target_id=published.id,
+            details={"scope": "org"},
+        )
+        workflow_execution_authority.audit_private_access(db, workflow, user_id, "publish")
+    db.commit()
+    db.refresh(published)
+    return published
+
+
 # =============================================================================
 # Stats & Options
 # =============================================================================
+
+
+def _visible_workflow_ids(db: Session, org_id: UUID, viewer_user_id: UUID | None):
+    query = db.query(AutomationWorkflow.id).filter(AutomationWorkflow.organization_id == org_id)
+    if viewer_user_id is not None and workflow_execution_authority.enabled(db, org_id):
+        from app.db.enums import Role
+
+        viewer = workflow_execution_authority.active_session(db, org_id, viewer_user_id)
+        if viewer is None or viewer.role not in {Role.ADMIN, Role.DEVELOPER}:
+            query = query.filter(
+                or_(
+                    AutomationWorkflow.scope == "org",
+                    AutomationWorkflow.owner_user_id == viewer_user_id,
+                )
+            )
+    return query
 
 
 def get_workflow_stats(
@@ -1067,20 +1219,36 @@ def get_workflow_stats(
     org_id: UUID,
     *,
     include_donor_subjects: bool = True,
+    viewer_user_id: UUID | None = None,
 ) -> WorkflowStats:
     """Get workflow statistics for dashboard."""
     from app.db.enums import TaskStatus, TaskType
+
     now = datetime.now(UTC)
     day_ago = now - timedelta(hours=24)
-    workflow_filters = [AutomationWorkflow.organization_id == org_id]
+    visible_ids = _visible_workflow_ids(db, org_id, viewer_user_id)
+    workflow_filters = [
+        AutomationWorkflow.organization_id == org_id,
+        AutomationWorkflow.id.in_(visible_ids),
+    ]
     execution_filters = [
         WorkflowExecution.organization_id == org_id,
         WorkflowExecution.executed_at >= day_ago,
+        WorkflowExecution.workflow_id.in_(visible_ids),
     ]
     approval_filters = [
         Task.organization_id == org_id,
         Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
     ]
+    if viewer_user_id is not None and workflow_execution_authority.enabled(db, org_id):
+        approval_filters.append(
+            Task.workflow_execution_id.in_(
+                db.query(WorkflowExecution.id).filter(
+                    WorkflowExecution.organization_id == org_id,
+                    WorkflowExecution.workflow_id.in_(visible_ids),
+                )
+            )
+        )
     if not include_donor_subjects:
         workflow_filters.append(~_workflow_is_donor_related())
         execution_filters.append(~_execution_is_donor_related())
@@ -1594,6 +1762,7 @@ def get_workflow_options(
 
     # Forms (published)
     from app.db.enums import FormStatus
+
     forms_query = db.query(Form).filter(
         Form.organization_id == org_id,
         Form.status == FormStatus.PUBLISHED.value,
@@ -1679,6 +1848,7 @@ def list_org_executions(
     limit: int = 20,
     offset: int = 0,
     include_donor_subjects: bool = True,
+    viewer_user_id: UUID | None = None,
 ) -> tuple[list[dict], int]:
     """
     List all workflow executions for an organization with filters.
@@ -1714,6 +1884,10 @@ def list_org_executions(
             _exact_donor_execution_identity_match(),
         )
         .filter(WorkflowExecution.organization_id == org_id)
+    )
+
+    query = query.filter(
+        WorkflowExecution.workflow_id.in_(_visible_workflow_ids(db, org_id, viewer_user_id))
     )
 
     if status:
@@ -1785,25 +1959,27 @@ def get_execution_stats(
     org_id: UUID,
     *,
     include_donor_subjects: bool = True,
+    viewer_user_id: UUID | None = None,
 ) -> dict:
     """Get execution statistics for the dashboard."""
     now = datetime.now(UTC)
     day_ago = now - timedelta(hours=24)
 
     query = db.query(
-            func.count(WorkflowExecution.id),
-            func.count(WorkflowExecution.id).filter(
-                WorkflowExecution.status == WorkflowExecutionStatus.FAILED.value
-            ),
-            func.count(WorkflowExecution.id).filter(
-                WorkflowExecution.status == WorkflowExecutionStatus.SUCCESS.value
-            ),
-            func.avg(WorkflowExecution.duration_ms).filter(
-                WorkflowExecution.duration_ms.isnot(None)
-            ),
-        ).filter(
+        func.count(WorkflowExecution.id),
+        func.count(WorkflowExecution.id).filter(
+            WorkflowExecution.status == WorkflowExecutionStatus.FAILED.value
+        ),
+        func.count(WorkflowExecution.id).filter(
+            WorkflowExecution.status == WorkflowExecutionStatus.SUCCESS.value
+        ),
+        func.avg(WorkflowExecution.duration_ms).filter(WorkflowExecution.duration_ms.isnot(None)),
+    ).filter(
         WorkflowExecution.organization_id == org_id,
         WorkflowExecution.executed_at >= day_ago,
+    )
+    query = query.filter(
+        WorkflowExecution.workflow_id.in_(_visible_workflow_ids(db, org_id, viewer_user_id))
     )
     if not include_donor_subjects:
         query = query.filter(~_execution_is_donor_related())
@@ -1897,6 +2073,7 @@ def to_workflow_read(
     db: Session,
     workflow: AutomationWorkflow,
     can_edit: bool = True,
+    can_publish: bool = False,
 ) -> WorkflowRead:
     """Convert workflow model to read schema with user names."""
     created_by_name = None
@@ -1924,6 +2101,8 @@ def to_workflow_read(
         scope=workflow.scope,
         owner_user_id=workflow.owner_user_id,
         owner_name=owner_name,
+        proposed_by_user_id=workflow.proposed_by_user_id,
+        proposed_by_name=workflow.proposed_by_name,
         subject_type=workflow.subject_type,
         trigger_type=workflow.trigger_type,
         trigger_config=workflow.trigger_config,
@@ -1939,6 +2118,7 @@ def to_workflow_read(
         created_at=workflow.created_at,
         updated_at=workflow.updated_at,
         can_edit=can_edit,
+        can_publish=can_publish,
     )
 
 
@@ -1946,6 +2126,7 @@ def to_workflow_list_item(
     db: Session,
     workflow: AutomationWorkflow,
     can_edit: bool = True,
+    can_publish: bool = False,
 ):
     """Convert workflow model to list item schema with owner name."""
     from app.schemas.workflow import WorkflowListItem
@@ -1963,6 +2144,8 @@ def to_workflow_list_item(
         scope=workflow.scope,
         owner_user_id=workflow.owner_user_id,
         owner_name=owner_name,
+        proposed_by_user_id=workflow.proposed_by_user_id,
+        proposed_by_name=workflow.proposed_by_name,
         subject_type=workflow.subject_type,
         trigger_type=workflow.trigger_type,
         is_enabled=workflow.is_enabled,
@@ -1971,6 +2154,7 @@ def to_workflow_list_item(
         last_error=workflow.last_error,
         created_at=workflow.created_at,
         can_edit=can_edit,
+        can_publish=can_publish,
     )
 
 
