@@ -32,7 +32,7 @@ from app.schemas.platform_templates import (
     EmailTemplateLibraryDetail,
     EmailTemplateLibraryItem,
 )
-from app.services import email_delivery_service, email_service, user_service
+from app.services import email_delivery_service, email_service, email_template_access, user_service
 
 router = APIRouter(
     tags=["Email Templates"],
@@ -305,31 +305,23 @@ def update_template(
     - Org templates: requires manage permission
     - Personal templates: owner, admin, or developer can edit
     """
-    from app.services import permission_service, version_service
+    from app.services import version_service
 
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    # Check permissions based on scope
-    if template.scope == "org":
-        manage_perm = POLICIES["email_templates"].actions["manage"]
-        perm_key = manage_perm.value if hasattr(manage_perm, "value") else str(manage_perm)
-        if not permission_service.check_permission(
-            db, session.org_id, session.user_id, session.role.value, perm_key
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to edit organization templates",
-            )
-    else:
-        # Personal templates: owner or admin/developer can edit
-        is_admin = session.role in (Role.ADMIN, Role.DEVELOPER)
-        if template.owner_user_id != session.user_id and not is_admin:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only edit your own personal templates",
-            )
+    if not email_template_access.can_edit_template(
+        db, session, scope=template.scope, owner_user_id=template.owner_user_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "You don't have permission to edit organization templates"
+                if template.scope == "org"
+                else "You can only edit your own personal templates"
+            ),
+        )
 
     # Check for duplicate name if changing
     if data.name and data.name != template.name:
@@ -390,31 +382,21 @@ def delete_template(
     - Org templates: requires manage permission
     - Personal templates: owner, admin, or developer can delete
     """
-    from app.services import permission_service
-
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    # Check permissions based on scope
-    if template.scope == "org":
-        manage_perm = POLICIES["email_templates"].actions["manage"]
-        perm_key = manage_perm.value if hasattr(manage_perm, "value") else str(manage_perm)
-        if not permission_service.check_permission(
-            db, session.org_id, session.user_id, session.role.value, perm_key
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to delete organization templates",
-            )
-    else:
-        # Personal templates: owner or admin/developer can delete
-        is_admin = session.role in (Role.ADMIN, Role.DEVELOPER)
-        if template.owner_user_id != session.user_id and not is_admin:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only delete your own personal templates",
-            )
+    if not email_template_access.can_edit_template(
+        db, session, scope=template.scope, owner_user_id=template.owner_user_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "You don't have permission to delete organization templates"
+                if template.scope == "org"
+                else "You can only delete your own personal templates"
+            ),
+        )
 
     email_service.delete_template(db, template, user_id=session.user_id)
 
@@ -638,26 +620,19 @@ def get_template_versions(
     session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get version history for a template the current user can edit."""
-    from app.services import permission_service
-
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
     if template.scope == "personal":
-        is_admin = session.role in (Role.ADMIN, Role.DEVELOPER)
-        if template.owner_user_id != session.user_id and not is_admin:
+        if not email_template_access.can_edit_personal_template(
+            owner_user_id=template.owner_user_id, user_id=session.user_id, role=session.role
+        ):
             raise HTTPException(status_code=404, detail="Template not found")
     else:
         manage_perm = POLICIES["email_templates"].actions["manage"]
         perm_key = manage_perm.value if hasattr(manage_perm, "value") else str(manage_perm)
-        if not permission_service.check_permission(
-            db,
-            session.org_id,
-            session.user_id,
-            session.role.value,
-            perm_key,
-        ):
+        if not email_template_access.has_manage_permission(db, session):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Missing permission: {perm_key}",
@@ -694,10 +669,8 @@ def rollback_template(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    if (
-        template.scope == "personal"
-        and template.owner_user_id != session.user_id
-        and session.role not in (Role.ADMIN, Role.DEVELOPER)
+    if template.scope == "personal" and not email_template_access.can_edit_personal_template(
+        owner_user_id=template.owner_user_id, user_id=session.user_id, role=session.role
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

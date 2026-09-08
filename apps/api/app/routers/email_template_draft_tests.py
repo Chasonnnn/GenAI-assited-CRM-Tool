@@ -13,12 +13,11 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
-from app.routers.email_template_drafts import _require_draft_editor
 from app.schemas.email_template_drafts import (
     EmailTemplateDraftTestSendRequest,
     EmailTemplateDraftTestSendResponse,
 )
-from app.services import email_template_draft_service
+from app.services import email_template_access, email_template_draft_service
 
 router = APIRouter(
     prefix="/email-template-drafts",
@@ -46,7 +45,14 @@ async def send_email_template_draft_test(
     )
     if draft is None:
         raise HTTPException(status_code=404, detail="Draft not found")
-    _require_draft_editor(db, session, draft)
+    if not email_template_access.can_edit_template(
+        db, session, scope=draft.scope, owner_user_id=draft.owner_user_id
+    ):
+        if draft.scope == "org":
+            raise HTTPException(
+                status_code=403, detail="Missing permission: manage_email_templates"
+            )
+        raise HTTPException(status_code=404, detail="Draft not found")
     if draft.revision != body.expected_revision:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
