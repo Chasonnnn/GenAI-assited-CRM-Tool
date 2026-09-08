@@ -1,6 +1,6 @@
 # Permission system design
 
-Status: product model awaiting final review. Application code and production permissions are unchanged.
+Status: agreed model implemented locally. Organizations remain on version 1 until an Admin or Dev reviews and activates their version 2 policy. Production has not been activated.
 
 This milestone covers internal agency staff. External professionals and participants are outside scope, and a new platform-support access mechanism is deferred because no concrete use case was identified.
 
@@ -12,6 +12,7 @@ Each staff member has one supplied role. Agencies cannot create custom roles or 
 |---|---|---|
 | Intake Specialist | Assigned applicants before approval, plus retained Intake-collaborator records after handoff | Admin/Dev can edit the role baseline and add individual permissions |
 | Case Manager | All Approved-and-later records, regardless of owner, for matching and case work | Admin/Dev can edit the role baseline and add individual permissions |
+| Operations | All donor/surrogate records and reports; no record writes or sending by default | Editable baseline; manages organization workflows, campaigns, and templates |
 | Admin | Full agency authority within organization and domain rules | Protected baseline |
 | Dev | Platform-controlled authority within existing organization boundaries | Protected baseline; not configurable by agency users |
 
@@ -43,7 +44,7 @@ Stage changes, reassignment, applicant approval, exports, and other actions reta
 | Applicant approval | Explicit approval permission; enabled for Intake and Admin by default, with Intake configurable |
 | Campaigns | Editing and sending are separate |
 | Workflows | One Manage Workflows permission covers editing and activation |
-| Organization content | Management can be delegated by module; defaults to Admin |
+| Organization content | Management can be delegated by module; supplied Operations, Admin, and Dev roles include it |
 | Linked matches and joint documents | Require access to both parties as well as the relevant action |
 
 Intake collaboration does not grant access to the matched Intended Parent. Existing profile, notes, documents, and correspondence sections are available under their action permissions; new field-level restrictions are outside this milestone.
@@ -68,7 +69,7 @@ A member's departure ends personal access. Role changes require the agreed revie
 
 ## Personal and organization work
 
-Campaigns, workflows, and templates support personal and organization scope. Personal campaign support is new work.
+Campaigns, workflows, and templates support personal and organization scope.
 
 | Rule | Personal | Organization |
 |---|---|---|
@@ -126,19 +127,23 @@ Before switching an organization to the new model:
 - Verify tenant isolation, denied operations, publication, next-action revocation, queued personal work, and organization execution after creator departure.
 - Validate surrogate, egg-donor, and sperm-donor handoff journeys in the rendered application.
 
-Implementation, migration execution, and deployment require subsequent work. No provider calls, messages, or production changes are part of this design interview.
+The additive schema and reviewed activation flow are implemented. Fresh-database migration and local behavioral verification are recorded in [the implementation report](permission-upgrade-verification.md). Deployment and activation of production organizations remain separate gates. Schema downgrade stops when a version 2 policy is active or personal campaigns cannot be represented by the old schema.
 
 ## Restricted Case Manager scope
 
 If an agency deliberately configures a Case Manager as assigned-only, unclaimed records outside that scope remain hidden until an authorized person assigns them. There is no implicit pool-review exception. The default all-post-approval Case Manager role still sees the approved pool.
 
-## Operations role under discussion
+## Reports and form submissions
 
-The user proposed adding a supplied Operations role for organization work. Its default responsibilities, record access, and campaign sending authority remain open; this would be a fifth platform-supplied role rather than agency-created custom roles.
+Reports, counts, charts, and PDF exports use the viewer's current record scope. Permission or collaborator removal changes the next report request. Organization-wide advertising spend appears only for viewers with unrestricted donor and surrogate scope and report access; restricted exports omit it.
 
-## Administration proposal
+Unlinked form intake submissions belong to Intake, Admin, and Dev. Linked submissions follow the linked record's scope and module permission. Operations can view linked submissions, but review actions require a separate grant and record-edit authority. Form submission review has its own screen and permissions; it does not require form-builder access.
 
-Group actions and record scope by module on the role screen. On the person screen, distinguish inherited permissions, individual additions, collaborator relationships, and effective access. [Three UI mock-ups](mockups/permissions/README.md) cover role configuration, individual access, and access explanations. They await design feedback; interaction details and Operations defaults remain open.
+## Administration UI
+
+The selected Studio layout provides supplied roles, module navigation, record scope, action controls, access preview, and reviewed changes. People shows inherited authority, individual additions, and record collaborations. Role changes require explicit carryover choices. Check access explains record visibility without implying permission to edit or send.
+
+The migration screen resolves legacy individual revokes, historical handoffs, old pool grants, and existing workflow/campaign execution. Activation validates the reviewed fingerprint again; a stale or incomplete review cannot activate the policy.
 
 ## Source and decision records
 
@@ -148,4 +153,4 @@ Group actions and record scope by module on the role screen. On the person scree
 - [Organization authority and proposer credit](adr/0003-organization-authority-and-proposer-credit.md)
 - [Domain glossary](../CONTEXT.md)
 
-Current source inspection found personal/org support for workflows and templates, organization-only campaigns, and donor phase categories without the surrogate approval gate/handoff. The interview record contains the source references. These observations are not live runtime or deployment verification.
+The [module plan](permission-module-refactor-plan.md) maps the shared authorization, execution, and domain services. The [verification report](permission-upgrade-verification.md) separates automated checks, browser checks, migration rehearsal, and production status.

@@ -20,7 +20,7 @@ The consolidated product model is in [permission-system-design.md](permission-sy
 | Record and sensitive-data access | Broad Case post-approval scope; retained Intake access covers existing sections; linked match/IP content requires both parties' access | Phase exception, exports, migration |
 | Approval and background execution | Applicant approval explicit; approved donors enter claim pool; org work survives creator access loss and personal work stops | Agency authorization, runtime checks, ownership transfer, migration |
 | Personal and organization content | Personal scope private from peers with audited Admin access; org management delegable by module; publication creates a copy | Template dependencies, ownership transfer, audience validation |
-| Migration and verification | Awaiting target behavior | Existing access comparison, rollout, recovery, completion criteria |
+| Migration and verification | Explicit per-organization review before activation; local implementation authorized | Existing access comparison, rollout, recovery, completion criteria |
 
 ## Round 1 decisions
 
@@ -199,3 +199,13 @@ These definitions are discussion terms, not an approved data model.
 - Accepted: validate organization-workflow action authority at activation; skip unauthorized personal records while continuing permitted work; review access differences and uncertain collaboration history before migration.
 - Accepted: Admin/Dev-only permission administration, revocation on the next action, and organization publication for reusing departed staff members' personal work.
 - Accepted initially: internal staff and platform support form the first-release scope. Round 2 identified no support use case, so the proposal defers a new support mechanism. External professionals and participants remain outside this milestone.
+
+## Implementation decisions confirmed September 7
+
+1. Operations manages organization workflows, campaigns, and templates and views agency records and reports. Sending and record writes are disabled by default.
+2. Reports follow the viewer's record scope, including counts and exports.
+3. Unlinked form submissions are an Intake/Admin/Dev queue. Linked submissions follow record access; form review is separate from the builder.
+4. Studio role-editor variant 2 is the selected visual direction.
+5. The user authorized implementation of the permission upgrade and affected module refactors, with parallel agents. Local implementation and commits are authorized; production activation, deployment, and external sends remain separate.
+
+These answers supersede the unanswered Operations questions above.

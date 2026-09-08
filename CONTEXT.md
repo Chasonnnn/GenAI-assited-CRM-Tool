@@ -22,7 +22,7 @@
 
 ## Staff access
 
-**Role preset**: One of four supplied staff roles: Intake Specialist, Case Manager, Admin, or Dev. Each staff member has one role; agencies may edit Intake Specialist and Case Manager baselines, while Admin and Dev baselines remain protected.
+**Role preset**: One of five supplied staff roles: Intake Specialist, Case Manager, Operations, Admin, or Dev. Each staff member has one role; agencies may edit Intake Specialist, Case Manager, and Operations baselines, while Admin and Dev baselines remain protected. Operations manages organization automation and templates and views records/reports without record-write or send authority by default.
 
 **Individual permission addition**: Removable extra authority assigned to a specific staff member beyond their role preset, consisting of additional actions or an explicit expansion of record scope. Removing it restores inherited role access without changing anyone else's permissions.
 

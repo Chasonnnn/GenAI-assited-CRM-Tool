@@ -18,7 +18,7 @@ Twilio setup and controlled verification should start early as a bounded separat
 
 Global UX discovery and shared visual rules also start early. Each feature adopts those rules as it changes; broad remaining screen migration comes later.
 
-The role-editor visual direction is selected: variant 2. The [permission execution plan](permission-upgrade-execution-plan.md) defines the first implementation packages, parallel work, and activation gates. Operations defaults remain open; they do not block behavior-preserving extraction or work on the agreed roles.
+The role-editor visual direction is selected: variant 2. The [permission execution plan](permission-upgrade-execution-plan.md) defines the first implementation packages, parallel work, and activation gates. Operations defaults are agreed: organization workflow/campaign/template management and record/report viewing, without record writes or sending. The permission upgrade and its affected module refactors are implemented locally; production activation remains pending. Validation is recorded in the [implementation report](permission-upgrade-verification.md).
 
 The first foundation batch is implemented and verified locally: permission resolution, workflow definition rules, template editing authorization, and permission-cache correction. The [module refactor plan](permission-module-refactor-plan.md) maps the remaining record, workflow, campaign, form, reporting, and UI work. The upgraded policy and administration UI are not yet active.
 

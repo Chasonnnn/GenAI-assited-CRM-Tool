@@ -1,105 +1,104 @@
 # Module refactors for the permission upgrade
 
-Status: first implementation batch implemented and verified locally. The action/scope model is agreed in principle; the full action matrix and Operations defaults remain open. These refactors do not activate new staff permissions or change production data.
+Status: permission v2 and its shared record filters are implemented locally behind organization activation. Existing organizations remain on v1 until their access and execution reviews are resolved. Integrated verification is recorded in `permission-upgrade-verification.md`. No deployment, production migration, or provider testing has occurred.
 
-## First batch
+## Implemented boundaries
 
-| Module | Extraction | Purpose |
+| Module owner | Implementation | Stable interface and responsibility |
 |---|---|---|
-| Permissions | `core/permission_resolution.py` | Calculate effective actions from loaded defaults and overrides without database access; keep scoped loading and audited changes in `permission_service.py` |
-| Workflow definitions | `services/workflow_definition_rules.py` | Validate trigger configuration and action ordering independently of CRUD, execution, and authorization |
-| Email templates | `services/email_template_access.py` | Share editing authorization across published templates, drafts, and draft tests; keep HTTP disclosure rules at each route |
-| Permission client | `lib/hooks/use-permissions.ts` | Separate effective-permission caches by authenticated user and refresh dependent views after permission changes |
+| Permission policy | `core/permissions.py`, `core/permission_resolution.py`, `services/permission_service.py`, `services/permission_policy_service.py` | Resolve action keys from loaded baselines and additions; protected Admin/Dev administration; lock configuration changes and bind activation to a reviewed digest |
+| Record scope | `services/record_scope_service.py`, `services/record_access_service.py`, `core/surrogate_access.py` | `build_visibility_filter`, `build_linked_visibility_filter`, `can_access_record`, and `get_record_with_access`; the same record set for View/Edit, with actions checked separately |
+| Approval handoff | `services/approval_handoff_service.py`, surrogate/donor status services | Canonical approval crossing, retained Intake collaboration, and pool ownership in the domain transaction; `record_phase` shares list/detail phase semantics |
+| Workflow definitions | `services/workflow_definition_rules.py` | Trigger validation and action ordering independently of CRUD, execution, and authorization |
+| Workflow authority | `services/workflow_access.py`, `services/workflow_execution_authority.py` | Human management, personal subject eligibility, organization execution snapshots, action authorization, retry/resume, and delivery admission |
+| Campaign authority | `services/campaign_access.py`, existing campaign audience and run services | View/Edit/Send, personal versus organization ownership, audience scope, send authorization, recipient rechecks, and publication |
+| Template authorization/publication | `services/email_template_access.py`, `services/email_template_publication.py` | Shared edit decisions and independent organization copies; proposal credit is separate from execution authority |
+| Submission review | `services/form_submission_access.py` | Submission actions, unlinked Intake/Admin/Dev queue, linked record scope, form picker, and intake-lead access; builder authority remains in `manage_forms` |
+| Application metadata | `services/form_application_access.py` | Record-scoped published form metadata and active link selection without builder access; explicit email-send permission before sending |
+| Reporting | `services/analytics_access_service.py` and existing analytics services | Request-scoped authorized ORM dataset, including aliases; v2 request-only result reuse until cross-request scope invalidation has a reliable revision |
+| Permission client | `lib/api/permissions.ts`, `lib/api/record-scopes.ts`, corresponding query hooks and permission components | Server capabilities, record rules, access explanations, reviewed changes, and cache invalidation; rendered validation remains part of the integration gate |
 
-Existing policy differences remain explicit during extraction. In particular, template editing, published test-send, rollback, and sharing currently have different authorization requirements. The approved policy changes must replace those differences deliberately with updated tests and migration decisions.
+Action baselines and Operations defaults are settled in `permission-system-design.md`. Individual additions never remove role access. Operations has record View without record Edit by default. Legacy post-approval visibility controls no longer narrow v2 list, date, search, or claim-queue results.
 
-Verification: 3,124 backend tests passed, including the serial migration/outbox group; 1,513 frontend tests, frontend type checking, and frontend lint passed. Ruff passed for changed Python files. Independent reviews found no actionable issues in permission resolution, workflow rules, template access, or permission caching. Six cache regressions failed before the fix and passed afterward. Tests used a dedicated disposable PostgreSQL 18.1 database; no provider sends or deployment were performed.
+## Record consumer coverage
 
-## Shared boundaries
+| Surface | Integration |
+|---|---|
+| Surrogate and donor approval | Approved begins the post-approval phase; paused records use their prior stage; terminal records use usable history; unknown historical phase requires an explicit evidence-backed review |
+| Donor records | Shared list/count/detail scope; owner changes require `assign_donors`; default personal creation assigns the creator; claim uses action, scope, organization, queue, and locking checks |
+| Intended parents | Shared list/count/date/stat/detail scope; no applicant approval-phase restriction |
+| Surrogate lists and queues | Shared list/date/stat scope; claim queue filters before pagination/count; claim and reassignment check record scope separately from assignment permission |
+| Global search | Record, note, and attachment branches apply shared SQL filters before branch limits and global pagination; v1 branches retain legacy rules |
+| Tasks and matches | Every linked participant must be visible; task list/count and match list/detail use the same subject rules |
+| Appointments | Linked surrogate, donor, intended-parent, match, and transfer subjects use shared scope before list counts and pagination; detail follows the same rule after collaboration is removed |
+| Attachments and correspondence | Subject access remains in the record adapter; attachment lists also use shared linked-subject filters |
+| Dashboard and AI summaries | Donor attention, linked task/meeting lists, overdue counts, and AI dashboard statistics use the actor's scope |
+| Intelligent suggestions | Rule matches and summary counts use module View plus shared scope; retained collaborators and individual additions are included |
+| Forms | Submission lists filter before limits; candidate lists and manual links check record access; inaccessible automatic rematches stay in manual review; Operations can read visible linked submissions but cannot review |
+| Manual email | v2 manual surrogate sends require `send_email` before provider lookup; existing human review, content, attachment, and provider rules remain |
 
-| Owner | Responsibility | Consumers |
+Configuration mutations refresh active membership after acquiring the organization lock. Returning inactive members can have their existing scope additions inspected and removed; new grants require an active membership. Removing one grant preserves any remaining role, individual, or collaborator route.
+
+Migration review persists per-record ownership and phase decisions. Legacy Intake pool grants require explicit removal or replacement with a scope addition. The activation snapshot includes unresolved records, grant decisions, exact current/proposed/gained/lost record-scope counts, and a record-state digest. These counts describe record scope; the permission preview reports action changes separately.
+
+## Ownership and transaction rules
+
+| Boundary | Owns | Must not own |
 |---|---|---|
-| Permission registry and service | Action keys, role baselines, individual additions, protected administration, effective-action calculation | API dependencies, settings, module authorization |
-| Record access | Authenticated organization scope, record inclusion, list filters, single-record decisions, access sources | Records, search, tasks, files, correspondence, matching, submissions, reporting |
-| Domain services | Valid transitions, approval handoff, record relationships, transaction and audit writes | Manual operations and authorized automated actions |
-| Execution services | Personal or organization authority, candidate eligibility, queued-action rechecks, retries | Workflows, campaigns, delivery admission |
-| Frontend | Display server capabilities and explanations, enable permitted queries, refresh changed access | Navigation, editors, record controls, reports |
+| Router | Authenticated session, CSRF, request/response validation, HTTP disclosure behavior | ORM queries, a second permission resolver, provider side effects |
+| Permission service | Actions, organization configuration locks, audited administrative changes | Stage transitions, consent, audience materialization |
+| Record scope service | Organization/member boundary, SQL inclusion, access sources, collaboration, migration review | Implicit action grants, domain status writes, provider access |
+| Domain service | Record relationships, status invariants, domain audit/activity, commit or rollback | A parallel role/stage access matrix |
+| Workflow/campaign use case | Management authority, immutable execution configuration, dispatch/retry admission | Ownership-based credit as proof of authority |
+| Delivery service | Consent, suppression, provider routing, idempotency, final execution admission | Reusing stale enqueue-time authorization |
+| Frontend | Server-state queries and permitted controls | Recomputing role, stage, or ownership rules as authorization |
 
-Extend the existing registry, record service, workflow adapters, audience query, and delivery modules. An extraction needs a concrete caller or duplicated rule. Feature availability and beta gates remain separate from staff permission grants.
+Record scope helpers compose into SQL before pagination and aggregates. Single-record adapters check the action and reuse that scope. A scope grant alone never authorizes Edit, Send, approval, assignment, or builder changes. Public token flows keep their existing token-bound organization resolution.
 
-## 1. Record scope and approval handoff
+Publication creates independent organization-owned work with proposal credit. Organization work continues when its proposer leaves. Personal work rechecks the owner's current membership, actions, and assigned-or-collaborator reach at execution and delivery.
 
-Files: `services/record_access_service.py`, `core/surrogate_access.py`, surrogate/donor pipeline and handoff services, list/search/count/export consumers.
+## Next refactor sequence
 
-- Define query filters and single-record decisions from the same module rules. Organization scope comes from authenticated membership.
-- Combine assignment and phase restrictions, then add explicit scope grants and retained collaborators.
-- Keep donor subtype stages and surrogate stages in their domain definitions. Handle paused and archived records deliberately.
-- Create the Intake-collaborator relationship and handoff audit atomically. Repeated handoffs must not duplicate access grants.
-- Match and joint-document access requires authorization for each linked party.
-- Preserve access through a second valid route after one grant is removed.
+### 1. Rehearse production activation
 
-Gate: list/detail/search/count parity, no per-record permission query growth, cross-organization denial, handoff idempotency, next-action revocation, and reviewed migration of historical ownership and individual denials.
+- Rehearse the exact committed version against an isolated production-shaped copy and inspect organization-specific access and execution changes.
+- Activate only a reviewed organization after explicit release authorization; validate its operational journeys before broadening rollout.
+- Remove legacy adapters after every organization has migrated and a separately validated change retires version 1.
 
-One owner coordinates scope filters and handoff writes. `test_surrogate_permission_access.py`, `test_record_capability_access.py`, and `test_surrogate_stage_role_permissions.py` are starting coverage. The old expectation that Intake loses access after approval must change only with the new behavior.
+### 2. Split workflow execution by concrete use case
 
-## 2. Permission API and administration
+Keep `workflow_definition_rules` as the definition validator and `workflow_execution_authority` as the authority boundary. Extract action execution from `workflow_engine_core` into existing action/adaptor modules by family: record changes, task creation, communications, and intake routing. Extract scheduled candidate selection separately from action execution.
 
-Files: `routers/permissions.py`, permission schemas, `lib/api/permissions.ts`, `lib/hooks/use-permissions.ts`, role/member settings pages.
+Preserve immutable action snapshots, scheduling timestamps, idempotency keys, approval results, and retry/resume behavior. Each extraction requires an existing caller and behavioral tests. Keep one coordinator for engine/adaptor/worker changes so dispatch and final delivery cannot drift apart.
 
-- Return allowed actions, configured record scope, sources of access, and which settings the actor may edit.
-- Use the same decision data for effective-access explanations and the role-editor preview.
-- Implement selected visual variant 2 with additions-only member editing, protected baselines, change review, loading, errors, and unsaved-change handling.
-- Carry authenticated organization/member identity into the complete permission cache contract. The first cache fix uses the existing user identity and self endpoint; the organization-wide cache migration is separate.
-- Invalidate relevant record datasets when scope changes, alongside permission and administration views.
+### 3. Split campaign lifecycle around the existing audience query
 
-Gate: one user's cached permissions are never displayed for another user; configuration changes refresh affected views; UI controls agree with server denials. Operations remains outside activation until its defaults are settled.
+Keep `campaign_access` responsible for authority. Separate campaign definition CRUD, publication, audience preview/materialization, run state, and retry dispatch where the current service combines them. Continue extending the existing recipient-query implementation.
 
-## 3. Workflow admission and execution
+Preview, materialized recipients, retry selection, and delivery admission must agree. Consent, suppression, immutable launch content, skipped counts, and delivery locking stay with their current owners. Campaign definition/UI work can run alongside workflow refactoring after the shared action and delivery contracts are stable.
 
-Files: `services/workflow_access.py`, `workflow_triggers.py`, `workflow_engine_core.py`, `workflow_engine_adapters.py`, workflow/email job handlers, workflow router.
+### 4. Separate form definition, intake routing, and review transactions
 
-- Keep human management checks in `workflow_access.py`; route edit and activation through Manage Workflows plus required action authority.
-- Use the same personal assigned-or-collaborator selection rule for events and scheduled sweeps.
-- Separate execution authority from the actor recorded for credit or audit. Personal execution depends on current owner authority; organization execution uses authorized agency configuration.
-- Check authority before dispatch, resume, retry, and provider admission. Revalidate configuration that expands actions or reach.
-- Preserve execution APIs, result shapes, immutable action snapshots, schedule timestamps, idempotency keys, and provider routing.
+Keep builder definition/publication separate from `view_form_submissions` and `review_form_submissions`. Move submission review transport orchestration into focused use cases that own matching, audit, and transaction completion together. Consolidate the current retry path's intermediate commits before adding more routing actions.
 
-Gate: collaborator eligibility, owner departure, permission removal after enqueue, organization execution after proposer departure, resume/retry organization binding, and approved-action snapshot behavior.
+Retain the explicit unlinked queue and shared linked-record access. Public intake, draft tokens, published-schema snapshots, file scanning, and duplicate detection remain independent boundaries. UI simplification follows this split; it does not require a new form engine.
 
-One execution owner coordinates the engine, adapters, and worker handlers. Existing tests include `test_workflow_trigger_scoping.py`, `test_workflow_task_sweeps.py`, `test_workflow_execution_retry.py`, `test_workflow_approvals.py`, and `test_workflow_email_outbox.py`.
+### 5. Consolidate reporting datasets and invalidation
 
-## 4. Campaign actions, audiences, and template publication
+Keep metric calculation in existing analytics modules and supply the same authorized dataset to counts, charts, drill-downs, and exports. Group related metrics around an explicit dataset/query context as duplication appears.
 
-Files: campaign router/service/schema/model and frontend API; template publication services; campaign/email/messaging job and dispatch modules.
+Before restoring cross-request v2 caches, define a scope revision covering role rules, individual additions, collaborators, membership changes, and record ownership/stage/archive changes. Test revocation on the next request. Agency-wide reporting requires explicit authority; ordinary report access uses the person's record scope.
 
-- Give campaigns explicit View, Edit, and Send actions. Current campaign routes use email-template permission keys; that coupling must change with the reviewed role matrix.
-- Add personal scope, owner, organization scope, and original-proposer attribution to the campaign contract. The server combines permission and lifecycle decisions for UI controls.
-- Extend the existing `_build_recipient_query` for personal eligibility; do not create another audience engine.
-- Align preview, recipient materialization, retry selection, and final email/messaging admission. Initial filtering alone cannot enforce revocation after enqueue.
-- Make publication a transaction-owned use case: independent organization copy, draft/disabled initial state, authorized organization-template dependencies, original credit, and no usable private-source link.
-- Preserve consent, suppression, immutable launch content, snapshots, delivery locking, and retry idempotency in their current owners.
+### 6. Refactor organization integrations, then broaden UI simplification
 
-Gate: edit-allowed/send-denied, peer-private campaigns, audited Admin access, publication rollback, revoked collaborator after enqueue, skipped counts, and continued organization execution after proposer departure.
+Meta spend synchronization already exists but is stale because Meta app approval is unavailable. Evaluate an organization-specific Meta MCP connection against that existing ingestion, account mapping, scheduling, deduplication, and reporting code. Configurable daily/weekly synchronization and its provider verification remain future work.
 
-Template publication and campaign CRUD can run separately after their shared copy contract is fixed. Run/retry plus email and messaging admission need one coordinated owner. Coverage starts with campaign recipient/run tests, donor campaigns, campaign/workflow messaging, template personal-scope tests, and delivery dispatch tests.
+Twilio setup and provider testing remain unfinished. Keep organization connection configuration, consent, execution admission, and proposer credit separate. Do not treat passing local delivery tests as a completed Twilio setup.
 
-## 5. Forms, reports, and remaining UI
+Continue donor completion against the existing workflow/campaign code and tests. Default donor creation workflow, onboarding, and the remaining global UI polish belong in their own reviewed slices. Reuse server capabilities and established component primitives as each surface is simplified.
 
-| Module | Refactor | Gate |
-|---|---|---|
-| Form submissions | One access adapter for list, detail, files, matching, and review; definitions/publication stay in forms | Filter before pagination; linked subjects use shared record access; define unlinked-intake access; preserve token-bound public flows |
-| Reporting and exports | Supply one authorized dataset to counts, charts, drill-downs, and export; aggregation remains in analytics | Equivalent scope across outputs; cache identity reflects scope; changes invalidate cached results |
-| Navigation and record controls | One capability selector using server decisions; preserve domain lifecycle checks | No duplicated frontend role/stage calculations; denied operations do not trigger unauthorized data requests |
-| Integrations | Organization-owned connection/configuration and execution authority stay independent of proposer credit | Organization-bound credentials, jobs, account selection, and cache keys; revoked connections stop admission |
+## Verification status
 
-Agency-wide reporting beyond a person's ordinary record scope and access to unlinked intake submissions require explicit product rules before rollout. These decisions do not block the first extractions.
-
-## Coordination
-
-- Keep shared permission names, schema changes, and the API contract under one owner.
-- Assign UI, workflow definition/publication, and verification work independently after their interfaces are fixed.
-- Review each stable extraction independently, then validate the integrated application.
-- Review old/new access differences before module activation. Temporary comparison support must have a removal gate.
-- Commit behavior-preserving refactors separately from permission changes and migrations.
+The integrated API suite, serial migration/outbox suite, frontend checks, fresh migration rehearsal, browser journeys, and local delivery state are recorded in [permission-upgrade-verification.md](permission-upgrade-verification.md). Focused lane selections overlap and are not additive.
 
 [Execution sequence](permission-upgrade-execution-plan.md) · [Permission model](permission-system-design.md) · [Selected UI](mockups/permissions/role-variants/README.md)
