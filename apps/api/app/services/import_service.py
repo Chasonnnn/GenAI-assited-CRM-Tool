@@ -1458,6 +1458,30 @@ def store_mapping_corrections(
     # Build lookup of original suggestions using normalize_column_name()
     original_map = {normalize_column_name(s["csv_column"]): s for s in original_suggestions}
 
+    # Pre-collect valid, normalized column names to bulk fetch existing corrections
+    valid_normalized_names = set()
+    for final in final_mappings:
+        if final.action == "ignore":
+            continue
+        normalized = normalize_column_name(final.csv_column)
+        if normalized:
+            valid_normalized_names.add(normalized)
+
+    # Bulk fetch existing corrections and map them by normalized name for O(1) lookups
+    existing_corrections = {}
+    if valid_normalized_names:
+        fetched_corrections = (
+            db.query(ImportMappingCorrection)
+            .filter(
+                ImportMappingCorrection.organization_id == org_id,
+                ImportMappingCorrection.column_name_normalized.in_(valid_normalized_names),
+            )
+            .all()
+        )
+        existing_corrections = {
+            correction.column_name_normalized: correction for correction in fetched_corrections
+        }
+
     for final in final_mappings:
         # SKIP ignore - don't teach system to hide columns
         if final.action == "ignore":
@@ -1486,14 +1510,7 @@ def store_mapping_corrections(
                 continue
 
         # Upsert correction
-        existing = (
-            db.query(ImportMappingCorrection)
-            .filter(
-                ImportMappingCorrection.organization_id == org_id,
-                ImportMappingCorrection.column_name_normalized == normalized,
-            )
-            .first()
-        )
+        existing = existing_corrections.get(normalized)
 
         if existing:
             if existing.corrected_field == corrected_field:
@@ -1507,16 +1524,16 @@ def store_mapping_corrections(
                 existing.times_used = 1
             existing.last_used_at = func.now()
         else:
-            db.add(
-                ImportMappingCorrection(
-                    organization_id=org_id,
-                    column_name_normalized=normalized,
-                    original_suggestion=original.get("suggested_field") if original else None,
-                    corrected_field=corrected_field,
-                    corrected_transformation=final.transformation,
-                    corrected_action=final.action,
-                )
+            new_correction = ImportMappingCorrection(
+                organization_id=org_id,
+                column_name_normalized=normalized,
+                original_suggestion=original.get("suggested_field") if original else None,
+                corrected_field=corrected_field,
+                corrected_transformation=final.transformation,
+                corrected_action=final.action,
             )
+            db.add(new_correction)
+            existing_corrections[normalized] = new_correction
 
 
 # =============================================================================
