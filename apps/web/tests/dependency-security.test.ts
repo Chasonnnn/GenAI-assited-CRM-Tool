@@ -371,4 +371,25 @@ describe("Dependency security guards", () => {
             expect(compareVersions(resolvedVersion, "7.29.6")).toBeGreaterThanOrEqual(0)
         }
     })
+
+    it("pins @tiptap/core to a non-vulnerable version in pnpm overrides", () => {
+        const tiptapCoreOverride = readPnpmOverrides()["'@tiptap/core'"] || readPnpmOverrides()["@tiptap/core"]
+
+        expect(tiptapCoreOverride).toBeDefined()
+        expect(compareVersions(tiptapCoreOverride!.replace(/^[^\d]*/, ""), "3.30.5")).toBeGreaterThanOrEqual(0)
+    })
+
+    it("resolves only non-vulnerable @tiptap/core versions in pnpm-lock.yaml", () => {
+        const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
+        const resolvedVersions = Array.from(
+            lockfile.matchAll(/^\s{2}'@tiptap\/core@(\d+\.\d+\.\d+)':/gm),
+            (match) => match[1],
+        )
+
+        expect(resolvedVersions.length).toBeGreaterThan(0)
+
+        for (const resolvedVersion of resolvedVersions) {
+            expect(compareVersions(resolvedVersion, "3.30.5")).toBeGreaterThanOrEqual(0)
+        }
+    })
 })
