@@ -16,7 +16,7 @@ RUN echo "cache_bust=${CACHE_BUST}" > /dev/null
 COPY --from=uv /uv /usr/local/bin/uv
 
 # Install build dependencies
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+RUN apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -40,7 +40,7 @@ ARG CACHE_BUST=0
 RUN echo "cache_bust=${CACHE_BUST}" > /dev/null
 
 # Install runtime dependencies only
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+RUN apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
     && rm -rf /var/lib/apt/lists/*
