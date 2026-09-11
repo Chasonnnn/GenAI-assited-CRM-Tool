@@ -51,14 +51,23 @@ The cooperative 45-second timeout cannot interrupt a synchronous database wait o
 
 The relevant AnyIO, SQLAlchemy, psycopg, and FastAPI dependency pins match the deployed manifest. The local Google SDK and grpc versions differ; provider calls were mocked and those SDK paths were not exercised. The reproduction validates the concurrency failure, not the complete production deployment or the source of the connection reset.
 
-## Proposed correction
+## Local correction
 
-1. Remove Google Tasks synchronization from task-list reads. Return the persisted CRM task list and use the existing `GOOGLE_TASKS_SYNC` job scheduled in five-minute buckets. This changes Google-to-CRM refresh from page-load synchronization to background synchronization.
-2. Keep synchronous database work off the event loop in the background sync path. The existing job handler also acquires the membership lock before awaiting synchronization, so moving work to that handler alone is insufficient.
-3. Bound lock waits within the sync operation and preserve active-membership authorization, transaction ownership, rollback, and retry behavior. Avoid applying an unreviewed global timeout to imports, exports, migrations, or unrelated jobs.
-4. Add PostgreSQL concurrency regressions for same-user sync, different-user sync, and membership revocation during sync. Verify that the API heartbeat remains responsive and failed or skipped work is retried safely.
+1. Task-list reads now return persisted CRM tasks without invoking Google. Google-to-CRM refresh uses the existing `GOOGLE_TASKS_SYNC` schedule in five-minute buckets, with the existing per-user jitter and queue delay. Initial connection and manual synchronization remain available.
+2. Inbound synchronization runs in an AnyIO worker with a private event loop. The caller awaits exclusive use of its database session. The job handler's duplicate blocking membership query was removed; the exact active membership check and lock still run inside reconciliation before provider access.
+3. The sync operation sets PostgreSQL lock waits to two seconds and statements to ten seconds. Its provider coroutine has a cooperative 45-second deadline. These are scoped limits, not a hard wall-clock bound on connection acquisition or the entire request. Successful completion restores the caller's database settings; rollback restores them after failure. Unrelated database operations retain their existing configuration. [PostgreSQL timeout settings](https://www.postgresql.org/docs/18/runtime-config-client.html)
+4. Reconciliation uses a savepoint-bound session inside the caller's savepoint. Internal OAuth commits cannot release the authorization lock or commit the caller's transaction. Exceptions and timeouts roll back the sync's partial work and propagate to the existing worker retry handler; timeout and database error messages expose only the exception class. [SQLAlchemy transaction ownership](https://docs.sqlalchemy.org/en/20/orm/session_api.html)
 
-Application changes, deployment, and post-deployment verification remain pending.
+The fix is local. Deployment and post-deployment verification remain pending.
+
+## Fix validation
+
+- The five initial regression checks failed against the original implementation: overlapping sync, lock timeout propagation, rollback after an internal commit, scoped timeouts, and task-list reads without Google synchronization.
+- After the correction, 166 affected tests passed across task services, donor tasks, integrations, tenant permissions, Google handlers, scheduler fallback, and async utilities.
+- The final PostgreSQL concurrency and handler set passed all 16 tests, including same-user and different-user overlap, event-loop heartbeat gaps below 500 ms, a 100 ms test lock deadline, successful retry after lock release, caller-owned commit, rollback after provider failure, cooperative provider timeout, and membership revocation while waiting. Inactive users, inactive memberships, and users outside the job organization are denied before provider access.
+- Ruff lint and patch whitespace checks passed. The Google Tasks service has five pre-existing formatter differences, confirmed against `HEAD`; they were left unchanged.
+- The final full backend suite passed: 3,359 tests in 131.25 seconds on PostgreSQL 18.1. Provider calls were mocked; this does not establish production behavior after deployment.
+- The disposable test container and temporary test logs were removed. No task-owned service was left running.
 
 ## Query coverage
 
