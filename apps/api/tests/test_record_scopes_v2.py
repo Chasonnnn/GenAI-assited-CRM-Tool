@@ -519,7 +519,9 @@ def test_consumer_lists_filter_before_pagination_and_counts(db, context, monkeyp
         db.add(task)
         tasks.append(task)
     db.flush()
-    monkeypatch.setattr(task_service, "_pull_google_tasks_for_user_best_effort", lambda *a: None)
+    monkeypatch.setattr(
+        task_service, "_pull_google_tasks_for_user_best_effort", lambda *a: None, raising=False
+    )
     rows, count = task_service.list_tasks(
         db,
         context.org.id,
