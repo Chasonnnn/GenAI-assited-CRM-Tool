@@ -1,0 +1,303 @@
+{
+  "public_eyebrow": "EWI Family Global",
+  "public_title": "Donor pre-questionnaire",
+  "privacy_notice": "Local preview: use sample information only. Submissions are saved in the local CRM.",
+  "pages": [
+    {
+      "title": "About you",
+      "fields": [
+        {
+          "key": "full_name",
+          "label": "Full name",
+          "type": "text",
+          "required": true,
+          "sensitivity": "identity"
+        },
+        {
+          "key": "email",
+          "label": "Email",
+          "type": "email",
+          "required": true,
+          "sensitivity": "contact"
+        },
+        {
+          "key": "phone",
+          "label": "Phone number",
+          "type": "phone",
+          "required": true,
+          "sensitivity": "contact"
+        },
+        {
+          "key": "date_of_birth",
+          "label": "Date of birth",
+          "type": "date",
+          "required": true,
+          "sensitivity": "identity"
+        },
+        {
+          "key": "city",
+          "label": "City",
+          "type": "text",
+          "required": true,
+          "sensitivity": "identity"
+        },
+        {
+          "key": "state",
+          "label": "State (2-letter code)",
+          "type": "text",
+          "required": true,
+          "sensitivity": "identity"
+        },
+        {
+          "key": "country",
+          "label": "Country",
+          "type": "text",
+          "required": true,
+          "sensitivity": "identity"
+        }
+      ]
+    },
+    {
+      "title": "Your background",
+      "fields": [
+        {
+          "key": "education",
+          "label": "Highest education level",
+          "type": "select",
+          "required": true,
+          "sensitivity": "identity",
+          "options": [
+            {
+              "label": "High school",
+              "value": "High school"
+            },
+            {
+              "label": "Some college",
+              "value": "Some college"
+            },
+            {
+              "label": "Associate degree",
+              "value": "Associate degree"
+            },
+            {
+              "label": "Bachelor’s degree",
+              "value": "Bachelor’s degree"
+            },
+            {
+              "label": "Master’s degree",
+              "value": "Master’s degree"
+            },
+            {
+              "label": "Doctorate / professional degree",
+              "value": "Doctorate / professional degree"
+            },
+            {
+              "label": "Other",
+              "value": "Other"
+            }
+          ]
+        },
+        {
+          "key": "college",
+          "label": "University / college",
+          "type": "text",
+          "required": false,
+          "sensitivity": "identity"
+        },
+        {
+          "key": "race",
+          "label": "Race / ethnicity",
+          "type": "select",
+          "required": false,
+          "sensitivity": "identity",
+          "options": [
+            {
+              "label": "Asian",
+              "value": "Asian"
+            },
+            {
+              "label": "Black / African American",
+              "value": "Black / African American"
+            },
+            {
+              "label": "Hispanic / Latino",
+              "value": "Hispanic / Latino"
+            },
+            {
+              "label": "Middle Eastern / North African",
+              "value": "Middle Eastern / North African"
+            },
+            {
+              "label": "Native American / Alaska Native",
+              "value": "Native American / Alaska Native"
+            },
+            {
+              "label": "Native Hawaiian / Pacific Islander",
+              "value": "Native Hawaiian / Pacific Islander"
+            },
+            {
+              "label": "White",
+              "value": "White"
+            },
+            {
+              "label": "Multiracial",
+              "value": "Multiracial"
+            },
+            {
+              "label": "Self-describe",
+              "value": "Self-describe"
+            },
+            {
+              "label": "Prefer not to say",
+              "value": "Prefer not to say"
+            }
+          ]
+        },
+        {
+          "key": "race_description",
+          "label": "Race / ethnicity — self-description",
+          "type": "text",
+          "required": false,
+          "sensitivity": "identity",
+          "show_if": {
+            "field_key": "race",
+            "operator": "equals",
+            "value": "Self-describe"
+          }
+        },
+        {
+          "key": "height",
+          "label": "Height",
+          "type": "height",
+          "required": true,
+          "sensitivity": "identity"
+        },
+        {
+          "key": "weight",
+          "label": "Weight (lb)",
+          "type": "number",
+          "required": true,
+          "sensitivity": "identity",
+          "validation": {
+            "min_value": 1,
+            "max_value": 1000
+          }
+        }
+      ]
+    },
+    {
+      "title": "Health & experience",
+      "fields": [
+        {
+          "key": "nicotine",
+          "label": "Do you currently use nicotine or tobacco products?",
+          "type": "radio",
+          "required": true,
+          "sensitivity": "sensitive_health",
+          "options": [
+            {
+              "label": "Yes",
+              "value": "Yes"
+            },
+            {
+              "label": "No",
+              "value": "No"
+            }
+          ]
+        },
+        {
+          "key": "cannabis",
+          "label": "Do you currently use cannabis?",
+          "type": "radio",
+          "required": true,
+          "sensitivity": "sensitive_health",
+          "options": [
+            {
+              "label": "Yes",
+              "value": "Yes"
+            },
+            {
+              "label": "No",
+              "value": "No"
+            }
+          ]
+        },
+        {
+          "key": "infectious_disease",
+          "label": "Have you ever had an infectious disease such as HIV, hepatitis B/C, or an STI?",
+          "type": "radio",
+          "required": true,
+          "sensitivity": "sensitive_health",
+          "options": [
+            {
+              "label": "Yes",
+              "value": "Yes"
+            },
+            {
+              "label": "No",
+              "value": "No"
+            },
+            {
+              "label": "Prefer to discuss with the team",
+              "value": "Prefer to discuss with the team"
+            }
+          ]
+        },
+        {
+          "key": "previous_donation",
+          "label": "Have you donated before?",
+          "type": "radio",
+          "required": true,
+          "sensitivity": "sensitive_reproductive",
+          "options": [
+            {
+              "label": "Yes",
+              "value": "Yes"
+            },
+            {
+              "label": "No",
+              "value": "No"
+            }
+          ]
+        },
+        {
+          "key": "profile_photo",
+          "label": "Recent profile photo",
+          "type": "file",
+          "required": true,
+          "sensitivity": "file"
+        },
+        {
+          "key": "referral_source",
+          "label": "How did you hear about us?",
+          "type": "select",
+          "required": false,
+          "sensitivity": "operational",
+          "options": [
+            {
+              "label": "Facebook",
+              "value": "Facebook"
+            },
+            {
+              "label": "Instagram",
+              "value": "Instagram"
+            },
+            {
+              "label": "Friend / family",
+              "value": "Friend / family"
+            },
+            {
+              "label": "Search engine",
+              "value": "Search engine"
+            },
+            {
+              "label": "Other",
+              "value": "Other"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "logo_url": "http://127.0.0.1:3027/assets/ewi-family-global-logo.png"
+}
