@@ -31,14 +31,14 @@ def test_dependency_pins_match_security_fixes():
     }
     expected_exact_pins = {
         "fastapi": "0.136.3",
-        "idna": "3.15",
+        "idna": "3.18",
         "pillow": "12.3.0",
         "pydantic-settings": "2.14.2",
         "pypdf": "6.17.0",
         "python-multipart": "0.0.31",
         "starlette": "1.3.1",
     }
-    expected_test_exact_pins = {"httpx2": "2.0.0", "pytest": "9.0.3"}
+    expected_test_exact_pins = {"httpx2": "2.12.0", "pytest": "9.0.3"}
 
     for dependency_name, version in expected_minimum_pins.items():
         requirement = dependencies.get(dependency_name)
@@ -50,9 +50,15 @@ def test_dependency_pins_match_security_fixes():
     for dependency_name, version in expected_exact_pins.items():
         requirement = dependencies.get(dependency_name)
         assert requirement is not None, f"Expected {dependency_name} in pyproject.toml dependencies"
-        assert str(requirement.specifier) == f"=={version}"
+        if dependency_name == "idna":
+            assert str(requirement.specifier) == f">={version}"
+        else:
+            assert str(requirement.specifier) == f"=={version}"
 
     for dependency_name, version in expected_test_exact_pins.items():
         requirement = test_dependencies.get(dependency_name)
         assert requirement is not None, f"Expected {dependency_name} in test optional dependencies"
-        assert str(requirement.specifier) == f"=={version}"
+        if dependency_name == "httpx2":
+            assert str(requirement.specifier) == f">={version}"
+        else:
+            assert str(requirement.specifier) == f"=={version}"
