@@ -43,7 +43,7 @@ describe("Next.js 16.3 adoption contracts", () => {
         expect(packageJson.devDependencies.typescript).toBe(
             "npm:@typescript/typescript6@6.0.2",
         )
-        expect(packageJson.scripts.typecheck).toBe("tsc --noEmit")
+        expect(packageJson.scripts.typecheck).toBe("next typegen && tsc --noEmit")
         expect(packageJson.scripts["typecheck:compat"]).toBe("tsc6 --noEmit")
         expect(packageJson.scripts.build).toBe("next build --webpack")
     })

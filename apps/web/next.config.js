@@ -44,11 +44,6 @@ module.exports = withBundleAnalyzer({
     // lucide-react / date-fns / recharts are optimized by Next automatically, so they are
     // intentionally omitted here.
     optimizePackageImports: [
-      "@fullcalendar/core",
-      "@fullcalendar/react",
-      "@fullcalendar/daygrid",
-      "@fullcalendar/timegrid",
-      "@fullcalendar/interaction",
       "@tiptap/react",
       "@tiptap/starter-kit",
       "@base-ui/react",
