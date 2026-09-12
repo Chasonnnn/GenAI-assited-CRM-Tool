@@ -1,0 +1,8 @@
+.preview {
+    --primary: #21273e;
+    --primary-foreground: #fff;
+}
+
+.preview > div { min-height: 0; }
+.preview footer { display: none; }
+.notice { display: block; padding: 0 16px 24px; text-align: center; font-size: 14px; text-decoration: underline; color: #21273e; }

@@ -86,13 +86,22 @@ module.exports = withBundleAnalyzer({
         headers,
       },
       {
-        source: "/((?!embed/forms).*)",
+        source: process.env.NODE_ENV === "development"
+          ? "/((?!embed/forms|prototype/donor-intake/).*)"
+          : "/((?!embed/forms).*)",
         headers: frameProtectionHeaders,
       },
       {
         source: "/embed/forms/:slug",
         headers: [{ key: "Cache-Control", value: "no-store" }],
       },
+      ...(process.env.NODE_ENV === "development" ? [{
+        source: "/prototype/donor-intake/:slug",
+        headers: [
+          { key: "Content-Security-Policy", value: "frame-ancestors http://127.0.0.1:3027" },
+          { key: "Cache-Control", value: "no-store" },
+        ],
+      }] : []),
     ];
   },
   async rewrites() {
