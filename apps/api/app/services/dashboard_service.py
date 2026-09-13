@@ -4,6 +4,7 @@ import asyncio
 import logging
 import threading
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from uuid import UUID
 
 import anyio
@@ -98,6 +99,7 @@ def get_upcoming_items(
     include_overdue: bool,
     pipeline_id: UUID | None = None,
     can_view_donors: bool = False,
+    session=None,
 ) -> tuple[list[dict], list[dict]]:
     """Get upcoming tasks and meetings for dashboard widgets."""
     now = datetime.now(UTC)
@@ -113,6 +115,10 @@ def get_upcoming_items(
     from app.services import task_service
 
     task_filters.append(task_service.task_subjects_belong_to_org(org_id))
+    if session is not None:
+        from app.services import record_scope_service
+
+        task_filters.append(record_scope_service.build_linked_visibility_filter(db, session, Task))
     if not can_view_donors:
         task_filters.append(Task.donor_id.is_(None))
 
@@ -199,6 +205,10 @@ def get_upcoming_items(
         ZoomMeeting.start_time <= now + timedelta(days=days),
     ]
 
+    if session is not None:
+        meeting_filters.append(
+            record_scope_service.build_linked_visibility_filter(db, session, ZoomMeeting)
+        )
     meeting_query = db.query(ZoomMeeting)
     if pipeline_id:
         meeting_query = meeting_query.join(
@@ -281,7 +291,13 @@ def get_attention_items(
     """
     now = datetime.now(UTC)
     today = now.date()
-    owner_only = _should_scope_attention_to_owner(db, org_id, user_id, user_role)
+    from app.services import permission_policy_service, record_scope_service
+
+    scoped_v2 = user_role is not None and permission_policy_service.is_enabled(db, org_id)
+    scope_session = SimpleNamespace(org_id=org_id, user_id=user_id, role=user_role)
+    owner_only = (
+        False if scoped_v2 else _should_scope_attention_to_owner(db, org_id, user_id, user_role)
+    )
     effective_owner_id = assignee_id or (user_id if owner_only else None)
     owner_filters = []
     if effective_owner_id:
@@ -424,6 +440,11 @@ def get_attention_items(
         )
     elif owner_only:
         task_filters.append(Task.id.is_(None))
+
+    if scoped_v2:
+        task_filters.append(
+            record_scope_service.build_linked_visibility_filter(db, scope_session, Task)
+        )
 
     overdue_tasks_query = db.query(Task)
     non_admin_visibility = user_role is not None and not _is_admin_role(user_role)
@@ -652,6 +673,10 @@ def get_attention_items(
             donor_last_change_col < stuck_cutoff,
             *donor_owner_filters,
         ]
+        if scoped_v2:
+            donor_stuck_filters.append(
+                record_scope_service.build_visibility_filter(db, scope_session, "donor")
+            )
         if pipeline_id:
             donor_stuck_filters.append(PipelineStage.pipeline_id == pipeline_id)
 

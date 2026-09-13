@@ -1282,7 +1282,7 @@ def test_execute_campaign_run_with_duplicates_and_suppression(
     monkeypatch.setattr(
         campaign_service,
         "_build_recipient_query",
-        lambda session, org_id, recipient_type, filters: _FakeQuery(recipients),
+        lambda session, org_id, recipient_type, filters, **kwargs: _FakeQuery(recipients),
     )
     monkeypatch.setattr(campaign_service, "_load_existing_recipients", lambda *args, **kwargs: {})
     monkeypatch.setattr(

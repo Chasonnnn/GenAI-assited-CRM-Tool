@@ -1091,14 +1091,21 @@ async def create_zoom_meeting(
     timezone_name = request.timezone or "UTC"
 
     # Validate entity exists and user has access (prevents cross-tenant/task leakage)
-    if entity_type == EntityType.SURROGATE:
+    scoped_access = zoom_service.authorize_meeting_creation(
+        db,
+        session,
+        request.entity_type,
+        request.entity_id,
+        idempotency_key=request.idempotency_key,
+    )
+    if not scoped_access and entity_type == EntityType.SURROGATE:
         surrogate = surrogate_service.get_surrogate(db, session.org_id, request.entity_id)
         if not surrogate:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Surrogate not found")
         check_surrogate_access(
             surrogate, session.role, session.user_id, db=db, org_id=session.org_id
         )
-    else:
+    elif not scoped_access:
         ip = ip_service.get_intended_parent(db, request.entity_id, session.org_id)
         if not ip:
             raise HTTPException(
@@ -1252,6 +1259,9 @@ def send_zoom_meeting_invite(
     """
     from app.services import zoom_service
 
+    saved_meeting = zoom_service.get_invite_meeting_with_access(
+        db, session, request.meeting_id, surrogate_id=request.surrogate_id
+    )
     # Get host name for template
     user = user_service.get_user_by_id(db, session.user_id)
     host_name = user.display_name if user else "Your Host"
@@ -1260,21 +1270,25 @@ def send_zoom_meeting_invite(
     org_timezone = org.timezone if org else "America/Los_Angeles"
 
     # Build meeting object for template
-    meeting = zoom_service.ZoomMeeting(
-        id=request.meeting_id,
-        uuid="",  # Not needed for email
-        topic=request.topic,
-        start_time=request.start_time,
-        duration=request.duration,
-        timezone=org_timezone,
-        join_url=request.join_url,
-        start_url="",  # Not needed for attendee
-        password=request.password,
+    meeting = (
+        zoom_service._meeting_from_model(saved_meeting)
+        if saved_meeting
+        else zoom_service.ZoomMeeting(
+            id=request.meeting_id,
+            uuid="",  # Not needed for email
+            topic=request.topic,
+            start_time=request.start_time,
+            duration=request.duration,
+            timezone=org_timezone,
+            join_url=request.join_url,
+            start_url="",  # Not needed for attendee
+            password=request.password,
+        )
     )
 
     # Parse surrogate_id (best-effort; ignore if invalid or not authorized)
-    surrogate_id = None
-    if request.surrogate_id:
+    surrogate_id = saved_meeting.surrogate_id if saved_meeting else None
+    if saved_meeting is None and request.surrogate_id:
         try:
             parsed_surrogate_id = uuid.UUID(request.surrogate_id)
             from app.core.surrogate_access import check_surrogate_access

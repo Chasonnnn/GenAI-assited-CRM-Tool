@@ -939,3 +939,15 @@ export async function exportSubmissionPdf(submissionId: string): Promise<void> {
     document.body.removeChild(link)
     URL.revokeObjectURL(objectUrl)
 }
+
+export function listSubmissionReviewForms(): Promise<FormSummary[]> {
+    return api.get<FormSummary[]>("/forms/submission-review/forms")
+}
+
+export function listSurrogateApplicationForms(surrogateId: string): Promise<FormSummary[]> {
+    return api.get<FormSummary[]>(`/forms/surrogates/${surrogateId}/application-forms`)
+}
+
+export function listSurrogateApplicationIntakeLinks(surrogateId: string, formId: string): Promise<FormIntakeLinkRead[]> {
+    return api.get<FormIntakeLinkRead[]>(`/forms/surrogates/${surrogateId}/application-forms/${formId}/intake-links`)
+}

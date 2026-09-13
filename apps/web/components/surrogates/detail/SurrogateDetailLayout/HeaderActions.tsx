@@ -41,6 +41,7 @@ export function HeaderActions() {
         surrogate,
         stageById,
         effectiveStage,
+        effectivePermissions,
         queues,
         assignees,
         canManageQueue,
@@ -89,10 +90,15 @@ export function HeaderActions() {
         workflowStageOrder !== null && interviewScheduledStage
             ? workflowStageOrder >= interviewScheduledStage.order
             : false
+    const isV2 = effectivePermissions?.policy_version === 2
+    const canEdit = !isV2 || (effectivePermissions.permissions.includes("edit_surrogates") && !surrogate.is_archived)
+    const canArchive = !isV2 || effectivePermissions.permissions.includes("archive_surrogates")
+    const canSendEmail = !isV2 || effectivePermissions.permissions.includes("send_email")
+    const canScheduleZoom = !isV2 || effectivePermissions.permissions.includes("manage_appointments")
     const isAssignee = !!(user?.user_id && surrogate.owner_id === user.user_id)
     const canLogInteraction =
         surrogate.owner_type === "user" &&
-        (isAssignee || canManageQueue) &&
+        (isV2 ? canEdit : isAssignee || canManageQueue) &&
         !surrogate.is_archived
     const canLogContact = canLogInteraction && !isOnHold && isAtOrBeforeContacted
     const canLogInterviewOutcome = canLogInteraction && !isOnHold && isAtOrAfterInterviewScheduled
@@ -103,7 +109,11 @@ export function HeaderActions() {
         "eligible_for_matching"
     )
     const isManagerRole = user?.role && ["case_manager", "admin", "developer"].includes(user.role)
-    const canProposeMatch = isManagerRole && !isOnHold && isReadyToMatchStage && !surrogate.is_archived
+    const hasMatchAuthority = isV2
+        ? ["view_matches", "propose_matches", "view_intended_parents"].every((permission) =>
+            effectivePermissions.permissions.includes(permission))
+        : isManagerRole
+    const canProposeMatch = hasMatchAuthority && !isOnHold && isReadyToMatchStage && !surrogate.is_archived
 
     const handleExport = async () => {
         setIsExporting(true)
@@ -159,7 +169,7 @@ export function HeaderActions() {
                 variant="outline"
                 size="sm"
                 onClick={() => openDialog({ type: "email" })}
-                disabled={surrogate.is_archived || !surrogate.email}
+                disabled={!canSendEmail || surrogate.is_archived || !surrogate.email}
                 className="gap-2"
             >
                 <MailIcon className="size-4" />
@@ -208,7 +218,7 @@ export function HeaderActions() {
                     onClick={() => {
                         openDialog({ type: "zoom_meeting" })
                     }}
-                    disabled={surrogate.is_archived}
+                    disabled={surrogate.is_archived || !canScheduleZoom}
                 >
                     <VideoIcon className="mr-2 size-4" />
                     Schedule Zoom
@@ -234,9 +244,11 @@ export function HeaderActions() {
                     <MoreVerticalIcon className="size-4" aria-hidden="true" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => openDialog({ type: "edit_surrogate" })}>
-                        Edit
-                    </DropdownMenuItem>
+                    {canEdit && (
+                        <DropdownMenuItem onClick={() => openDialog({ type: "edit_surrogate" })}>
+                            Edit
+                        </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem onClick={handleExport} disabled={isExporting}>
                         {isExporting ? "Exporting" : "Export"}
                     </DropdownMenuItem>
@@ -248,8 +260,7 @@ export function HeaderActions() {
                             Release to Queue
                         </DropdownMenuItem>
                     )}
-                    {user?.role &&
-                        ["case_manager", "admin", "developer"].includes(user.role) &&
+                    {canManageQueue &&
                         !surrogate.is_archived && (
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger disabled={isAssignPending}>
@@ -295,11 +306,11 @@ export function HeaderActions() {
                                 </DropdownMenuSubContent>
                             </DropdownMenuSub>
                         )}
-                    {surrogate.is_archived ? (
+                    {canArchive && (surrogate.is_archived ? (
                         <DropdownMenuItem onClick={restoreSurrogate}>Restore</DropdownMenuItem>
                     ) : (
                         <DropdownMenuItem onClick={archiveSurrogate}>Archive</DropdownMenuItem>
-                    )}
+                    ))}
                 </DropdownMenuContent>
             </DropdownMenu>
         </>

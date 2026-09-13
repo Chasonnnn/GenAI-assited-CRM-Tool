@@ -28,7 +28,9 @@ def test_global_search_uses_single_unified_query(db, test_org, test_user, monkey
     )
 
     assert result["total"] == 0
-    assert len(execute_calls) == 1
+    data_queries = [statement for statement in execute_calls if "UNION ALL" in str(statement)]
+    assert len(data_queries) == 1
+    assert len(execute_calls) == 2  # Policy version lookup plus the unified data query.
 
 
 def test_global_search_applies_branch_limits_without_wrapper_subqueries(
@@ -59,7 +61,9 @@ def test_global_search_applies_branch_limits_without_wrapper_subqueries(
     )
 
     assert captured_statements
-    sql = str(captured_statements[0]).upper()
+    sql = next(
+        str(statement).upper() for statement in captured_statements if "UNION ALL" in str(statement)
+    )
     assert "UNION ALL" in sql
     assert sql.count("LIMIT") >= 2
     assert "CAST(ANON_" not in sql

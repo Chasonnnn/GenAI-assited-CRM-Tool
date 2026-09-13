@@ -445,6 +445,8 @@ class WorkflowRead(BaseModel):
     scope: str  # 'org' or 'personal'
     owner_user_id: UUID | None = None
     owner_name: str | None = None  # Display name of owner (for personal workflows)
+    proposed_by_user_id: UUID | None = None
+    proposed_by_name: str | None = None
     subject_type: WorkflowSubjectType
     trigger_type: str
     trigger_config: dict
@@ -465,6 +467,7 @@ class WorkflowRead(BaseModel):
     config_warnings: list[str] | None = None  # Warnings from template usage
     # Permission info for UI
     can_edit: bool = True
+    can_publish: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -480,6 +483,8 @@ class WorkflowListItem(BaseModel):
     scope: str  # 'org' or 'personal'
     owner_user_id: UUID | None = None
     owner_name: str | None = None  # Display name of owner (for personal workflows)
+    proposed_by_user_id: UUID | None = None
+    proposed_by_name: str | None = None
     subject_type: WorkflowSubjectType
     trigger_type: str
     is_enabled: bool
@@ -489,6 +494,7 @@ class WorkflowListItem(BaseModel):
     created_at: datetime
     # Permission info for UI
     can_edit: bool = True
+    can_publish: bool = False
 
     model_config = {"from_attributes": True}
 

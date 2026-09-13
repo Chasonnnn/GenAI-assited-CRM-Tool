@@ -1850,6 +1850,8 @@ def list_appointments(
     include_record_history: bool = False,
     limit: int = 50,
     offset: int = 0,
+    *,
+    session=None,
 ) -> tuple[list[Appointment], int]:
     """List appointments for a user with pagination.
 
@@ -1881,6 +1883,13 @@ def list_appointments(
         Appointment.user_id == user_id,
         Appointment.organization_id == org_id,
     )
+
+    if session is not None:
+        from app.services import record_scope_service
+
+        query = query.filter(
+            record_scope_service.build_linked_visibility_filter(db, session, Appointment)
+        )
 
     if status:
         query = query.filter(Appointment.status == status)
@@ -2086,6 +2095,11 @@ def validate_existing_appointment_access(db, session, appointment, *, action="vi
         field: getattr(appointment, field)
         for field in ("surrogate_id", "intended_parent_id", "donor_id", "match_id", "attempt_id")
     }
+    from app.services import permission_policy_service
+
+    if permission_policy_service.is_enabled(db, session.org_id):
+        validate_record_links(db, session, links, action=action)
+        return
     if appointment.donor_id or appointment.match_id or appointment.attempt_id:
         validate_record_links(db, session, links, action=action)
         return

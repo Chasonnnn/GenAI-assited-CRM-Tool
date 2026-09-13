@@ -64,6 +64,7 @@ export interface ProfileCardDataContextValue {
 export interface ProfileCardModeContextValue {
     // Mode state
     mode: CardMode
+    readOnly: boolean
     enterEditMode: () => void
     exitEditMode: () => void
     setEditingField: (fieldKey: string | null) => void
@@ -169,6 +170,7 @@ export function useProfileCard(): ProfileCardContextValue {
 
 interface ProfileCardProviderProps {
     surrogateId: string
+    readOnly?: boolean
     children: React.ReactNode
 }
 
@@ -258,7 +260,7 @@ function isSameHidden(a: string[], b: string[]) {
     return b.every((item) => setA.has(item))
 }
 
-export function ProfileCardProvider({ surrogateId, children }: ProfileCardProviderProps) {
+export function ProfileCardProvider({ surrogateId, children, readOnly = false }: ProfileCardProviderProps) {
     const { data: profileData, isLoading, error } = useProfile(surrogateId)
     const syncMutation = useSyncProfile()
     const saveMutation = useSaveProfileOverrides()
@@ -344,6 +346,7 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
 
     // Mode actions
     const enterEditMode = () => {
+        if (readOnly) return
         setMode({ type: "edit", editingField: null })
     }
 
@@ -352,6 +355,7 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
     }
 
     const setEditingField = (fieldKey: string | null) => {
+        if (readOnly) return
         setMode(prev => {
             if (prev.type === "view") return prev
             return { type: "edit", editingField: fieldKey }
@@ -360,6 +364,7 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
 
     // Field editing
     const setFieldValue = (key: string, value: JsonValue) => {
+        if (readOnly) return
         setEditedFields(prev => ({ ...prev, [key]: value }))
     }
 
@@ -379,6 +384,7 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
 
     // Hidden fields
     const toggleHidden = (fieldKey: string) => {
+        if (readOnly) return
         setHiddenFields(prev =>
             prev.includes(fieldKey) ? prev.filter(key => key !== fieldKey) : [...prev, fieldKey]
         )
@@ -408,6 +414,7 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
 
     // Actions
     const syncProfile = async () => {
+        if (readOnly) return
         try {
             if (mode.type === "view") {
                 enterEditMode()
@@ -432,6 +439,7 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
     }
 
     const saveChanges = async () => {
+        if (readOnly) return
         try {
             if (hasOverrideChanges) {
                 await saveMutation.mutateAsync({
@@ -496,7 +504,8 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
     }
 
     const modeValue: ProfileCardModeContextValue = {
-        mode,
+        mode: readOnly ? { type: "view" } : mode,
+        readOnly,
         enterEditMode,
         exitEditMode,
         setEditingField,

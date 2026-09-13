@@ -182,6 +182,11 @@
       "200"
     ]
   },
+  "/ai/availability": {
+    "GET": [
+      "200"
+    ]
+  },
   "/ai/chat": {
     "POST": [
       "200",
@@ -933,6 +938,12 @@
       "422"
     ]
   },
+  "/campaigns/{campaign_id}/publish": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/campaigns/{campaign_id}/runs": {
     "GET": [
       "200",
@@ -1102,14 +1113,20 @@
       "422"
     ]
   },
+  "/donors/{donor_id}/activity": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
   "/donors/{donor_id}/archive": {
     "POST": [
       "200",
       "422"
     ]
   },
-  "/donors/{donor_id}/activity": {
-    "GET": [
+  "/donors/{donor_id}/claim": {
+    "POST": [
       "200",
       "422"
     ]
@@ -1160,6 +1177,21 @@
       "422"
     ]
   },
+  "/email-operations/readiness": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/email-operations/readiness/check": {
+    "POST": [
+      "202"
+    ]
+  },
+  "/email-operations/readiness/live": {
+    "GET": [
+      "200"
+    ]
+  },
   "/email-operations/reconciliation-cases": {
     "GET": [
       "200",
@@ -1188,21 +1220,6 @@
     "POST": [
       "200",
       "422"
-    ]
-  },
-  "/email-operations/readiness": {
-    "GET": [
-      "200"
-    ]
-  },
-  "/email-operations/readiness/check": {
-    "POST": [
-      "202"
-    ]
-  },
-  "/email-operations/readiness/live": {
-    "GET": [
-      "200"
     ]
   },
   "/email-template-drafts": {
@@ -1470,6 +1487,11 @@
       "422"
     ]
   },
+  "/forms/submission-review/forms": {
+    "GET": [
+      "200"
+    ]
+  },
   "/forms/submissions/{submission_id}/answers": {
     "PATCH": [
       "200",
@@ -1526,6 +1548,18 @@
   },
   "/forms/submissions/{submission_id}/reject": {
     "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/surrogates/{surrogate_id}/application-forms": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/surrogates/{surrogate_id}/application-forms/{form_id}/intake-links": {
+    "GET": [
       "200",
       "422"
     ]
@@ -1992,14 +2026,14 @@
       "422"
     ]
   },
-  "/intended-parents/{ip_id}/archive": {
-    "POST": [
+  "/intended-parents/{ip_id}/activity": {
+    "GET": [
       "200",
       "422"
     ]
   },
-  "/intended-parents/{ip_id}/activity": {
-    "GET": [
+  "/intended-parents/{ip_id}/archive": {
+    "POST": [
       "200",
       "422"
     ]
@@ -2375,8 +2409,36 @@
       "422"
     ]
   },
+  "/matches/{match_id}/attachments": {
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/attempts": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/attempts/{attempt_id}": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
   "/matches/{match_id}/cancel-request": {
     "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/complete": {
+    "PUT": [
       "200",
       "422"
     ]
@@ -2415,8 +2477,20 @@
       "422"
     ]
   },
+  "/matches/{match_id}/notes/{note_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ]
+  },
   "/matches/{match_id}/reject": {
     "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/work": {
+    "GET": [
       "200",
       "422"
     ]
@@ -2450,36 +2524,6 @@
     "PATCH": [
       "200",
       "422"
-    ]
-  },
-  "/metadata/intended-parent-statuses": {
-    "GET": [
-      "200"
-    ]
-  },
-  "/metadata/match-statuses": {
-    "GET": [
-      "200"
-    ]
-  },
-  "/metadata/roles": {
-    "GET": [
-      "200"
-    ]
-  },
-  "/metadata/sources": {
-    "GET": [
-      "200"
-    ]
-  },
-  "/metadata/statuses": {
-    "GET": [
-      "200"
-    ]
-  },
-  "/metadata/task-types": {
-    "GET": [
-      "200"
     ]
   },
   "/messaging/candidates/{surrogate_id}/conversations": {
@@ -2548,12 +2592,12 @@
     ]
   },
   "/messaging/media": {
-    "POST": [
-      "201",
-      "422"
-    ],
     "GET": [
       "200",
+      "422"
+    ],
+    "POST": [
+      "201",
       "422"
     ]
   },
@@ -2586,12 +2630,12 @@
     ]
   },
   "/messaging/templates": {
-    "POST": [
-      "201",
-      "422"
-    ],
     "GET": [
       "200",
+      "422"
+    ],
+    "POST": [
+      "201",
       "422"
     ]
   },
@@ -2611,6 +2655,36 @@
     "POST": [
       "201",
       "422"
+    ]
+  },
+  "/metadata/intended-parent-statuses": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/metadata/match-statuses": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/metadata/roles": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/metadata/sources": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/metadata/statuses": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/metadata/task-types": {
+    "GET": [
+      "200"
     ]
   },
   "/mfa/complete": {
@@ -3052,18 +3126,18 @@
       "422"
     ]
   },
-  "/public/org-by-domain": {
-    "GET": [
-      "200",
-      "422"
-    ]
-  },
   "/public/messaging-consent/{token}": {
     "GET": [
       "200",
       "422"
     ],
     "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/public/org-by-domain": {
+    "GET": [
       "200",
       "422"
     ]
@@ -3129,6 +3203,95 @@
   "/readyz": {
     "GET": [
       "200"
+    ]
+  },
+  "/record-scopes/check": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/record-scopes/members/{user_id}/additions": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/record-scopes/members/{user_id}/additions/{addition_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ]
+  },
+  "/record-scopes/migration-review": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/record-scopes/migration-review/pool-grants/{grant_id}": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/record-scopes/migration-review/records/{kind}/{record_id}": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/record-scopes/records/{kind}/{record_id}/collaborator-options": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/record-scopes/records/{kind}/{record_id}/collaborators": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/record-scopes/records/{kind}/{record_id}/collaborators/{user_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ]
+  },
+  "/record-scopes/roles/{role}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/record-scopes/roles/{role}/{module}": {
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/records/{kind}/{record_id}/correspondence": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/records/{kind}/{record_id}/correspondence/{ticket_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "PUT": [
+      "204",
+      "422"
     ]
   },
   "/resend/eligible-senders": {
@@ -3299,7 +3462,8 @@
   },
   "/settings/permissions/members": {
     "GET": [
-      "200"
+      "200",
+      "422"
     ]
   },
   "/settings/permissions/members/{member_id}": {
@@ -3312,6 +3476,32 @@
       "422"
     ],
     "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/permissions/policy": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/settings/permissions/policy/activate": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/permissions/policy/config": {
+    "GET": [
+      "200"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/permissions/policy/preview": {
+    "POST": [
       "200",
       "422"
     ]
@@ -4135,6 +4325,12 @@
       "422"
     ]
   },
+  "/workflows/{workflow_id}/publish": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/workflows/{workflow_id}/test": {
     "POST": [
       "200",
@@ -4144,62 +4340,6 @@
   "/workflows/{workflow_id}/toggle": {
     "POST": [
       "200",
-      "422"
-    ]
-  },
-  "/matches/{match_id}/attachments": {
-    "POST": [
-      "201",
-      "422"
-    ]
-  },
-  "/matches/{match_id}/attempts": {
-    "GET": [
-      "200",
-      "422"
-    ],
-    "POST": [
-      "201",
-      "422"
-    ]
-  },
-  "/matches/{match_id}/attempts/{attempt_id}": {
-    "PATCH": [
-      "200",
-      "422"
-    ]
-  },
-  "/matches/{match_id}/complete": {
-    "PUT": [
-      "200",
-      "422"
-    ]
-  },
-  "/matches/{match_id}/notes/{note_id}": {
-    "DELETE": [
-      "204",
-      "422"
-    ]
-  },
-  "/matches/{match_id}/work": {
-    "GET": [
-      "200",
-      "422"
-    ]
-  },
-  "/records/{kind}/{record_id}/correspondence": {
-    "GET": [
-      "200",
-      "422"
-    ]
-  },
-  "/records/{kind}/{record_id}/correspondence/{ticket_id}": {
-    "DELETE": [
-      "204",
-      "422"
-    ],
-    "PUT": [
-      "204",
       "422"
     ]
   }

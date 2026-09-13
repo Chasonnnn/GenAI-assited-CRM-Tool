@@ -8,6 +8,7 @@ Provides:
 """
 
 import logging
+from types import SimpleNamespace
 from typing import TypedDict
 from uuid import UUID
 
@@ -218,6 +219,7 @@ def global_search(
         can_view_post_approval=can_view_post_approval,
         limit=limit,
         offset=offset,
+        permissions=permissions,
     )
 
     return SearchResponse(
@@ -293,8 +295,13 @@ def _global_search_unified(
     can_view_post_approval: bool,
     limit: int,
     offset: int,
+    permissions: set[str] | None = None,
 ) -> list[SearchResult]:
     """Run one unified UNION ALL query and paginate globally by relevance."""
+    from app.services import permission_policy_service, record_scope_service
+
+    scoped_v2 = permission_policy_service.is_enabled(db, org_id)
+    scope_session = SimpleNamespace(org_id=org_id, user_id=user_id, role=role)
 
     def _run_with_tsquery(tsquery_factory) -> list[SearchResult]:
         surrogate_table = Surrogate.__table__.alias("s")
@@ -307,6 +314,10 @@ def _global_search_unified(
 
         def _apply_branch_limit(stmt):
             """Bound each UNION branch to reduce intermediate materialization."""
+            if scoped_v2:
+                for table, condition in scope_filters:
+                    if stmt.is_derived_from(table):
+                        stmt = stmt.where(condition)
             if branch_limit <= 0:
                 return stmt.limit(0)
 
@@ -325,14 +336,41 @@ def _global_search_unified(
         def _null_donor_id():
             return literal(None, type_=donor_table.c.id.type).label("donor_id")
 
-        surrogate_access_filter = _build_surrogate_access_filter(
-            org_id,
-            role,
-            user_id,
-            can_view_post_approval,
-            surrogate_table,
-            stage_table,
+        surrogate_access_filter = (
+            true()
+            if scoped_v2
+            else _build_surrogate_access_filter(
+                org_id,
+                role,
+                user_id,
+                can_view_post_approval,
+                surrogate_table,
+                stage_table,
+            )
         )
+        scope_filters = []
+        if scoped_v2:
+            scope_filters = [
+                (
+                    table,
+                    record_scope_service.build_visibility_filter(
+                        db, scope_session, kind, model=table
+                    ),
+                )
+                for kind, table in (
+                    ("surrogate", surrogate_table),
+                    ("donor", donor_table),
+                    ("intended_parent", ip_table),
+                )
+            ]
+            scope_filters.append(
+                (
+                    attachments_table,
+                    record_scope_service.build_linked_visibility_filter(
+                        db, scope_session, attachments_table, permissions=permissions
+                    ),
+                )
+            )
 
         tsquery_simple = tsquery_factory("simple", query)
         tsquery_english = tsquery_factory("english", query)

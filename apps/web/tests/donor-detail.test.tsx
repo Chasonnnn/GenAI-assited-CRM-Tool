@@ -93,6 +93,7 @@ vi.mock("@/lib/hooks/use-donors", () => ({
         isError: false,
         refetch: vi.fn(),
     }),
+    useClaimDonor: () => ({mutateAsync: vi.fn(), isPending: false}),
     useUpdateDonor: () => ({ mutateAsync: mockUpdateDonor, isPending: false }),
     useUpdateDonorStatus: () => ({ mutateAsync: mockUpdateDonorStatus, isPending: false }),
     useArchiveDonor: () => ({ mutateAsync: mockArchiveDonor, isPending: false }),

@@ -29,6 +29,9 @@ type RetryMatchOptions = {
 }
 
 type AutomationFormSubmissionsPanelProps = {
+    canPromoteLead?: ((submission: FormSubmissionRead) => boolean) | undefined
+    canReview?: boolean
+    showWorkflowApprovals?: boolean
     formId: string | null
     pendingSubmissionHistory: FormSubmissionRead[]
     processedSubmissionHistory: FormSubmissionRead[]
@@ -330,11 +333,13 @@ function LeadPromotionSubmissionCard({
     readAnswerValue,
     promoteIntakeLeadPending,
     onPromoteLeadFromSubmission,
+    canPromoteLead,
 }: {
     submission: FormSubmissionRead
     readAnswerValue: SubmissionIdentityReader
     promoteIntakeLeadPending: boolean
     onPromoteLeadFromSubmission: (submission: FormSubmissionRead) => Promise<void> | void
+    canPromoteLead?: ((submission: FormSubmissionRead) => boolean) | undefined
 }) {
     const identity = readSubmissionIdentity(submission, readAnswerValue)
 
@@ -347,7 +352,7 @@ function LeadPromotionSubmissionCard({
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={promoteIntakeLeadPending || !submission.intake_lead_id}
+                    disabled={promoteIntakeLeadPending || !submission.intake_lead_id || (canPromoteLead ? !canPromoteLead(submission) : false)}
                     onClick={() => void onPromoteLeadFromSubmission(submission)}
                 >
                     {isDonorFormLeadKind(submission.lead_kind)
@@ -364,12 +369,14 @@ function LeadPromotionQueueCard({
     readAnswerValue,
     promoteIntakeLeadPending,
     onPromoteLeadFromSubmission,
+    canPromoteLead,
 }: Pick<
     AutomationFormSubmissionsPanelProps,
     | "leadQueueSubmissions"
     | "readAnswerValue"
     | "promoteIntakeLeadPending"
     | "onPromoteLeadFromSubmission"
+    | "canPromoteLead"
 >) {
     return (
         <Card>
@@ -389,6 +396,7 @@ function LeadPromotionQueueCard({
                                 readAnswerValue={readAnswerValue}
                                 promoteIntakeLeadPending={promoteIntakeLeadPending}
                                 onPromoteLeadFromSubmission={onPromoteLeadFromSubmission}
+                                canPromoteLead={canPromoteLead}
                             />
                         ))}
                     </div>
@@ -409,6 +417,7 @@ function SubmissionReviewQueues({
     onSelectQueueSubmission,
     onResolveSubmissionToLead,
     onPromoteLeadFromSubmission,
+    canPromoteLead,
 }: Pick<
     AutomationFormSubmissionsPanelProps,
     | "formId"
@@ -421,6 +430,7 @@ function SubmissionReviewQueues({
     | "onSelectQueueSubmission"
     | "onResolveSubmissionToLead"
     | "onPromoteLeadFromSubmission"
+    | "canPromoteLead"
 >) {
     if (!formId) {
         return (
@@ -447,6 +457,7 @@ function SubmissionReviewQueues({
                 readAnswerValue={readAnswerValue}
                 promoteIntakeLeadPending={promoteIntakeLeadPending}
                 onPromoteLeadFromSubmission={onPromoteLeadFromSubmission}
+                canPromoteLead={canPromoteLead}
             />
         </div>
     )
@@ -586,16 +597,19 @@ function SubmissionHistoryBadges({
 }
 
 function SubmissionHistoryActions({
+    canReview = true,
     submission,
     retrySubmissionMatchPending,
     onSelectQueueSubmission,
     onRetrySubmissionMatch,
 }: Pick<
     AutomationFormSubmissionsPanelProps,
+    "canReview" |
     "retrySubmissionMatchPending" | "onSelectQueueSubmission" | "onRetrySubmissionMatch"
 > & {
     submission: FormSubmissionRead
 }) {
+    if (!canReview) return null
     const canReviewCandidates =
         submission.source_mode === "shared" &&
         submission.match_status === "ambiguous_review" &&
@@ -685,6 +699,7 @@ function SubmissionHistoryActions({
 }
 
 function SubmissionHistoryEntry({
+    canReview = true,
     submission,
     readAnswerValue,
     formatSubmissionDateTime,
@@ -697,6 +712,7 @@ function SubmissionHistoryEntry({
     onRetrySubmissionMatch,
 }: Pick<
     AutomationFormSubmissionsPanelProps,
+    "canReview"
     | "readAnswerValue"
     | "formatSubmissionDateTime"
     | "submissionOutcomeLabel"
@@ -724,6 +740,7 @@ function SubmissionHistoryEntry({
                 formatSubmissionDateTime={formatSubmissionDateTime}
             />
             <SubmissionHistoryActions
+                canReview={canReview}
                 submission={submission}
                 retrySubmissionMatchPending={retrySubmissionMatchPending}
                 onSelectQueueSubmission={onSelectQueueSubmission}
@@ -734,6 +751,7 @@ function SubmissionHistoryEntry({
 }
 
 function SubmissionHistoryCard({
+    canReview = true,
     visibleSubmissionHistory,
     submissionHistoryFilter,
     isSubmissionHistoryLoading,
@@ -749,6 +767,7 @@ function SubmissionHistoryCard({
     onRetrySubmissionMatch,
 }: Pick<
     AutomationFormSubmissionsPanelProps,
+    "canReview"
     | "visibleSubmissionHistory"
     | "submissionHistoryFilter"
     | "isSubmissionHistoryLoading"
@@ -782,6 +801,7 @@ function SubmissionHistoryCard({
                     <div className="space-y-3">
                         {visibleSubmissionHistory.map((submission) => (
                             <SubmissionHistoryEntry
+                canReview={canReview}
                                 key={submission.id}
                                 submission={submission}
                                 readAnswerValue={readAnswerValue}
@@ -909,6 +929,8 @@ function SubmissionCandidateReviewCard({
 }
 
 export function AutomationFormSubmissionsPanel({
+    canReview = true,
+    showWorkflowApprovals = true,
     formId,
     pendingSubmissionHistory,
     processedSubmissionHistory,
@@ -941,17 +963,18 @@ export function AutomationFormSubmissionsPanel({
     onResolveSubmissionToLead,
     onRetrySubmissionMatch,
     onPromoteLeadFromSubmission,
+    canPromoteLead,
 }: AutomationFormSubmissionsPanelProps) {
     return (
         <div className="mx-auto max-w-6xl space-y-6">
-            <WorkflowApprovalCard onOpenApprovalQueue={onOpenApprovalQueue} />
+            {showWorkflowApprovals && <WorkflowApprovalCard onOpenApprovalQueue={onOpenApprovalQueue} />}
             <SubmissionMetricsGrid
                 pendingSubmissionHistory={pendingSubmissionHistory}
                 processedSubmissionHistory={processedSubmissionHistory}
                 ambiguousSubmissions={ambiguousSubmissions}
                 leadQueueSubmissions={leadQueueSubmissions}
             />
-            <SubmissionReviewQueues
+            {canReview && <SubmissionReviewQueues
                 formId={formId}
                 ambiguousSubmissions={ambiguousSubmissions}
                 leadQueueSubmissions={leadQueueSubmissions}
@@ -962,8 +985,10 @@ export function AutomationFormSubmissionsPanel({
                 onSelectQueueSubmission={onSelectQueueSubmission}
                 onResolveSubmissionToLead={onResolveSubmissionToLead}
                 onPromoteLeadFromSubmission={onPromoteLeadFromSubmission}
-            />
+                canPromoteLead={canPromoteLead}
+            />}
             <SubmissionHistoryCard
+                canReview={canReview}
                 visibleSubmissionHistory={visibleSubmissionHistory}
                 submissionHistoryFilter={submissionHistoryFilter}
                 isSubmissionHistoryLoading={isSubmissionHistoryLoading}
@@ -978,7 +1003,7 @@ export function AutomationFormSubmissionsPanel({
                 onSelectQueueSubmission={onSelectQueueSubmission}
                 onRetrySubmissionMatch={onRetrySubmissionMatch}
             />
-            <SubmissionCandidateReviewCard
+            {canReview && <SubmissionCandidateReviewCard
                 selectedQueueSubmissionId={selectedQueueSubmissionId}
                 selectedMatchCandidates={selectedMatchCandidates}
                 isMatchCandidatesLoading={isMatchCandidatesLoading}
@@ -989,7 +1014,7 @@ export function AutomationFormSubmissionsPanel({
                 onResolveReviewNotesChange={onResolveReviewNotesChange}
                 onLinkByManualSurrogateId={onLinkByManualSurrogateId}
                 onResolveSubmissionToSurrogate={onResolveSubmissionToSurrogate}
-            />
+            />}
         </div>
     )
 }

@@ -1,5 +1,7 @@
 "use client"
 
+import { RecordCollaborators } from "@/components/permissions/record-collaborators"
+
 import * as React from "react"
 import { useParams } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
@@ -210,6 +212,7 @@ function PersonalInfoRow({
 }
 
 function InlineSelectField({
+    readOnly = false,
     value,
     options,
     onSave,
@@ -218,6 +221,7 @@ function InlineSelectField({
     saveOnSelect = true,
     triggerClassName = "w-48",
 }: {
+    readOnly?: boolean
     value: string | null | undefined
     options: readonly SelectOption[]
     onSave: (value: string | null) => Promise<void>
@@ -265,6 +269,8 @@ function InlineSelectField({
             finishSaving()
         }
     }
+
+    if (readOnly) return <span>{displayValue}</span>
 
     if (!isEditing) {
         return (
@@ -385,9 +391,11 @@ function ProfileMetric({
 }
 
 function InlineHeightField({
+    readOnly = false,
     value,
     onSave,
 }: {
+    readOnly?: boolean
     value: number | string | null | undefined
     onSave: (value: number | null) => Promise<void>
 }) {
@@ -434,6 +442,8 @@ function InlineHeightField({
             finishSaving()
         }
     }
+
+    if (readOnly) return <span>{displayValue}</span>
 
     if (!isEditing) {
         return (
@@ -520,9 +530,11 @@ function InlineHeightField({
 }
 
 function InlineRaceField({
+    readOnly = false,
     value,
     onSave,
 }: {
+    readOnly?: boolean
     value: string | null | undefined
     onSave: (value: string | null) => Promise<void>
 }) {
@@ -565,6 +577,8 @@ function InlineRaceField({
             finishSaving()
         }
     }
+
+    if (readOnly) return <span>{displayValue}</span>
 
     if (!isEditing) {
         return (
@@ -642,9 +656,11 @@ function InlineRaceField({
 }
 
 function InlineWeightField({
+    readOnly = false,
     value,
     onSave,
 }: {
+    readOnly?: boolean
     value: number | null | undefined
     onSave: (value: number | null) => Promise<void>
 }) {
@@ -695,6 +711,8 @@ function InlineWeightField({
             finishSaving()
         }
     }
+
+    if (readOnly) return <span>{value != null ? `${value} lb` : "-"}</span>
 
     if (!isEditing) {
         return (
@@ -786,10 +804,12 @@ function PersonalInfoColumn({
 }
 
 function ChecklistStatusButton({
+    readOnly = false,
     label,
     value,
     onChange,
 }: {
+    readOnly?: boolean
     label: string
     value: boolean | null | undefined
     onChange: (value: boolean | null) => Promise<void>
@@ -814,8 +834,8 @@ function ChecklistStatusButton({
             type="button"
             className="flex size-6 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-60"
             onClick={cycleChecklistValue}
-            disabled={isSaving}
-            aria-label={`${label}: ${statusLabel}. Click to change.`}
+            disabled={readOnly || isSaving}
+            aria-label={`${label}: ${statusLabel}${readOnly ? "" : ". Click to change."}`}
         >
             {value === true && <CheckIcon className="size-4 text-green-500" />}
             {value === false && <XIcon className="size-4 text-red-500" />}
@@ -860,6 +880,7 @@ function getAgeLabel(dateOfBirth: string | null | undefined) {
 }
 
 function SsnField({
+    readOnly = false,
     label,
     maskedValue,
     revealedValue,
@@ -867,6 +888,7 @@ function SsnField({
     onSave,
     isRevealPending,
 }: {
+    readOnly?: boolean
     label: string
     maskedValue: string | null | undefined
     revealedValue: string | null
@@ -895,7 +917,7 @@ function SsnField({
         }
     }
 
-    if (isEditing) {
+    if (isEditing && !readOnly) {
         return (
             <div className="space-y-1">
                 <div className="flex min-w-0 items-center gap-2">
@@ -961,7 +983,7 @@ function SsnField({
                     size="icon"
                     className="size-7"
                     onClick={() => void onReveal()}
-                    disabled={isRevealPending}
+                    disabled={readOnly || isRevealPending}
                     aria-label={`Reveal ${label}`}
                 >
                     <EyeIcon className="size-3.5" aria-hidden="true" />
@@ -976,6 +998,7 @@ function SsnField({
                     setError(null)
                     setIsEditing(true)
                 }}
+                disabled={readOnly}
                 aria-label={`Edit ${label}`}
             >
                 <PencilIcon className="size-3.5" aria-hidden="true" />
@@ -989,6 +1012,7 @@ export function SurrogateOverviewTab() {
     const id = params.id
     const detailContext = useSurrogateDetailContext()
     const surrogateData = detailContext?.surrogate
+    const readOnly = detailContext?.canEditSurrogate === false
     const pipelineQuery = useDefaultPipeline()
     const stageOptions = pipelineQuery.data?.stages || []
     const stageById = new Map(stageOptions.map((stage) => [stage.id, stage]))
@@ -1065,6 +1089,7 @@ export function SurrogateOverviewTab() {
     }
 
     const updateSurrogate = async (data: Partial<SurrogateUpdatePayload>) => {
+        if (readOnly) return
         await updateSurrogateMutation.mutateAsync({
             surrogateId: id,
             data,
@@ -1138,6 +1163,7 @@ export function SurrogateOverviewTab() {
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Name:</span>
                             <InlineEditField
+                                readOnly={readOnly}
                                 value={surrogateData.full_name}
                                 onSave={async (value) => {
                                     await updateSurrogateMutation.mutateAsync({
@@ -1154,6 +1180,7 @@ export function SurrogateOverviewTab() {
                             <span className="text-sm text-muted-foreground">Email:</span>
                             <div className="flex min-w-0 items-center gap-1.5">
                                 <InlineEditField
+                                    readOnly={readOnly}
                                     value={surrogateData.email}
                                     onSave={async (value) => {
                                         await updateSurrogateMutation.mutateAsync({
@@ -1191,6 +1218,7 @@ export function SurrogateOverviewTab() {
                             <span className="text-sm text-muted-foreground">Phone:</span>
                             <div className="flex min-w-0 items-center gap-1.5">
                                 <InlineEditField
+                                    readOnly={readOnly}
                                     value={surrogateData.phone ?? undefined}
                                     onSave={async (value) => {
                                         await updateSurrogateMutation.mutateAsync({
@@ -1214,6 +1242,7 @@ export function SurrogateOverviewTab() {
                             <span className="text-sm text-muted-foreground">State:</span>
                             <div className="flex min-w-0 items-center gap-1.5">
                                 <InlineEditField
+                                    readOnly={readOnly}
                                     value={surrogateData.state ?? undefined}
                                     onSave={async (value) => {
                                         await updateSurrogateMutation.mutateAsync({
@@ -1256,6 +1285,7 @@ export function SurrogateOverviewTab() {
                                 label="Date of Birth"
                                 primary={
                                     <InlineDateField
+                                        disabled={readOnly}
                                         value={surrogateData.date_of_birth}
                                         onSave={async (value) => {
                                             await updateSurrogateMutation.mutateAsync({
@@ -1274,6 +1304,7 @@ export function SurrogateOverviewTab() {
                                 label="Race / Ethnicity"
                                 primary={
                                     <InlineRaceField
+                                        readOnly={readOnly}
                                         value={surrogateData.race ?? undefined}
                                         onSave={async (value) => {
                                             await updateSurrogateMutation.mutateAsync({
@@ -1289,6 +1320,7 @@ export function SurrogateOverviewTab() {
                                 label="Height"
                                 primary={
                                     <InlineHeightField
+                                        readOnly={readOnly}
                                         value={surrogateData.height_ft}
                                         onSave={async (value) => {
                                             await updateSurrogateMutation.mutateAsync({
@@ -1312,6 +1344,7 @@ export function SurrogateOverviewTab() {
                                 label="Weight"
                                 primary={
                                     <InlineWeightField
+                                        readOnly={readOnly}
                                         value={surrogateData.weight_lb}
                                         onSave={async (value) => {
                                             await updateSurrogateMutation.mutateAsync({
@@ -1342,7 +1375,7 @@ export function SurrogateOverviewTab() {
                             <SurrogateOverviewCard
                                 title="Personal Information"
                                 icon={UserIcon}
-                                action={
+                                action={!readOnly &&
                                     <DropdownMenu>
                                         <DropdownMenuTrigger
                                             render={
@@ -1439,6 +1472,7 @@ export function SurrogateOverviewTab() {
                                         <PersonalInfoColumn title="Surrogate" icon={UserIcon}>
                                         <PersonalInfoRow label="Marital Status">
                                             <InlineSelectField
+                                                readOnly={readOnly}
                                                 label="Marital Status"
                                                 value={surrogateData.marital_status}
                                                 options={maritalStatusOptions}
@@ -1450,6 +1484,7 @@ export function SurrogateOverviewTab() {
                                         </PersonalInfoRow>
                                         <PersonalInfoRow label="SSN">
                                             <SsnField
+                                                readOnly={readOnly}
                                                 label="surrogate SSN"
                                                 maskedValue={surrogateData.ssn_masked}
                                                 revealedValue={revealedSsn}
@@ -1463,6 +1498,7 @@ export function SurrogateOverviewTab() {
                                         </PersonalInfoRow>
                                         <PersonalInfoRow label="Address Line 1">
                                             <InlineEditField
+                                                readOnly={readOnly}
                                                 value={surrogateData.address_line1}
                                                 onSave={async (value) => updateSurrogate({ address_line1: value || null })}
                                                 placeholder="-"
@@ -1471,6 +1507,7 @@ export function SurrogateOverviewTab() {
                                         </PersonalInfoRow>
                                         <PersonalInfoRow label="Address Line 2">
                                             <InlineEditField
+                                                readOnly={readOnly}
                                                 value={surrogateData.address_line2}
                                                 onSave={async (value) => updateSurrogate({ address_line2: value || null })}
                                                 placeholder="-"
@@ -1479,6 +1516,7 @@ export function SurrogateOverviewTab() {
                                         </PersonalInfoRow>
                                         <PersonalInfoRow label="City">
                                             <InlineEditField
+                                                readOnly={readOnly}
                                                 value={surrogateData.address_city}
                                                 onSave={async (value) => updateSurrogate({ address_city: value || null })}
                                                 placeholder="-"
@@ -1487,6 +1525,7 @@ export function SurrogateOverviewTab() {
                                         </PersonalInfoRow>
                                         <PersonalInfoRow label="State">
                                             <InlineEditField
+                                                readOnly={readOnly}
                                                 value={surrogateData.address_state}
                                                 onSave={async (value) => updateSurrogate({ address_state: value || null })}
                                                 placeholder="-"
@@ -1500,6 +1539,7 @@ export function SurrogateOverviewTab() {
                                         </PersonalInfoRow>
                                         <PersonalInfoRow label="Postal Code">
                                             <InlineEditField
+                                                readOnly={readOnly}
                                                 value={surrogateData.address_postal}
                                                 onSave={async (value) => updateSurrogate({ address_postal: value || null })}
                                                 placeholder="-"
@@ -1513,6 +1553,7 @@ export function SurrogateOverviewTab() {
                                         <PersonalInfoColumn title="Partner" icon={UsersIcon}>
                                             <PersonalInfoRow label="Full Name">
                                                 <InlineEditField
+                                                    readOnly={readOnly}
                                                     value={surrogateData.partner_name}
                                                     onSave={async (value) => updateSurrogate({ partner_name: value || null })}
                                                     placeholder="-"
@@ -1521,6 +1562,7 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="DOB">
                                                 <InlineDateField
+                                                    disabled={readOnly}
                                                     value={surrogateData.partner_date_of_birth}
                                                     onSave={async (value) => updateSurrogate({ partner_date_of_birth: value })}
                                                     placeholder="-"
@@ -1529,6 +1571,7 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="Email">
                                                 <InlineEditField
+                                                    readOnly={readOnly}
                                                     value={surrogateData.partner_email}
                                                     onSave={async (value) => updateSurrogate({ partner_email: value || null })}
                                                     type="email"
@@ -1539,6 +1582,7 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="Phone">
                                                 <InlineEditField
+                                                    readOnly={readOnly}
                                                     value={surrogateData.partner_phone}
                                                     onSave={async (value) => updateSurrogate({ partner_phone: value || null })}
                                                     type="tel"
@@ -1548,6 +1592,7 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="SSN">
                                                 <SsnField
+                                                    readOnly={readOnly}
                                                     label="partner SSN"
                                                     maskedValue={surrogateData.partner_ssn_masked}
                                                     revealedValue={revealedPartnerSsn}
@@ -1561,6 +1606,7 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="Address Line 1">
                                                 <InlineEditField
+                                                    readOnly={readOnly}
                                                     value={surrogateData.partner_address_line1}
                                                     onSave={async (value) => updateSurrogate({ partner_address_line1: value || null })}
                                                     placeholder="-"
@@ -1569,6 +1615,7 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="Address Line 2">
                                                 <InlineEditField
+                                                    readOnly={readOnly}
                                                     value={surrogateData.partner_address_line2}
                                                     onSave={async (value) => updateSurrogate({ partner_address_line2: value || null })}
                                                     placeholder="-"
@@ -1577,6 +1624,7 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="City">
                                                 <InlineEditField
+                                                    readOnly={readOnly}
                                                     value={surrogateData.partner_city}
                                                     onSave={async (value) => updateSurrogate({ partner_city: value || null })}
                                                     placeholder="-"
@@ -1585,6 +1633,7 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="State">
                                                 <InlineEditField
+                                                    readOnly={readOnly}
                                                     value={surrogateData.partner_state}
                                                     onSave={async (value) => updateSurrogate({ partner_state: value || null })}
                                                     placeholder="-"
@@ -1598,6 +1647,7 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="Postal Code">
                                                 <InlineEditField
+                                                    readOnly={readOnly}
                                                     value={surrogateData.partner_postal}
                                                     onSave={async (value) => updateSurrogate({ partner_postal: value || null })}
                                                     placeholder="-"
@@ -1628,11 +1678,11 @@ export function SurrogateOverviewTab() {
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
-                                        <AlertDialogCancel disabled={isDeletingPersonalSection}>Cancel</AlertDialogCancel>
+                                        <AlertDialogCancel disabled={readOnly || isDeletingPersonalSection}>Cancel</AlertDialogCancel>
                                         <AlertDialogAction
                                             variant="destructive"
                                             onClick={deletePersonalSection}
-                                            disabled={isDeletingPersonalSection}
+                                            disabled={readOnly || isDeletingPersonalSection}
                                         >
                                             Delete Section
                                         </AlertDialogAction>
@@ -1642,6 +1692,7 @@ export function SurrogateOverviewTab() {
                         </>
 
                     <CombinedMedicalInsuranceCard
+                        readOnly={readOnly}
                         surrogateData={surrogateData}
                         onUpdate={async (data) => {
                             await updateSurrogateMutation.mutateAsync({
@@ -1655,6 +1706,7 @@ export function SurrogateOverviewTab() {
                 <div className="space-y-4">
                     {isHeartbeatConfirmedOrLater && !isTerminalIntakeOutcome && (
                         <PregnancyTrackerCard
+                            readOnly={readOnly}
                             surrogateData={surrogateData}
                             onUpdate={async (data) => {
                                 await updateSurrogateMutation.mutateAsync({
@@ -1686,6 +1738,7 @@ export function SurrogateOverviewTab() {
                         {...(effectiveStage?.id ? { effectiveStageId: effectiveStage.id } : {})}
                     />
 
+                    <RecordCollaborators kind="surrogate" recordId={id} />
                     <SurrogateOverviewCard title="Eligibility Checklist" icon={ClipboardCheckIcon}>
                         {(surrogateData.eligibility_checklist ?? []).map((item) => {
                             if (item.type === "boolean") {
@@ -1705,6 +1758,7 @@ export function SurrogateOverviewTab() {
                                 return (
                                     <div key={item.key} className="flex items-center gap-2">
                                         <ChecklistStatusButton
+                                            readOnly={readOnly}
                                             label={item.label}
                                             value={currentValue}
                                             onChange={async (value) => {
@@ -1728,6 +1782,7 @@ export function SurrogateOverviewTab() {
                                     <div key={item.key} className="grid gap-1 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
                                         <span className="text-sm text-muted-foreground">{item.label}:</span>
                                         <InlineSelectField
+                                            readOnly={readOnly}
                                             label={item.label}
                                             value={currentValue}
                                             options={JOURNEY_TIMING_OPTIONS}
@@ -1758,6 +1813,7 @@ export function SurrogateOverviewTab() {
                                     <div key={item.key} className="grid gap-1 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
                                         <span className="text-sm text-muted-foreground">{item.label}:</span>
                                         <InlineEditField
+                                            readOnly={readOnly}
                                             value={currentValue != null ? String(currentValue) : undefined}
                                             onSave={async (value) => {
                                                 const trimmed = value.trim()

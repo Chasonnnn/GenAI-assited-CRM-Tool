@@ -660,6 +660,14 @@ def copy_template_to_personal(
     Raises:
         ValueError: If source template not found or name already exists
     """
+    from app.services import permission_policy_service, permission_service
+
+    if permission_policy_service.is_enabled(db, org_id):
+        member = permission_service.get_membership_for_user(db, org_id, user_id)
+        if member is None or not permission_service.check_permission(
+            db, org_id, user_id, member.role, "manage_email_templates"
+        ):
+            raise PermissionError("Template editing permission required")
     # Get source template
     source = (
         db.query(EmailTemplate)
@@ -744,6 +752,16 @@ def share_template_with_org(
     Raises:
         ValueError: If source template not found, not owned by user, or name exists
     """
+    from app.services import email_template_publication, permission_policy_service
+
+    if permission_policy_service.is_enabled(db, org_id):
+        published = email_template_publication.publish_template_to_org(
+            db, org_id=org_id, actor_user_id=user_id, template_id=template_id, name=new_name
+        )
+        db.commit()
+        db.refresh(published)
+        return published
+
     # Get source template (must be owned by user)
     source = (
         db.query(EmailTemplate)
@@ -1617,6 +1635,54 @@ async def send_immediate_email(
         idempotency_key=idempotency_key,
         attachments=attachments,
     )
+
+
+def is_manual_template_delivery_eligible(db: Session, org_id: UUID, email_log: EmailLog) -> bool:
+    """Recheck a manual sender without changing organization automation authority."""
+    from fastapi import HTTPException
+
+    from app.schemas.auth import UserSession
+    from app.services import email_template_access, permission_policy_service, permission_service
+
+    if not permission_policy_service.is_enabled(db, org_id):
+        return True
+    if email_log.organization_id != org_id or email_log.actor_user_id is None:
+        return False
+    membership = permission_service.get_membership_for_user(db, org_id, email_log.actor_user_id)
+    if membership is None:
+        return False
+    user = membership.user
+    session = UserSession(
+        org_id=org_id,
+        user_id=user.id,
+        role=membership.role,
+        email=user.email,
+        display_name=user.display_name,
+    )
+    template = (
+        db.query(EmailTemplate)
+        .filter(
+            EmailTemplate.id == email_log.template_id,
+            EmailTemplate.organization_id == org_id,
+            EmailTemplate.is_active.is_(True),
+        )
+        .populate_existing()
+        .first()
+    )
+    if template is None or (
+        template.scope == "personal"
+        and not email_template_access.can_edit_personal_template(
+            owner_user_id=template.owner_user_id, user_id=session.user_id, role=session.role
+        )
+    ):
+        return False
+    try:
+        email_template_access.require_send_permission(
+            db, session, surrogate_id=email_log.surrogate_id
+        )
+    except HTTPException:
+        return False
+    return True
 
 
 def send_from_template(

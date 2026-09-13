@@ -1,11 +1,14 @@
 "use client"
 
+import { readAnswerValue, formatSubmissionDateTime, submissionOutcomeLabel, submissionOutcomeBadgeClass, submissionReviewLabel, submissionReviewBadgeClass } from "@/lib/forms/submission-presentation"
 import { useRef } from "react"
 import type { ChangeEvent } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "@/components/ui/toast"
 
 import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
+import { canCreateIntakeRecord } from "@/lib/forms/record-creation-access"
 import {
     DEFAULT_FORM_DONOR_FIELD_OPTIONS,
     DEFAULT_FORM_SURROGATE_FIELD_OPTIONS,
@@ -284,60 +287,13 @@ async function handleCopySharedLink(link: FormIntakeLinkRead) {
     }
 }
 
-function readAnswerValue(submission: FormSubmissionRead, keys: string[]) {
-    for (const key of keys) {
-        const rawValue = submission.answers?.[key]
-        if (typeof rawValue === "string" && rawValue.trim()) {
-            return rawValue.trim()
-        }
-    }
-    return "—"
-}
-
-function formatSubmissionDateTime(isoString: string) {
-    const value = new Date(isoString)
-    if (Number.isNaN(value.getTime())) return "—"
-    return value.toLocaleString()
-}
-
-function submissionOutcomeLabel(submission: FormSubmissionRead) {
-    if (submission.match_status === "linked") return "Matched"
-    if (submission.match_status === "lead_created") return "Lead Created"
-    return "Pending Match"
-}
-
-function submissionOutcomeBadgeClass(submission: FormSubmissionRead) {
-    if (submission.match_status === "linked") {
-        return "border-emerald-200 bg-emerald-50 text-emerald-700"
-    }
-    if (submission.match_status === "lead_created") {
-        return "border-blue-200 bg-blue-50 text-blue-700"
-    }
-    return "border-amber-200 bg-amber-50 text-amber-700"
-}
-
-function submissionReviewLabel(submission: FormSubmissionRead) {
-    if (submission.status === "approved") return "Approved"
-    if (submission.status === "rejected") return "Rejected"
-    return "Pending Review"
-}
-
-function submissionReviewBadgeClass(submission: FormSubmissionRead) {
-    if (submission.status === "approved") {
-        return "border-emerald-200 bg-emerald-50 text-emerald-700"
-    }
-    if (submission.status === "rejected") {
-        return "border-red-200 bg-red-50 text-red-700"
-    }
-    return "border-stone-200 bg-stone-100 text-stone-700"
-}
-
 export function useAutomationFormBuilderPage() {
     const params = useParams<{ id: string }>()
     const idParam = params?.id
     const id = Array.isArray(idParam) ? idParam[0] : idParam ?? "new"
     const router = useRouter()
     const { user } = useAuth()
+    const { data: permissions } = useEffectivePermissions(user?.user_id ?? null)
     const isNewForm = id === "new"
     const formId = isNewForm ? null : id
     const formKey = formId ?? "new"
@@ -937,6 +893,7 @@ export function useAutomationFormBuilderPage() {
     }
 
     const handlePromoteLeadFromSubmission = async (submission: FormSubmissionRead) => {
+        if (!canCreateIntakeRecord(permissions, submission.lead_kind)) return
         if (!submission.intake_lead_id) {
             toast.error("No intake lead linked to this submission")
             return
@@ -1155,6 +1112,7 @@ export function useAutomationFormBuilderPage() {
             onAllowedMimeTypesTextChange: (value: string) => patchState({ allowedMimeTypesText: value }),
         },
         submissionsPanelProps: {
+            canPromoteLead: (submission: FormSubmissionRead) => canCreateIntakeRecord(permissions, submission.lead_kind),
             formId,
             pendingSubmissionHistory,
             processedSubmissionHistory,

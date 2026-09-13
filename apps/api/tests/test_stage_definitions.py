@@ -158,6 +158,7 @@ def test_egg_donor_pipeline_defaults_follow_the_operational_lifecycle() -> None:
         "application_submitted",
         "medical_records_review",
         "psychological_screening",
+        "approved",
         "ready_to_match",
         "matched",
         "cycle_in_progress",
@@ -178,6 +179,7 @@ def test_sperm_donor_pipeline_defaults_follow_the_operational_lifecycle() -> Non
         "application_submitted",
         "semen_analysis",
         "medical_genetic_screening",
+        "approved",
         "available",
         "matched",
         "collection_in_progress",
@@ -193,8 +195,7 @@ def test_donor_defaults_keep_target_specific_labels_categories_and_system_anchor
         stage["stage_key"]: stage for stage in get_default_stage_defs(EGG_DONOR_PIPELINE_ENTITY)
     }
     sperm_defs = {
-        stage["stage_key"]: stage
-        for stage in get_default_stage_defs(SPERM_DONOR_PIPELINE_ENTITY)
+        stage["stage_key"]: stage for stage in get_default_stage_defs(SPERM_DONOR_PIPELINE_ENTITY)
     }
 
     assert egg_defs["medical_records_review"]["label"] == "Medical Records Review"
@@ -203,8 +204,16 @@ def test_donor_defaults_keep_target_specific_labels_categories_and_system_anchor
     assert sperm_defs["available"]["stage_type"] == "post_approval"
     assert egg_defs["on_hold"]["stage_type"] == "paused"
     assert sperm_defs["disqualified"]["stage_type"] == "terminal"
-    assert get_protected_system_stage_keys(EGG_DONOR_PIPELINE_ENTITY) == {"new", "closed"}
-    assert get_protected_system_stage_keys(SPERM_DONOR_PIPELINE_ENTITY) == {"new", "closed"}
+    assert get_protected_system_stage_keys(EGG_DONOR_PIPELINE_ENTITY) == {
+        "new",
+        "approved",
+        "closed",
+    }
+    assert get_protected_system_stage_keys(SPERM_DONOR_PIPELINE_ENTITY) == {
+        "new",
+        "approved",
+        "closed",
+    }
 
 
 def test_donor_default_semantics_are_target_specific_and_not_surrogate_fallbacks() -> None:

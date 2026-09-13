@@ -198,11 +198,17 @@ def list_form_submissions(
     match_status: str | None = None,
     source_mode: str | None = None,
     limit: int | None = 200,
+    *,
+    session=None,
 ) -> list[FormSubmission]:
     query = db.query(FormSubmission).filter(
         FormSubmission.organization_id == org_id,
         FormSubmission.form_id == form_id,
     )
+    if session is not None:
+        from app.services import form_submission_access
+
+        query = query.filter(form_submission_access.visibility_filter(db, session))
     if status:
         query = query.filter(FormSubmission.status == status)
     if match_status:

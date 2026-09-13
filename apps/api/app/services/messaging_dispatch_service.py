@@ -75,6 +75,11 @@ def _require_current_lease(
     lease_token: UUID,
     lease_generation: int,
 ) -> MessageDelivery:
+    from app.services import campaign_service
+
+    campaign_service.lock_campaign_run_for_message_delivery(
+        db, organization_id=organization_id, message_delivery_id=delivery_id
+    )
     delivery = db.execute(
         select(MessageDelivery)
         .where(

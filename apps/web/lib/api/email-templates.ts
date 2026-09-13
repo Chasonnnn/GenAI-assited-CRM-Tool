@@ -8,6 +8,13 @@ import type { TemplateVariableRead } from '@/lib/types/template-variable'
 // Types
 export type EmailTemplateScope = 'org' | 'personal'
 
+export type EmailTemplateCapabilities = {
+    can_edit: boolean
+    can_send_test: boolean
+    can_publish_to_org: boolean
+    can_copy: boolean
+}
+
 export interface EmailTemplate {
     id: string
     organization_id: string
@@ -20,7 +27,10 @@ export interface EmailTemplate {
     scope: EmailTemplateScope
     owner_user_id: string | null
     owner_name: string | null
+    proposed_by_name?: string | null
+    capabilities?: EmailTemplateCapabilities | null
     source_template_id: string | null
+    proposed_by_user_id?: string | null
     is_system_template: boolean
     current_version: number
     created_at: string
@@ -36,6 +46,8 @@ export interface EmailTemplateListItem {
     scope: EmailTemplateScope
     owner_user_id: string | null
     owner_name: string | null
+    proposed_by_name?: string | null
+    capabilities?: EmailTemplateCapabilities | null
     is_system_template: boolean
     created_at: string
     updated_at: string

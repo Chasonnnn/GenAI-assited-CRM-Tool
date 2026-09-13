@@ -106,6 +106,7 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
 
 describe("AppSidebar permission visibility", () => {
     beforeEach(() => {
+        document.cookie = "sidebar_state=true"
         mockNavigationState.pathname = "/settings/team"
         mockMobileState.isMobile = false
         mockUseAuth.mockReturnValue({
@@ -392,7 +393,7 @@ describe("AppSidebar permission visibility", () => {
             "aria-expanded",
             "false"
         )
-        expect(screen.getByRole("button", { name: "Automation" })).toHaveAttribute(
+        expect(screen.getByRole("button", { name: "Operations" })).toHaveAttribute(
             "aria-expanded",
             "false"
         )
@@ -418,7 +419,7 @@ describe("AppSidebar permission visibility", () => {
         expect(html).toContain("Team")
     })
 
-    it("places AI Studio (beta) directly under Automation when AI access is enabled", async () => {
+    it("places AI Studio (beta) directly under Operations when AI access is enabled", async () => {
         mockUseAuth.mockReturnValue({
             user: {
                 user_id: "user-ai",
@@ -440,7 +441,7 @@ describe("AppSidebar permission visibility", () => {
             </AppSidebar>
         )
 
-        const automation = await screen.findByRole("button", { name: "Automation" })
+        const automation = await screen.findByRole("button", { name: "Operations" })
         const studio = screen.getByRole("link", { name: "AI Studio (beta)" })
         const reports = screen.getByRole("link", { name: "Reports" })
 
@@ -512,4 +513,24 @@ describe("AppSidebar permission visibility", () => {
             }
         }
     })
+    it("shows only granted automation modules under version 2", () => {
+        mockNavigationState.pathname = "/automation/form-submissions"
+        mockUseAuth.mockReturnValue({ user: { user_id: "reviewer", role: "intake_specialist", display_name: "Reviewer", ai_enabled: false } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_form_submissions", "view_donors"] } })
+        render(<AppSidebar><div>content</div></AppSidebar>)
+        expect(screen.getByRole("link", { name: "Form Submissions" })).toHaveAttribute("href", "/automation/form-submissions")
+        expect(screen.getByRole("link", { name: "Donors (beta)" })).toHaveAttribute("href", "/donors")
+        for (const name of ["Workflows", "Campaigns", "Form Builder", "Email Templates"]) expect(screen.queryByRole("link", { name })).not.toBeInTheDocument()
+    })
+
+    it("shows granted authoring modules without requiring an Admin role", () => {
+        mockNavigationState.pathname = "/automation"
+        mockUseAuth.mockReturnValue({ user: { user_id: "author", role: "case_manager", display_name: "Author", ai_enabled: false } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_automation", "view_campaigns", "view_email_templates", "manage_forms"] } })
+        render(<AppSidebar><div>content</div></AppSidebar>)
+        for (const name of ["Workflows", "Campaigns", "Form Builder", "Email Templates"]) expect(screen.getByRole("link", { name })).toBeInTheDocument()
+        expect(screen.queryByRole("link", { name: "Form Submissions" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("link", { name: "Donors (beta)" })).not.toBeInTheDocument()
+    })
+
 })

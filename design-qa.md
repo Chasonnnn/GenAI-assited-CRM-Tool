@@ -1,71 +1,37 @@
-# AI Chat Panel Design QA
-
-## Artifacts
-
-- Source visual truth: `.gstack/qa-reports/ai-chat-panel-audit/02-proposed-panel.png`
-- Browser-rendered implementation: `.gstack/qa-reports/ai-chat-panel-audit/03-implemented-panel.png`
-- Equal-state comparison: `.gstack/qa-reports/ai-chat-panel-audit/04-reference-vs-implementation.png`
-- Mobile implementation: `.gstack/qa-reports/ai-chat-panel-audit/05-mobile-panel.png`
-- Authentic final empty state: `.gstack/qa-reports/ai-chat-panel-audit/06-authentic-empty-state.png`
-- Interactive before/after review: `.gstack/qa-reports/ai-chat-panel-before-after.html?view=after`
-- Previous root QA preserved at: `docs/pregnancy-tracker-design-qa-2026-07-15.md`
-
-## Comparison Setup
-
-- Reference viewport: 1280 × 720 CSS pixels
-- Implementation viewport: 1280 × 720 CSS pixels
-- Source image: 1280 × 720 pixels at 1× density
-- Implementation image: 1280 × 720 pixels at 1× density
-- Combined comparison: 2560 × 720 pixels, reference on the left and implementation on the right
-- Representative state: surrogate context, user request, assistant response, and an email action awaiting human review
-- Authentic state: seeded surrogate record with an empty local AI conversation
-
-## Full-View Comparison Evidence
-
-The equal-state comparison covers the complete page and drawer at the same viewport and density. The implementation matches the approved target's 400px right-side drawer, compact header, context badges, message hierarchy, review card, prompt strip, and multiline composer. The source is shown inside a labeled presentation frame; the production implementation correctly occupies the live application viewport without that frame.
-
-## Focused Region Evidence
-
-- Header and context: compact AI identity, ready state, close control, surrogate number, and friendly lifecycle label
-- Conversation: distinct user and assistant treatments, compact type, readable Markdown, and live-log semantics
-- Proposed action: bounded shadcn card, human-review status, draft disclosure, and separate dismiss and approve controls
-- Composer: shadcn input group and textarea, quick prompts, send/stop affordance, keyboard hint, and human-review reminder
-
-These regions were visible together at native resolution, so additional crops were not needed to judge spacing, typography, border treatment, or state hierarchy.
-
-## Responsive and Interaction Evidence
-
-- Desktop drawer: 400 × 720 pixels, non-modal, persistent workspace context
-- Mobile drawer: 390 × 844 pixels, full-width modal, no horizontal overflow, composer visible
-- Escape and close controls return focus to the floating AI trigger
-- Enter sends; Shift+Enter creates a newline
-- Streaming can be stopped without allowing an older request to clear a newer request's state
-- `Review draft` reveals action details without execution
-- Only the second explicit `Approve and send` action executes; `Dismiss` rejects
-- Final authentic browser state reported no console warnings or errors
-
-## Comparison History
-
-1. **P2 — Drawer width:** the first production render inherited a 384px responsive maximum from the shared Sheet. The drawer width and maximum were made explicit; the post-fix browser measurement is exactly 400px.
-2. **P2 — Message density:** the first implementation used larger message type, causing the user prompt to wrap relative to the target. Panel-local message and rich-text type were tightened; the post-fix comparison matches the reference density.
-3. **P2 — Focus return:** programmatic close initially left focus on the document body. A stable launcher marker and Sheet final-focus callback were added; both Escape and the close control now return focus to the AI trigger.
-4. **Investigated, not a product defect — Mobile overlay:** a bottom-corner element was traced to TanStack Query and Next.js development tooling at an elevated development-only z-index. Product-only capture confirmed the drawer itself has no overlap.
-
-## Findings
-
-- No actionable P0, P1, or P2 visual or interaction differences remain.
-- Accepted P3 difference: the implementation preserves the existing surrogate-only `Parse Schedule` quick prompt as a fourth item in the horizontal prompt scroller, while the proposal displays three prompts.
-- No shadcn package or component-library upgrade is needed. Existing customized Base UI-backed primitives support the design; the shared Sheet received only additive overlay controls.
-- The complete frontend run reaches the AI chat tests successfully but remains red on three source guards in unrelated concurrent email/integration work: a barrel API import, unused template-version exports, and a missing integration-settings helper split.
-
-## Implementation Checklist
-
-- [x] Uses shared shadcn/Base UI primitives and existing design tokens
-- [x] Preserves human review before AI actions
-- [x] Covers loading, empty, error, streaming, and proposed-action states
-- [x] Uses friendly context labels instead of raw stored values
-- [x] Includes desktop and mobile rendered QA
-- [x] Includes equal-state, equal-viewport comparison evidence
-- [x] Passes focused tests, TypeScript, ESLint, and whitespace validation
+# Permission Studio design QA
 
 final result: passed
+
+Reference: [approved option 1](docs/mockups/permissions/2026-09-12-module-first-studio.png). Implementation: [desktop capture](docs/verification/permissions-2026-09-12/desktop-donors.png), September 12, 2026.
+
+Browser evidence comes from the original main-based implementation run. The stacked PR branch received separate automated validation recorded in the linked report.
+
+The source and implementation were opened together in one comparison input at 1499 × 1049. Both show Case Manager, Donors, all-record post-approval scope, View/Edit/Change status enabled, Create/Archive/Approve/Assign disabled, and unsaved changes. Application chrome remains the existing product shell; comparison centers on the permission workspace. The implementation capture is vertically scrolled to align the workspace with the reference.
+
+## Findings and resolution
+
+| Priority | Finding | Resolution |
+|---|---|---|
+| P2, resolved | Alphabetical groups placed progress before records; actions began with Archive | Records now precede progress and notes. Record actions follow View, Create, Edit, Archive, Delete, Import |
+| P2, resolved | Preview repeated ambiguous View/Edit labels across records and notes | Preview uses View notes and Edit notes; switches retain short labels |
+| P2, resolved | Legacy surrogate post-approval permission duplicated the version 2 phase control | Removed from version 2 catalogs; version 1 and migration review retain compatibility |
+| P3, accepted | Existing product font, smaller switches, global navigation, and shared button styling differ from the raster mockup | Existing customized components and application shell retained |
+| P3, accepted | Operations children are collapsed outside Operations | Reduces navigation clutter; children appear on selection |
+
+No unresolved P0, P1, or P2 findings remain. The final comparison was made after the listed fixes. At full capture resolution, labels, switches, and layout were readable without a separate detail crop.
+
+## Fidelity surfaces
+
+| Surface | Result |
+|---|---|
+| Typography | Clear title, module, section, and action hierarchy; existing product font and weights retained. No visible label clipping in the workspace |
+| Layout | Role strip, module navigation, scope/actions column, and preview match the reference structure. Specific stages remain available in a collapsed control |
+| Colors | Ivory canvas, plum selected role, pink selections, and pale preview follow the source palette. Dark mode uses existing semantic tokens |
+| Assets | Existing supplied product branding and icon-library components retained; no new raster asset or handcrafted illustration required |
+| Content | Five primary topics, separate Create/Edit, short actions, protected roles, and included-default preview match the accepted model. Actual organization AI availability drives the preview |
+
+## Interaction and responsive evidence
+
+Role changes were reviewed, applied, and confirmed after reload. Operations subtopics, protected-role controls, individual additions, denied access, and reviewed activation were exercised in the browser. The 390 × 844 viewport has no document horizontal overflow; its role strip scrolls and review dialog remains usable. The observed content width is 375 CSS pixels after the scrollbar. Dark-mode contrast was inspected.
+
+[Mobile layout](docs/verification/permissions-2026-09-12/mobile-top.png) · [Mobile review](docs/verification/permissions-2026-09-12/mobile-review.png) · [Dark theme](docs/verification/permissions-2026-09-12/dark-donors.png) · [Behavior and test evidence](docs/permission-upgrade-verification.md).

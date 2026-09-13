@@ -124,6 +124,90 @@ describe("HeaderActions", () => {
         mockToastError.mockReset()
     })
 
+    function setV2Access(permissions: string[], role = 'case_manager', options: { readyToMatch?: boolean; archived?: boolean } = {}) {
+        mockUseAuth.mockReturnValue({ user: { role, user_id: 'member-1' } })
+        const data = mockUseSurrogateDetailData()
+        const stage = options.readyToMatch
+            ? { stage_key: 'ready_to_match', stage_type: 'post_approval', order: 10 }
+            : data.effectiveStage
+        mockUseSurrogateDetailData.mockReturnValue({
+            ...data,
+            effectivePermissions: { policy_version: 2, permissions },
+            canManageQueue: false,
+            surrogate: { ...data.surrogate, email: 'synthetic@example.test', owner_id: 'other-member', is_archived: options.archived ?? false },
+            effectiveStage: stage,
+            stageById: new Map([[data.surrogate.stage_id, stage]]),
+            stageOptions: [
+                ...data.stageOptions,
+                { stage_key: 'interview_scheduled', stage_type: 'intake', order: 6 },
+            ],
+        })
+    }
+
+    it.each(['intake_specialist', 'operations'])('allows delegated v2 %s actions on a loaded record owned by another member', (role) => {
+        setV2Access(['view_surrogates', 'edit_surrogates', 'send_email', 'archive_surrogates'], role)
+        render(<HeaderActions />)
+        expect(screen.getByRole('button', { name: 'Log Contact' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Archive' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Send Email' })).toBeEnabled()
+    })
+
+    it('hides revoked Case Manager mutations and disables sending under v2', () => {
+        setV2Access(['view_surrogates'])
+        render(<HeaderActions />)
+        expect(screen.queryByRole('button', { name: 'Log Contact' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Send Email' })).toBeDisabled()
+    })
+
+    it('allows delegated proposal and interview outcome actions for retained Intake under v2', () => {
+        setV2Access(['view_surrogates', 'edit_surrogates', 'view_matches', 'propose_matches', 'view_intended_parents'], 'intake_specialist', { readyToMatch: true })
+        render(<HeaderActions />)
+        expect(screen.getByRole('button', { name: 'Propose Match' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Log Interview Outcome' })).toBeEnabled()
+    })
+
+    it.each(['view_matches', 'propose_matches', 'view_intended_parents'])('hides proposal when a Case Manager lacks %s under v2', (missing) => {
+        setV2Access(['view_surrogates', 'view_matches', 'propose_matches', 'view_intended_parents'].filter((permission) => permission !== missing), 'case_manager', { readyToMatch: true })
+        render(<HeaderActions />)
+        expect(screen.queryByRole('button', { name: 'Propose Match' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Log Interview Outcome' })).not.toBeInTheDocument()
+    })
+
+    it('requires archive authority to restore under v2', () => {
+        setV2Access(['view_surrogates'], 'case_manager', { archived: true })
+        const view = render(<HeaderActions />)
+        expect(screen.queryByRole('button', { name: 'Restore' })).not.toBeInTheDocument()
+        setV2Access(['view_surrogates', 'archive_surrogates'], 'intake_specialist', { archived: true })
+        view.rerender(<HeaderActions />)
+        expect(screen.getByRole('button', { name: 'Restore' })).toBeEnabled()
+        expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Send Email' })).toBeDisabled()
+    })
+
+    it('requires appointment management to schedule Zoom under v2', () => {
+        setV2Access(['view_surrogates'], 'operations')
+        mockUseSurrogateDetailData.mockReturnValue({ ...mockUseSurrogateDetailData(), zoomConnected: true })
+        const view = render(<HeaderActions />)
+        expect(screen.getByRole('button', { name: 'Schedule Zoom' })).toBeDisabled()
+        setV2Access(['view_surrogates', 'manage_appointments'], 'operations')
+        view.rerender(<HeaderActions />)
+        expect(screen.getByRole('button', { name: 'Schedule Zoom' })).toBeEnabled()
+    })
+
+    it("uses shared assignment authority for the assignment menu", () => {
+        const data = mockUseSurrogateDetailData()
+        mockUseSurrogateDetailData.mockReturnValue({ ...data, canManageQueue: false })
+        const view = render(<HeaderActions />)
+        expect(screen.queryByRole('button', { name: 'Assign' })).not.toBeInTheDocument()
+        mockUseAuth.mockReturnValue({ user: { role: 'intake_specialist', user_id: 'intake-1' } })
+        mockUseSurrogateDetailData.mockReturnValue({ ...data, canManageQueue: true })
+        view.rerender(<HeaderActions />)
+        expect(screen.getByRole('button', { name: 'Assign' })).toBeInTheDocument()
+    })
+
     it("renders 'More actions' button with accessible label", () => {
         render(<HeaderActions />)
         const button = screen.getByRole("button", { name: /more actions/i })

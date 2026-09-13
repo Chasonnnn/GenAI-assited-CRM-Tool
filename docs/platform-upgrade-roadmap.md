@@ -6,10 +6,10 @@ Date: 2026-09-07. Status: proposed priorities; implementation and external activ
 
 | Order | Work | Reason | Completion gate |
 |---|---|---|---|
-| 1 | Define permission rules and shared module boundaries | Donor completion and later builders need consistent access and capability rules | Reviewed module/action/record-scope matrix, migration approach, and one concrete donor example |
-| 2 | Complete the donor journey | Finish an existing investment and use real requirements to test the shared boundaries | Staff can complete egg- and sperm-donor intake, follow-up, communication, and handoff with verified permissions |
-| 3 | Modularize workflow and campaign execution | Apply the donor lessons before adding more builder features | Shared actions and delivery rules have clear owners; existing workflows, campaigns, approvals, and retries retain their behavior |
-| 4 | Complete permission migration and simplify administration | Apply the agreed model across the stabilized modules | Effective access is understandable and consistent across UI, API, jobs, and exports |
+| 1 | Build the tested permission foundation | The agreed product model now supports a focused implementation contract | Current behavior captured, action/scope contract reviewed, and migration differences identified |
+| 2 | Build permission administration and one approval-handoff journey | Prove the selected UI and record rules together before expanding them | Admin configures access; Intake approval, Case Manager claim, retained collaboration, and removal work in an isolated surrogate/donor journey |
+| 3 | Apply personal/organization authority and modularize workflow/campaign execution | Shared execution must honor the new authority rules before broader activation | Audiences, actions, publication, revocation, proposer departure, approvals, and retries are verified |
+| 4 | Complete donor journeys and module-by-module permission migration | Finish existing donor investment on the tested foundation | Both donor types work end to end; UI, API, jobs, exports, and linked-record access agree for each activated module |
 | 5 | Simplify form and workflow creation | Stable behavior and permissions make the new creation experience easier to maintain | Representative staff can publish a form and configure a common workflow without developer assistance |
 | 6 | Rebuild reporting with a Meta MCP connection per organization | The existing direct integration is blocked by Meta app approval; useful reporting needs verified organization-specific data | A reconciled acquisition report supports a real budget or follow-up decision |
 | 7 | Extend the shared UI improvements across the platform | Apply patterns proven in the earlier work | Priority journeys use consistent navigation, components, and onboarding, with measured usability and performance improvements |
@@ -17,6 +17,10 @@ Date: 2026-09-07. Status: proposed priorities; implementation and external activ
 Twilio setup and controlled verification should start early as a bounded separate work item. Provider setup can take elapsed time without blocking donor email or the rest of the roadmap. Complete donor SMS after the applicable consent, record-access, and messaging paths are ready.
 
 Global UX discovery and shared visual rules also start early. Each feature adopts those rules as it changes; broad remaining screen migration comes later.
+
+The role-editor visual direction is selected: variant 2. The [permission execution plan](permission-upgrade-execution-plan.md) defines the first implementation packages, parallel work, and activation gates. Operations defaults are agreed: organization workflow/campaign/template management and record/report viewing, without record writes or sending. The permission upgrade and its affected module refactors are implemented locally; production activation remains pending. Validation is recorded in the [implementation report](permission-upgrade-verification.md).
+
+The first foundation batch is implemented and verified locally: permission resolution, workflow definition rules, template editing authorization, and permission-cache correction. The [module refactor plan](permission-module-refactor-plan.md) maps the remaining record, workflow, campaign, form, reporting, and UI work. The upgraded policy and administration UI are not yet active.
 
 ## 1. Permissions and module foundations
 
@@ -113,7 +117,7 @@ Confirmed direction, 2026-09-07: the existing direct Meta integration is stale b
 
 Plan in rolling monthly priorities and small independently reviewable releases. Re-estimate each milestone after its scope and completion gate are agreed; staffing and provider readiness are not yet specified, so calendar commitments would be premature.
 
-First planning cycle: reconcile donor gaps, approve a donor default journey, draft the permission matrix, inventory Twilio readiness, and establish a short UX baseline. First implementation milestone: one verified donor creation-to-follow-up journey. Expand its coverage before starting broad refactors.
+First implementation cycle: preserve and isolate current permission resolution, complete the action/scope contract, refine the selected UI, and reconcile donor/provider gaps in parallel. First working milestone: permission administration plus an isolated approval-handoff journey. Complete the module's access paths and automation authority before production activation.
 
 Every milestone records implementation, automated checks, browser checks, provider checks where relevant, migration readiness, and deployment status separately. This plan does not authorize external sends or deployment.
 

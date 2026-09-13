@@ -60,6 +60,8 @@ import {
 import { format } from "date-fns"
 import { toast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { parseDateInput } from "@/lib/utils/date"
 import {
     useCampaigns,
@@ -158,6 +160,10 @@ type StagePreset = {
 }
 
 type CampaignWizardState = {
+    scope: "personal" | "org"
+    policyV2: boolean
+    canManageOrg: boolean
+    canSend: boolean
     wizardStep: number
     campaignName: string
     campaignDescription: string
@@ -200,6 +206,7 @@ type CampaignWizardData = {
 }
 
 type CampaignWizardActions = {
+    setScope: (scope: "personal" | "org") => void
     resetWizard: () => void
     setWizardStep: StateSetter<number>
     setCampaignName: StateSetter<string>
@@ -482,6 +489,15 @@ const isScheduleFor = (value: unknown): value is ScheduleFor =>
 
 function useCampaignsPageController() {
     const { push } = useRouter()
+    const { user } = useAuth()
+    const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
+    const permissions = effectivePermissions?.permissions ?? []
+    const policyV2 = (effectivePermissions?.policy_version ?? 1) >= 2
+    const canCreate = permissions.includes(policyV2 ? "edit_campaigns" : "manage_email_templates")
+    const canManageOrg = canCreate && (!policyV2 || permissions.includes("manage_org_campaigns"))
+    const [scopeSelection, setScopeSelection] = useState<"personal" | "org" | null>(null)
+    const campaignScope = scopeSelection ?? (policyV2 ? "personal" : "org")
+    const [scopeFilter, setScopeFilter] = useState("all")
     const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
     const [showCreateWizard, setShowCreateWizard] = useState(false)
     const [wizardStep, setWizardStep] = useState(1)
@@ -490,6 +506,7 @@ function useCampaignsPageController() {
     const [campaignName, setCampaignName] = useState("")
     const [campaignDescription, setCampaignDescription] = useState("")
     const [channel, setChannel] = useState<CampaignChannel>("email")
+    const canSend = canCreate && (!policyV2 || (permissions.includes("send_campaigns") && permissions.includes(channel === "email" ? "send_email" : "send_sms")))
     const [selectedTemplateId, setSelectedTemplateId] = useState("")
     const [recipientType, setRecipientType] = useState<RecipientType>("case")
     const [selectedStages, setSelectedStages] = useState<string[]>([])
@@ -505,13 +522,13 @@ function useCampaignsPageController() {
     const minScheduleDate = toLocalDateTimeInput(new Date())
 
     const { data: campaigns, isLoading } = useCampaigns(statusFilter)
-    const { data: emailTemplates } = useEmailTemplates()
+    const { data: emailTemplates } = useEmailTemplates({ scope: campaignScope === "org" ? "org" : null })
     const { data: messageTemplates } = useQuery({
         queryKey: ["messaging-templates", "promotional", "published"],
         queryFn: () => listMessagingTemplates({ purpose: "promotional", status: "published" }),
     })
     const templates: CampaignTemplateOption[] | undefined = channel === "email"
-        ? emailTemplates
+        ? emailTemplates?.filter((template) => template.scope !== "personal" || (campaignScope === "personal" && template.owner_user_id === user?.user_id))
         : messageTemplates?.map((template) => ({
             id: template.id,
             name: template.name,
@@ -562,10 +579,11 @@ function useCampaignsPageController() {
         selectedTemplateId,
         previewFiltersData: previewFilters.data,
     })
-    const filteredCampaigns = campaigns || []
+    const filteredCampaigns = (campaigns || []).filter((campaign) => scopeFilter === "all" || (campaign.scope ?? "org") === scopeFilter)
 
     const resetWizard = () => {
         setWizardStep(1)
+        setScopeSelection(null)
         setCampaignName("")
         setCampaignDescription("")
         setChannel("email")
@@ -583,6 +601,7 @@ function useCampaignsPageController() {
 
     const previewRecipientSelection = () => {
         previewFilters.mutate({
+            scope: campaignScope,
             channel,
             recipientType,
             filterCriteria: buildFilterCriteria(),
@@ -596,7 +615,7 @@ function useCampaignsPageController() {
             return
         }
 
-        if (scheduleFor === "later") {
+        if (canSend && scheduleFor === "later") {
             if (!scheduledDate) {
                 toast.error("Please select a scheduled date and time")
                 return
@@ -614,11 +633,12 @@ function useCampaignsPageController() {
 
         try {
             const scheduledAt =
-                scheduleFor === "later" && scheduledDate
+                canSend && scheduleFor === "later" && scheduledDate
                     ? new Date(scheduledDate).toISOString()
                     : undefined
             const campaign = await createCampaign.mutateAsync({
                 name: campaignName,
+                scope: campaignScope,
                 channel,
                 ...(channel === "email"
                     ? { email_template_id: selectedTemplateId }
@@ -632,7 +652,7 @@ function useCampaignsPageController() {
 
             toast.success("Campaign created successfully")
 
-            try {
+            if (canSend) try {
                 await sendCampaign.mutateAsync({ id: campaign.id, sendNow: scheduleFor === "now" })
                 if (scheduleFor === "now") {
                     toast.success("Campaign queued for sending")
@@ -701,6 +721,7 @@ function useCampaignsPageController() {
     }
 
     const wizardState: CampaignWizardState = {
+        scope: campaignScope, policyV2, canManageOrg, canSend,
         wizardStep,
         campaignName,
         campaignDescription,
@@ -736,6 +757,7 @@ function useCampaignsPageController() {
         isPreviewLoading: previewFilters.isPending,
     }
     const wizardActions: CampaignWizardActions = {
+        setScope: (scope) => { setScopeSelection(scope); setSelectedTemplateId(""); previewFilters.reset() },
         resetWizard,
         setWizardStep,
         setCampaignName,
@@ -783,9 +805,11 @@ function useCampaignsPageController() {
 
     return {
         headerProps: {
-            onCreateCampaign: () => setShowCreateWizard(true),
+            canCreate, scopeFilter, onScopeFilterChange: setScopeFilter,
+            onCreateCampaign: () => { if (canCreate) setShowCreateWizard(true) },
         },
         listProps: {
+            canCreate,
             statusFilter,
             onStatusFilterChange: setStatusFilter,
             campaigns: filteredCampaigns,
@@ -793,7 +817,7 @@ function useCampaignsPageController() {
             page,
             perPage,
             onPageChange: setPage,
-            onCreateCampaign: () => setShowCreateWizard(true),
+            onCreateCampaign: () => { if (canCreate) setShowCreateWizard(true) },
             onViewCampaign: (campaignId: string) => push(`/automation/campaigns/${campaignId}`),
             onEditCampaign: (campaignId: string) =>
                 push(`/automation/campaigns/${campaignId}?edit=1`),
@@ -830,7 +854,9 @@ export default function CampaignsPage() {
     )
 }
 
-function CampaignsPageHeader({ onCreateCampaign }: { onCreateCampaign: () => void }) {
+function CampaignsPageHeader({ onCreateCampaign, canCreate, scopeFilter, onScopeFilterChange }: {
+    onCreateCampaign: () => void; canCreate: boolean; scopeFilter: string; onScopeFilterChange: (value: string) => void
+}) {
     return (
         <div className="border-b bg-card">
             <div className="flex items-center justify-between p-6">
@@ -847,16 +873,23 @@ function CampaignsPageHeader({ onCreateCampaign }: { onCreateCampaign: () => voi
                         <h1 className="text-2xl font-semibold">Campaigns</h1>
                     </div>
                 </div>
-                <Button onClick={onCreateCampaign}>
+                <div className="flex items-center gap-3">
+                <Select value={scopeFilter} onValueChange={(value) => value && onScopeFilterChange(value)} aria-label="Campaign scope filter">
+                    <SelectTrigger aria-label="Campaign scope filter"><SelectValue>{() => scopeFilter === "personal" ? "Personal" : scopeFilter === "org" ? "Organization" : "All campaigns"}</SelectValue></SelectTrigger>
+                    <SelectContent><SelectItem value="all">All campaigns</SelectItem><SelectItem value="personal">Personal</SelectItem><SelectItem value="org">Organization</SelectItem></SelectContent>
+                </Select>
+                <Button disabled={!canCreate} onClick={onCreateCampaign}>
                     <PlusIcon className="size-4" />
                     Create Campaign
                 </Button>
+                </div>
             </div>
         </div>
     )
 }
 
 function CampaignsListSection({
+    canCreate,
     statusFilter,
     onStatusFilterChange,
     campaigns,
@@ -872,6 +905,7 @@ function CampaignsListSection({
     onCancelCampaign,
     onDeleteCampaign,
 }: {
+    canCreate: boolean
     statusFilter: string | undefined
     onStatusFilterChange: StateSetter<string | undefined>
     campaigns: CampaignListItem[]
@@ -909,7 +943,7 @@ function CampaignsListSection({
                     {isLoading ? (
                         <CampaignsLoadingState />
                     ) : campaigns.length === 0 ? (
-                        <CampaignsEmptyState onCreateCampaign={onCreateCampaign} />
+                        <CampaignsEmptyState canCreate={canCreate} onCreateCampaign={onCreateCampaign} />
                     ) : (
                         <CampaignsTable
                             campaigns={campaigns}
@@ -943,7 +977,7 @@ function CampaignsLoadingState() {
     )
 }
 
-function CampaignsEmptyState({ onCreateCampaign }: { onCreateCampaign: () => void }) {
+function CampaignsEmptyState({ onCreateCampaign, canCreate }: { onCreateCampaign: () => void; canCreate: boolean }) {
     return (
         <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
@@ -952,7 +986,7 @@ function CampaignsEmptyState({ onCreateCampaign }: { onCreateCampaign: () => voi
                 <p className="text-sm text-muted-foreground mb-4">
                     Create your first campaign to send consent-gated email or text messages
                 </p>
-                <Button onClick={onCreateCampaign}>
+                <Button disabled={!canCreate} onClick={onCreateCampaign}>
                     <PlusIcon className="size-4" />
                     Create Campaign
                 </Button>
@@ -1053,6 +1087,7 @@ function CampaignsTableRow({
                 >
                     {campaign.name}
                 </Link>
+                <Badge variant="outline" className="ml-2">{campaign.scope === "personal" ? "Personal" : "Organization"}</Badge>
             </TableCell>
             <TableCell className="text-muted-foreground">
                 <div className="space-y-1">
@@ -1155,24 +1190,24 @@ function CampaignActionsMenu({
                     View Details
                 </DropdownMenuItem>
                 {campaign.status === "draft" && (
-                    <DropdownMenuItem onClick={() => onSendNowCampaign(campaign.id)}>
+                    <DropdownMenuItem disabled={campaign.can_send === false} onClick={() => onSendNowCampaign(campaign.id)}>
                         <SendIcon className="mr-2 size-4" />
                         Send Now
                     </DropdownMenuItem>
                 )}
                 {(campaign.status === "draft" || campaign.status === "scheduled") && (
-                    <DropdownMenuItem onClick={() => onEditCampaign(campaign.id)}>
+                    <DropdownMenuItem disabled={campaign.can_edit === false} onClick={() => onEditCampaign(campaign.id)}>
                         <PencilIcon className="mr-2 size-4" />
                         Edit
                     </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={() => { void onDuplicateCampaign(campaign.id) }}>
+                <DropdownMenuItem disabled={campaign.can_edit === false} onClick={() => { void onDuplicateCampaign(campaign.id) }}>
                     <CopyIcon className="mr-2 size-4" />
                     Duplicate
                 </DropdownMenuItem>
                 {(campaign.status === "scheduled" || campaign.status === "sending") && (
                     <DropdownMenuItem
-                        onClick={() => onCancelCampaign(campaign.id)}
+                        disabled={campaign.can_send === false} onClick={() => onCancelCampaign(campaign.id)}
                         className="text-destructive"
                     >
                         <TrashIcon className="mr-2 size-4" />
@@ -1181,7 +1216,7 @@ function CampaignActionsMenu({
                 )}
                 {campaign.status === "draft" && (
                     <DropdownMenuItem
-                        onClick={() => onDeleteCampaign(campaign.id)}
+                        disabled={campaign.can_edit === false} onClick={() => onDeleteCampaign(campaign.id)}
                         className="text-destructive"
                     >
                         <TrashIcon className="mr-2 size-4" />
@@ -1305,7 +1340,7 @@ function CampaignWizardStepContent({
             {state.wizardStep === 4 && <CampaignStateFilterStep state={state} data={data} actions={actions} />}
             {state.wizardStep === 5 && <CampaignReviewStep state={state} data={data} />}
             {state.wizardStep === 6 && <CampaignRecipientPreviewStep data={data} actions={actions} />}
-            {state.wizardStep === 7 && <CampaignScheduleStep state={state} actions={actions} />}
+            {state.wizardStep === 7 && (state.canSend ? <CampaignScheduleStep state={state} actions={actions} /> : <h3 className="font-medium">Save draft</h3>)}
         </div>
     )
 }
@@ -1320,9 +1355,17 @@ function CampaignDetailsStep({
     return (
         <div className="space-y-4">
             <h3 className="font-medium">Campaign Details</h3>
+            {state.policyV2 && <div className="space-y-2">
+                <Label>Scope</Label>
+                <Select aria-label="Campaign scope" value={state.scope} onValueChange={(value) => { if (value === "personal" || value === "org") actions.setScope(value) }}>
+                    <SelectTrigger aria-label="Campaign scope"><SelectValue>{() => state.scope === "personal" ? "Personal" : "Organization"}</SelectValue></SelectTrigger>
+                    <SelectContent><SelectItem value="personal">Personal</SelectItem><SelectItem value="org" disabled={!state.canManageOrg}>Organization</SelectItem></SelectContent>
+                </Select>
+            </div>}
             <div className="space-y-2">
                 <Label>Channel *</Label>
                 <Select
+                    aria-label="Campaign channel"
                     value={state.channel}
                     onValueChange={(value) => {
                         if (value === "email" || value === "messaging") actions.setChannel(value)
@@ -1951,12 +1994,12 @@ function CampaignWizardFooter({
                     disabled={
                         pending.isCreating ||
                         pending.isSending ||
-                        (state.scheduleFor === "later" && !state.scheduledDate)
+                        (state.canSend && state.scheduleFor === "later" && !state.scheduledDate)
                     }
                 >
                     {pending.isCreating || pending.isSending ? (
                         <Loader2Icon className="size-4 animate-spin" />
-                    ) : state.scheduleFor === "now" ? (
+                    ) : !state.canSend ? "Save draft" : state.scheduleFor === "now" ? (
                         <>
                             <SendIcon className="size-4" />
                             Send Campaign

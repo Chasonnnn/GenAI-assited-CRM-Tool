@@ -495,11 +495,19 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "stageType": "intake"
         },
         {
+            "stageKey": "approved",
+            "slug": "approved",
+            "label": "Approved",
+            "color": "#22C55E",
+            "order": 7,
+            "stageType": "post_approval"
+        },
+        {
             "stageKey": "ready_to_match",
             "slug": "ready_to_match",
             "label": "Ready to Match",
             "color": "#0EA5E9",
-            "order": 7,
+            "order": 8,
             "stageType": "post_approval"
         },
         {
@@ -507,7 +515,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "matched",
             "label": "Matched",
             "color": "#6366F1",
-            "order": 8,
+            "order": 9,
             "stageType": "post_approval"
         },
         {
@@ -515,7 +523,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "cycle_in_progress",
             "label": "Cycle in Progress",
             "color": "#14B8A6",
-            "order": 9,
+            "order": 10,
             "stageType": "post_approval"
         },
         {
@@ -523,7 +531,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "retrieval_complete",
             "label": "Retrieval Complete",
             "color": "#10B981",
-            "order": 10,
+            "order": 11,
             "stageType": "post_approval"
         },
         {
@@ -531,7 +539,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "on_hold",
             "label": "On-Hold",
             "color": "#B4536A",
-            "order": 11,
+            "order": 12,
             "stageType": "paused"
         },
         {
@@ -539,7 +547,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "disqualified",
             "label": "Disqualified",
             "color": "#EF4444",
-            "order": 12,
+            "order": 13,
             "stageType": "terminal"
         },
         {
@@ -547,7 +555,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "closed",
             "label": "Closed",
             "color": "#64748B",
-            "order": 13,
+            "order": 14,
             "stageType": "terminal"
         }
     ],
@@ -601,11 +609,19 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "stageType": "intake"
         },
         {
+            "stageKey": "approved",
+            "slug": "approved",
+            "label": "Approved",
+            "color": "#22C55E",
+            "order": 7,
+            "stageType": "post_approval"
+        },
+        {
             "stageKey": "available",
             "slug": "available",
             "label": "Available",
             "color": "#0EA5E9",
-            "order": 7,
+            "order": 8,
             "stageType": "post_approval"
         },
         {
@@ -613,7 +629,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "matched",
             "label": "Matched",
             "color": "#6366F1",
-            "order": 8,
+            "order": 9,
             "stageType": "post_approval"
         },
         {
@@ -621,7 +637,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "collection_in_progress",
             "label": "Collection in Progress",
             "color": "#14B8A6",
-            "order": 9,
+            "order": 10,
             "stageType": "post_approval"
         },
         {
@@ -629,7 +645,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "donation_complete",
             "label": "Donation Complete",
             "color": "#10B981",
-            "order": 10,
+            "order": 11,
             "stageType": "post_approval"
         },
         {
@@ -637,7 +653,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "on_hold",
             "label": "On-Hold",
             "color": "#B4536A",
-            "order": 11,
+            "order": 12,
             "stageType": "paused"
         },
         {
@@ -645,7 +661,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "disqualified",
             "label": "Disqualified",
             "color": "#EF4444",
-            "order": 12,
+            "order": 13,
             "stageType": "terminal"
         },
         {
@@ -653,7 +669,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "closed",
             "label": "Closed",
             "color": "#64748B",
-            "order": 13,
+            "order": 14,
             "stageType": "terminal"
         }
     ]
@@ -689,6 +705,7 @@ export const STAGE_TYPE_MAP: Record<string, StageType> = {
 export const STAGE_TYPE_MAP_BY_ENTITY: Record<PipelineEntityType, Record<string, StageType>> = {
     "egg_donor": {
         "application_submitted": "intake",
+        "approved": "post_approval",
         "closed": "terminal",
         "contacted": "intake",
         "cycle_in_progress": "post_approval",
@@ -710,6 +727,7 @@ export const STAGE_TYPE_MAP_BY_ENTITY: Record<PipelineEntityType, Record<string,
     },
     "sperm_donor": {
         "application_submitted": "intake",
+        "approved": "post_approval",
         "available": "post_approval",
         "closed": "terminal",
         "collection_in_progress": "post_approval",
@@ -818,6 +836,7 @@ export const DEFAULT_STAGE_ORDER_BY_ENTITY: Record<PipelineEntityType, string[]>
         "application_submitted",
         "medical_records_review",
         "psychological_screening",
+        "approved",
         "ready_to_match",
         "matched",
         "cycle_in_progress",
@@ -833,6 +852,7 @@ export const DEFAULT_STAGE_ORDER_BY_ENTITY: Record<PipelineEntityType, string[]>
         "application_submitted",
         "semen_analysis",
         "medical_genetic_screening",
+        "approved",
         "available",
         "matched",
         "collection_in_progress",

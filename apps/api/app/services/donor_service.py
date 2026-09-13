@@ -431,10 +431,20 @@ def list_donors(
     archived_only: bool = False,
     page: int = 1,
     per_page: int = 20,
+    session=None,
 ) -> tuple[list[Donor], int]:
     query = (
         db.query(Donor).options(selectinload(Donor.stage)).filter(Donor.organization_id == org_id)
     )
+    if session is not None:
+        from app.services import permission_policy_service, record_scope_service
+
+        if permission_policy_service.is_enabled(db, session.org_id):
+            query = query.filter(
+                record_scope_service.build_visibility_filter(
+                    db, session, "donor", allow_archived=include_archived or archived_only
+                )
+            )
     if archived_only:
         query = query.filter(Donor.is_archived.is_(True))
     elif not include_archived:
@@ -906,6 +916,7 @@ def change_status(
     *,
     user_role: Role | str | None = None,
     emit_workflow_events: bool = True,
+    execution_permissions: frozenset[str] | None = None,
 ) -> DonorStatusChangeResult:
     if donor.is_archived:
         raise DonorValidationError("Cannot change status of an archived donor")
@@ -932,7 +943,17 @@ def change_status(
     if not role_value:
         raise DonorValidationError("User role is required to change donor stage")
     feature_config = pipeline_semantics_service.get_pipeline_feature_config(target.pipeline)
-    if not pipeline_semantics_service.can_role_access_stage(
+    from app.services import approval_handoff_service
+
+    uses_record_policy = approval_handoff_service.authorize_stage_change(
+        db,
+        record=donor,
+        kind="donor",
+        target_stage=target,
+        user_id=user_id,
+        execution_permissions=execution_permissions,
+    )
+    if not uses_record_policy and not pipeline_semantics_service.can_role_access_stage(
         role_value,
         target,
         feature_config=feature_config,
@@ -1092,6 +1113,16 @@ def apply_status_change(
     commit: bool = True,
 ) -> DonorStatusChangeResult:
     try:
+        from app.services import approval_handoff_service
+
+        approval_handoff_service.retain_at_approval(
+            db, record=donor, kind="donor", target_stage=new_stage, actor_user_id=user_id
+        )
+        if new_stage.stage_type == "paused":
+            if old_stage.stage_type != "paused":
+                donor.paused_from_stage_id = old_stage.id
+        else:
+            donor.paused_from_stage_id = None
         history = DonorStatusHistory(
             donor_id=donor.id,
             organization_id=donor.organization_id,

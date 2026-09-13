@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
+from collections.abc import Callable
 from typing import Any, TypedDict
 
 from fastapi import HTTPException
@@ -115,9 +117,27 @@ def approve_action_for_session(
     session: UserSession,
 ) -> ActionApprovalResult:
     """Approve and execute an AI action proposal for the current session."""
-    from app.services import ai_service, audit_service, permission_service, surrogate_service
+    from app.services import (
+        ai_service,
+        ai_settings_service,
+        audit_service,
+        permission_policy_service,
+        permission_service,
+        surrogate_service,
+    )
     from app.services.ai_action_executor import execute_action
 
+    if not ai_settings_service.is_org_ai_enabled(db, session.org_id):
+        raise HTTPException(status_code=403, detail="AI is not enabled for this organization")
+
+    if permission_policy_service.is_enabled(db, session.org_id):
+        from app.services.workflow_execution_authority import active_session
+
+        permission_policy_service.lock_configuration(db, session.org_id)
+        actor = active_session(db, session.org_id, session.user_id)
+        if actor is None:
+            raise HTTPException(status_code=403, detail="Active organization membership required")
+        session = actor
     approval, message, conversation = ai_service.get_approval_with_conversation(db, approval_id)
     if not approval:
         raise HTTPException(status_code=404, detail="Action not found")
@@ -153,6 +173,7 @@ def approve_action_for_session(
     user_permissions = permission_service.get_effective_permissions(
         db, session.org_id, session.user_id, session.role.value
     )
+    after_commit: list[Callable[[], None]] = []
     result = execute_action(
         db=db,
         approval=approval,
@@ -160,6 +181,7 @@ def approve_action_for_session(
         org_id=session.org_id,
         entity_id=conversation.entity_id,
         user_permissions=user_permissions,
+        after_commit=after_commit,
     )
 
     if result.get("success") and conversation.entity_type == "surrogate":
@@ -203,6 +225,13 @@ def approve_action_for_session(
             )
 
     db.commit()
+    for callback in after_commit:
+        try:
+            callback()
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "AI stage side effects failed for approval %s", approval.id
+            )
     return ActionApprovalResult(
         success=result.get("success", False),
         action_type=approval.action_type,

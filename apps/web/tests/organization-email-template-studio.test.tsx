@@ -22,6 +22,8 @@ const mocks = vi.hoisted(() => ({
     refetchDraft: vi.fn(),
     refetchVersions: vi.fn(),
     state: {
+        permissionPolicy: 1,
+        permissions: [] as string[],
         publishedTemplate: null as Record<string, unknown> | null,
         draft: null as Record<string, unknown> | null,
         publishedLookupErrorId: null as string | null,
@@ -44,6 +46,12 @@ const mocks = vi.hoisted(() => ({
             },
         ],
     },
+}))
+
+vi.mock("@/lib/hooks/use-permissions", () => ({
+    useEffectivePermissions: () => ({ data: {
+        policy_version: mocks.state.permissionPolicy, permissions: mocks.state.permissions,
+    } }),
 }))
 
 vi.mock("next/navigation", () => ({
@@ -238,7 +246,20 @@ const draftFromPublished = {
 }
 
 describe("OrganizationEmailTemplateStudio", () => {
+    it("requires the send action before opening a v2 draft test", () => {
+        mocks.state.permissionPolicy = 2
+        mocks.state.permissions = ["manage_email_templates", "manage_org_templates"]
+        mocks.state.draft = draftFromPublished
+        const view = render(<OrganizationEmailTemplateStudio templateId="template-1" />)
+        expect(screen.getByRole("button", { name: "Send test", exact: true })).toBeDisabled()
+        mocks.state.permissions.push("send_email")
+        view.rerender(<OrganizationEmailTemplateStudio templateId="template-1" />)
+        expect(screen.getByRole("button", { name: "Send test", exact: true })).toBeEnabled()
+    })
+
     beforeEach(() => {
+        mocks.state.permissionPolicy = 1
+        mocks.state.permissions = []
         mocks.push.mockReset()
         mocks.replace.mockReset()
         mocks.createDraft.mockReset()
@@ -1217,4 +1238,21 @@ describe("OrganizationEmailTemplateStudio", () => {
         fireEvent.click(screen.getByRole("button", { name: "Retry" }))
         await waitFor(() => expect(mocks.refetchDrafts).toHaveBeenCalledOnce())
     })
+    it.each(["personal", "org"] as const)("denies direct %s studio creation without authoring permission", (scope) => {
+        mocks.state.permissionPolicy = 2
+        mocks.state.permissions = ["view_email_templates"]
+        render(<OrganizationEmailTemplateStudio scope={scope} />)
+        expect(screen.getByText("Template editing unavailable")).toBeInTheDocument()
+        expect(mocks.draftListParams).not.toHaveBeenCalled()
+        expect(mocks.createDraft).not.toHaveBeenCalled()
+    })
+
+    it("requires organization management in the organization studio", () => {
+        mocks.state.permissionPolicy = 2
+        mocks.state.permissions = ["manage_email_templates"]
+        render(<OrganizationEmailTemplateStudio scope="org" />)
+        expect(screen.getByText("Template editing unavailable")).toBeInTheDocument()
+        expect(mocks.draftListParams).not.toHaveBeenCalled()
+    })
+
 })

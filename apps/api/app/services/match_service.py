@@ -1359,6 +1359,10 @@ def apply_approved_cancellation(
 
 def match_visibility_filter(db: Session, session):
     """Filter authorized participants before case pagination and summary counts."""
+    from app.services import permission_policy_service, record_scope_service
+
+    if permission_policy_service.is_enabled(db, session.org_id):
+        return record_scope_service.build_linked_visibility_filter(db, session, Match)
     from sqlalchemy import false
 
     from app.core.policies import POLICIES

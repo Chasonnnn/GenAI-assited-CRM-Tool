@@ -3,8 +3,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { DonorOwnershipSection } from "@/components/donors/DonorOwnershipSection"
 import type { Donor } from "@/lib/types/donor"
 
-const mocks = vi.hoisted(() => ({ options: vi.fn(), update: vi.fn(), success: vi.fn(), error: vi.fn() }))
-vi.mock("@/lib/hooks/use-donors", () => ({ useDonorOwnerOptions: mocks.options, useUpdateDonor: () => ({ mutateAsync: mocks.update, isPending: false }) }))
+const mocks = vi.hoisted(() => ({ options: vi.fn(), update: vi.fn(), claim: vi.fn(), success: vi.fn(), error: vi.fn() }))
+vi.mock("@/lib/hooks/use-donors", () => ({ useDonorOwnerOptions: mocks.options, useClaimDonor: () => ({mutateAsync: mocks.claim, isPending: false}), useUpdateDonor: () => ({ mutateAsync: mocks.update, isPending: false }) }))
 vi.mock("@/components/ui/toast", () => ({ toast: { success: mocks.success, error: mocks.error } }))
 const donor = { id: "donor-1", owner_type: "user", owner_id: "user-1", is_archived: false } as Donor
 const options = { users: [{ id: "user-1", display_name: "Alex" }, { id: "user-2", display_name: "Sam" }], queues: [{ id: "queue-1", name: "Donor Intake" }] }
@@ -88,4 +88,22 @@ describe("DonorOwnershipSection", () => {
         rerender(<DonorOwnershipSection donor={{ ...donor, is_archived: true }} canEdit />)
         expect(screen.queryByRole("button", { name: "Change Owner" })).not.toBeInTheDocument()
     })
+})
+
+
+it("claims an approved pool donor without opening the owner editor", async () => {
+    mocks.options.mockReturnValue({ data: undefined, isLoading: false, isError: false })
+    mocks.claim.mockResolvedValue({})
+    render(<DonorOwnershipSection donor={{...donor, owner_type: "queue", owner_id: "pool", owner_name: "Donor Pool"}} canEdit={false} canClaim />)
+    fireEvent.click(screen.getByRole("button", {name: "Assign to me"}))
+    await waitFor(() => expect(mocks.claim).toHaveBeenCalledWith(donor.id))
+    expect(screen.queryByRole("button", {name: "Change Owner"})).not.toBeInTheDocument()
+})
+
+it("shows the server owner name without loading assignment choices for readers", () => {
+    mocks.options.mockReturnValue({data: undefined, isLoading: false})
+    render(<DonorOwnershipSection donor={{...donor, owner_name: "Alex Intake"}} canEdit={false} />)
+    expect(screen.getByText("Alex Intake")).toBeInTheDocument()
+    expect(mocks.options).toHaveBeenLastCalledWith(false)
+    expect(screen.queryByRole("button", {name:"Change Owner"})).not.toBeInTheDocument()
 })

@@ -56,6 +56,7 @@ import { IntelligentSuggestionsSection } from "./intelligent-suggestions-section
 const ROLE_LABELS: Record<string, string> = {
   intake_specialist: "Intake Specialist",
   case_manager: "Case Manager",
+  operations: "Operations",
   admin: "Admin",
   developer: "Developer",
 }

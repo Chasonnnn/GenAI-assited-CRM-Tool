@@ -14,6 +14,7 @@ from app.core.deps import (
 )
 from app.core.permissions import PermissionKey
 from app.core.policies import POLICIES
+from app.core.record_creation import require_record_creation
 from app.db.enums import AuditEventType, EntityType, Role
 from app.schemas.activity import EntityActivityRead, EntityActivityResponse
 from app.schemas.auth import UserSession
@@ -33,9 +34,11 @@ from app.services import (
     donor_service,
     entity_activity_service,
     note_service,
+    permission_policy_service,
     permission_service,
     phi_access_service,
     record_owner_service,
+    record_scope_service,
     user_service,
 )
 
@@ -46,11 +49,24 @@ router = APIRouter(
 )
 
 
-def _get_or_404(db: Session, org_id: UUID, donor_id: UUID):
-    donor = donor_service.get_donor(db, org_id, donor_id)
+def _get_or_404(db: Session, session: UserSession, donor_id: UUID, *, allow_archived=False):
+    donor = donor_service.get_donor(db, session.org_id, donor_id)
     if donor is None:
         raise HTTPException(status_code=404, detail="Donor not found")
+    if permission_policy_service.is_enabled(
+        db, session.org_id
+    ) and not record_scope_service.can_access_record(
+        db, session, "donor", donor, allow_archived=allow_archived
+    ):
+        raise HTTPException(status_code=403, detail="You don't have access to this donor")
     return donor
+
+
+def _require_assign(db, session):
+    if not permission_service.check_permission(
+        db, session.org_id, session.user_id, session.role.value, "assign_donors"
+    ):
+        raise HTTPException(status_code=403, detail="Missing permission: assign_donors")
 
 
 def _raise_domain_error(exc: ValueError) -> None:
@@ -114,6 +130,7 @@ def list_donors(
             archived_only=archived_only,
             page=page,
             per_page=per_page,
+            session=session,
         )
     except ValueError as exc:
         _raise_domain_error(exc)
@@ -148,9 +165,14 @@ def create_donor(
     db: Annotated[Session, Depends(get_db)],
     session: Annotated[
         UserSession,
-        Depends(require_permission(POLICIES["donors"].actions["edit"])),
+        Depends(require_record_creation("donors")),
     ],
 ) -> DonorRead:
+    if permission_policy_service.is_enabled(db, session.org_id):
+        if data.owner_id is None and data.owner_type is None:
+            data = data.model_copy(update={"owner_type": "user", "owner_id": session.user_id})
+        elif data.owner_type != "user" or data.owner_id != session.user_id:
+            _require_assign(db, session)
     try:
         donor = donor_service.create_donor(
             db=db,
@@ -181,7 +203,7 @@ def get_donor(
     db: Annotated[Session, Depends(get_db)],
     session: Annotated[UserSession, Depends(get_current_session)],
 ) -> DonorRead:
-    donor = _get_or_404(db, session.org_id, donor_id)
+    donor = _get_or_404(db, session, donor_id, allow_archived=True)
     phi_access_service.log_phi_access(
         db=db,
         org_id=session.org_id,
@@ -191,7 +213,13 @@ def get_donor(
         request=request,
         details={"view": "donor_detail"},
     )
-    return DonorRead.model_validate(donor)
+    return DonorRead.model_validate(donor).model_copy(
+        update={
+            "owner_name": record_owner_service.owner_label(
+                db, session.org_id, donor.owner_type, donor.owner_id
+            )
+        }
+    )
 
 
 @router.patch(
@@ -209,7 +237,12 @@ def update_donor(
         Depends(require_permission(POLICIES["donors"].actions["edit"])),
     ],
 ) -> DonorRead:
-    donor = _get_or_404(db, session.org_id, donor_id)
+    donor = _get_or_404(db, session, donor_id)
+    if permission_policy_service.is_enabled(db, session.org_id) and any(
+        field in data.model_fields_set and getattr(data, field) != getattr(donor, field)
+        for field in ("owner_type", "owner_id")
+    ):
+        _require_assign(db, session)
     try:
         updated = donor_service.update_donor(db, donor, session.user_id, data, request)
     except ValueError as exc:
@@ -231,7 +264,7 @@ def archive_donor(
         Depends(require_permission(POLICIES["donors"].actions["archive"])),
     ],
 ) -> DonorRead:
-    donor = _get_or_404(db, session.org_id, donor_id)
+    donor = _get_or_404(db, session, donor_id)
     try:
         archived = donor_service.archive_donor(db, donor, session.user_id, request)
     except ValueError as exc:
@@ -253,7 +286,7 @@ def restore_donor(
         Depends(require_permission(POLICIES["donors"].actions["archive"])),
     ],
 ) -> DonorRead:
-    donor = _get_or_404(db, session.org_id, donor_id)
+    donor = _get_or_404(db, session, donor_id, allow_archived=True)
     try:
         restored = donor_service.restore_donor(db, donor, session.user_id, request)
     except ValueError as exc:
@@ -276,7 +309,7 @@ def update_donor_status(
         Depends(require_permission(POLICIES["donors"].actions["change_status"])),
     ],
 ) -> DonorStatusChangeResponse:
-    donor = _get_or_404(db, session.org_id, donor_id)
+    donor = _get_or_404(db, session, donor_id)
     try:
         result = donor_service.change_status(
             db,
@@ -301,13 +334,35 @@ def update_donor_status(
     )
 
 
+@router.post(
+    "/{donor_id}/claim", response_model=DonorRead, dependencies=[Depends(require_csrf_header)]
+)
+def claim_donor(
+    donor_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(get_current_session)],
+) -> DonorRead:
+    from app.services import approval_handoff_service
+
+    try:
+        donor = approval_handoff_service.claim_donor(db, session, donor_id)
+        db.commit()
+        return DonorRead.model_validate(donor)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @router.get("/{donor_id}/history", response_model=list[DonorStatusHistoryRead])
 def get_donor_history(
     donor_id: UUID,
     db: Annotated[Session, Depends(get_db)],
     session: Annotated[UserSession, Depends(get_current_session)],
 ) -> list[DonorStatusHistoryRead]:
-    _get_or_404(db, session.org_id, donor_id)
+    _get_or_404(db, session, donor_id, allow_archived=True)
     history = donor_service.get_status_history(db, session.org_id, donor_id)
     user_ids = {
         user_id
@@ -351,7 +406,7 @@ def get_donor_activity(
     page: Annotated[int, Query(ge=1)] = 1,
     per_page: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> EntityActivityResponse:
-    donor = _get_or_404(db, session.org_id, donor_id)
+    donor = _get_or_404(db, session, donor_id, allow_archived=True)
     can_view_task_previews = permission_service.check_permission(
         db,
         session.org_id,
@@ -430,7 +485,7 @@ def list_donor_notes(
     db: Annotated[Session, Depends(get_db)],
     session: Annotated[UserSession, Depends(get_current_session)],
 ) -> list[EntityNoteListItem]:
-    donor = _get_or_404(db, session.org_id, donor_id)
+    donor = _get_or_404(db, session, donor_id, allow_archived=True)
     notes = note_service.list_notes(db, session.org_id, EntityType.DONOR, donor.id)
     audit_service.log_event(
         db=db,
@@ -470,7 +525,7 @@ def create_donor_note(
         Depends(require_permission(POLICIES["donors"].actions["edit"])),
     ],
 ) -> EntityNoteRead:
-    donor = _get_or_404(db, session.org_id, donor_id)
+    donor = _get_or_404(db, session, donor_id)
     note = note_service.create_note(
         db=db,
         org_id=session.org_id,
@@ -496,7 +551,7 @@ def delete_donor_note(
         Depends(require_permission(POLICIES["donors"].actions["edit"])),
     ],
 ) -> Response:
-    donor = _get_or_404(db, session.org_id, donor_id)
+    donor = _get_or_404(db, session, donor_id)
     note = note_service.get_note(db, note_id, session.org_id)
     if not note or note.entity_type != EntityType.DONOR.value or note.entity_id != donor.id:
         raise HTTPException(status_code=404, detail="Note not found")

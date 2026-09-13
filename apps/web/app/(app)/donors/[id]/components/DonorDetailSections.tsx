@@ -1,5 +1,7 @@
 "use client"
 
+import { RecordCollaborators } from "@/components/permissions/record-collaborators"
+
 import {
     ArchiveIcon,
     ArchiveRestoreIcon,
@@ -208,7 +210,8 @@ export function DonorDetailSections({
                                 />
                             </CardContent>
                         </Card>
-                        <DonorOwnershipSection donor={donor} canEdit={canEdit} />
+                        <RecordCollaborators kind="donor" recordId={donor.id} />
+                        <DonorOwnershipSection donor={donor} canEdit={canEdit && ((permissionsQuery.data?.policy_version ?? 1) < 2 || hasPermission("assign_donors"))} canClaim={(permissionsQuery.data?.policy_version ?? 1) >= 2 && hasPermission("assign_donors")} />
                         <RelatedMatchesCard key={`matches-${donor.id}`} kind="donor" recordId={donor.id} name={donor.full_name} canView={hasPermission("view_matches")} canPropose={hasPermission("propose_matches")} archived={donor.is_archived} />
                         <RecordAppointmentsCard key={`appointments-${donor.id}`} record={{ kind: "donor", id: donor.id, name: donor.full_name, email: donor.email, phone: donor.phone }} canView={hasPermission("manage_appointments")} canViewMatches={hasPermission("view_matches")} canCreate={canEdit} archived={donor.is_archived} />
                         <RecordCorrespondenceCard key={`correspondence-${donor.id}`} kind="donor" recordId={donor.id} canView={user?.role === "developer"} canEdit={canEdit && !donor.is_archived} />

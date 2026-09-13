@@ -125,6 +125,7 @@ const mockUseWorkflowOptions = vi.fn()
 const mockUseWorkflowExecutions = vi.fn()
 const mockCreateWorkflow = { mutate: vi.fn(), isPending: false }
 const mockUpdateWorkflow = { mutate: vi.fn(), isPending: false }
+const mockPublishWorkflow = { mutate: vi.fn(), isPending: false }
 const mockTestWorkflow = { mutate: vi.fn(), isPending: false }
 const mockListDonors = vi.fn()
 
@@ -156,6 +157,7 @@ vi.mock('@/lib/hooks/use-workflows', () => ({
     useWorkflowExecutions: () => mockUseWorkflowExecutions(),
     useCreateWorkflow: () => mockCreateWorkflow,
     useUpdateWorkflow: () => mockUpdateWorkflow,
+    usePublishWorkflow: () => mockPublishWorkflow,
     useDuplicateWorkflow: () => ({ mutate: vi.fn(), isPending: false }),
     useTestWorkflow: () => mockTestWorkflow,
     useDeleteWorkflow: () => ({ mutate: vi.fn(), isPending: false }),
@@ -1065,6 +1067,23 @@ describe('AutomationPage', () => {
             }),
             expect.any(Object),
         )
+    })
+
+    it("requires organization workflow management for org creation under version 2", () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["manage_automation"] } })
+        renderAutomationPage()
+        for (const button of screen.getAllByRole("button", { name: "Create Workflow" })) expect(button).toBeEnabled()
+        fireEvent.click(screen.getByRole("tab", { name: "Org Workflows" }))
+        for (const button of screen.getAllByRole("button", { name: "Create Org Workflow" })) expect(button).toBeDisabled()
+    })
+
+    it("publishes eligible personal workflows and preserves proposer credit in details", () => {
+        mockUseWorkflows.mockReturnValue({ data: [{ id: "private-workflow", name: "Personal workflow", scope: "personal", owner_name: "Owner", proposed_by_name: "Former teammate", can_edit: true, can_publish: true, trigger_type: "status_changed", is_enabled: false, run_count: 0, created_at: "2026-09-01T00:00:00Z" }], isLoading: false })
+        renderAutomationPage()
+        fireEvent.click(screen.getByRole("button", { name: "Details" }))
+        expect(screen.getByText("Former teammate")).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Publish to organization" }))
+        expect(mockPublishWorkflow.mutate).toHaveBeenCalledWith("private-workflow", expect.any(Object))
     })
 
 })

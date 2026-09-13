@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import type { SurrogateTasksViewMode } from "./use-surrogate-task-view-mode"
 
 interface SurrogateTasksCalendarHeaderProps {
+    canCreateTask: boolean
     taskCount: number
     viewMode: SurrogateTasksViewMode
     onViewModeChange: (mode: SurrogateTasksViewMode) => void
@@ -14,6 +15,7 @@ interface SurrogateTasksCalendarHeaderProps {
 }
 
 export function SurrogateTasksCalendarHeader({
+    canCreateTask,
     taskCount,
     viewMode,
     onViewModeChange,
@@ -49,7 +51,7 @@ export function SurrogateTasksCalendarHeader({
                         Calendar
                     </Button>
                 </div>
-                <Button size="sm" onClick={onAddTask}>
+                <Button size="sm" onClick={onAddTask} disabled={!canCreateTask}>
                     <PlusIcon className="size-4 mr-1.5" />
                     Add Task
                 </Button>

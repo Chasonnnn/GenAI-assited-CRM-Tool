@@ -17,7 +17,7 @@ from app.core.permissions import PermissionKey
 from app.core.policies import POLICIES
 from app.db.enums import Role
 from app.schemas.auth import UserSession
-from app.services import analytics_service
+from app.services import analytics_access_service, analytics_service, permission_policy_service
 
 DASHBOARD_ANALYTICS_PATHS = {
     "/analytics/surrogates/by-status",
@@ -34,7 +34,11 @@ def require_analytics_access(
 
     session = get_current_session(request, db)
     path = request.scope.get("path") or request.url.path
-    if session.role == Role.INTAKE_SPECIALIST and path not in DASHBOARD_ANALYTICS_PATHS:
+    if (
+        not permission_policy_service.is_enabled(db, session.org_id)
+        and session.role == Role.INTAKE_SPECIALIST
+        and path not in DASHBOARD_ANALYTICS_PATHS
+    ):
         raise HTTPException(
             status_code=403, detail="Intake users can only view assigned-case analytics"
         )
@@ -65,10 +69,28 @@ def require_analytics_access(
     )
 
 
+def require_analytics_dataset(
+    request: Request,
+    session: Annotated[UserSession, Depends(require_analytics_access)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    if (
+        permission_policy_service.is_enabled(db, session.org_id)
+        and request.url.path.startswith("/analytics/meta/spend/")
+        and not analytics_access_service.has_organization_record_scope(db, session)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Organization-wide record scope is required for advertising spend",
+        )
+    with analytics_access_service.authorized_dataset(db, session):
+        yield session
+
+
 router = APIRouter(
     prefix="/analytics",
     tags=["analytics"],
-    dependencies=[Depends(require_analytics_access)],
+    dependencies=[Depends(require_analytics_dataset)],
 )
 
 
@@ -206,7 +228,8 @@ def get_surrogates_by_status(
 ):
     """Get surrogate counts grouped by status."""
     if (
-        owner_id
+        not permission_policy_service.is_enabled(db, session.org_id)
+        and owner_id
         and owner_id != session.user_id
         and session.role not in (Role.ADMIN, Role.DEVELOPER, Role.CASE_MANAGER)
     ):
@@ -223,7 +246,9 @@ def get_surrogates_by_status(
         end_date=end_date,
         pipeline_id=pipeline_id,
         owner_id=owner_id,
-        role_filter=session.role,
+        role_filter=None
+        if permission_policy_service.is_enabled(db, session.org_id)
+        else session.role,
         user_id=session.user_id,
     )
     return [StatusCount(**item) for item in data]
@@ -260,7 +285,8 @@ def get_surrogates_trend(
 ):
     """Get surrogate creation trend over time."""
     if (
-        owner_id
+        not permission_policy_service.is_enabled(db, session.org_id)
+        and owner_id
         and owner_id != session.user_id
         and session.role not in (Role.ADMIN, Role.DEVELOPER, Role.CASE_MANAGER)
     ):
@@ -281,15 +307,20 @@ def get_surrogates_trend(
         pipeline_id=pipeline_id,
         owner_id=owner_id,
         timezone_name=timezone_name,
-        role_filter=session.role,
+        role_filter=None
+        if permission_policy_service.is_enabled(db, session.org_id)
+        else session.role,
         user_id=session.user_id,
     )
     return [TrendPoint(**item) for item in data]
 
 
-def _require_allowed_analytics_owner(session: UserSession, owner_id: UUID | None) -> None:
+def _require_allowed_analytics_owner(
+    db: Session, session: UserSession, owner_id: UUID | None
+) -> None:
     if (
-        owner_id
+        not permission_policy_service.is_enabled(db, session.org_id)
+        and owner_id
         and owner_id != session.user_id
         and session.role not in (Role.ADMIN, Role.DEVELOPER, Role.CASE_MANAGER)
     ):
@@ -313,9 +344,7 @@ def _optional_donor_date_range(
 
 
 DONOR_REPORT_ACCESS = Depends(
-    require_all_permissions(
-        [PermissionKey.REPORTS_VIEW, PermissionKey.DONORS_VIEW]
-    )
+    require_all_permissions([PermissionKey.REPORTS_VIEW, PermissionKey.DONORS_VIEW])
 )
 
 
@@ -338,7 +367,7 @@ def get_donor_analytics_summary(
     """Get subtype-specific donor summary metrics for reports."""
     from app.services import analytics_donor_service
 
-    _require_allowed_analytics_owner(session, owner_id)
+    _require_allowed_analytics_owner(db, session, owner_id)
     start, end = analytics_service.parse_date_range(
         from_date,
         to_date,
@@ -380,7 +409,7 @@ def get_donors_by_status(
     """Get every active subtype stage with its current donor count."""
     from app.services import analytics_donor_service
 
-    _require_allowed_analytics_owner(session, owner_id)
+    _require_allowed_analytics_owner(db, session, owner_id)
     start, end = _optional_donor_date_range(from_date, to_date)
     try:
         data = analytics_donor_service.get_cached_donors_by_status(
@@ -420,7 +449,7 @@ def get_donors_trend(
     """Get subtype donor creation volume grouped in the requested timezone."""
     from app.services import analytics_donor_service
 
-    _require_allowed_analytics_owner(session, owner_id)
+    _require_allowed_analytics_owner(db, session, owner_id)
     start, end = analytics_service.parse_date_range(
         from_date,
         to_date,
@@ -1119,6 +1148,10 @@ async def export_analytics_pdf(
         start_dt=start_dt,
         end_dt=end_dt,
         date_range_str=date_range_str,
+        include_organization_spend=(
+            not permission_policy_service.is_enabled(db, session.org_id)
+            or analytics_access_service.has_organization_record_scope(db, session)
+        ),
     )
 
     # Return PDF response

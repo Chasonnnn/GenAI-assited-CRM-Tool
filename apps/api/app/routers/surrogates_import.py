@@ -24,6 +24,7 @@ from app.core.deps import (
 )
 from app.core.permissions import PermissionKey as P
 from app.core.policies import POLICIES
+from app.core.record_creation import require_record_creation
 from app.db.enums import SurrogateSource
 from app.schemas.auth import UserSession
 from app.schemas.import_template import (
@@ -832,7 +833,10 @@ def submit_import_for_approval(
 @router.post(
     "/{import_id:uuid}/approve",
     response_model=ImportApprovalResponse,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[
+        Depends(require_csrf_header),
+        Depends(require_record_creation("surrogates", v2_only=True)),
+    ],
 )
 def approve_import(
     import_id: UUID,
@@ -882,7 +886,10 @@ def approve_import(
 @router.post(
     "/{import_id:uuid}/retry",
     response_model=ImportActionResponse,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[
+        Depends(require_csrf_header),
+        Depends(require_record_creation("surrogates", v2_only=True)),
+    ],
 )
 def retry_import(
     import_id: UUID,
@@ -926,7 +933,10 @@ def retry_import(
 @router.post(
     "/{import_id:uuid}/run-inline",
     response_model=ImportActionResponse,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[
+        Depends(require_csrf_header),
+        Depends(require_record_creation("surrogates", v2_only=True)),
+    ],
 )
 def run_import_inline(
     import_id: UUID,

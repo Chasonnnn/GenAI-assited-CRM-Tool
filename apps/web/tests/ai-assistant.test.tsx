@@ -6,11 +6,12 @@ const mockStreamMessage = vi.fn()
 const mockApproveAction = vi.fn()
 const mockRejectAction = vi.fn()
 const mockUseAuth = vi.fn()
+const mockAvailability = vi.fn()
 
 let mockUser: { user_id: string } | null = { user_id: 'u1' }
 
 vi.mock('@/lib/hooks/use-ai', () => ({
-    useAISettings: () => ({ data: { is_enabled: true } }),
+    useAIAvailability: () => mockAvailability(),
     useStreamChatMessage: () => mockStreamMessage,
     useApproveAction: () => ({ mutateAsync: mockApproveAction, isPending: false }),
     useRejectAction: () => ({ mutateAsync: mockRejectAction, isPending: false }),
@@ -22,6 +23,7 @@ vi.mock('@/lib/auth-context', () => ({
 
 describe('AIAssistantPage', () => {
     beforeEach(() => {
+        mockAvailability.mockReturnValue({ data: { is_enabled: true }, refetch: vi.fn() })
         mockUser = { user_id: 'u1' }
         mockUseAuth.mockReturnValue({ user: mockUser, isLoading: false, error: null, refetch: vi.fn() })
 
@@ -74,6 +76,32 @@ describe('AIAssistantPage', () => {
         expect(mockApproveAction).toHaveBeenCalledWith('a1')
 
         expect(await screen.findByText('approved')).toBeInTheDocument()
+    })
+
+    it('blocks sending and approval when organization AI is disabled after a proposal', async () => {
+        const view = render(<AIAssistantPage />)
+        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Prepare a note' } })
+        fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter', shiftKey: false })
+        expect(await screen.findByRole('button', { name: /approve/i })).toBeEnabled()
+
+        mockAvailability.mockReturnValue({ data: { is_enabled: false }, refetch: vi.fn() })
+        view.rerender(<AIAssistantPage />)
+        expect(screen.getByRole('textbox')).toBeDisabled()
+        expect(screen.getByRole('button', { name: /approve/i })).toBeDisabled()
+        fireEvent.click(screen.getByRole('button', { name: /approve/i }))
+        expect(mockApproveAction).not.toHaveBeenCalled()
+    })
+
+    it('keeps actions unavailable while availability is loading or failed', () => {
+        mockAvailability.mockReturnValue({ data: undefined, isLoading: true })
+        const view = render(<AIAssistantPage />)
+        expect(screen.getByRole('textbox')).toBeDisabled()
+        const refetch = vi.fn()
+        mockAvailability.mockReturnValue({ data: undefined, isError: true, error: new Error('Unavailable'), refetch })
+        view.rerender(<AIAssistantPage />)
+        expect(screen.getByRole('textbox')).toBeDisabled()
+        fireEvent.click(screen.getByRole('button', { name: /retry/i }))
+        expect(refetch).toHaveBeenCalled()
     })
 
     it("renders streamed assistant Markdown as rich text", async () => {

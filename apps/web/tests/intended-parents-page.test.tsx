@@ -9,6 +9,13 @@ vi.mock('next/link', () => ({
     ),
 }))
 
+const mockUseEffectivePermissions = vi.fn()
+vi.mock('@/lib/auth-context', () => ({
+    useAuth: () => ({ user: { user_id: 'user-1', role: 'case_manager' } }),
+}))
+vi.mock('@/lib/hooks/use-permissions', () => ({
+    useEffectivePermissions: () => mockUseEffectivePermissions(),
+}))
 const mockSearchParams = new URLSearchParams()
 const mockRouterReplace = vi.fn()
 const mockCreateIntendedParent = vi.fn()
@@ -92,6 +99,7 @@ vi.mock('@/lib/hooks/use-metadata', () => ({
 
 describe('IntendedParentsPage', () => {
     beforeEach(() => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 1, permissions: ["edit_intended_parents"] } })
         mockSearchParams.delete('page')
         mockSearchParams.delete('status')
         mockSearchParams.delete('q')
@@ -131,6 +139,25 @@ describe('IntendedParentsPage', () => {
             },
             isLoading: false,
         })
+    })
+
+    it("uses Create independently of Edit under V2 and closes on revocation", async () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_intended_parents", "edit_intended_parents"] } })
+        const { rerender } = render(<IntendedParentsPage />)
+        expect(screen.queryByRole("button", { name: "New Intended Parent" })).not.toBeInTheDocument()
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_intended_parents", "create_intended_parents"] } })
+        rerender(<IntendedParentsPage />)
+        fireEvent.click(screen.getByRole("button", { name: "New Intended Parent" }))
+        expect(screen.getByRole("dialog")).toBeInTheDocument()
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_intended_parents"] } })
+        rerender(<IntendedParentsPage />)
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+    })
+
+    it.each([{ data: undefined, isLoading: true }, { data: undefined, isError: true }])("hides Create until permissions load successfully", (result) => {
+        mockUseEffectivePermissions.mockReturnValue(result)
+        render(<IntendedParentsPage />)
+        expect(screen.queryByRole("button", { name: "New Intended Parent" })).not.toBeInTheDocument()
     })
 
     it('renders stats and a list row', () => {

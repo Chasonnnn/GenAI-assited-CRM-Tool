@@ -4,13 +4,29 @@
 
 import api from '../api'
 
+export type PermissionTopic = "Surrogates" | "Donors" | "Intended Parents" | "Operations" | "Administration"
+
+export interface PermissionPresentation {
+    topic?: PermissionTopic
+    section?: string
+    short_label?: string
+    is_default?: boolean
+}
+
+export interface IncludedFeatures {
+    personal_workspace: boolean
+    ai_assistant: boolean
+}
+
 // Types
-export interface PermissionInfo {
+export interface PermissionInfo extends PermissionPresentation {
     key: string
     label: string
     description: string
     category: string
     developer_only: boolean
+    assignable?: boolean
+    configurable?: boolean
 }
 
 export interface Member {
@@ -19,6 +35,7 @@ export interface Member {
     email: string
     display_name: string | null
     role: string
+    is_active?: boolean
     last_login_at: string | null
     created_at: string
 }
@@ -33,12 +50,19 @@ interface PermissionOverride {
 export interface MemberDetail extends Member {
     effective_permissions: string[]
     overrides: PermissionOverride[]
+    policy_version?: number
+    capabilities?: Record<string, boolean>
+    access_sources?: Record<string, string[]>
+    included_features?: IncludedFeatures
 }
 
 export interface MemberUpdate {
     role?: string
     add_overrides?: { permission: string; override_type: "grant" | "revoke" }[]
     remove_overrides?: string[]
+    access_reviewed?: boolean
+    retain_additions?: boolean
+    retain_collaborators?: boolean
 }
 
 export interface RoleSummary {
@@ -46,27 +70,39 @@ export interface RoleSummary {
     label: string
     permission_count: number
     is_developer: boolean
+    protected?: boolean
+    can_edit?: boolean
+    policy_version?: number
 }
 
-interface RolePermission {
+export interface RolePermission extends PermissionPresentation {
     key: string
     label: string
     description: string
     is_granted: boolean
     developer_only: boolean
+    configurable?: boolean
 }
 
 export interface RoleDetail {
     role: string
     label: string
     permissions_by_category: Record<string, RolePermission[]>
+    protected?: boolean
+    can_edit?: boolean
+    policy_version?: number
+    included_features?: IncludedFeatures
 }
 
 export interface EffectivePermissions {
+    included_features?: IncludedFeatures
     user_id: string
     role: string
     permissions: string[]
     overrides: PermissionOverride[]
+    policy_version?: number
+    capabilities?: Record<string, boolean>
+    access_sources?: Record<string, string[]>
 }
 
 export interface IntakePoolGrant {
@@ -93,8 +129,8 @@ export async function getAvailablePermissions(): Promise<PermissionInfo[]> {
     return api.get<PermissionInfo[]>("/settings/permissions/available")
 }
 
-export async function getMembers(): Promise<Member[]> {
-    return api.get<Member[]>("/settings/permissions/members")
+export async function getMembers(includeInactive = false): Promise<Member[]> {
+    return api.get<Member[]>(`/settings/permissions/members${includeInactive ? "?include_inactive=true" : ""}`)
 }
 
 export async function getMember(memberId: string): Promise<MemberDetail> {
@@ -140,20 +176,63 @@ export async function getRoleDetail(role: string): Promise<RoleDetail> {
 
 export async function updateRolePermissions(
     role: string,
-    permissions: Record<string, boolean>
+    permissions: Record<string, boolean>,
+    scopeRules?: Partial<Record<import("./record-scopes").RecordModule, import("./record-scopes").RecordScopeRule>>,
 ): Promise<RoleDetail> {
-    return api.patch<RoleDetail>(`/settings/permissions/roles/${role}`, { permissions })
+    return api.patch<RoleDetail>(`/settings/permissions/roles/${role}`, { permissions, ...(scopeRules ? { scope_rules: scopeRules } : {}) })
 }
 
 export async function bulkUpdateRoles(
     memberIds: string[],
-    role: string
+    role: string,
+    review: Pick<MemberUpdate, "access_reviewed" | "retain_additions" | "retain_collaborators"> = {},
 ): Promise<{ success: number; failed: number }> {
     // Update members in parallel
     const results = await Promise.allSettled(
-        memberIds.map(id => api.patch(`/settings/permissions/members/${id}`, { role }))
+        memberIds.map(id => api.patch(`/settings/permissions/members/${id}`, { role, ...review }))
     )
     const success = results.filter(r => r.status === "fulfilled").length
     const failed = results.filter(r => r.status === "rejected").length
     return { success, failed }
 }
+
+export interface PolicyChanges {
+    role_permissions?: Record<string, Record<string, boolean>>
+    revoke_resolutions?: { override_id: string; action: "remove" | "deny_for_role" }[]
+    execution_resolutions?: { item_type: "workflow" | "campaign"; id: string; action: "pause" }[]
+}
+
+export interface PolicyConfiguration {
+    version: number
+    configuration_revision: number
+    status: "legacy" | "active"
+    role_permissions: Record<string, Record<string, boolean>>
+    protected_roles: string[]
+}
+
+export interface PolicyPreview {
+    digest: string
+    current_version: number
+    target_version: number
+    configuration_revision: number
+    ready: boolean
+    members: {
+        membership_id: string
+        user_id: string
+        role: string
+        current: string[]
+        proposed: string[]
+        gained: string[]
+        lost: string[]
+    }[]
+    revokes: { override_id: string; user_id: string; role: string | null; permission: string; resolution: "remove" | "deny_for_role" | null; can_deny_for_role?: boolean }[]
+    unresolved_revoke_ids: string[]
+    role_permissions: Record<string, Record<string, boolean>>
+    scope_review: import("./record-scopes").ScopeMigrationReview
+    execution_review: { item_type: "workflow" | "campaign"; id: string; name?: string; unreviewed_execution_ids?: string[] }[]
+    unresolved_execution_ids: string[]
+}
+
+export const getPolicyConfiguration = () => api.get<PolicyConfiguration>("/settings/permissions/policy")
+export const previewPolicy = (changes: PolicyChanges) => api.post<PolicyPreview>("/settings/permissions/policy/preview", changes)
+export const activatePolicy = (changes: PolicyChanges & { digest: string }) => api.post<PolicyConfiguration>("/settings/permissions/policy/activate", changes)

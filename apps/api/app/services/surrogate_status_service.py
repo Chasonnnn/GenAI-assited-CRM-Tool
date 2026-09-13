@@ -316,6 +316,7 @@ def change_status(
     *,
     emit_events: bool = False,
     commit: bool = True,
+    execution_permissions: frozenset[str] | None = None,
 ) -> StatusChangeResult:
     """
     Change surrogate stage and record history with backdating support.
@@ -405,7 +406,17 @@ def change_status(
     if not role_str:
         raise ValueError("User role is required to change stage")
 
-    if role_str == Role.CASE_MANAGER.value:
+    from app.services import approval_handoff_service
+
+    uses_record_policy = approval_handoff_service.authorize_stage_change(
+        db,
+        record=surrogate,
+        kind="surrogate",
+        target_stage=new_stage,
+        user_id=user_id,
+        execution_permissions=execution_permissions,
+    )
+    if not uses_record_policy and role_str == Role.CASE_MANAGER.value:
         if surrogate.owner_type != OwnerType.USER.value or surrogate.owner_id != user_id:
             raise ValueError("Surrogate must be claimed before changing stage")
 
@@ -421,7 +432,7 @@ def change_status(
         if pipeline_service.normalize_stage_ref(stage_key)
     }
     new_stage_key = pipeline_service.get_stage_semantic_key(new_stage) or new_stage.slug
-    if is_resume_from_on_hold:
+    if uses_record_policy or is_resume_from_on_hold:
         pass
     elif not is_regression:
         if not pipeline_semantics_service.can_role_access_stage(
@@ -656,8 +667,11 @@ def apply_status_change(
 
     Called for non-regressions, undo within grace period, and approved regressions.
     """
-    from app.services import pipeline_service
+    from app.services import approval_handoff_service, pipeline_service
 
+    approval_handoff_service.retain_at_approval(
+        db, record=surrogate, kind="surrogate", target_stage=new_stage, actor_user_id=user_id
+    )
     resolved_org_timezone = org_timezone_str or _get_org_timezone(db, surrogate.organization_id)
     deleted_follow_up_task = None
     created_follow_up_task = None

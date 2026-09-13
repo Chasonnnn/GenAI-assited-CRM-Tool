@@ -62,6 +62,26 @@ beforeEach(() => {
 })
 
 describe("SurrogateTasksCalendar accessibility", () => {
+    it('keeps tasks readable while creation and completion are denied', () => {
+        installTaskViewStorage()
+        const toggle = vi.fn()
+        const open = vi.fn()
+        render(<SurrogateTasksCalendar surrogateId="s1" tasks={[makeTask()]} onAddTask={vi.fn()} onTaskToggle={toggle} onTaskClick={open} canCreateTask={false} canToggleTask={() => false} />)
+        expect(screen.getByRole('button', { name: 'Add Task' })).toBeDisabled()
+        const checkbox = screen.getByRole('checkbox', { name: 'Mark Initial Consultation as complete' })
+        expect(checkbox).toHaveAttribute("aria-disabled", "true")
+        fireEvent.click(checkbox)
+        expect(toggle).not.toHaveBeenCalled()
+        fireEvent.click(screen.getByRole('button', { name: /Initial Consultation/ }))
+        expect(open).toHaveBeenCalled()
+    })
+
+    it('disables the empty-state create action without create permission', () => {
+        installTaskViewStorage()
+        render(<SurrogateTasksCalendar surrogateId="s1" tasks={[]} onAddTask={vi.fn()} onTaskToggle={vi.fn()} canCreateTask={false} />)
+        expect(screen.getByRole('button', { name: 'Add First Task' })).toBeDisabled()
+    })
+
     it("renders task titles as buttons and provides checkbox aria-labels", async () => {
         const onTaskToggle = vi.fn()
         const onAddTask = vi.fn()

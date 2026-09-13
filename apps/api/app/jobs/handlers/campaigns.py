@@ -41,7 +41,13 @@ async def process_campaign_send(db, job) -> None:
         from app.db.enums import CampaignStatus
         from app.db.models import Campaign
 
-        campaign = db.query(Campaign).filter(Campaign.id == UUID(campaign_id)).first()
+        campaign = (
+            db.query(Campaign)
+            .filter(
+                Campaign.id == UUID(campaign_id), Campaign.organization_id == job.organization_id
+            )
+            .first()
+        )
         if not campaign:
             raise Exception(f"Campaign {campaign_id} not found")
 

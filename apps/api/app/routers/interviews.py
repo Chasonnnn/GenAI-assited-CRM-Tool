@@ -82,6 +82,8 @@ def _check_interview_access(
     org_id: UUID,
     interview_id: UUID,
     session: UserSession,
+    *,
+    write: bool = False,
 ):
     """Get interview and verify surrogate access."""
     interview = interview_service.get_interview(db, org_id, interview_id)
@@ -94,6 +96,10 @@ def _check_interview_access(
         raise HTTPException(status_code=404, detail="Surrogate not found")
 
     check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+    from app.services import permission_policy_service
+
+    if write and permission_policy_service.is_enabled(db, org_id):
+        _check_can_modify_interview(surrogate, session, db)
 
     return interview, surrogate
 
@@ -231,9 +237,12 @@ def delete_interview(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> Response:
-    """Delete an interview (admin+ only)."""
-    interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
-    _check_admin_only(session)
+    """Delete an interview with record-edit authority (legacy: admin+)."""
+    interview, _ = _check_interview_access(db, session.org_id, interview_id, session, write=True)
+    from app.services import permission_policy_service
+
+    if not permission_policy_service.is_enabled(db, session.org_id):
+        _check_admin_only(session)
 
     interview_service.delete_interview(db, interview)
     db.commit()
@@ -365,7 +374,7 @@ def create_note(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Create a note on an interview (with optional anchor)."""
-    interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
+    interview, _ = _check_interview_access(db, session.org_id, interview_id, session, write=True)
 
     try:
         note = interview_note_service.create_note(
@@ -394,7 +403,7 @@ def update_note(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Update a note."""
-    interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
+    interview, _ = _check_interview_access(db, session.org_id, interview_id, session, write=True)
 
     note = interview_note_service.get_note(db, session.org_id, note_id)
     if not note or note.interview_id != interview_id:
@@ -417,7 +426,7 @@ def delete_note(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> Response:
     """Delete a note."""
-    interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
+    interview, _ = _check_interview_access(db, session.org_id, interview_id, session, write=True)
 
     note = interview_note_service.get_note(db, session.org_id, note_id)
     if not note or note.interview_id != interview_id:
@@ -440,7 +449,7 @@ def resolve_note(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Mark a note as resolved."""
-    _check_interview_access(db, session.org_id, interview_id, session)
+    _check_interview_access(db, session.org_id, interview_id, session, write=True)
 
     note = interview_note_service.get_note(db, session.org_id, note_id)
     if not note or note.interview_id != interview_id:
@@ -463,7 +472,7 @@ def unresolve_note(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Re-open a resolved note."""
-    _check_interview_access(db, session.org_id, interview_id, session)
+    _check_interview_access(db, session.org_id, interview_id, session, write=True)
 
     note = interview_note_service.get_note(db, session.org_id, note_id)
     if not note or note.interview_id != interview_id:
@@ -605,11 +614,13 @@ def unlink_attachment(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> Response:
-    """Unlink an attachment from the interview (case_manager+ only)."""
-    interview, case = _check_interview_access(db, session.org_id, interview_id, session)
+    """Unlink an attachment with record-edit authority (legacy: case_manager+)."""
+    interview, case = _check_interview_access(db, session.org_id, interview_id, session, write=True)
 
     role_str = session.role.value if hasattr(session.role, "value") else session.role
-    if role_str not in [
+    from app.services import permission_policy_service
+
+    if not permission_policy_service.is_enabled(db, session.org_id) and role_str not in [
         Role.CASE_MANAGER.value,
         Role.ADMIN.value,
         Role.DEVELOPER.value,
@@ -731,7 +742,7 @@ async def summarize_interview(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Generate AI summary of a single interview."""
-    interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
+    interview, _ = _check_interview_access(db, session.org_id, interview_id, session, write=True)
 
     try:
         return await ai_interview_service.summarize_interview(
@@ -761,7 +772,7 @@ async def summarize_interview_stream(
     from app.services.ai_usage_service import log_usage
     from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_data
 
-    interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
+    interview, _ = _check_interview_access(db, session.org_id, interview_id, session, write=True)
 
     ai_settings = ai_interview_service.get_ai_settings(db, session.org_id)
     if not ai_settings or not ai_settings.is_enabled:
@@ -908,6 +919,10 @@ async def summarize_all_interviews(
         raise HTTPException(status_code=404, detail="Surrogate not found")
 
     check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+    from app.services import permission_policy_service
+
+    if permission_policy_service.is_enabled(db, session.org_id):
+        _check_can_modify_interview(surrogate, session, db)
 
     try:
         return await ai_interview_service.summarize_all_interviews(
@@ -942,6 +957,10 @@ async def summarize_all_interviews_stream(
         raise HTTPException(status_code=404, detail="Surrogate not found")
 
     check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+    from app.services import permission_policy_service
+
+    if permission_policy_service.is_enabled(db, session.org_id):
+        _check_can_modify_interview(surrogate, session, db)
 
     ai_settings = ai_interview_service.get_ai_settings(db, session.org_id)
     if not ai_settings or not ai_settings.is_enabled:

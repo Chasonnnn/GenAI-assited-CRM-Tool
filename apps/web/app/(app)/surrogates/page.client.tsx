@@ -25,6 +25,7 @@ import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurro
 import { useQueues } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import type { SurrogateSource } from "@/lib/types/surrogate"
 import { isDynamicSurrogateFilter, type DynamicSurrogateFilter, type SurrogateMassEditStageFilters } from "@/lib/api/surrogates"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
@@ -90,7 +91,10 @@ function FloatingActionBar({
     const bulkChangeStageMutation = useBulkChangeStage()
     const [isChangeStageOpen, setIsChangeStageOpen] = useState(false)
 
-    const canAssign = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
+    const { data: permissions } = useEffectivePermissions(user?.user_id ?? null)
+    const canAssign = permissions?.policy_version === 2
+        ? permissions.permissions.includes('assign_surrogates')
+        : user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
     const canBulkChangeStage = user?.role && ['admin', 'developer'].includes(user.role)
 
     const handleAssign = async (userId: string) => {
@@ -553,7 +557,13 @@ export function SurrogatesPageClient() {
 
     const { user } = useAuth()
     const { data: assignees } = useAssignees()
-    const canUseOrgAssigneeFilter = user?.role === "admin" || user?.role === "developer" || user?.role === "case_manager"
+    const { data: permissions } = useEffectivePermissions(user?.user_id ?? null)
+    const canCreateSurrogates = permissions?.permissions.includes(
+        permissions.policy_version === 2 ? "create_surrogates" : "edit_surrogates",
+    ) === true
+    const canUseOrgAssigneeFilter = permissions?.policy_version === 2
+        ? permissions.permissions.includes("view_surrogates")
+        : user?.role === "admin" || user?.role === "developer" || user?.role === "case_manager"
     const canFilterByAssignee = canUseOrgAssigneeFilter
     const assigneeFilterOptions = assignees ?? []
     const canManagePriority = user?.role === "admin" || user?.role === "developer"
@@ -1127,6 +1137,7 @@ export function SurrogatesPageClient() {
     }
 
     const handleCreate = async () => {
+        if (!canCreateSurrogates) return
         try {
             const fullName = createForm.full_name.trim()
             const email = createForm.email.trim()
@@ -1171,10 +1182,10 @@ export function SurrogatesPageClient() {
                                 Mass Edit
                             </Button>
                         )}
-                        <Button onClick={() => setIsCreateOpen(true)}>
+                        {canCreateSurrogates && <Button onClick={() => setIsCreateOpen(true)}>
                             <PlusIcon className="mr-2 size-4" />
                             New Surrogates
-                        </Button>
+                        </Button>}
                     </div>
                 </div>
             </div>
@@ -1431,7 +1442,7 @@ export function SurrogatesPageClient() {
             </div>
 
             {/* Create Modal */}
-            <Dialog open={isCreateOpen} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) resetCreateForm() }}>
+            <Dialog open={isCreateOpen && canCreateSurrogates} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) resetCreateForm() }}>
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
                         <DialogTitle>New Surrogates</DialogTitle>

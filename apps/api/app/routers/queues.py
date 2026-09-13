@@ -35,6 +35,15 @@ router = APIRouter(
 )
 
 
+def _check_record_assignment_scope(db: Session, session: UserSession, surrogate_id: UUID) -> bool:
+    from app.services import permission_policy_service, record_access_service
+
+    enabled = permission_policy_service.is_enabled(db, session.org_id)
+    if enabled:
+        record_access_service.get_record_with_access(db, session, "surrogate", surrogate_id)
+    return enabled
+
+
 # =============================================================================
 # Schemas
 # =============================================================================
@@ -218,8 +227,13 @@ def claim_surrogate(
     - Sets owner to current user
     - Returns 409 if already claimed by a user
     """
+    scoped_v2 = _check_record_assignment_scope(db, session, surrogate_id)
     role_str = session.role.value if hasattr(session.role, "value") else session.role
-    if role_str not in [Role.CASE_MANAGER.value, Role.ADMIN.value, Role.DEVELOPER.value]:
+    if not scoped_v2 and role_str not in [
+        Role.CASE_MANAGER.value,
+        Role.ADMIN.value,
+        Role.DEVELOPER.value,
+    ]:
         raise HTTPException(status_code=403, detail="Only case managers can claim surrogates")
     try:
         surrogate = queue_service.claim_surrogate(db, session.org_id, surrogate_id, session.user_id)
@@ -250,6 +264,7 @@ def release_surrogate(
     - Surrogate must be owned by a user
     - Transfers ownership to specified queue
     """
+    _check_record_assignment_scope(db, session, surrogate_id)
     try:
         surrogate = queue_service.release_surrogate(
             db, session.org_id, surrogate_id, data.queue_id, session.user_id
@@ -278,6 +293,7 @@ def assign_surrogate_to_queue(
 
     Works whether surrogate is currently user-owned or queue-owned.
     """
+    _check_record_assignment_scope(db, session, surrogate_id)
     try:
         surrogate = queue_service.assign_surrogate_to_queue(
             db, session.org_id, surrogate_id, data.queue_id, session.user_id

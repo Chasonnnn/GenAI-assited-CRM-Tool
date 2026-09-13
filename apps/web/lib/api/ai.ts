@@ -7,6 +7,12 @@ import { streamSSE, type StreamEvent } from './stream';
 import type { JsonObject } from '../types/json';
 
 // Types
+export interface AIAvailability {
+    is_enabled: boolean;
+    provider: string | null;
+    model: string | null;
+}
+
 export interface AISettings {
     is_enabled: boolean;
     provider: string;
@@ -118,6 +124,10 @@ export interface ActionApprovalResult {
 // ============================================================================
 // Settings API
 // ============================================================================
+
+export async function getAIAvailability(): Promise<AIAvailability> {
+    return api.get<AIAvailability>('/ai/availability');
+}
 
 export async function getAISettings(): Promise<AISettings> {
     return api.get<AISettings>('/ai/settings');

@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import func, literal, text
+from sqlalchemy import func, literal
 from sqlalchemy.orm import Session
 
 from app.db.models import (
@@ -18,6 +18,7 @@ from app.db.models import (
     MetaForm,
     MetaLead,
     Surrogate,
+    SurrogateStatusHistory,
 )
 from app.services.analytics_shared import (
     _apply_date_range_filters,
@@ -109,28 +110,25 @@ def get_meta_performance(
 
     avg_hours = None
     if converted_stage:
-        result = db.execute(
-            text(
-                """
-                SELECT AVG(EXTRACT(EPOCH FROM (csh.changed_at - COALESCE(ml.meta_created_time, ml.received_at))) / 3600) as avg_hours
-                FROM meta_leads ml
-                JOIN surrogates c ON ml.converted_surrogate_id = c.id
-                JOIN surrogate_status_history csh ON c.id = csh.surrogate_id AND csh.to_stage_id = :converted_stage_id
-                WHERE ml.organization_id = :org_id
-                  AND COALESCE(ml.meta_created_time, ml.received_at) >= :start
-                  AND COALESCE(ml.meta_created_time, ml.received_at) < :end
-                  AND ml.is_converted = true
-            """
-            ),
-            {
-                "org_id": organization_id,
-                "start": start,
-                "end": end,
-                "converted_stage_id": converted_stage.id,
-            },
+        value = (
+            db.query(
+                func.avg(
+                    func.extract("epoch", SurrogateStatusHistory.changed_at - lead_time) / 3600
+                )
+            )
+            .select_from(MetaLead)
+            .join(Surrogate, MetaLead.converted_surrogate_id == Surrogate.id)
+            .join(SurrogateStatusHistory, Surrogate.id == SurrogateStatusHistory.surrogate_id)
+            .filter(
+                MetaLead.organization_id == organization_id,
+                MetaLead.is_converted.is_(True),
+                SurrogateStatusHistory.to_stage_id == converted_stage.id,
+                lead_time >= start,
+                lead_time < end,
+            )
+            .scalar()
         )
-        row = result.fetchone()
-        avg_hours = float(round(row[0], 1)) if row and row[0] else None
+        avg_hours = float(round(value, 1)) if value is not None else None
 
     return {
         "leads_received": leads_received,

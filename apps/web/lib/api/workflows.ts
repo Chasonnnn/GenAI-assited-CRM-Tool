@@ -33,6 +33,9 @@ export interface Workflow {
     created_at: string
     updated_at: string
     can_edit?: boolean
+    can_publish?: boolean
+    proposed_by_user_id?: string | null
+    proposed_by_name?: string | null
 }
 
 export type WorkflowScope = 'org' | 'personal'
@@ -62,6 +65,9 @@ export interface WorkflowListItem {
     subject_type: WorkflowSubjectType
     created_at: string
     can_edit?: boolean
+    can_publish?: boolean
+    proposed_by_user_id?: string | null
+    proposed_by_name?: string | null
 }
 
 export interface Condition {
@@ -285,4 +291,8 @@ export async function updateUserPreference(
     isOptedOut: boolean
 ): Promise<UserWorkflowPreference> {
     return api.patch<UserWorkflowPreference>(`/workflows/me/preferences/${workflowId}`, { is_opted_out: isOptedOut })
+}
+
+export async function publishWorkflow(id: string): Promise<Workflow> {
+    return api.post<Workflow>(`/workflows/${id}/publish`)
 }

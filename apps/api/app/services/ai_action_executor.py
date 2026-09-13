@@ -7,6 +7,8 @@ Each action type has its own executor that performs the actual work.
 import logging
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Callable
+from contextlib import nullcontext
 from datetime import UTC, date, datetime
 
 from sqlalchemy.orm import Session
@@ -31,6 +33,82 @@ def _get_surrogate_for_action(
         )
         .first()
     )
+
+
+def _current_action_permissions(db, approval, user_id, org_id, entity_id):
+    """Bind the human approval and refresh record authority at execution time."""
+    from app.db.enums import Role
+    from app.db.models import AIConversation, AIMessage
+    from app.services import permission_policy_service, permission_service, record_scope_service
+    from app.services.workflow_execution_authority import active_session
+
+    permission_policy_service.lock_configuration(db, org_id)
+    actor = active_session(db, org_id, user_id)
+    if actor is None:
+        raise PermissionError("Active organization membership required")
+    bound = (
+        db.query(AIActionApproval, AIConversation)
+        .join(AIMessage, AIMessage.id == AIActionApproval.message_id)
+        .join(AIConversation, AIConversation.id == AIMessage.conversation_id)
+        .filter(
+            AIActionApproval.id == approval.id,
+            AIConversation.organization_id == org_id,
+            AIConversation.entity_type.in_(("surrogate", "case")),
+            AIConversation.entity_id == entity_id,
+        )
+        .with_for_update(of=AIActionApproval)
+        .populate_existing()
+        .first()
+    )
+    if bound is None or bound[0].status != "pending":
+        raise PermissionError("Pending action approval is unavailable")
+    if bound[1].user_id != user_id and actor.role not in {
+        Role.ADMIN,
+        Role.DEVELOPER,
+        Role.CASE_MANAGER,
+    }:
+        raise PermissionError("Not authorized to approve this action")
+    permissions = permission_service.get_effective_permissions(
+        db, org_id, user_id, actor.role.value
+    )
+    record = (
+        db.query(Surrogate)
+        .filter(Surrogate.id == entity_id, Surrogate.organization_id == org_id)
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+    if (
+        record is None
+        or "view_surrogates" not in permissions
+        or not record_scope_service.can_access_record(db, actor, "surrogate", record)
+    ):
+        raise PermissionError("Surrogate is outside your access scope")
+    if approval.action_type == "update_status":
+        from app.db.models import Pipeline, PipelineStage
+        from app.services.approval_handoff_service import crosses_approval
+
+        try:
+            target_id = uuid.UUID(str(approval.action_payload.get("stage_id")))
+        except ValueError, TypeError:
+            target_id = None
+        target = (
+            db.query(PipelineStage)
+            .join(Pipeline)
+            .filter(PipelineStage.id == target_id, Pipeline.organization_id == org_id)
+            .first()
+            if target_id
+            else None
+        )
+        if (
+            target is not None
+            and crosses_approval(db, record, target)
+            and "approve_surrogates" not in permissions
+        ):
+            raise PermissionError("Applicant approval permission required")
+    if approval.action_type == "send_email" and "send_email" not in permissions:
+        raise PermissionError("Send email permission required")
+    return permissions
 
 
 # ============================================================================
@@ -228,6 +306,10 @@ class UpdateStatusExecutor(ActionExecutor):
         if not stage_id:
             return False, "stage_id is required"
 
+        try:
+            stage_id = uuid.UUID(str(stage_id))
+        except ValueError, TypeError:
+            return False, "Invalid stage"
         from app.services import pipeline_service
 
         stage = pipeline_service.get_stage_by_id(db, stage_id)
@@ -243,6 +325,8 @@ class UpdateStatusExecutor(ActionExecutor):
         user_id: uuid.UUID,
         org_id: uuid.UUID,
         entity_id: uuid.UUID,
+        *,
+        after_commit: list[Callable[[], None]] | None = None,
     ) -> JsonObject:
         stage_id = payload.get("stage_id")
 
@@ -273,6 +357,32 @@ class UpdateStatusExecutor(ActionExecutor):
             }
 
         old_stage_id = surrogate.stage_id
+        from app.services import permission_policy_service, surrogate_status_service
+
+        if permission_policy_service.is_enabled(db, org_id):
+            from app.services.workflow_execution_authority import active_session
+
+            actor = active_session(db, org_id, user_id)
+            if actor is None:
+                raise PermissionError("Active organization membership required")
+            result = surrogate_status_service.change_status(
+                db,
+                surrogate,
+                stage.id,
+                user_id,
+                actor.role,
+                reason=payload.get("reason"),
+                commit=False,
+            )
+            callback = result.get("after_commit")
+            if callback is not None and after_commit is not None:
+                after_commit.append(callback)
+            return {
+                "action": "update_status",
+                "old_stage_id": str(old_stage_id) if old_stage_id else None,
+                "new_stage_id": str(stage.id),
+                "success": result["status"] == "applied",
+            }
         old_label = surrogate.status_label
         surrogate.stage_id = stage.id
         surrogate.status_label = stage.label
@@ -481,6 +591,8 @@ def execute_action(
     org_id: uuid.UUID,
     entity_id: uuid.UUID,
     user_permissions: set[str] | None = None,
+    *,
+    after_commit: list[Callable[[], None]] | None = None,
 ) -> JsonObject:
     """Execute an approved action with permission checks and activity logging.
 
@@ -495,6 +607,22 @@ def execute_action(
     Returns:
         Result dict from executor
     """
+    from app.services import ai_settings_service, permission_policy_service
+
+    if not ai_settings_service.is_org_ai_enabled(db, org_id):
+        return {
+            "success": False,
+            "error": "AI is not enabled for this organization",
+            "error_code": "permission_denied",
+        }
+
+    policy_v2 = permission_policy_service.is_enabled(db, org_id)
+    if policy_v2:
+        try:
+            user_permissions = _current_action_permissions(db, approval, user_id, org_id, entity_id)
+        except PermissionError as exc:
+            return {"success": False, "error": str(exc), "error_code": "permission_denied"}
+
     # 1. Check approve_ai_actions permission
     if user_permissions is not None and "approve_ai_actions" not in user_permissions:
         error_msg = "You don't have permission to execute AI actions"
@@ -505,7 +633,11 @@ def execute_action(
         return {"success": False, "error": error_msg, "error_code": "permission_denied"}
 
     # 2. Check action-specific permission
-    required_permission = ACTION_PERMISSIONS.get(approval.action_type)
+    required_permission = (
+        "send_email"
+        if policy_v2 and approval.action_type == "send_email"
+        else ACTION_PERMISSIONS.get(approval.action_type)
+    )
     if required_permission and user_permissions is not None:
         if required_permission not in user_permissions:
             error_msg = f"You don't have permission to {approval.action_type.replace('_', ' ')}"
@@ -547,7 +679,13 @@ def execute_action(
 
     # 5. Execute
     try:
-        result = executor.execute(payload, db, user_id, org_id, entity_id)
+        with db.begin_nested() if policy_v2 else nullcontext():
+            if policy_v2 and isinstance(executor, UpdateStatusExecutor):
+                result = executor.execute(
+                    payload, db, user_id, org_id, entity_id, after_commit=after_commit
+                )
+            else:
+                result = executor.execute(payload, db, user_id, org_id, entity_id)
         approval.status = "executed" if result.get("success") else "failed"
         approval.executed_at = datetime.now(UTC)
         if not result.get("success"):

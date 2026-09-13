@@ -1,17 +1,11 @@
 "use client"
 
-import { useParams } from "next/navigation"
 import { TabsContent } from "@/components/ui/tabs"
 import { SurrogateProfileCard } from "@/components/surrogates/SurrogateProfileCard"
-import { useAuth } from "@/lib/auth-context"
+import { useSurrogateDetailData } from "@/components/surrogates/detail/SurrogateDetailLayout/context"
 
 export default function SurrogateProfilePage() {
-    const params = useParams<{ id: string }>()
-    const id = params.id
-    const { user } = useAuth()
-    const canViewProfile = user
-        ? ["case_manager", "admin", "developer"].includes(user.role)
-        : false
+    const { surrogateId, canViewProfile, canEditSurrogate } = useSurrogateDetailData()
 
     if (!canViewProfile) {
         return null
@@ -19,7 +13,7 @@ export default function SurrogateProfilePage() {
 
     return (
         <TabsContent value="profile" className="space-y-4">
-            <SurrogateProfileCard surrogateId={id} />
+            <SurrogateProfileCard surrogateId={surrogateId} readOnly={canEditSurrogate === false} />
         </TabsContent>
     )
 }

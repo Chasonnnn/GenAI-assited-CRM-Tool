@@ -8,7 +8,7 @@ import { SendIcon, SparklesIcon, FileTextIcon, UserIcon, CalendarIcon, ClockIcon
 import { useEffect, useReducer, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react"
 import { useAIChatScrollToLatest } from "@/lib/hooks/use-ai-chat-scroll-to-latest"
 import { useMountEffect } from "@/lib/hooks/use-mount-effect"
-import { useStreamChatMessage, useAISettings, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
+import { useStreamChatMessage, useAIAvailability, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
 import { useAuth } from "@/lib/auth-context"
 import { AssistantRichText } from "@/components/ai/AssistantRichText"
 
@@ -394,7 +394,7 @@ function useAIAssistantChat() {
         setActiveChatSessionId(dispatchChat, chatStateRef, value)
     }
 
-    const aiSettingsQuery = useAISettings()
+    const aiSettingsQuery = useAIAvailability()
     const {
         data: aiSettings,
         isError: aiSettingsError,
@@ -642,7 +642,7 @@ function useAIAssistantChat() {
     }
 
     const handleApprove = async (approvalId: string | null) => {
-        if (!approvalId) return
+        if (!approvalId || !aiSettings?.is_enabled) return
         try {
             await approveAction.mutateAsync(approvalId)
             // Update the action status in messages
@@ -934,7 +934,7 @@ function AIAssistantChatWindow({
             </CardHeader>
 
             <AIAssistantMessageList
-                approveActionPending={approveActionPending}
+                approveActionPending={approveActionPending || !isAIEnabled}
                 messages={messages}
                 onApprove={onApprove}
                 onReject={onReject}

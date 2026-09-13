@@ -2117,6 +2117,7 @@ def auto_match_submission(
     db: Session,
     *,
     submission: FormSubmission,
+    session=None,
 ) -> tuple[FormSubmission, str]:
     """Apply deterministic matching rules for a shared submission."""
     if submission.source_mode != FormLinkMode.SHARED.value:
@@ -2168,6 +2169,24 @@ def auto_match_submission(
     email_matches: list[Surrogate] = []
     if not phone_matches:
         email_matches = _match_rule_email(db, org_id=submission.organization_id, identity=identity)
+
+    if session is not None:
+        from app.services import permission_policy_service, record_scope_service
+
+        if permission_policy_service.is_enabled(db, session.org_id) and any(
+            not record_scope_service.can_access_record(db, session, "surrogate", record)
+            for record in phone_matches + email_matches
+        ):
+            submission.match_status = FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
+            submission.match_reason = "manual_review_required"
+            submission.matched_at = None
+            db.query(FormSubmissionMatchCandidate).filter(
+                FormSubmissionMatchCandidate.organization_id == submission.organization_id,
+                FormSubmissionMatchCandidate.submission_id == submission.id,
+            ).delete(synchronize_session=False)
+            db.commit()
+            db.refresh(submission)
+            return submission, FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
 
     db.query(FormSubmissionMatchCandidate).filter(
         FormSubmissionMatchCandidate.submission_id == submission.id
@@ -2662,16 +2681,22 @@ def list_match_candidates(
     *,
     org_id: uuid.UUID,
     submission_id: uuid.UUID,
+    session=None,
 ) -> list[FormSubmissionMatchCandidate]:
-    return (
-        db.query(FormSubmissionMatchCandidate)
-        .filter(
-            FormSubmissionMatchCandidate.organization_id == org_id,
-            FormSubmissionMatchCandidate.submission_id == submission_id,
-        )
-        .order_by(FormSubmissionMatchCandidate.created_at.asc())
-        .all()
+    query = db.query(FormSubmissionMatchCandidate).filter(
+        FormSubmissionMatchCandidate.organization_id == org_id,
+        FormSubmissionMatchCandidate.submission_id == submission_id,
     )
+
+    if session is not None:
+        from app.services import record_scope_service
+
+        query = query.filter(
+            record_scope_service.build_linked_visibility_filter(
+                db, session, FormSubmissionMatchCandidate
+            )
+        )
+    return query.order_by(FormSubmissionMatchCandidate.created_at.asc()).all()
 
 
 def resolve_submission_match(
@@ -2753,6 +2778,7 @@ def retry_submission_match(
     create_intake_lead_if_unmatched: bool,
     reviewer_id: uuid.UUID | None,
     review_notes: str | None = None,
+    session=None,
 ) -> tuple[FormSubmission, str]:
     """Reset and optionally reprocess matching for a shared submission."""
     if submission.source_mode != FormLinkMode.SHARED.value:
@@ -2790,10 +2816,11 @@ def retry_submission_match(
 
     outcome = FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
     if rerun_auto_match:
-        submission, outcome = auto_match_submission(db=db, submission=submission)
+        submission, outcome = auto_match_submission(db=db, submission=submission, session=session)
 
     if (
         create_intake_lead_if_unmatched
+        and submission.match_reason != "manual_review_required"
         and outcome == FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
         and not submission.surrogate_id
         and not submission.intake_lead_id

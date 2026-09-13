@@ -53,7 +53,11 @@ def _uses_messaging(actions: list[dict] | None) -> bool:
     return any(action.get("action_type") == "send_message" for action in actions or [])
 
 
-def _require_messaging_admin(session: UserSession) -> None:
+def _require_messaging_admin(session: UserSession, db: Session) -> None:
+    from app.services import permission_policy_service
+
+    if permission_policy_service.is_enabled(db, session.org_id):
+        return
     if session.role not in {Role.ADMIN, Role.DEVELOPER}:
         raise HTTPException(
             status_code=403,
@@ -71,6 +75,10 @@ def _require_subject_edit_access(
     session: UserSession,
     subject_type: str | None,
 ) -> None:
+    from app.services import permission_policy_service
+
+    if permission_policy_service.is_enabled(db, session.org_id):
+        return
     if not workflow_access.can_edit_subject(db, session, subject_type):
         raise HTTPException(status_code=403, detail="Missing permission: edit_donors")
 
@@ -94,6 +102,17 @@ def _can_edit_workflow(db: Session, session: UserSession, workflow) -> bool:
         session,
         workflow,
         _effective_workflow_subject(db, workflow),
+    )
+
+
+def _can_publish_workflow(db: Session, session: UserSession, workflow) -> bool:
+    from app.services import permission_policy_service
+
+    return (
+        permission_policy_service.is_enabled(db, session.org_id)
+        and workflow.scope == "personal"
+        and _can_edit_workflow(db, session, workflow)
+        and workflow_access.can_create(db, session, "org")
     )
 
 
@@ -157,25 +176,28 @@ def list_workflows(
     """
     if subject_type:
         _require_subject_access(db, session, subject_type)
-    has_manage = workflow_access.has_manage_permission(db, session)
     workflows = workflow_service.list_workflows(
         db=db,
         org_id=session.org_id,
         user_id=session.user_id,
-        has_manage_permission=has_manage,
+        has_manage_permission=workflow_access.can_inspect_personal(db, session),
         scope_filter=scope,
         enabled_only=enabled_only,
         trigger_type=trigger_type,
         subject_type=subject_type,
     )
-    workflows = [
-        workflow
-        for workflow in workflows
-        if _can_view_workflow(db, session, workflow)
-    ]
+    workflows = [workflow for workflow in workflows if _can_view_workflow(db, session, workflow)]
+    from app.services import workflow_execution_authority
+
+    for workflow in workflows:
+        workflow_execution_authority.audit_private_access(db, workflow, session.user_id, "list")
+    db.commit()
     return [
         workflow_service.to_workflow_list_item(
-            db, w, can_edit=_can_edit_workflow(db, session, w)
+            db,
+            w,
+            can_edit=_can_edit_workflow(db, session, w),
+            can_publish=_can_publish_workflow(db, session, w),
         )
         for w in workflows
     ]
@@ -223,6 +245,7 @@ def get_workflow_stats(
     return workflow_service.get_workflow_stats(
         db,
         session.org_id,
+        viewer_user_id=session.user_id,
         include_donor_subjects=workflow_access.can_view_subject(
             db,
             session,
@@ -267,6 +290,7 @@ def list_org_executions(
         workflow_id=workflow_id,
         limit=per_page,
         offset=offset,
+        viewer_user_id=session.user_id,
         include_donor_subjects=workflow_access.can_view_subject(
             db,
             session,
@@ -287,6 +311,7 @@ def get_execution_stats(
     return workflow_service.get_execution_stats(
         db,
         session.org_id,
+        viewer_user_id=session.user_id,
         include_donor_subjects=workflow_access.can_view_subject(
             db,
             session,
@@ -325,7 +350,7 @@ def retry_workflow_execution(
         raise HTTPException(status_code=404, detail="Workflow not found")
 
     if _uses_messaging(workflow.actions):
-        _require_messaging_admin(session)
+        _require_messaging_admin(session, db)
 
     if not _can_edit_workflow(db, session, workflow):
         raise HTTPException(status_code=403, detail="Cannot retry this workflow")
@@ -374,7 +399,7 @@ def create_workflow(
     _require_subject_access(db, session, effective_subject_type)
     _require_subject_edit_access(db, session, effective_subject_type)
     if _uses_messaging(data.actions):
-        _require_messaging_admin(session)
+        _require_messaging_admin(session, db)
     if not workflow_access.can_create(db, session, data.scope):
         raise HTTPException(
             status_code=403,
@@ -388,7 +413,9 @@ def create_workflow(
             user_id=session.user_id,
             data=data,
         )
-        return workflow_service.to_workflow_read(db, workflow, can_edit=True)
+        return workflow_service.to_workflow_read(
+            db, workflow, can_edit=True, can_publish=_can_publish_workflow(db, session, workflow)
+        )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -405,8 +432,15 @@ def get_workflow(
         raise HTTPException(status_code=404, detail="Workflow not found")
     if not _can_view_workflow(db, session, workflow):
         raise HTTPException(status_code=403, detail="Cannot view this workflow")
+    from app.services import workflow_execution_authority
+
+    workflow_execution_authority.audit_private_access(db, workflow, session.user_id)
+    db.commit()
     return workflow_service.to_workflow_read(
-        db, workflow, can_edit=_can_edit_workflow(db, session, workflow)
+        db,
+        workflow,
+        can_edit=_can_edit_workflow(db, session, workflow),
+        can_publish=_can_publish_workflow(db, session, workflow),
     )
 
 
@@ -438,7 +472,7 @@ def update_workflow(
     )
     _require_subject_edit_access(db, session, prospective_subject_type)
     if _uses_messaging(workflow.actions) or _uses_messaging(data.actions):
-        _require_messaging_admin(session)
+        _require_messaging_admin(session, db)
 
     try:
         workflow = workflow_service.update_workflow(
@@ -447,7 +481,9 @@ def update_workflow(
             user_id=session.user_id,
             data=data,
         )
-        return workflow_service.to_workflow_read(db, workflow, can_edit=True)
+        return workflow_service.to_workflow_read(
+            db, workflow, can_edit=True, can_publish=_can_publish_workflow(db, session, workflow)
+        )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -463,7 +499,7 @@ def delete_workflow(
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
     if _uses_messaging(workflow.actions):
-        _require_messaging_admin(session)
+        _require_messaging_admin(session, db)
     if not workflow_access.can_delete(
         db,
         session,
@@ -472,6 +508,9 @@ def delete_workflow(
     ):
         raise HTTPException(status_code=403, detail="Cannot delete this workflow")
 
+    from app.services import workflow_execution_authority
+
+    workflow_execution_authority.audit_configuration(db, workflow, session.user_id, "delete")
     workflow_service.delete_workflow(db, workflow)
     return {"message": "Workflow deleted"}
 
@@ -491,7 +530,7 @@ def toggle_workflow(
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
     if _uses_messaging(workflow.actions):
-        _require_messaging_admin(session)
+        _require_messaging_admin(session, db)
     if not workflow_access.can_toggle(
         db,
         session,
@@ -500,8 +539,13 @@ def toggle_workflow(
     ):
         raise HTTPException(status_code=403, detail="Cannot toggle this workflow")
 
-    workflow = workflow_service.toggle_workflow(db, workflow, session.user_id)
-    return workflow_service.to_workflow_read(db, workflow, can_edit=True)
+    try:
+        workflow = workflow_service.toggle_workflow(db, workflow, session.user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return workflow_service.to_workflow_read(
+        db, workflow, can_edit=True, can_publish=_can_publish_workflow(db, session, workflow)
+    )
 
 
 @router.post(
@@ -524,7 +568,7 @@ def duplicate_workflow(
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
     if _uses_messaging(workflow.actions):
-        _require_messaging_admin(session)
+        _require_messaging_admin(session, db)
     if not workflow_access.can_duplicate(
         db,
         session,
@@ -540,7 +584,36 @@ def duplicate_workflow(
         new_scope = "personal"
 
     new_workflow = workflow_service.duplicate_workflow(db, workflow, session.user_id, new_scope)
-    return workflow_service.to_workflow_read(db, new_workflow, can_edit=True)
+    return workflow_service.to_workflow_read(
+        db,
+        new_workflow,
+        can_edit=True,
+        can_publish=_can_publish_workflow(db, session, new_workflow),
+    )
+
+
+@router.post(
+    "/{workflow_id}/publish",
+    response_model=WorkflowRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def publish_workflow(
+    workflow_id: UUID,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+):
+    workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
+    if workflow is None:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    if not _can_edit_workflow(db, session, workflow) or not workflow_access.can_create(
+        db, session, "org"
+    ):
+        raise HTTPException(status_code=403, detail="Cannot publish this workflow")
+    try:
+        published = workflow_service.publish_workflow(db, workflow, session.user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return workflow_service.to_workflow_read(db, published, can_edit=True)
 
 
 # =============================================================================
@@ -564,7 +637,7 @@ def test_workflow(
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
     if _uses_messaging(workflow.actions):
-        _require_messaging_admin(session)
+        _require_messaging_admin(session, db)
     if not _can_view_workflow(db, session, workflow):
         raise HTTPException(status_code=403, detail="Cannot view this workflow")
 

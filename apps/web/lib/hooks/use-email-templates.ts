@@ -49,10 +49,11 @@ const emailTemplateKeys = {
 }
 
 // Hooks
-export function useEmailTemplates(params: ListTemplatesParams = {}) {
+export function useEmailTemplates(params: ListTemplatesParams = {}, enabled = true) {
     return useQuery({
         queryKey: emailTemplateKeys.list(params),
         queryFn: () => listTemplates(params),
+        enabled,
     })
 }
 

@@ -5,6 +5,7 @@ import TeamSettingsPage from '../app/(app)/settings/team/page'
 
 const mockUseInvites = vi.fn()
 const mockUseMembers = vi.fn()
+const mockUseEffectivePermissions = vi.fn()
 
 vi.mock('next/navigation', () => ({
     useRouter: () => ({
@@ -36,7 +37,8 @@ vi.mock('@/lib/hooks/use-invites', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-permissions', () => ({
-    useMembers: () => mockUseMembers(),
+    useEffectivePermissions: () => mockUseEffectivePermissions(),
+    useMembers: (includeInactive?: boolean) => mockUseMembers(includeInactive),
     useRemoveMember: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useBulkUpdateRoles: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
@@ -59,6 +61,7 @@ vi.mock('@/components/ui/toast', () => ({
 
 describe('TeamSettingsPage invitations tab', () => {
     beforeEach(() => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 1, capabilities: { can_manage_members: true } } })
         mockUseMembers.mockReturnValue({ data: [], isLoading: false })
         mockUseInvites.mockReturnValue({
             data: {
@@ -114,6 +117,30 @@ describe('TeamSettingsPage invitations tab', () => {
         expect(screen.getByText('pending@example.com')).toBeInTheDocument()
         expect(screen.getByText('expired@example.com')).toBeInTheDocument()
         expect(screen.queryByText('accepted@example.com')).not.toBeInTheDocument()
+    })
+
+    it('offers Operations invitations only after policy activation', () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, capabilities: { can_manage_members: true } } })
+        render(<TeamSettingsPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'Invite Member' }))
+        fireEvent.click(screen.getByRole('combobox', { name: 'Role' }))
+        const option = screen.getByRole('option', { name: 'Operations' })
+        fireEvent.mouseMove(option)
+        fireEvent.click(option)
+        expect(screen.getByRole('combobox', { name: 'Role' })).toHaveTextContent('Operations')
+    })
+
+    it('keeps Operations out of legacy invitation options', () => {
+        render(<TeamSettingsPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'Invite Member' }))
+        fireEvent.click(screen.getByRole('combobox', { name: 'Role' }))
+        expect(screen.queryByRole('option', { name: 'Operations' })).not.toBeInTheDocument()
+    })
+
+    it('requests inactive members when the Admin enables the returning-member view', () => {
+        render(<TeamSettingsPage />)
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Include inactive members' }))
+        expect(mockUseMembers).toHaveBeenLastCalledWith(true)
     })
 
     it('moves the current user badge into the action slot so the name column stays centered', () => {
