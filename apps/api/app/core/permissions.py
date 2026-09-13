@@ -48,6 +48,7 @@ class PermissionKey(str, Enum):
     VIEW_DASHBOARD = "view_dashboard"
 
     SURROGATES_VIEW = "view_surrogates"
+    SURROGATES_CREATE = "create_surrogates"
     SURROGATES_EDIT = "edit_surrogates"
     SURROGATES_DELETE = "delete_surrogates"
     SURROGATES_VIEW_POST_APPROVAL = "view_post_approval_surrogates"
@@ -59,8 +60,10 @@ class PermissionKey(str, Enum):
     SURROGATES_IMPORT = "import_surrogates"
 
     INTENDED_PARENTS_VIEW = "view_intended_parents"
+    INTENDED_PARENTS_CREATE = "create_intended_parents"
     INTENDED_PARENTS_EDIT = "edit_intended_parents"
     DONORS_VIEW = "view_donors"
+    DONORS_CREATE = "create_donors"
     DONORS_EDIT = "edit_donors"
     DONORS_ARCHIVE = "archive_donors"
     DONORS_CHANGE_STATUS = "change_donor_status"
@@ -478,6 +481,21 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
 
 V2_PERMISSION_DEFINITIONS = [
     PermissionDef(
+        "create_surrogates",
+        "Create Surrogates",
+        "Create surrogate records",
+        PermissionCategory.SURROGATES,
+    ),
+    PermissionDef(
+        "create_donors", "Create Donors", "Create donor records", PermissionCategory.DONORS
+    ),
+    PermissionDef(
+        "create_intended_parents",
+        "Create Intended Parents",
+        "Create intended parent records",
+        PermissionCategory.INTENDED_PARENTS,
+    ),
+    PermissionDef(
         "view_form_submissions",
         "View Form Submissions",
         "Read submitted applications",
@@ -670,10 +688,23 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
 }
 
 PROTECTED_ROLES = frozenset({"admin", "developer"})
-ADMIN_ONLY_PERMISSIONS = frozenset({"manage_roles", "manage_team"})
+ADMIN_ONLY_PERMISSIONS = frozenset({"manage_roles", "manage_team", "manage_ai_settings"})
+V2_PERSONAL_WORKSPACE_PERMISSIONS = frozenset(
+    {
+        "manage_automation",
+        "view_email_templates",
+        "manage_email_templates",
+        "view_campaigns",
+        "edit_campaigns",
+    }
+)
+V2_AI_PERMISSIONS = frozenset({"use_ai_assistant", "approve_ai_actions"})
+V2_DEFAULT_PERMISSIONS = V2_PERSONAL_WORKSPACE_PERMISSIONS | V2_AI_PERMISSIONS
 V2_ROLE_DEFAULTS: dict[str, set[str]] = {
     "intake_specialist": ROLE_DEFAULTS["intake_specialist"]
     | {
+        "create_surrogates",
+        "create_donors",
         "approve_surrogates",
         "approve_donors",
         "manage_automation",
@@ -687,6 +718,9 @@ V2_ROLE_DEFAULTS: dict[str, set[str]] = {
     },
     "case_manager": ROLE_DEFAULTS["case_manager"]
     | {
+        "create_surrogates",
+        "create_donors",
+        "create_intended_parents",
         "assign_donors",
         "manage_automation",
         "manage_email_templates",
@@ -723,6 +757,13 @@ V2_ROLE_DEFAULTS: dict[str, set[str]] = {
     },
     "developer": set(PERMISSION_REGISTRY),
 }
+
+
+# Universal features do not depend on editable role baselines.
+for _role, _permissions in V2_ROLE_DEFAULTS.items():
+    _permissions.update(V2_DEFAULT_PERMISSIONS)
+    if _role not in PROTECTED_ROLES:
+        _permissions.difference_update(ADMIN_ONLY_PERMISSIONS)
 
 
 # =============================================================================
@@ -817,3 +858,137 @@ def get_permissions_by_category() -> dict[str, list[PermissionDef]]:
             result[perm.category] = []
         result[perm.category].append(perm)
     return result
+
+
+# Presentation metadata is independent of authorization keys and legacy categories.
+# Each key appears once so grouping cannot silently omit a protected operation.
+PERMISSION_TOPIC_SECTIONS: dict[str, dict[str, dict[str, str]]] = {
+    "Surrogates": {
+        "Records": {
+            "view_surrogates": "View",
+            "create_surrogates": "Create",
+            "edit_surrogates": "Edit",
+            "archive_surrogates": "Archive",
+            "delete_surrogates": "Delete",
+            "import_surrogates": "Import",
+            "view_post_approval_surrogates": "View after approval",
+        },
+        "Progress & ownership": {
+            "change_surrogate_status": "Change status",
+            "approve_surrogates": "Approve",
+            "assign_surrogates": "Assign",
+            "approve_status_change_requests": "Approve status corrections",
+        },
+        "Notes": {"view_surrogate_notes": "View", "edit_surrogate_notes": "Edit"},
+    },
+    "Donors": {
+        "Records": {
+            "view_donors": "View",
+            "create_donors": "Create",
+            "edit_donors": "Edit",
+            "archive_donors": "Archive",
+        },
+        "Progress & ownership": {
+            "change_donor_status": "Change status",
+            "approve_donors": "Approve",
+            "assign_donors": "Assign",
+        },
+    },
+    "Intended Parents": {
+        "Records": {
+            "view_intended_parents": "View",
+            "create_intended_parents": "Create",
+            "edit_intended_parents": "Edit",
+        },
+        "Matches": {"view_matches": "View", "propose_matches": "Propose"},
+    },
+    "Operations": {
+        "Workflows": {
+            "manage_automation": "Manage personal",
+            "manage_org_workflows": "Manage organization",
+        },
+        "Templates": {
+            "view_email_templates": "View",
+            "manage_email_templates": "Manage personal",
+            "manage_org_templates": "Manage organization",
+        },
+        "Campaigns": {
+            "view_campaigns": "View",
+            "edit_campaigns": "Manage personal",
+            "manage_org_campaigns": "Manage organization",
+            "send_campaigns": "Send",
+        },
+        "Tasks": {
+            "view_tasks": "View",
+            "create_tasks": "Create",
+            "edit_tasks": "Edit",
+            "delete_tasks": "Delete",
+        },
+        "Communications": {"send_email": "Send email", "send_sms": "Send SMS"},
+        "Inbox": {
+            "view_tickets": "View",
+            "edit_tickets": "Edit",
+            "reply_tickets": "Reply",
+            "link_ticket_surrogates": "Manage record links and contacts",
+        },
+        "Appointments": {"manage_appointments": "Manage"},
+        "Forms": {
+            "manage_forms": "Manage forms",
+            "view_form_submissions": "View submissions",
+            "review_form_submissions": "Review submissions",
+        },
+        "Reports": {
+            "view_dashboard": "View dashboard",
+            "view_reports": "View reports",
+            "export_data": "Export data",
+        },
+    },
+    "Administration": {
+        "Team": {
+            "manage_team": "Manage members",
+            "view_roles": "View roles",
+            "manage_roles": "Manage roles",
+        },
+        "Organization": {
+            "manage_org": "Manage settings",
+            "manage_pipelines": "Manage pipelines",
+            "manage_queues": "Manage queues",
+            "view_audit_log": "View audit log",
+        },
+        "Integrations": {
+            "manage_integrations": "Manage integrations",
+            "manage_meta_leads": "Manage Meta leads",
+        },
+        "AI": {
+            "use_ai_assistant": "Use assistant",
+            "approve_ai_actions": "Review actions",
+            "manage_ai_settings": "Manage settings",
+            "view_ai_usage": "View usage",
+            "view_ai_conversations_all": "View all conversations",
+        },
+        "Compliance": {
+            "manage_compliance": "Manage compliance",
+            "purge_compliance_data": "Purge data",
+        },
+        "System": {
+            "manage_ops": "Monitor operations",
+            "manage_jobs": "Manage background jobs",
+            "manage_admin_exports": "Manage exports",
+            "manage_admin_imports": "Manage imports",
+            "manage_admin_versions": "Manage versions",
+        },
+    },
+}
+PERMISSION_PRESENTATION = {
+    key: {"topic": topic, "section": section, "short_label": label}
+    for topic, sections in PERMISSION_TOPIC_SECTIONS.items()
+    for section, permissions in sections.items()
+    for key, label in permissions.items()
+}
+
+
+def get_permission_presentation(key: str, *, policy_version: int = 1) -> dict:
+    return {
+        **PERMISSION_PRESENTATION[key],
+        "is_default": policy_version >= 2 and key in V2_DEFAULT_PERMISSIONS,
+    }

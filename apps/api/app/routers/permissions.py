@@ -20,9 +20,11 @@ from app.core.permissions import (
     PERMISSION_REGISTRY,
     PROTECTED_ROLES,
     ROLE_DEFAULTS,
+    V2_DEFAULT_PERMISSIONS,
     V2_PERMISSION_KEYS,
     V2_ROLE_DEFAULTS,
     get_all_permissions,
+    get_permission_presentation,
     get_role_default_permissions,
     is_developer_only,
 )
@@ -56,6 +58,11 @@ class PermissionInfo(BaseModel):
     category: str
     developer_only: bool
     assignable: bool = True
+    configurable: bool = True
+    topic: str
+    section: str
+    short_label: str
+    is_default: bool
 
 
 class MemberRead(BaseModel):
@@ -87,6 +94,7 @@ class MemberDetail(BaseModel):
     policy_version: int = 1
     capabilities: dict[str, bool] = Field(default_factory=dict)
     access_sources: dict[str, list[str]] = Field(default_factory=dict)
+    included_features: dict[str, bool] = Field(default_factory=dict)
 
 
 class OverrideRead(BaseModel):
@@ -134,6 +142,7 @@ class RoleDetail(BaseModel):
     role: str
     label: str
     permissions_by_category: dict[str, list[RolePermissionRead]]
+    included_features: dict[str, bool] = Field(default_factory=dict)
     protected: bool = False
     can_edit: bool = False
     policy_version: int = 1
@@ -148,6 +157,10 @@ class RolePermissionRead(BaseModel):
     is_granted: bool
     developer_only: bool
     configurable: bool = True
+    topic: str
+    section: str
+    short_label: str
+    is_default: bool
 
 
 class RolePermissionUpdate(BaseModel):
@@ -167,6 +180,7 @@ class EffectivePermissions(BaseModel):
     policy_version: int = 1
     capabilities: dict[str, bool] = Field(default_factory=dict)
     access_sources: dict[str, list[str]] = Field(default_factory=dict)
+    included_features: dict[str, bool] = Field(default_factory=dict)
 
 
 class IntakePoolGrantCreate(BaseModel):
@@ -222,6 +236,9 @@ def _permission_sources(
         role,
         role_overrides=permission_service.get_role_overrides(db, org_id, role).items(),
         policy_version=version,
+        ai_enabled=permission_policy_service.get_included_features(
+            db, org_id, policy_version=version
+        )["ai_assistant"],
     )
     additions = {
         row.permission
@@ -230,7 +247,9 @@ def _permission_sources(
     }
     return {
         key: (
-            ["developer"]
+            ["included_feature"]
+            if version >= 2 and key in V2_DEFAULT_PERMISSIONS
+            else ["developer"]
             if role == "developer"
             else (["role_baseline"] if key in baseline else [])
             + (
@@ -295,6 +314,9 @@ def _build_effective_permissions_response(
         policy_version=version,
         capabilities=capabilities,
         access_sources=_permission_sources(db, org_id, user_id, role, effective, version),
+        included_features=permission_policy_service.get_included_features(
+            db, org_id, policy_version=version
+        ),
     )
 
 
@@ -530,10 +552,14 @@ def list_available_permissions(
             description=p.description,
             category=p.category,
             developer_only=is_developer_only(p.key, policy_version=version),
-            assignable=version < 2 or p.key not in ADMIN_ONLY_PERMISSIONS,
+            assignable=version < 2 or p.key not in ADMIN_ONLY_PERMISSIONS | V2_DEFAULT_PERMISSIONS,
+            configurable=version < 2
+            or p.key not in ADMIN_ONLY_PERMISSIONS | V2_DEFAULT_PERMISSIONS,
+            **get_permission_presentation(p.key, policy_version=version),
         )
         for p in get_all_permissions()
         if version >= 2 or p.key not in V2_PERMISSION_KEYS
+        if version < 2 or p.key != "view_post_approval_surrogates"
     ]
 
 
@@ -651,6 +677,11 @@ def get_member(
         else None,
         created_at=membership.created_at.isoformat(),
         effective_permissions=sorted(effective),
+        included_features=permission_policy_service.get_included_features(
+            db, session.org_id, policy_version=version
+        )
+        if membership.is_active and user.is_active
+        else {"personal_workspace": False, "ai_assistant": False},
         overrides=override_list,
         policy_version=version,
         capabilities=capabilities,
@@ -1004,7 +1035,12 @@ def get_role_detail(
         from app.core.permission_resolution import resolve_effective_permissions
 
         global_defaults = resolve_effective_permissions(
-            role, role_overrides=org_overrides.items(), policy_version=version
+            role,
+            role_overrides=org_overrides.items(),
+            policy_version=version,
+            ai_enabled=permission_policy_service.get_included_features(
+                db, session.org_id, policy_version=version
+            )["ai_assistant"],
         )
 
     # Build permissions by category
@@ -1012,6 +1048,9 @@ def get_role_detail(
 
     for perm in get_all_permissions():
         if version < 2 and perm.key in V2_PERMISSION_KEYS:
+            continue
+        # V2 record scopes replace the legacy phase permission.
+        if version >= 2 and perm.key == "view_post_approval_surrogates":
             continue
         # Effective value: org override > global default
         if version >= 2:
@@ -1031,7 +1070,9 @@ def get_role_detail(
                 description=perm.description,
                 is_granted=is_granted,
                 developer_only=is_developer_only(perm.key, policy_version=version),
-                configurable=version < 2 or perm.key not in ADMIN_ONLY_PERMISSIONS,
+                configurable=version < 2
+                or perm.key not in ADMIN_ONLY_PERMISSIONS | V2_DEFAULT_PERMISSIONS,
+                **get_permission_presentation(perm.key, policy_version=version),
             )
         )
 
@@ -1039,6 +1080,9 @@ def get_role_detail(
         role=role,
         label=ROLE_LABELS.get(role, humanize_identifier(role)),
         permissions_by_category=perms_by_cat,
+        included_features=permission_policy_service.get_included_features(
+            db, session.org_id, policy_version=version
+        ),
         protected=role in PROTECTED_ROLES if version >= 2 else role == "developer",
         can_edit=(_role_value(session.role) in PROTECTED_ROLES and role not in PROTECTED_ROLES)
         if version >= 2

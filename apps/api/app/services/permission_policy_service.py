@@ -17,6 +17,7 @@ from app.core.permissions import (
     ADMIN_ONLY_PERMISSIONS,
     PERMISSION_REGISTRY,
     PROTECTED_ROLES,
+    V2_DEFAULT_PERMISSIONS,
     V2_ROLE_DEFAULTS,
     is_developer_only,
 )
@@ -99,6 +100,15 @@ def administration_capabilities(role: str, permissions: set[str], version: int) 
     }
 
 
+def get_included_features(
+    db: Session, org_id: UUID, *, policy_version: int | None = None
+) -> dict[str, bool]:
+    version = get_version(db, org_id) if policy_version is None else policy_version
+    enabled = version >= 2
+    ai_enabled = db.query(Organization.ai_enabled).filter(Organization.id == org_id).scalar()
+    return {"personal_workspace": enabled, "ai_assistant": enabled and bool(ai_enabled)}
+
+
 def get_configuration(db: Session, org_id: UUID) -> PermissionPolicyConfiguration:
     policy = db.get(OrganizationPermissionPolicy, org_id)
     version = policy.version if policy else 1
@@ -106,12 +116,14 @@ def get_configuration(db: Session, org_id: UUID) -> PermissionPolicyConfiguratio
 
     defaults = V2_ROLE_DEFAULTS if version >= 2 else ROLE_DEFAULTS
     rows = db.query(RolePermission).filter(RolePermission.organization_id == org_id).all()
+    ai_enabled = get_included_features(db, org_id, policy_version=version)["ai_assistant"]
     role_permissions = {}
     for role in defaults:
         resolved = resolve_effective_permissions(
             role,
             role_overrides=((row.permission, row.is_granted) for row in rows if row.role == role),
             policy_version=version,
+            ai_enabled=ai_enabled,
         )
         role_permissions[role] = {key: key in resolved for key in sorted(PERMISSION_REGISTRY)}
     return PermissionPolicyConfiguration(
@@ -132,6 +144,8 @@ def _validate_changes(changes: PermissionPolicyChanges) -> None:
         for permission, granted in permissions.items():
             if permission not in PERMISSION_REGISTRY:
                 raise ValueError(f"Invalid permission: {permission}")
+            if permission in V2_DEFAULT_PERMISSIONS:
+                raise ValueError("Included features cannot be configured in role baselines")
             if granted and is_developer_only(permission, policy_version=2):
                 raise ValueError(f"Permission '{permission}' is developer-only")
             if granted and permission in ADMIN_ONLY_PERMISSIONS:
@@ -149,12 +163,15 @@ def preview(db: Session, org_id: UUID, changes: PermissionPolicyChanges) -> Perm
     policy = db.get(OrganizationPermissionPolicy, org_id)
     version = policy.version if policy else 1
     revision = policy.configuration_revision if policy else 1
-    members = (
-        db.query(Membership)
+    member_rows = (
+        db.query(Membership, User.is_active)
+        .join(User, User.id == Membership.user_id)
         .filter(Membership.organization_id == org_id)
         .order_by(Membership.id)
         .all()
     )
+    members = [member for member, _ in member_rows]
+    active_users = {member.user_id for member, is_active in member_rows if is_active}
     role_rows = (
         db.query(RolePermission)
         .filter(RolePermission.organization_id == org_id)
@@ -169,12 +186,17 @@ def preview(db: Session, org_id: UUID, changes: PermissionPolicyChanges) -> Perm
     )
     proposed_roles: dict[str, dict[str, bool]] = {}
     for row in role_rows:
+        if row.permission in V2_DEFAULT_PERMISSIONS:
+            continue
         proposed_roles.setdefault(row.role, {})[row.permission] = row.is_granted
     for role, permissions in changes.role_permissions.items():
         proposed_roles.setdefault(role, {}).update(permissions)
 
+    ai_enabled = bool(db.query(Organization.ai_enabled).filter(Organization.id == org_id).scalar())
     proposed_action_sets = {
-        role: resolve_effective_permissions(role, role_overrides=values.items(), policy_version=2)
+        role: resolve_effective_permissions(
+            role, role_overrides=values.items(), policy_version=2, ai_enabled=ai_enabled
+        )
         for role, values in {**{role: {} for role in V2_ROLE_DEFAULTS}, **proposed_roles}.items()
     }
     members_by_user = {member.user_id: member for member in members}
@@ -188,6 +210,8 @@ def preview(db: Session, org_id: UUID, changes: PermissionPolicyChanges) -> Perm
         role = member.role if member else None
         action = resolutions.get(row.id)
         if action == "deny_for_role":
+            if row.permission in V2_DEFAULT_PERMISSIONS:
+                raise ValueError("Included feature revokes must be explicitly removed")
             if role is None or role in PROTECTED_ROLES:
                 raise ValueError("Cannot move this revoke to a protected or missing role")
             if row.permission not in PERMISSION_REGISTRY:
@@ -202,6 +226,7 @@ def preview(db: Session, org_id: UUID, changes: PermissionPolicyChanges) -> Perm
                 can_deny_for_role=(
                     role is not None
                     and role not in PROTECTED_ROLES
+                    and row.permission not in V2_DEFAULT_PERMISSIONS
                     and row.permission in PERMISSION_REGISTRY
                     and row.permission in proposed_action_sets.get(role, set())
                 ),
@@ -215,7 +240,7 @@ def preview(db: Session, org_id: UUID, changes: PermissionPolicyChanges) -> Perm
 
     differences = []
     for member in members:
-        if not member.is_active:
+        if not member.is_active or member.user_id not in active_users:
             continue
         user_overrides = [
             (row.permission, row.override_type)
@@ -229,12 +254,14 @@ def preview(db: Session, org_id: UUID, changes: PermissionPolicyChanges) -> Perm
             ),
             user_overrides=user_overrides,
             policy_version=version,
+            ai_enabled=ai_enabled,
         )
         proposed = resolve_effective_permissions(
             member.role,
             role_overrides=proposed_roles.get(member.role, {}).items(),
             user_overrides=user_overrides,
             policy_version=2,
+            ai_enabled=ai_enabled,
         )
         differences.append(
             PermissionMemberDifference(
@@ -261,8 +288,12 @@ def preview(db: Session, org_id: UUID, changes: PermissionPolicyChanges) -> Perm
         "org_id": str(org_id),
         "version": version,
         "revision": revision,
+        "ai_enabled": ai_enabled,
         "defaults": {role: sorted(values) for role, values in V2_ROLE_DEFAULTS.items()},
-        "members": [(str(m.id), str(m.user_id), m.role, m.is_active) for m in members],
+        "members": [
+            (str(m.id), str(m.user_id), m.role, m.is_active, m.user_id in active_users)
+            for m in members
+        ],
         "roles": [(str(r.id), r.role, r.permission, r.is_granted) for r in role_rows],
         "overrides": [
             (str(r.id), str(r.user_id), r.permission, r.override_type) for r in user_rows

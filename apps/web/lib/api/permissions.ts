@@ -4,14 +4,29 @@
 
 import api from '../api'
 
+export type PermissionTopic = "Surrogates" | "Donors" | "Intended Parents" | "Operations" | "Administration"
+
+export interface PermissionPresentation {
+    topic?: PermissionTopic
+    section?: string
+    short_label?: string
+    is_default?: boolean
+}
+
+export interface IncludedFeatures {
+    personal_workspace: boolean
+    ai_assistant: boolean
+}
+
 // Types
-export interface PermissionInfo {
+export interface PermissionInfo extends PermissionPresentation {
     key: string
     label: string
     description: string
     category: string
     developer_only: boolean
     assignable?: boolean
+    configurable?: boolean
 }
 
 export interface Member {
@@ -38,6 +53,7 @@ export interface MemberDetail extends Member {
     policy_version?: number
     capabilities?: Record<string, boolean>
     access_sources?: Record<string, string[]>
+    included_features?: IncludedFeatures
 }
 
 export interface MemberUpdate {
@@ -59,7 +75,7 @@ export interface RoleSummary {
     policy_version?: number
 }
 
-export interface RolePermission {
+export interface RolePermission extends PermissionPresentation {
     key: string
     label: string
     description: string
@@ -75,9 +91,11 @@ export interface RoleDetail {
     protected?: boolean
     can_edit?: boolean
     policy_version?: number
+    included_features?: IncludedFeatures
 }
 
 export interface EffectivePermissions {
+    included_features?: IncludedFeatures
     user_id: string
     role: string
     permissions: string[]

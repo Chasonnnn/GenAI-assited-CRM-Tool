@@ -16,6 +16,7 @@ from app.core.permissions import (
     ADMIN_ONLY_PERMISSIONS,
     PROTECTED_ROLES,
     ROLE_DEFAULTS,
+    V2_DEFAULT_PERMISSIONS,
     V2_PERMISSION_KEYS,
     is_developer_only,
     is_valid_permission,
@@ -45,13 +46,16 @@ def get_effective_permissions(
     Developer role always gets all permissions.
     Developer-only permissions are filtered out for non-developers.
     """
-    # Developer always has everything
-    if role == "developer":
-        return resolve_effective_permissions(role)
-
     from app.services import permission_policy_service
 
     policy_version = permission_policy_service.get_version(db, org_id)
+    if policy_version >= 2:
+        membership = get_membership_for_user(db, org_id, user_id)
+        if membership is None:
+            return set()
+        role = membership.role
+    elif role == "developer":
+        return resolve_effective_permissions(role)
 
     # Apply org-level role overrides (if any exist)
     from app.db.models import RolePermission
@@ -84,6 +88,11 @@ def get_effective_permissions(
             (override.permission, override.override_type) for override in user_overrides
         ),
         policy_version=policy_version,
+        ai_enabled=permission_policy_service.get_included_features(
+            db, org_id, policy_version=policy_version
+        )["ai_assistant"]
+        if policy_version >= 2
+        else True,
     )
 
 
@@ -95,10 +104,11 @@ def check_permission(
     permission: str,
 ) -> bool:
     """Check if user has a specific permission."""
-    # Developer always has everything
     if role == "developer":
-        return True
+        from app.services import permission_policy_service
 
+        if permission_policy_service.get_version(db, org_id) < 2:
+            return True
     effective = get_effective_permissions(db, org_id, user_id, role)
     return permission in effective
 
@@ -148,6 +158,8 @@ def set_user_override(
     permission_policy_service.lock_configuration(db, org_id)
     policy_version = permission_policy_service.get_version(db, org_id)
     if policy_version >= 2:
+        if override_type is not None and permission in V2_DEFAULT_PERMISSIONS:
+            raise ValueError("Included features cannot be configured as individual additions")
         actor = get_membership_for_user(db, org_id, actor_user_id)
         if actor is None or actor.role not in PROTECTED_ROLES:
             raise ValueError("Only Admin and Developer can manage individual additions")
@@ -265,6 +277,8 @@ def set_role_default(
     permission_policy_service.lock_configuration(db, org_id)
     policy_version = permission_policy_service.get_version(db, org_id)
     if policy_version >= 2:
+        if permission in V2_DEFAULT_PERMISSIONS:
+            raise ValueError("Included features cannot be configured in role baselines")
         actor = get_membership_for_user(db, org_id, actor_user_id)
         if actor is None or actor.role not in PROTECTED_ROLES:
             raise ValueError("Only Admin and Developer can configure role baselines")
