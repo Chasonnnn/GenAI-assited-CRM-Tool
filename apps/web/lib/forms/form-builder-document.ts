@@ -15,6 +15,7 @@ export type BuilderFormField = {
     label: string
     helperText: string
     required: boolean
+    sensitivity?: FieldSensitivity
     surrogateFieldMapping: string
     options?: BuilderOption[]
     validation?: FormFieldValidation | null
@@ -174,15 +175,19 @@ const toFieldOptions = (options?: BuilderOption[]): FormFieldOption[] | null => 
     }))
 }
 
-function inferFieldSensitivity(field: BuilderFormField): FieldSensitivity {
+export function getBuilderFieldSensitivity(field: BuilderFormField): FieldSensitivity {
+    if (field.type === "file") return "file"
+    if (field.sensitivity && field.sensitivity !== "operational" && field.sensitivity !== "campaign_safe") {
+        return field.sensitivity
+    }
     const mapping = field.surrogateFieldMapping
     if (mapping === "full_name") return "identity"
     if (mapping === "email" || mapping === "phone") return "contact"
     if (mapping === "state") return "campaign_safe"
-    if (field.type === "file") return "file"
     if (field.type === "textarea") return "free_text_unclassified"
     if (
         [
+            "donor_type",
             "num_deliveries",
             "num_csections",
             "has_child",
@@ -194,7 +199,7 @@ function inferFieldSensitivity(field: BuilderFormField): FieldSensitivity {
     if (["height_ft", "weight_lb", "weight_kg", "weight_lbs"].includes(mapping)) {
         return "sensitive_health"
     }
-    return "operational"
+    return field.sensitivity ?? "operational"
 }
 
 const toFieldRows = (
@@ -248,7 +253,7 @@ export function buildFormSchema(pages: BuilderFormPage[], metadata: BuilderSchem
                     rows: toFieldRows(field.rows),
                     min_rows: field.minRows ?? null,
                     max_rows: field.maxRows ?? null,
-                    sensitivity: inferFieldSensitivity(field),
+                    sensitivity: getBuilderFieldSensitivity(field),
                 }
             }),
         })),
@@ -298,6 +303,7 @@ export function schemaToPages(schema: FormSchema, mappings: Map<string, string>)
                 label: field.label,
                 helperText: field.help_text || "",
                 required: field.required ?? false,
+                ...(field.sensitivity ? { sensitivity: field.sensitivity } : {}),
                 surrogateFieldMapping: mappings.get(field.key) || "",
                 validation: field.validation ?? null,
                 showIf,
