@@ -16,7 +16,6 @@ from urllib.parse import urlencode
 from uuid import UUID
 
 import httpx
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -402,19 +401,6 @@ def get_oauth_connection(
             MetaOAuthConnection.organization_id == org_id,
         )
         .first()
-    )
-
-
-def get_oauth_connections_by_ids(
-    db: Session, connection_ids: list[UUID]
-) -> list[MetaOAuthConnection]:
-    """Get multiple Meta OAuth connections by their IDs."""
-    if not connection_ids:
-        return []
-    return list(
-        db.execute(select(MetaOAuthConnection).where(MetaOAuthConnection.id.in_(connection_ids)))
-        .scalars()
-        .all()
     )
 
 

@@ -490,20 +490,12 @@ async def list_available_assets(
     }
     existing_pages = {p.page_id: p for p in meta_page_service.list_meta_pages(db, session.org_id)}
 
-    connection_ids = {
-        a.oauth_connection_id for a in existing_accounts.values() if a.oauth_connection_id
-    }
-    connection_ids.update(
-        {p.oauth_connection_id for p in existing_pages.values() if p.oauth_connection_id}
-    )
-    connections = meta_oauth_service.get_oauth_connections_by_ids(db, list(connection_ids))
-    connection_owners = {c.id: c.meta_user_name for c in connections}
-
     # Helper to get connection owner name
     def get_owner_name(asset) -> str | None:
         if not asset or not asset.oauth_connection_id:
             return None
-        return connection_owners.get(asset.oauth_connection_id)
+        conn = meta_oauth_service.get_oauth_connection_by_id(db, asset.oauth_connection_id)
+        return conn.meta_user_name if conn else None
 
     # Build ad account options
     ad_account_options = []
@@ -590,42 +582,29 @@ async def connect_assets(
 
     results: dict[str, Any] = {"ad_accounts": [], "pages": [], "overwrites": []}
 
-    # Pre-fetch existing connections for overwrites
-    existing_ad_accounts = {
-        acc_id: meta_admin_service.get_ad_account_by_external_id(db, session.org_id, acc_id)
-        for acc_id in data.ad_account_ids
-    }
-    conn_ids = {
-        a.oauth_connection_id for a in existing_ad_accounts.values() if a and a.oauth_connection_id
-    }
-    existing_mappings = {
-        page_id: meta_page_service.get_mapping_by_page_id(db, session.org_id, page_id)
-        for page_id in data.page_ids
-    }
-    conn_ids.update(
-        {p.oauth_connection_id for p in existing_mappings.values() if p and p.oauth_connection_id}
-    )
-    connections = meta_oauth_service.get_oauth_connections_by_ids(db, list(conn_ids))
-    connection_owners = {c.id: c.meta_user_name for c in connections}
-
     # Connect ad accounts
     for account_id in data.ad_account_ids:
-        existing = existing_ad_accounts.get(account_id)
+        existing = meta_admin_service.get_ad_account_by_external_id(db, session.org_id, account_id)
 
         if existing and existing.oauth_connection_id != connection.id:
-            old_owner_name = connection_owners.get(existing.oauth_connection_id)
             if not data.overwrite_existing:
+                old_conn = meta_oauth_service.get_oauth_connection_by_id(
+                    db, existing.oauth_connection_id
+                )
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Asset {account_id} is connected by {old_owner_name if old_owner_name else 'another user'}",
+                    detail=f"Asset {account_id} is connected by {old_conn.meta_user_name if old_conn else 'another user'}",
                 )
 
             # Log overwrite
+            old_conn = meta_oauth_service.get_oauth_connection_by_id(
+                db, existing.oauth_connection_id
+            )
             results["overwrites"].append(
                 {
                     "asset_id": account_id,
                     "asset_type": "ad_account",
-                    "previous_user": old_owner_name if old_owner_name else "unknown",
+                    "previous_user": old_conn.meta_user_name if old_conn else "unknown",
                 }
             )
 
@@ -688,23 +667,28 @@ async def connect_assets(
         page_name = page_names.get(page_id)
 
         # Create/update mapping
-        existing = existing_mappings.get(page_id)
+        existing = meta_page_service.get_mapping_by_page_id(db, session.org_id, page_id)
         encrypted_page_token = encrypt_token(page_token) if page_token else None
 
         if existing:
             if existing.oauth_connection_id != connection.id:
-                old_owner_name = connection_owners.get(existing.oauth_connection_id)
                 if not data.overwrite_existing:
+                    old_conn = meta_oauth_service.get_oauth_connection_by_id(
+                        db, existing.oauth_connection_id
+                    )
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
-                        detail=f"Page {page_id} is connected by {old_owner_name if old_owner_name else 'another user'}",
+                        detail=f"Page {page_id} is connected by {old_conn.meta_user_name if old_conn else 'another user'}",
                     )
 
+                old_conn = meta_oauth_service.get_oauth_connection_by_id(
+                    db, existing.oauth_connection_id
+                )
                 results["overwrites"].append(
                     {
                         "asset_id": page_id,
                         "asset_type": "page",
-                        "previous_user": old_owner_name if old_owner_name else "unknown",
+                        "previous_user": old_conn.meta_user_name if old_conn else "unknown",
                     }
                 )
 
