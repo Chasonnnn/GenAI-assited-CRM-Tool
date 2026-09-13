@@ -174,8 +174,8 @@ describe("Dependency security guards", () => {
 
         expect(nextVersion).toBeDefined()
         expect(bundleAnalyzerVersion).toBeDefined()
-        expect(compareVersions(nextVersion!, "16.3.0")).toBeGreaterThanOrEqual(0)
-        expect(compareVersions(bundleAnalyzerVersion!, "16.3.0")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(nextVersion!, "16.3.3")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(bundleAnalyzerVersion!, "16.3.3")).toBeGreaterThanOrEqual(0)
     })
 
     it("holds React and TypeScript on the validated compatibility line", () => {
