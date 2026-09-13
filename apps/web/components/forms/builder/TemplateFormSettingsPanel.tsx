@@ -6,9 +6,12 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 
 type TemplateFormSettingsPanelProps = {
+    templateType: "surrogate" | "donor"
+    onTemplateTypeChange: (value: "surrogate" | "donor") => void
     formName: string
     formDescription: string
     publicEyebrow: string
@@ -33,6 +36,8 @@ type TemplateFormSettingsPanelProps = {
 }
 
 export function TemplateFormSettingsPanel({
+    templateType,
+    onTemplateTypeChange,
     formName,
     formDescription,
     publicEyebrow,
@@ -69,6 +74,21 @@ export function TemplateFormSettingsPanel({
                 </div>
 
                 <div className="space-y-6">
+                    <div className="space-y-2">
+                        <Label htmlFor="settings-template-type">Template type</Label>
+                        <Select value={templateType} onValueChange={(value) => {
+                            if (value === "surrogate" || value === "donor") onTemplateTypeChange(value)
+                        }}>
+                            <SelectTrigger id="settings-template-type" aria-label="Template type">
+                                <SelectValue>{(value: string | null) => value === "donor" ? "Donor" : "Surrogate"}</SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="surrogate">Surrogate</SelectItem>
+                                <SelectItem value="donor">Donor</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
                     <div className="space-y-2">
                         <Label htmlFor="settings-form-name">Internal template name</Label>
                         <Input

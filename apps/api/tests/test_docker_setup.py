@@ -48,7 +48,7 @@ def test_api_images_pin_python_and_uv_versions() -> None:
 
 def test_web_dockerfile_pins_node_and_optimizes_cache() -> None:
     content = _read("apps/web/Dockerfile")
-    expected = "FROM node:24.18.0-bullseye-slim"
+    expected = "FROM node:24.18.0-bookworm-slim"
     assert f"{expected} AS builder" in content
     assert f"{expected} AS runner" in content
 

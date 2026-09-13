@@ -291,6 +291,21 @@ def publish_platform_form_template(
 ) -> PlatformFormTemplate:
     _require_targets(publish_all, org_ids)
 
+    settings = template.settings_json or {}
+    if settings.get("lead_kind") in {"egg_donor", "sperm_donor"}:
+        from app.schemas.forms import FormFieldMappingsUpdate
+        from app.services import form_service
+
+        mappings = FormFieldMappingsUpdate.model_validate(
+            {"mappings": settings.get("mappings", [])}
+        )
+        form_service.validate_donor_intake_configuration(
+            schema_json=template.schema_json,
+            mappings={mapping.surrogate_field: mapping.field_key for mapping in mappings.mappings},
+            max_file_count=settings.get("max_file_count", form_service.DEFAULT_MAX_FILE_COUNT),
+            allowed_mime_types=settings.get("allowed_mime_types"),
+        )
+
     template.published_name = template.name
     template.published_description = template.description
     template.published_schema_json = template.schema_json

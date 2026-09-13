@@ -13,10 +13,13 @@ from app.db.models import (
     Donor,
     EmailTemplate,
     Form,
+    FormFieldMapping,
+    FormIntakeLink,
     FormSubmission,
     IntakeLead,
     MessageTemplate,
     Pipeline,
+    PublishedIntakeVersion,
     Queue,
     Surrogate,
     Task,
@@ -413,6 +416,39 @@ def _resolve_stage_ref(
     return str(stage.id), stage.stage_key
 
 
+def _form_intake_lead_kinds(db: Session, form: Form) -> set[str]:
+    if form.lead_kind not in DONOR_SUBJECT_TYPES:
+        return {form.lead_kind}
+    published_mappings = (
+        db.query(PublishedIntakeVersion.mapping_snapshot_json)
+        .join(FormIntakeLink, FormIntakeLink.published_version_id == PublishedIntakeVersion.id)
+        .filter(
+            FormIntakeLink.organization_id == form.organization_id,
+            FormIntakeLink.form_id == form.id,
+            PublishedIntakeVersion.organization_id == form.organization_id,
+            PublishedIntakeVersion.form_id == form.id,
+            PublishedIntakeVersion.lead_kind_snapshot.in_(DONOR_SUBJECT_TYPES),
+        )
+        .all()
+    )
+    if published_mappings:
+        shared = any(
+            mapping.get("surrogate_field") == "donor_type"
+            for (mappings,) in published_mappings
+            for mapping in mappings
+        )
+    else:
+        shared = (
+            db.query(FormFieldMapping.id)
+            .filter(
+                FormFieldMapping.form_id == form.id,
+                FormFieldMapping.surrogate_field == "donor_type",
+            )
+            .first()
+        ) is not None
+    return DONOR_SUBJECT_TYPES if shared else {form.lead_kind}
+
+
 def _canonicalize_trigger_config(
     db: Session,
     org_id: UUID,
@@ -442,11 +478,14 @@ def _canonicalize_trigger_config(
         if not form:
             raise ValueError("Workflow form not found in organization")
         configured_kind = config.get(intake_context_key)
-        if configured_kind is not None and configured_kind != form.lead_kind:
-            raise ValueError(
-                f"Workflow {intake_context_key} must match the selected form"
-            )
-        config[intake_context_key] = form.lead_kind
+        supported_kinds = _form_intake_lead_kinds(db, form)
+        if configured_kind is not None and configured_kind not in supported_kinds:
+            raise ValueError(f"Workflow {intake_context_key} must match the selected form")
+        if len(supported_kinds) == 1:
+            config[intake_context_key] = form.lead_kind
+        elif configured_kind is None:
+            # A form-only workflow covers both programs; explicit subtype filters remain exact.
+            config.pop(intake_context_key, None)
 
     if trigger_type not in {
         WorkflowTriggerType.STATUS_CHANGED,
