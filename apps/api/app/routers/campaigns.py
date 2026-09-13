@@ -319,6 +319,7 @@ def preview_filters(
         ignore_opt_out=bool(getattr(data, "include_unsubscribed", False)),
         scope=data.scope,
         owner_user_id=preview_owner,
+        viewer_session=session,
         channel=data.channel,
     )
 
@@ -347,6 +348,7 @@ def preview_recipients(
         limit=limit,
         ignore_opt_out=bool(getattr(campaign, "include_unsubscribed", False)),
         campaign=campaign,
+        viewer_session=session,
         channel=campaign.channel,
     )
 
@@ -452,7 +454,7 @@ def list_campaign_runs(
     _require_access(db, session, campaign, "view")
     _require_donor_recipient_access(db, session, campaign.recipient_type)
     return campaign_service.list_campaign_runs(
-        db, org_id=session.org_id, campaign_id=campaign_id, limit=limit
+        db, org_id=session.org_id, campaign_id=campaign_id, limit=limit, viewer_session=session
     )
 
 
@@ -473,7 +475,7 @@ def get_campaign_run(
     _require_access(db, session, campaign, "view")
     _require_donor_recipient_access(db, session, campaign.recipient_type)
 
-    return CampaignRunResponse.model_validate(run)
+    return campaign_service.campaign_run_response(db, run, session)
 
 
 @router.post(
@@ -550,6 +552,8 @@ def list_run_recipients(
         status=status,
         limit=limit,
         offset=offset,
+        org_id=session.org_id,
+        viewer_session=session,
     )
 
     return [CampaignRecipientResponse.model_validate(r) for r in recipients]
@@ -651,7 +655,11 @@ def publish_campaign(
 def _campaign_to_response(db: Session, campaign, session=None) -> CampaignResponse:
     """Convert campaign model to response with stats."""
     # Get latest run stats
-    latest_run = campaign_service.get_latest_run_for_campaign(db, campaign.id)
+    latest_run = campaign_service.get_latest_run_for_campaign(
+        db, campaign.id, org_id=campaign.organization_id
+    )
+    if latest_run is not None:
+        latest_run = campaign_service.campaign_run_response(db, latest_run, session)
 
     return CampaignResponse(
         scope=campaign.scope,

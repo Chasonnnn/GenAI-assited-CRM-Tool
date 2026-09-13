@@ -96,11 +96,91 @@ def _module(recipient_type):
 
 
 def visible_filter(db, session):
-    from sqlalchemy import or_, true
+    from sqlalchemy import and_, false, or_, true
 
-    if not enabled(db, session.org_id) or _administrator(session):
+    if not enabled(db, session.org_id):
         return true()
-    return or_(Campaign.scope == "org", Campaign.owner_user_id == session.user_id)
+    from app.services.workflow_execution_authority import active_session
+
+    actor = active_session(db, session.org_id, session.user_id)
+    if actor is None:
+        return false()
+    permissions = effective_permissions(db, actor)
+    if "view_campaigns" not in permissions:
+        return false()
+    recipient_types = [
+        kind
+        for kind in ("case", "intended_parent", "egg_donor", "sperm_donor")
+        if "view_" + _module(kind) in permissions
+    ]
+    return and_(
+        Campaign.organization_id == actor.org_id,
+        Campaign.recipient_type.in_(recipient_types),
+        true()
+        if _administrator(actor)
+        else or_(Campaign.scope == "org", Campaign.owner_user_id == actor.user_id),
+    )
+
+
+def viewer_entity_filter(db, session, org_id, recipient_type):
+    """Limit a read to the viewer without changing the execution audience."""
+    from sqlalchemy import false
+
+    from app.services import record_scope_service
+    from app.services.workflow_execution_authority import active_session
+
+    if session is None or session.org_id != org_id:
+        return false()
+    actor = active_session(db, org_id, session.user_id)
+    if actor is None or not _has(db, actor, "view_" + _module(recipient_type)):
+        return false()
+    kind = {
+        "case": "surrogate",
+        "intended_parent": "intended_parent",
+        "egg_donor": "donor",
+        "sperm_donor": "donor",
+    }[recipient_type]
+    return record_scope_service.build_visibility_filter(db, actor, kind)
+
+
+def viewer_recipient_filter(db, session, org_id):
+    """SQL predicate shared by recipient rows and aggregate counts."""
+    from sqlalchemy import and_, false, or_, select
+
+    from app.db.models import CampaignRecipient, Donor, IntendedParent, Surrogate
+    from app.services import record_scope_service
+    from app.services.workflow_execution_authority import active_session
+
+    if session is None or session.org_id != org_id:
+        return false()
+    actor = active_session(db, org_id, session.user_id)
+    if actor is None:
+        return false()
+    permissions = effective_permissions(db, actor)
+    if "view_campaigns" not in permissions:
+        return false()
+    branches = []
+    for kind, model, recipient_types in (
+        ("surrogate", Surrogate, ("case",)),
+        ("intended_parent", IntendedParent, ("intended_parent",)),
+        ("donor", Donor, ("egg_donor", "sperm_donor")),
+    ):
+        if "view_" + _module(recipient_types[0]) not in permissions:
+            continue
+        visibility = record_scope_service.build_visibility_filter(db, actor, kind)
+        for recipient_type in recipient_types:
+            ids = select(model.id).where(visibility)
+            if kind == "donor":
+                ids = ids.where(
+                    Donor.donor_type == ("egg" if recipient_type == "egg_donor" else "sperm")
+                )
+            branches.append(
+                and_(
+                    CampaignRecipient.entity_type == recipient_type,
+                    CampaignRecipient.entity_id.in_(ids),
+                )
+            )
+    return or_(*branches) if branches else false()
 
 
 def can_view(db, session, campaign, *, permissions=None):

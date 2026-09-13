@@ -369,6 +369,8 @@ def list_campaigns(
     viewer_session=None,
 ) -> tuple[list[CampaignListItem], int]:
     """List campaigns for an organization with optimized run stats query."""
+    if viewer_session is not None and viewer_session.org_id != org_id:
+        return [], 0
     # Base query for count
     base_query = db.query(Campaign).filter(Campaign.organization_id == org_id)
 
@@ -384,6 +386,7 @@ def list_campaigns(
     run_subq = (
         db.query(
             CampaignRun.campaign_id,
+            CampaignRun.id.label("run_id"),
             CampaignRun.total_count,
             CampaignRun.sent_count,
             CampaignRun.delivered_count,
@@ -405,6 +408,7 @@ def list_campaigns(
     query = (
         db.query(
             Campaign,
+            run_subq.c.run_id,
             run_subq.c.total_count,
             run_subq.c.sent_count,
             run_subq.c.delivered_count,
@@ -441,9 +445,21 @@ def list_campaigns(
     permissions = (
         campaign_access.effective_permissions(db, viewer_session) if viewer_session else None
     )
+    scoped_stats = (
+        viewer_run_statistics(
+            db, org_id, [row.run_id for row in rows if row.run_id], viewer_session
+        )
+        if viewer_session is not None and campaign_access.enabled(db, org_id)
+        else None
+    )
     result = []
     for row in rows:
         c = row[0]  # Campaign object
+        counts = (
+            scoped_stats.get(row.run_id, EMPTY_RUN_STATISTICS)
+            if scoped_stats is not None
+            else row._mapping
+        )
         if (
             viewer_session is not None
             and c.scope == "personal"
@@ -466,12 +482,12 @@ def list_campaigns(
                 status=c.status,
                 scheduled_at=c.scheduled_at,
                 include_unsubscribed=getattr(c, "include_unsubscribed", False),
-                total_recipients=row.total_count or 0,
-                sent_count=row.sent_count or 0,
-                delivered_count=row.delivered_count or 0,
-                failed_count=row.failed_count or 0,
-                opened_count=row.opened_count or 0,
-                clicked_count=row.clicked_count or 0,
+                total_recipients=counts["total_count"] or 0,
+                sent_count=counts["sent_count"] or 0,
+                delivered_count=counts["delivered_count"] or 0,
+                failed_count=counts["failed_count"] or 0,
+                opened_count=counts["opened_count"] or 0,
+                clicked_count=counts["clicked_count"] or 0,
                 created_at=c.created_at,
             )
         )
@@ -1026,9 +1042,15 @@ def preview_recipients(
     campaign=None,
     scope: str = "org",
     owner_user_id: UUID | None = None,
+    viewer_session=None,
 ) -> CampaignPreviewResponse:
     """Preview recipients matching the filter criteria."""
     _ensure_supported_campaign_channel(channel, recipient_type)
+    viewer_filter = (
+        campaign_access.viewer_entity_filter(db, viewer_session, org_id, recipient_type)
+        if viewer_session is not None and campaign_access.enabled(db, org_id)
+        else None
+    )
     if channel == "messaging":
         if ignore_opt_out:
             raise ValueError("include_unsubscribed is not available for messaging campaigns")
@@ -1042,6 +1064,8 @@ def preview_recipients(
             scope=scope,
             owner_user_id=owner_user_id,
         )
+        if viewer_filter is not None:
+            base_query = base_query.filter(viewer_filter)
         total_count = base_query.order_by(None).count()
         rows_query = _messaging_recipient_rows_query(
             db,
@@ -1052,6 +1076,8 @@ def preview_recipients(
             scope=scope,
             owner_user_id=owner_user_id,
         )
+        if viewer_filter is not None:
+            rows_query = rows_query.filter(viewer_filter)
         globally_allowed = or_(
             MessagingGlobalSuppression.id.is_(None),
             MessagingGlobalSuppression.active.is_(False),
@@ -1121,7 +1147,8 @@ def preview_recipients(
         owner_user_id=owner_user_id,
     )
 
-    entities, total_count = paginate_query_by_offset(query, offset=0, limit=limit)
+    if viewer_filter is not None:
+        query = query.filter(viewer_filter)
 
     # Get suppressed emails for this org (handle SA 2.0 Row objects)
     suppression_query = db.query(EmailSuppression.email, EmailSuppression.reason).filter(
@@ -1131,6 +1158,21 @@ def preview_recipients(
         suppression_query = suppression_query.filter(EmailSuppression.reason != "opt_out")
     suppression_rows = suppression_query.all()
     suppressed = {row[0].lower() for row in suppression_rows if row[0]}
+
+    if viewer_filter is not None:
+        from app.core.encryption import hash_email
+
+        model = _recipient_entity_model(recipient_type)
+        total_count = query.order_by(None).count()
+        eligible_query = (
+            query.filter(model.email_hash.notin_([hash_email(email) for email in suppressed]))
+            if suppressed
+            else query
+        )
+        entities, eligible_count = paginate_query_by_offset(eligible_query, offset=0, limit=limit)
+    else:
+        entities, total_count = paginate_query_by_offset(query, offset=0, limit=limit)
+        eligible_count = None
 
     stage_labels: dict[UUID, str] = {}
     if recipient_type in RECIPIENT_PIPELINE_ENTITY_TYPES:
@@ -1161,8 +1203,10 @@ def preview_recipients(
 
     return CampaignPreviewResponse(
         total_count=total_count,
-        eligible_count=len(recipients),
-        suppressed_count=max(total_count - len(recipients), 0),
+        eligible_count=eligible_count if eligible_count is not None else len(recipients),
+        suppressed_count=max(
+            total_count - (eligible_count if eligible_count is not None else len(recipients)), 0
+        ),
         sample_recipients=recipients[:limit],
     )
 
@@ -1997,8 +2041,68 @@ def project_campaign_message_delivery(
 # =============================================================================
 
 
+EMPTY_RUN_STATISTICS = {
+    key: 0
+    for key in (
+        "total_count",
+        "sent_count",
+        "delivered_count",
+        "failed_count",
+        "skipped_count",
+        "opened_count",
+        "clicked_count",
+    )
+}
+
+
+def viewer_run_statistics(db, org_id, run_ids, viewer_session) -> dict:
+    if not run_ids:
+        return {}
+    recipient = CampaignRecipient
+    query = (
+        db.query(
+            recipient.run_id,
+            func.count(recipient.id).label("total_count"),
+            func.count(recipient.id)
+            .filter(recipient.status.in_(("sent", "delivered")))
+            .label("sent_count"),
+            func.count(recipient.id)
+            .filter(recipient.status == "delivered")
+            .label("delivered_count"),
+            func.count(recipient.id).filter(recipient.status == "failed").label("failed_count"),
+            func.count(recipient.id).filter(recipient.status == "skipped").label("skipped_count"),
+            func.count(recipient.id).filter(recipient.opened_at.is_not(None)).label("opened_count"),
+            func.count(recipient.id)
+            .filter(recipient.clicked_at.is_not(None))
+            .label("clicked_count"),
+        )
+        .join(CampaignRun, CampaignRun.id == recipient.run_id)
+        .join(Campaign, Campaign.id == CampaignRun.campaign_id)
+        .filter(
+            CampaignRun.organization_id == org_id,
+            Campaign.organization_id == org_id,
+            recipient.run_id.in_(run_ids),
+            recipient.entity_type == Campaign.recipient_type,
+            campaign_access.visible_filter(db, viewer_session),
+            campaign_access.viewer_recipient_filter(db, viewer_session, org_id),
+        )
+        .group_by(recipient.run_id)
+    )
+    return {
+        row.run_id: {key: row._mapping[key] for key in EMPTY_RUN_STATISTICS} for row in query.all()
+    }
+
+
+def campaign_run_response(db, run, viewer_session=None) -> CampaignRunResponse:
+    response = CampaignRunResponse.model_validate(run)
+    if viewer_session is not None and campaign_access.enabled(db, run.organization_id):
+        counts = viewer_run_statistics(db, run.organization_id, [run.id], viewer_session)
+        response = response.model_copy(update=counts.get(run.id, EMPTY_RUN_STATISTICS))
+    return response
+
+
 def list_campaign_runs(
-    db: Session, org_id: UUID, campaign_id: UUID, limit: int = 20
+    db: Session, org_id: UUID, campaign_id: UUID, limit: int = 20, *, viewer_session=None
 ) -> list[CampaignRunResponse]:
     """List runs for a campaign."""
     runs = (
@@ -2012,7 +2116,19 @@ def list_campaign_runs(
         .all()
     )
 
-    return [CampaignRunResponse.model_validate(r) for r in runs]
+    stats = (
+        viewer_run_statistics(db, org_id, [run.id for run in runs], viewer_session)
+        if viewer_session is not None and campaign_access.enabled(db, org_id)
+        else None
+    )
+    return [
+        CampaignRunResponse.model_validate(run).model_copy(
+            update=stats.get(run.id, EMPTY_RUN_STATISTICS)
+        )
+        if stats is not None
+        else CampaignRunResponse.model_validate(run)
+        for run in runs
+    ]
 
 
 def get_campaign_run(db: Session, org_id: UUID, run_id: UUID) -> CampaignRun | None:
@@ -2020,7 +2136,6 @@ def get_campaign_run(db: Session, org_id: UUID, run_id: UUID) -> CampaignRun | N
     return (
         db.query(CampaignRun)
         .filter(CampaignRun.id == run_id, CampaignRun.organization_id == org_id)
-        .options(joinedload(CampaignRun.recipients))
         .first()
     )
 
@@ -2031,9 +2146,28 @@ def list_run_recipients(
     status: str | None = None,
     limit: int = 100,
     offset: int = 0,
+    *,
+    org_id: UUID | None = None,
+    viewer_session=None,
 ) -> list[CampaignRecipient]:
     """List recipients for a campaign run."""
     query = db.query(CampaignRecipient).filter(CampaignRecipient.run_id == run_id)
+
+    if viewer_session is not None:
+        query = (
+            query.join(CampaignRun, CampaignRun.id == CampaignRecipient.run_id)
+            .join(Campaign, Campaign.id == CampaignRun.campaign_id)
+            .filter(
+                CampaignRun.organization_id == org_id,
+                Campaign.organization_id == org_id,
+                CampaignRecipient.entity_type == Campaign.recipient_type,
+            )
+        )
+        if campaign_access.enabled(db, org_id):
+            query = query.filter(
+                campaign_access.visible_filter(db, viewer_session),
+                campaign_access.viewer_recipient_filter(db, viewer_session, org_id),
+            )
 
     if status:
         query = query.filter(CampaignRecipient.status == status)
@@ -2044,14 +2178,14 @@ def list_run_recipients(
 def get_latest_run_for_campaign(
     db: Session,
     campaign_id: UUID,
+    *,
+    org_id: UUID | None = None,
 ) -> CampaignRun | None:
     """Fetch the latest run for a campaign."""
-    return (
-        db.query(CampaignRun)
-        .filter(CampaignRun.campaign_id == campaign_id)
-        .order_by(CampaignRun.started_at.desc())
-        .first()
-    )
+    query = db.query(CampaignRun).filter(CampaignRun.campaign_id == campaign_id)
+    if org_id is not None:
+        query = query.filter(CampaignRun.organization_id == org_id)
+    return query.order_by(CampaignRun.started_at.desc()).first()
 
 
 # =============================================================================
