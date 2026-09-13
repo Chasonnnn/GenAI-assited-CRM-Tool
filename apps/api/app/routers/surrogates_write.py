@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
 from app.core.policies import POLICIES
+from app.core.record_creation import require_record_creation
 from app.core.surrogate_access import (
     can_modify_surrogate,
     check_surrogate_access,
@@ -57,7 +58,7 @@ def _check_v2_record_access(db, session, surrogate, *, allow_archived=False):
 def create_surrogate(
     request: Request,
     data: SurrogateCreate,
-    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
+    session: UserSession = Depends(require_record_creation("surrogates")),
     db: Session = Depends(get_db),
 ) -> SurrogateRead:
     """Create a new surrogate."""

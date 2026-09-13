@@ -380,6 +380,17 @@ def get_intended_parent(
     return query.first()
 
 
+def validate_create_owner(
+    db: Session, org_id: UUID, owner_type: str | None, owner_id: UUID | None
+) -> None:
+    from app.services import permission_policy_service, task_service
+
+    if permission_policy_service.is_enabled(db, org_id):
+        if (owner_type is None) != (owner_id is None):
+            raise ValueError("owner_type and owner_id must be provided together")
+        task_service.validate_task_owner(db, org_id, owner_type, owner_id, allow_none=True)
+
+
 def create_intended_parent(
     db: Session,
     org_id: UUID,

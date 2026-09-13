@@ -7,6 +7,8 @@ import { useParams, useRouter } from "next/navigation"
 import { toast } from "@/components/ui/toast"
 
 import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
+import { canCreateIntakeRecord } from "@/lib/forms/record-creation-access"
 import {
     DEFAULT_FORM_DONOR_FIELD_OPTIONS,
     DEFAULT_FORM_SURROGATE_FIELD_OPTIONS,
@@ -291,6 +293,7 @@ export function useAutomationFormBuilderPage() {
     const id = Array.isArray(idParam) ? idParam[0] : idParam ?? "new"
     const router = useRouter()
     const { user } = useAuth()
+    const { data: permissions } = useEffectivePermissions(user?.user_id ?? null)
     const isNewForm = id === "new"
     const formId = isNewForm ? null : id
     const formKey = formId ?? "new"
@@ -890,6 +893,7 @@ export function useAutomationFormBuilderPage() {
     }
 
     const handlePromoteLeadFromSubmission = async (submission: FormSubmissionRead) => {
+        if (!canCreateIntakeRecord(permissions, submission.lead_kind)) return
         if (!submission.intake_lead_id) {
             toast.error("No intake lead linked to this submission")
             return
@@ -1108,6 +1112,7 @@ export function useAutomationFormBuilderPage() {
             onAllowedMimeTypesTextChange: (value: string) => patchState({ allowedMimeTypesText: value }),
         },
         submissionsPanelProps: {
+            canPromoteLead: (submission: FormSubmissionRead) => canCreateIntakeRecord(permissions, submission.lead_kind),
             formId,
             pendingSubmissionHistory,
             processedSubmissionHistory,

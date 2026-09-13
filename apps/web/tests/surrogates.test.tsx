@@ -176,7 +176,7 @@ function buildSurrogateListItem(
 
 describe('SurrogatesPage', () => {
     beforeEach(() => {
-        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 1, permissions: [] } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 1, permissions: ["edit_surrogates"] } })
         // Reset mocks default return values
         mockSearchParams.delete('page')
         mockSearchParams.delete('stage')
@@ -224,6 +224,27 @@ describe('SurrogatesPage', () => {
         })
         mockUseSurrogateCreatedDates.mockReturnValue({ data: [] })
         mockUseQueues.mockReturnValue({ data: [] })
+    })
+
+    it("uses Create independently of Edit under V2 and closes on revocation", async () => {
+        mockUseSurrogates.mockReturnValue({ data: { items: [], total: 0, page: 1, per_page: 30 }, isLoading: false })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_surrogates", "edit_surrogates"] } })
+        const { rerender } = render(<SurrogatesPage />)
+        expect(screen.queryByRole("button", { name: "New Surrogates" })).not.toBeInTheDocument()
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_surrogates", "create_surrogates"] } })
+        rerender(<SurrogatesPage />)
+        fireEvent.click(screen.getByRole("button", { name: "New Surrogates" }))
+        expect(screen.getByRole("dialog")).toBeInTheDocument()
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_surrogates"] } })
+        rerender(<SurrogatesPage />)
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+    })
+
+    it.each([{ data: undefined, isLoading: true }, { data: undefined, isError: true }])("hides Create until permissions load successfully", (result) => {
+        mockUseSurrogates.mockReturnValue({ data: { items: [], total: 0, page: 1, per_page: 30 }, isLoading: false })
+        mockUseEffectivePermissions.mockReturnValue(result)
+        render(<SurrogatesPage />)
+        expect(screen.queryByRole("button", { name: "New Surrogates" })).not.toBeInTheDocument()
     })
 
     it('renders loading state', () => {

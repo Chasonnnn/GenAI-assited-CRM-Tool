@@ -14,6 +14,7 @@ from app.core.deps import (
 )
 from app.core.permissions import PermissionKey
 from app.core.policies import POLICIES
+from app.core.record_creation import require_record_creation
 from app.db.enums import AuditEventType, EntityType, Role
 from app.schemas.activity import EntityActivityRead, EntityActivityResponse
 from app.schemas.auth import UserSession
@@ -164,7 +165,7 @@ def create_donor(
     db: Annotated[Session, Depends(get_db)],
     session: Annotated[
         UserSession,
-        Depends(require_permission(POLICIES["donors"].actions["edit"])),
+        Depends(require_record_creation("donors")),
     ],
 ) -> DonorRead:
     if permission_policy_service.is_enabled(db, session.org_id):

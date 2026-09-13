@@ -511,8 +511,9 @@ function DonorFiltersPanel({
 export default function DonorsPageClient() {
     const { user } = useAuth()
     const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
-    const canEditDonors = user?.role === "developer" ||
-        permissionsQuery.data?.permissions.includes("edit_donors") === true
+    const canCreateDonors = permissionsQuery.data?.permissions.includes(
+        permissionsQuery.data.policy_version === 2 ? "create_donors" : "edit_donors",
+    ) === true
     const searchParams = useSearchParams()
     const { replace } = useRouter()
     const query = searchParams.toString()
@@ -613,6 +614,7 @@ export default function DonorsPageClient() {
     }
 
     const handleCreate = async () => {
+        if (!canCreateDonors) return
         try {
             await createDonor.mutateAsync({
                 donor_type: donorType,
@@ -671,7 +673,7 @@ export default function DonorsPageClient() {
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="flex h-16 items-center justify-between px-6">
                     <h1 className="text-2xl font-semibold">Donors</h1>
-                    {canEditDonors ? (
+                    {canCreateDonors ? (
                         <Button
                             onClick={() => {
                                 resetCreateForm()
@@ -762,7 +764,7 @@ export default function DonorsPageClient() {
             <CreateDonorDialog
                 donorType={donorType}
                 formValues={formValues}
-                open={isCreateOpen}
+                open={isCreateOpen && canCreateDonors}
                 pending={createDonor.isPending}
                 onOpenChange={(open) => {
                     if (open) setIsCreateOpen(true)

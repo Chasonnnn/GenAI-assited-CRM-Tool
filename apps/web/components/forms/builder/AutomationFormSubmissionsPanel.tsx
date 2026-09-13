@@ -29,6 +29,7 @@ type RetryMatchOptions = {
 }
 
 type AutomationFormSubmissionsPanelProps = {
+    canPromoteLead?: ((submission: FormSubmissionRead) => boolean) | undefined
     canReview?: boolean
     showWorkflowApprovals?: boolean
     formId: string | null
@@ -332,11 +333,13 @@ function LeadPromotionSubmissionCard({
     readAnswerValue,
     promoteIntakeLeadPending,
     onPromoteLeadFromSubmission,
+    canPromoteLead,
 }: {
     submission: FormSubmissionRead
     readAnswerValue: SubmissionIdentityReader
     promoteIntakeLeadPending: boolean
     onPromoteLeadFromSubmission: (submission: FormSubmissionRead) => Promise<void> | void
+    canPromoteLead?: ((submission: FormSubmissionRead) => boolean) | undefined
 }) {
     const identity = readSubmissionIdentity(submission, readAnswerValue)
 
@@ -349,7 +352,7 @@ function LeadPromotionSubmissionCard({
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={promoteIntakeLeadPending || !submission.intake_lead_id}
+                    disabled={promoteIntakeLeadPending || !submission.intake_lead_id || (canPromoteLead ? !canPromoteLead(submission) : false)}
                     onClick={() => void onPromoteLeadFromSubmission(submission)}
                 >
                     {isDonorFormLeadKind(submission.lead_kind)
@@ -366,12 +369,14 @@ function LeadPromotionQueueCard({
     readAnswerValue,
     promoteIntakeLeadPending,
     onPromoteLeadFromSubmission,
+    canPromoteLead,
 }: Pick<
     AutomationFormSubmissionsPanelProps,
     | "leadQueueSubmissions"
     | "readAnswerValue"
     | "promoteIntakeLeadPending"
     | "onPromoteLeadFromSubmission"
+    | "canPromoteLead"
 >) {
     return (
         <Card>
@@ -391,6 +396,7 @@ function LeadPromotionQueueCard({
                                 readAnswerValue={readAnswerValue}
                                 promoteIntakeLeadPending={promoteIntakeLeadPending}
                                 onPromoteLeadFromSubmission={onPromoteLeadFromSubmission}
+                                canPromoteLead={canPromoteLead}
                             />
                         ))}
                     </div>
@@ -411,6 +417,7 @@ function SubmissionReviewQueues({
     onSelectQueueSubmission,
     onResolveSubmissionToLead,
     onPromoteLeadFromSubmission,
+    canPromoteLead,
 }: Pick<
     AutomationFormSubmissionsPanelProps,
     | "formId"
@@ -423,6 +430,7 @@ function SubmissionReviewQueues({
     | "onSelectQueueSubmission"
     | "onResolveSubmissionToLead"
     | "onPromoteLeadFromSubmission"
+    | "canPromoteLead"
 >) {
     if (!formId) {
         return (
@@ -449,6 +457,7 @@ function SubmissionReviewQueues({
                 readAnswerValue={readAnswerValue}
                 promoteIntakeLeadPending={promoteIntakeLeadPending}
                 onPromoteLeadFromSubmission={onPromoteLeadFromSubmission}
+                canPromoteLead={canPromoteLead}
             />
         </div>
     )
@@ -954,6 +963,7 @@ export function AutomationFormSubmissionsPanel({
     onResolveSubmissionToLead,
     onRetrySubmissionMatch,
     onPromoteLeadFromSubmission,
+    canPromoteLead,
 }: AutomationFormSubmissionsPanelProps) {
     return (
         <div className="mx-auto max-w-6xl space-y-6">
@@ -975,6 +985,7 @@ export function AutomationFormSubmissionsPanel({
                 onSelectQueueSubmission={onSelectQueueSubmission}
                 onResolveSubmissionToLead={onResolveSubmissionToLead}
                 onPromoteLeadFromSubmission={onPromoteLeadFromSubmission}
+                canPromoteLead={canPromoteLead}
             />}
             <SubmissionHistoryCard
                 canReview={canReview}

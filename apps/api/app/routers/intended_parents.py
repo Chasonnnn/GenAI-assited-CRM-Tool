@@ -15,6 +15,7 @@ from app.core.deps import (
 )
 from app.core.permissions import PermissionKey
 from app.core.policies import POLICIES
+from app.core.record_creation import require_record_creation
 from app.db.enums import AuditEventType, EntityType, Role
 from app.schemas.activity import EntityActivityRead, EntityActivityResponse
 from app.schemas.auth import UserSession
@@ -156,10 +157,14 @@ def create_intended_parent(
     data: IntendedParentCreate,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[object, "fastapi_param"] = Depends(
-        require_permission(POLICIES["intended_parents"].actions["edit"])
+        require_record_creation("intended_parents")
     ),
 ):
     """Create a new intended parent."""
+    try:
+        ip_service.validate_create_owner(db, session.org_id, data.owner_type, data.owner_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     # Check for duplicate email
     existing = ip_service.get_ip_by_email(db, data.email, session.org_id)
     if existing:

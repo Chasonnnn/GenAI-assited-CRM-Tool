@@ -54,6 +54,10 @@ vi.mock("@/components/ui/toast", () => ({
     },
 }))
 
+vi.mock("@/lib/hooks/use-permissions", () => ({
+    useEffectivePermissions: () => ({ data: { policy_version: 1, permissions: ["edit_surrogates", "edit_donors"] } }),
+}))
+
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => ({
         user: {

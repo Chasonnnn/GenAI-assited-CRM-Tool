@@ -558,6 +558,9 @@ export function SurrogatesPageClient() {
     const { user } = useAuth()
     const { data: assignees } = useAssignees()
     const { data: permissions } = useEffectivePermissions(user?.user_id ?? null)
+    const canCreateSurrogates = permissions?.permissions.includes(
+        permissions.policy_version === 2 ? "create_surrogates" : "edit_surrogates",
+    ) === true
     const canUseOrgAssigneeFilter = permissions?.policy_version === 2
         ? permissions.permissions.includes("view_surrogates")
         : user?.role === "admin" || user?.role === "developer" || user?.role === "case_manager"
@@ -1134,6 +1137,7 @@ export function SurrogatesPageClient() {
     }
 
     const handleCreate = async () => {
+        if (!canCreateSurrogates) return
         try {
             const fullName = createForm.full_name.trim()
             const email = createForm.email.trim()
@@ -1178,10 +1182,10 @@ export function SurrogatesPageClient() {
                                 Mass Edit
                             </Button>
                         )}
-                        <Button onClick={() => setIsCreateOpen(true)}>
+                        {canCreateSurrogates && <Button onClick={() => setIsCreateOpen(true)}>
                             <PlusIcon className="mr-2 size-4" />
                             New Surrogates
-                        </Button>
+                        </Button>}
                     </div>
                 </div>
             </div>
@@ -1438,7 +1442,7 @@ export function SurrogatesPageClient() {
             </div>
 
             {/* Create Modal */}
-            <Dialog open={isCreateOpen} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) resetCreateForm() }}>
+            <Dialog open={isCreateOpen && canCreateSurrogates} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) resetCreateForm() }}>
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
                         <DialogTitle>New Surrogates</DialogTitle>

@@ -293,7 +293,7 @@ vi.mock('@/lib/hooks/use-attachments', () => ({
 vi.mock('@/lib/hooks/use-ai', () => ({
     useSummarizeSurrogate: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useDraftEmail: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useAISettings: () => ({ data: { is_enabled: false } }),
+    useAIAvailability: () => ({ data: { is_enabled: false } }),
 }))
 
 vi.mock('@/lib/hooks/use-pipelines', () => ({

@@ -4,6 +4,8 @@ import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
+import { canCreateIntakeRecord } from "@/lib/forms/record-creation-access"
+import type { FormSubmissionRead } from "@/lib/api/forms"
 import { listSubmissionReviewForms } from "@/lib/api/forms"
 import { useFormSubmissions, usePromoteIntakeLead, useResolveSubmissionMatch, useRetrySubmissionMatch, useSubmissionMatchCandidates } from "@/lib/hooks/use-forms"
 import { AutomationFormSubmissionsPanel } from "@/components/forms/builder/AutomationFormSubmissionsPanel"
@@ -21,10 +23,12 @@ export default function FormSubmissionsPage() {
     const permissions = access.data?.permissions ?? []
     const v2 = (access.data?.policy_version ?? 1) >= 2
     if (!permissions.includes(v2 ? "view_form_submissions" : "manage_forms")) return <div className="p-6"><h1 className="text-xl font-semibold">Form submissions unavailable</h1></div>
-    return <SubmissionWorkspace canReview={permissions.includes(v2 ? "review_form_submissions" : "manage_forms")} />
+    return <SubmissionWorkspace canPromoteLead={submission => canCreateIntakeRecord(access.data, submission.lead_kind)} canReview={permissions.includes(v2 ? "review_form_submissions" : "manage_forms")} />
 }
 
-function SubmissionWorkspace({canReview}: {canReview: boolean}) {
+type SubmissionAccess = {canReview: boolean; canPromoteLead: (submission: FormSubmissionRead) => boolean}
+
+function SubmissionWorkspace({canReview, canPromoteLead}: SubmissionAccess) {
     const [chosenForm, setChosenForm] = useState<string | null>(null)
     const forms = useQuery({queryKey: ["forms", "submission-review"], queryFn: listSubmissionReviewForms})
     const formId = forms.data?.find(form => form.id === chosenForm)?.id ?? forms.data?.[0]?.id ?? null
@@ -35,11 +39,11 @@ function SubmissionWorkspace({canReview}: {canReview: boolean}) {
                 <SelectContent>{forms.data?.map(form => <SelectItem key={form.id} value={form.id}>{form.name}</SelectItem>)}</SelectContent>
             </Select>
         </div>
-        {forms.isLoading ? <Skeleton className="h-48" /> : forms.isError ? <div role="alert" className="space-y-2"><p>Unable to load submission forms.</p><Button variant="outline" onClick={() => {void forms.refetch()}}>Retry</Button></div> : formId ? <SubmissionQueue key={formId} formId={formId} canReview={canReview} /> : <p className="text-muted-foreground">No submissions available</p>}
+        {forms.isLoading ? <Skeleton className="h-48" /> : forms.isError ? <div role="alert" className="space-y-2"><p>Unable to load submission forms.</p><Button variant="outline" onClick={() => {void forms.refetch()}}>Retry</Button></div> : formId ? <SubmissionQueue key={formId} formId={formId} canReview={canReview} canPromoteLead={canPromoteLead} /> : <p className="text-muted-foreground">No submissions available</p>}
     </div>
 }
 
-function SubmissionQueue({formId, canReview}: {formId: string; canReview: boolean}) {
+function SubmissionQueue({formId, canReview, canPromoteLead}: SubmissionAccess & {formId: string}) {
     const [filter, setFilter] = useState<"all" | "pending" | "processed">("all")
     const [selected, setSelected] = useState<string | null>(null)
     const [manualId, setManualId] = useState("")
@@ -65,7 +69,7 @@ function SubmissionQueue({formId, canReview}: {formId: string; canReview: boolea
     return <>
         {candidates.isError && <div role="alert" className="flex items-center gap-3"><p>Unable to load matching records.</p><Button variant="outline" onClick={() => {void candidates.refetch()}}>Retry matches</Button></div>}
         <AutomationFormSubmissionsPanel {...presentation}
-            canReview={canReview} showWorkflowApprovals={false} formId={formId}
+            canReview={canReview} canPromoteLead={canPromoteLead} showWorkflowApprovals={false} formId={formId}
             pendingSubmissionHistory={pending} processedSubmissionHistory={processed}
             ambiguousSubmissions={rows.filter(row => row.match_status === "ambiguous_review")}
             leadQueueSubmissions={rows.filter(row => row.match_status === "lead_created" && !row.surrogate_id && !row.donor_id)}
@@ -82,7 +86,7 @@ function SubmissionQueue({formId, canReview}: {formId: string; canReview: boolea
             onResolveSubmissionToSurrogate={link}
             onResolveSubmissionToLead={submissionId => perform(() => resolve.mutateAsync({submissionId, payload: {create_intake_lead: true, review_notes: notes.trim() || null}}), "Submission moved to intake")}
             onRetrySubmissionMatch={(submission, options, message) => perform(() => retry.mutateAsync({submissionId: submission.id, payload: {unlink_surrogate: options.unlinkSurrogate ?? false, unlink_intake_lead: options.unlinkIntakeLead ?? false, rerun_auto_match: options.rerunAutoMatch ?? true, create_intake_lead_if_unmatched: options.createIntakeLeadIfUnmatched ?? false, review_notes: notes.trim() || null}}), message)}
-            onPromoteLeadFromSubmission={submission => {if (submission.intake_lead_id) return perform(() => promote.mutateAsync({leadId: submission.intake_lead_id!}), "Intake record created")}}
+            onPromoteLeadFromSubmission={submission => {if (submission.intake_lead_id && canPromoteLead(submission)) return perform(() => promote.mutateAsync({leadId: submission.intake_lead_id!}), "Intake record created")}}
         />
         {rows.length === limit && limit < 1000 && <Button variant="outline" onClick={() => setLimit(value => Math.min(1000, value + 100))}>Load more</Button>}
     </>

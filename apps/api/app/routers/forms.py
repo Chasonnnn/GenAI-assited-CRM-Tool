@@ -26,8 +26,8 @@ from app.core.deps import (
     require_csrf_header,
     require_permission,
 )
-from app.core.permissions import PermissionKey
 from app.core.policies import POLICIES
+from app.core.record_creation import check_record_creation
 from app.core.surrogate_access import (
     check_surrogate_access,
     ensure_can_manage_surrogate_priority,
@@ -1526,17 +1526,7 @@ def get_intake_lead(
 @router.post(
     "/intake-leads/{lead_id}/promote",
     response_model=IntakeLeadPromoteResponse,
-    dependencies=[
-        Depends(
-            require_any_permissions(
-                [
-                    PermissionKey.SURROGATES_EDIT,
-                    PermissionKey.DONORS_EDIT,
-                ]
-            )
-        ),
-        Depends(require_csrf_header),
-    ],
+    dependencies=[Depends(require_csrf_header)],
 )
 def promote_intake_lead(
     lead_id: UUID,
@@ -1550,21 +1540,11 @@ def promote_intake_lead(
 
     form_submission_access.check_intake_lead(db, session, lead, write=True)
 
-    from app.services import permission_service
-
-    required_permission = (
-        PermissionKey.DONORS_EDIT.value
-        if lead.lead_type in {"egg_donor", "sperm_donor"}
-        else PermissionKey.SURROGATES_EDIT.value
-    )
-    if not permission_service.check_permission(
+    check_record_creation(
         db,
-        session.org_id,
-        session.user_id,
-        session.role.value,
-        required_permission,
-    ):
-        raise HTTPException(status_code=403, detail=f"Missing permission: {required_permission}")
+        session,
+        "donors" if lead.lead_type in DONOR_LEAD_KINDS else "surrogates",
+    )
 
     if body.is_priority and lead.lead_type == "surrogate":
         ensure_can_manage_surrogate_priority(session.role)

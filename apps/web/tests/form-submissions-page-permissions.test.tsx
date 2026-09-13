@@ -85,6 +85,18 @@ describe("standalone form submission access", () => {
         expect(mocks.resolve).not.toHaveBeenCalled()
     })
 
+    it.each(["surrogate", "egg_donor", "sperm_donor"] as const)("requires the exact Create action to promote %s leads", (lead_kind) => {
+        const module = lead_kind === "surrogate" ? "surrogates" : "donors"
+        const name = lead_kind === "surrogate" ? "Promote Lead" : lead_kind === "egg_donor" ? "Promote to Egg Donor" : "Promote to Sperm Donor"
+        mocks.submissions.mockReturnValue({ data: [{ ...submission(), lead_kind, match_status: "lead_created", intake_lead_id: "lead-1" }], isLoading: false })
+        mocks.access.mockReturnValue({ data: { policy_version: 2, permissions: ["view_form_submissions", "review_form_submissions", `edit_${module}`] } })
+        const view = render(<FormSubmissionsPage />)
+        expect(screen.getByRole("button", { name })).toBeDisabled()
+        mocks.access.mockReturnValue({ data: { policy_version: 2, permissions: ["view_form_submissions", "review_form_submissions", `create_${module}`] } })
+        view.rerender(<FormSubmissionsPage />)
+        expect(screen.getByRole("button", { name })).toBeEnabled()
+    })
+
     it("allows an authorized reviewer to resolve an ambiguous submission", async () => {
         mocks.access.mockReturnValue({ data: { policy_version: 2, permissions: ["view_form_submissions", "review_form_submissions"] } })
         render(<FormSubmissionsPage />)
