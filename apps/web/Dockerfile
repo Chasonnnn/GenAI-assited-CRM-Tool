@@ -2,7 +2,7 @@
 
 FROM node:24.18.0-bullseye-slim AS builder
 
-RUN apt-get -o Acquire::Check-Valid-Until=false update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
