@@ -330,7 +330,9 @@ def get_reprocess_eligibility_for_leads(
     for lead in leads:
         effective_lead_kind = getattr(lead, "lead_kind", None) or lead_kind
         subject_group = (
-            "donor" if effective_lead_kind in {"egg_donor", "sperm_donor"} else "surrogate"
+            "donor"
+            if effective_lead_kind in {"egg_donor", "sperm_donor"}
+            else "surrogate"
         )
         subject_group_by_lead[lead.id] = subject_group
         email = _extract_lead_email(lead)
@@ -477,32 +479,6 @@ def build_mapping_preview(
     has_live_leads = len(leads) > 0
 
     if has_live_leads:
-        # Performance optimization: prefetch MetaAd records to avoid N+1 queries.
-        # Previously, if a lead lacked an ad name but had an ad id, a separate DB
-        # query was made for each lead to look up the ad name. We now bulk fetch them.
-        ad_ids_to_fetch = set()
-        for lead in leads:
-            raw = lead.field_data_raw or lead.field_data or {}
-            if "meta_ad_name" in keys:
-                ad_name = raw.get("meta_ad_name") or raw.get("ad_name")
-                if not ad_name:
-                    ad_id = raw.get("meta_ad_id") or raw.get("ad_id")
-                    if ad_id:
-                        ad_ids_to_fetch.add(str(ad_id))
-
-        meta_ads_by_id = {}
-        if ad_ids_to_fetch:
-            meta_ads = (
-                db.query(MetaAd.ad_external_id, MetaAd.ad_name)
-                .filter(
-                    MetaAd.organization_id == form.organization_id,
-                    MetaAd.ad_external_id.in_(list(ad_ids_to_fetch)),
-                )
-                .all()
-            )
-            for meta_ad_external_id, meta_ad_name in meta_ads:
-                meta_ads_by_id[meta_ad_external_id] = meta_ad_name
-
         for lead in leads:
             raw = lead.field_data_raw or lead.field_data or {}
             row: dict[str, str] = {}
@@ -517,7 +493,15 @@ def build_mapping_preview(
                     if not ad_name:
                         ad_id = raw.get("meta_ad_id") or raw.get("ad_id")
                         if ad_id:
-                            ad_name = meta_ads_by_id.get(str(ad_id))
+                            meta_ad = (
+                                db.query(MetaAd)
+                                .filter(
+                                    MetaAd.organization_id == form.organization_id,
+                                    MetaAd.ad_external_id == str(ad_id),
+                                )
+                                .first()
+                            )
+                            ad_name = meta_ad.ad_name if meta_ad else None
                     row[key] = _format_sample_value(ad_name)
                 elif key == "meta_form_name":
                     row[key] = form.form_name or ""
@@ -774,7 +758,9 @@ def _validate_mapping_targets(column_mappings: list[dict], lead_kind: str) -> No
         }
     )
     if unsupported_fields:
-        raise ValueError("Unsupported donor mapping field(s): " + ", ".join(unsupported_fields))
+        raise ValueError(
+            "Unsupported donor mapping field(s): " + ", ".join(unsupported_fields)
+        )
 
 
 def _format_sample_value(value: object) -> str:
