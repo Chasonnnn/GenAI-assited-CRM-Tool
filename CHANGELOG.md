@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.63](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.62...surrogacy-crm-platform-v0.91.63) (2026-09-13)
+
+
+### Features
+
+* show the theme toggle tooltip on hover and focus ([d449329](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d449329a1edab6b5c643fa1acd679b9e2e3dd828))
+
+
+### Bug Fixes
+
+* batch default pipeline discovery during rollout ([9225601](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9225601fa03a1b8b5622de3ef28a7139b536a43c))
+* batch import corrections and handle normalized duplicates ([846ae04](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/846ae04fdd719b1314a87e3da8b7722ac3d96978))
+* batch tenant-scoped Meta preview ad lookups ([01bcc06](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/01bcc0600736e8c90dd433b710feebae6eceface))
+* consolidate validated queue repairs and security updates ([ed2f1cd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ed2f1cd7552a7596efc8e8bd77139de74a271bf3))
+* isolate Google Tasks reconciliation from request handling ([f3f65ba](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f3f65bad7d8ea66aed1bf4a8917ddb64d485ff39))
+* make Meta asset connections atomic and tenant scoped ([b3aecc4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b3aecc43437f7d6665dcb1b6c2ce5d35ff0244ae))
+* patch frontend dependency vulnerabilities ([24fc807](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/24fc8070c0b06987b0885937e5c957edee4b2584))
+* patch Python HTTP client dependencies ([639ec5a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/639ec5a18637de2b297d8702fb93a8b98146ba6f))
+* remove unused system packages from the web build ([b11201f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b11201f07a24775edb71ff3f2debd266c555f590))
+
 ## [0.91.62](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.61...surrogacy-crm-platform-v0.91.62) (2026-09-07)
 
 
