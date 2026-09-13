@@ -351,25 +351,31 @@ def rollout_surrogate_default_pipelines(
     apply: bool = False,
     user_id: UUID | None = None,
 ) -> list[dict[str, object]]:
-    query = db.query(Organization).order_by(Organization.slug)
+    query = db.query(Organization.id, Organization.slug).order_by(Organization.slug)
     if organization_ids:
         query = query.filter(Organization.id.in_(organization_ids))
     if org_slugs:
         query = query.filter(Organization.slug.in_(org_slugs))
 
     organizations = query.all()
-    reports: list[dict[str, object]] = []
-    for organization in organizations:
-        pipeline = (
+    if not organizations:
+        return []
+    pipelines_by_org = {
+        pipeline.organization_id: pipeline
+        for pipeline in (
             db.query(Pipeline)
             .options(selectinload(Pipeline.stages))
             .filter(
-                Pipeline.organization_id == organization.id,
+                Pipeline.organization_id.in_([organization.id for organization in organizations]),
                 Pipeline.entity_type == SURROGATE_PIPELINE_ENTITY,
                 Pipeline.is_default.is_(True),
             )
-            .first()
+            .all()
         )
+    }
+    reports: list[dict[str, object]] = []
+    for organization in organizations:
+        pipeline = pipelines_by_org.get(organization.id)
 
         if pipeline is None:
             reports.append(

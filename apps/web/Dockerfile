@@ -2,11 +2,6 @@
 
 FROM node:24.18.0-bookworm-slim AS builder
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 ARG CACHE_BUST=0
 RUN echo "cache_bust=${CACHE_BUST}" > /dev/null
