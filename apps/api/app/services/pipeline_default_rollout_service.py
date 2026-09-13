@@ -358,31 +358,18 @@ def rollout_surrogate_default_pipelines(
         query = query.filter(Organization.slug.in_(org_slugs))
 
     organizations = query.all()
-    org_ids = [org.id for org in organizations]
-
-    # Performance optimization:
-    # Instead of querying Pipeline inside the loop (N+1 queries),
-    # fetch all relevant default surrogate pipelines in a single bulk query
-    # and map them by organization_id for O(1) lookups.
-    pipelines = (
-        (
+    reports: list[dict[str, object]] = []
+    for organization in organizations:
+        pipeline = (
             db.query(Pipeline)
             .options(selectinload(Pipeline.stages))
             .filter(
-                Pipeline.organization_id.in_(org_ids),
+                Pipeline.organization_id == organization.id,
                 Pipeline.entity_type == SURROGATE_PIPELINE_ENTITY,
                 Pipeline.is_default.is_(True),
             )
-            .all()
+            .first()
         )
-        if org_ids
-        else []
-    )
-    pipelines_by_org = {p.organization_id: p for p in pipelines}
-
-    reports: list[dict[str, object]] = []
-    for organization in organizations:
-        pipeline = pipelines_by_org.get(organization.id)
 
         if pipeline is None:
             reports.append(
