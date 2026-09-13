@@ -256,9 +256,7 @@ def create_next_template_version(
         else is_enrollment_confirmation
     )
     next_classification = (
-        latest.content_classification
-        if content_classification is None
-        else content_classification
+        latest.content_classification if content_classification is None else content_classification
     )
     normalized_name, normalized_body = _validate_template_fields(
         name=next_name,
@@ -349,9 +347,7 @@ def _validate_enrollment_disclosure(
     if not _WORD_STOP.search(body):
         missing.append("STOP")
     if missing:
-        raise TemplateDisclosureError(
-            "Enrollment confirmation is missing: " + ", ".join(missing)
-        )
+        raise TemplateDisclosureError("Enrollment confirmation is missing: " + ", ".join(missing))
 
 
 def publish_template(
@@ -475,6 +471,38 @@ def _ensure_media_scan_job(
     )
 
 
+def _ensure_media_scan_jobs_bulk(
+    db: Session,
+    *,
+    organization_id: uuid.UUID,
+    asset_ids: list[uuid.UUID],
+) -> None:
+    if not asset_ids:
+        return
+
+    idempotency_keys = [f"message_media_scan:{asset_id}" for asset_id in asset_ids]
+
+    existing = (
+        db.execute(select(Job.idempotency_key).where(Job.idempotency_key.in_(idempotency_keys)))
+        .scalars()
+        .all()
+    )
+
+    existing_keys = set(existing)
+
+    for asset_id in asset_ids:
+        idempotency_key = f"message_media_scan:{asset_id}"
+        if idempotency_key not in existing_keys:
+            job_service.enqueue_job(
+                db=db,
+                org_id=organization_id,
+                job_type=JobType.MESSAGE_MEDIA_SCAN,
+                payload={"media_asset_id": str(asset_id)},
+                idempotency_key=idempotency_key,
+                commit=False,
+            )
+
+
 def upload_media_assets(
     db: Session,
     *,
@@ -487,21 +515,28 @@ def upload_media_assets(
     if content_classification not in _VALID_CLASSIFICATIONS:
         raise MessagingMediaValidationError("Unsupported content classification")
     _require_phi_gate_for_classification(db, organization_id, content_classification)
-    validated_uploads = [
-        (upload, *_validated_media_bytes(upload))
-        for upload in uploads
-    ]
+    validated_uploads = [(upload, *_validated_media_bytes(upload)) for upload in uploads]
+
+    checksums = [hashlib.sha256(content).hexdigest() for _, _, content in validated_uploads]
+    existing_assets_by_checksum = {}
+    if checksums:
+        existing_assets_records = (
+            db.execute(
+                select(MessageMediaAsset).where(
+                    MessageMediaAsset.organization_id == organization_id,
+                    MessageMediaAsset.checksum_sha256.in_(checksums),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        existing_assets_by_checksum = {a.checksum_sha256: a for a in existing_assets_records}
 
     assets: list[MessageMediaAsset] = []
     try:
-        for upload, content_type, content in validated_uploads:
-            checksum = hashlib.sha256(content).hexdigest()
-            existing = db.execute(
-                select(MessageMediaAsset).where(
-                    MessageMediaAsset.organization_id == organization_id,
-                    MessageMediaAsset.checksum_sha256 == checksum,
-                )
-            ).scalar_one_or_none()
+        for i, (upload, content_type, content) in enumerate(validated_uploads):
+            checksum = checksums[i]
+            existing = existing_assets_by_checksum.get(checksum)
             if existing is not None:
                 if existing.content_classification != content_classification:
                     raise MessagingMediaValidationError(
@@ -531,12 +566,16 @@ def upload_media_assets(
             )
             db.add(asset)
             db.flush()
-            _ensure_media_scan_job(
+            existing_assets_by_checksum[checksum] = asset
+            assets.append(asset)
+
+        pending_asset_ids = [asset.id for asset in assets if asset.scan_status == "pending"]
+        if pending_asset_ids:
+            _ensure_media_scan_jobs_bulk(
                 db,
                 organization_id=organization_id,
-                asset_id=asset.id,
+                asset_ids=pending_asset_ids,
             )
-            assets.append(asset)
         db.commit()
         for asset in assets:
             db.refresh(asset)
@@ -565,9 +604,7 @@ def list_media_assets(
     *,
     scan_status: str | None = None,
 ) -> list[MessageMediaAsset]:
-    query = select(MessageMediaAsset).where(
-        MessageMediaAsset.organization_id == organization_id
-    )
+    query = select(MessageMediaAsset).where(MessageMediaAsset.organization_id == organization_id)
     if scan_status is not None:
         query = query.where(MessageMediaAsset.scan_status == scan_status)
     return list(db.execute(query.order_by(MessageMediaAsset.created_at.desc())).scalars())
@@ -584,16 +621,16 @@ def mark_media_asset_scanned(
     if scan_result not in _VALID_SCAN_RESULTS:
         raise ValueError("Unsupported messaging media scan result")
     asset = db.execute(
-        select(MessageMediaAsset)
-        .where(MessageMediaAsset.id == asset_id)
-        .with_for_update()
+        select(MessageMediaAsset).where(MessageMediaAsset.id == asset_id).with_for_update()
     ).scalar_one_or_none()
     if asset is None:
         return None
     if asset.scan_status != "pending":
         return asset
     asset.scan_status = scan_result
-    asset.quarantine_reason = None if scan_result == "clean" else (quarantine_reason or "unsafe")[:120]
+    asset.quarantine_reason = (
+        None if scan_result == "clean" else (quarantine_reason or "unsafe")[:120]
+    )
     db.flush()
     return asset
 
@@ -675,7 +712,10 @@ def load_signed_media(
         content = attachment_service.load_file_bytes(asset.storage_key)
     except (FileNotFoundError, OSError) as exc:
         raise MessagingMediaStorageError("Messaging media storage object is unavailable") from exc
-    if len(content) != asset.byte_size or hashlib.sha256(content).hexdigest() != asset.checksum_sha256:
+    if (
+        len(content) != asset.byte_size
+        or hashlib.sha256(content).hexdigest() != asset.checksum_sha256
+    ):
         raise MessagingMediaStorageError("Messaging media storage integrity check failed")
     return MediaContent(asset=asset, content=content)
 
@@ -697,4 +737,6 @@ def pending_media_scan_job(
         .order_by(Job.created_at.desc())
     ).scalars()
     expected = str(asset_id)
-    return next((job for job in jobs if (job.payload or {}).get("media_asset_id") == expected), None)
+    return next(
+        (job for job in jobs if (job.payload or {}).get("media_asset_id") == expected), None
+    )
