@@ -10,6 +10,7 @@ import { useBulkUpdateRoles, useRoleDetail, useRoles } from "@/lib/hooks/use-per
 import { useRoleScopes, useScopeMigrationReview } from "@/lib/hooks/use-record-scopes"
 import { ChoiceField, MODULE_LABELS, PermissionError, PermissionLoading, ROLE_LABELS, scopeLabel } from "./permission-controls"
 import { PermissionScopeChanges } from "./permission-scope-changes"
+import { isIncludedPermission } from "./permission-catalog"
 
 export function PermissionBulkRoleReview({ memberIds, v2, canAssignDeveloper, onClose, onSaved }: { memberIds: string[]; v2: boolean; canAssignDeveloper: boolean; onClose: () => void; onSaved: () => void }) {
     const [role, setRole] = useState("case_manager")
@@ -31,18 +32,20 @@ export function PermissionBulkRoleReview({ memberIds, v2, canAssignDeveloper, on
     const mutation = useBulkUpdateRoles()
     const loading = members.isLoading || roles.isLoading || proposedRole.isLoading || (v2 && (collaborations.isLoading || proposedScopes.isLoading))
     const error = members.error || roles.error || proposedRole.error || (v2 && (collaborations.error || proposedScopes.error))
-    const baseline = Object.values(proposedRole.data?.permissions_by_category ?? {}).flat().filter((item) => item.is_granted)
+    const catalog = Object.values(proposedRole.data?.permissions_by_category ?? {}).flat()
+    const baseline = catalog.filter((item) => item.is_granted && !isIncludedPermission(item, v2))
+    const included = (key: string) => isIncludedPermission(catalog.find((item) => item.key === key), v2)
     return <DialogContent className="sm:max-w-xl"><DialogHeader><DialogTitle>Review role changes</DialogTitle><DialogDescription>{memberIds.length} selected members</DialogDescription></DialogHeader>
         {loading ? <PermissionLoading /> : error ? <PermissionError error={error} retry={() => { void members.refetch(); void roles.refetch(); void proposedRole.refetch(); if (v2) void collaborations.refetch() }} /> : <div className="max-h-[60vh] space-y-5 overflow-y-auto">
             <ChoiceField label="New role" value={role} options={Object.fromEntries((roles.data ?? []).filter((item) => item.role !== "developer" || canAssignDeveloper).map((item) => [item.role, ROLE_LABELS[item.role] || item.label]))} onChange={setRole} disabled={mutation.isPending} />
             {v2 && <><ChoiceField label="Action and scope additions" value={retainAdditions} options={{ keep: "Keep each member’s existing additions", remove: "Remove each member’s existing additions" }} onChange={setRetainAdditions} disabled={mutation.isPending} /><ChoiceField label="Record collaborations" value={retainCollaborators} options={{ keep: "Keep each member’s collaborations", remove: "Remove each member’s collaborations" }} onChange={setRetainCollaborators} disabled={mutation.isPending} /></>}
             {(members.data ?? []).map(({ member, scopes, roleScopes }) => {
-                const actionAdditions = member.overrides.filter((item) => item.override_type === "grant")
+                const actionAdditions = member.overrides.filter((item) => item.override_type === "grant" && !included(item.permission))
                 const recordCount = collaborations.data?.collaborators.filter((item) => item.user_id === member.user_id).length ?? 0
                 const next = new Set(baseline.map((item) => item.key))
                 if (!proposedRole.data?.protected && (!v2 || retainAdditions === "keep")) actionAdditions.forEach((item) => next.add(item.permission))
                 if (!v2) member.overrides.filter((item) => item.override_type === "revoke").forEach((item) => next.delete(item.permission))
-                const lost = member.effective_permissions.filter((key) => !next.has(key))
+                const lost = member.effective_permissions.filter((key) => !included(key) && !next.has(key))
                 const gained = baseline.filter((item) => !member.effective_permissions.includes(item.key))
                 return <details key={member.id} className="rounded-xl border p-4"><summary className="cursor-pointer text-sm font-medium">{member.display_name || member.email} · {ROLE_LABELS[member.role]}{member.is_active === false ? " · Inactive" : ""}</summary><div className="mt-4 space-y-3 text-sm"><p>{actionAdditions.length} action additions · {scopes.length} scope additions · {recordCount} collaborations</p>{actionAdditions.length > 0 && <ul>{actionAdditions.map((item) => <li key={item.permission}>{item.label}</li>)}</ul>}{scopes.length > 0 && <ul>{scopes.map((item) => <li key={item.id}>{MODULE_LABELS[item.module]} · {scopeLabel(item)}</li>)}</ul>}{v2 && roleScopes && proposedScopes.data && <PermissionScopeChanges before={roleScopes} after={proposedScopes.data} />}<p>Added actions: {gained.map((item) => item.label).join(", ") || "None"}</p><p>Removed actions: {lost.map((key) => member.overrides.find((item) => item.permission === key)?.label || Object.values(proposedRole.data?.permissions_by_category ?? {}).flat().find((item) => item.key === key)?.label || key.replaceAll("_", " ")).join(", ") || "None"}</p></div></details>
             })}

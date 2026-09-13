@@ -124,7 +124,7 @@ const settingsNavigation = {
 }
 
 const automationNavigation = {
-    title: "Automation",
+    title: "Operations",
     url: "/automation",
     icon: Zap,
 }

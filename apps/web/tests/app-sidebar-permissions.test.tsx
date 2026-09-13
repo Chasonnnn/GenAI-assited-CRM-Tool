@@ -393,7 +393,7 @@ describe("AppSidebar permission visibility", () => {
             "aria-expanded",
             "false"
         )
-        expect(screen.getByRole("button", { name: "Automation" })).toHaveAttribute(
+        expect(screen.getByRole("button", { name: "Operations" })).toHaveAttribute(
             "aria-expanded",
             "false"
         )
@@ -419,7 +419,7 @@ describe("AppSidebar permission visibility", () => {
         expect(html).toContain("Team")
     })
 
-    it("places AI Studio (beta) directly under Automation when AI access is enabled", async () => {
+    it("places AI Studio (beta) directly under Operations when AI access is enabled", async () => {
         mockUseAuth.mockReturnValue({
             user: {
                 user_id: "user-ai",
@@ -441,7 +441,7 @@ describe("AppSidebar permission visibility", () => {
             </AppSidebar>
         )
 
-        const automation = await screen.findByRole("button", { name: "Automation" })
+        const automation = await screen.findByRole("button", { name: "Operations" })
         const studio = screen.getByRole("link", { name: "AI Studio (beta)" })
         const reports = screen.getByRole("link", { name: "Reports" })
 

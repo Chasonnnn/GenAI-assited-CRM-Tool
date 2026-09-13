@@ -40,4 +40,15 @@ describe("bulk member role review", () => {
         expect(await screen.findByRole("alert")).toHaveTextContent("0 updated; 1 failed")
         expect(onSaved).not.toHaveBeenCalled()
     })
+    it("excludes included features from carryover counts and removed action previews", async () => {
+        vi.mocked(api.getMember).mockResolvedValue({ id: "member-1", user_id: "user-1", display_name: "Taylor Morgan", email: "taylor@example.test", role: "intake_specialist", created_at: "2026-09-07", last_login_at: null, effective_permissions: ["use_ai_assistant"], overrides: [{ permission: "use_ai_assistant", label: "Use AI Assistant", category: "AI", override_type: "grant" }] })
+        vi.mocked(api.getRoleDetail).mockResolvedValue({ role: "case_manager", label: "Case Manager", permissions_by_category: { AI: [{ key: "use_ai_assistant", label: "Use AI Assistant", description: "", is_granted: true, developer_only: false, is_default: true }] } })
+        render(<Dialog open><PermissionBulkRoleReview memberIds={["member-1"]} v2 canAssignDeveloper={false} onClose={vi.fn()} onSaved={vi.fn()} /></Dialog>)
+        await screen.findByRole("combobox", { name: "New role" })
+        fireEvent.click(screen.getByText(/Taylor Morgan/))
+        expect(screen.getByText("0 action additions · 0 scope additions · 0 collaborations")).toBeVisible()
+        expect(screen.queryByText("Use AI Assistant")).not.toBeInTheDocument()
+        expect(screen.getByText("Removed actions: None")).toBeVisible()
+    })
+
 })
