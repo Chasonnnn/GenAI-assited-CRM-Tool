@@ -77,6 +77,7 @@ def create_ad_account(
     pixel_id: str | None = None,
     capi_enabled: bool = False,
     oauth_connection_id: UUID | None = None,
+    commit: bool = True,
 ) -> MetaAdAccount:
     """Create a new Meta ad account record."""
     account = MetaAdAccount(
@@ -88,8 +89,9 @@ def create_ad_account(
         oauth_connection_id=oauth_connection_id,
     )
     db.add(account)
-    db.commit()
-    db.refresh(account)
+    if commit:
+        db.commit()
+        db.refresh(account)
     return account
 
 

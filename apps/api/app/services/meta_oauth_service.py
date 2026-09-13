@@ -409,6 +409,23 @@ def get_oauth_connection_by_id(db: Session, connection_id: UUID) -> MetaOAuthCon
     return db.get(MetaOAuthConnection, connection_id)
 
 
+def get_oauth_connections_by_ids(
+    db: Session, org_id: UUID, connection_ids: set[UUID]
+) -> dict[UUID, MetaOAuthConnection]:
+    """Resolve asset owners within the authenticated organization."""
+    if not connection_ids:
+        return {}
+    return {
+        connection.id: connection
+        for connection in db.query(MetaOAuthConnection)
+        .filter(
+            MetaOAuthConnection.organization_id == org_id,
+            MetaOAuthConnection.id.in_(connection_ids),
+        )
+        .all()
+    }
+
+
 def get_oauth_connection_by_meta_user(
     db: Session, org_id: UUID, meta_user_id: str
 ) -> MetaOAuthConnection | None:
