@@ -1004,7 +1004,7 @@ function useEmailTemplatesPageView() {
 
     const handleLibraryCopy = () => {
         const target = libraryCopyTargetRef.current
-        if (!target || !libraryCopyName.trim()) return
+        if (!canManageEmailTemplates || copyFromLibrary.isPending || !target || !libraryCopyName.trim()) return
         copyFromLibrary.mutate(
             { id: target.id, data: { name: libraryCopyName.trim() } },
             {
@@ -1477,7 +1477,9 @@ function useEmailTemplatesPageView() {
                                             </Button>
                                             <Button
                                                 size="sm"
+                                                disabled={!canManageEmailTemplates || copyFromLibrary.isPending}
                                                 onClick={() => {
+                                                    if (!canManageEmailTemplates) return
                                                     libraryCopyTargetRef.current = template
                                                     setLibraryCopyName(template.name)
                                                     setLibraryCopyOpen(true)
@@ -2140,7 +2142,7 @@ function useEmailTemplatesPageView() {
             </Dialog>
 
             {/* Platform Library Copy Dialog */}
-            <Dialog open={libraryCopyOpen} onOpenChange={setLibraryCopyOpen}>
+            <Dialog open={libraryCopyOpen && canManageEmailTemplates} onOpenChange={(open) => setLibraryCopyOpen(open && canManageEmailTemplates)}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Copy to Org Templates</DialogTitle>
@@ -2163,7 +2165,7 @@ function useEmailTemplatesPageView() {
                         <Button variant="outline" onClick={() => setLibraryCopyOpen(false)}>
                             Cancel
                         </Button>
-                        <Button onClick={handleLibraryCopy} disabled={copyFromLibrary.isPending}>
+                        <Button onClick={handleLibraryCopy} disabled={!canManageEmailTemplates || copyFromLibrary.isPending || !libraryCopyName.trim()}>
                             {copyFromLibrary.isPending && (
                                 <Loader2Icon className="mr-2 size-4 animate-spin" />
                             )}

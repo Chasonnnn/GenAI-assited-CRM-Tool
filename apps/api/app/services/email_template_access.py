@@ -34,15 +34,19 @@ def capabilities(template, session, permissions: set[str]) -> dict[str, bool]:
     }
 
 
-def require_send_permission(db: Session, session: UserSession) -> None:
-    from app.services import permission_policy_service
+def require_send_permission(
+    db: Session, session: UserSession, *, surrogate_id: UUID | None = None
+) -> None:
+    from app.services import permission_policy_service, record_access_service
 
-    if permission_policy_service.is_enabled(
-        db, session.org_id
-    ) and not permission_service.check_permission(
+    if not permission_policy_service.is_enabled(db, session.org_id):
+        return
+    if not permission_service.check_permission(
         db, session.org_id, session.user_id, session.role.value, "send_email"
     ):
         raise HTTPException(status_code=403, detail="Send email permission required")
+    if surrogate_id is not None:
+        record_access_service.get_record_with_access(db, session, "surrogate", surrogate_id)
 
 
 def audit_private_read(db, session, template, *, target_type="email_template") -> bool:

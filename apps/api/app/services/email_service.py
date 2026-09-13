@@ -1637,6 +1637,54 @@ async def send_immediate_email(
     )
 
 
+def is_manual_template_delivery_eligible(db: Session, org_id: UUID, email_log: EmailLog) -> bool:
+    """Recheck a manual sender without changing organization automation authority."""
+    from fastapi import HTTPException
+
+    from app.schemas.auth import UserSession
+    from app.services import email_template_access, permission_policy_service, permission_service
+
+    if not permission_policy_service.is_enabled(db, org_id):
+        return True
+    if email_log.organization_id != org_id or email_log.actor_user_id is None:
+        return False
+    membership = permission_service.get_membership_for_user(db, org_id, email_log.actor_user_id)
+    if membership is None:
+        return False
+    user = membership.user
+    session = UserSession(
+        org_id=org_id,
+        user_id=user.id,
+        role=membership.role,
+        email=user.email,
+        display_name=user.display_name,
+    )
+    template = (
+        db.query(EmailTemplate)
+        .filter(
+            EmailTemplate.id == email_log.template_id,
+            EmailTemplate.organization_id == org_id,
+            EmailTemplate.is_active.is_(True),
+        )
+        .populate_existing()
+        .first()
+    )
+    if template is None or (
+        template.scope == "personal"
+        and not email_template_access.can_edit_personal_template(
+            owner_user_id=template.owner_user_id, user_id=session.user_id, role=session.role
+        )
+    ):
+        return False
+    try:
+        email_template_access.require_send_permission(
+            db, session, surrogate_id=email_log.surrogate_id
+        )
+    except HTTPException:
+        return False
+    return True
+
+
 def send_from_template(
     db: Session,
     org_id: UUID,

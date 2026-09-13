@@ -547,8 +547,8 @@ def send_email(
         require_permission(POLICIES["email_templates"].actions["manage"])
     ),
 ):
-    """Send an email using a template (queues for async sending). Manager only."""
-    email_template_access.require_send_permission(db, session)
+    """Queue a template email within the sender's action and record access."""
+    email_template_access.require_send_permission(db, session, surrogate_id=data.surrogate_id)
     template = email_service.get_template(db, data.template_id, session.org_id)
     if template is None or (
         template.scope == "personal"
@@ -568,6 +568,7 @@ def send_email(
             schedule_at=data.schedule_at,
             sender_user_id=session.user_id,
             idempotency_key=data.idempotency_key,
+            source_type="manual_template_email",
         )
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
@@ -794,14 +795,8 @@ def copy_platform_email_template(
     session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Copy a platform template into org templates."""
-    from app.services import permission_service
-
-    manage_perm = POLICIES["email_templates"].actions["manage"]
-    perm_key = manage_perm.value if hasattr(manage_perm, "value") else str(manage_perm)
-    if not permission_service.check_permission(
-        db, session.org_id, session.user_id, session.role.value, perm_key
-    ):
-        raise HTTPException(status_code=403, detail="Missing permission: manage_email_templates")
+    if not email_template_access.has_manage_permission(db, session):
+        raise HTTPException(status_code=403, detail="Organization template management required")
 
     from app.services import platform_template_service
 

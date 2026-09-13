@@ -110,7 +110,16 @@ class DeliveryNoLongerEligible(RuntimeError):
 
 def _raise_if_source_ineligible(db: Session, delivery: EmailDelivery) -> None:
     email_log = delivery.email_log
-    if email_log.source_type == "workflow_job":
+    if email_log.source_type == "manual_template_email":
+        if not email_service.is_manual_template_delivery_eligible(
+            db, delivery.organization_id, email_log
+        ):
+            raise DeliveryNoLongerEligible(
+                "manual_template_authority_revoked",
+                "Manual template send is no longer authorized",
+                requires_reconciliation=delivery.attempt_count > 1,
+            )
+    elif email_log.source_type == "workflow_job":
         from uuid import UUID
 
         from app.db.models import Job
