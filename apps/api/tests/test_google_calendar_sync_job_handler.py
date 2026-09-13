@@ -190,30 +190,44 @@ async def test_google_tasks_sync_job_handler_invokes_reconciler(db, test_auth, m
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("denial", ["other_org", "inactive_membership", "inactive_user"])
 async def test_google_tasks_sync_job_rejects_user_outside_exact_active_membership(
     db,
     test_auth,
     monkeypatch,
+    denial,
 ):
+    from app.db.models import Membership
     from app.jobs.handlers import appointments as appointments_handler
 
     called = False
+    org_id = test_auth.org.id
+    if denial == "other_org":
+        org_id = uuid.uuid4()
+    elif denial == "inactive_membership":
+        membership = (
+            db.query(Membership).filter_by(organization_id=org_id, user_id=test_auth.user.id).one()
+        )
+        membership.is_active = False
+    else:
+        test_auth.user.is_active = False
+    db.flush()
 
-    async def fake_sync_google_tasks_for_user_async(*_args, **_kwargs):
+    async def fake_get_access_token_async(*_args, **_kwargs):
         nonlocal called
         called = True
         return 0
 
     monkeypatch.setattr(
-        "app.services.google_tasks_sync_service.sync_google_tasks_for_user_async",
-        fake_sync_google_tasks_for_user_async,
+        "app.services.oauth_service.get_access_token_async",
+        fake_get_access_token_async,
     )
     job = type(
         "Job",
         (),
         {
             "id": uuid.uuid4(),
-            "organization_id": uuid.uuid4(),
+            "organization_id": org_id,
             "payload": {"user_id": str(test_auth.user.id)},
         },
     )()
@@ -222,3 +236,28 @@ async def test_google_tasks_sync_job_rejects_user_outside_exact_active_membershi
         await appointments_handler.process_google_tasks_sync(db, job)
 
     assert called is False
+
+
+@pytest.mark.asyncio
+async def test_google_tasks_sync_job_propagates_timeout_for_worker_retry(
+    db, test_auth, monkeypatch
+):
+    from app.jobs.handlers import appointments as appointments_handler
+
+    async def timeout(*_args, **_kwargs):
+        raise RuntimeError("Google Tasks sync failed (TimeoutError)")
+
+    monkeypatch.setattr(
+        "app.services.google_tasks_sync_service.sync_google_tasks_for_user_async", timeout
+    )
+    job = type(
+        "Job",
+        (),
+        {
+            "id": uuid.uuid4(),
+            "organization_id": test_auth.org.id,
+            "payload": {"user_id": str(test_auth.user.id)},
+        },
+    )()
+    with pytest.raises(RuntimeError, match="Google Tasks sync failed"):
+        await appointments_handler.process_google_tasks_sync(db, job)
