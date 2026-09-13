@@ -94,6 +94,14 @@ def _ai_settings_payload(ai_settings: AISettings) -> dict:
     }
 
 
+def is_org_ai_enabled(db: Session, organization_id: uuid.UUID) -> bool:
+    """Read the organization switch at the point an AI action is admitted."""
+    return (
+        db.query(Organization.ai_enabled).filter(Organization.id == organization_id).scalar()
+        is True
+    )
+
+
 def get_ai_settings(db: Session, organization_id: uuid.UUID) -> AISettings | None:
     """Get AI settings for an organization."""
     return db.query(AISettings).filter(AISettings.organization_id == organization_id).first()
@@ -166,17 +174,13 @@ def update_ai_settings(
         vertex_location if vertex_location is not None else ai_settings.vertex_location
     )
     if target_provider == "vertex_wif" and target_vertex_location not in GEMINI_VERTEX_LOCATIONS:
-        raise ValueError(
-            "Vertex AI location must be global, us, or eu for gemini-3.8-flash."
-        )
+        raise ValueError("Vertex AI location must be global, us, or eu for gemini-3.8-flash.")
     if (
         target_provider == "vertex_api_key"
         and target_vertex_location is not None
         and target_vertex_location not in GEMINI_VERTEX_LOCATIONS
     ):
-        raise ValueError(
-            "Vertex AI location must be global, us, or eu for gemini-3.8-flash."
-        )
+        raise ValueError("Vertex AI location must be global, us, or eu for gemini-3.8-flash.")
 
     if is_enabled is not None:
         ai_settings.is_enabled = is_enabled

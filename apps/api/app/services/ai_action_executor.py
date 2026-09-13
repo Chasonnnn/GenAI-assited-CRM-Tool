@@ -607,7 +607,14 @@ def execute_action(
     Returns:
         Result dict from executor
     """
-    from app.services import permission_policy_service
+    from app.services import ai_settings_service, permission_policy_service
+
+    if not ai_settings_service.is_org_ai_enabled(db, org_id):
+        return {
+            "success": False,
+            "error": "AI is not enabled for this organization",
+            "error_code": "permission_denied",
+        }
 
     policy_v2 = permission_policy_service.is_enabled(db, org_id)
     if policy_v2:

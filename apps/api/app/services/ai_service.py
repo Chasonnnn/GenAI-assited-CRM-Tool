@@ -2,6 +2,7 @@
 
 from uuid import UUID
 
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import AIActionApproval, AIConversation, AIMessage
@@ -76,6 +77,54 @@ def list_pending_actions(
             AIActionApproval.status == "pending",
         )
     )
+
+    from app.db.enums import Role
+    from app.db.models import Surrogate, Task
+    from app.services import permission_policy_service, permission_service, record_scope_service
+    from app.services.workflow_execution_authority import active_session
+
+    if permission_policy_service.is_enabled(db, org_id):
+        actor = active_session(db, org_id, user_id)
+        if actor is None:
+            return []
+        permissions = permission_service.get_effective_permissions(
+            db, org_id, user_id, actor.role.value
+        )
+        if "use_ai_assistant" not in permissions:
+            return []
+        visible = [
+            and_(AIConversation.entity_type == "global", AIConversation.entity_id == user_id)
+        ]
+        if "view_surrogates" in permissions:
+            visible.append(
+                and_(
+                    AIConversation.entity_type.in_(("surrogate", "case")),
+                    AIConversation.entity_id.in_(
+                        select(Surrogate.id).where(
+                            record_scope_service.build_visibility_filter(db, actor, "surrogate")
+                        )
+                    ),
+                )
+            )
+        if "view_tasks" in permissions:
+            task_filter = record_scope_service.build_linked_visibility_filter(db, actor, Task)
+            if actor.role not in {Role.ADMIN, Role.DEVELOPER, Role.CASE_MANAGER}:
+                task_filter = and_(
+                    task_filter,
+                    or_(
+                        Task.created_by_user_id == user_id,
+                        and_(Task.owner_type == "user", Task.owner_id == user_id),
+                    ),
+                )
+            visible.append(
+                and_(
+                    AIConversation.entity_type == "task",
+                    AIConversation.entity_id.in_(
+                        select(Task.id).where(Task.organization_id == org_id, task_filter)
+                    ),
+                )
+            )
+        query = query.filter(or_(*visible))
 
     if entity_type:
         query = query.filter(AIConversation.entity_type == entity_type)

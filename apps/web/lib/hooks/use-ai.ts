@@ -10,6 +10,7 @@ import type { AISettingsUpdate, ChatRequest } from '../api/ai';
 const aiKeys = {
     all: ['ai'] as const,
     settings: () => [...aiKeys.all, 'settings'] as const,
+    availability: () => [...aiKeys.all, 'availability'] as const,
     consent: () => [...aiKeys.all, 'consent'] as const,
     usageSummary: () => [...aiKeys.all, 'usage', 'summary'] as const,
     conversation: (entityType: string, entityId: string) =>
@@ -27,6 +28,15 @@ function invalidateAIUsageCaches(queryClient: QueryClient) {
 // Settings Hooks
 // ============================================================================
 
+export function useAIAvailability(enabled = true) {
+    return useQuery({
+        queryKey: aiKeys.availability(),
+        queryFn: aiApi.getAIAvailability,
+        enabled,
+        staleTime: 30 * 1000,
+    });
+}
+
 export function useAISettings(enabled = true) {
     return useQuery({
         queryKey: aiKeys.settings(),
@@ -43,6 +53,7 @@ export function useUpdateAISettings() {
         mutationFn: (update: AISettingsUpdate) => aiApi.updateAISettings(update),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: aiKeys.settings() });
+            void queryClient.invalidateQueries({ queryKey: aiKeys.availability() });
         },
     });
 }
@@ -81,6 +92,7 @@ export function useAcceptConsent() {
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: aiKeys.consent() });
             void queryClient.invalidateQueries({ queryKey: aiKeys.settings() });
+            void queryClient.invalidateQueries({ queryKey: aiKeys.availability() });
         },
     });
 }

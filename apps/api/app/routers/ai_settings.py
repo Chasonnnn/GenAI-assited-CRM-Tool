@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_csrf_header, require_permission
+from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
 from app.core.permissions import PermissionKey as P
 from app.schemas.auth import UserSession
 
@@ -23,6 +23,38 @@ class VertexWIFConfig(BaseModel):
 class VertexAPIKeyConfig(BaseModel):
     project_id: str | None = None
     location: str | None = None
+
+
+class AIAvailabilityResponse(BaseModel):
+    """Non-sensitive assistant availability for active organization members."""
+
+    is_enabled: bool
+    provider: str | None
+    model: str | None
+
+
+@router.get("/availability", response_model=AIAvailabilityResponse)
+def get_availability(
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(get_current_session)],
+) -> AIAvailabilityResponse:
+    from app.services import ai_settings_service, permission_service
+
+    ai_settings = ai_settings_service.get_ai_settings(db, session.org_id)
+    can_use = permission_service.check_permission(
+        db, session.org_id, session.user_id, session.role.value, P.AI_USE.value
+    )
+    return AIAvailabilityResponse(
+        is_enabled=bool(
+            can_use
+            and ai_settings_service.is_org_ai_enabled(db, session.org_id)
+            and ai_settings
+            and ai_settings.is_enabled
+            and not ai_settings_service.is_consent_required(ai_settings)
+        ),
+        provider=ai_settings.provider if ai_settings else None,
+        model=ai_settings_service.get_effective_model(ai_settings),
+    )
 
 
 class AISettingsResponse(BaseModel):

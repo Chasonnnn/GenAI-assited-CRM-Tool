@@ -119,12 +119,16 @@ def approve_action_for_session(
     """Approve and execute an AI action proposal for the current session."""
     from app.services import (
         ai_service,
+        ai_settings_service,
         audit_service,
         permission_policy_service,
         permission_service,
         surrogate_service,
     )
     from app.services.ai_action_executor import execute_action
+
+    if not ai_settings_service.is_org_ai_enabled(db, session.org_id):
+        raise HTTPException(status_code=403, detail="AI is not enabled for this organization")
 
     if permission_policy_service.is_enabled(db, session.org_id):
         from app.services.workflow_execution_authority import active_session

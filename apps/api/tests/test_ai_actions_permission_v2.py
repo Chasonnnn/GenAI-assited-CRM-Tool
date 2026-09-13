@@ -284,3 +284,90 @@ def test_approval_event_preserves_v2_case_manager_owner_and_v1_pool_behavior(
     else:
         assert record.owner_type == "queue"
         assert ready_notifications == [record.id]
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_ai_disabled_after_proposal_denies_execution_without_mutation(
+    db, ai_context, monkeypatch, version
+):
+    org, actor, _, record, _ = ai_context
+    db.query(OrganizationPermissionPolicy).filter_by(organization_id=org.id).one().version = version
+    approval = proposal(
+        db, org, actor, record, action="add_note", payload={"content": "Synthetic note"}
+    )
+    org.ai_enabled = False
+    db.flush()
+    monkeypatch.setattr(
+        ai_action_executor,
+        "get_executor",
+        lambda *args: pytest.fail("Disabled AI reached executor"),
+    )
+    result = execute(db, ai_context, approval)
+    assert result["success"] is False
+    assert result["error_code"] == "permission_denied"
+    assert approval.status == "pending"
+    assert approval.executed_at is None
+    assert db.query(EntityNote).filter_by(entity_id=record.id).count() == 0
+
+
+def test_ai_approval_service_checks_org_switch_before_any_action(db, ai_context, monkeypatch):
+    from fastapi import HTTPException
+
+    from app.schemas.auth import UserSession
+    from app.services.ai_action_approval_service import approve_action_for_session
+
+    org, actor, _, record, _ = ai_context
+    approval = proposal(
+        db, org, actor, record, action="add_note", payload={"content": "Synthetic note"}
+    )
+    org.ai_enabled = False
+    db.flush()
+    monkeypatch.setattr(
+        ai_action_executor, "execute_action", lambda **kwargs: pytest.fail("Executed disabled AI")
+    )
+    with pytest.raises(HTTPException, match="AI is not enabled") as exc:
+        approve_action_for_session(
+            db,
+            approval_id=approval.id,
+            session=UserSession(
+                org_id=org.id,
+                user_id=actor.id,
+                role=Role.INTAKE_SPECIALIST,
+                email="",
+                display_name="",
+            ),
+        )
+    assert exc.value.status_code == 403
+    assert approval.status == "pending"
+
+
+def test_pending_ai_actions_follow_current_record_access(db, ai_context):
+    from app.services import ai_service
+
+    org, actor, _, record, stages = ai_context
+    approval = proposal(
+        db, org, actor, record, action="add_note", payload={"content": "Synthetic note"}
+    )
+    assert [item.id for item in ai_service.list_pending_actions(db, org.id, actor.id)] == [
+        approval.id
+    ]
+    record.owner_id = uuid4()
+    record.stage_id = stages["approved"].id
+    db.flush()
+    assert ai_service.list_pending_actions(db, org.id, actor.id) == []
+
+
+def test_pending_actions_reject_cross_org_and_inactive_actors(db, ai_context):
+    from app.db.models import Organization
+    from app.services import ai_service
+
+    org, actor, membership, record, _ = ai_context
+    other = Organization(id=uuid4(), name="Other tenant", slug=f"other-{uuid4()}", ai_enabled=True)
+    db.add(other)
+    db.flush()
+    own = proposal(db, org, actor, record, action="add_note", payload={"content": "Owned note"})
+    proposal(db, other, actor, record, action="add_note", payload={"content": "Other note"})
+    assert [item.id for item in ai_service.list_pending_actions(db, org.id, actor.id)] == [own.id]
+    membership.is_active = False
+    db.flush()
+    assert ai_service.list_pending_actions(db, org.id, actor.id) == []
