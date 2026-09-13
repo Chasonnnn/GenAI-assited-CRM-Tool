@@ -183,3 +183,54 @@ async def test_shared_donor_questionnaire_rejects_unsafe_program_field(authed_cl
     publish = await authed_client.post(f"/forms/{form_id}/publish")
     assert publish.status_code == 400, publish.text
     assert "Donor Type" in publish.json()["detail"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "invalid", ["optional", "conditional", "wrong_options", "missing_photo", "no_uploads"]
+)
+async def test_ops_rejects_invalid_donor_template_before_publication(
+    authed_client, db, test_user, invalid
+):
+    test_user.is_platform_admin = True
+    db.commit()
+    schema = json.loads(
+        (
+            Path(__file__).resolve().parents[3] / "scripts/fixtures/ewi-donor-pre-screening.json"
+        ).read_text()
+    )
+    field = schema["pages"][0]["fields"][0]
+    if invalid == "optional":
+        field["required"] = False
+    elif invalid == "conditional":
+        field["show_if"] = {"field_key": "full_name", "operator": "is_empty"}
+    elif invalid == "wrong_options":
+        field["options"][1]["value"] = "surrogate"
+    mappings = [
+        {"field_key": key, "surrogate_field": key}
+        for key in ("donor_type", "full_name", "email", "profile_photo")
+        if invalid != "missing_photo" or key != "profile_photo"
+    ]
+    created = await authed_client.post(
+        "/platform/templates/forms",
+        json={
+            "name": "Invalid shared donor",
+            "schema_json": schema,
+            "settings_json": {
+                "lead_kind": "egg_donor",
+                "purpose": "other",
+                "mappings": mappings,
+                "max_file_count": 0 if invalid == "no_uploads" else 1,
+            },
+        },
+    )
+    assert created.status_code == 201, created.text
+    template_id = created.json()["id"]
+    published = await authed_client.post(
+        f"/platform/templates/forms/{template_id}/publish", json={"publish_all": True}
+    )
+    assert published.status_code == 400, published.text
+    saved = await authed_client.get(f"/platform/templates/forms/{template_id}")
+    assert saved.json()["status"] == "draft"
+    assert saved.json()["published_version"] == 0
+    assert saved.json()["is_published_globally"] is False

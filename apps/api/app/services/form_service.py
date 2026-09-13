@@ -567,15 +567,29 @@ def validate_shared_intake_identity_targets(db: Session, form: Form) -> None:
 
 def validate_donor_intake_schema(db: Session, form: Form) -> None:
     """Require donor identity plus one mapped, required profile image upload."""
-    if not form.schema_json:
-        raise ValueError("Form schema is required before publishing")
-
-    schema = parse_schema(form.schema_json)
-    fields = flatten_fields(schema)
     mappings = {
         mapping.surrogate_field: mapping.field_key
         for mapping in db.query(FormFieldMapping).filter(FormFieldMapping.form_id == form.id).all()
     }
+    validate_donor_intake_configuration(
+        schema_json=form.schema_json,
+        mappings=mappings,
+        max_file_count=form.max_file_count,
+        allowed_mime_types=form.allowed_mime_types,
+    )
+
+
+def validate_donor_intake_configuration(
+    *,
+    schema_json: dict | None,
+    mappings: dict[str, str],
+    max_file_count: int,
+    allowed_mime_types: list | None,
+) -> None:
+    """Apply the same publication contract to agency forms and shared templates."""
+    if not schema_json:
+        raise ValueError("Form schema is required before publishing")
+    fields = flatten_fields(parse_schema(schema_json))
     donor_type_key = mappings.get("donor_type")
     if donor_type_key:
         field = fields.get(donor_type_key)
@@ -591,11 +605,11 @@ def validate_donor_intake_schema(db: Session, form: Form) -> None:
                 "Donor Type must be an unconditional required choice with "
                 "Egg donor and Sperm donor options"
             )
-    if form.max_file_count < 1:
+    if max_file_count < 1:
         raise ValueError("Donor intake must allow at least one file upload")
     allowed_mime_types = {
         mime_type.strip().lower()
-        for mime_type in form.allowed_mime_types or []
+        for mime_type in allowed_mime_types or []
         if isinstance(mime_type, str)
     }
     if allowed_mime_types and not allowed_mime_types.intersection(
