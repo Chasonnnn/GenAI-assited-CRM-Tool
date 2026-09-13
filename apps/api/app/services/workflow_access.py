@@ -1,7 +1,7 @@
 """Centralized permission checks for workflows.
 
 This module provides permission helpers for workflow operations:
-- Org workflows: require manage_automation permission to create/edit
+- Org workflows: require organization workflow management permission to create/edit
 - Personal workflows: any user can create, only owner can edit
 
 Admins can view (but not edit) other users' personal workflows.
@@ -303,4 +303,4 @@ def has_manage_permission(db: Session, session: UserSession) -> bool:
     Returns:
         True if user has manage_automation permission
     """
-    return _has_manage_automation(db, session)
+    return can_create(db, session, "org")

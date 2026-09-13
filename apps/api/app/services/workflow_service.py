@@ -677,6 +677,14 @@ def create_workflow(
     from app.services import permission_policy_service
 
     permission_policy_service.lock_configuration(db, org_id)
+    if permission_policy_service.is_enabled(db, org_id):
+        from app.services import workflow_access
+
+        actor = workflow_execution_authority.active_session(db, org_id, user_id)
+        if actor is None or not workflow_access.can_create(db, actor, data.scope):
+            raise workflow_execution_authority.WorkflowAuthorityError(
+                "Workflow creation is not permitted"
+            )
     subject_type = data.subject_type
     if "subject_type" not in data.model_fields_set:
         subject_type = LEGACY_TRIGGER_SUBJECT_TYPES.get(data.trigger_type.value, "surrogate")
