@@ -8,4 +8,4 @@ Organization workflow actions are authorized at activation and then operate unde
 
 Publishing personal work creates an independent organization copy; it does not create a live link to privately editable content. Current organization configuration and domain restrictions still apply to execution.
 
-Implementation is pending.
+Implemented locally behind reviewed organization activation. See [verification](../permission-upgrade-verification.md).

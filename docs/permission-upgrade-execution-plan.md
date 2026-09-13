@@ -1,6 +1,6 @@
 # Permission upgrade execution plan
 
-Status: permission version 2 and its affected module refactors are implemented locally. Production organizations remain on version 1 until reviewed activation. The selected role editor is Studio variant 2.
+Status: permission version 2 and its affected module refactors are implemented and packaged in draft PR #691. Production organizations remain on version 1 until reviewed activation. The selected role editor is the September 12 module-first mockup, option 1.
 
 ## Delivered packages
 
@@ -13,10 +13,12 @@ Status: permission version 2 and its affected module refactors are implemented l
 | Administration UI | Roles, People, Check access, migration review, individual additions, role carryover review | Server capabilities govern controls and inherited access has no individual deny |
 | Consumer integration | Records, notes/interviews/profile, search, tasks, matches, attachments, appointments, status corrections, reporting, submission review, AI-approved actions | Related record access follows the same tenant and scope constraints |
 
-Detailed checks and local commit status are in [permission-upgrade-verification.md](permission-upgrade-verification.md).
+Detailed checks and local delivery status are in [permission-upgrade-verification.md](permission-upgrade-verification.md).
 
 ## Agreed defaults
 
+- Personal workflows, templates, and campaign authoring are included for every active member. AI is included when enabled by the organization; provider settings remain Admin/Dev only.
+- Create is independent of Edit for all three record modules.
 - Intake: assigned records before approval, retained collaboration after handoff, configurable applicant approval.
 - Case Manager: all records from Approved onward; actions remain configurable.
 - Operations: organization workflow/campaign/template management and record/report viewing; no record writes or sending by default.
@@ -28,7 +30,7 @@ Detailed checks and local commit status are in [permission-upgrade-verification.
 
 1. Apply additive migrations `20260907_2200_perm_policy`, `20260907_2210_record_scope`, and `20260907_2220_work_authority` with their matching application version. Existing organizations continue using version 1.
 2. Inspect the per-organization preview: role and individual action changes, record-scope changes, uncertain historical handoffs, old pool grants, and existing execution items.
-3. Resolve each legacy individual revoke by explicit removal or a meaningful role-wide denial. Protected-role and already-denied permissions cannot use a no-op role resolution.
+3. Resolve each legacy individual revoke by explicit removal or a meaningful role-wide denial. Protected-role and already-denied permissions cannot use a no-op role resolution. Included personal/AI features require explicit legacy-revoke removal; they cannot become role denials.
 4. Review historical approval ownership and unknown phases using explicit evidence. Do not infer collaborators from every past owner.
 5. Resolve existing workflow/campaign execution before activation. Unreviewed organization execution cannot silently acquire authority.
 6. Activate the exact reviewed preview. The server rechecks membership, configuration, records, and execution state under the organization lock; stale reviews require regeneration.
@@ -57,4 +59,4 @@ Twilio end-to-end provider testing and Meta MCP configuration remain separate wo
 - Use independent agent ownership for separate modules, then run shared negative tests and full affected suites at integration.
 - Remove the legacy policy path after all organizations migrate and its removal is separately verified; do not preserve two permanent permission systems.
 
-[Module ownership and refactor sequence](permission-module-refactor-plan.md) · [Product model](permission-system-design.md) · [Platform roadmap](platform-upgrade-roadmap.md)
+[Module ownership and refactor sequence](permission-module-refactor-plan.md) · [Product model](permission-system-design.md)

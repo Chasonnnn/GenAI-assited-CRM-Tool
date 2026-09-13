@@ -1,6 +1,6 @@
 # Module refactors for the permission upgrade
 
-Status: permission v2 and its shared record filters are implemented locally behind organization activation. Existing organizations remain on v1 until their access and execution reviews are resolved. Integrated verification is recorded in `permission-upgrade-verification.md`. No deployment, production migration, or provider testing has occurred.
+Status: permission v2 and its shared record filters are implemented in draft PR #691 behind organization activation. Existing organizations remain on v1 until their access and execution reviews are resolved. Integrated verification is recorded in `permission-upgrade-verification.md`. No deployment, production migration, or provider testing has occurred.
 
 ## Implemented boundaries
 
@@ -11,7 +11,7 @@ Status: permission v2 and its shared record filters are implemented locally behi
 | Approval handoff | `services/approval_handoff_service.py`, surrogate/donor status services | Canonical approval crossing, retained Intake collaboration, and pool ownership in the domain transaction; `record_phase` shares list/detail phase semantics |
 | Workflow definitions | `services/workflow_definition_rules.py` | Trigger validation and action ordering independently of CRUD, execution, and authorization |
 | Workflow authority | `services/workflow_access.py`, `services/workflow_execution_authority.py` | Human management, personal subject eligibility, organization execution snapshots, action authorization, retry/resume, and delivery admission |
-| Campaign authority | `services/campaign_access.py`, existing campaign audience and run services | View/Edit/Send, personal versus organization ownership, audience scope, send authorization, recipient rechecks, and publication |
+| Campaign authority | `services/campaign_access.py`, existing campaign audience and run services | View/Edit/Send, personal versus organization ownership, viewer-scoped preview/recipient/count queries, durable execution audience, send authorization, recipient rechecks, and publication |
 | Template authorization/publication | `services/email_template_access.py`, `services/email_template_publication.py` | Shared edit decisions and independent organization copies; proposal credit is separate from execution authority |
 | Submission review | `services/form_submission_access.py` | Submission actions, unlinked Intake/Admin/Dev queue, linked record scope, form picker, and intake-lead access; builder authority remains in `manage_forms` |
 | Application metadata | `services/form_application_access.py` | Record-scoped published form metadata and active link selection without builder access; explicit email-send permission before sending |
@@ -35,7 +35,9 @@ Action baselines and Operations defaults are settled in `permission-system-desig
 | Dashboard and AI summaries | Donor attention, linked task/meeting lists, overdue counts, and AI dashboard statistics use the actor's scope |
 | Intelligent suggestions | Rule matches and summary counts use module View plus shared scope; retained collaborators and individual additions are included |
 | Forms | Submission lists filter before limits; candidate lists and manual links check record access; inaccessible automatic rematches stay in manual review; Operations can read visible linked submissions but cannot review |
-| Manual email | v2 manual surrogate sends require `send_email` before provider lookup; existing human review, content, attachment, and provider rules remain |
+| Record creation | `core/record_creation.py` separates Create from Edit across record CRUD, import approval/retry, and intake promotion |
+| AI availability | Safe organization availability is separate from provider settings; current actor actions and linked-record scope apply to proposals, approvals, and task chat |
+| Manual email | New manual template jobs recheck active actor, Send permission, template ownership, and linked scope before provider delivery; uncertain revoked retries require reconciliation |
 
 Configuration mutations refresh active membership after acquiring the organization lock. Returning inactive members can have their existing scope additions inspected and removed; new grants require an active membership. Removing one grant preserves any remaining role, individual, or collaborator route.
 
@@ -101,4 +103,4 @@ Continue donor completion against the existing workflow/campaign code and tests.
 
 The integrated API suite, serial migration/outbox suite, frontend checks, fresh migration rehearsal, browser journeys, and local delivery state are recorded in [permission-upgrade-verification.md](permission-upgrade-verification.md). Focused lane selections overlap and are not additive.
 
-[Execution sequence](permission-upgrade-execution-plan.md) · [Permission model](permission-system-design.md) · [Selected UI](mockups/permissions/role-variants/README.md)
+[Execution sequence](permission-upgrade-execution-plan.md) · [Permission model](permission-system-design.md) · [Selected UI](mockups/permissions/2026-09-12-module-first-studio.png)

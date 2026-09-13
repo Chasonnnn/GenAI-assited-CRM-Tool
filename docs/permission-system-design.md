@@ -43,7 +43,8 @@ Stage changes, reassignment, applicant approval, exports, and other actions reta
 |---|---|
 | Applicant approval | Explicit approval permission; enabled for Intake and Admin by default, with Intake configurable |
 | Campaigns | Editing and sending are separate |
-| Workflows | One Manage Workflows permission covers editing and activation |
+| Record creation | Create is independent of Edit for donors, surrogates, and intended parents |
+| Workflows | Personal authoring is included; organization management and executable action authority remain explicit |
 | Organization content | Management can be delegated by module; supplied Operations, Admin, and Dev roles include it |
 | Linked matches and joint documents | Require access to both parties as well as the relevant action |
 
@@ -69,7 +70,9 @@ A member's departure ends personal access. Role changes require the agreed revie
 
 ## Personal and organization work
 
-Campaigns, workflows, and templates support personal and organization scope.
+Campaigns, workflows, and templates support personal and organization scope. Every active member can create and manage their personal work. These defaults cannot be denied by a role or individual override. Sending, organization management, and underlying record actions remain explicit permissions.
+
+AI Assistant is included for every active member when enabled by the organization. Only Admin and Dev configure AI providers. AI reads and proposed actions use the member's current record scope and action permissions; sending still requires human review. The availability endpoint exposes no provider credentials.
 
 | Rule | Personal | Organization |
 |---|---|---|
@@ -102,6 +105,8 @@ Permission and collaborator removals take effect on the next server request and 
 If personal work loses access to one record, skip unauthorized actions for that record, continue authorized work elsewhere, and report the skipped count. Loss of required owner authority across all records stops all affected personal work.
 
 Organization work is stopped through organization controls, not through departure or permission changes of its original contributor.
+
+New manual template email jobs use explicit manual authority. They recheck the sender, current Send permission, template access, and linked surrogate scope before delivery. Previously queued generic organization-email jobs retain their existing classification because that source also includes system email. Campaign previews, recipient pages, and displayed run counts follow the viewer's record scope; durable organization execution uses its independently authorized audience.
 
 ## Acceptance examples
 
@@ -141,7 +146,7 @@ Unlinked form intake submissions belong to Intake, Admin, and Dev. Linked submis
 
 ## Administration UI
 
-The selected Studio layout provides supplied roles, module navigation, record scope, action controls, access preview, and reviewed changes. People shows inherited authority, individual additions, and record collaborations. Role changes require explicit carryover choices. Check access explains record visibility without implying permission to edit or send.
+The approved September 12 mockup is implemented with five primary topics: Surrogates, Donors, Intended Parents, Operations, and Administration. Operations groups workflows, templates, campaigns, and supporting tools. Record actions use short labels within sections; record scope remains separate. Personal tools and AI availability appear in the access preview, without redundant role toggles. The legacy post-approval surrogate permission is absent from the version 2 catalog because phase scope replaces it. People shows inherited authority, individual additions, and record collaborations. Role changes require explicit carryover choices. Check access explains record visibility without implying permission to edit or send.
 
 The migration screen resolves legacy individual revokes, historical handoffs, old pool grants, and existing workflow/campaign execution. Activation validates the reviewed fingerprint again; a stale or incomplete review cannot activate the policy.
 

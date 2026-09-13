@@ -1,0 +1,5 @@
+Task API PID 3821 and frontend PID 96849 stopped; ports 8016 and 3016 closed.
+Postgres container crm-permission-upgrade-0912 and its anonymous volume removed.
+Existing crm-donor-preview-0912 and aiw-demo-postgres containers retained.
+Task temporary files removed. Browser QA tabs closed and viewport override reset.
+No task-owned services left running. No commits, staging, push, or deployment.
