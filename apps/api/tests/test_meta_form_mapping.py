@@ -6,6 +6,124 @@ import pytest
 from httpx import AsyncClient
 
 
+def test_preview_batches_missing_ad_names_and_preserves_tenant_scope(db, test_org):
+    from uuid import uuid4
+
+    from sqlalchemy import event
+
+    from app.db.models import (
+        MetaAd,
+        MetaAdAccount,
+        MetaAdSet,
+        MetaCampaign,
+        MetaForm,
+        MetaFormVersion,
+        MetaLead,
+        Organization,
+    )
+    from app.services.meta_form_mapping_service import build_mapping_preview
+
+    other_org = Organization(name="Other", slug=f"other-{uuid4().hex}")
+    db.add(other_org)
+    db.flush()
+    for org, ad_id, name in [(test_org, "123", "Local ad"), (other_org, "foreign", "Foreign ad")]:
+        account = MetaAdAccount(organization_id=org.id, ad_account_external_id="account")
+        db.add(account)
+        db.flush()
+        campaign = MetaCampaign(
+            organization_id=org.id,
+            ad_account_id=account.id,
+            campaign_external_id="campaign",
+            campaign_name="Campaign",
+            status="ACTIVE",
+        )
+        db.add(campaign)
+        db.flush()
+        adset = MetaAdSet(
+            organization_id=org.id,
+            ad_account_id=account.id,
+            campaign_id=campaign.id,
+            campaign_external_id="campaign",
+            adset_external_id="adset",
+            adset_name="Ad set",
+            status="ACTIVE",
+        )
+        db.add(adset)
+        db.flush()
+        db.add(
+            MetaAd(
+                organization_id=org.id,
+                ad_account_id=account.id,
+                campaign_id=campaign.id,
+                adset_id=adset.id,
+                campaign_external_id="campaign",
+                adset_external_id="adset",
+                ad_external_id=ad_id,
+                ad_name=name,
+                status="ACTIVE",
+            )
+        )
+    form = MetaForm(
+        organization_id=test_org.id,
+        page_id="page",
+        form_external_id="preview-form",
+        form_name="Preview",
+    )
+    db.add(form)
+    db.flush()
+    version = MetaFormVersion(
+        form_id=form.id, version_number=1, field_schema=[], schema_hash="batch"
+    )
+    db.add(version)
+    db.flush()
+    form.current_version_id = version.id
+    for index, raw in enumerate(
+        [
+            {"meta_ad_id": 123},
+            {"ad_id": "123"},
+            {"ad_id": "foreign"},
+            {"ad_id": "123", "ad_name": "Payload name"},
+            {"ad_id": "missing"},
+        ]
+    ):
+        db.add(
+            MetaLead(
+                organization_id=test_org.id,
+                meta_lead_id=f"lead-{index}",
+                meta_form_id=form.form_external_id,
+                field_data_raw=raw,
+            )
+        )
+    db.add(
+        MetaLead(
+            organization_id=other_org.id,
+            meta_lead_id="foreign-lead",
+            meta_form_id=form.form_external_id,
+            field_data_raw={"ad_name": "Foreign lead"},
+        )
+    )
+    db.flush()
+    statements = []
+
+    def capture(_conn, _cursor, statement, _params, _context, _many):
+        if statement.startswith("SELECT") and "FROM meta_ads" in statement:
+            statements.append(statement)
+
+    event.listen(db.get_bind(), "before_cursor_execute", capture)
+    try:
+        preview = build_mapping_preview(db, form)
+    finally:
+        event.remove(db.get_bind(), "before_cursor_execute", capture)
+    assert sorted(row["meta_ad_name"] for row in preview["sample_rows"]) == [
+        "",
+        "",
+        "Local ad",
+        "Local ad",
+        "Payload name",
+    ]
+    assert len(statements) == 1
+
+
 @pytest.mark.asyncio
 async def test_meta_form_mapping_preview_generates_sample_rows(
     authed_client: AsyncClient, db, test_org
