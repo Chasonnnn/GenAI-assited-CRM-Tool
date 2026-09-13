@@ -73,6 +73,94 @@ describe("PlatformFormTemplatePage", () => {
         vi.useRealTimers()
     })
 
+    it("lets OPS choose donor templates without changing existing surrogate defaults", async () => {
+        mockUpdate.mockResolvedValue({ ...mockTemplateData, current_version: 2 })
+        render(<PlatformFormTemplatePage />)
+        fireEvent.click(await screen.findByRole("button", { name: "Add Name field", exact: true }))
+        fireEvent.click(await screen.findByRole("tab", { name: "Settings", exact: true }))
+        const typeSelect = screen.getByRole("combobox", { name: "Template type" })
+        expect(typeSelect).toHaveTextContent("Surrogate")
+        expect(mockUpdate).not.toHaveBeenCalled()
+        fireEvent.mouseDown(typeSelect)
+        const donorOption = await screen.findByRole("option", { name: "Donor", exact: true })
+        fireEvent.mouseMove(donorOption)
+        fireEvent.click(donorOption)
+        await waitFor(() => expect(mockUpdate).toHaveBeenLastCalledWith({
+            id: "tpl_form_1",
+            payload: expect.objectContaining({ settings_json: expect.objectContaining({
+                purpose: "other", lead_kind: "egg_donor",
+            }) }),
+        }), { timeout: 2000 })
+    })
+
+    it("keeps donor routing settings and mappings when OPS autosaves a shared template", async () => {
+        mockTemplateData = {
+            ...buildTemplateData(),
+            draft: {
+                name: "Donor pre-screening",
+                description: null,
+                schema_json: { pages: [{ title: "Questionnaire", fields: [{
+                    key: "donor_type", label: "Donor program", type: "radio", required: true,
+                    options: [
+                        { label: "Egg donor", value: "Egg donor" },
+                        { label: "Sperm donor", value: "Sperm donor" },
+                    ],
+                }] }] },
+                settings_json: {
+                    purpose: "other", lead_kind: "egg_donor",
+                    mappings: [{ field_key: "donor_type", surrogate_field: "donor_type" }],
+                    allowed_mime_types: ["image/png", "image/jpeg"],
+                    max_file_count: 1,
+                },
+            },
+        }
+        mockUpdate.mockResolvedValue({ ...mockTemplateData, current_version: 2 })
+        render(<PlatformFormTemplatePage />)
+        fireEvent.change(await screen.findByPlaceholderText("Form name..."), {
+            target: { value: "Shared donor pre-screening" },
+        })
+        await waitFor(() => expect(mockUpdate).toHaveBeenCalled(), { timeout: 2000 })
+        expect(mockUpdate).toHaveBeenLastCalledWith({
+            id: "tpl_form_1",
+            payload: expect.objectContaining({ settings_json: expect.objectContaining({
+                purpose: "other", lead_kind: "egg_donor",
+                mappings: [{ field_key: "donor_type", surrogate_field: "donor_type" }],
+                max_file_count: 1, allowed_mime_types: ["image/png", "image/jpeg"],
+            }) }),
+        })
+    })
+
+    it("saves donor data classification from the field editor", async () => {
+        mockTemplateData = {
+            ...buildTemplateData(),
+            draft: {
+                name: "Donor screening", description: null,
+                settings_json: { lead_kind: "egg_donor", purpose: "other" },
+                schema_json: { pages: [{ title: "Questionnaire", fields: [{
+                    key: "medical_history", label: "Medical history", type: "text", required: true,
+                }] }] },
+            },
+        }
+        mockUpdate.mockResolvedValue({ ...mockTemplateData, current_version: 2 })
+        render(<PlatformFormTemplatePage />)
+        fireEvent.click(await screen.findByRole("button", { name: "Select Medical history field" }))
+        fireEvent.click(screen.getByRole("tab", { name: "Advanced", exact: true }))
+        const classification = screen.getByRole("combobox", { name: "Data classification" })
+        fireEvent.mouseDown(classification)
+        const healthOption = await screen.findByRole("option", { name: "Health", exact: true })
+        fireEvent.mouseMove(healthOption)
+        fireEvent.click(healthOption)
+        await waitFor(() => expect(mockUpdate).toHaveBeenLastCalledWith({
+            id: "tpl_form_1",
+            payload: expect.objectContaining({ schema_json: expect.objectContaining({
+                pages: [expect.objectContaining({ fields: [expect.objectContaining({
+                    key: "medical_history", sensitivity: "sensitive_health",
+                })] })],
+            }) }),
+        }), { timeout: 2000 })
+        expect(classification).toHaveTextContent("Health")
+    })
+
     it("waits for the routed template response before hydrating the builder draft", async () => {
         const templateA = buildTemplateData("tpl-form-a", "Template A")
         const templateB = buildTemplateData("tpl-form-b", "Template B")

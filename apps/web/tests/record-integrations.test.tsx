@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { RecordAppointmentsCard } from "@/components/records/RecordAppointmentsCard"
@@ -23,6 +23,8 @@ function mount(children: React.ReactNode) {
 const record = { kind: "donor" as const, id: "donor-1", name: "QA Donor", email: "qa@example.com", phone: "6075550100" }
 
 beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-09-01T12:00:00Z"))
     vi.clearAllMocks()
     mocks.appointments.mockReturnValue({ data: { items: [], pages: 0 }, isLoading: false, isError: false, refetch: mocks.refetch })
     mocks.types.mockReturnValue({ data: [], isLoading: false, isError: false })
@@ -32,6 +34,8 @@ beforeEach(() => {
     mocks.remove.mockResolvedValue(undefined)
     mocks.tickets.mockResolvedValue({ items: [{ id: "ticket-1", ticket_code: "T1001", subject: "QA conversation" }] })
 })
+
+afterEach(() => vi.useRealTimers())
 
 describe("Light record appointments", () => {
     it("queries the explicit donor and opens the existing management dialog", () => {

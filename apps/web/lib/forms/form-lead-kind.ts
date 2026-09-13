@@ -19,6 +19,7 @@ export const FORM_LEAD_KIND_OPTIONS: Array<{ value: FormLeadKind; label: string 
 ]
 
 const DONOR_FIELD_TYPES: Record<string, Set<FieldType>> = {
+    donor_type: new Set(["radio", "select"]),
     full_name: new Set(["text", "textarea"]),
     email: new Set(["email", "text"]),
     phone: new Set(["phone", "text"]),

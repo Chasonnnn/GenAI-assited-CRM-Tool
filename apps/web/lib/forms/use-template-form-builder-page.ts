@@ -4,8 +4,8 @@ import { useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "@/components/ui/toast"
 
-import { DEFAULT_FORM_SURROGATE_FIELD_OPTIONS } from "@/lib/api/forms"
-import type { FormSchema } from "@/lib/api/forms"
+import { DEFAULT_FORM_DONOR_FIELD_OPTIONS, DEFAULT_FORM_SURROGATE_FIELD_OPTIONS } from "@/lib/api/forms"
+import type { FormLeadKind, FormSchema } from "@/lib/api/forms"
 import type { PlatformFormTemplate } from "@/lib/api/platform"
 import {
     FALLBACK_FORM_PAGE,
@@ -13,6 +13,7 @@ import {
     buildMappings,
     schemaToPages,
 } from "@/lib/forms/form-builder-document"
+import { normalizePagesForLeadKind, getDonorPublishValidationMessage } from "@/lib/forms/form-lead-kind"
 import { useFormBuilderAutosave } from "@/lib/forms/use-form-builder-autosave"
 import { useFormBuilderDocument } from "@/lib/forms/use-form-builder-document"
 import { useTemplateFormBuilderState } from "@/lib/forms/use-template-form-builder-state"
@@ -24,8 +25,6 @@ import {
     usePublishPlatformFormTemplate,
     useUpdatePlatformFormTemplate,
 } from "@/lib/hooks/use-platform-templates"
-
-const surrogateFieldMappings = DEFAULT_FORM_SURROGATE_FIELD_OPTIONS
 
 type TemplateDraftValues = Pick<
     TemplateBuilderState,
@@ -39,6 +38,7 @@ type TemplateDraftValues = Pick<
     | "publicEyebrow"
     | "publicSubtitle"
     | "publicTitle"
+    | "templateSettings"
 >
 
 type TemplateDraftPayload = {
@@ -73,6 +73,16 @@ type TemplateUpdateMutation = {
 
 type TemplateRouter = ReturnType<typeof useRouter>
 
+function resolveTemplateTarget(settings: Record<string, unknown>) {
+    const leadKind: FormLeadKind = settings.lead_kind === "egg_donor" || settings.lead_kind === "sperm_donor"
+        ? settings.lead_kind
+        : "surrogate"
+    return {
+        leadKind,
+        mappingOptions: leadKind === "surrogate" ? DEFAULT_FORM_SURROGATE_FIELD_OPTIONS : DEFAULT_FORM_DONOR_FIELD_OPTIONS,
+    }
+}
+
 const buildTemplateDraftPayload = (
     pages: ReturnType<typeof useFormBuilderDocument>["pages"],
     state: TemplateDraftValues,
@@ -84,10 +94,12 @@ const buildTemplateDraftPayload = (
     }
     const mappings = buildMappings(pages)
     const settingsJson: Record<string, unknown> = {
+        ...state.templateSettings,
         max_file_size_bytes: Math.max(1, Math.round(state.maxFileSizeMb * 1024 * 1024)),
         max_file_count: Math.max(0, Math.round(state.maxFileCount)),
         allowed_mime_types: allowedMimeTypes.length > 0 ? allowedMimeTypes : null,
     }
+    delete settingsJson.mappings
     if (mappings.length > 0) {
         settingsJson.mappings = mappings
     }
@@ -256,6 +268,7 @@ export function useTemplateFormBuilderPage() {
     } = useFormBuilderDocument()
 
     const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || ""
+    const { leadKind: templateLeadKind, mappingOptions: surrogateFieldMappings } = resolveTemplateTarget(state.templateSettings)
     const resolvedLogoUrl =
         state.logoUrl && state.logoUrl.startsWith("/") && apiBaseUrl ? `${apiBaseUrl}${state.logoUrl}` : state.logoUrl
 
@@ -382,6 +395,7 @@ export function useTemplateFormBuilderPage() {
                 publicEyebrow: state.publicEyebrow,
                 publicSubtitle: state.publicSubtitle,
                 publicTitle: state.publicTitle,
+                templateSettings: state.templateSettings,
             })
             return queueTemplateSave(saveQueueRef, () =>
                 persistTemplatePayload({
@@ -410,6 +424,17 @@ export function useTemplateFormBuilderPage() {
         patchState({ workspaceTab: "preview" })
     }
 
+    const handleTemplateTypeChange = (value: "surrogate" | "donor") => {
+        const leadKind = value === "surrogate" ? "surrogate"
+            : templateLeadKind === "surrogate" ? "egg_donor" : templateLeadKind
+        patchState({ templateSettings: {
+            ...state.templateSettings,
+            lead_kind: leadKind,
+            purpose: value === "donor" ? "other" : "surrogate_application",
+        } })
+        resetDocument(normalizePagesForLeadKind(pages, leadKind))
+    }
+
     const handlePublish = () => {
         if (!state.formName.trim()) {
             toast.error("Form name is required")
@@ -417,6 +442,11 @@ export function useTemplateFormBuilderPage() {
         }
         if (pages.every((page) => page.fields.length === 0)) {
             toast.error("Add at least one field before publishing")
+            return
+        }
+        const donorValidation = getDonorPublishValidationMessage(pages, templateLeadKind)
+        if (donorValidation) {
+            toast.error(donorValidation)
             return
         }
         patchState({ showPublishDialog: true })
@@ -527,7 +557,7 @@ export function useTemplateFormBuilderPage() {
         surrogateFieldMappings,
         workspaceDocument,
         workspaceProps: {
-            leadKind: "surrogate" as const,
+            leadKind: templateLeadKind,
             desktopCanvasWidthClass: "max-w-[min(100%,76rem)]",
             canvasFrameClass: "rounded-[24px] border border-stone-200 bg-white p-4 sm:p-5",
             mappingOptions: surrogateFieldMappings,
@@ -555,6 +585,8 @@ export function useTemplateFormBuilderPage() {
             onPreviewDeviceChange: (value: "desktop" | "mobile") => patchState({ previewDevice: value }),
         },
         formSettingsProps: {
+            templateType: templateLeadKind === "surrogate" ? "surrogate" as const : "donor" as const,
+            onTemplateTypeChange: handleTemplateTypeChange,
             formName: state.formName,
             formDescription: state.formDescription,
             publicEyebrow: state.publicEyebrow,

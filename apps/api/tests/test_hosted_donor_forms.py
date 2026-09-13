@@ -29,13 +29,22 @@ from app.services import (
 )
 
 
+@pytest.fixture(autouse=True)
+def reset_donor_form_rate_limits():
+    from app.core.rate_limit import limiter
+
+    limiter.reset()
+
+
 def _png_bytes() -> bytes:
     buffer = io.BytesIO()
     Image.new("RGB", (8, 8), color=(40, 130, 210)).save(buffer, format="PNG")
     return buffer.getvalue()
 
 
-async def _create_donor_form(client, *, lead_kind: str = "egg_donor") -> tuple[str, str]:
+async def _create_donor_form(
+    client, *, lead_kind: str = "egg_donor", shared_donor: bool = False
+) -> tuple[str, str]:
     schema = {
         "pages": [
             {
@@ -81,6 +90,20 @@ async def _create_donor_form(client, *, lead_kind: str = "egg_donor") -> tuple[s
             }
         ]
     }
+    if shared_donor:
+        schema["pages"][0]["fields"].insert(
+            0,
+            {
+                "key": "donation_program",
+                "label": "Which donor program are you applying for?",
+                "type": "radio",
+                "required": True,
+                "options": [
+                    {"label": "Egg donor", "value": "Egg donor"},
+                    {"label": "Sperm donor", "value": "Sperm donor"},
+                ],
+            },
+        )
     create = await client.post(
         "/forms",
         json={
@@ -99,6 +122,11 @@ async def _create_donor_form(client, *, lead_kind: str = "egg_donor") -> tuple[s
         f"/forms/{form_id}/mappings",
         json={
             "mappings": [
+                *(
+                    [{"field_key": "donation_program", "surrogate_field": "donor_type"}]
+                    if shared_donor
+                    else []
+                ),
                 {"field_key": "applicant_name", "surrogate_field": "full_name"},
                 {"field_key": "email_address", "surrogate_field": "email"},
                 {"field_key": "mobile", "surrogate_field": "phone"},
@@ -126,10 +154,12 @@ async def _submit_donor_form(
     slug: str,
     email: str,
     idempotency_key: str | None = None,
+    donor_type: str | None = None,
 ):
     data = {
         "answers": json.dumps(
             {
+                **({"donation_program": donor_type} if donor_type is not None else {}),
                 "applicant_name": "Taylor Donor",
                 "email_address": email,
                 "mobile": "+1 (607) 555-0199",
@@ -255,6 +285,7 @@ async def test_donor_form_deletion_respects_submission_legal_hold(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("shared_donor", [False, True])
 @pytest.mark.parametrize(
     ("lead_kind", "donor_type", "pipeline_entity_type"),
     [
@@ -270,6 +301,7 @@ async def test_hosted_donor_form_promotes_exact_subtype_with_clean_profile_photo
     lead_kind,
     donor_type,
     pipeline_entity_type,
+    shared_donor,
 ):
     monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", False)
     donor_trigger_ids: list[uuid.UUID] = []
@@ -284,11 +316,18 @@ async def test_hosted_donor_form_promotes_exact_subtype_with_clean_profile_photo
         "trigger_document_uploaded",
         lambda _db, attachment: document_trigger_ids.append(attachment.id),
     )
-    form_id, slug = await _create_donor_form(authed_client, lead_kind=lead_kind)
+    form_id, slug = await _create_donor_form(
+        authed_client,
+        lead_kind="egg_donor" if shared_donor else lead_kind,
+        shared_donor=shared_donor,
+    )
     submit = await _submit_donor_form(
         authed_client,
         slug=slug,
         email=f"{donor_type}-{uuid.uuid4().hex[:8]}@example.com",
+        donor_type=("Egg donor" if donor_type == "egg" else "Sperm donor")
+        if shared_donor
+        else None,
     )
     assert submit.status_code == 200, submit.text
     submission_id = submit.json()["id"]
@@ -376,7 +415,7 @@ async def test_hosted_donor_form_promotes_exact_subtype_with_clean_profile_photo
     assert document_trigger_ids == [attachment.id]
 
     form = db.query(Form).filter(Form.id == uuid.UUID(form_id)).one()
-    assert form.lead_kind == lead_kind
+    assert form.lead_kind == ("egg_donor" if shared_donor else lead_kind)
 
 
 @pytest.mark.asyncio
@@ -722,9 +761,7 @@ async def test_donor_promotion_fails_closed_until_profile_scan_is_clean(
     monkeypatch,
 ):
     monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", True)
-    donors_before = (
-        db.query(Donor).filter(Donor.organization_id == test_org.id).count()
-    )
+    donors_before = db.query(Donor).filter(Donor.organization_id == test_org.id).count()
     donor_attachments_before = (
         db.query(Attachment)
         .filter(
@@ -753,10 +790,7 @@ async def test_donor_promotion_fails_closed_until_profile_scan_is_clean(
     )
     assert blocked.status_code == 400
     assert "pass security scanning" in blocked.json()["detail"]
-    assert (
-        db.query(Donor).filter(Donor.organization_id == test_org.id).count()
-        == donors_before
-    )
+    assert db.query(Donor).filter(Donor.organization_id == test_org.id).count() == donors_before
     assert (
         db.query(Attachment)
         .filter(
@@ -782,10 +816,7 @@ async def test_donor_promotion_fails_closed_until_profile_scan_is_clean(
     )
     assert promoted.status_code == 200, promoted.text
     assert promoted.json()["donor_id"]
-    assert (
-        db.query(Donor).filter(Donor.organization_id == test_org.id).count()
-        == donors_before + 1
-    )
+    assert db.query(Donor).filter(Donor.organization_id == test_org.id).count() == donors_before + 1
 
 
 @pytest.mark.asyncio
@@ -796,9 +827,7 @@ async def test_donor_promotion_rejects_active_email_conflict_without_partial_rec
     monkeypatch,
 ):
     monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", False)
-    donors_before = (
-        db.query(Donor).filter(Donor.organization_id == test_org.id).count()
-    )
+    donors_before = db.query(Donor).filter(Donor.organization_id == test_org.id).count()
     donor_attachments_before = (
         db.query(Attachment)
         .filter(
@@ -825,10 +854,7 @@ async def test_donor_promotion_rejects_active_email_conflict_without_partial_rec
 
     assert promote.status_code == 409
     assert "active donor" in promote.json()["detail"].lower()
-    assert (
-        db.query(Donor).filter(Donor.organization_id == test_org.id).count()
-        == donors_before + 1
-    )
+    assert db.query(Donor).filter(Donor.organization_id == test_org.id).count() == donors_before + 1
     assert (
         db.query(Attachment)
         .filter(

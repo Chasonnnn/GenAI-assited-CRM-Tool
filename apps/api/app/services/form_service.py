@@ -101,6 +101,7 @@ PUBLIC_SURROGATE_FIELD_DEFAULTS: dict[str, dict[str, Any]] = {
     },
 }
 DONOR_MAPPING_FIELD_TYPES: dict[str, set[str]] = {
+    "donor_type": {"radio", "select"},
     "full_name": {"text", "textarea"},
     "email": {"email", "text"},
     "phone": {"phone", "text"},
@@ -110,12 +111,17 @@ DONOR_MAPPING_FIELD_TYPES: dict[str, set[str]] = {
 }
 REQUIRED_DONOR_MAPPING_FIELDS = ("full_name", "email", "profile_photo")
 DONOR_FIELD_LABELS = {
+    "donor_type": "Donor Type",
     "full_name": "Full Name",
     "email": "Email",
     "phone": "Phone",
     "state": "State",
     "education": "Education",
     "profile_photo": "Profile Photo",
+}
+DONOR_TYPE_ANSWER_LEAD_KINDS = {
+    "Egg donor": FormLeadKind.EGG_DONOR.value,
+    "Sperm donor": FormLeadKind.SPERM_DONOR.value,
 }
 
 
@@ -570,6 +576,21 @@ def validate_donor_intake_schema(db: Session, form: Form) -> None:
         mapping.surrogate_field: mapping.field_key
         for mapping in db.query(FormFieldMapping).filter(FormFieldMapping.form_id == form.id).all()
     }
+    donor_type_key = mappings.get("donor_type")
+    if donor_type_key:
+        field = fields.get(donor_type_key)
+        if (
+            field is None
+            or field.type not in DONOR_MAPPING_FIELD_TYPES["donor_type"]
+            or not field.required
+            or field.show_if is not None
+            or len(field.options or []) != 2
+            or {option.value for option in field.options or []} != set(DONOR_TYPE_ANSWER_LEAD_KINDS)
+        ):
+            raise ValueError(
+                "Donor Type must be an unconditional required choice with "
+                "Egg donor and Sperm donor options"
+            )
     if form.max_file_count < 1:
         raise ValueError("Donor intake must allow at least one file upload")
     allowed_mime_types = {
