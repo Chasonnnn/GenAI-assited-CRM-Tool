@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -27,9 +27,9 @@ def other_org(db):
     return org
 
 
-def _submission(db, donor, *, org_id=None, answers=None):
+def _submission(db, donor, *, org_id=None, answers=None, fields=None, submitted_at=None):
     org_id = org_id or donor.organization_id
-    fields = [
+    fields = fields if fields is not None else [
         {"key": "birth", "label": "Date of birth", "type": "date"},
         {"key": "height", "label": "Height", "type": "height"},
         {"key": "weight", "label": "Weight", "type": "number"},
@@ -55,8 +55,7 @@ def _submission(db, donor, *, org_id=None, answers=None):
         donor_id=donor.id,
         schema_snapshot=schema,
         mapping_snapshot=[{"field_key": "birth", "surrogate_field": "date_of_birth"}],
-        answers_json=answers
-        or {
+        answers_json=answers if answers is not None else {
             "birth": "2000-05-14",
             "height": "5.5",
             "weight": 135,
@@ -69,6 +68,8 @@ def _submission(db, donor, *, org_id=None, answers=None):
             "infectious_disease": "Prefer to discuss with the team",
         },
     )
+    if submitted_at is not None:
+        submission.submitted_at = submitted_at
     db.add(submission)
     db.flush()
     return submission
@@ -197,6 +198,100 @@ async def test_checklist_uses_submitted_option_labels_and_only_questions_asked(d
         assert "nicotine" not in {item["key"] for item in profile["eligibility_checklist"]}
         assert (await client.patch(f"/donors/{donor.id}", json={"infectious_disease": "No history"})).status_code == 200
         assert (await client.get(f"/donors/{donor.id}/profile")).json()["infectious_disease"] == "No history"
+
+
+@pytest.mark.asyncio
+async def test_profile_retains_earlier_answers_when_later_forms_omit_questions(db, test_org):
+    async with _client_for_org(db, test_org) as client:
+        created = await _create_donor(client)
+        donor = db.get(Donor, uuid.UUID(created["id"]))
+        now = datetime.now(UTC)
+        original = _submission(db, donor, submitted_at=now - timedelta(days=2))
+        before = dict(original.answers_json)
+        _submission(
+            db, donor, submitted_at=now - timedelta(days=1),
+            answers={"nicotine": "current", "birth": "2001-02-03"},
+            fields=[
+                {"key": "birth", "type": "date", "label": "Updated birth date"},
+                {"key": "nicotine", "type": "radio", "label": "Updated nicotine question",
+                 "options": [{"value": "current", "label": "Current use"}]},
+            ],
+        )
+        _submission(
+            db, donor, submitted_at=now, answers={"followup": "Received"},
+            fields=[{"key": "followup", "type": "text", "label": "Follow-up"}],
+        )
+        profile = (await client.get(f"/donors/{donor.id}/profile")).json()
+        assert profile["date_of_birth"] == "2001-02-03"
+        assert profile["weight_lb"] == 135
+        assert profile["college"] == "Example University"
+        assert profile["infectious_disease"] == "Prefer to discuss with the team"
+        item = next(item for item in profile["eligibility_checklist"] if item["key"] == "nicotine")
+        assert item["value"] == "Current use"
+        assert item["question"] == "Updated nicotine question"
+        assert item["options"] == [{"value": "Current use", "label": "Current use"}]
+        assert (await client.patch(
+            f"/donors/{donor.id}", json={"college": None, "nicotine": "Manual answer"}
+        )).status_code == 200
+        refreshed = (await client.get(f"/donors/{donor.id}/profile")).json()
+        assert refreshed["college"] is None
+        assert refreshed["nicotine"] == "Manual answer"
+        assert refreshed["weight_lb"] == 135
+        db.refresh(original)
+        assert original.answers_json == before
+
+
+@pytest.mark.asyncio
+async def test_profile_respects_newer_unanswered_and_hidden_questions(db, test_org):
+    async with _client_for_org(db, test_org) as client:
+        created = await _create_donor(client)
+        donor = db.get(Donor, uuid.UUID(created["id"]))
+        now = datetime.now(UTC)
+        _submission(db, donor, submitted_at=now - timedelta(days=1))
+        _submission(
+            db, donor, submitted_at=now,
+            answers={"college": "", "nicotine": None, "show": "No", "cannabis": "Yes"},
+            fields=[
+                {"key": "college", "type": "text", "label": "Current college"},
+                {"key": "nicotine", "type": "text", "label": "Current nicotine use"},
+                {"key": "show", "type": "text", "label": "Ask cannabis question"},
+                {"key": "cannabis", "type": "text", "label": "Hidden question",
+                 "show_if": {"field_key": "show", "operator": "equals", "value": "Yes"}},
+            ],
+        )
+        profile = (await client.get(f"/donors/{donor.id}/profile")).json()
+        assert profile["college"] is None
+        assert profile["nicotine"] is None
+        assert profile["cannabis"] == "No"
+        assert profile["previous_donation"] == "Yes"
+        assert {item["key"] for item in profile["eligibility_checklist"]} == {
+            item["key"] for item in donor_profile_service.DEFAULT_QUESTIONS
+        }
+
+
+@pytest.mark.asyncio
+async def test_profile_history_excludes_other_tenants_and_donors(db, test_org, other_org):
+    async with _client_for_org(db, test_org) as client:
+        created = await _create_donor(client)
+        donor = db.get(Donor, uuid.UUID(created["id"]))
+        now = datetime.now(UTC)
+        _submission(db, donor, submitted_at=now - timedelta(days=2))
+        _submission(
+            db, donor, submitted_at=now, org_id=other_org.id,
+            answers={"college": "Other tenant college"},
+        )
+        _submission(
+            db, donor, submitted_at=now - timedelta(days=1), answers={}, fields=[]
+        )
+        from app.schemas.donor import DonorCreate
+
+        other_donor = donor_service.create_donor(
+            db, test_org.id, None,
+            DonorCreate(donor_type="egg", full_name="Another Donor", email="another@example.com"),
+        )
+        _submission(db, other_donor, submitted_at=now, answers={"college": "Other donor college"})
+        profile = (await client.get(f"/donors/{donor.id}/profile")).json()
+        assert profile["college"] == "Example University"
 
 
 @pytest.mark.asyncio

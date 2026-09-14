@@ -81,25 +81,26 @@ FORM_PROFILE_KEYS = {
 
 
 def read_profile(db: Session, donor: Donor) -> DonorProfileRead:
-    submission = (
+    submissions = (
         db.query(FormSubmission)
         .filter(
             FormSubmission.organization_id == donor.organization_id,
             FormSubmission.donor_id == donor.id,
         )
         .order_by(FormSubmission.submitted_at.desc(), FormSubmission.id.desc())
-        .first()
+        .all()
     )
-    return resolve_profile(donor, submission)
+    return resolve_profile(donor, submissions)
 
 
-def resolve_profile(donor: Donor, submission: FormSubmission | None) -> DonorProfileRead:
+def resolve_profile(donor: Donor, submissions: list[FormSubmission]) -> DonorProfileRead:
+    """Use the newest visible question for each field; stored edits and clears win."""
     values = DonorProfileFields.model_validate(donor).model_dump()
     overrides = set(donor.profile_updated_fields or [])
-    fields = {}
-    answers = {}
-    mappings = {}
-    if submission and submission.schema_snapshot:
+    matching_fields = {}
+    for submission in submissions:
+        if not submission.schema_snapshot:
+            continue
         schema = form_submission_service.parse_schema(submission.schema_snapshot)
         fields = form_submission_service.flatten_fields(schema)
         answers = submission.answers_json or {}
@@ -115,37 +116,39 @@ def resolve_profile(donor: Donor, submission: FormSubmission | None) -> DonorPro
             and mapping.get("surrogate_field") in FORM_PROFILE_KEYS
         }
 
-    matching_fields = {}
-    for target, aliases in FORM_PROFILE_KEYS.items():
-        field = fields.get(mappings.get(target))
-        if field is None:
-            field = next((fields[key] for key in aliases if key in fields), None)
-        if field is None:
-            continue
-        matching_fields[target] = field
-        if target in overrides or values.get(target) is not None:
-            continue
-        raw = answers.get(field.key)
-        if raw in (None, "", []):
-            continue
-        # Choice values are stored as labels in the profile; preserve custom option labels.
-        option = next((option for option in field.options or [] if option.value == raw), None)
-        if option:
-            raw = option.label
-        try:
-            if target == "height_ft" and field.type != "height":
-                raw = form_submission_service._coerce_surrogate_value("height_ft", raw)
-            parsed = DonorProfileFields.model_validate({target: raw})
-        except ValidationError, ValueError, TypeError:
-            continue
-        values[target] = getattr(parsed, target)
+        for target, aliases in FORM_PROFILE_KEYS.items():
+            if target in matching_fields:
+                continue
+            field = fields.get(mappings.get(target))
+            if field is None:
+                field = next((fields[key] for key in aliases if key in fields), None)
+            if field is None:
+                continue
+            # Even an unanswered newer question supersedes its older answer.
+            matching_fields[target] = field
+            if target in overrides or values.get(target) is not None:
+                continue
+            raw = answers.get(field.key)
+            if raw in (None, "", []):
+                continue
+            # Choice values are stored as labels in the profile; preserve custom option labels.
+            option = next((option for option in field.options or [] if option.value == raw), None)
+            if option:
+                raw = option.label
+            try:
+                if target == "height_ft" and field.type != "height":
+                    raw = form_submission_service._coerce_surrogate_value("height_ft", raw)
+                parsed = DonorProfileFields.model_validate({target: raw})
+            except ValidationError, ValueError, TypeError:
+                continue
+            values[target] = getattr(parsed, target)
 
     checklist = []
     for spec in DEFAULT_QUESTIONS:
         key = spec["key"]
         field = matching_fields.get(key)
         # A submitted form defines which questions were actually asked.
-        if submission and not field and values[key] is None and key not in overrides:
+        if submissions and not field and values[key] is None and key not in overrides:
             continue
         options = spec["options"]
         if field and field.options:
