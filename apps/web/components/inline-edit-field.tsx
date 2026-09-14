@@ -7,6 +7,8 @@ import { CheckIcon, XIcon, PencilIcon, Loader2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useFocusWhen } from "@/lib/hooks/use-focus-when"
 
+import { useRecordEditing } from "@/components/records/RecordEditingContext"
+
 interface InlineEditFieldProps {
     value: string | null | undefined
     onSave: (value: string) => Promise<void>
@@ -76,6 +78,7 @@ export function InlineEditField({
     validate,
     label,
 }: InlineEditFieldProps) {
+    const canEdit = useRecordEditing()
     const [state, dispatch] = React.useReducer(
         inlineEditFieldReducer,
         INITIAL_INLINE_EDIT_FIELD_STATE,
@@ -131,6 +134,8 @@ export function InlineEditField({
     }
 
     const fieldLabel = label?.trim() || (placeholder && placeholder !== "-" ? placeholder : "field")
+
+    if (!canEdit) return <span className={cn("text-sm", !value && "text-muted-foreground", className)}>{value || placeholder}</span>
 
     if (!isEditing) {
         return (
