@@ -26,10 +26,12 @@ from app.schemas.donor import (
     DonorStatusUpdate,
     DonorUpdate,
 )
+from app.schemas.donor_profile import DonorProfileRead, DonorSensitiveInfoRead
 from app.schemas.entity_note import EntityNoteCreate, EntityNoteListItem, EntityNoteRead
 from app.schemas.record_owner import RecordOwnerOptions
 from app.services import (
     audit_service,
+    donor_profile_service,
     donor_service,
     entity_activity_service,
     note_service,
@@ -192,6 +194,65 @@ def get_donor(
         details={"view": "donor_detail"},
     )
     return DonorRead.model_validate(donor)
+
+
+@router.get("/{donor_id}/profile", response_model=DonorProfileRead)
+def get_donor_profile(
+    donor_id: UUID,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(get_current_session)],
+) -> DonorProfileRead:
+    donor = _get_or_404(db, session.org_id, donor_id)
+    profile = donor_profile_service.read_profile(db, donor)
+    response.headers["Cache-Control"] = "no-store"
+    phi_access_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="donor",
+        target_id=donor.id,
+        request=request,
+        details={"view": "donor_profile"},
+    )
+    return profile
+
+
+@router.post(
+    "/{donor_id}/sensitive-info/reveal",
+    response_model=DonorSensitiveInfoRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def reveal_donor_sensitive_info(
+    donor_id: UUID,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(get_current_session)],
+) -> DonorSensitiveInfoRead:
+    donor = _get_or_404(db, session.org_id, donor_id)
+    response.headers["Cache-Control"] = "no-store"
+    phi_access_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="donor",
+        target_id=donor.id,
+        request=request,
+        details={"view": "sensitive_info_reveal", "fields": ["ssn", "partner_ssn"]},
+        commit=False,
+    )
+    entity_activity_service.record_activity(
+        db,
+        org_id=session.org_id,
+        entity_type="donor",
+        entity_id=donor.id,
+        activity_type="sensitive_info_revealed",
+        actor_user_id=session.user_id,
+    )
+    db.commit()
+    return DonorSensitiveInfoRead(ssn=donor.ssn, partner_ssn=donor.partner_ssn)
 
 
 @router.patch(
