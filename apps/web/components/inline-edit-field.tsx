@@ -7,6 +7,8 @@ import { CheckIcon, XIcon, PencilIcon, Loader2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useFocusWhen } from "@/lib/hooks/use-focus-when"
 
+import { useRecordEditing } from "@/components/records/RecordEditingContext"
+
 interface InlineEditFieldProps {
     value: string | null | undefined
     onSave: (value: string) => Promise<void>
@@ -76,12 +78,14 @@ export function InlineEditField({
     validate,
     label,
 }: InlineEditFieldProps) {
+    const canEdit = useRecordEditing()
     const [state, dispatch] = React.useReducer(
         inlineEditFieldReducer,
         INITIAL_INLINE_EDIT_FIELD_STATE,
     )
     const { isEditing, editValue, isSaving, error } = state
     const inputRef = React.useRef<HTMLInputElement>(null)
+    const savingRef = React.useRef(false)
 
     useFocusWhen(inputRef, isEditing, { select: true })
 
@@ -94,6 +98,7 @@ export function InlineEditField({
     }
 
     const handleSave = async () => {
+        if (!canEdit || savingRef.current) return
         // Validate if provided
         if (validate) {
             const validationError = validate(editValue)
@@ -109,11 +114,14 @@ export function InlineEditField({
             return
         }
 
+        savingRef.current = true
         dispatch({ type: "startSaving" })
         try {
             await onSave(editValue)
+            savingRef.current = false
             dispatch({ type: "saveSuccess" })
         } catch (err) {
+            savingRef.current = false
             dispatch({
                 type: "saveError",
                 error: err instanceof Error ? err.message : "Failed to save",
@@ -131,6 +139,8 @@ export function InlineEditField({
     }
 
     const fieldLabel = label?.trim() || (placeholder && placeholder !== "-" ? placeholder : "field")
+
+    if (!canEdit) return <span className={cn("text-sm", !value && "text-muted-foreground", className)}>{value || placeholder}</span>
 
     if (!isEditing) {
         return (
@@ -155,7 +165,12 @@ export function InlineEditField({
     }
 
     return (
-        <div className="flex items-center gap-1">
+        <div
+            className="flex items-center gap-1"
+            onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) void handleSave()
+            }}
+        >
             <div className="flex-1">
                 <Input
                     ref={inputRef}
@@ -163,12 +178,6 @@ export function InlineEditField({
                     value={editValue}
                     onChange={(e) => dispatch({ type: "setEditValue", value: e.target.value })}
                     onKeyDown={handleKeyDown}
-                    onBlur={() => {
-                        // Delay to allow button clicks
-                        setTimeout(() => {
-                            if (isEditing && !isSaving) void handleSave()
-                        }, 200)
-                    }}
                     className={cn("h-7 text-sm", error && "border-destructive")}
                     disabled={isSaving}
                     aria-label={fieldLabel}

@@ -4,7 +4,8 @@ import { EntityNotes } from "@/components/notes/EntityNotes"
 import { Card, CardContent } from "@/components/ui/card"
 import { useCreateDonorNote, useDeleteDonorNote, useDonorNotes } from "@/lib/hooks/use-donors"
 
-export function DonorNotesSection({ donorId, canEdit, currentUserId, canDeleteAny }: {
+export function DonorNotesSection({ donorId, canEdit, currentUserId, canDeleteAny, embedded = false }: {
+    embedded?: boolean
     donorId: string
     canEdit: boolean
     currentUserId: string | null
@@ -14,7 +15,7 @@ export function DonorNotesSection({ donorId, canEdit, currentUserId, canDeleteAn
     const createNote = useCreateDonorNote()
     const deleteNote = useDeleteDonorNote()
 
-    return <Card><CardContent><EntityNotes
+    const content = <EntityNotes
         key={donorId}
         notes={notesQuery.data?.map((note) => ({ ...note, body: note.content }))}
         status={notesQuery.isLoading ? "loading" : notesQuery.isError ? "error" : "ready"}
@@ -26,5 +27,6 @@ export function DonorNotesSection({ donorId, canEdit, currentUserId, canDeleteAn
         canDeleteNote={(note) => canEdit && (canDeleteAny || note.author_id === currentUserId)}
         editorLabel="New donor note"
         listLabel="Donor notes"
-    /></CardContent></Card>
+    />
+    return embedded ? content : <Card><CardContent>{content}</CardContent></Card>
 }

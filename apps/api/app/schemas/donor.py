@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.schemas.donor_profile import DonorProfileUpdate
 from app.utils.normalization import normalize_phone, normalize_state
 
 DonorTypeValue = Literal["egg", "sperm"]
@@ -35,7 +36,7 @@ class DonorCreate(BaseModel):
         return normalize_state(value)
 
 
-class DonorUpdate(BaseModel):
+class DonorUpdate(DonorProfileUpdate):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     full_name: str | None = Field(None, min_length=1, max_length=255)
