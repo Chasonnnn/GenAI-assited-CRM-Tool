@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.64](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.63...surrogacy-crm-platform-v0.91.64) (2026-09-14)
+
+
+### Bug Fixes
+
+* allow republishing shared form templates ([6d288ef](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6d288eff002ee2a88e82e0d4052bf82ce79e3d40))
+* allow republishing shared form templates ([96b06b4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/96b06b42fea88c20b33d84b5be623d66e27b787d))
+
 ## [0.91.63](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.62...surrogacy-crm-platform-v0.91.63) (2026-09-14)
 
 
