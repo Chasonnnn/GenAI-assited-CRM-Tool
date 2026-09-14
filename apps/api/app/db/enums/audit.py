@@ -139,6 +139,7 @@ class AuditEventType(str, Enum):
 
     # Forms
     FORM_SUBMISSION_RECEIVED = "form_submission_received"
+    FORM_SUBMISSION_MATCHED = "form_submission_matched"
     FORM_SUBMISSION_APPROVED = "form_submission_approved"
     FORM_SUBMISSION_REJECTED = "form_submission_rejected"
     FORM_SUBMISSION_FILE_DOWNLOADED = "form_submission_file_downloaded"
