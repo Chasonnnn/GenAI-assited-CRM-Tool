@@ -78,6 +78,82 @@ async def test_donor_routing_creates_then_matches_without_duplicates(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["egg_donor", "sperm_donor"])
+@pytest.mark.parametrize("queued", [False, True])
+async def test_same_form_repeat_is_held_for_review_without_linking_or_promoting(
+    authed_client, db, test_org, test_user, donor_storage, monkeypatch, kind, queued
+):
+    from app.jobs.handlers.form_submissions import process_donor_intake_promote
+    from app.schemas.donor import DonorCreate
+    from app.services import donor_service
+
+    monkeypatch.setattr(settings, "FORMS_SHARED_DUPLICATE_WINDOW_SECONDS", 0)
+    donor = donor_service.create_donor(
+        db,
+        test_org.id,
+        test_user.id,
+        DonorCreate(
+            donor_type=kind.removesuffix("_donor"),
+            full_name="Taylor Donor",
+            email="repeat@example.com",
+            phone="+16075550199",
+        ),
+    )
+    form_id, slug = await _create_donor_form(authed_client, shared_donor=True)
+    donor_type = "Egg donor" if kind == "egg_donor" else "Sperm donor"
+    first_response = await _submit_donor_form(
+        authed_client, slug=slug, email="repeat@example.com", donor_type=donor_type
+    )
+    assert first_response.status_code == 200, first_response.text
+    first = db.get(FormSubmission, uuid.UUID(first_response.json()["id"]))
+    form_intake_service.auto_match_submission(db, submission=first)
+    assert first.donor_id == donor.id
+    first.status = "approved"
+    db.commit()
+
+    repeat_response = await _submit_donor_form(
+        authed_client, slug=slug, email="repeat@example.com", donor_type=donor_type
+    )
+    assert repeat_response.status_code == 200, repeat_response.text
+    repeat = db.get(FormSubmission, uuid.UUID(repeat_response.json()["id"]))
+    answers = dict(repeat.answers_json)
+    if queued:
+        # A pending lead can be queued before deterministic matching runs.
+        _, lead = form_intake_service.create_intake_lead_for_submission(
+            db, submission=repeat, user_id=None
+        )
+        form_intake_service.create_intake_lead_for_submission(
+            db, submission=repeat, user_id=None, auto_promote=True
+        )
+        job = _jobs(db, test_org.id)[0]
+        await process_donor_intake_promote(db, job)
+        await process_donor_intake_promote(db, job)
+        db.refresh(lead)
+        assert lead.status == "pending_review"
+        assert lead.promoted_donor_id is None
+    else:
+        for _ in range(2):
+            _, outcome = form_intake_service.auto_match_submission(db, submission=repeat)
+            assert outcome == "ambiguous_review"
+        for auto_promote in (False, True):
+            _, lead = form_intake_service.create_intake_lead_for_submission(
+                db, submission=repeat, user_id=None, auto_promote=auto_promote
+            )
+            assert lead is None
+        assert not _jobs(db, test_org.id)
+    db.refresh(repeat)
+    assert repeat.donor_id is None
+    assert repeat.match_status == "ambiguous_review"
+    assert repeat.match_reason == "existing_submission_for_donor"
+    assert repeat.matched_at is None
+    assert repeat.answers_json == answers
+    assert db.query(Donor).filter_by(organization_id=test_org.id).count() == 1
+    assert db.query(FormSubmission).filter_by(
+        form_id=uuid.UUID(form_id), donor_id=donor.id
+    ).count() == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("status", ["pending", "infected", "error"])
 async def test_donor_creation_waits_for_clean_scan_and_queues_once(
     authed_client, db, test_org, donor_storage, status

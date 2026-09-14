@@ -2297,7 +2297,10 @@ def create_intake_lead_for_submission(
         )
         if auto_promote and not submission.intake_lead_id and not submission.donor_id:
             donor_intake_service.match_submission(db, submission)
-        if submission.match_reason == donor_intake_service.CONFLICT_REASON and not allow_ambiguous:
+        if (
+            submission.match_reason in donor_intake_service.REVIEW_REQUIRED_REASONS
+            and not allow_ambiguous
+        ):
             db.commit()
             return submission, None
     if submission.surrogate_id or submission.donor_id:

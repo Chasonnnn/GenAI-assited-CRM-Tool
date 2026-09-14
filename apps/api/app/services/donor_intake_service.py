@@ -11,6 +11,8 @@ from app.db.models import Donor, FormSubmission, FormSubmissionFile, IntakeLead
 from app.utils.normalization import normalize_search_text
 
 CONFLICT_REASON = "donor_identity_conflict"
+EXISTING_SUBMISSION_REASON = "existing_submission_for_donor"
+REVIEW_REQUIRED_REASONS = {CONFLICT_REASON, EXISTING_SUBMISSION_REASON}
 
 
 def match_submission(db: Session, submission: FormSubmission) -> str:
@@ -52,6 +54,21 @@ def match_submission(db: Session, submission: FormSubmission) -> str:
             or matched.phone_hash == identity["phone_hash"]
         )
     ):
+        existing_submission = (
+            db.query(FormSubmission.id)
+            .filter(
+                FormSubmission.organization_id == submission.organization_id,
+                FormSubmission.form_id == submission.form_id,
+                FormSubmission.donor_id == matched.id,
+                FormSubmission.id != submission.id,
+            )
+            .first()
+        )
+        if existing_submission is not None:
+            submission.match_status = "ambiguous_review"
+            submission.match_reason = EXISTING_SUBMISSION_REASON
+            submission.matched_at = None
+            return submission.match_status
         submission.donor_id = matched.id
         submission.match_status = "linked"
         submission.match_reason = "donor_email_name_type_exact"
@@ -184,7 +201,7 @@ def promote_queued_lead(db: Session, *, org_id: UUID, lead_id: UUID) -> None:
         lead.promoted_at = datetime.now(UTC)
         db.commit()
         return
-    if submission.match_reason == CONFLICT_REASON:
+    if submission.match_reason in REVIEW_REQUIRED_REASONS:
         db.commit()
         return
     try:
