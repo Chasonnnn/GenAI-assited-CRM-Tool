@@ -85,6 +85,7 @@ export function InlineEditField({
     )
     const { isEditing, editValue, isSaving, error } = state
     const inputRef = React.useRef<HTMLInputElement>(null)
+    const savingRef = React.useRef(false)
 
     useFocusWhen(inputRef, isEditing, { select: true })
 
@@ -97,6 +98,7 @@ export function InlineEditField({
     }
 
     const handleSave = async () => {
+        if (!canEdit || savingRef.current) return
         // Validate if provided
         if (validate) {
             const validationError = validate(editValue)
@@ -112,11 +114,14 @@ export function InlineEditField({
             return
         }
 
+        savingRef.current = true
         dispatch({ type: "startSaving" })
         try {
             await onSave(editValue)
+            savingRef.current = false
             dispatch({ type: "saveSuccess" })
         } catch (err) {
+            savingRef.current = false
             dispatch({
                 type: "saveError",
                 error: err instanceof Error ? err.message : "Failed to save",
@@ -160,7 +165,12 @@ export function InlineEditField({
     }
 
     return (
-        <div className="flex items-center gap-1">
+        <div
+            className="flex items-center gap-1"
+            onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) void handleSave()
+            }}
+        >
             <div className="flex-1">
                 <Input
                     ref={inputRef}
@@ -168,12 +178,6 @@ export function InlineEditField({
                     value={editValue}
                     onChange={(e) => dispatch({ type: "setEditValue", value: e.target.value })}
                     onKeyDown={handleKeyDown}
-                    onBlur={() => {
-                        // Delay to allow button clicks
-                        setTimeout(() => {
-                            if (isEditing && !isSaving) void handleSave()
-                        }, 200)
-                    }}
                     className={cn("h-7 text-sm", error && "border-destructive")}
                     disabled={isSaving}
                     aria-label={fieldLabel}
