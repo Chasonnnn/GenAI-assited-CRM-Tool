@@ -16,6 +16,7 @@ import {
 export type BuilderPaletteField = {
     key: string
     label: string
+    fieldLabel?: string
     type: FieldType
     icon: LucideIcon
     helperText?: string
@@ -39,6 +40,14 @@ const CONTACT_FIELD_GROUP: BuilderPaletteGroup = {
     id: "contacts",
     label: "Contacts",
     fields: [
+        {
+            key: "opt_in_consent",
+            label: "Opt-in Consent",
+            fieldLabel: "I agree to receive text messages.",
+            type: "checkbox",
+            icon: CheckSquareIcon,
+            required: false,
+        },
         {
             key: "full_name",
             label: "Full Name",
