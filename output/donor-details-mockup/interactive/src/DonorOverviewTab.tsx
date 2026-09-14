@@ -1,0 +1,1641 @@
+"use client"
+
+import * as React from "react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuItem,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { TabsContent } from "@/components/ui/tabs"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { InlineEditField } from "@/components/inline-edit-field"
+import { InlineDateField } from "@/components/inline-date-field"
+import { CombinedMedicalInsuranceCard } from "@/components/surrogates/CombinedMedicalInsuranceCard"
+import { SurrogateOverviewCard } from "@/components/surrogates/SurrogateOverviewCard"
+import {
+    AlertTriangleIcon,
+    CalendarDaysIcon,
+    ChevronDownIcon,
+    ClipboardCheckIcon,
+    CopyIcon,
+    EyeIcon,
+    InfoIcon,
+    CheckIcon,
+    PencilIcon,
+    PlusIcon,
+    RulerIcon,
+    ScaleIcon,
+    Trash2Icon,
+    UserIcon,
+    UsersIcon,
+    WeightIcon,
+    XIcon,
+} from "lucide-react"
+import { computeBmi, formatDate, formatHeight } from "@/components/surrogates/detail/surrogate-detail-utils"
+import { serializeHeightSelection, splitHeightFt } from "@/lib/height"
+import { getMaritalStatusOptions } from "@/lib/intended-parent-marital-status"
+import type { SurrogateRead, SurrogateLeadIntakeWarning } from "@/lib/types/surrogate"
+import type { SurrogateUpdatePayload } from "@/lib/api/surrogates"
+import { formatRace } from "@/lib/formatters"
+import { DONOR_QUESTIONS, EDUCATION_OPTIONS, type DonorQuestionAnswers } from "./donor-checklist"
+
+const LEAD_WARNING_FIELD_LABELS = {
+    email: "Email",
+    phone: "Phone",
+    state: "State",
+    height_ft: "Height",
+    weight_lb: "Weight",
+} as const
+
+const LEAD_WARNING_REASON_LABELS = {
+    invalid_value: "Invalid structured value",
+    missing_value: "Missing structured value",
+} as const
+
+const LEAD_WARNING_REASON_COPY = {
+    invalid_value: "This value could not be structured, so the field needs review.",
+    missing_value: "This value could not be structured, so the field needs review.",
+} as const
+
+const RACE_OPTIONS = [
+    "american_indian_or_alaska_native",
+    "asian",
+    "black_or_african_american",
+    "hispanic_or_latino",
+    "native_hawaiian_or_other_pacific_islander",
+    "white",
+    "other_please_specify",
+] as const
+
+const RACE_OPTION_ALIASES: Record<string, (typeof RACE_OPTIONS)[number]> = {
+    american_indian_alaska_native: "american_indian_or_alaska_native",
+    black_african_american: "black_or_african_american",
+    native_hawaiian_or_pacific_islander: "native_hawaiian_or_other_pacific_islander",
+    native_hawaiian_or_other_pacific_islanders: "native_hawaiian_or_other_pacific_islander",
+    other: "other_please_specify",
+    other_please_specified: "other_please_specify",
+}
+
+function normalizeRaceOptionKey(value: string | null | undefined): string {
+    const normalized = value?.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") ?? ""
+    if (!normalized) return ""
+    const aliased = RACE_OPTION_ALIASES[normalized] ?? normalized
+    return RACE_OPTIONS.includes(aliased as (typeof RACE_OPTIONS)[number]) ? aliased : ""
+}
+
+type SelectOption = {
+    value: string
+    label: string
+}
+
+function formatSelectValue(
+    value: string | null | undefined,
+    options: readonly SelectOption[],
+    placeholder: string
+) {
+    if (!value) return placeholder
+    return options.find((option) => option.value === value)?.label ?? value
+}
+
+function LeadWarningIndicator({
+    warning,
+    fieldLabel,
+}: {
+    warning: SurrogateLeadIntakeWarning
+    fieldLabel: string
+}) {
+    return (
+        <Tooltip>
+            <TooltipTrigger
+                type="button"
+                aria-label={`${fieldLabel} lead intake warning`}
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-red-300/80 bg-[radial-gradient(circle_at_28%_28%,rgba(255,255,255,0.96),rgba(255,255,255,0.42)_34%,rgba(252,165,165,0.3)_38%,rgba(248,113,113,0.26)_62%,rgba(220,38,38,0.18)_100%)] text-red-600 shadow-[0_6px_16px_-10px_rgba(220,38,38,0.95),inset_0_1px_0_rgba(255,255,255,0.95)] transition-transform duration-150 hover:-tranzinc-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300/70 focus-visible:ring-offset-2 dark:border-red-400/90 dark:bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.3),rgba(255,255,255,0.08)_18%,rgba(248,113,113,0.72)_42%,rgba(220,38,38,0.86)_70%,rgba(69,10,10,0.98)_100%)] dark:text-red-50 dark:shadow-[0_10px_24px_-14px_rgba(248,113,113,0.98),inset_0_1px_0_rgba(255,255,255,0.18)] dark:focus-visible:ring-red-400/70"
+            >
+                <AlertTriangleIcon
+                    className="size-3.5 drop-shadow-[0_0_1px_rgba(255,255,255,0.16)] dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.52)]"
+                    aria-hidden="true"
+                />
+            </TooltipTrigger>
+            <TooltipContent
+                className="max-w-64 border border-zinc-200/80 bg-white px-3 py-2 text-zinc-950 shadow-xl shadow-zinc-950/12 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-50 dark:shadow-black/40"
+                arrowClassName="bg-white fill-white dark:bg-zinc-950 dark:fill-zinc-950"
+            >
+                <div className="space-y-1.5">
+                    <div className="text-sm font-medium">{fieldLabel}</div>
+                    <div className="text-[10px] uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
+                        {LEAD_WARNING_REASON_LABELS[warning.issue]}
+                    </div>
+                    <p className="text-xs leading-relaxed text-zinc-700 dark:text-zinc-200">
+                        {LEAD_WARNING_REASON_COPY[warning.issue]}
+                    </p>
+                    <div className="border-t border-zinc-200/80 pt-1.5 dark:border-white/10">
+                        <div className="text-[10px] uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
+                            Raw lead value
+                        </div>
+                        <div className="mt-1 break-words text-xs font-medium">
+                            {warning.raw_value}
+                        </div>
+                    </div>
+                </div>
+            </TooltipContent>
+        </Tooltip>
+    )
+}
+
+function PersonalInfoRow({
+    label,
+    children,
+}: {
+    label: string
+    children: React.ReactNode
+}) {
+    return (
+        <div className="grid gap-1 sm:grid-cols-[8.25rem_minmax(0,1fr)] sm:items-center">
+            <span className="text-sm text-muted-foreground">{label}:</span>
+            <div className="min-w-0 text-sm">{children}</div>
+        </div>
+    )
+}
+
+function InlineSelectField({
+    value,
+    options,
+    onSave,
+    label,
+    placeholder = "Not provided",
+    saveOnSelect = true,
+    triggerClassName = "w-48",
+}: {
+    value: string | null | undefined
+    options: readonly SelectOption[]
+    onSave: (value: string | null) => Promise<void>
+    label: string
+    placeholder?: string
+    saveOnSelect?: boolean
+    triggerClassName?: string
+}) {
+    const [isEditing, setIsEditing] = React.useState(false)
+    const [editValue, setEditValue] = React.useState(value ?? "")
+    const [isSaving, setIsSaving] = React.useState(false)
+    const [error, setError] = React.useState<string | null>(null)
+
+    const displayValue = formatSelectValue(value, options, placeholder)
+    const isPlaceholder = !value
+
+    const handleStartEdit = () => {
+        setEditValue(value ?? "")
+        setError(null)
+        setIsEditing(true)
+    }
+
+    const handleCancel = () => {
+        setEditValue(value ?? "")
+        setError(null)
+        setIsEditing(false)
+    }
+
+    const handleSave = async (nextValue = editValue) => {
+        const normalizedValue = nextValue || null
+        if ((value ?? "") === (nextValue ?? "")) {
+            setIsEditing(false)
+            return
+        }
+
+        setIsSaving(true)
+        const finishSaving = () => setIsSaving(false)
+        try {
+            await onSave(normalizedValue)
+            setIsEditing(false)
+            setError(null)
+            finishSaving()
+        } catch (err) {
+            setError(err instanceof Error ? err.message : `Failed to save ${label}`)
+            finishSaving()
+        }
+    }
+
+    if (!isEditing) {
+        return (
+            <Button unstyled
+                type="button"
+                className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                onClick={handleStartEdit}
+                aria-label={`Edit ${label}`}
+            >
+                <span className={isPlaceholder ? "text-muted-foreground" : undefined}>
+                    {displayValue}
+                </span>
+                <PencilIcon
+                    className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                    aria-hidden="true"
+                />
+            </Button>
+        )
+    }
+
+    return (
+        <div className="space-y-1">
+            <div className="flex max-w-full flex-wrap items-center gap-1">
+                <Select
+                    value={editValue}
+                    onValueChange={(nextValue) => {
+                        const normalizedValue = nextValue ?? ""
+                        setEditValue(normalizedValue)
+                        if (saveOnSelect) {
+                            void handleSave(normalizedValue)
+                        }
+                    }}
+                    disabled={isSaving}
+                >
+                    <SelectTrigger
+                        aria-label={label}
+                        size="sm"
+                        className={triggerClassName}
+                    >
+                        <SelectValue>
+                            {(selectedValue: string | null) =>
+                                formatSelectValue(selectedValue, options, placeholder)
+                            }
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className={triggerClassName}>
+                        <SelectGroup>
+                            <SelectItem value="">{placeholder}</SelectItem>
+                            {options.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                </SelectItem>
+                            ))}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+                {!saveOnSelect && (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-6"
+                        onClick={() => void handleSave()}
+                        disabled={isSaving}
+                        aria-label={`Save ${label}`}
+                    >
+                        <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
+                    </Button>
+                )}
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    onClick={handleCancel}
+                    disabled={isSaving}
+                    aria-label={`Cancel ${label}`}
+                >
+                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
+                </Button>
+            </div>
+            {error && <p className="text-xs text-destructive">{error}</p>}
+        </div>
+    )
+}
+
+function ProfileMetric({
+    icon: Icon,
+    label,
+    primary,
+    secondary,
+    warning,
+    badge,
+}: {
+    icon: React.ComponentType<{ className?: string }>
+    label: string
+    primary: React.ReactNode
+    secondary?: React.ReactNode
+    warning?: React.ReactNode
+    badge?: React.ReactNode
+}) {
+    return (
+        <div className="grid h-full grid-cols-[2.25rem_minmax(0,1fr)] gap-3 rounded-lg p-2">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-rose-100/65 text-rose-900 dark:bg-rose-950/40 dark:text-rose-100">
+                <Icon className="size-4" />
+            </div>
+            <div className="min-w-0 space-y-0.5">
+                <div className="flex items-center gap-1.5">
+                    <span className="text-sm text-muted-foreground">{label}:</span>
+                    {warning}
+                </div>
+                <div className="min-w-0 text-sm text-foreground">{primary}</div>
+                {secondary && <div className="text-xs text-muted-foreground">{secondary}</div>}
+                {badge}
+            </div>
+        </div>
+    )
+}
+
+function InlineHeightField({
+    value,
+    onSave,
+}: {
+    value: number | string | null | undefined
+    onSave: (value: number | null) => Promise<void>
+}) {
+    const [isEditing, setIsEditing] = React.useState(false)
+    const [feet, setFeet] = React.useState("")
+    const [inches, setInches] = React.useState("")
+    const [isSaving, setIsSaving] = React.useState(false)
+    const [error, setError] = React.useState<string | null>(null)
+
+    const displayValue = value != null ? formatHeight(value) : "-"
+
+    const handleStartEdit = () => {
+        const selection = splitHeightFt(value)
+        setFeet(selection.feet)
+        setInches(selection.inches)
+        setError(null)
+        setIsEditing(true)
+    }
+
+    const handleCancel = () => {
+        const selection = splitHeightFt(value)
+        setFeet(selection.feet)
+        setInches(selection.inches)
+        setError(null)
+        setIsEditing(false)
+    }
+
+    const handleSave = async () => {
+        const nextValue = serializeHeightSelection(feet, inches)
+        if ((feet !== "" || inches !== "") && nextValue === null) {
+            setError("Invalid height")
+            return
+        }
+
+        setIsSaving(true)
+        const finishSaving = () => setIsSaving(false)
+        try {
+            await onSave(nextValue)
+            setIsEditing(false)
+            setError(null)
+            finishSaving()
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to save")
+            finishSaving()
+        }
+    }
+
+    if (!isEditing) {
+        return (
+            <Button unstyled
+                type="button"
+                className="group -mx-1 flex cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                onClick={handleStartEdit}
+                aria-label="Edit Height"
+            >
+                <span className={value == null ? "text-muted-foreground" : undefined}>
+                    {displayValue}
+                </span>
+                <PencilIcon
+                    className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                    aria-hidden="true"
+                />
+            </Button>
+        )
+    }
+
+    return (
+        <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-1">
+                <Select value={feet} onValueChange={(value) => setFeet(value ?? "")} disabled={isSaving}>
+                    <SelectTrigger aria-label="Height feet" size="sm" className="w-20">
+                        <SelectValue>
+                            {(value: string | null) => (value ? `${value} ft` : "ft")}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="w-24">
+                        <SelectGroup>
+                            <SelectItem value="">ft</SelectItem>
+                            {Array.from({ length: 9 }, (_, option) => option).map((option) => (
+                                <SelectItem key={`inline-height-feet-${option}`} value={String(option)}>
+                                    {option} ft
+                                </SelectItem>
+                            ))}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+                <Select value={inches} onValueChange={(value) => setInches(value ?? "")} disabled={isSaving}>
+                    <SelectTrigger aria-label="Height inches" size="sm" className="w-20">
+                        <SelectValue>
+                            {(value: string | null) => (value ? `${value} in` : "in")}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="w-24">
+                        <SelectGroup>
+                            <SelectItem value="">in</SelectItem>
+                            {Array.from({ length: 12 }, (_, option) => option).map((option) => (
+                                <SelectItem key={`inline-height-inches-${option}`} value={String(option)}>
+                                    {option} in
+                                </SelectItem>
+                            ))}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    aria-label="Save Height"
+                >
+                    <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
+                </Button>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    onClick={handleCancel}
+                    disabled={isSaving}
+                    aria-label="Cancel Height"
+                >
+                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
+                </Button>
+            </div>
+            {error && <p className="text-xs text-destructive">{error}</p>}
+        </div>
+    )
+}
+
+function InlineRaceField({
+    value,
+    onSave,
+}: {
+    value: string | null | undefined
+    onSave: (value: string | null) => Promise<void>
+}) {
+    const [isEditing, setIsEditing] = React.useState(false)
+    const [editValue, setEditValue] = React.useState(() => normalizeRaceOptionKey(value))
+    const [isSaving, setIsSaving] = React.useState(false)
+    const [error, setError] = React.useState<string | null>(null)
+
+    const displayValue = formatRace(value)
+    const fieldLabel = "Race / Ethnicity"
+
+    const handleStartEdit = () => {
+        setEditValue(normalizeRaceOptionKey(value))
+        setError(null)
+        setIsEditing(true)
+    }
+
+    const handleCancel = () => {
+        setEditValue(normalizeRaceOptionKey(value))
+        setError(null)
+        setIsEditing(false)
+    }
+
+    const handleSave = async () => {
+        const currentValue = normalizeRaceOptionKey(value)
+        if (editValue === currentValue) {
+            setIsEditing(false)
+            return
+        }
+
+        setIsSaving(true)
+        const finishSaving = () => setIsSaving(false)
+        try {
+            await onSave(editValue || null)
+            setIsEditing(false)
+            setError(null)
+            finishSaving()
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to save")
+            finishSaving()
+        }
+    }
+
+    if (!isEditing) {
+        return (
+            <Button unstyled
+                type="button"
+                className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                onClick={handleStartEdit}
+                aria-label={`Edit ${fieldLabel}`}
+            >
+                <span className={displayValue ? undefined : "text-muted-foreground"}>
+                    {displayValue || "-"}
+                </span>
+                <PencilIcon
+                    className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                    aria-hidden="true"
+                />
+            </Button>
+        )
+    }
+
+    return (
+        <div className="space-y-1">
+            <div className="flex max-w-full flex-wrap items-center gap-1">
+                <Select
+                    value={editValue}
+                    onValueChange={(value) => setEditValue(value ?? "")}
+                    disabled={isSaving}
+                >
+                    <SelectTrigger
+                        aria-label={fieldLabel}
+                        size="sm"
+                        className="w-64 max-w-full"
+                    >
+                        <SelectValue>
+                            {(value: string | null) => (value ? formatRace(value) : "No race selected")}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="w-64 max-w-full">
+                        <SelectGroup>
+                            <SelectItem value="">No race selected</SelectItem>
+                            {RACE_OPTIONS.map((raceKey) => (
+                                <SelectItem key={raceKey} value={raceKey}>
+                                    {formatRace(raceKey)}
+                                </SelectItem>
+                            ))}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    aria-label={`Save ${fieldLabel}`}
+                >
+                    <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
+                </Button>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    onClick={handleCancel}
+                    disabled={isSaving}
+                    aria-label={`Cancel ${fieldLabel}`}
+                >
+                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
+                </Button>
+            </div>
+            {error && <p className="text-xs text-destructive">{error}</p>}
+        </div>
+    )
+}
+
+function InlineWeightField({
+    value,
+    onSave,
+}: {
+    value: number | null | undefined
+    onSave: (value: number | null) => Promise<void>
+}) {
+    const [isEditing, setIsEditing] = React.useState(false)
+    const [editValue, setEditValue] = React.useState("")
+    const [isSaving, setIsSaving] = React.useState(false)
+    const [error, setError] = React.useState<string | null>(null)
+
+    const handleStartEdit = () => {
+        setEditValue("")
+        setError(null)
+        setIsEditing(true)
+    }
+
+    const handleCancel = () => {
+        setEditValue("")
+        setError(null)
+        setIsEditing(false)
+    }
+
+    const handleSave = async () => {
+        const trimmed = editValue.trim()
+        if (!trimmed) {
+            setIsEditing(false)
+            setError(null)
+            return
+        }
+        const parsed = trimmed ? Number(trimmed) : null
+        if (parsed !== null && (!Number.isFinite(parsed) || parsed < 0)) {
+            setError("Enter a valid weight")
+            return
+        }
+        if (parsed === value) {
+            setIsEditing(false)
+            setError(null)
+            return
+        }
+
+        setIsSaving(true)
+        const finishSaving = () => setIsSaving(false)
+        try {
+            await onSave(parsed)
+            setIsEditing(false)
+            setError(null)
+            finishSaving()
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to save")
+            finishSaving()
+        }
+    }
+
+    if (!isEditing) {
+        return (
+            <Button unstyled
+                type="button"
+                className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                onClick={handleStartEdit}
+                aria-label="Edit Weight"
+            >
+                <span className={value == null ? "text-muted-foreground" : undefined}>
+                    {value != null ? `${value} lb` : "-"}
+                </span>
+                <PencilIcon
+                    className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                    aria-hidden="true"
+                />
+            </Button>
+        )
+    }
+
+    return (
+        <div className="space-y-1">
+            <div className="flex items-center gap-1">
+                <Input
+                    type="number"
+                    min="0"
+                    value={editValue}
+                    onChange={(event) => setEditValue(event.target.value)}
+                    onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                            event.preventDefault()
+                            void handleSave()
+                        } else if (event.key === "Escape") {
+                            handleCancel()
+                        }
+                    }}
+                    className="h-7 w-24 text-sm"
+                    disabled={isSaving}
+                    aria-label="Weight"
+                    placeholder={value != null ? String(value) : undefined}
+                />
+                <span className="text-sm text-muted-foreground">lb</span>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    aria-label="Save Weight"
+                >
+                    <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
+                </Button>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    onClick={handleCancel}
+                    disabled={isSaving}
+                    aria-label="Cancel Weight"
+                >
+                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
+                </Button>
+            </div>
+            {error && <p className="text-xs text-destructive">{error}</p>}
+        </div>
+    )
+}
+
+function PersonalInfoColumn({
+    title,
+    icon: Icon,
+    children,
+}: {
+    title: string
+    icon: React.ComponentType<{ className?: string }>
+    children: React.ReactNode
+}) {
+    return (
+        <section className="flex h-full min-w-0 flex-col rounded-lg border border-border/70 bg-card p-4 shadow-sm">
+            <h3 className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Icon className="size-4 text-muted-foreground" />
+                {title}
+            </h3>
+            <div className="mt-4 space-y-3">{children}</div>
+        </section>
+    )
+}
+
+function SectionActionIcon({
+    icon,
+    tone = "default",
+}: {
+    icon: React.ReactNode
+    tone?: "default" | "destructive"
+}) {
+    return (
+        <span
+            className={
+                tone === "destructive"
+                    ? "flex size-7 items-center justify-center rounded-full bg-destructive/10 text-destructive"
+                    : "flex size-7 items-center justify-center rounded-full bg-muted text-muted-foreground"
+            }
+        >
+            {icon}
+        </span>
+    )
+}
+
+function getAgeLabel(dateOfBirth: string | null | undefined) {
+    if (!dateOfBirth) return null
+    const parsed = new Date(`${dateOfBirth}T00:00:00`)
+    if (Number.isNaN(parsed.getTime())) return null
+    const today = new Date()
+    let age = today.getFullYear() - parsed.getFullYear()
+    const monthDelta = today.getMonth() - parsed.getMonth()
+    if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < parsed.getDate())) {
+        age -= 1
+    }
+    return `Age ${age}`
+}
+
+function SsnField({
+    label,
+    maskedValue,
+    revealedValue,
+    onReveal,
+    onSave,
+    isRevealPending,
+}: {
+    label: string
+    maskedValue: string | null | undefined
+    revealedValue: string | null
+    onReveal: () => Promise<void>
+    onSave: (value: string | null) => Promise<void>
+    isRevealPending: boolean
+}) {
+    const [isEditing, setIsEditing] = React.useState(false)
+    const [editValue, setEditValue] = React.useState("")
+    const [isSaving, setIsSaving] = React.useState(false)
+    const [error, setError] = React.useState<string | null>(null)
+    const displayValue = revealedValue || maskedValue || "-"
+
+    const save = async () => {
+        setIsSaving(true)
+        const finishSaving = () => setIsSaving(false)
+        try {
+            await onSave(editValue.trim() || null)
+            setEditValue("")
+            setError(null)
+            setIsEditing(false)
+            finishSaving()
+        } catch (err) {
+            setError(err instanceof Error ? err.message : `Failed to save ${label}`)
+            finishSaving()
+        }
+    }
+
+    if (isEditing) {
+        return (
+            <div className="space-y-1">
+                <div className="flex min-w-0 items-center gap-2">
+                    <Input
+                        aria-label={label}
+                        value={editValue}
+                        onChange={(event) => setEditValue(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                                event.preventDefault()
+                                void save()
+                            }
+                            if (event.key === "Escape") {
+                                setEditValue("")
+                                setError(null)
+                                setIsEditing(false)
+                            }
+                        }}
+                        placeholder="XXX-XX-XXXX"
+                        className="h-7 min-w-0 rounded-md border border-input bg-background px-2 text-sm"
+                    />
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-7"
+                        onClick={() => void save()}
+                        disabled={isSaving}
+                        aria-label={`Save ${label}`}
+                    >
+                        <CheckIcon className="size-3.5" aria-hidden="true" />
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-7"
+                        onClick={() => {
+                            setEditValue("")
+                            setError(null)
+                            setIsEditing(false)
+                        }}
+                        disabled={isSaving}
+                        aria-label={`Cancel editing ${label}`}
+                    >
+                        <XIcon className="size-3.5" aria-hidden="true" />
+                    </Button>
+                </div>
+                {error && <p className="text-xs text-destructive">{error}</p>}
+            </div>
+        )
+    }
+
+    return (
+        <div className="flex min-w-0 items-center gap-1.5">
+            <span className="shrink-0 whitespace-nowrap font-mono text-[13px] tabular-nums">
+                {displayValue}
+            </span>
+            {maskedValue && !revealedValue && (
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onClick={() => void onReveal()}
+                    disabled={isRevealPending}
+                    aria-label={`Reveal ${label}`}
+                >
+                    <EyeIcon className="size-3.5" aria-hidden="true" />
+                </Button>
+            )}
+            <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={() => {
+                    setError(null)
+                    setIsEditing(true)
+                }}
+                aria-label={`Edit ${label}`}
+            >
+                <PencilIcon className="size-3.5" aria-hidden="true" />
+            </Button>
+        </div>
+    )
+}
+
+export type PrototypeDonorRecord = SurrogateRead & DonorQuestionAnswers & {
+    donor_type: string
+    education: string
+    ssn?: string | null
+    partner_ssn?: string | null
+}
+
+type DonorUpdate = Partial<SurrogateUpdatePayload> & Partial<DonorQuestionAnswers> & { donor_type?: string }
+
+export function DonorOverviewTab({ record, onUpdate, activityPanel }: {
+    record: PrototypeDonorRecord
+    onUpdate: (data: DonorUpdate) => Promise<void>
+    activityPanel: React.ReactNode
+}) {
+    const id = "donor-demo"
+    const surrogateData = record
+    const updateSurrogateMutation = {
+        mutateAsync: async ({ data }: { surrogateId: string; data: DonorUpdate }) => onUpdate(data),
+    }
+    const revealSensitiveInfoMutation = {
+        isPending: false,
+        mutateAsync: async (_id: string) => ({ ssn: record.ssn ?? null, partner_ssn: record.partner_ssn ?? null }),
+    }
+    const [copiedEmail, setCopiedEmail] = React.useState(false)
+    const [revealedSsn, setRevealedSsn] = React.useState<string | null>(null)
+    const [revealedPartnerSsn, setRevealedPartnerSsn] = React.useState<string | null>(null)
+    const [surrogatePersonalSectionAdded, setSurrogatePersonalSectionAdded] = React.useState(false)
+    const [surrogatePersonalSectionHidden, setSurrogatePersonalSectionHidden] = React.useState(false)
+    const [partnerSectionAdded, setPartnerSectionAdded] = React.useState(false)
+    const [partnerSectionHidden, setPartnerSectionHidden] = React.useState(false)
+    const [isDeletingPersonalSection, setIsDeletingPersonalSection] = React.useState(false)
+    const [personalSectionPendingDelete, setPersonalSectionPendingDelete] = React.useState<"surrogate" | "partner" | null>(null)
+
+    const bmiValue = surrogateData
+        ? typeof surrogateData.bmi === "number"
+            ? surrogateData.bmi
+            : computeBmi(surrogateData.height_ft, surrogateData.weight_lb)
+        : null
+    const leadIntakeWarnings = surrogateData?.lead_intake_warnings ?? []
+    const leadWarningMap = new Map(leadIntakeWarnings.map((warning) => [warning.field_key, warning]))
+
+    if (!surrogateData) {
+        return null
+    }
+
+    const emailLeadWarning = leadWarningMap.get("email")
+    const phoneLeadWarning = leadWarningMap.get("phone")
+    const stateLeadWarning = leadWarningMap.get("state")
+    const heightLeadWarning = leadWarningMap.get("height_ft")
+    const weightLeadWarning = leadWarningMap.get("weight_lb")
+    const maritalStatusOptions = getMaritalStatusOptions(surrogateData.marital_status)
+    const hasSurrogatePersonalInfo = Boolean(
+        surrogateData.donor_type ||
+        surrogateData.education ||
+        surrogateData.marital_status ||
+        surrogateData.ssn_masked ||
+        surrogateData.address_line1 ||
+        surrogateData.address_line2 ||
+        surrogateData.address_city ||
+        surrogateData.address_state ||
+        surrogateData.address_postal
+    )
+    const hasPartnerInfo = Boolean(
+        surrogateData.partner_name ||
+        surrogateData.partner_date_of_birth ||
+        surrogateData.partner_email ||
+        surrogateData.partner_phone ||
+        surrogateData.partner_ssn_masked ||
+        surrogateData.partner_address_line1 ||
+        surrogateData.partner_address_line2 ||
+        surrogateData.partner_city ||
+        surrogateData.partner_state ||
+        surrogateData.partner_postal
+    )
+    const showSurrogatePersonalInfo =
+        (hasSurrogatePersonalInfo || surrogatePersonalSectionAdded) && !surrogatePersonalSectionHidden
+    const showPartnerInfo = (hasPartnerInfo || partnerSectionAdded) && !partnerSectionHidden
+    const hasAnyPersonalInfoSection = showSurrogatePersonalInfo || showPartnerInfo
+
+    const copyEmail = () => {
+        void navigator.clipboard.writeText(surrogateData.email)
+        setCopiedEmail(true)
+        setTimeout(() => setCopiedEmail(false), 2000)
+    }
+
+    const updateSurrogate = async (data: Partial<SurrogateUpdatePayload>) => {
+        await updateSurrogateMutation.mutateAsync({
+            surrogateId: id,
+            data,
+        })
+    }
+
+    const revealSensitiveInfo = async () => {
+        const payload = await revealSensitiveInfoMutation.mutateAsync(id)
+        setRevealedSsn(payload.ssn)
+        setRevealedPartnerSsn(payload.partner_ssn)
+    }
+
+    const addSurrogatePersonalSection = () => {
+        setSurrogatePersonalSectionHidden(false)
+        setSurrogatePersonalSectionAdded(true)
+    }
+
+    const addPartnerSection = () => {
+        setPartnerSectionHidden(false)
+        setPartnerSectionAdded(true)
+    }
+
+    const deletePersonalSection = async () => {
+        if (!personalSectionPendingDelete) return
+
+        setIsDeletingPersonalSection(true)
+        const finishDeleting = () => setIsDeletingPersonalSection(false)
+        try {
+            if (personalSectionPendingDelete === "surrogate") {
+                await updateSurrogate({
+                    donor_type: "",
+                    education: "",
+                    marital_status: null,
+                    ssn: null,
+                    address_line1: null,
+                    address_line2: null,
+                    address_city: null,
+                    address_state: null,
+                    address_postal: null,
+                })
+                setRevealedSsn(null)
+                setSurrogatePersonalSectionAdded(false)
+                setSurrogatePersonalSectionHidden(true)
+            } else {
+                await updateSurrogate({
+                    partner_name: null,
+                    partner_date_of_birth: null,
+                    partner_email: null,
+                    partner_phone: null,
+                    partner_ssn: null,
+                    partner_address_line1: null,
+                    partner_address_line2: null,
+                    partner_city: null,
+                    partner_state: null,
+                    partner_postal: null,
+                })
+                setRevealedPartnerSsn(null)
+                setPartnerSectionAdded(false)
+                setPartnerSectionHidden(true)
+            }
+            setPersonalSectionPendingDelete(null)
+            finishDeleting()
+        } catch {
+            finishDeleting()
+        }
+    }
+
+    return (
+        <TabsContent value="overview" className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+                <div className="space-y-4">
+                    <SurrogateOverviewCard title="Contact Information" icon={UserIcon}>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">Name:</span>
+                            <InlineEditField
+                                value={surrogateData.full_name}
+                                onSave={async (value) => {
+                                    await updateSurrogateMutation.mutateAsync({
+                                        surrogateId: id,
+                                        data: { full_name: value },
+                                    })
+                                }}
+                                placeholder="Enter name"
+                                className="text-base font-medium"
+                                label="Full name"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">Email:</span>
+                            <div className="flex min-w-0 items-center gap-1.5">
+                                <InlineEditField
+                                    value={surrogateData.email}
+                                    onSave={async (value) => {
+                                        await updateSurrogateMutation.mutateAsync({
+                                            surrogateId: id,
+                                            data: { email: value },
+                                        })
+                                    }}
+                                    type="email"
+                                    placeholder="Enter email"
+                                    validate={(value) => (!value.includes("@") ? "Invalid email" : null)}
+                                    label="Email"
+                                />
+                                {emailLeadWarning && (
+                                    <LeadWarningIndicator
+                                        warning={emailLeadWarning}
+                                        fieldLabel={LEAD_WARNING_FIELD_LABELS.email}
+                                    />
+                                )}
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-6"
+                                onClick={copyEmail}
+                                aria-label="Copy email"
+                            >
+                                {copiedEmail ? (
+                                    <CheckIcon className="size-3" />
+                                ) : (
+                                    <CopyIcon className="size-3" />
+                                )}
+                            </Button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">Phone:</span>
+                            <div className="flex min-w-0 items-center gap-1.5">
+                                <InlineEditField
+                                    value={surrogateData.phone ?? undefined}
+                                    onSave={async (value) => {
+                                        await updateSurrogateMutation.mutateAsync({
+                                            surrogateId: id,
+                                            data: { phone: value || null },
+                                        })
+                                    }}
+                                    type="tel"
+                                    placeholder="-"
+                                    label="Phone"
+                                />
+                                {phoneLeadWarning && (
+                                    <LeadWarningIndicator
+                                        warning={phoneLeadWarning}
+                                        fieldLabel={LEAD_WARNING_FIELD_LABELS.phone}
+                                    />
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">State:</span>
+                            <div className="flex min-w-0 items-center gap-1.5">
+                                <InlineEditField
+                                    value={surrogateData.state ?? undefined}
+                                    onSave={async (value) => {
+                                        await updateSurrogateMutation.mutateAsync({
+                                            surrogateId: id,
+                                            data: { state: value || null },
+                                        })
+                                    }}
+                                    placeholder="-"
+                                    validate={(value) =>
+                                        value && value.length !== 2
+                                            ? "Use 2-letter code (e.g., CA, TX)"
+                                            : null
+                                    }
+                                    label="State"
+                                />
+                                {stateLeadWarning && (
+                                    <LeadWarningIndicator
+                                        warning={stateLeadWarning}
+                                        fieldLabel={LEAD_WARNING_FIELD_LABELS.state}
+                                    />
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">Source:</span>
+                            <Badge variant="secondary" className="capitalize">
+                                {surrogateData.source}
+                            </Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">Created:</span>
+                            <span className="text-sm">{formatDate(surrogateData.created_at)}</span>
+                        </div>
+                    </SurrogateOverviewCard>
+
+                    <SurrogateOverviewCard title="Demographics" icon={InfoIcon}>
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+                            <ProfileMetric
+                                icon={CalendarDaysIcon}
+                                label="Date of Birth"
+                                primary={
+                                    <InlineDateField
+                                        value={surrogateData.date_of_birth}
+                                        onSave={async (value) => {
+                                            await updateSurrogateMutation.mutateAsync({
+                                                surrogateId: id,
+                                                data: { date_of_birth: value },
+                                            })
+                                        }}
+                                        placeholder="-"
+                                        label="Date of Birth"
+                                    />
+                                }
+                                secondary={getAgeLabel(surrogateData.date_of_birth)}
+                            />
+                            <ProfileMetric
+                                icon={UsersIcon}
+                                label="Race / Ethnicity"
+                                primary={
+                                    <InlineRaceField
+                                        value={surrogateData.race ?? undefined}
+                                        onSave={async (value) => {
+                                            await updateSurrogateMutation.mutateAsync({
+                                                surrogateId: id,
+                                                data: { race: value || null },
+                                            })
+                                        }}
+                                    />
+                                }
+                            />
+                            <ProfileMetric
+                                icon={RulerIcon}
+                                label="Height"
+                                primary={
+                                    <InlineHeightField
+                                        value={surrogateData.height_ft}
+                                        onSave={async (value) => {
+                                            await updateSurrogateMutation.mutateAsync({
+                                                surrogateId: id,
+                                                data: { height_ft: value },
+                                            })
+                                        }}
+                                    />
+                                }
+                                warning={
+                                    heightLeadWarning ? (
+                                        <LeadWarningIndicator
+                                            warning={heightLeadWarning}
+                                            fieldLabel={LEAD_WARNING_FIELD_LABELS.height_ft}
+                                        />
+                                    ) : undefined
+                                }
+                            />
+                            <ProfileMetric
+                                icon={WeightIcon}
+                                label="Weight"
+                                primary={
+                                    <InlineWeightField
+                                        value={surrogateData.weight_lb}
+                                        onSave={async (value) => {
+                                            await updateSurrogateMutation.mutateAsync({
+                                                surrogateId: id,
+                                                data: { weight_lb: value },
+                                            })
+                                        }}
+                                    />
+                                }
+                                warning={
+                                    weightLeadWarning ? (
+                                        <LeadWarningIndicator
+                                            warning={weightLeadWarning}
+                                            fieldLabel={LEAD_WARNING_FIELD_LABELS.weight_lb}
+                                        />
+                                    ) : undefined
+                                }
+                            />
+                            <ProfileMetric
+                                icon={ScaleIcon}
+                                label="BMI"
+                                primary={bmiValue ?? "-"}
+                            />
+                        </div>
+                    </SurrogateOverviewCard>
+
+                    <>
+                            <SurrogateOverviewCard
+                                title="Personal Information"
+                                icon={UserIcon}
+                                action={
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger
+                                            render={
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    aria-label="Edit Personal Information"
+                                                    className="group h-8 rounded-full border-border/70 bg-background/90 px-3.5 text-xs font-medium shadow-none transition-colors hover:bg-accent/70 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
+                                                />
+                                            }
+                                        >
+                                            <PencilIcon className="size-3.5 text-muted-foreground transition-colors group-data-[state=open]:text-current" />
+                                            Edit Info
+                                            <ChevronDownIcon className="ml-0.5 size-3.5 text-muted-foreground transition-all group-data-[state=open]:tranzinc-y-px group-data-[state=open]:text-current" />
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent
+                                            align="end"
+                                            sideOffset={8}
+                                            className="w-56 rounded-2xl border border-border/70 bg-background/95 p-1.5 shadow-lg supports-[backdrop-filter]:bg-background/90"
+                                        >
+                                            {(!showSurrogatePersonalInfo || !showPartnerInfo) && (
+                                                <DropdownMenuGroup>
+                                                    <DropdownMenuSub>
+                                                        <DropdownMenuSubTrigger className="rounded-xl px-2.5 py-2 font-medium">
+                                                            <SectionActionIcon icon={<PlusIcon className="size-4" />} />
+                                                            Add Section
+                                                        </DropdownMenuSubTrigger>
+                                                        <DropdownMenuSubContent className="w-52 rounded-2xl border border-border/70 bg-background/95 p-1.5 shadow-lg supports-[backdrop-filter]:bg-background/90">
+                                                            {!showSurrogatePersonalInfo && (
+                                                                <DropdownMenuItem
+                                                                    onClick={addSurrogatePersonalSection}
+                                                                    className="rounded-xl px-2.5 py-2"
+                                                                >
+                                                                    <SectionActionIcon icon={<UserIcon className="size-4" />} />
+                                                                    <span className="font-medium">Donor</span>
+                                                                </DropdownMenuItem>
+                                                            )}
+                                                            {!showPartnerInfo && (
+                                                                <DropdownMenuItem
+                                                                    onClick={addPartnerSection}
+                                                                    className="rounded-xl px-2.5 py-2"
+                                                                >
+                                                                    <SectionActionIcon icon={<UsersIcon className="size-4" />} />
+                                                                    <span className="font-medium">Partner</span>
+                                                                </DropdownMenuItem>
+                                                            )}
+                                                        </DropdownMenuSubContent>
+                                                    </DropdownMenuSub>
+                                                </DropdownMenuGroup>
+                                            )}
+                                            {hasAnyPersonalInfoSection && (
+                                                <DropdownMenuGroup>
+                                                    <DropdownMenuSub>
+                                                        <DropdownMenuSubTrigger className="rounded-xl px-2.5 py-2 font-medium text-destructive data-open:bg-destructive/10 data-open:text-destructive focus:bg-destructive/10 focus:text-destructive">
+                                                            <SectionActionIcon icon={<Trash2Icon className="size-4" />} tone="destructive" />
+                                                            Delete Section
+                                                        </DropdownMenuSubTrigger>
+                                                        <DropdownMenuSubContent className="w-52 rounded-2xl border border-border/70 bg-background/95 p-1.5 shadow-lg supports-[backdrop-filter]:bg-background/90">
+                                                            {showSurrogatePersonalInfo && (
+                                                                <DropdownMenuItem
+                                                                    onClick={() => setPersonalSectionPendingDelete("surrogate")}
+                                                                    variant="destructive"
+                                                                    className="rounded-xl px-2.5 py-2"
+                                                                >
+                                                                    <SectionActionIcon icon={<UserIcon className="size-4" />} tone="destructive" />
+                                                                    <span className="font-medium">Delete Donor</span>
+                                                                </DropdownMenuItem>
+                                                            )}
+                                                            {showPartnerInfo && (
+                                                                <DropdownMenuItem
+                                                                    onClick={() => setPersonalSectionPendingDelete("partner")}
+                                                                    variant="destructive"
+                                                                    className="rounded-xl px-2.5 py-2"
+                                                                >
+                                                                    <SectionActionIcon icon={<UsersIcon className="size-4" />} tone="destructive" />
+                                                                    <span className="font-medium">Delete Partner</span>
+                                                                </DropdownMenuItem>
+                                                            )}
+                                                        </DropdownMenuSubContent>
+                                                    </DropdownMenuSub>
+                                                </DropdownMenuGroup>
+                                            )}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                }
+                            >
+                                {!hasAnyPersonalInfoSection ? (
+                                    <p className="py-4 text-center text-sm text-muted-foreground">
+                                        No personal information added yet.
+                                    </p>
+                                ) : (
+                                    <div className="grid items-stretch gap-4 lg:grid-cols-2">
+                                    {showSurrogatePersonalInfo && (
+                                        <PersonalInfoColumn title="Donor" icon={UserIcon}>
+                                        <PersonalInfoRow label="Donor Type">
+                                            <InlineSelectField
+                                                label="Donor Type"
+                                                value={record.donor_type}
+                                                options={[{value:"egg",label:"Egg Donor"},{value:"sperm",label:"Sperm Donor"}]}
+                                                onSave={async value=>onUpdate({donor_type:value ?? ""})}
+                                                triggerClassName="w-full max-w-[15rem]"
+                                            />
+                                        </PersonalInfoRow>
+                                        <PersonalInfoRow label="Education">
+                                            <InlineSelectField
+                                                value={record.education}
+                                                label="Education"
+                                                options={EDUCATION_OPTIONS}
+                                                placeholder="Not answered"
+                                                onSave={async value=>onUpdate({education:value})}
+                                                triggerClassName="w-full max-w-[15rem]"
+                                            />
+                                        </PersonalInfoRow>
+                                        <PersonalInfoRow label="Marital Status">
+                                            <InlineSelectField
+                                                label="Marital Status"
+                                                value={surrogateData.marital_status}
+                                                options={maritalStatusOptions}
+                                                onSave={async (value) => {
+                                                    await updateSurrogate({ marital_status: value })
+                                                }}
+                                                triggerClassName="w-full max-w-[15rem]"
+                                            />
+                                        </PersonalInfoRow>
+                                        <PersonalInfoRow label="SSN">
+                                            <SsnField
+                                                label="donor SSN"
+                                                maskedValue={surrogateData.ssn_masked}
+                                                revealedValue={revealedSsn}
+                                                isRevealPending={revealSensitiveInfoMutation.isPending}
+                                                onReveal={revealSensitiveInfo}
+                                                onSave={async (value) => {
+                                                    await updateSurrogate({ ssn: value })
+                                                    setRevealedSsn(null)
+                                                }}
+                                            />
+                                        </PersonalInfoRow>
+                                        <PersonalInfoRow label="Address Line 1">
+                                            <InlineEditField
+                                                value={surrogateData.address_line1}
+                                                onSave={async (value) => updateSurrogate({ address_line1: value || null })}
+                                                placeholder="-"
+                                                label="Donor address line 1"
+                                            />
+                                        </PersonalInfoRow>
+                                        <PersonalInfoRow label="Address Line 2">
+                                            <InlineEditField
+                                                value={surrogateData.address_line2}
+                                                onSave={async (value) => updateSurrogate({ address_line2: value || null })}
+                                                placeholder="-"
+                                                label="Donor address line 2"
+                                            />
+                                        </PersonalInfoRow>
+                                        <PersonalInfoRow label="City">
+                                            <InlineEditField
+                                                value={surrogateData.address_city}
+                                                onSave={async (value) => updateSurrogate({ address_city: value || null })}
+                                                placeholder="-"
+                                                label="Donor city"
+                                            />
+                                        </PersonalInfoRow>
+                                        <PersonalInfoRow label="State">
+                                            <InlineEditField
+                                                value={surrogateData.address_state}
+                                                onSave={async (value) => updateSurrogate({ address_state: value || null })}
+                                                placeholder="-"
+                                                validate={(value) =>
+                                                    value && value.length !== 2
+                                                        ? "Use 2-letter code (e.g., CA, TX)"
+                                                        : null
+                                                }
+                                                label="Donor state"
+                                            />
+                                        </PersonalInfoRow>
+                                        <PersonalInfoRow label="Postal Code">
+                                            <InlineEditField
+                                                value={surrogateData.address_postal}
+                                                onSave={async (value) => updateSurrogate({ address_postal: value || null })}
+                                                placeholder="-"
+                                                label="Donor postal code"
+                                            />
+                                        </PersonalInfoRow>
+                                        </PersonalInfoColumn>
+                                    )}
+
+                                    {showPartnerInfo && (
+                                        <PersonalInfoColumn title="Partner" icon={UsersIcon}>
+                                            <PersonalInfoRow label="Full Name">
+                                                <InlineEditField
+                                                    value={surrogateData.partner_name}
+                                                    onSave={async (value) => updateSurrogate({ partner_name: value || null })}
+                                                    placeholder="-"
+                                                    label="Partner full name"
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="DOB">
+                                                <InlineDateField
+                                                    value={surrogateData.partner_date_of_birth}
+                                                    onSave={async (value) => updateSurrogate({ partner_date_of_birth: value })}
+                                                    placeholder="-"
+                                                    label="Partner date of birth"
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="Email">
+                                                <InlineEditField
+                                                    value={surrogateData.partner_email}
+                                                    onSave={async (value) => updateSurrogate({ partner_email: value || null })}
+                                                    type="email"
+                                                    placeholder="-"
+                                                    validate={(value) => (value && !value.includes("@") ? "Invalid email" : null)}
+                                                    label="Partner email"
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="Phone">
+                                                <InlineEditField
+                                                    value={surrogateData.partner_phone}
+                                                    onSave={async (value) => updateSurrogate({ partner_phone: value || null })}
+                                                    type="tel"
+                                                    placeholder="-"
+                                                    label="Partner phone"
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="SSN">
+                                                <SsnField
+                                                    label="partner SSN"
+                                                    maskedValue={surrogateData.partner_ssn_masked}
+                                                    revealedValue={revealedPartnerSsn}
+                                                    isRevealPending={revealSensitiveInfoMutation.isPending}
+                                                    onReveal={revealSensitiveInfo}
+                                                    onSave={async (value) => {
+                                                        await updateSurrogate({ partner_ssn: value })
+                                                        setRevealedPartnerSsn(null)
+                                                    }}
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="Address Line 1">
+                                                <InlineEditField
+                                                    value={surrogateData.partner_address_line1}
+                                                    onSave={async (value) => updateSurrogate({ partner_address_line1: value || null })}
+                                                    placeholder="-"
+                                                    label="Partner address line 1"
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="Address Line 2">
+                                                <InlineEditField
+                                                    value={surrogateData.partner_address_line2}
+                                                    onSave={async (value) => updateSurrogate({ partner_address_line2: value || null })}
+                                                    placeholder="-"
+                                                    label="Partner address line 2"
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="City">
+                                                <InlineEditField
+                                                    value={surrogateData.partner_city}
+                                                    onSave={async (value) => updateSurrogate({ partner_city: value || null })}
+                                                    placeholder="-"
+                                                    label="Partner city"
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="State">
+                                                <InlineEditField
+                                                    value={surrogateData.partner_state}
+                                                    onSave={async (value) => updateSurrogate({ partner_state: value || null })}
+                                                    placeholder="-"
+                                                    validate={(value) =>
+                                                        value && value.length !== 2
+                                                            ? "Use 2-letter code (e.g., CA, TX)"
+                                                            : null
+                                                    }
+                                                    label="Partner state"
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="Postal Code">
+                                                <InlineEditField
+                                                    value={surrogateData.partner_postal}
+                                                    onSave={async (value) => updateSurrogate({ partner_postal: value || null })}
+                                                    placeholder="-"
+                                                    label="Partner postal code"
+                                                />
+                                            </PersonalInfoRow>
+                                        </PersonalInfoColumn>
+                                    )}
+                                    </div>
+                                )}
+                            </SurrogateOverviewCard>
+
+                            <AlertDialog
+                                open={personalSectionPendingDelete !== null}
+                                onOpenChange={(open) => {
+                                    if (!open && !isDeletingPersonalSection) {
+                                        setPersonalSectionPendingDelete(null)
+                                    }
+                                }}
+                            >
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>
+                                            Delete {personalSectionPendingDelete === "surrogate" ? "Donor" : "Partner"} section?
+                                        </AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            This removes the section from Personal Information and clears any saved details. You can add it back later.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel disabled={isDeletingPersonalSection}>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                            variant="destructive"
+                                            onClick={deletePersonalSection}
+                                            disabled={isDeletingPersonalSection}
+                                        >
+                                            Delete Section
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        </>
+
+                    <CombinedMedicalInsuranceCard
+                        surrogateData={surrogateData}
+                        onUpdate={async (data) => {
+                            await updateSurrogateMutation.mutateAsync({
+                                surrogateId: id,
+                                data,
+                            })
+                        }}
+                    />
+                </div>
+
+                <div className="space-y-4">
+                    {activityPanel}
+
+                    <SurrogateOverviewCard title="Eligibility Checklist" icon={ClipboardCheckIcon}>
+                        {DONOR_QUESTIONS.map(({key, label, question, options}) => (
+                            <div key={key} className="grid gap-1 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
+                                <Tooltip>
+                                    <TooltipTrigger render={<button type="button" className="text-left text-sm text-muted-foreground"/>}>{label}:</TooltipTrigger>
+                                    <TooltipContent className="max-w-72">{question}</TooltipContent>
+                                </Tooltip>
+                                {options ? (
+                                    <InlineSelectField
+                                        label={label}
+                                        value={record[key]}
+                                        options={options}
+                                        placeholder="Not answered"
+                                        onSave={async value=>onUpdate({[key]:value})}
+                                        triggerClassName="w-full"
+                                    />
+                                ) : (
+                                    <InlineEditField
+                                        label={label}
+                                        value={record[key] ?? undefined}
+                                        placeholder="Not answered"
+                                        onSave={async value=>onUpdate({[key]:value || null})}
+                                    />
+                                )}
+                            </div>
+                        ))}
+                    </SurrogateOverviewCard>
+                </div>
+            </div>
+        </TabsContent>
+    )
+}
