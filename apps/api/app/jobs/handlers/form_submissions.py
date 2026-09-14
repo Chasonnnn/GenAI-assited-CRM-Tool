@@ -8,6 +8,20 @@ from uuid import UUID
 logger = logging.getLogger(__name__)
 
 
+async def process_donor_intake_promote(db, job) -> None:
+    from app.services import donor_intake_service
+
+    if not job.organization_id:
+        raise ValueError("Donor intake job requires organization scope")
+    try:
+        donor_intake_service.promote_queued_lead(
+            db, org_id=job.organization_id, lead_id=UUID(job.payload["intake_lead_id"])
+        )
+    except Exception:
+        # Worker errors are persisted; provider/validation errors can contain applicant data.
+        raise RuntimeError("Donor intake promotion failed") from None
+
+
 async def process_form_submission_file_scan(db, job) -> bool:
     """Process form submission file scan job."""
     file_id = job.payload.get("submission_file_id")

@@ -1428,12 +1428,12 @@ def get_workflow_options(
         {
             "value": "promote_intake_lead",
             "label": "Promote Intake Lead",
-            "description": "Create surrogate case from intake lead",
+            "description": "Create a surrogate or donor record from an intake lead",
         },
         {
             "value": "auto_match_submission",
             "label": "Auto-Match Submission",
-            "description": "Try deterministic match to an existing surrogate",
+            "description": "Match a submission to an existing applicant record",
         },
         {
             "value": "create_intake_lead",

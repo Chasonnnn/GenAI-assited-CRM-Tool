@@ -645,6 +645,19 @@ def mark_submission_file_scanned(
     record.scan_status = status
     record.quarantined = status in ("infected", "error")
     db.flush()
+    if status == "clean":
+        from app.services import donor_intake_service
+
+        submission = (
+            db.query(FormSubmission)
+            .filter(
+                FormSubmission.organization_id == record.organization_id,
+                FormSubmission.id == record.submission_id,
+            )
+            .first()
+        )
+        if submission:
+            donor_intake_service.enqueue_promotion(db, submission=submission)
     return record
 
 

@@ -10,7 +10,7 @@ interface SurrogateTasksCalendarHeaderProps {
     taskCount: number
     viewMode: SurrogateTasksViewMode
     onViewModeChange: (mode: SurrogateTasksViewMode) => void
-    onAddTask: () => void
+    onAddTask?: (() => void) | undefined
 }
 
 export function SurrogateTasksCalendarHeader({
@@ -49,10 +49,10 @@ export function SurrogateTasksCalendarHeader({
                         Calendar
                     </Button>
                 </div>
-                <Button size="sm" onClick={onAddTask}>
+                {onAddTask && <Button size="sm" onClick={onAddTask}>
                     <PlusIcon className="size-4 mr-1.5" />
                     Add Task
-                </Button>
+                </Button>}
             </div>
         </div>
     )

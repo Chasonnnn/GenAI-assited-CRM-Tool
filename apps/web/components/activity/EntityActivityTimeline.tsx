@@ -928,9 +928,11 @@ function ActivityTimelineNextSteps({
 }
 
 function ActivityTimelineLinks({
+    onViewHistory,
     historyHref,
     notesHref,
 }: {
+    onViewHistory?: (() => void) | undefined
     historyHref?: string | undefined
     notesHref?: string | undefined
 }) {
@@ -940,6 +942,7 @@ function ActivityTimelineLinks({
             {historyHref ? (
                 <Link
                     href={historyHref}
+                    onClick={onViewHistory ? (event) => { event.preventDefault(); onViewHistory() } : undefined}
                     className="text-xs text-primary underline-offset-4 hover:underline"
                 >
                     View full history &rarr;
@@ -972,6 +975,7 @@ export interface EntityActivityTimelineProps {
     onRetryTasks?: () => void
     status?: "loading" | "error" | "ready"
     onRetry?: () => void
+    onViewHistory?: () => void
     historyHref?: string
     notesHref?: string
 }
@@ -990,6 +994,7 @@ export function EntityActivityTimeline({
     onRetryTasks,
     status = "ready",
     onRetry,
+    onViewHistory,
     historyHref,
     notesHref,
 }: EntityActivityTimelineProps) {
@@ -1132,7 +1137,7 @@ export function EntityActivityTimeline({
                     upcomingTasks={upcomingTasks}
                     onRetry={onRetryTasks}
                 />
-                <ActivityTimelineLinks historyHref={historyHref} notesHref={notesHref} />
+                <ActivityTimelineLinks onViewHistory={onViewHistory} historyHref={historyHref} notesHref={notesHref} />
             </CardContent>
         </Card>
     )
