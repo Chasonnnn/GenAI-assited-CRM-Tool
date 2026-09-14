@@ -17,6 +17,21 @@ const metadata = {
     privacyNotice: "",
 }
 
+describe("opt-in consent preset", () => {
+    it("starts optional and preserves custom wording and notice links on reload", () => {
+        const preset = PRESET_FIELD_GROUPS.flatMap((group) => group.fields)
+            .find((field) => field.key === "opt_in_consent")!
+        const field = createBuilderField(preset)
+        expect(field).toMatchObject({ type: "checkbox", required: false, label: "I agree to receive text messages." })
+        field.label = "I agree to receive updates from Example Agency."
+        field.helperText = "[Privacy Notice](https://agency.example/privacy)"
+        const schema = buildFormSchema([{ id: 1, name: "Contact", fields: [field] }], metadata)
+        const restored = schemaToPages(schema, new Map())
+        expect(buildFormSchema(restored, metadata)).toEqual(schema)
+        expect(buildMappings(restored)).toEqual([])
+    })
+})
+
 describe("form builder journey timing preset", () => {
     it("serializes the journey timing preset with canonical option values", () => {
         const journeyTimingTemplate = PRESET_FIELD_GROUPS

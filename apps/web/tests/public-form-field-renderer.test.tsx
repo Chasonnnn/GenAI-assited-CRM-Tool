@@ -32,6 +32,27 @@ function chooseBaseUiOption(trigger: HTMLElement, optionName: string | RegExp) {
 }
 
 describe("PublicFormFieldRenderer", () => {
+    it("renders an unchecked opt-in with agency-provided privacy links", () => {
+        const updateField = vi.fn()
+        render(<PublicFormFieldRenderer
+            field={{ key: "consent", label: "I agree to receive text messages.", type: "checkbox", required: false,
+                help_text: "Read our [Privacy Notice](https://agency.example/privacy) and [Terms](https://agency.example/terms). <script>alert(1)</script> [unsafe](javascript:alert(1))" }}
+            value={undefined}
+            updateField={updateField}
+            datePickerOpen={{}}
+            setDatePickerOpen={vi.fn()}
+        />)
+        const checkbox = screen.getByRole("checkbox", { name: "I agree to receive text messages." })
+        expect(checkbox).not.toBeChecked()
+        expect(checkbox).not.toBeRequired()
+        expect(screen.getByRole("link", { name: "Privacy Notice" })).toHaveAttribute("href", "https://agency.example/privacy")
+        expect(screen.getByRole("link", { name: "Terms" })).toHaveAttribute("target", "_blank")
+        expect(screen.queryByRole("link", { name: "unsafe" })).not.toBeInTheDocument()
+        expect(document.querySelector("script")).toBeNull()
+        fireEvent.click(checkbox)
+        expect(updateField).toHaveBeenCalledWith("consent", true)
+    })
+
     it("renders date fields with month/year dropdown navigation", () => {
         const updateField = vi.fn()
         const setDatePickerOpen = vi.fn()

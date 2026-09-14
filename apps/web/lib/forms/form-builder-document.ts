@@ -363,7 +363,7 @@ export function createBuilderField(template: BuilderPaletteField): BuilderFormFi
     const baseField: BuilderFormField = {
         id: fieldId,
         type: template.type,
-        label: template.label,
+        label: template.fieldLabel ?? template.label,
         helperText: template.helperText ?? "",
         required: template.required ?? false,
         surrogateFieldMapping: template.surrogateFieldMapping ?? "",

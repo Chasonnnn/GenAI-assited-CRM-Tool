@@ -10,6 +10,7 @@ import { FieldLibraryDialog } from "@/components/forms/builder/FieldLibraryDialo
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
@@ -681,11 +682,13 @@ function useFieldInspectorView({
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="field-helper">Field description</Label>
-                                <Input
+                                <Textarea
                                     id="field-helper"
                                     value={selectedFieldData.helperText}
                                     onChange={(event) => onUpdateField(selectedFieldData.id, { helperText: event.target.value })}
-                                    placeholder="Optional hint for users"
+                                    placeholder={selectedFieldData.type === "checkbox"
+                                        ? "Add your consent wording and links: [Privacy Notice](https://your-website.com/privacy)"
+                                        : "Optional hint for users"}
                                 />
                             </div>
                             <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/20 px-3 py-2">
