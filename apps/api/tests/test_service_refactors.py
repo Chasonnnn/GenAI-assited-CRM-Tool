@@ -119,7 +119,7 @@ def test_task_service_create_triggers_google_tasks_sync(db, test_org, test_user,
     assert calls == [task.id]
 
 
-def test_task_service_list_triggers_google_tasks_pull_for_user(
+def test_task_service_list_reads_stored_tasks_without_google_sync(
     db, test_org, test_user, monkeypatch
 ):
     from app.db.enums import TaskType
@@ -149,7 +149,7 @@ def test_task_service_list_triggers_google_tasks_pull_for_user(
         fake_sync_google_tasks_for_user,
     )
 
-    task_service.list_tasks(
+    rows, count = task_service.list_tasks(
         db=db,
         org_id=test_org.id,
         user_id=test_user.id,
@@ -157,7 +157,9 @@ def test_task_service_list_triggers_google_tasks_pull_for_user(
         per_page=20,
     )
 
-    assert calls == [(test_user.id, test_org.id)]
+    assert count == 1
+    assert [row.title for row in rows] == ["Task 1"]
+    assert calls == []
 
 
 def test_surrogate_change_status_emits_dashboard(db, test_org, test_user, monkeypatch):

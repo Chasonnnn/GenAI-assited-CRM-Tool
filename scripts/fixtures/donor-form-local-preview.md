@@ -1,31 +1,26 @@
 # EWI donor form preview
 
-Two platform templates and their published organization forms use `scripts/fixtures/ewi-donor-pre-screening.json`: egg donor and sperm donor. Each has 19 fields across three pages, followed by the platform's review step. The schemas differ only in donor kind and donation-history wording. Six fields map to donor identity: name, email, phone, state, education, and profile photo. Other answers remain in the submission.
+One platform template and one organization form use `scripts/fixtures/ewi-donor-pre-screening.json`. The first required question selects Egg donor or Sperm donor. All 19 fields appear on one questionnaire page, followed by review. Date of birth has no age eligibility filter. A PNG/JPEG profile photo is required.
 
-Date of birth has no age eligibility filter. College and race/ethnicity are optional. A PNG/JPEG profile photo is required by the current donor publishing contract. SMS remains unconfigured; no counsel approval or sending permission is fabricated. Tracking is `internal_only`.
+Seven fields map to the donor record: donor type, name, email, phone, state, education, and profile photo. The published donor-type mapping determines each applicant's subtype. Other answers remain in the submission.
 
-The seed script requires `ENV=dev`, database `crm_donor_preview` at `127.0.0.1:5549`, and API URL `http://127.0.0.1:8027`. It targets only the synthetic organization created by `/dev/seed`. It uses the existing development login and CSRF-protected form APIs. Rerunning updates the named preview templates and forms, retaining their IDs. It does not create duplicate templates.
+The seed script requires `ENV=dev`, database `crm_donor_preview` at `127.0.0.1:5549`, and API URL `http://127.0.0.1:8027`. It targets the synthetic organization created by `/dev/seed` and uses development login with CSRF-protected form APIs. Rerunning updates the shared template and form, retains their IDs, disables old separate preview links, and hides the old preview templates from that organization's library. Existing submissions remain stored.
 
 ```sh
 cd apps/api
 uv run python ../../scripts/preview_donor_forms.py
 ```
 
-The local website runs on port 3027 and the CRM web application on 3037. Local `.env` files contain generated development secrets and are excluded from Git. No production environment or provider credentials are used.
+The website preview uses port 3027 and the CRM web application uses port 3037. Local environment files and development secrets are excluded from Git.
 
-## Embed limitation
+## Embedded preview
 
-The existing compact `/embed/forms` renderer deliberately rejects file uploads. The temporary `/prototype/donor-intake/[slug]` route reuses the complete hosted CRM form, including autosave, uploads, validation, review, and submission. It is available only in development with the local API and restricts framing to `http://127.0.0.1:3027`. Production frame protection remains unchanged. This is a local integration preview, not a completed production donor embed adapter.
+The compact `/embed/forms` renderer rejects file uploads. The development-only `/prototype/donor-intake/[slug]` route reuses the hosted CRM form with autosave, uploads, validation, review, and submission. It requires the local API and permits framing only from `http://127.0.0.1:3027`. Production frame protection remains unchanged.
 
-The preview wrapper hides the platform's generic Privacy/Terms footer and links to the single EWI notice at `http://127.0.0.1:3027/prototype/privacy/`. The website design is pending selection from generated variants A/B/C.
+The wrapper links to the single EWI privacy notice preview at `http://127.0.0.1:3027/prototype/privacy/`.
 
-## Validation
+## Reusable consent field
 
-- TypeScript, focused ESLint and Ruff passed.
-- 21 existing/new frontend checks passed: hosted intake, autosave, and development/production frame policy.
-- React Doctor found no issues; its remote score service was unavailable.
-- Both local form APIs accepted a synthetic application with photo, rejected missing required photos, and returned the original submission on idempotent retry. Date of birth outside the earlier proposed ranges was accepted without age rejection. Submissions were verified in the isolated database.
-- Browser confirmed the actual CRM form renders inside the website with EWI branding and the single notice link. Full browser submission and mobile validation remain pending.
-- No migration or shared production form renderer was changed. No provider messages were sent.
+The form-builder library includes an optional, unchecked Opt-in Consent checkbox. Authors can edit its label and description and add Markdown links to their privacy notice and terms. It records a form answer and does not enable SMS sending. Name and phone remain separate fields. The donor fixture does not automatically include this checkbox.
 
-Local review services are intentionally left running: website 3027, CRM web 3037, CRM API 8027, Docker container `crm-donor-preview-0912` on 5549. The container holds synthetic preview records only.
+SMS remains unconfigured in the seeded preview. Tracking uses `internal_only`.

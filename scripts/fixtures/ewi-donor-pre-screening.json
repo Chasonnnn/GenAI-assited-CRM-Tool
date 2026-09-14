@@ -1,11 +1,28 @@
 {
-  "public_eyebrow": "EWI Family Global",
+  "public_eyebrow": null,
   "public_title": "Donor pre-questionnaire",
-  "privacy_notice": "Local preview: use sample information only. Submissions are saved in the local CRM.",
+  "privacy_notice": null,
   "pages": [
     {
-      "title": "About you",
+      "title": "Questionnaire",
       "fields": [
+        {
+          "key": "donor_type",
+          "label": "Which donor program are you applying for?",
+          "type": "radio",
+          "required": true,
+          "sensitivity": "sensitive_reproductive",
+          "options": [
+            {
+              "label": "Egg donor",
+              "value": "Egg donor"
+            },
+            {
+              "label": "Sperm donor",
+              "value": "Sperm donor"
+            }
+          ]
+        },
         {
           "key": "full_name",
           "label": "Full name",
@@ -54,12 +71,7 @@
           "type": "text",
           "required": true,
           "sensitivity": "identity"
-        }
-      ]
-    },
-    {
-      "title": "Your background",
-      "fields": [
+        },
         {
           "key": "education",
           "label": "Highest education level",
@@ -101,14 +113,14 @@
           "key": "college",
           "label": "University / college",
           "type": "text",
-          "required": false,
+          "required": true,
           "sensitivity": "identity"
         },
         {
           "key": "race",
           "label": "Race / ethnicity",
           "type": "select",
-          "required": false,
+          "required": true,
           "sensitivity": "identity",
           "options": [
             {
@@ -142,28 +154,8 @@
             {
               "label": "Multiracial",
               "value": "Multiracial"
-            },
-            {
-              "label": "Self-describe",
-              "value": "Self-describe"
-            },
-            {
-              "label": "Prefer not to say",
-              "value": "Prefer not to say"
             }
           ]
-        },
-        {
-          "key": "race_description",
-          "label": "Race / ethnicity — self-description",
-          "type": "text",
-          "required": false,
-          "sensitivity": "identity",
-          "show_if": {
-            "field_key": "race",
-            "operator": "equals",
-            "value": "Self-describe"
-          }
         },
         {
           "key": "height",
@@ -182,12 +174,7 @@
             "min_value": 1,
             "max_value": 1000
           }
-        }
-      ]
-    },
-    {
-      "title": "Health & experience",
-      "fields": [
+        },
         {
           "key": "nicotine",
           "label": "Do you currently use nicotine or tobacco products?",
@@ -245,7 +232,7 @@
         },
         {
           "key": "previous_donation",
-          "label": "Have you donated before?",
+          "label": "Have you been an egg or sperm donor before?",
           "type": "radio",
           "required": true,
           "sensitivity": "sensitive_reproductive",
@@ -271,7 +258,7 @@
           "key": "referral_source",
           "label": "How did you hear about us?",
           "type": "select",
-          "required": false,
+          "required": true,
           "sensitivity": "operational",
           "options": [
             {
@@ -299,5 +286,5 @@
       ]
     }
   ],
-  "logo_url": "http://127.0.0.1:3027/assets/ewi-family-global-logo.png"
+  "logo_url": null
 }

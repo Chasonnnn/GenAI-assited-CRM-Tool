@@ -153,7 +153,7 @@ def test_email_template_sanitization_and_lifecycle(monkeypatch, db, test_org, te
 
 
 def test_task_service_state_paths(monkeypatch, db, test_org, test_user):
-    sync_calls = {"sync": 0, "delete": 0, "pull": 0}
+    sync_calls = {"sync": 0, "delete": 0}
 
     monkeypatch.setattr(
         "app.services.google_tasks_sync_service.sync_platform_task_to_google",
@@ -162,10 +162,6 @@ def test_task_service_state_paths(monkeypatch, db, test_org, test_user):
     monkeypatch.setattr(
         "app.services.google_tasks_sync_service.delete_platform_task_from_google",
         lambda *_args, **_kwargs: sync_calls.__setitem__("delete", sync_calls["delete"] + 1),
-    )
-    monkeypatch.setattr(
-        "app.services.google_tasks_sync_service.sync_google_tasks_for_user",
-        lambda *_args, **_kwargs: sync_calls.__setitem__("pull", sync_calls["pull"] + 1),
     )
 
     data = TaskCreate(title="Call client", description="desc", task_type=TaskType.OTHER)
@@ -188,9 +184,7 @@ def test_task_service_state_paths(monkeypatch, db, test_org, test_user):
 
     # Best-effort helpers should never raise.
     task_service._delete_task_from_google_best_effort(db, task)
-    task_service._pull_google_tasks_for_user_best_effort(db, test_user.id, test_org.id)
     assert sync_calls["delete"] == 1
-    assert sync_calls["pull"] == 1
 
     assert task_service._coerce_task_type(None) == TaskType.OTHER
     assert task_service._coerce_task_type("unknown") == TaskType.OTHER

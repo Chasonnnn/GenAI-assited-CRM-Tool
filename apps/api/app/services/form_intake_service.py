@@ -1579,6 +1579,15 @@ def create_shared_submission(
     form_submission_service._validate_answers(schema, answers)  # type: ignore[attr-defined]
 
     mapping_lookup = _mapping_lookup_from_snapshot(selected_mapping_snapshot)
+    donor_type_key = mapping_lookup.get("donor_type")
+    if selected_lead_kind in DONOR_LEAD_KINDS and donor_type_key:
+        donor_type = answers.get(donor_type_key)
+        if (
+            not isinstance(donor_type, str)
+            or donor_type not in form_service.DONOR_TYPE_ANSWER_LEAD_KINDS
+        ):
+            raise ValueError("Please choose Egg donor or Sperm donor")
+        selected_lead_kind = form_service.DONOR_TYPE_ANSWER_LEAD_KINDS[donor_type]
     identity = (
         _extract_donor_identity(answers=answers, mapping_lookup=mapping_lookup)
         if selected_lead_kind in DONOR_LEAD_KINDS

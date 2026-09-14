@@ -6,6 +6,7 @@ import { CopyIcon, Layers2Icon, PlusIcon, Settings2Icon, Trash2Icon, XIcon } fro
 import { FormBuilderFieldPreview } from "@/components/forms/FormBuilderFieldPreview"
 import { FormBuilderPalette } from "@/components/forms/FormBuilderPalette"
 import { PublicFormFieldRenderer } from "@/components/forms/PublicFormFieldRenderer"
+import { DonorFieldSensitivitySelect } from "@/components/forms/builder/DonorFieldSensitivitySelect"
 import { FieldLibraryDialog } from "@/components/forms/builder/FieldLibraryDialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -591,6 +592,7 @@ function SelectedFieldSummary({ field }: { field: BuilderFormField }) {
 }
 
 function useFieldInspectorView({
+    leadKind,
     currentPage,
     selectedFieldData,
     mappingOptions,
@@ -608,6 +610,7 @@ function useFieldInspectorView({
     addOption,
     removeOption,
 }: {
+    leadKind: FormLeadKind
     currentPage: BuilderFormPage
     selectedFieldData: BuilderFormField | null
     mappingOptions: FormSurrogateFieldOption[]
@@ -1116,6 +1119,12 @@ function useFieldInspectorView({
                             </InspectorSection>
                         ) : null}
 
+                        <DonorFieldSensitivitySelect
+                            field={selectedFieldData}
+                            leadKind={leadKind}
+                            onChange={(sensitivity) => onUpdateField(selectedFieldData.id, { sensitivity })}
+                        />
+
                         <InspectorSection title="Mapping" description="Connect this field to a CRM record field.">
                             <Select
                                 value={selectedFieldData.surrogateFieldMapping || "none"}
@@ -1222,6 +1231,7 @@ export function FormBuilderWorkspace({
                     />
 
                     <FieldInspector
+                        leadKind={leadKind}
                         currentPage={document.currentPage}
                         selectedFieldData={document.selectedFieldData}
                         mappingOptions={mappingOptions}

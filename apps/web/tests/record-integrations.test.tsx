@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { RecordAppointmentsCard } from "@/components/records/RecordAppointmentsCard"
@@ -33,6 +33,10 @@ beforeEach(() => {
     mocks.tickets.mockResolvedValue({ items: [{ id: "ticket-1", ticket_code: "T1001", subject: "QA conversation" }] })
 })
 
+afterEach(() => {
+    vi.useRealTimers()
+})
+
 describe("Light record appointments", () => {
     it("queries the explicit donor and opens the existing management dialog", () => {
         mocks.appointments.mockReturnValue({ data: { items: [{ id: "appointment-1", appointment_type_name: "Consultation", scheduled_start: "2026-09-12T14:00:00Z", status: "confirmed" }], pages: 1 }, isLoading: false, isError: false })
@@ -57,6 +61,8 @@ describe("Light record appointments", () => {
         expect(mocks.refetch).toHaveBeenCalled()
     })
     it("schedules an appointment with an explicitly selected case and attempt", async () => {
+        vi.useFakeTimers({ toFake: ["Date"] })
+        vi.setSystemTime(new Date("2026-09-10T12:00:00Z"))
         mocks.types.mockReturnValue({ data: [{ id: "type-1", name: "Consultation" }], isLoading: false, isError: false })
         mocks.get.mockImplementation((path: string) => Promise.resolve(path.endsWith("/attempts") ? [{ id: "attempt-1", match_id: "match-1", sequence: 1, attempt_type: "retrieval", status: "planned" }] : { items: [{ id: "match-1", match_number: "M10001", ip_name: "Avery" }] }))
         mount(<RecordAppointmentsCard record={record} canView canCreate canViewMatches archived={false} />)
@@ -71,6 +77,7 @@ describe("Light record appointments", () => {
         fireEvent.mouseMove(await screen.findByRole("option", { name: "Attempt 1 · Retrieval · Planned" }))
         fireEvent.click(await screen.findByRole("option", { name: "Attempt 1 · Retrieval · Planned" }))
         fireEvent.change(screen.getByLabelText(/Date ·/), { target: { value: "2026-09-12" } })
+        expect(screen.getByLabelText(/Date ·/)).toBeValid()
         fireEvent.click(screen.getByRole("button", { name: /[0-9]+:[0-9]+ [AP]M/ }))
         fireEvent.click(screen.getAllByRole("button", { name: "Schedule" }).at(-1)!)
         await waitFor(() => expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ donor_id: "donor-1", match_id: "match-1", attempt_id: "attempt-1", client_email: "qa@example.com" }), expect.anything()))
