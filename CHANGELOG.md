@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.65](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.64...surrogacy-crm-platform-v0.91.65) (2026-09-14)
+
+
+### Features
+
+* align donor details with surrogate tabs ([71be7af](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/71be7afc5ddbf506e42931c0c4286c38f915713f))
+* match and create donors from shared intake forms ([9cba97d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9cba97d1d25d5e88414865b4b467c8eaa8263ed1))
+* match and create donors from shared intake workflows ([0a3761d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0a3761de097f1d275a5bfa92a642dc73c1254d69))
+* persist donor profiles and questionnaire answers ([012cab0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/012cab0cbfe64a31eb1c4d92c6485f5f2efe88cf))
+
+
+### Bug Fixes
+
+* hold repeated donor form submissions for review ([d3af238](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d3af238435f4fc30401d6c4aa9bb76f3d6477f3d))
+* preserve donor profile answers across forms ([2be15ab](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2be15ab86156a60bc3d165b4dfc3a7d1ffecec95))
+* prevent duplicate and canceled inline field saves ([8f35b7e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8f35b7e1c796a96ba6c0d505d5edfacb76e36d49))
+
 ## [0.91.64](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.63...surrogacy-crm-platform-v0.91.64) (2026-09-14)
 
 
