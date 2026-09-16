@@ -9,3 +9,7 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+
+## 2026-09-16 - SelectTrigger Accessibility Pattern
+**Learning:** Select components inside complex popovers/menus (like filter bars) often lack `aria-label` attributes, and their visible labels (using `<Label>`) might not be properly associated via `htmlFor` (or the generic Radix `Select` components miss this association internally). This makes it difficult for screen readers to identify the dropdown's purpose.
+**Action:** Always ensure `SelectTrigger` components have descriptive `aria-label` props (e.g., 'Filter by source'), especially when rendering dynamically within popovers without explicit `htmlFor` associations on their labels.
