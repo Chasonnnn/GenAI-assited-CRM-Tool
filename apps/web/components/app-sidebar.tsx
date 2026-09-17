@@ -44,6 +44,7 @@ import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { getCsrfHeaders } from "@/lib/csrf"
 import { NotificationBell } from "@/components/notification-bell"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
 
@@ -799,14 +800,19 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
             <div className="flex min-w-0 flex-1 flex-col bg-background">
                 <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b px-4 print:hidden">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={toggleSidebar}
-                        aria-label="Toggle sidebar"
-                    >
-                        <PanelLeftIcon className="size-4" />
-                    </Button>
+                    <Tooltip>
+                        <TooltipTrigger render={
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={toggleSidebar}
+                                aria-label="Toggle sidebar"
+                            />
+                        }>
+                            <PanelLeftIcon className="size-4" aria-hidden="true" />
+                        </TooltipTrigger>
+                        <TooltipContent>Toggle sidebar</TooltipContent>
+                    </Tooltip>
                     <div className="flex items-center gap-2">
                         <NotificationBell />
                         <ThemeToggle />
