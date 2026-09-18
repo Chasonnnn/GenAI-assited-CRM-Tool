@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { CheckIcon, XIcon, PencilIcon, Loader2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { useFocusWhen } from "@/lib/hooks/use-focus-when"
 
 import { useRecordEditing } from "@/components/records/RecordEditingContext"
@@ -186,32 +187,42 @@ export function InlineEditField({
                     <p className="text-xs text-destructive mt-1">{error}</p>
                 )}
             </div>
-            <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-6"
-                onClick={handleSave}
-                disabled={isSaving}
-                aria-label={`Save ${fieldLabel}`}
-            >
-                {isSaving ? (
-                    <Loader2Icon className="size-3 animate-spin" aria-hidden="true" />
-                ) : (
-                    <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
-                )}
-            </Button>
-            <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-6"
-                onClick={handleCancel}
-                disabled={isSaving}
-                aria-label={`Cancel ${fieldLabel}`}
-            >
-                <XIcon className="size-3 text-destructive" aria-hidden="true" />
-            </Button>
+            <Tooltip>
+                <TooltipTrigger render={
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-6"
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        aria-label={`Save ${fieldLabel}`}
+                    />
+                }>
+                    {isSaving ? (
+                        <Loader2Icon className="size-3 animate-spin" aria-hidden="true" />
+                    ) : (
+                        <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
+                    )}
+                </TooltipTrigger>
+                <TooltipContent>Save</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+                <TooltipTrigger render={
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-6"
+                        onClick={handleCancel}
+                        disabled={isSaving}
+                        aria-label={`Cancel ${fieldLabel}`}
+                    />
+                }>
+                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
+                </TooltipTrigger>
+                <TooltipContent>Cancel</TooltipContent>
+            </Tooltip>
         </div>
     )
 }
