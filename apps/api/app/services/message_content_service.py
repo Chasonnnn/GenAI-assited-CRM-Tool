@@ -493,22 +493,15 @@ def upload_media_assets(
     ]
 
     assets: list[MessageMediaAsset] = []
-
-    if not validated_uploads:
-        return assets
-
     try:
-        checksums = [hashlib.sha256(content).hexdigest() for _, _, content in validated_uploads]
-        existing_assets = db.execute(
-            select(MessageMediaAsset).where(
-                MessageMediaAsset.organization_id == organization_id,
-                MessageMediaAsset.checksum_sha256.in_(checksums),
-            )
-        ).scalars().all()
-        existing_by_checksum = {a.checksum_sha256: a for a in existing_assets}
-
-        for (upload, content_type, content), checksum in zip(validated_uploads, checksums, strict=True):
-            existing = existing_by_checksum.get(checksum)
+        for upload, content_type, content in validated_uploads:
+            checksum = hashlib.sha256(content).hexdigest()
+            existing = db.execute(
+                select(MessageMediaAsset).where(
+                    MessageMediaAsset.organization_id == organization_id,
+                    MessageMediaAsset.checksum_sha256 == checksum,
+                )
+            ).scalar_one_or_none()
             if existing is not None:
                 if existing.content_classification != content_classification:
                     raise MessagingMediaValidationError(
@@ -538,7 +531,6 @@ def upload_media_assets(
             )
             db.add(asset)
             db.flush()
-            existing_by_checksum[checksum] = asset
             _ensure_media_scan_job(
                 db,
                 organization_id=organization_id,
