@@ -43,12 +43,18 @@ install_system_packages() {
 }
 
 install_toolchains() {
-    if ! command -v mise >/dev/null; then
+    local minimum_version installed_version
+    minimum_version="$(sed -n 's/^min_version = "\([^"]*\)"$/\1/p' mise.toml)"
+    # Query outside the checkout: old mise may reject its min_version outright.
+    installed_version="$(cd /; mise --version 2>/dev/null | awk 'NR == 1 {print $1}')" || installed_version=0
+    if ! dpkg --compare-versions "$installed_version" ge "$minimum_version"; then
         local installer
         installer="$(mktemp)"
         curl --fail --silent --show-error --location --retry 3 https://mise.run -o "$installer"
-        bash "$installer"
+        MISE_VERSION="$minimum_version" MISE_INSTALL_PATH="$HOME/.local/bin/mise" bash "$installer"
         rm -f "$installer"
+        # Forget any cached system mise path in favor of ~/.local/bin/mise.
+        hash -r
     fi
     mise trust "$repo_root/mise.toml"
     mise install --locked
