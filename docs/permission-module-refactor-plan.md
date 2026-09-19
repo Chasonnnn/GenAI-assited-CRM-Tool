@@ -63,6 +63,8 @@ Publication creates independent organization-owned work with proposal credit. Or
 
 ### 1. Rehearse production activation
 
+The September 19 isolated synthetic-history rehearsal passed on the combined application code. It does not replace live frontend acceptance or a real organization's reviewed activation; see the verification record for data coverage and boundaries.
+
 - Rehearse the exact committed version against an isolated production-shaped copy and inspect organization-specific access and execution changes.
 - Activate only a reviewed organization after explicit release authorization; validate its operational journeys before broadening rollout.
 - Remove legacy adapters after every organization has migrated and a separately validated change retires version 1.

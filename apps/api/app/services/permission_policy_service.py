@@ -76,8 +76,12 @@ def is_enabled(db: Session, org_id: UUID) -> bool:
 
 
 def lock_configuration(db: Session, org_id: UUID) -> None:
+    # NO KEY UPDATE serializes configuration without blocking audit inserts' FK checks.
     organization = (
-        db.query(Organization.id).filter(Organization.id == org_id).with_for_update().one_or_none()
+        db.query(Organization.id)
+        .filter(Organization.id == org_id)
+        .with_for_update(key_share=True)
+        .one_or_none()
     )
     if organization is None:
         raise ValueError("Organization not found")

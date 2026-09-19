@@ -1362,6 +1362,46 @@ async def _sync_google_tasks_for_user_async(db: Session, *, user_id: UUID, org_i
         task_list_id = task_list_id_raw
         google_tasks = await _list_google_tasks(token, task_list_id)
 
+        correlated_by_id: dict[UUID, Task] = {}
+        if can_view_donors:
+            correlation_ids = {
+                correlation_id
+                for google_task in google_tasks
+                if isinstance((google_task_id := google_task.get("id")), str)
+                and bool(google_task_id)
+                and (task_list_id, google_task_id) not in blocked_google_task_keys
+                and google_task_id not in blocked_default_list_task_ids
+                and (
+                    correlation_id := _google_task_correlation_id(
+                        google_task.get("notes")
+                    )
+                )
+                is not None
+            }
+            if correlation_ids:
+                correlated_tasks = (
+                    db.query(Task)
+                    .join(
+                        Donor,
+                        and_(
+                            Donor.id == Task.donor_id,
+                            Donor.organization_id == Task.organization_id,
+                        ),
+                    )
+                    .filter(
+                        Task.organization_id == org_id,
+                        Task.id.in_(correlation_ids),
+                        Task.owner_type == OwnerType.USER.value,
+                        Task.owner_id == user_id,
+                        Task.donor_id.is_not(None),
+                        Donor.is_archived.is_(False),
+                    )
+                    .order_by(Task.id)
+                    .with_for_update(of=Task)
+                    .all()
+                )
+                correlated_by_id = {task.id: task for task in correlated_tasks}
+
         for google_task in google_tasks:
             google_task_id_raw = google_task.get("id")
             if not google_task_id_raw or not isinstance(google_task_id_raw, str):
@@ -1381,26 +1421,7 @@ async def _sync_google_tasks_for_user_async(db: Session, *, user_id: UUID, org_i
             if correlation_id is not None:
                 if not can_view_donors:
                     continue
-                correlated_local = (
-                    db.query(Task)
-                    .join(
-                        Donor,
-                        and_(
-                            Donor.id == Task.donor_id,
-                            Donor.organization_id == Task.organization_id,
-                        ),
-                    )
-                    .filter(
-                        Task.organization_id == org_id,
-                        Task.id == correlation_id,
-                        Task.owner_type == OwnerType.USER.value,
-                        Task.owner_id == user_id,
-                        Task.donor_id.is_not(None),
-                        Donor.is_archived.is_(False),
-                    )
-                    .with_for_update(of=Task)
-                    .one_or_none()
-                )
+                correlated_local = correlated_by_id.get(correlation_id)
                 # A branded marker without its exact active tenant-owned source
                 # is stale donor data, never a generic task to import.
                 if correlated_local is None:

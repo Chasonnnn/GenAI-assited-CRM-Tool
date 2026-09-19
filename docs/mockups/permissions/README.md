@@ -35,7 +35,8 @@ The concept explains both the granted action and the record-access route. The se
 - Confirm the navigation and preferred screen structure.
 - Show adding record scope, reviewing changes, role changes, and collaborator removal.
 - Show personal versus organization authority in workflow, campaign, and template controls.
-- Define Operations defaults.
 - Verify responsive layouts, interaction states, and keyboard behavior during implementation.
+
+Operations defaults are settled in the permission model; accepting the live controls remains separate from choosing these visual concepts.
 
 [Permission model](../../permission-system-design.md) · [Generation prompts](prompts.md)

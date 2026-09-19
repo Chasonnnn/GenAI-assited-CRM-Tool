@@ -984,6 +984,7 @@ def change_status(
     normalized_effective_at = normalize_effective_at(
         effective_at,
         _get_org_timezone(db, donor.organization_id),
+        now=now,
     )
     is_backdated = (now - normalized_effective_at).total_seconds() > 1
     is_regression = target.order < old_stage.order

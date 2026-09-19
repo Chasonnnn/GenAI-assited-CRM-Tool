@@ -44,11 +44,12 @@ The workflow execution/scheduling, campaign lifecycle, form-review transaction, 
 
 | Order | Work | Start condition |
 |---|---|---|
-| 1 | Production rehearsal and first organization activation | Exact committed version validated against an isolated production-shaped copy; explicit release authorization |
-| 2 | Remaining donor journeys and provider verification | Shared record and execution contracts stable; synthetic integration tests pass |
-| 3 | Workflow and form-builder UX simplification | Editing, publication, validation, and execution authority remain behind existing service interfaces |
-| 4 | Reporting redesign and per-organization Meta MCP | Evaluate the MCP connector and organization authorization; reuse existing ingestion/reporting contracts where applicable |
-| 5 | Remaining platform UI and onboarding | Apply proven permission and scope patterns module by module |
+| 1 | Live frontend acceptance | Compare Roles and existing team/member controls with the selected concepts; settle the People navigation; check reviewed changes and personal/organization authority controls |
+| 2 | Release review and first organization activation | Exact combined version validated; isolated activation rehearsal complete; explicit release and organization activation authorization |
+| 3 | Remaining donor journeys and provider verification | Shared record and execution contracts stable; synthetic integration tests pass |
+| 4 | Workflow and form-builder UX simplification | Editing, publication, validation, and execution authority remain behind existing service interfaces |
+| 5 | Reporting redesign and per-organization Meta MCP | Evaluate the MCP connector and organization authorization; reuse existing ingestion/reporting contracts where applicable |
+| 6 | Remaining platform UI and onboarding | Apply proven permission and scope patterns module by module |
 
 Twilio end-to-end provider testing and Meta MCP configuration remain separate work. The earlier Meta app integration is blocked by app approval; a per-organization MCP connection is the chosen direction to evaluate. No provider traffic or production activation is part of this local implementation.
 

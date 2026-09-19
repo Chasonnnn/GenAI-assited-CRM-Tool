@@ -5,10 +5,13 @@ from __future__ import annotations
 import hashlib
 import uuid
 from datetime import UTC, datetime
+from io import BytesIO
 
 import pytest
+from sqlalchemy import event, select
 
-from app.db.models import MessageTemplate, TwilioSettings
+from app.db.enums import JobType
+from app.db.models import Job, MessageMediaAsset, MessageTemplate, Organization, TwilioSettings
 from app.services import message_content_service
 
 
@@ -33,6 +36,103 @@ def _configure_twilio_policy(db, organization_id, *, phi_enabled: bool = False) 
     db.add(settings)
     db.commit()
     return settings
+
+
+def _media_upload(filename: str, content: bytes) -> message_content_service.MediaUpload:
+    return message_content_service.MediaUpload(
+        filename=filename,
+        content_type="image/gif",
+        file=BytesIO(content),
+    )
+
+
+def test_media_upload_batches_checksum_asset_lookup(db, test_org):
+    statements: list[str] = []
+
+    def capture_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
+        normalized = " ".join(statement.lower().split())
+        if normalized.startswith("select") and "from message_media_assets" in normalized:
+            statements.append(normalized)
+
+    engine = db.get_bind()
+    event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        message_content_service.upload_media_assets(
+            db,
+            organization_id=test_org.id,
+            uploads=[
+                _media_upload("one.gif", b"GIF89a-one"),
+                _media_upload("two.gif", b"GIF89a-two"),
+                _media_upload("three.gif", b"GIF89a-three"),
+            ],
+            content_classification="no_phi",
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", capture_sql)
+
+    checksum_lookups = [
+        statement
+        for statement in statements
+        if "message_media_assets.checksum_sha256 =" in statement
+        or "message_media_assets.checksum_sha256 in (" in statement
+    ]
+    assert len(checksum_lookups) == 1
+    assert "checksum_sha256 in (" in checksum_lookups[0]
+
+
+def test_duplicate_media_bytes_return_same_asset_and_create_one_scan_job(db, test_org):
+    assets = message_content_service.upload_media_assets(
+        db,
+        organization_id=test_org.id,
+        uploads=[
+            _media_upload("first.gif", b"GIF89a-duplicate"),
+            _media_upload("second.gif", b"GIF89a-duplicate"),
+        ],
+        content_classification="no_phi",
+    )
+
+    assert assets[0].id == assets[1].id
+    jobs = db.execute(
+        select(Job).where(Job.job_type == JobType.MESSAGE_MEDIA_SCAN.value)
+    ).scalars().all()
+    assert len(jobs) == 1
+    assert jobs[0].payload == {"media_asset_id": str(assets[0].id)}
+
+
+def test_same_media_checksum_remains_separate_across_organizations(db, test_org):
+    other_org = Organization(
+        id=uuid.uuid4(),
+        name="Other Organization",
+        slug=f"other-org-{uuid.uuid4().hex[:8]}",
+        ai_enabled=True,
+    )
+    db.add(other_org)
+    db.flush()
+    content = b"GIF89a-shared-checksum"
+
+    first = message_content_service.upload_media_assets(
+        db,
+        organization_id=test_org.id,
+        uploads=[_media_upload("first.gif", content)],
+        content_classification="no_phi",
+    )[0]
+    second = message_content_service.upload_media_assets(
+        db,
+        organization_id=other_org.id,
+        uploads=[_media_upload("second.gif", content)],
+        content_classification="no_phi",
+    )[0]
+
+    assert first.id != second.id
+    assert first.checksum_sha256 == second.checksum_sha256
+    asset_ids = db.execute(
+        select(MessageMediaAsset.id).where(
+            MessageMediaAsset.checksum_sha256 == first.checksum_sha256
+        )
+    ).scalars().all()
+    assert set(asset_ids) == {first.id, second.id}
+    assert first.organization_id == test_org.id
+    assert second.organization_id == other_org.id
 
 
 def test_template_versions_are_immutable_and_publish_is_exact_and_idempotent(

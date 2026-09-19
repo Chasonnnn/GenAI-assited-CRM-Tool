@@ -338,7 +338,7 @@ def change_status(
 
     now = datetime.now(UTC)
     org_tz_str = _get_org_timezone(db, surrogate.organization_id)
-    normalized_effective_at = normalize_effective_at(effective_at, org_tz_str)
+    normalized_effective_at = normalize_effective_at(effective_at, org_tz_str, now=now)
 
     old_stage_id = surrogate.stage_id
     old_label = surrogate.status_label
