@@ -1,11 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:24.18.0-bullseye-slim AS builder
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+FROM node:24.18.0-bookworm-slim AS builder
 
 WORKDIR /app
 ARG CACHE_BUST=0
@@ -42,7 +37,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
 
 
-FROM node:24.18.0-bullseye-slim AS runner
+FROM node:24.18.0-bookworm-slim AS runner
 
 WORKDIR /app/apps/web
 

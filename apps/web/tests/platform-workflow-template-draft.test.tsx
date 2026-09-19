@@ -101,8 +101,34 @@ describe("platform workflow template draft ownership", () => {
                 trigger_type: "surrogate_created",
                 trigger_config: {},
                 actions: [],
+                conditions: [],
             },
         }
+    })
+
+    it("saves donor-only conditions and the explicit automatic creation option", async () => {
+        templateState.data = {
+            ...templateState.data,
+            draft: {
+                ...templateState.data.draft,
+                trigger_type: "form_submitted",
+                conditions: [{ field: "lead_kind", operator: "in", value: ["egg_donor", "sperm_donor"] }],
+                actions: [{ action_type: "create_intake_lead", source: "website" }],
+            },
+        }
+        mutationMocks.update.mockResolvedValue(templateState.data)
+        render(<PlatformWorkflowTemplatePage />)
+        const automaticCreation = screen.getByRole("switch", { name: "Create donor after photo scan" })
+        expect(automaticCreation).not.toBeChecked()
+        fireEvent.click(automaticCreation)
+        fireEvent.click(screen.getByRole("button", { name: "Save Draft" }))
+        await waitFor(() => expect(mutationMocks.update).toHaveBeenCalledWith({
+            id: "workflow-template-1",
+            payload: expect.objectContaining({
+                conditions: [{ field: "lead_kind", operator: "in", value: ["egg_donor", "sperm_donor"] }],
+                actions: [expect.objectContaining({ action_type: "create_intake_lead", auto_promote: true })],
+            }),
+        }))
     })
 
     it("preserves an in-progress name edit across an equivalent query rerender", () => {

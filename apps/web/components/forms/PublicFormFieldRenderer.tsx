@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { AssistantRichText } from "@/components/ai/AssistantRichText"
 import type { FormField } from "@/lib/api/forms"
 import { splitHeightFt, totalInchesToHeightFt } from "@/lib/height"
 import { cn } from "@/lib/utils"
@@ -801,7 +802,7 @@ export function PublicFormFieldRenderer({
                         <Label htmlFor={field.key} className={cn(densityStyles.labelClassName, "leading-relaxed")}>
                             {field.label} {requiredMark}
                         </Label>
-                        {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
+                        {field.help_text && <AssistantRichText content={field.help_text} className="text-xs text-stone-500" />}
                     </div>
                 </div>
             </div>

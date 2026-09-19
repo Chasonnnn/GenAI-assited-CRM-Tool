@@ -1,6 +1,6 @@
 # Surrogacy Force Platform
 
-**Version:** 0.91.62 <!-- x-release-please-version -->
+**Version:** 0.91.65 <!-- x-release-please-version -->
 
 A modern, multi-tenant platform for surrogacy agencies. Manage surrogates, intended parents, egg donors, and sperm donors with configurable workflows, matching, automation, and full auditability.
 
@@ -190,6 +190,35 @@ A modern, multi-tenant platform for surrogacy agencies. Manage surrogates, inten
 - **Python** 3.14.6
 - **uv** 0.12.0 (Python package manager)
 - **Docker** + Docker Compose
+
+### Amp orbs
+
+`.agents/setup` installs the locked mise toolchains, frozen backend/test and frontend
+dependencies, PostgreSQL 18, and Playwright Chromium. Amp caches this filesystem for
+fresh orbs; warm setup checks the existing installs. `.agents/resume` only checks
+that dependencies are present. Pinned tools are available in new login shells within
+this checkout, including supervised services.
+
+Setup preserves existing environment files and copies `apps/api/.env.example` only
+when `.env` is absent. It does not provision integration credentials, seed users,
+run migrations, or start application services. Configure credentials only when a
+task needs them; never bake them into setup or the shared snapshot.
+
+For database QA, use the installed PostgreSQL instead of Docker. Start it on demand
+with Amp's supervisor (the durability settings below are for disposable orb data):
+
+```bash
+amp orb service start crm-db --port 5432 --command 'sudo -u postgres /usr/lib/postgresql/18/bin/postgres -D /var/lib/postgresql/18/main -c config_file=/etc/postgresql/18/main/postgresql.conf -c fsync=off -c synchronous_commit=off'
+sudo -u postgres psql -h /var/run/postgresql -d postgres -c "ALTER USER postgres PASSWORD 'postgres'"
+sudo -u postgres createdb -h /var/run/postgresql crm
+# In apps/api, explicitly target disposable local data for migrations and tests:
+export DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/crm
+```
+
+Create `crm` only once per orb, then run the backend migration command below before
+database tests. These commands target the orb's disposable local cluster, not a
+database from project secrets. Stop it after QA with `amp orb service stop crm-db`.
+Redis and external integrations are not needed for the normal test suite.
 
 ### 1) Start Database
 

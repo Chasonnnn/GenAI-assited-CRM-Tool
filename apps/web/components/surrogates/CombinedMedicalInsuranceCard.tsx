@@ -41,13 +41,16 @@ import { InlineEditField } from "@/components/inline-edit-field"
 import { InlineDateField } from "@/components/inline-date-field"
 import { MedicalContactSection } from "@/components/surrogates/MedicalContactSection"
 import { SurrogateRead } from "@/lib/types/surrogate"
-import { SurrogateUpdatePayload } from "@/lib/api/surrogates"
+import { useRecordEditing } from "@/components/records/RecordEditingContext"
+
+type MedicalKey = { [K in keyof SurrogateRead]: K extends `insurance_${string}` | `clinic_${string}` | `monitoring_clinic_${string}` | `ob_${string}` | `delivery_hospital_${string}` | `pcp_${string}` | `lab_clinic_${string}` ? K : never }[keyof SurrogateRead]
+export type MedicalProfile = Partial<Pick<SurrogateRead, NonNullable<MedicalKey>>>
 
 type SectionType = "insurance" | "pcp" | "lab_clinic" | "clinic" | "monitoring_clinic" | "ob" | "delivery_hospital"
 
 type OptimisticallyHiddenSection = {
     key: SectionType
-    dataSnapshot: SurrogateRead
+    dataSnapshot: MedicalProfile
 }
 
 interface SectionConfig {
@@ -163,8 +166,8 @@ const SECTION_CONFIGS: SectionConfig[] = [
 ]
 
 interface CombinedMedicalInsuranceCardProps {
-    surrogateData: SurrogateRead
-    onUpdate: (data: Partial<SurrogateUpdatePayload>) => Promise<void>
+    surrogateData: MedicalProfile
+    onUpdate: (data: MedicalProfile) => Promise<void>
 }
 
 function SectionActionIcon({
@@ -188,6 +191,7 @@ function SectionActionIcon({
 }
 
 export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate }: CombinedMedicalInsuranceCardProps) {
+    const canEdit = useRecordEditing()
     const [manuallyAdded, setManuallyAdded] = useState<SectionType[]>([])
     const [optimisticallyHiddenSections, setOptimisticallyHiddenSections] = useState<OptimisticallyHiddenSection[]>([])
     const [sectionPendingDelete, setSectionPendingDelete] = useState<SectionType | null>(null)
@@ -255,7 +259,7 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate }: Combin
         setIsDeletingSection(true)
         const clearedFields = Object.fromEntries(
             section.fields.map((field) => [field, null])
-        ) as Partial<SurrogateUpdatePayload>
+        ) as MedicalProfile
         const result = await onUpdate(clearedFields).then(() => ({
             status: "success" as const,
         })).catch((error: unknown) => ({
@@ -283,7 +287,7 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate }: Combin
                             <HospitalIcon className="size-4" />
                             Medical & Insurance
                         </CardTitle>
-                        {canEditSections && (
+                        {canEdit && canEditSections && (
                             <DropdownMenu>
                                 <DropdownMenuTrigger
                                     render={
@@ -432,7 +436,7 @@ function InsuranceSection({
     surrogateData,
     onUpdate,
 }: {
-    surrogateData: SurrogateRead
+    surrogateData: MedicalProfile
     onUpdate: (field: string) => (value: string | null) => Promise<void>
 }) {
     return (
@@ -506,7 +510,7 @@ function InsuranceSection({
             <div className="flex items-center gap-2">
                 <PrinterIcon className="size-3.5 text-muted-foreground shrink-0" />
                 <InlineEditField
-                    value={(surrogateData as unknown as Record<string, string | null>).insurance_fax ?? null}
+                    value={surrogateData.insurance_fax ?? null}
                     onSave={onUpdate("insurance_fax")}
                     type="tel"
                     placeholder="Fax"

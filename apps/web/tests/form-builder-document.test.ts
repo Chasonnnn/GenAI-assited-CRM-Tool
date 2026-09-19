@@ -8,6 +8,7 @@ import {
     schemaToPages,
 } from "@/lib/forms/form-builder-document"
 import { PRESET_FIELD_GROUPS } from "@/lib/forms/form-builder-library"
+import { normalizePagesForLeadKind } from "@/lib/forms/form-lead-kind"
 
 const metadata = {
     publicEyebrow: "",
@@ -16,6 +17,21 @@ const metadata = {
     logoUrl: "",
     privacyNotice: "",
 }
+
+describe("opt-in consent preset", () => {
+    it("starts optional and preserves custom wording and notice links on reload", () => {
+        const preset = PRESET_FIELD_GROUPS.flatMap((group) => group.fields)
+            .find((field) => field.key === "opt_in_consent")!
+        const field = createBuilderField(preset)
+        expect(field).toMatchObject({ type: "checkbox", required: false, label: "I agree to receive text messages." })
+        field.label = "I agree to receive updates from Example Agency."
+        field.helperText = "[Privacy Notice](https://agency.example/privacy)"
+        const schema = buildFormSchema([{ id: 1, name: "Contact", fields: [field] }], metadata)
+        const restored = schemaToPages(schema, new Map())
+        expect(buildFormSchema(restored, metadata)).toEqual(schema)
+        expect(buildMappings(restored)).toEqual([])
+    })
+})
 
 describe("form builder journey timing preset", () => {
     it("serializes the journey timing preset with canonical option values", () => {
@@ -75,6 +91,47 @@ describe("form builder journey timing preset", () => {
 })
 
 describe("form builder field mappings", () => {
+    it("keeps mapped identity and file protections when an older field was operational", () => {
+        const pages = schemaToPages({ pages: [{ fields: [
+            { key: "name", label: "Name", type: "text", sensitivity: "operational" },
+            { key: "photo", label: "Photo", type: "file", sensitivity: "identity" },
+        ] }] }, new Map([["name", "full_name"]]))
+        expect(buildFormSchema(pages, metadata).pages[0]?.fields.map((field) => field.sensitivity))
+            .toEqual(["identity", "file"])
+    })
+
+    it("preserves explicit donor health classifications through builder edits", () => {
+        const pages = schemaToPages({ pages: [{ fields: [{
+            key: "medical_history", label: "Medical history", type: "radio",
+            required: true, sensitivity: "sensitive_health",
+            options: [{ label: "Yes", value: "Yes" }, { label: "No", value: "No" }],
+        }] }] }, new Map())
+        expect(buildFormSchema(pages, metadata).pages[0]?.fields[0]?.sensitivity)
+            .toBe("sensitive_health")
+    })
+
+    it("preserves shared donor routing and sensitive classification through builder edits", () => {
+        const pages = schemaToPages({ pages: [{ title: "Questionnaire", fields: [{
+            key: "donor_type", label: "Which donor program are you applying for?",
+            type: "radio", required: true, options: [
+                { label: "Egg donor", value: "Egg donor" },
+                { label: "Sperm donor", value: "Sperm donor" },
+            ],
+        }] }] }, new Map([["donor_type", "donor_type"]]))
+        const normalized = normalizePagesForLeadKind(pages, "egg_donor")
+        expect(buildMappings(normalized)).toEqual([
+            { field_key: "donor_type", surrogate_field: "donor_type" },
+        ])
+        const schema = buildFormSchema(normalized, metadata)
+        expect(schema.pages[0]?.fields[0]).toMatchObject({
+            required: true, sensitivity: "sensitive_reproductive",
+            options: [
+                { label: "Egg donor", value: "Egg donor" },
+                { label: "Sperm donor", value: "Sperm donor" },
+            ],
+        })
+    })
+
     it("collects mapped fields in page and field order", () => {
         const mappings = buildMappings([
             {

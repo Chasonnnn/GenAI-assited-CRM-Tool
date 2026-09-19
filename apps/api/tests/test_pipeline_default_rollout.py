@@ -1,6 +1,9 @@
 import uuid
 from collections.abc import Iterable
 
+import pytest
+from sqlalchemy import event
+
 from app.core.stage_definitions import SURROGATE_PIPELINE_ENTITY, get_default_stage_defs
 from app.db.models import Pipeline, PipelineStage
 from app.schemas.pipeline_semantics import default_pipeline_feature_config, default_stage_semantics
@@ -13,6 +16,47 @@ NEW_PLATFORM_STAGE_KEYS = {
     "pbo_process_started",
     "cold_leads",
 }
+
+
+@pytest.mark.parametrize("apply", [False, True])
+def test_rollout_multiple_orgs_keeps_selection_and_missing_pipeline_reports(db, apply):
+    from app.db.models import Organization
+
+    organizations = [
+        Organization(name=f"Org {i}", slug=f"rollout-{i}-{uuid.uuid4().hex}") for i in range(4)
+    ]
+    db.add_all(organizations)
+    db.flush()
+    pipelines = [
+        _create_default_pipeline(db, org_id=org.id, stage_keys=_legacy_surrogate_stage_keys())
+        for org in organizations[:3]
+    ]
+    selected_ids = [org.id for org in [*organizations[:2], organizations[3]]]
+    excluded_id = organizations[2].id
+    statements = []
+
+    def capture(_conn, _cursor, statement, _params, _context, _many):
+        if statement.startswith("SELECT") and "FROM pipelines" in statement:
+            statements.append(statement)
+
+    event.listen(db.get_bind(), "before_cursor_execute", capture)
+    try:
+        reports = rollout_surrogate_default_pipelines(
+            db, organization_ids=selected_ids, apply=apply
+        )
+    finally:
+        event.remove(db.get_bind(), "before_cursor_execute", capture)
+    assert {item["organization_id"] for item in reports} == {str(value) for value in selected_ids}
+    assert [item["applied"] for item in reports] == [apply, apply, False]
+    assert reports[-1]["pipeline_id"] is None
+    assert reports[-1]["blockers"]
+    excluded = db.query(Pipeline).filter_by(organization_id=excluded_id, is_default=True).one()
+    assert not (set(_active_stage_keys(excluded)) & NEW_PLATFORM_STAGE_KEYS)
+    for pipeline in pipelines[:2]:
+        db.refresh(pipeline)
+        assert (NEW_PLATFORM_STAGE_KEYS <= set(_active_stage_keys(pipeline))) is apply
+    if not apply:
+        assert len(statements) == 1
 
 
 def _legacy_surrogate_stage_keys() -> list[str]:

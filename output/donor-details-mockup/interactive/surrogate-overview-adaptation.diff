@@ -1,0 +1,517 @@
+--- apps/web/components/surrogates/detail/tabs/SurrogateOverviewTab.tsx
++++ src/DonorOverviewTab.tsx
+@@ -1,7 +1,6 @@
+ "use client"
+ 
+ import * as React from "react"
+-import { useParams } from "next/navigation"
+ import { Badge } from "@/components/ui/badge"
+ import { Button } from "@/components/ui/button"
+ import { Input } from "@/components/ui/input"
+@@ -31,12 +30,7 @@
+ import { InlineEditField } from "@/components/inline-edit-field"
+ import { InlineDateField } from "@/components/inline-date-field"
+ import { CombinedMedicalInsuranceCard } from "@/components/surrogates/CombinedMedicalInsuranceCard"
+-import { ActivityTimeline } from "@/components/surrogates/ActivityTimeline"
+-import { PregnancyTrackerCard } from "@/components/surrogates/PregnancyTrackerCard"
+ import { SurrogateOverviewCard } from "@/components/surrogates/SurrogateOverviewCard"
+-import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
+-import { useRevealSurrogateSensitiveInfo, useSurrogateActivity, useUpdateSurrogate } from "@/lib/hooks/use-surrogates"
+-import { useTasks } from "@/lib/hooks/use-tasks"
+ import {
+     AlertTriangleIcon,
+     CalendarDaysIcon,
+@@ -57,13 +51,12 @@
+     XIcon,
+ } from "lucide-react"
+ import { computeBmi, formatDate, formatHeight } from "@/components/surrogates/detail/surrogate-detail-utils"
+-import { useSurrogateDetailContext } from "@/components/surrogates/detail/SurrogateDetailContext"
+ import { serializeHeightSelection, splitHeightFt } from "@/lib/height"
+ import { getMaritalStatusOptions } from "@/lib/intended-parent-marital-status"
+-import { getSurrogateStageContext, stageHasCapability } from "@/lib/surrogate-stage-context"
+-import type { SurrogateLeadIntakeWarning } from "@/lib/types/surrogate"
++import type { SurrogateRead, SurrogateLeadIntakeWarning } from "@/lib/types/surrogate"
+ import type { SurrogateUpdatePayload } from "@/lib/api/surrogates"
+ import { formatRace } from "@/lib/formatters"
++import { DONOR_QUESTIONS, EDUCATION_OPTIONS, type DonorQuestionAnswers } from "./donor-checklist"
+ 
+ const LEAD_WARNING_FIELD_LABELS = {
+     email: "Email",
+@@ -109,20 +102,6 @@
+     return RACE_OPTIONS.includes(aliased as (typeof RACE_OPTIONS)[number]) ? aliased : ""
+ }
+ 
+-const CHECKLIST_BOOLEAN_FIELD_KEYS = [
+-    "is_age_eligible",
+-    "is_citizen_or_pr",
+-    "has_child",
+-    "is_non_smoker",
+-    "has_surrogate_experience",
+-] as const
+-
+-const JOURNEY_TIMING_OPTIONS = [
+-    { label: "0–3 months", value: "months_0_3" },
+-    { label: "3–6 months", value: "months_3_6" },
+-    { label: "Still deciding", value: "still_deciding" },
+-] as const
+-
+ type SelectOption = {
+     value: string
+     label: string
+@@ -135,18 +114,6 @@
+ ) {
+     if (!value) return placeholder
+     return options.find((option) => option.value === value)?.label ?? value
+-}
+-
+-type ChecklistBooleanFieldKey = (typeof CHECKLIST_BOOLEAN_FIELD_KEYS)[number]
+-
+-function isChecklistBooleanFieldKey(key: string): key is ChecklistBooleanFieldKey {
+-    return (CHECKLIST_BOOLEAN_FIELD_KEYS as readonly string[]).includes(key)
+-}
+-
+-function getNextChecklistValue(value: boolean | null | undefined) {
+-    if (value === null || value === undefined) return true
+-    if (value === true) return false
+-    return null
+ }
+ 
+ function LeadWarningIndicator({
+@@ -270,7 +237,7 @@
+         return (
+             <Button unstyled
+                 type="button"
+-                className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
++                className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                 onClick={handleStartEdit}
+                 aria-label={`Edit ${label}`}
+             >
+@@ -570,7 +537,7 @@
+         return (
+             <Button unstyled
+                 type="button"
+-                className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
++                className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                 onClick={handleStartEdit}
+                 aria-label={`Edit ${fieldLabel}`}
+             >
+@@ -700,7 +667,7 @@
+         return (
+             <Button unstyled
+                 type="button"
+-                className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
++                className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                 onClick={handleStartEdit}
+                 aria-label="Edit Weight"
+             >
+@@ -782,47 +749,6 @@
+             </h3>
+             <div className="mt-4 space-y-3">{children}</div>
+         </section>
+-    )
+-}
+-
+-function ChecklistStatusButton({
+-    label,
+-    value,
+-    onChange,
+-}: {
+-    label: string
+-    value: boolean | null | undefined
+-    onChange: (value: boolean | null) => Promise<void>
+-}) {
+-    const [isSaving, setIsSaving] = React.useState(false)
+-    const nextValue = getNextChecklistValue(value)
+-    const statusLabel = value === true ? "Yes" : value === false ? "No" : "Not set"
+-
+-    const cycleChecklistValue = async () => {
+-        setIsSaving(true)
+-        const finishSaving = () => setIsSaving(false)
+-        try {
+-            await onChange(nextValue)
+-            finishSaving()
+-        } catch {
+-            finishSaving()
+-        }
+-    }
+-
+-    return (
+-        <Button unstyled
+-            type="button"
+-            className="flex size-6 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-60"
+-            onClick={cycleChecklistValue}
+-            disabled={isSaving}
+-            aria-label={`${label}: ${statusLabel}. Click to change.`}
+-        >
+-            {value === true && <CheckIcon className="size-4 text-green-500" />}
+-            {value === false && <XIcon className="size-4 text-red-500" />}
+-            {(value === null || value === undefined) && (
+-                <span className="text-sm leading-none text-muted-foreground">-</span>
+-            )}
+-        </Button>
+     )
+ }
+ 
+@@ -984,18 +910,29 @@
+     )
+ }
+ 
+-export function SurrogateOverviewTab() {
+-    const params = useParams<{ id: string }>()
+-    const id = params.id
+-    const detailContext = useSurrogateDetailContext()
+-    const surrogateData = detailContext?.surrogate
+-    const pipelineQuery = useDefaultPipeline()
+-    const stageOptions = pipelineQuery.data?.stages || []
+-    const stageById = new Map(stageOptions.map((stage) => [stage.id, stage]))
+-    const activityQuery = useSurrogateActivity(id, 1, 100)
+-    const tasksQuery = useTasks({ surrogate_id: id, exclude_approvals: true })
+-    const updateSurrogateMutation = useUpdateSurrogate()
+-    const revealSensitiveInfoMutation = useRevealSurrogateSensitiveInfo()
++export type PrototypeDonorRecord = SurrogateRead & DonorQuestionAnswers & {
++    donor_type: string
++    education: string
++    ssn?: string | null
++    partner_ssn?: string | null
++}
++
++type DonorUpdate = Partial<SurrogateUpdatePayload> & Partial<DonorQuestionAnswers> & { donor_type?: string }
++
++export function DonorOverviewTab({ record, onUpdate, activityPanel }: {
++    record: PrototypeDonorRecord
++    onUpdate: (data: DonorUpdate) => Promise<void>
++    activityPanel: React.ReactNode
++}) {
++    const id = "donor-demo"
++    const surrogateData = record
++    const updateSurrogateMutation = {
++        mutateAsync: async ({ data }: { surrogateId: string; data: DonorUpdate }) => onUpdate(data),
++    }
++    const revealSensitiveInfoMutation = {
++        isPending: false,
++        mutateAsync: async (_id: string) => ({ ssn: record.ssn ?? null, partner_ssn: record.partner_ssn ?? null }),
++    }
+     const [copiedEmail, setCopiedEmail] = React.useState(false)
+     const [revealedSsn, setRevealedSsn] = React.useState<string | null>(null)
+     const [revealedPartnerSsn, setRevealedPartnerSsn] = React.useState<string | null>(null)
+@@ -1011,7 +948,6 @@
+             ? surrogateData.bmi
+             : computeBmi(surrogateData.height_ft, surrogateData.weight_lb)
+         : null
+-    const stageContext = getSurrogateStageContext(surrogateData ?? null, stageById)
+     const leadIntakeWarnings = surrogateData?.lead_intake_warnings ?? []
+     const leadWarningMap = new Map(leadIntakeWarnings.map((warning) => [warning.field_key, warning]))
+ 
+@@ -1019,13 +955,6 @@
+         return null
+     }
+ 
+-    const effectiveStage = stageContext.effectiveStage
+-    const isHeartbeatConfirmedOrLater = stageHasCapability(
+-        effectiveStage ?? { stage_key: surrogateData.stage_key, stage_slug: surrogateData.stage_slug },
+-        "shows_pregnancy_tracking"
+-    )
+-    const isTerminalIntakeOutcome =
+-        stageContext.effectiveStageKey === "lost" || stageContext.effectiveStageKey === "disqualified"
+     const emailLeadWarning = leadWarningMap.get("email")
+     const phoneLeadWarning = leadWarningMap.get("phone")
+     const stateLeadWarning = leadWarningMap.get("state")
+@@ -1033,6 +962,8 @@
+     const weightLeadWarning = leadWarningMap.get("weight_lb")
+     const maritalStatusOptions = getMaritalStatusOptions(surrogateData.marital_status)
+     const hasSurrogatePersonalInfo = Boolean(
++        surrogateData.donor_type ||
++        surrogateData.education ||
+         surrogateData.marital_status ||
+         surrogateData.ssn_masked ||
+         surrogateData.address_line1 ||
+@@ -1095,6 +1026,8 @@
+         try {
+             if (personalSectionPendingDelete === "surrogate") {
+                 await updateSurrogate({
++                    donor_type: "",
++                    education: "",
+                     marital_status: null,
+                     ssn: null,
+                     address_line1: null,
+@@ -1377,7 +1310,7 @@
+                                                                     className="rounded-xl px-2.5 py-2"
+                                                                 >
+                                                                     <SectionActionIcon icon={<UserIcon className="size-4" />} />
+-                                                                    <span className="font-medium">Surrogate</span>
++                                                                    <span className="font-medium">Donor</span>
+                                                                 </DropdownMenuItem>
+                                                             )}
+                                                             {!showPartnerInfo && (
+@@ -1408,7 +1341,7 @@
+                                                                     className="rounded-xl px-2.5 py-2"
+                                                                 >
+                                                                     <SectionActionIcon icon={<UserIcon className="size-4" />} tone="destructive" />
+-                                                                    <span className="font-medium">Delete Surrogate</span>
++                                                                    <span className="font-medium">Delete Donor</span>
+                                                                 </DropdownMenuItem>
+                                                             )}
+                                                             {showPartnerInfo && (
+@@ -1436,7 +1369,26 @@
+                                 ) : (
+                                     <div className="grid items-stretch gap-4 lg:grid-cols-2">
+                                     {showSurrogatePersonalInfo && (
+-                                        <PersonalInfoColumn title="Surrogate" icon={UserIcon}>
++                                        <PersonalInfoColumn title="Donor" icon={UserIcon}>
++                                        <PersonalInfoRow label="Donor Type">
++                                            <InlineSelectField
++                                                label="Donor Type"
++                                                value={record.donor_type}
++                                                options={[{value:"egg",label:"Egg Donor"},{value:"sperm",label:"Sperm Donor"}]}
++                                                onSave={async value=>onUpdate({donor_type:value ?? ""})}
++                                                triggerClassName="w-full max-w-[15rem]"
++                                            />
++                                        </PersonalInfoRow>
++                                        <PersonalInfoRow label="Education">
++                                            <InlineSelectField
++                                                value={record.education}
++                                                label="Education"
++                                                options={EDUCATION_OPTIONS}
++                                                placeholder="Not answered"
++                                                onSave={async value=>onUpdate({education:value})}
++                                                triggerClassName="w-full max-w-[15rem]"
++                                            />
++                                        </PersonalInfoRow>
+                                         <PersonalInfoRow label="Marital Status">
+                                             <InlineSelectField
+                                                 label="Marital Status"
+@@ -1450,7 +1402,7 @@
+                                         </PersonalInfoRow>
+                                         <PersonalInfoRow label="SSN">
+                                             <SsnField
+-                                                label="surrogate SSN"
++                                                label="donor SSN"
+                                                 maskedValue={surrogateData.ssn_masked}
+                                                 revealedValue={revealedSsn}
+                                                 isRevealPending={revealSensitiveInfoMutation.isPending}
+@@ -1466,7 +1418,7 @@
+                                                 value={surrogateData.address_line1}
+                                                 onSave={async (value) => updateSurrogate({ address_line1: value || null })}
+                                                 placeholder="-"
+-                                                label="Surrogate address line 1"
++                                                label="Donor address line 1"
+                                             />
+                                         </PersonalInfoRow>
+                                         <PersonalInfoRow label="Address Line 2">
+@@ -1474,7 +1426,7 @@
+                                                 value={surrogateData.address_line2}
+                                                 onSave={async (value) => updateSurrogate({ address_line2: value || null })}
+                                                 placeholder="-"
+-                                                label="Surrogate address line 2"
++                                                label="Donor address line 2"
+                                             />
+                                         </PersonalInfoRow>
+                                         <PersonalInfoRow label="City">
+@@ -1482,7 +1434,7 @@
+                                                 value={surrogateData.address_city}
+                                                 onSave={async (value) => updateSurrogate({ address_city: value || null })}
+                                                 placeholder="-"
+-                                                label="Surrogate city"
++                                                label="Donor city"
+                                             />
+                                         </PersonalInfoRow>
+                                         <PersonalInfoRow label="State">
+@@ -1495,7 +1447,7 @@
+                                                         ? "Use 2-letter code (e.g., CA, TX)"
+                                                         : null
+                                                 }
+-                                                label="Surrogate state"
++                                                label="Donor state"
+                                             />
+                                         </PersonalInfoRow>
+                                         <PersonalInfoRow label="Postal Code">
+@@ -1503,7 +1455,7 @@
+                                                 value={surrogateData.address_postal}
+                                                 onSave={async (value) => updateSurrogate({ address_postal: value || null })}
+                                                 placeholder="-"
+-                                                label="Surrogate postal code"
++                                                label="Donor postal code"
+                                             />
+                                         </PersonalInfoRow>
+                                         </PersonalInfoColumn>
+@@ -1621,7 +1573,7 @@
+                                 <AlertDialogContent>
+                                     <AlertDialogHeader>
+                                         <AlertDialogTitle>
+-                                            Delete {personalSectionPendingDelete === "surrogate" ? "Surrogate" : "Partner"} section?
++                                            Delete {personalSectionPendingDelete === "surrogate" ? "Donor" : "Partner"} section?
+                                         </AlertDialogTitle>
+                                         <AlertDialogDescription>
+                                             This removes the section from Personal Information and clears any saved details. You can add it back later.
+@@ -1653,145 +1605,34 @@
+                 </div>
+ 
+                 <div className="space-y-4">
+-                    {isHeartbeatConfirmedOrLater && !isTerminalIntakeOutcome && (
+-                        <PregnancyTrackerCard
+-                            surrogateData={surrogateData}
+-                            onUpdate={async (data) => {
+-                                await updateSurrogateMutation.mutateAsync({
+-                                    surrogateId: id,
+-                                    data,
+-                                })
+-                            }}
+-                        />
+-                    )}
+-
+-                    <ActivityTimeline
+-                        surrogateId={id}
+-                        currentStageId={surrogateData.stage_id}
+-                        stages={stageOptions}
+-                        activities={activityQuery.data?.items ?? []}
+-                        tasks={tasksQuery.data?.items ?? []}
+-                        tasksStatus={
+-                            tasksQuery.isLoading ? "loading" : tasksQuery.isError ? "error" : "ready"
+-                        }
+-                        onRetryTasks={() => { void tasksQuery.refetch() }}
+-                        activityStatus={
+-                            activityQuery.isLoading || pipelineQuery.isLoading
+-                                ? "loading"
+-                                : activityQuery.isError || pipelineQuery.isError
+-                                  ? "error"
+-                                  : "ready"
+-                        }
+-                        onRetryActivity={() => { void activityQuery.refetch() }}
+-                        {...(effectiveStage?.id ? { effectiveStageId: effectiveStage.id } : {})}
+-                    />
++                    {activityPanel}
+ 
+                     <SurrogateOverviewCard title="Eligibility Checklist" icon={ClipboardCheckIcon}>
+-                        {(surrogateData.eligibility_checklist ?? []).map((item) => {
+-                            if (item.type === "boolean") {
+-                                if (!isChecklistBooleanFieldKey(item.key)) {
+-                                    return (
+-                                        <div key={item.key} className="flex items-center gap-2">
+-                                            <span className="flex size-6 shrink-0 items-center justify-center text-sm text-muted-foreground">
+-                                                -
+-                                            </span>
+-                                            <span className="text-sm">{item.label}</span>
+-                                        </div>
+-                                    )
+-                                }
+-
+-                                const currentValue = surrogateData[item.key]
+-
+-                                return (
+-                                    <div key={item.key} className="flex items-center gap-2">
+-                                        <ChecklistStatusButton
+-                                            label={item.label}
+-                                            value={currentValue}
+-                                            onChange={async (value) => {
+-                                                await updateSurrogateMutation.mutateAsync({
+-                                                    surrogateId: id,
+-                                                    data: { [item.key]: value } as SurrogateUpdatePayload,
+-                                                })
+-                                            }}
+-                                        />
+-                                        <span className="text-sm">{item.label}</span>
+-                                    </div>
+-                                )
+-                            }
+-
+-                            if (item.key === "journey_timing_preference") {
+-                                const currentValue =
+-                                    surrogateData.journey_timing_preference ??
+-                                    (typeof item.value === "string" ? item.value : "")
+-
+-                                return (
+-                                    <div key={item.key} className="grid gap-1 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
+-                                        <span className="text-sm text-muted-foreground">{item.label}:</span>
+-                                        <InlineSelectField
+-                                            label={item.label}
+-                                            value={currentValue}
+-                                            options={JOURNEY_TIMING_OPTIONS}
+-                                            onSave={async (value) => {
+-                                                await updateSurrogateMutation.mutateAsync({
+-                                                    surrogateId: id,
+-                                                    data: {
+-                                                        journey_timing_preference: value,
+-                                                    },
+-                                                })
+-                                            }}
+-                                            triggerClassName="w-full max-w-44"
+-                                        />
+-                                    </div>
+-                                )
+-                            }
+-
+-                            if (item.type === "number" && (item.key === "num_deliveries" || item.key === "num_csections")) {
+-                                const fallbackValue =
+-                                    typeof item.value === "number"
+-                                        ? item.value
+-                                        : typeof item.value === "string" && /^\d+$/.test(item.value)
+-                                            ? Number.parseInt(item.value, 10)
+-                                            : null
+-                                const currentValue = surrogateData[item.key] ?? fallbackValue
+-
+-                                return (
+-                                    <div key={item.key} className="grid gap-1 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
+-                                        <span className="text-sm text-muted-foreground">{item.label}:</span>
+-                                        <InlineEditField
+-                                            value={currentValue != null ? String(currentValue) : undefined}
+-                                            onSave={async (value) => {
+-                                                const trimmed = value.trim()
+-                                                await updateSurrogateMutation.mutateAsync({
+-                                                    surrogateId: id,
+-                                                    data: {
+-                                                        [item.key]: trimmed ? Number.parseInt(trimmed, 10) : null,
+-                                                    } as SurrogateUpdatePayload,
+-                                                })
+-                                            }}
+-                                            validate={(value) => {
+-                                                const trimmed = value.trim()
+-                                                if (!trimmed) return null
+-                                                return /^\d+$/.test(trimmed)
+-                                                    ? null
+-                                                    : "Enter a valid number"
+-                                            }}
+-                                            placeholder="-"
+-                                            label={item.label}
+-                                            displayClassName="w-fit"
+-                                        />
+-                                    </div>
+-                                )
+-                            }
+-
+-                            return (
+-                                <div key={item.key} className="flex items-center gap-2">
+-                                    <span className="text-sm text-muted-foreground">
+-                                        {item.label}:
+-                                    </span>
+-                                    <span className="text-sm">{item.display_value}</span>
+-                                </div>
+-                            )
+-                        })}
++                        {DONOR_QUESTIONS.map(({key, label, question, options}) => (
++                            <div key={key} className="grid gap-1 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
++                                <Tooltip>
++                                    <TooltipTrigger render={<button type="button" className="text-left text-sm text-muted-foreground"/>}>{label}:</TooltipTrigger>
++                                    <TooltipContent className="max-w-72">{question}</TooltipContent>
++                                </Tooltip>
++                                {options ? (
++                                    <InlineSelectField
++                                        label={label}
++                                        value={record[key]}
++                                        options={options}
++                                        placeholder="Not answered"
++                                        onSave={async value=>onUpdate({[key]:value})}
++                                        triggerClassName="w-full"
++                                    />
++                                ) : (
++                                    <InlineEditField
++                                        label={label}
++                                        value={record[key] ?? undefined}
++                                        placeholder="Not answered"
++                                        onSave={async value=>onUpdate({[key]:value || null})}
++                                    />
++                                )}
++                            </div>
++                        ))}
+                     </SurrogateOverviewCard>
+                 </div>
+             </div>

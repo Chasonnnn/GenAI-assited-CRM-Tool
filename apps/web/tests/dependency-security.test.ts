@@ -43,6 +43,22 @@ function compareVersions(left: string, right: string): number {
 }
 
 describe("Dependency security guards", () => {
+    it.each([
+        ["sharp", "0.35.4"],
+        ["@tiptap/core", "3.30.5"],
+        ["baseline-browser-mapping", "2.11.0"],
+    ])("resolves patched %s versions", (name, minimum) => {
+        const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
+        const versions = Array.from(
+            lockfile.matchAll(new RegExp(`^  '?${name}@(\\d+\\.\\d+\\.\\d+)'?:`, "gm")),
+            (match) => match[1],
+        )
+        expect(versions.length).toBeGreaterThan(0)
+        for (const version of versions) {
+            expect(compareVersions(version, minimum)).toBeGreaterThanOrEqual(0)
+        }
+    })
+
     it("pins browserslist to the patched version in pnpm overrides", () => {
         expect(readPnpmOverrides().browserslist).toBe("4.28.7")
     })
@@ -96,7 +112,7 @@ describe("Dependency security guards", () => {
         const dompurifyVersion = packageJson.dependencies?.dompurify?.replace(/^[^\d]*/, "")
 
         expect(dompurifyVersion).toBeDefined()
-        expect(compareVersions(dompurifyVersion!, "3.4.11")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(dompurifyVersion!, "3.4.13")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins markdown-it to a non-vulnerable version", () => {
@@ -128,7 +144,7 @@ describe("Dependency security guards", () => {
         const postcssOverride = readPnpmOverrides().postcss
 
         expect(postcssOverride).toBeDefined()
-        expect(compareVersions(postcssOverride!, "8.5.18")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(postcssOverride!, "8.5.23")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins ws to a non-vulnerable version in pnpm overrides", () => {
@@ -160,7 +176,7 @@ describe("Dependency security guards", () => {
         const vitestVersion = packageJson.devDependencies?.vitest?.replace(/^[^\d]*/, "")
 
         expect(vitestVersion).toBeDefined()
-        expect(compareVersions(vitestVersion!, "4.1.0")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(vitestVersion!, "4.1.11")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins Next and its bundle analyzer to the patched release", () => {
@@ -174,8 +190,8 @@ describe("Dependency security guards", () => {
 
         expect(nextVersion).toBeDefined()
         expect(bundleAnalyzerVersion).toBeDefined()
-        expect(compareVersions(nextVersion!, "16.3.0")).toBeGreaterThanOrEqual(0)
-        expect(compareVersions(bundleAnalyzerVersion!, "16.3.0")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(nextVersion!, "16.3.3")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(bundleAnalyzerVersion!, "16.3.3")).toBeGreaterThanOrEqual(0)
     })
 
     it("holds React and TypeScript on the validated compatibility line", () => {
@@ -258,7 +274,7 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "8.5.18")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "8.5.23")).toBeGreaterThanOrEqual(0)
         }
     })
 
@@ -314,7 +330,7 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "4.1.0")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "4.1.11")).toBeGreaterThanOrEqual(0)
         }
     })
 
@@ -328,7 +344,7 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "3.4.11")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "3.4.13")).toBeGreaterThanOrEqual(0)
         }
     })
 

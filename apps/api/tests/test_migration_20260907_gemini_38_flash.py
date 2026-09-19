@@ -5,6 +5,16 @@ import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+
+
+def test_platform_migrations_have_one_head_with_both_upgrade_histories():
+    scripts = ScriptDirectory.from_config(Config("alembic.ini"))
+    assert len(scripts.get_heads()) == 1
+    ancestors = {revision.revision for revision in scripts.walk_revisions()}
+    assert {"20260907_1200", "20260914_1200_donor_profile"} <= ancestors
+
 
 def test_google_model_upgrade_and_downgrade(monkeypatch):
     path = (
@@ -29,9 +39,7 @@ def test_google_model_upgrade_and_downgrade(monkeypatch):
             migration,
             "op",
             SimpleNamespace(
-                alter_column=lambda *args, **kwargs: defaults.append(
-                    str(kwargs["server_default"])
-                ),
+                alter_column=lambda *args, **kwargs: defaults.append(str(kwargs["server_default"])),
                 execute=db.execute,
             ),
         )

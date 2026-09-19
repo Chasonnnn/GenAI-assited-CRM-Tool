@@ -3,15 +3,27 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.db.types import EncryptedString
+from app.db.types import EncryptedDate, EncryptedString
 
 if TYPE_CHECKING:
     from app.db.models import Organization, PipelineStage
@@ -72,6 +84,289 @@ class Donor(Base):
     state: Mapped[str | None] = mapped_column(String(100), nullable=True)
     education: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    marital_status: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    ssn: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    ssn_last4: Mapped[str | None] = mapped_column(
+        String(4), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    address_line1: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    address_line2: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    address_city: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    address_state: Mapped[str | None] = mapped_column(
+        String(2), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    address_postal: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    partner_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    partner_date_of_birth: Mapped[date | None] = mapped_column(
+        EncryptedDate, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    partner_email: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    partner_phone: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    partner_ssn: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    partner_ssn_last4: Mapped[str | None] = mapped_column(
+        String(4), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    partner_address_line1: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    partner_address_line2: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    partner_city: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    partner_state: Mapped[str | None] = mapped_column(
+        String(2), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    partner_postal: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    date_of_birth: Mapped[date | None] = mapped_column(
+        EncryptedDate, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    race: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    height_ft: Mapped[Decimal | None] = mapped_column(
+        Numeric(4, 2), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    weight_lb: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    insurance_company: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    insurance_plan_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    insurance_phone: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    insurance_policy_number: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    insurance_member_id: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    insurance_group_number: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    insurance_subscriber_name: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    insurance_subscriber_dob: Mapped[date | None] = mapped_column(
+        EncryptedDate, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    insurance_fax: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    clinic_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    clinic_address_line1: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    clinic_address_line2: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    clinic_city: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    clinic_state: Mapped[str | None] = mapped_column(
+        String(2), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    clinic_postal: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    clinic_phone: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    clinic_email: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    clinic_fax: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    monitoring_clinic_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    monitoring_clinic_address_line1: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    monitoring_clinic_address_line2: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    monitoring_clinic_city: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    monitoring_clinic_state: Mapped[str | None] = mapped_column(
+        String(2), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    monitoring_clinic_postal: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    monitoring_clinic_phone: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    monitoring_clinic_email: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    monitoring_clinic_fax: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    ob_provider_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    ob_clinic_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    ob_address_line1: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    ob_address_line2: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    ob_city: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    ob_state: Mapped[str | None] = mapped_column(
+        String(2), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    ob_postal: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    ob_phone: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    ob_email: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    ob_fax: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    delivery_hospital_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    delivery_hospital_address_line1: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    delivery_hospital_address_line2: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    delivery_hospital_city: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    delivery_hospital_state: Mapped[str | None] = mapped_column(
+        String(2), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    delivery_hospital_postal: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    delivery_hospital_phone: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    delivery_hospital_email: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    delivery_hospital_fax: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    pcp_provider_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    pcp_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    pcp_address_line1: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    pcp_address_line2: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    pcp_city: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    pcp_state: Mapped[str | None] = mapped_column(
+        String(2), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    pcp_postal: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    pcp_phone: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    pcp_fax: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    pcp_email: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    lab_clinic_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    lab_clinic_address_line1: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    lab_clinic_address_line2: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    lab_clinic_city: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    lab_clinic_state: Mapped[str | None] = mapped_column(
+        String(2), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    lab_clinic_postal: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    lab_clinic_phone: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    lab_clinic_fax: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    lab_clinic_email: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    college: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    nicotine: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    cannabis: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    infectious_disease: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    previous_donation: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True, deferred_group="donor_profile"
+    )
+    profile_updated_fields: Mapped[list[str]] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb"), nullable=False
+    )
 
     owner_type: Mapped[str | None] = mapped_column(String(10), nullable=True)
     owner_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
@@ -166,18 +461,12 @@ class DonorStatusHistory(Base):
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False
     )
-    requested_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    approved_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    is_undo: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("false"), nullable=False
-    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_undo: Mapped[bool] = mapped_column(Boolean, server_default=text("false"), nullable=False)
     request_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("status_change_requests.id", ondelete="SET NULL"),

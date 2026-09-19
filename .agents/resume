@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# No authentication or always-on services are needed. Never install on resume:
+# setup owns dependencies and the login-shell hook exposes the pinned tools.
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+export PATH="$HOME/.local/bin:$PATH"
+command -v mise >/dev/null || { echo '[orb resume] Missing mise; run .agents/setup.' >&2; exit 1; }
+for executable in apps/api/.venv/bin/python apps/web/node_modules/.bin/vitest; do
+    if [[ ! -x "$executable" ]]; then
+        printf '[orb resume] Missing %s; run .agents/setup to repair this orb.\n' "$executable" >&2
+        exit 1
+    fi
+done
+printf '[orb resume] Cached toolchain and dependencies are ready.\n'

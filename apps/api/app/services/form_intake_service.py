@@ -1579,6 +1579,15 @@ def create_shared_submission(
     form_submission_service._validate_answers(schema, answers)  # type: ignore[attr-defined]
 
     mapping_lookup = _mapping_lookup_from_snapshot(selected_mapping_snapshot)
+    donor_type_key = mapping_lookup.get("donor_type")
+    if selected_lead_kind in DONOR_LEAD_KINDS and donor_type_key:
+        donor_type = answers.get(donor_type_key)
+        if (
+            not isinstance(donor_type, str)
+            or donor_type not in form_service.DONOR_TYPE_ANSWER_LEAD_KINDS
+        ):
+            raise ValueError("Please choose Egg donor or Sperm donor")
+        selected_lead_kind = form_service.DONOR_TYPE_ANSWER_LEAD_KINDS[donor_type]
     identity = (
         _extract_donor_identity(answers=answers, mapping_lookup=mapping_lookup)
         if selected_lead_kind in DONOR_LEAD_KINDS
@@ -2124,14 +2133,24 @@ def auto_match_submission(
         return submission, _normalize_shared_outcome(outcome)
 
     if submission.lead_kind in DONOR_LEAD_KINDS:
-        if submission.donor_id:
-            return submission, FormSubmissionMatchStatus.LINKED.value
-        submission.match_status = FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
-        submission.match_reason = "donor_lead_requires_promotion"
-        submission.matched_at = None
+        from app.services import donor_intake_service
+
+        submission = (
+            db.query(FormSubmission)
+            .filter(
+                FormSubmission.organization_id == submission.organization_id,
+                FormSubmission.id == submission.id,
+            )
+            .with_for_update()
+            .populate_existing()
+            .one()
+        )
+        if submission.intake_lead_id and not submission.donor_id:
+            return submission, FormSubmissionMatchStatus.LEAD_CREATED.value
+        outcome = donor_intake_service.match_submission(db, submission)
         db.commit()
         db.refresh(submission)
-        return submission, FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
+        return submission, outcome
 
     if submission.surrogate_id:
         if submission.match_status != FormSubmissionMatchStatus.LINKED.value:
@@ -2258,11 +2277,35 @@ def create_intake_lead_for_submission(
     user_id: uuid.UUID | None,
     source: str | None = None,
     allow_ambiguous: bool = False,
+    auto_promote: bool = False,
 ) -> tuple[FormSubmission, IntakeLead | None]:
     """Create or attach an intake lead for a shared submission."""
     if submission.source_mode != FormLinkMode.SHARED.value:
         return submission, None
+    if submission.lead_kind in DONOR_LEAD_KINDS:
+        from app.services import donor_intake_service
+
+        submission = (
+            db.query(FormSubmission)
+            .filter(
+                FormSubmission.organization_id == submission.organization_id,
+                FormSubmission.id == submission.id,
+            )
+            .with_for_update()
+            .populate_existing()
+            .one()
+        )
+        if auto_promote and not submission.intake_lead_id and not submission.donor_id:
+            donor_intake_service.match_submission(db, submission)
+        if (
+            submission.match_reason in donor_intake_service.REVIEW_REQUIRED_REASONS
+            and not allow_ambiguous
+        ):
+            db.commit()
+            return submission, None
     if submission.surrogate_id or submission.donor_id:
+        if auto_promote and submission.lead_kind in DONOR_LEAD_KINDS:
+            db.commit()
         return submission, None
 
     if not allow_ambiguous:
@@ -2290,6 +2333,11 @@ def create_intake_lead_for_submission(
             submission.matched_at = None
             db.commit()
             db.refresh(submission)
+        if lead and auto_promote and submission.lead_kind in DONOR_LEAD_KINDS:
+            lead.source_metadata = {**(lead.source_metadata or {}), "auto_create_donor": True}
+            db.flush()
+            donor_intake_service.enqueue_promotion(db, submission=submission)
+            db.commit()
         return submission, lead
 
     form = (
@@ -2325,6 +2373,8 @@ def create_intake_lead_for_submission(
     else:
         identity = _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
     metadata: dict[str, Any] = {"submission_id": str(submission.id)}
+    if auto_promote and submission.lead_kind in DONOR_LEAD_KINDS:
+        metadata["auto_create_donor"] = True
     if source:
         metadata["source"] = source
     if link and link.campaign_name:
@@ -2363,6 +2413,9 @@ def create_intake_lead_for_submission(
     db.query(FormSubmissionMatchCandidate).filter(
         FormSubmissionMatchCandidate.submission_id == submission.id
     ).delete(synchronize_session=False)
+    if auto_promote and submission.lead_kind in DONOR_LEAD_KINDS:
+        db.flush()
+        donor_intake_service.enqueue_promotion(db, submission=submission)
     db.commit()
     db.refresh(submission)
     db.refresh(lead)

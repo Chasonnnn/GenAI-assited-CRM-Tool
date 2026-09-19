@@ -1318,7 +1318,7 @@ class DefaultWorkflowDomainAdapter:
         if not isinstance(assign_to_user, bool):
             assign_to_user = None
 
-        surrogate, linked_submission_count = form_intake_service.promote_intake_lead(
+        record, linked_submission_count = form_intake_service.promote_intake_lead(
             db=db,
             lead=entity,
             user_id=entity.created_by_user_id,
@@ -1328,8 +1328,10 @@ class DefaultWorkflowDomainAdapter:
         )
         return {
             "success": True,
-            "description": "Promoted intake lead to surrogate",
-            "surrogate_id": str(surrogate.id),
+            "description": "Promoted intake lead to donor"
+            if entity.promoted_donor_id
+            else "Promoted intake lead to surrogate",
+            "donor_id" if entity.promoted_donor_id else "surrogate_id": str(record.id),
             "linked_submission_count": int(linked_submission_count),
         }
 
@@ -1348,9 +1350,13 @@ class DefaultWorkflowDomainAdapter:
         if outcome == "linked":
             return {
                 "success": True,
-                "description": "Matched submission to existing surrogate",
+                "description": "Matched submission to existing donor"
+                if submission.donor_id
+                else "Matched submission to existing surrogate",
                 "submission_id": str(submission.id),
-                "surrogate_id": str(submission.surrogate_id) if submission.surrogate_id else None,
+                "donor_id" if submission.donor_id else "surrogate_id": str(
+                    submission.donor_id or submission.surrogate_id
+                ),
                 "match_status": outcome,
             }
         return {
@@ -1378,6 +1384,7 @@ class DefaultWorkflowDomainAdapter:
             submission=entity,
             user_id=None,
             source=source,
+            auto_promote=action.get("auto_promote") is True,
         )
         if not lead:
             return {

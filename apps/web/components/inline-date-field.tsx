@@ -8,6 +8,8 @@ import { CheckIcon, XIcon, PencilIcon, Loader2Icon, CalendarIcon } from "lucide-
 import { Button } from "@/components/ui/button"
 import { format, parseISO, isValid } from "date-fns"
 
+import { useRecordEditing } from "@/components/records/RecordEditingContext"
+
 interface InlineDateFieldProps {
     value: string | null | undefined
     onSave: (value: string | null) => Promise<void>
@@ -78,8 +80,10 @@ export function InlineDateField({
     className,
     displayClassName,
     label,
-    disabled = false,
+    disabled: disabledProp = false,
 }: InlineDateFieldProps) {
+    const canEdit = useRecordEditing()
+    const disabled = disabledProp || !canEdit
     const [state, dispatch] = React.useReducer(
         inlineDateFieldReducer,
         INITIAL_INLINE_DATE_FIELD_STATE,
