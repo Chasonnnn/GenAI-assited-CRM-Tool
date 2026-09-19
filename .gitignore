@@ -63,6 +63,8 @@ infra/terraform/tfplan
 .uv_cache/
 .uv-cache/
 .playwright-mcp/
+# Orb portal metadata (generated locally)
+.amp/portals/*
 # next-agents-md
 .next-docs/
 .gstack/
