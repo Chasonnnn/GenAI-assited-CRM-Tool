@@ -640,10 +640,11 @@ async def test_deleted_note_keeps_durable_activity_without_copying_content(
     rows = (
         db.query(EntityActivityLog)
         .filter(EntityActivityLog.organization_id == test_auth.org.id)
-        .order_by(EntityActivityLog.recorded_at)
         .all()
     )
-    assert [row.activity_type for row in rows] == ["note_added", "note_deleted"]
+    # recorded_at uses transaction time, so both rows can tie in this fixture.
+    # The API ordering is checked above; here verify exact durable ledger contents.
+    assert sorted(row.activity_type for row in rows) == ["note_added", "note_deleted"]
     assert all("Private note text" not in str(row.details) for row in rows)
 
 
