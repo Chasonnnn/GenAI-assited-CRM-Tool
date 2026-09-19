@@ -61,6 +61,7 @@ describe("stages.generated", () => {
             "pre_qualified",
             "application_submitted",
             "interview_scheduled",
+            "reschedule_needed",
             "pending_docusign",
             "under_review",
             "approved",
@@ -92,6 +93,7 @@ describe("stages.generated", () => {
             ["pre_qualified", "Pre-Qualified", "intake"],
             ["application_submitted", "Application Submitted", "intake"],
             ["interview_scheduled", "Interview Scheduled", "intake"],
+            ["reschedule_needed", "Reschedule Needed", "intake"],
             ["pending_docusign", "Pending-DocuSign", "intake"],
             ["under_review", "Under Review", "intake"],
             ["approved", "Approved", "intake"],
@@ -119,6 +121,7 @@ describe("stages.generated", () => {
     })
 
     it("exposes the new stage types to generated consumers", () => {
+        expect(STAGE_TYPE_MAP.reschedule_needed).toBe("intake")
         expect(STAGE_TYPE_MAP.pending_docusign).toBe("intake")
         expect(STAGE_TYPE_MAP.life_insurance_application_started).toBe("post_approval")
         expect(STAGE_TYPE_MAP.pbo_process_started).toBe("post_approval")

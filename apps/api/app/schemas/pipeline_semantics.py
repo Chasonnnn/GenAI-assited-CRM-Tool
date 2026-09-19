@@ -273,13 +273,10 @@ def default_stage_semantics(
 
     if normalized_entity_type in DONOR_PIPELINE_ENTITY_TYPES:
         matching_entry_key = (
-            "ready_to_match"
-            if normalized_entity_type == EGG_DONOR_PIPELINE_ENTITY
-            else "available"
+            "ready_to_match" if normalized_entity_type == EGG_DONOR_PIPELINE_ENTITY else "available"
         )
         capabilities = StageCapabilities(
-            counts_as_contacted=normalized_key
-            not in {"new", "on_hold", "disqualified", "closed"},
+            counts_as_contacted=normalized_key not in {"new", "on_hold", "disqualified", "closed"},
             eligible_for_matching=normalized_key == matching_entry_key,
             locks_match_state=normalized_key
             in {
@@ -334,6 +331,7 @@ def default_stage_semantics(
             "contacted",
             "pre_qualified",
             "interview_scheduled",
+            "reschedule_needed",
             "application_submitted",
             "pending_docusign",
             "under_review",
@@ -370,6 +368,9 @@ def default_stage_semantics(
 
     if normalized_key == "contacted":
         integration_bucket: IntegrationBucket = "intake"
+    elif normalized_key == "reschedule_needed":
+        # A retry state is not forward qualification or conversion progress.
+        integration_bucket = "none"
     elif normalized_key in {
         "pre_qualified",
         "interview_scheduled",

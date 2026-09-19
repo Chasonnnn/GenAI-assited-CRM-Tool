@@ -33,11 +33,6 @@ export interface LatestContactOutcomeRead {
     at: string;
 }
 
-export interface LatestInterviewOutcomeRead {
-    outcome: "completed" | "no_show" | "rescheduled" | "cancelled";
-    at: string;
-}
-
 export interface SurrogateEligibilityChecklistItem {
     key: string;
     label: string;
@@ -95,7 +90,6 @@ export interface SurrogateRead {
     partner_postal?: string | null;
     lead_intake_warnings?: SurrogateLeadIntakeWarning[];
     latest_contact_outcome?: LatestContactOutcomeRead | null;
-    latest_interview_outcome?: LatestInterviewOutcomeRead | null;
     date_of_birth: string | null;
     race: string | null;
     height_ft: string | null;

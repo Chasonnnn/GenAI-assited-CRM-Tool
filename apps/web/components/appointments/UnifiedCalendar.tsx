@@ -61,7 +61,6 @@ import { useSurrogates } from "@/lib/hooks/use-surrogates"
 import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { AppointmentDetailDialog as AppointmentManagementDialog } from "@/components/appointments/AppointmentsList"
-import { LogInterviewOutcomeDialog } from "@/components/surrogates/LogInterviewOutcomeDialog"
 import type { AppointmentListItem, GoogleCalendarEvent } from "@/lib/api/appointments"
 import type { TaskListItem } from "@/lib/api/tasks"
 import type { IntendedParentListItem } from "@/lib/types/intended-parent"
@@ -351,7 +350,6 @@ function AppointmentDetailDialog({
     const [showLinkSection, setShowLinkSection] = useState(false)
     const [selectedSurrogateId, setSelectedSurrogateId] = useState(() => appointment?.surrogate_id ?? null)
     const [selectedIpId, setSelectedIpId] = useState(() => appointment?.intended_parent_id ?? null)
-    const [logOutcomeOpen, setLogOutcomeOpen] = useState(false)
 
     const updateLinkMutation = useUpdateAppointmentLink()
     const { user } = useAuth()
@@ -478,24 +476,8 @@ function AppointmentDetailDialog({
                                 onUnlinkIntendedParent: handleUnlinkIp,
                             }}
                         />
-                        <AppointmentOutcomeAction
-                            appointment={appointment}
-                            onLogOutcome={() => setLogOutcomeOpen(true)}
-                        />
                     </div>
                 </div>
-
-                {logOutcomeOpen && (
-                    <LogInterviewOutcomeDialog
-                        open
-                        onOpenChange={setLogOutcomeOpen}
-                        surrogateId={appointment.surrogate_id}
-                        surrogateName={
-                            appointment.surrogate_number ? `Surrogate #${appointment.surrogate_number}` : "surrogate"
-                        }
-                        appointmentId={appointment.id}
-                    />
-                )}
             </DialogContent>
         </Dialog>
     )
@@ -836,30 +818,6 @@ function AppointmentLinkEditor({
                     Cancel
                 </Button>
             </div>
-        </div>
-    )
-}
-
-function AppointmentOutcomeAction({
-    appointment,
-    onLogOutcome,
-}: {
-    appointment: AppointmentListItem
-    onLogOutcome: () => void
-}) {
-    return (
-        <div className="mt-3 space-y-1">
-            <Button
-                variant="outline"
-                size="sm"
-                onClick={onLogOutcome}
-                disabled={!appointment.surrogate_id}
-            >
-                Log Interview Outcome
-            </Button>
-            {!appointment.surrogate_id && (
-                <p className="text-xs text-muted-foreground">Link surrogate first</p>
-            )}
         </div>
     )
 }

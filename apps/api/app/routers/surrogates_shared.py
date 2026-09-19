@@ -100,9 +100,6 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
         latest_contact_outcome=surrogate_outcome_summary_service.get_latest_contact_outcome(
             surrogate, db
         ),
-        latest_interview_outcome=surrogate_outcome_summary_service.get_latest_interview_outcome(
-            surrogate, db
-        ),
         date_of_birth=surrogate.date_of_birth,
         race=surrogate.race,
         height_ft=surrogate.height_ft,

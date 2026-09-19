@@ -25,7 +25,6 @@ export type EmbryoStage = 'day_3' | 'day_5' | 'day_6' | 'unknown';
 const DYNAMIC_SURROGATE_FILTERS = [
     'intelligent_any',
     'intelligent_new_unread_stale',
-    'intelligent_meeting_outcome_missing',
     'intelligent_stuck_preapproval',
     'attention_unreached',
     'attention_stuck',
@@ -716,29 +715,6 @@ export async function exportSurrogatePacketPdf(
     URL.revokeObjectURL(objectUrl);
 
     return { includesApplication };
-}
-
-// =============================================================================
-// Interview Outcome Tracking
-// =============================================================================
-
-export type InterviewOutcome = 'completed' | 'no_show' | 'rescheduled' | 'cancelled';
-
-export interface InterviewOutcomeCreatePayload {
-    outcome: InterviewOutcome;
-    occurred_at?: string | null; // ISO datetime, defaults to now
-    notes?: string | null;
-    appointment_id?: string | null;
-}
-
-/**
- * Log an interview outcome for a surrogate.
- */
-export function logInterviewOutcome(
-    surrogateId: string,
-    data: InterviewOutcomeCreatePayload
-): Promise<SurrogateActivity> {
-    return api.post<SurrogateActivity>(`/surrogates/${surrogateId}/interview-outcomes`, data);
 }
 
 // =============================================================================

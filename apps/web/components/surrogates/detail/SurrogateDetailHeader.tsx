@@ -7,7 +7,8 @@ import { OutcomeBadge } from "@/components/surrogates/OutcomeBadge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { stageMatchesKey } from "@/lib/surrogate-stage-context"
-import type { LatestContactOutcome, LatestInterviewOutcome } from "@/lib/types/surrogate"
+import type { LatestContactOutcome } from "@/lib/types/surrogate"
+import { readableForeground } from "@/lib/stage-colors"
 
 type SurrogateDetailHeaderProps = {
     recordLabel?: string
@@ -17,7 +18,6 @@ type SurrogateDetailHeaderProps = {
     statusLabel: string
     statusColor: string
     latestContactOutcome?: LatestContactOutcome | null
-    latestInterviewOutcome?: LatestInterviewOutcome | null
     pausedFromLabel?: string | null
     isArchived: boolean
     onBack: () => void
@@ -32,7 +32,6 @@ export function SurrogateDetailHeader({
     statusLabel,
     statusColor,
     latestContactOutcome = null,
-    latestInterviewOutcome = null,
     pausedFromLabel,
     isArchived,
     onBack,
@@ -41,10 +40,6 @@ export function SurrogateDetailHeader({
     const currentStage = { stage_key: currentStageKey, slug: currentStageSlug }
     const showContactOutcome =
         latestContactOutcome && stageMatchesKey(currentStage, "contacted")
-    const isInterviewScheduledStage = stageMatchesKey(currentStage, "interview_scheduled")
-    const showInterviewOutcome =
-        latestInterviewOutcome && isInterviewScheduledStage
-    const showUpcomingInterview = !latestInterviewOutcome && isInterviewScheduledStage
 
     return (
         <header className="flex min-h-16 shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
@@ -54,25 +49,12 @@ export function SurrogateDetailHeader({
                     Back
                 </Button>
                 <h1 className="text-xl font-semibold">{recordLabel} #{surrogateNumber}</h1>
-                <Badge style={{ backgroundColor: statusColor, color: "white" }}>{statusLabel}</Badge>
+                <Badge style={{ backgroundColor: statusColor, color: readableForeground(statusColor) }}>{statusLabel}</Badge>
                 {showContactOutcome && (
                     <OutcomeBadge
                         kind="contact"
                         outcome={latestContactOutcome.outcome}
                         prefix="Contact"
-                    />
-                )}
-                {showInterviewOutcome && (
-                    <OutcomeBadge
-                        kind="interview"
-                        outcome={latestInterviewOutcome.outcome}
-                        prefix="Interview"
-                    />
-                )}
-                {showUpcomingInterview && (
-                    <OutcomeBadge
-                        kind="interview"
-                        outcome="upcoming"
                     />
                 )}
                 {pausedFromLabel && (

@@ -620,7 +620,6 @@ class SurrogateRead(BaseModel):
     partner_postal: str | None = None
     lead_intake_warnings: list[SurrogateLeadIntakeWarning] = Field(default_factory=list)
     latest_contact_outcome: LatestContactOutcomeRead | None = None
-    latest_interview_outcome: LatestInterviewOutcomeRead | None = None
 
     # Demographics
     date_of_birth: date | None
@@ -914,35 +913,6 @@ class SurrogateActivityResponse(BaseModel):
     total: int
     page: int
     pages: int
-
-
-# =============================================================================
-# Interview Outcome Tracking
-# =============================================================================
-
-
-class InterviewOutcomeCreate(BaseModel):
-    """Request schema for logging an interview outcome."""
-
-    outcome: str
-    occurred_at: datetime | None = None
-    notes: str | None = Field(None, max_length=5000)
-    appointment_id: UUID | None = None
-
-    @field_validator("outcome")
-    @classmethod
-    def validate_outcome(cls, v: str) -> str:
-        valid_outcomes = {"completed", "no_show", "rescheduled", "cancelled"}
-        if v not in valid_outcomes:
-            raise ValueError(f"Invalid outcome: {v}")
-        return v
-
-
-class LatestInterviewOutcomeRead(BaseModel):
-    """Latest interview outcome summary for surrogate detail views."""
-
-    outcome: Literal["completed", "no_show", "rescheduled", "cancelled"]
-    at: datetime
 
 
 # =============================================================================
