@@ -1,5 +1,11 @@
 # Permission upgrade verification
 
+## September 19 scope correction
+
+The record-page **Intake collaborators** card and its Add/Remove controls were unrequested and have been removed from surrogate and donor overviews. Earlier screenshots and browser results involving that card document a historical implementation, not approved product UI. Backend collaboration retention and the separate member-settings controls remain unchanged; this correction does not establish user approval of either.
+
+Both new page regressions failed before removal. After removal, `pnpm test tests/surrogate-detail.test.tsx tests/donor-detail.test.tsx` passed all 87 tests; focused ESLint and `pnpm run typecheck` also passed. Browser checks against a disposable database containing retained collaborators confirmed that surrogate, egg-donor, and sperm-donor pages display no collaborator card or picker and make zero collaborator resource requests. Inspected screenshots preserve the record/profile and Activity sections, plus donor Owner controls. These targeted checks cover this removal; the broader results below predate it. Nothing was pushed or activated in production.
+
 ## September 19 combined integration
 
 The local platform branch incorporates `origin/main` through [PR #714](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/pull/714); the local permission branch incorporates that refreshed platform branch. The original local `main` was not moved. No remote branch update, GitHub merge, deployment, production migration, production activation, or provider send is represented by this verification.

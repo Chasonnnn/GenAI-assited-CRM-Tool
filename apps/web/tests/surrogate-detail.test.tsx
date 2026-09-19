@@ -396,6 +396,20 @@ describe('SurrogateDetailPage', () => {
         expect(screen.getByText('Scoped profile')).toBeInTheDocument()
     })
 
+    it('keeps collaborator management out of the record overview under v2', () => {
+        mockUseAuth.mockReturnValue({ user: { role: 'case_manager', user_id: 'member-1' } })
+        mockUseEffectivePermissions.mockReturnValue({ data: {
+            policy_version: 2,
+            role: 'case_manager',
+            permissions: ['view_surrogates', 'edit_surrogates'],
+        } })
+        render(<SurrogateDetailLayoutClient><SurrogateOverviewTab /></SurrogateDetailLayoutClient>)
+
+        expect(screen.getByText('Jane Applicant')).toBeInTheDocument()
+        expect(screen.queryByText('Intake collaborators')).not.toBeInTheDocument()
+        expect(screen.queryByRole('combobox', { name: 'Intake specialist' })).not.toBeInTheDocument()
+    })
+
     it('renders Operations overview fields and cards without writable controls under v2', () => {
         mockUseAuth.mockReturnValue({ user: { role: 'operations', user_id: 'ops-1' } })
         mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ['view_surrogates'] } })

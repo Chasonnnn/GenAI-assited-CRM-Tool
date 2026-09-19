@@ -20,7 +20,6 @@ import { DonorProfilePhoto } from "@/components/donors/DonorProfilePhoto"
 import { DonorTasksSection } from "@/components/donors/DonorTasksSection"
 import { DonorOverviewTab } from "@/components/donors/DonorOverviewTab"
 import { DonorOwnershipSection } from "@/components/donors/DonorOwnershipSection"
-import { RecordCollaborators } from "@/components/permissions/record-collaborators"
 import { SurrogateDetailHeader } from "@/components/surrogates/detail/SurrogateDetailHeader"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import type { EntityActivity } from "@/lib/api/activity"
@@ -114,7 +113,6 @@ export function DonorDetailSections({
             canEdit={canEdit && (!policyV2 || hasPermission("assign_donors"))}
             canClaim={policyV2 && hasPermission("assign_donors")}
         />
-        <RecordCollaborators kind="donor" recordId={donor.id} />
     </>
     return <div className="flex flex-1 flex-col">
         <SurrogateDetailHeader

@@ -309,6 +309,19 @@ describe("DonorDetailPage", () => {
         })
     })
 
+    it("keeps collaborator management out of the record overview under v2", () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: {
+            policy_version: 2,
+            role: "admin",
+            permissions: ["view_donors", "edit_donors", "assign_donors"],
+        } })
+        render(<DonorDetailPage />)
+
+        expect(screen.getByRole("heading", { name: "Owner" })).toBeInTheDocument()
+        expect(screen.queryByText("Intake collaborators")).not.toBeInTheDocument()
+        expect(screen.queryByRole("combobox", { name: "Intake specialist" })).not.toBeInTheDocument()
+    })
+
     it("uses the compact entity header and action hierarchy shared by other detail pages", async () => {
         render(<DonorDetailPage />)
 

@@ -62,7 +62,6 @@ import type { SurrogateUpdatePayload } from "@/lib/api/surrogates"
 
 import { PersonalInfoRow, InlineSelectField, ProfileMetric, InlineHeightField, InlineRaceField, InlineWeightField, PersonalInfoColumn, SectionActionIcon, getAgeLabel, SsnField } from "@/components/records/RecordProfileFields"
 import { RecordEditingContext } from "@/components/records/RecordEditingContext"
-import { RecordCollaborators } from "@/components/permissions/record-collaborators"
 
 const LEAD_WARNING_FIELD_LABELS = {
     email: "Email",
@@ -869,7 +868,6 @@ export function SurrogateOverviewTab() {
                 </div>
 
                 <div className="space-y-4">
-                    <RecordCollaborators kind="surrogate" recordId={id} />
                     {isHeartbeatConfirmedOrLater && !isTerminalIntakeOutcome && (
                         <PregnancyTrackerCard
                             readOnly={readOnly}
