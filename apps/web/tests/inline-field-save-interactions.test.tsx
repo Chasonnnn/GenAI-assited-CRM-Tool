@@ -13,6 +13,19 @@ function edit(onSave: (value: string) => Promise<void>) {
 }
 
 describe("InlineEditField save interactions", () => {
+    it("disables both actions while saving and retains the draft on failure", async () => {
+        let rejectSave!: (error: Error) => void
+        const onSave = vi.fn(() => new Promise<void>((_resolve, reject) => { rejectSave = reject }))
+        edit(onSave)
+        fireEvent.click(screen.getByRole("button", { name: "Save Name" }))
+        expect(screen.getByRole("button", { name: "Save Name" })).toBeDisabled()
+        expect(screen.getByRole("button", { name: "Cancel Name" })).toBeDisabled()
+        await act(async () => rejectSave(new Error("Save unavailable")))
+        expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Updated")
+        expect(screen.getByText("Save unavailable")).toBeVisible()
+        expect(screen.getByRole("button", { name: "Save Name" })).toBeEnabled()
+    })
+
     it("saves once when focus moves to the Save button", async () => {
         vi.useFakeTimers()
         const onSave = vi.fn().mockResolvedValue(undefined)

@@ -6,10 +6,19 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
+from sqlalchemy import event
 
+from app.core.encryption import hash_email
 from app.db.enums import OwnerType, TaskType
-from app.db.models import Task
-from app.services import calendar_service, google_tasks_sync_service, http_service
+from app.db.models import Donor, Organization, Task
+from app.services import (
+    calendar_service,
+    google_tasks_cleanup_service,
+    google_tasks_sync_service,
+    http_service,
+    pipeline_service,
+    task_service,
+)
 
 
 class _FakeResponse:
@@ -503,6 +512,152 @@ async def test_sync_google_tasks_marks_scope_missing_after_403(db, test_auth, mo
 
     db.refresh(integration)
     assert integration.granted_scopes == []
+
+
+@pytest.mark.asyncio
+async def test_correlated_donor_tasks_are_locked_in_one_scoped_batch(
+    db, test_auth, monkeypatch
+):
+    def donor_task(*, org_id, owner_id, number, archived=False):
+        pipeline = pipeline_service.get_or_create_default_pipeline(
+            db, org_id, entity_type="egg_donor"
+        )
+        stage = pipeline_service.get_stage_by_key(db, pipeline.id, "new")
+        assert stage is not None
+        email = f"batch-{number.lower()}@example.com"
+        donor = Donor(
+            organization_id=org_id,
+            donor_number=number,
+            donor_type="egg",
+            stage_id=stage.id,
+            full_name=number,
+            email=email,
+            email_hash=hash_email(email),
+            is_archived=archived,
+        )
+        task = Task(
+            organization_id=org_id,
+            created_by_user_id=test_auth.user.id,
+            donor=donor,
+            owner_type=OwnerType.USER.value,
+            owner_id=owner_id,
+            title=f"local-{number}",
+            task_type=TaskType.OTHER.value,
+        )
+        db.add(task)
+        db.flush()
+        return task
+
+    other_org = Organization(name="Other batch org", slug=f"other-batch-{uuid4().hex}")
+    db.add(other_org)
+    db.flush()
+    valid = [
+        donor_task(
+            org_id=test_auth.org.id,
+            owner_id=test_auth.user.id,
+            number=number,
+        )
+        for number in ("D81001", "D81002")
+    ]
+    wrong_owner = donor_task(
+        org_id=test_auth.org.id, owner_id=uuid4(), number="D81003"
+    )
+    archived = donor_task(
+        org_id=test_auth.org.id,
+        owner_id=test_auth.user.id,
+        number="D81004",
+        archived=True,
+    )
+    cross_org = donor_task(
+        org_id=other_org.id, owner_id=test_auth.user.id, number="D81005"
+    )
+    blocked_exact = donor_task(
+        org_id=test_auth.org.id, owner_id=test_auth.user.id, number="D81006"
+    )
+    blocked_default = donor_task(
+        org_id=test_auth.org.id, owner_id=test_auth.user.id, number="D81007"
+    )
+    malformed_remote = donor_task(
+        org_id=test_auth.org.id, owner_id=test_auth.user.id, number="D81008"
+    )
+    db.commit()
+
+    def remote(remote_id, task_id, title):
+        return {
+            "id": remote_id,
+            "title": title,
+            "notes": f"[Surrogacy Force task ID: {task_id}]",
+            "updated": "2099-01-01T00:00:00Z",
+        }
+
+    remotes = [
+        remote("remote-valid-1", valid[0].id, "valid-1"),
+        remote("remote-valid-2", valid[1].id, "valid-2"),
+        remote("remote-owner", wrong_owner.id, "wrong-owner"),
+        remote("remote-archive", archived.id, "archived"),
+        remote("remote-cross-org", cross_org.id, "cross-org"),
+        remote("remote-blocked-exact", blocked_exact.id, "blocked-exact"),
+        remote("remote-blocked-default", blocked_default.id, "blocked-default"),
+        remote(42, malformed_remote.id, "malformed-remote-id"),
+    ]
+    monkeypatch.setattr(
+        google_tasks_sync_service.oauth_service,
+        "get_user_integration",
+        lambda *_args: SimpleNamespace(granted_scopes=None),
+    )
+
+    async def token(*_args):
+        return "token"
+
+    async def lists(_token):
+        return [{"id": "list-1"}], None
+
+    async def tasks(_token, _list_id):
+        return remotes
+
+    monkeypatch.setattr(
+        google_tasks_sync_service.oauth_service, "get_access_token_async", token
+    )
+    monkeypatch.setattr(google_tasks_sync_service, "_list_google_task_lists", lists)
+    monkeypatch.setattr(google_tasks_sync_service, "_list_google_tasks", tasks)
+    monkeypatch.setattr(task_service, "user_can_view_donors", lambda *_args: True)
+    monkeypatch.setattr(
+        google_tasks_cleanup_service,
+        "list_tombstoned_remote_keys",
+        lambda *_args, **_kwargs: {
+            ("list-1", "remote-blocked-exact"),
+            ("@default", "remote-blocked-default"),
+        },
+    )
+
+    lock_queries = []
+
+    def capture_lock_query(_conn, _cursor, statement, parameters, _context, _many):
+        if "FROM tasks JOIN donors" in statement and "FOR UPDATE" in statement:
+            lock_queries.append((statement, parameters))
+
+    event.listen(db.get_bind(), "before_cursor_execute", capture_lock_query)
+    try:
+        changed = await google_tasks_sync_service._sync_google_tasks_for_user_async(
+            db, user_id=test_auth.user.id, org_id=test_auth.org.id
+        )
+    finally:
+        event.remove(db.get_bind(), "before_cursor_execute", capture_lock_query)
+
+    assert changed == 2
+    assert len(lock_queries) == 1
+    assert "ORDER BY tasks.id FOR UPDATE OF tasks" in lock_queries[0][0]
+    locked_parameters = set(lock_queries[0][1].values())
+    assert blocked_exact.id not in locked_parameters
+    assert blocked_default.id not in locked_parameters
+    assert malformed_remote.id not in locked_parameters
+    assert [task.title for task in valid] == ["valid-1", "valid-2"]
+    assert wrong_owner.title == "local-D81003"
+    assert archived.title == "local-D81004"
+    assert cross_org.title == "local-D81005"
+    assert blocked_exact.title == "local-D81006"
+    assert blocked_default.title == "local-D81007"
+    assert malformed_remote.title == "local-D81008"
 
 
 @pytest.mark.asyncio
