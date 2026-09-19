@@ -47,6 +47,7 @@ def test_ci_uses_safe_path_filters_and_cancels_stale_runs() -> None:
     workflow = CI_WORKFLOW.read_text()
     pull_request_trigger = workflow.split("jobs:", 1)[0]
     expected_paths = {
+        ".agents/**",
         "apps/**",
         "cloudbuild/**",
         "infra/terraform/**",
