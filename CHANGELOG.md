@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.66](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.65...surrogacy-crm-platform-v0.91.66) (2026-09-19)
+
+
+### Bug Fixes
+
+* unblock orb setup CI checks ([0732161](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0732161039d642f6bf115b5a3aeb123e2e0100d3))
+* upgrade stale mise before orb toolchain setup ([315e957](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/315e957fc487ee6c7e4b27e81433945e2d23c964))
+
+
+### Maintenance
+
+* prepare cached toolchains and dependencies for Amp orbs ([1215b8e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1215b8eb75ac060a87cb2c6a26edfddd4c6797b3))
+* prepare cached toolchains and dependencies for orbs ([c4a5ba0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c4a5ba08cbc6c5c02d82271f4e9e349a020572fb))
+* run required CI for orb lifecycle changes ([34b6575](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/34b65750d70edffa6e21a41d6a6ca39869ab6cf0))
+
 ## [0.91.65](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.64...surrogacy-crm-platform-v0.91.65) (2026-09-14)
 
 
