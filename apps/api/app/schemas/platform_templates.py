@@ -16,9 +16,12 @@ TemplateStatus = Literal["draft", "published", "archived"]
 class TemplatePublishRequest(BaseModel):
     publish_all: bool = False
     org_ids: list[UUID] | None = None
+    expected_version: int = Field(ge=1)
 
     @model_validator(mode="after")
     def validate_targets(self):
+        if self.publish_all and self.org_ids:
+            raise ValueError("org_ids must be empty when publish_all is true")
         if not self.publish_all and not self.org_ids:
             raise ValueError("org_ids is required when publish_all is false")
         return self
@@ -42,7 +45,7 @@ class PlatformEmailTemplateUpdate(BaseModel):
     body: str | None = None
     from_email: str | None = Field(default=None, max_length=200)
     category: str | None = Field(default=None, max_length=50)
-    expected_version: int | None = None
+    expected_version: int = Field(ge=1)
 
 
 class PlatformEmailTemplateRead(BaseModel):
@@ -102,7 +105,7 @@ class PlatformFormTemplateUpdate(BaseModel):
     description: str | None = None
     form_schema: FormSchema | None = Field(default=None, alias="schema_json")
     settings_json: dict | None = None
-    expected_version: int | None = None
+    expected_version: int = Field(ge=1)
 
 
 class PlatformFormTemplateRead(BaseModel):
@@ -170,12 +173,13 @@ class PlatformWorkflowTemplateUpdate(BaseModel):
     conditions: list[dict] | None = None
     condition_logic: str | None = None
     actions: list[dict] | None = None
-    expected_version: int | None = None
+    expected_version: int = Field(ge=1)
 
 
 class PlatformWorkflowTemplateRead(BaseModel):
     id: UUID
     status: TemplateStatus
+    current_version: int
     published_version: int
     is_published_globally: bool
     target_org_ids: list[UUID] = Field(default_factory=list)
@@ -189,6 +193,7 @@ class PlatformWorkflowTemplateRead(BaseModel):
 class PlatformWorkflowTemplateListItem(BaseModel):
     id: UUID
     status: TemplateStatus
+    current_version: int
     published_version: int
     is_published_globally: bool
     draft: PlatformWorkflowTemplateDraft

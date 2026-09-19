@@ -333,7 +333,7 @@ function normalizeFixedTableRows(
     }))
 }
 
-function FixedTableFieldInput({
+function TableFieldInput({
     field,
     value,
     requiredMark,
@@ -345,16 +345,25 @@ function FixedTableFieldInput({
     updateField: (fieldKey: string, value: PublicFormAnswerValue) => void
 }) {
     const columns = field.columns || []
-    const rows = normalizeFixedTableRows(field, value)
+    const repeatable = field.type === "repeatable_table"
+    const minRows = field.min_rows ?? 0
+    const existingRows = Array.isArray(value)
+        ? value.filter((row): row is TableRow => Boolean(row) && typeof row === "object" && !Array.isArray(row))
+        : []
+    const rows: TableRow[] = repeatable
+        ? Array.from({ length: Math.max(minRows, existingRows.length) }, (_, index) => ({
+            ...existingRows[index],
+        }))
+        : normalizeFixedTableRows(field, value)
 
     const updateCell = (rowKey: string, columnKey: string, nextValue: string) => {
-        const nextRows = rows.map((row) =>
-            row.row_key === rowKey ? { ...row, [columnKey]: nextValue } : row,
+        const nextRows = rows.map((row, index) =>
+            (repeatable ? String(index) === rowKey : row.row_key === rowKey) ? { ...row, [columnKey]: nextValue } : row,
         )
         updateField(field.key, nextRows)
     }
 
-    if (columns.length === 0 || (field.rows?.length ?? 0) === 0) {
+    if (columns.length === 0 || (!repeatable && (field.rows?.length ?? 0) === 0)) {
         return (
             <div key={field.key} className={publicFieldGroupShellClassName}>
                 <Label className="text-sm font-medium">
@@ -374,11 +383,14 @@ function FixedTableFieldInput({
                 {field.help_text ? <p className="text-xs text-stone-500">{field.help_text}</p> : null}
             </div>
 
+            {repeatable && <Button type="button" variant="outline" size="sm"
+                disabled={field.max_rows != null && rows.length >= field.max_rows}
+                onClick={() => updateField(field.key, [...rows, {}])}>Add Row</Button>}
             <div className="space-y-3">
-                {rows.map((row) => {
-                    const rowKey = typeof row.row_key === "string" ? row.row_key : ""
+                {rows.map((row, rowIndex) => {
+                    const rowKey = repeatable ? String(rowIndex) : typeof row.row_key === "string" ? row.row_key : ""
                     const rowDefinition = field.rows?.find((item) => item.key === rowKey)
-                    const rowLabel = rowDefinition?.label || rowKey || "Row"
+                    const rowLabel = repeatable ? `Row ${rowIndex + 1}` : rowDefinition?.label || rowKey || "Row"
                     const rowHelpText = rowDefinition?.help_text || ""
 
                     return (
@@ -391,6 +403,9 @@ function FixedTableFieldInput({
                             <div className="mb-4 space-y-1 @xl/table-row:mb-0 @xl/table-row:pr-2">
                                 <div className="text-base font-semibold text-stone-900">{rowLabel}</div>
                                 {rowHelpText ? <p className="mt-1 text-xs text-stone-500">{rowHelpText}</p> : null}
+                                {repeatable && <Button type="button" variant="ghost" size="sm"
+                                    aria-label={`Remove row ${rowIndex + 1}`} disabled={rows.length <= minRows}
+                                    onClick={() => updateField(field.key, rows.filter((_, index) => index !== rowIndex))}>Remove</Button>}
                             </div>
 
                             {columns.map((column) => {
@@ -699,9 +714,9 @@ export function PublicFormFieldRenderer({
         )
     }
 
-    if (field.type === "table") {
+    if (field.type === "table" || field.type === "repeatable_table") {
         return (
-            <FixedTableFieldInput
+            <TableFieldInput
                 field={field}
                 value={value}
                 requiredMark={requiredMark}

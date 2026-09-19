@@ -663,6 +663,7 @@ function useEmailTemplateController({
     const htmlBodySelectionRef = useRef<{ start: number; end: number } | null>(null)
     const visualBodyRef = useRef<RichTextEditorHandle | null>(null)
     const testSendOccurrenceIdRef = useRef<string | null>(null)
+    const currentVersionRef = useRef(templateData?.current_version ?? null)
 
     const canValidateVariables = !variablesLoading && templateVariables.length > 0
     const allowedVariableNames = new Set(templateVariables.map((variable) => variable.name))
@@ -790,13 +791,18 @@ function useEmailTemplateController({
             return created
         }
 
-        return updateTemplate.mutateAsync({
+        if (currentVersionRef.current === null) {
+            throw new Error("Template revision is unavailable")
+        }
+        const saved = await updateTemplate.mutateAsync({
             id,
             payload: {
                 ...payload,
-                expected_version: templateData?.current_version ?? null,
+                expected_version: currentVersionRef.current,
             },
         })
+        currentVersionRef.current = saved.current_version
+        return saved
     }
 
     const handleSave = async () => {
@@ -842,13 +848,15 @@ function useEmailTemplateController({
         const finishPublishing = () => dispatch({ type: "setBusy", flag: "isPublishing", value: false })
         try {
             const saved = await persistTemplate()
-            await publishTemplate.mutateAsync({
+            const published = await publishTemplate.mutateAsync({
                 id: saved.id,
                 payload: {
                     publish_all: publishAll,
                     org_ids: publishAll ? null : orgIds,
+                    expected_version: saved.current_version,
                 },
             })
+            currentVersionRef.current = published.current_version
             dispatch({ type: "setPublished", isPublished: true })
             dispatch({ type: "setDialog", dialog: "publish", open: false })
             toast.success("Template published")

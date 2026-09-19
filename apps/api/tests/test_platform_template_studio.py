@@ -92,11 +92,15 @@ async def test_platform_email_templates_publish_targets(authed_client, db, test_
         },
     )
     assert create_resp.status_code == 201
-    template_id = create_resp.json()["id"]
+    template = create_resp.json()
+    template_id = template["id"]
 
     publish_resp = await authed_client.post(
         f"/platform/templates/email/{template_id}/publish",
-        json={"org_ids": [str(test_org.id)]},
+        json={
+            "org_ids": [str(test_org.id)],
+            "expected_version": template["current_version"],
+        },
     )
     assert publish_resp.status_code == 200
 
@@ -147,11 +151,15 @@ async def test_platform_form_templates_publish_and_use(authed_client, db, test_u
         },
     )
     assert create_resp.status_code == 201
-    template_id = create_resp.json()["id"]
+    template = create_resp.json()
+    template_id = template["id"]
 
     publish_resp = await authed_client.post(
         f"/platform/templates/forms/{template_id}/publish",
-        json={"org_ids": [str(test_org.id)]},
+        json={
+            "org_ids": [str(test_org.id)],
+            "expected_version": template["current_version"],
+        },
     )
     assert publish_resp.status_code == 200
 
@@ -225,11 +233,15 @@ async def test_org_can_remove_published_form_template_from_library_only_for_itse
         },
     )
     assert create_resp.status_code == 201
-    template_id = create_resp.json()["id"]
+    template = create_resp.json()
+    template_id = template["id"]
 
     publish_resp = await authed_client.post(
         f"/platform/templates/forms/{template_id}/publish",
-        json={"publish_all": True},
+        json={
+            "publish_all": True,
+            "expected_version": template["current_version"],
+        },
     )
     assert publish_resp.status_code == 200
 
@@ -395,11 +407,15 @@ async def test_platform_workflow_templates_publish_targets(authed_client, db, te
         },
     )
     assert create_resp.status_code == 201
-    template_id = create_resp.json()["id"]
+    template = create_resp.json()
+    template_id = template["id"]
 
     publish_resp = await authed_client.post(
         f"/platform/templates/workflows/{template_id}/publish",
-        json={"org_ids": [str(test_org.id)]},
+        json={
+            "org_ids": [str(test_org.id)],
+            "expected_version": template["current_version"],
+        },
     )
     assert publish_resp.status_code == 200
 

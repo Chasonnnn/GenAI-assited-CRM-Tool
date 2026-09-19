@@ -1,7 +1,7 @@
 "use client"
 
 import { FORM_LEAD_KIND_OPTIONS } from "@/lib/forms/form-lead-kind"
-import { useReducer, useState, type Dispatch, type SetStateAction } from "react"
+import { useEffect, useReducer, useRef, useState, type Dispatch, type SetStateAction } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -58,6 +58,7 @@ import {
     createClientRowId,
     getEmailRecipientKind,
     getEmailRecipientUserId,
+    normalizeEditableActionsForSave as normalizeActionsForSave,
     normalizeEditableActionsForUi as normalizeActionsForUi,
     normalizeEditableConditionsForSave as normalizeConditionsForSave,
     normalizeEditableConditionsForUi as normalizeConditionsForUi,
@@ -2130,6 +2131,12 @@ function useWorkflowTemplatePageState() {
     const [showDeleteDialog, setShowDeleteDialog] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isPublishing, setIsPublishing] = useState(false)
+    const revisionRef = useRef<{ id: string; version: number } | null>(null)
+
+    useEffect(() => {
+        if (!templateData || revisionRef.current?.id === templateData.id) return
+        revisionRef.current = { id: templateData.id, version: templateData.current_version }
+    }, [templateData])
 
     const statusOptions = options?.statuses ?? EMPTY_STATUS_OPTIONS
     const templateKey = isNew
@@ -2360,7 +2367,7 @@ function useWorkflowTemplatePageState() {
             trigger_config: buildTriggerConfig(),
             conditions: normalizeConditionsForSave(conditions),
             condition_logic: conditionLogic,
-            actions,
+            actions: normalizeActionsForSave(actions),
         }
 
         if (isNew) {
@@ -2369,13 +2376,19 @@ function useWorkflowTemplatePageState() {
             return created
         }
 
-        return updateTemplate.mutateAsync({
+        const expectedVersion = revisionRef.current?.version
+        if (typeof expectedVersion !== "number") {
+            throw new Error("Template revision is unavailable")
+        }
+        const saved = await updateTemplate.mutateAsync({
             id,
             payload: {
                 ...payload,
-                expected_version: templateData?.published_version ?? null,
+                expected_version: expectedVersion,
             },
         })
+        revisionRef.current = { id: saved.id, version: saved.current_version }
+        return saved
     }
 
     const handleSave = async () => {
@@ -2420,10 +2433,12 @@ function useWorkflowTemplatePageState() {
                 payload: {
                     publish_all: publishAll,
                     org_ids: publishAll ? null : orgIds,
+                    expected_version: saved.current_version,
                 },
-            }).then(() => ({
-                status: "success" as const,
-            }))
+            }).then((published) => {
+                revisionRef.current = { id: published.id, version: published.current_version }
+                return { status: "success" as const }
+            })
         ).catch((err: unknown) => ({
             status: "error" as const,
             message: err instanceof Error ? err.message : "Failed to publish template",

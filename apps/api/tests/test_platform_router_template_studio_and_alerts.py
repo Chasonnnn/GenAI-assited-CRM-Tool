@@ -95,8 +95,16 @@ async def test_platform_template_studio_missing_resources_return_404(
     missing_id = uuid.uuid4()
     cases = [
         ("get", f"/platform/templates/email/{missing_id}", None),
-        ("patch", f"/platform/templates/email/{missing_id}", {"name": "x"}),
-        ("post", f"/platform/templates/email/{missing_id}/publish", {"publish_all": True}),
+        (
+            "patch",
+            f"/platform/templates/email/{missing_id}",
+            {"name": "x", "expected_version": 1},
+        ),
+        (
+            "post",
+            f"/platform/templates/email/{missing_id}/publish",
+            {"publish_all": True, "expected_version": 1},
+        ),
         ("delete", f"/platform/templates/email/{missing_id}", None),
         (
             "post",
@@ -108,15 +116,27 @@ async def test_platform_template_studio_missing_resources_return_404(
             },
         ),
         ("get", f"/platform/templates/forms/{missing_id}", None),
-        ("patch", f"/platform/templates/forms/{missing_id}", {"name": "x"}),
-        ("post", f"/platform/templates/forms/{missing_id}/publish", {"publish_all": True}),
+        (
+            "patch",
+            f"/platform/templates/forms/{missing_id}",
+            {"name": "x", "expected_version": 1},
+        ),
+        (
+            "post",
+            f"/platform/templates/forms/{missing_id}/publish",
+            {"publish_all": True, "expected_version": 1},
+        ),
         ("delete", f"/platform/templates/forms/{missing_id}", None),
         ("get", f"/platform/templates/workflows/{missing_id}", None),
-        ("patch", f"/platform/templates/workflows/{missing_id}", {"name": "x"}),
+        (
+            "patch",
+            f"/platform/templates/workflows/{missing_id}",
+            {"name": "x", "expected_version": 1},
+        ),
         (
             "post",
             f"/platform/templates/workflows/{missing_id}/publish",
-            {"publish_all": True},
+            {"publish_all": True, "expected_version": 1},
         ),
         ("delete", f"/platform/templates/workflows/{missing_id}", None),
     ]
@@ -147,21 +167,21 @@ async def test_platform_template_updates_reject_version_mismatch(authed_client, 
         json={"subject": "Updated", "expected_version": 999},
     )
     assert email_update.status_code == 409
-    assert "version mismatch" in email_update.text.lower()
+    assert "revision mismatch" in email_update.text.lower()
 
     form_update = await authed_client.patch(
         f"/platform/templates/forms/{form_template_id}",
         json={"description": "Updated", "expected_version": 999},
     )
     assert form_update.status_code == 409
-    assert "version mismatch" in form_update.text.lower()
+    assert "revision mismatch" in form_update.text.lower()
 
     workflow_update = await authed_client.patch(
         f"/platform/templates/workflows/{workflow_template_id}",
         json={"description": "Updated", "expected_version": 999},
     )
     assert workflow_update.status_code == 409
-    assert "version mismatch" in workflow_update.text.lower()
+    assert "revision mismatch" in workflow_update.text.lower()
 
 
 @pytest.mark.asyncio
@@ -180,9 +200,16 @@ async def test_platform_template_publish_requires_target_orgs(
     db.commit()
 
     template_id = await create_fn(authed_client)
+    template_response = await authed_client.get(
+        f"/platform/templates/{template_kind}/{template_id}"
+    )
+    assert template_response.status_code == 200
     publish_response = await authed_client.post(
         f"/platform/templates/{template_kind}/{template_id}/publish",
-        json={"publish_all": False},
+        json={
+            "publish_all": False,
+            "expected_version": template_response.json()["current_version"],
+        },
     )
 
     assert publish_response.status_code == 422

@@ -386,7 +386,7 @@ describe("PlatformFormTemplatePage", () => {
     it("can republish saved edits to an already published template", async () => {
         mockTemplateData = { ...buildTemplateData(), status: "published", published_version: 1 }
         mockUpdate.mockResolvedValue({ ...mockTemplateData, current_version: 2 })
-        mockPublish.mockResolvedValue({ ...mockTemplateData, published_version: 2 })
+        mockPublish.mockResolvedValue({ ...mockTemplateData, current_version: 3, published_version: 2 })
 
         render(<PlatformFormTemplatePage />)
         fireEvent.click(await screen.findByRole("button", { name: /add name field/i }))
@@ -402,7 +402,13 @@ describe("PlatformFormTemplatePage", () => {
 
         await waitFor(() => expect(mockPublish).toHaveBeenCalledWith({
             id: "tpl_form_1",
-            payload: { publish_all: true, org_ids: null },
+            payload: { publish_all: true, org_ids: null, expected_version: 2 },
+        }))
+        await waitFor(() => expect(screen.queryByRole("dialog", { name: "Publish Form Template" })).not.toBeInTheDocument())
+        fireEvent.click(screen.getByRole("button", { name: /add name field/i }))
+        fireEvent.click(screen.getByRole("button", { name: /^save$/i }))
+        await waitFor(() => expect(mockUpdate).toHaveBeenLastCalledWith({
+            id: "tpl_form_1", payload: expect.objectContaining({ expected_version: 3 }),
         }))
     })
 
