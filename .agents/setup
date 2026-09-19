@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+export PATH="$HOME/.local/bin:$PATH"
+export CI=true
+
+step() {
+    local label="$1" started=$SECONDS
+    shift
+    printf '\n[orb setup] %s\n' "$label"
+    "$@"
+    printf '[orb setup] %s completed in %ss\n' "$label" "$((SECONDS - started))"
+}
+
+install_system_packages() {
+    # Match CI's PostgreSQL major version, rather than Debian 12's default (15).
+    if ! dpkg-query -W -f='${Status}' postgresql-18 2>/dev/null | grep -qx 'install ok installed'; then
+        sudo install -d /usr/share/postgresql-common/pgdg
+        curl --fail --silent --show-error --location --retry 3 \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+        echo 'deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main' \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+    fi
+
+    local package missing=()
+    # Chromium runtime libraries for the API's pinned Playwright, plus build tools.
+    for package in postgresql-18 postgresql-client-18 build-essential libpq-dev \
+        libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+        libdbus-1-3 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
+        libgbm1 libasound2 libatspi2.0-0 libx11-6 libxcb1 libxext6 \
+        libpango-1.0-0 libcairo2 fonts-liberation; do
+        if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -qx 'install ok installed'; then
+            missing+=("$package")
+        fi
+    done
+    if ((${#missing[@]})); then
+        sudo apt-get update -qq
+        sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
+    fi
+}
+
+install_toolchains() {
+    local minimum_version installed_version
+    minimum_version="$(sed -n 's/^min_version = "\([^"]*\)"$/\1/p' mise.toml)"
+    # Query outside the checkout: old mise may reject its min_version outright.
+    installed_version="$(cd /; mise --version 2>/dev/null | awk 'NR == 1 {print $1}')" || installed_version=0
+    if ! dpkg --compare-versions "$installed_version" ge "$minimum_version"; then
+        local installer
+        installer="$(mktemp)"
+        curl --fail --silent --show-error --location --retry 3 https://mise.run -o "$installer"
+        MISE_VERSION="$minimum_version" MISE_INSTALL_PATH="$HOME/.local/bin/mise" bash "$installer"
+        rm -f "$installer"
+        # Forget any cached system mise path in favor of ~/.local/bin/mise.
+        hash -r
+    fi
+    mise trust "$repo_root/mise.toml"
+    mise install --locked
+    mise reshim
+
+    # Login shells used by Amp and supervised services must see the pinned tools.
+    # Shims resolve mise.toml in both the repository root and its subdirectories.
+    local marker='# Surrogacy Force orb toolchain'
+    if ! grep -Fqx "$marker" "$HOME/.bash_profile" 2>/dev/null; then
+        cat >> "$HOME/.bash_profile" <<EOF
+
+$marker
+case "\$PWD/" in
+    "$repo_root/"*)
+        export PATH="\$HOME/.local/bin:\$HOME/.local/share/mise/shims:\$PATH"
+        ;;
+esac
+EOF
+    fi
+}
+
+step 'System prerequisites' install_system_packages
+step 'Pinned toolchains' install_toolchains
+step 'Backend dependencies' mise exec -- uv sync --project apps/api --frozen --extra test
+step 'Frontend dependencies' mise exec -- pnpm --dir apps/web install --frozen-lockfile
+step 'PDF browser' apps/api/.venv/bin/python -m playwright install chromium
+
+# Keep integration credentials out of shared snapshots. The template contains no
+# working credentials; tests supply their own isolated defaults via conftest.py.
+if [[ ! -f apps/api/.env ]]; then
+    cp -- apps/api/.env.example apps/api/.env
+fi
+printf '\n[orb setup] Ready. Database and application services remain opt-in; see README.md.\n'
