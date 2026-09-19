@@ -9,6 +9,3 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
-## 2024-03-20 - [Tooltip Trigger Component Usage]
-**Learning:** The application uses `@base-ui/react` rather than Radix UI for primitive components like Tooltips. The `TooltipTrigger` uses a `render` prop (e.g. `<TooltipTrigger render={<Button />} />`) instead of `asChild` to properly compose buttons without semantic nesting issues.
-**Action:** Always use the `render` prop for component composition in Base UI components rather than nesting elements inside or using `asChild`.
