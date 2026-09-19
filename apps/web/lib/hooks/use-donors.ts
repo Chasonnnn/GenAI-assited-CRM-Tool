@@ -7,6 +7,8 @@ import {
     createDonor,
     deleteDonorNote,
     getDonor,
+    getDonorProfile,
+    revealDonorSensitiveInfo,
     getDonorOwnerOptions,
     getDonorHistory,
     listDonorNotes,
@@ -30,6 +32,7 @@ export const donorKeys = {
     list: (filters: DonorFilters) => [...donorKeys.lists(), filters] as const,
     details: () => [...donorKeys.all, "detail"] as const,
     detail: (id: string) => [...donorKeys.details(), id] as const,
+    profile: (id: string) => [...donorKeys.all, "profile", id] as const,
     history: (id: string) => [...donorKeys.all, "history", id] as const,
     notes: (id: string) => [...donorKeys.all, "notes", id] as const,
 }
@@ -82,10 +85,11 @@ export function useUpdateDonor() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: ({ id, data }: { id: string; data: DonorUpdate }) => updateDonor(id, data),
-        onSuccess: (donor, { data }) => {
+        onSuccess: async (donor, { data }) => {
+            await queryClient.invalidateQueries({ queryKey: donorKeys.profile(donor.id) })
             queryClient.setQueryData(donorKeys.detail(donor.id), donor)
             if ("owner_id" in data || "owner_type" in data) {
-                void queryClient.invalidateQueries()
+                await queryClient.invalidateQueries()
                 return
             }
             void queryClient.invalidateQueries({ queryKey: donorKeys.detail(donor.id) })
@@ -117,7 +121,7 @@ export function useUpdateDonorStatus() {
             if (response.donor) {
                 queryClient.setQueryData(donorKeys.detail(response.donor.id), response.donor)
             }
-            void queryClient.invalidateQueries()
+            return queryClient.invalidateQueries()
         },
     })
 }
@@ -128,7 +132,7 @@ export function useArchiveDonor() {
         mutationFn: (id: string) => archiveDonor(id),
         onSuccess: (donor) => {
             queryClient.setQueryData(donorKeys.detail(donor.id), donor)
-            void queryClient.invalidateQueries()
+            return queryClient.invalidateQueries()
         },
     })
 }
@@ -139,7 +143,7 @@ export function useRestoreDonor() {
         mutationFn: (id: string) => restoreDonor(id),
         onSuccess: (donor) => {
             queryClient.setQueryData(donorKeys.detail(donor.id), donor)
-            void queryClient.invalidateQueries()
+            return queryClient.invalidateQueries()
         },
     })
 }
@@ -179,5 +183,23 @@ export function useDonorOwnerOptions(enabled: boolean) {
         queryKey: [...donorKeys.all, "owner-options"],
         queryFn: getDonorOwnerOptions,
         enabled,
+    })
+}
+
+export function useDonorProfile(id: string) {
+    return useQuery({
+        queryKey: donorKeys.profile(id),
+        queryFn: () => getDonorProfile(id),
+        enabled: Boolean(id),
+        gcTime: 0,
+    })
+}
+
+export function useRevealDonorSensitiveInfo() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: revealDonorSensitiveInfo,
+        gcTime: 0,
+        onSuccess: (_, id) => queryClient.invalidateQueries({ queryKey: entityActivityKeys.entity("donor", id) }),
     })
 }

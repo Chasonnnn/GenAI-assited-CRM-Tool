@@ -2,6 +2,64 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.65](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.64...surrogacy-crm-platform-v0.91.65) (2026-09-14)
+
+
+### Features
+
+* align donor details with surrogate tabs ([71be7af](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/71be7afc5ddbf506e42931c0c4286c38f915713f))
+* match and create donors from shared intake forms ([9cba97d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9cba97d1d25d5e88414865b4b467c8eaa8263ed1))
+* match and create donors from shared intake workflows ([0a3761d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0a3761de097f1d275a5bfa92a642dc73c1254d69))
+* persist donor profiles and questionnaire answers ([012cab0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/012cab0cbfe64a31eb1c4d92c6485f5f2efe88cf))
+
+
+### Bug Fixes
+
+* hold repeated donor form submissions for review ([d3af238](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d3af238435f4fc30401d6c4aa9bb76f3d6477f3d))
+* preserve donor profile answers across forms ([2be15ab](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2be15ab86156a60bc3d165b4dfc3a7d1ffecec95))
+* prevent duplicate and canceled inline field saves ([8f35b7e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8f35b7e1c796a96ba6c0d505d5edfacb76e36d49))
+
+## [0.91.64](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.63...surrogacy-crm-platform-v0.91.64) (2026-09-14)
+
+
+### Bug Fixes
+
+* allow republishing shared form templates ([6d288ef](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6d288eff002ee2a88e82e0d4052bf82ce79e3d40))
+* allow republishing shared form templates ([96b06b4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/96b06b42fea88c20b33d84b5be623d66e27b787d))
+
+## [0.91.63](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.62...surrogacy-crm-platform-v0.91.63) (2026-09-14)
+
+
+### Features
+
+* add local EWI donor form templates and iframe preview ([a7b83c2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a7b83c2fd78b6bbd64fb82d412ae6c98350f7567))
+* add reusable consent field and local donor preview ([72aaeff](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/72aaeff65a65758044b4228f2dd89880b50949af))
+* add reusable opt-in consent checkbox ([596ddb6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/596ddb65891b03ea36f7dc0b74244229d28db09a))
+* publish shared donor questionnaires through OPS ([bb755f9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bb755f909c64a1699bb4c6fc434097f6e7fe88ee))
+* publish shared donor questionnaires through OPS ([c497dce](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c497dce491fd6fef5508dd52fc5fe8f49d00bfbd))
+* show the theme toggle tooltip on hover and focus ([d449329](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d449329a1edab6b5c643fa1acd679b9e2e3dd828))
+
+
+### Bug Fixes
+
+* batch default pipeline discovery during rollout ([9225601](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9225601fa03a1b8b5622de3ef28a7139b536a43c))
+* batch import corrections and handle normalized duplicates ([846ae04](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/846ae04fdd719b1314a87e3da8b7722ac3d96978))
+* batch tenant-scoped Meta preview ad lookups ([01bcc06](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/01bcc0600736e8c90dd433b710feebae6eceface))
+* consolidate validated queue repairs and security updates ([ed2f1cd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ed2f1cd7552a7596efc8e8bd77139de74a271bf3))
+* isolate Google Tasks reconciliation from request handling ([f3f65ba](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f3f65bad7d8ea66aed1bf4a8917ddb64d485ff39))
+* make Meta asset connections atomic and tenant scoped ([b3aecc4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b3aecc43437f7d6665dcb1b6c2ce5d35ff0244ae))
+* patch frontend dependencies for donor release ([ca8d9ba](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ca8d9ba380218ed701d5a43e5334946c00015560))
+* patch frontend dependency vulnerabilities ([24fc807](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/24fc8070c0b06987b0885937e5c957edee4b2584))
+* patch Python HTTP client dependencies ([639ec5a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/639ec5a18637de2b297d8702fb93a8b98146ba6f))
+* remove unused system packages from the web build ([b11201f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b11201f07a24775edb71ff3f2debd266c555f590))
+* validate donor templates and preserve shared workflow routing ([7edcbdf](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7edcbdf2d7b9f2bb5398fbe92dd1762458673da6))
+
+
+### Maintenance
+
+* reconcile donor preview and consent with main ([274a0f9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/274a0f9dc1985d9e4427c03ea8f35ed2d364fe1c))
+* reconcile donor release with main ([4c2de84](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4c2de84fead214c17ecc1bde3d8267ac2c5075d9))
+
 ## [0.91.62](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.61...surrogacy-crm-platform-v0.91.62) (2026-09-07)
 
 

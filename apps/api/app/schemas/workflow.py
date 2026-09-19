@@ -31,6 +31,7 @@ ALLOWED_CONDITION_FIELDS = {
     "form_id",
     "status",
     "source_mode",
+    "lead_kind",
     "match_status",
     # Contact fields
     "email",
@@ -372,6 +373,7 @@ class CreateIntakeLeadActionConfig(BaseModel):
 
     action_type: Literal["create_intake_lead"] = "create_intake_lead"
     source: str | None = None
+    auto_promote: bool = False
 
 
 # Union of all action configs

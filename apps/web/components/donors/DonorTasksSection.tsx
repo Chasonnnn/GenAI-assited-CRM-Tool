@@ -9,6 +9,7 @@ export function DonorTasksSection({ donor, canView, canCreate }: {
     canCreate: boolean
 }) {
     return <EntityTasksSection
+        layout="detail"
         key={donor.id}
         subject={{ donor_id: donor.id }}
         record={{ donor_id: donor.id, donor_number: donor.donor_number, donor_type: donor.donor_type, donor_name: donor.full_name }}

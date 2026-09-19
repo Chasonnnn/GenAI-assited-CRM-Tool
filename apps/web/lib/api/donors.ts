@@ -1,3 +1,4 @@
+import type { DonorProfile } from "@/lib/types/donor-profile"
 import api from "@/lib/api"
 import type {
     Donor,
@@ -111,4 +112,12 @@ export function getDonorOwnerOptions(): Promise<DonorOwnerOptions> {
 
 export async function claimDonor(id: string): Promise<Donor> {
     return api.post<Donor>(`/donors/${id}/claim`, {})
+}
+
+export async function getDonorProfile(id: string): Promise<DonorProfile> {
+    return api.get<DonorProfile>(`/donors/${id}/profile`)
+}
+
+export async function revealDonorSensitiveInfo(id: string): Promise<{ ssn: string | null; partner_ssn: string | null }> {
+    return api.post(`/donors/${id}/sensitive-info/reveal`, {})
 }

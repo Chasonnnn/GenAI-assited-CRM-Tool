@@ -225,16 +225,6 @@ def _delete_task_from_google_best_effort(db: Session, task: Task) -> None:
         logger.warning("Task Google delete sync failed task=%s error=%s", task.id, exc)
 
 
-def _pull_google_tasks_for_user_best_effort(db: Session, user_id: UUID, org_id: UUID) -> None:
-    """Best-effort inbound Google Tasks pull for a user."""
-    try:
-        from app.services import google_tasks_sync_service
-
-        google_tasks_sync_service.sync_google_tasks_for_user(db, user_id=user_id, org_id=org_id)
-    except Exception as exc:
-        logger.warning("Task Google pull failed user=%s org=%s error=%s", user_id, org_id, exc)
-
-
 def create_task(
     db: Session,
     org_id: UUID,
@@ -960,9 +950,6 @@ def list_tasks(
     from app.core.surrogate_access import build_surrogate_visibility_filter
     from app.db.enums import Role
     from app.db.models import Surrogate
-
-    if user_id:
-        _pull_google_tasks_for_user_best_effort(db, user_id, org_id)
 
     query = db.query(Task).filter(
         Task.organization_id == org_id,

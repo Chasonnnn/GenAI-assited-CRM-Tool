@@ -17,6 +17,11 @@ import { useTasks } from "@/lib/hooks/use-tasks"
 import { useTaskActions } from "@/lib/hooks/use-task-actions"
 import type { TaskRelatedRecordFields } from "@/lib/task-related-record"
 
+import { UnifiedCalendar } from "@/components/appointments/UnifiedCalendar"
+import { SurrogateTasksCalendarHeader } from "@/components/surrogates/SurrogateTasksCalendarHeader"
+import { SurrogateTasksListView } from "@/components/surrogates/SurrogateTasksListView"
+import { buildTaskGroups, countCompletedTasks, getOrphanedCompletedTasks } from "@/components/surrogates/surrogate-task-derivations"
+
 type TaskSubject =
     | { surrogate_id: string; intended_parent_id?: never; donor_id?: never }
     | { intended_parent_id: string; surrogate_id?: never; donor_id?: never }
@@ -30,18 +35,21 @@ export function EntityTasksSection({
     canView,
     canCreate,
     archived = false,
+    layout = "card",
 }: {
     subject: TaskSubject
     record: TaskRelatedRecordFields
     canView: boolean
     canCreate: boolean
     archived?: boolean
+    layout?: "card" | "detail"
 }) {
     const { user } = useAuth()
     const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
     const permissions = permissionsQuery.data?.permissions ?? []
     const isAdmin = user?.role === "developer" || user?.role === "admin"
     const canEdit = user?.role === "developer" || permissions.includes("edit_tasks")
+    const [viewMode, setViewMode] = useState<"list" | "calendar">("list")
     const [filter, setFilter] = useState<TaskFilter>("open")
     const [page, setPage] = useState(1)
     const [isAddOpen, setIsAddOpen] = useState(false)
@@ -49,9 +57,9 @@ export function EntityTasksSection({
     const tasksQuery = useTasks({
         ...subject,
         exclude_approvals: true,
-        ...(filter === "all" ? {} : { is_completed: filter === "completed" }),
+        ...(layout === "detail" || filter === "all" ? {} : { is_completed: filter === "completed" }),
         page,
-        per_page: 10,
+        per_page: layout === "detail" ? 100 : 10,
     }, { enabled: canView })
     const actions = useTaskActions()
     const canManage = (task: TaskListItem) => isAdmin
@@ -94,6 +102,23 @@ export function EntityTasksSection({
     }
 
     if (!canView) return null
+
+    if (layout === "detail") {
+        const tasks = tasksQuery.data?.items ?? []
+        const groups = buildTaskGroups(tasks)
+        const toggleAllowed = (task: TaskListItem) => !archived && canEdit && canManage(task) && !actions.isToggling
+        return <div className="space-y-4">
+            <SurrogateTasksCalendarHeader taskCount={tasksQuery.data?.total ?? tasks.length} viewMode={viewMode} onViewModeChange={setViewMode} onAddTask={canCreate && !archived ? () => setIsAddOpen(true) : undefined} />
+            {tasksQuery.isLoading ? <Card className="items-center py-12"><Loader2Icon className="size-6 animate-spin text-muted-foreground" aria-label="Loading tasks" /></Card>
+                : tasksQuery.isError ? <Card className="gap-3 p-6"><p role="alert">Failed to load tasks.</p><Button variant="outline" onClick={() => { void tasksQuery.refetch() }}>Retry tasks</Button></Card>
+                    : viewMode === "calendar" ? <UnifiedCalendar taskFilter={subject} includeAppointments={false} includeGoogleEvents={false} onTaskClick={task => setSelectedTaskId(task.id)} />
+                        : tasks.length === 0 ? <Card className="items-center py-16"><p className="text-sm text-muted-foreground">No tasks yet</p>{canCreate && !archived && <Button size="sm" variant="outline" onClick={() => setIsAddOpen(true)}>Add First Task</Button>}</Card>
+                            : <SurrogateTasksListView taskGroups={groups} completedTaskCount={countCompletedTasks(tasks)} orphanedCompletedTasks={getOrphanedCompletedTasks(groups, tasks)} canToggleTask={toggleAllowed} onTaskClick={task => setSelectedTaskId(task.id)} onTaskToggle={id => { const task = tasks.find(item => item.id === id); if (task && toggleAllowed(task)) void handleToggle(task) }} />}
+            {viewMode === "list" && pages > 1 && <nav aria-label="Task pages" className="flex items-center justify-between"><Button variant="outline" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span className="text-sm">Page {page} of {pages}</span><Button variant="outline" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</Button></nav>}
+            {isAddOpen && <AddTaskDialog open onOpenChange={setIsAddOpen} onSubmit={handleCreate} isPending={actions.isCreating} initialRelatedRecord={record} />}
+            {selectedTaskId && <TaskDetailDialog taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} onSave={handleSave} onDelete={handleDelete} isDeleting={actions.isDeleting} />}
+        </div>
+    }
 
     return (
         <Card>

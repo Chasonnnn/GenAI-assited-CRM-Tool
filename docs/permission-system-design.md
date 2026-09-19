@@ -1,6 +1,6 @@
 # Permission system design
 
-Status: agreed model implemented locally. Organizations remain on version 1 until an Admin or Dev reviews and activates their version 2 policy. Production has not been activated.
+Status: agreed target model with a local permission-v2 implementation in draft PR #691. This is not a declaration that the frontend or broader module refactors are complete. The current integration evidence and remaining gaps are tracked in [verification](permission-upgrade-verification.md) and the [module plan](permission-module-refactor-plan.md). Organizations remain on version 1 until an Admin or Dev reviews and activates their version 2 policy. Production has not been activated.
 
 This milestone covers internal agency staff. External professionals and participants are outside scope, and a new platform-support access mechanism is deferred because no concrete use case was identified.
 
@@ -146,7 +146,7 @@ Unlinked form intake submissions belong to Intake, Admin, and Dev. Linked submis
 
 ## Administration UI
 
-The approved September 12 mockup is implemented with five primary topics: Surrogates, Donors, Intended Parents, Operations, and Administration. Operations groups workflows, templates, campaigns, and supporting tools. Record actions use short labels within sections; record scope remains separate. Personal tools and AI availability appear in the access preview, without redundant role toggles. The legacy post-approval surrogate permission is absent from the version 2 catalog because phase scope replaces it. People shows inherited authority, individual additions, and record collaborations. Role changes require explicit carryover choices. Check access explains record visibility without implying permission to edit or send.
+The production role editor follows the September 12 direction with five primary topics: Surrogates, Donors, Intended Parents, Operations, and Administration. This does not establish acceptance of every mockup. Operations groups workflows, templates, campaigns, and supporting tools. Record actions use short labels within sections; record scope remains separate. Personal tools and AI availability appear in the access preview, without redundant role toggles. The legacy post-approval surrogate permission is absent from the version 2 catalog because phase scope replaces it. Existing team/member pages show inherited authority, individual additions, and record collaborations rather than reproducing the unified People concept. Role changes require explicit carryover choices. Check access explains record visibility without implying permission to edit or send.
 
 The migration screen resolves legacy individual revokes, historical handoffs, old pool grants, and existing workflow/campaign execution. Activation validates the reviewed fingerprint again; a stale or incomplete review cannot activate the policy.
 

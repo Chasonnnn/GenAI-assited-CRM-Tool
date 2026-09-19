@@ -1,0 +1,17 @@
+{
+  "name": "Donor pre-screening — match or create",
+  "description": "Match donor submissions to an existing donor, or create a donor after the uploaded photo passes scanning.",
+  "icon": "activity",
+  "category": "intake",
+  "trigger_type": "form_submitted",
+  "trigger_config": {},
+  "conditions": [
+    { "field": "source_mode", "operator": "equals", "value": "shared" },
+    { "field": "lead_kind", "operator": "in", "value": ["egg_donor", "sperm_donor"] }
+  ],
+  "condition_logic": "AND",
+  "actions": [
+    { "action_type": "auto_match_submission", "requires_approval": false },
+    { "action_type": "create_intake_lead", "source": "website", "auto_promote": true, "requires_approval": false }
+  ]
+}

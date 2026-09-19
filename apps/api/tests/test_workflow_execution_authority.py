@@ -100,6 +100,77 @@ class RecordingAdapter(DefaultWorkflowDomainAdapter):
         return {"success": True}
 
 
+@pytest.mark.parametrize(
+    "kind,module", [("surrogate", "surrogates"), ("egg_donor", "donors"), ("sperm_donor", "donors")]
+)
+@pytest.mark.parametrize(
+    "action",
+    [
+        {"action_type": "promote_intake_lead"},
+        {"action_type": "create_intake_lead", "auto_promote": True},
+    ],
+)
+def test_intake_creation_authority_is_independent_of_edit(setup, db, kind, module, action):
+    org, _, _ = setup
+    owner, membership = member(db, org, Role.OPERATIONS)
+    db.add_all(
+        [
+            RolePermission(
+                organization_id=org.id,
+                role=membership.role,
+                permission="manage_forms",
+                is_granted=True,
+            ),
+            RolePermission(
+                organization_id=org.id,
+                role=membership.role,
+                permission=f"create_{module}",
+                is_granted=True,
+            ),
+        ]
+    )
+    item = workflow(db, org, owner, scope="org", actions=[action])
+    item.subject_type = (
+        "intake_lead" if action["action_type"] == "promote_intake_lead" else "form_submission"
+    )
+    item.trigger_type = (
+        "intake_lead_created" if item.subject_type == "intake_lead" else "form_submitted"
+    )
+    item.trigger_config = {"lead_type" if item.subject_type == "intake_lead" else "lead_kind": kind}
+    db.flush()
+    authority.authorize_configuration(db, item, owner.id)
+    assert f"create_{module}" in item.execution_authority["permissions"]
+    assert f"edit_{module}" not in item.execution_authority["permissions"]
+    db.query(RolePermission).filter_by(
+        organization_id=org.id, role=membership.role, permission=f"create_{module}"
+    ).one().is_granted = False
+    db.add(
+        RolePermission(
+            organization_id=org.id,
+            role=membership.role,
+            permission=f"edit_{module}",
+            is_granted=True,
+        )
+    )
+    db.flush()
+    with pytest.raises(authority.WorkflowAuthorityError, match="Missing permission"):
+        authority.authorize_configuration(db, item, owner.id)
+
+
+def test_unrestricted_intake_workflow_requires_both_creation_modules(setup, db):
+    org, owner, _ = setup
+    item = workflow(db, org, owner, scope="org", actions=[{"action_type": "promote_intake_lead"}])
+    item.subject_type = "intake_lead"
+    item.trigger_type = "intake_lead_created"
+    assert authority.action_permissions(db, item, item.actions[0]) == {
+        "manage_forms",
+        "view_donors",
+        "view_surrogates",
+        "create_donors",
+        "create_surrogates",
+    }
+
+
 def execute(db, item, record, adapter=None):
     adapter = adapter or RecordingAdapter()
     result = WorkflowEngineCore(adapter).execute_workflow(

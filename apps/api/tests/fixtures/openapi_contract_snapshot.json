@@ -1153,7 +1153,19 @@
       "422"
     ]
   },
+  "/donors/{donor_id}/profile": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
   "/donors/{donor_id}/restore": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/donors/{donor_id}/sensitive-info/reveal": {
     "POST": [
       "200",
       "422"

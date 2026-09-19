@@ -2,6 +2,8 @@
 
 import { ArrowLeftIcon, Loader2Icon } from "lucide-react"
 
+import { SurrogateHistoryTab } from "@/components/surrogates/detail/SurrogateHistoryTab"
+import { formatDateTime } from "@/lib/formatters"
 import Link from "@/components/app-link"
 import { ActivityEventRow } from "@/components/activity/EntityActivityTimeline"
 import { Button } from "@/components/ui/button"
@@ -13,14 +15,27 @@ export function EntityActivityHistory({
     entityType,
     entityId,
     backHref,
+    embedded = false,
 }: {
     entityType: ActivityEntityType
     entityId: string
     backHref: string
+    embedded?: boolean
 }) {
     const query = useInfiniteEntityActivity(entityType, entityId)
     const activities = query.data?.pages.flatMap((page) => page.items) ?? []
     const initialLoadError = query.isError && activities.length === 0
+
+    if (embedded) return <SurrogateHistoryTab
+        activities={activities}
+        formatDateTime={formatDateTime}
+        status={query.isLoading ? "loading" : initialLoadError ? "error" : "ready"}
+        onRetry={() => { void query.refetch() }}
+        hasMore={query.hasNextPage}
+        isLoadingMore={query.isFetchingNextPage}
+        loadMoreError={query.isFetchNextPageError}
+        onLoadMore={() => { void query.fetchNextPage() }}
+    />
 
     return (
         <div className="flex flex-1 flex-col">
@@ -34,7 +49,7 @@ export function EntityActivityHistory({
                 </Link>
                 <h1 className="text-xl font-semibold">Activity history</h1>
             </header>
-            <main className="mx-auto w-full max-w-4xl p-6">
+            <div className="mx-auto w-full max-w-4xl p-6">
                 <Card>
                     <CardHeader><CardTitle><h2>Activity</h2></CardTitle></CardHeader>
                     <CardContent>
@@ -85,7 +100,7 @@ export function EntityActivityHistory({
                         ) : null}
                     </CardContent>
                 </Card>
-            </main>
+            </div>
         </div>
     )
 }

@@ -5,12 +5,14 @@ from __future__ import annotations
 import logging
 import re
 from datetime import UTC, date, datetime, time, timedelta
+from functools import partial
 from typing import Any
 from urllib.parse import quote, unquote
 from uuid import UUID
 
+import anyio
 import httpx
-from sqlalchemy import and_
+from sqlalchemy import and_, text
 from sqlalchemy.orm import Session
 
 from app.core.async_utils import run_async
@@ -24,6 +26,9 @@ logger = logging.getLogger(__name__)
 GOOGLE_TASKS_API_BASE = "https://tasks.googleapis.com/tasks/v1"
 GOOGLE_DEFAULT_TASKLIST_ID = "@default"
 GOOGLE_TASKS_TIMEOUT_SECONDS = 30.0
+GOOGLE_TASKS_SYNC_TIMEOUT_SECONDS = 45.0
+GOOGLE_TASKS_LOCK_TIMEOUT_MS = 2000
+GOOGLE_TASKS_STATEMENT_TIMEOUT_MS = 10000
 GOOGLE_TASKS_RETRY_ATTEMPTS = 3
 GOOGLE_TASKS_RETRY_BASE_DELAY = 0.5
 GOOGLE_TASKS_RETRY_MAX_DELAY = 4.0
@@ -1529,45 +1534,60 @@ async def _sync_google_tasks_for_user_async(db: Session, *, user_id: UUID, org_i
 
 
 def sync_google_tasks_for_user(db: Session, *, user_id: UUID, org_id: UUID) -> int:
-    """Best-effort inbound sync from Google Tasks to platform tasks."""
-    integration = oauth_service.get_user_integration(db, user_id, "google_calendar")
-    if not integration:
-        return 0
-    if integration_scope_known_to_exclude_google_tasks(integration):
-        return 0
+    """Run inbound reconciliation off the shared loop; the caller owns the commit."""
 
-    coro = _sync_google_tasks_for_user_async(db, user_id=user_id, org_id=org_id)
+    async def reconcile() -> int:
+        with anyio.fail_after(GOOGLE_TASKS_SYNC_TIMEOUT_SECONDS), db.begin_nested():
+            connection = db.connection()
+            previous = connection.execute(
+                text("SELECT current_setting('lock_timeout'), current_setting('statement_timeout')")
+            ).one()
+            set_timeouts = text(
+                "SELECT set_config('lock_timeout', :lock_timeout, true), "
+                "set_config('statement_timeout', :statement_timeout, true)"
+            )
+            connection.execute(
+                set_timeouts,
+                {
+                    "lock_timeout": f"{GOOGLE_TASKS_LOCK_TIMEOUT_MS}ms",
+                    "statement_timeout": f"{GOOGLE_TASKS_STATEMENT_TIMEOUT_MS}ms",
+                },
+            )
+            # OAuth refresh can commit. Bind it to a savepoint so it cannot release
+            # the membership lock or commit partial work in the caller's transaction.
+            with Session(bind=connection, join_transaction_mode="create_savepoint") as sync_db:
+                changed = await _sync_google_tasks_for_user_async(
+                    sync_db, user_id=user_id, org_id=org_id
+                )
+                sync_db.commit()
+            connection.execute(
+                set_timeouts,
+                {"lock_timeout": previous[0], "statement_timeout": previous[1]},
+            )
+            return changed
+
     try:
-        return run_async(coro, timeout=45)
+        # Do not use run_async here: from an AnyIO worker it bridges back to the
+        # shared event loop, where synchronous row-lock waits can deadlock it.
+        return anyio.run(reconcile)
+    except ValueError:
+        raise
     except Exception as exc:
-        try:
-            coro.close()
-        except Exception:
-            pass
+        error_class = type(exc).__name__
         logger.warning(
-            "Google→Platform task sync failed user=%s org=%s error=%s", user_id, org_id, exc
+            "Google Tasks sync failed user=%s org=%s error_class=%s",
+            user_id,
+            org_id,
+            error_class,
         )
-        return 0
+        raise RuntimeError(f"Google Tasks sync failed ({error_class})") from None
 
 
 async def sync_google_tasks_for_user_async(db: Session, *, user_id: UUID, org_id: UUID) -> int:
-    """Async-safe inbound sync from Google Tasks to platform tasks."""
-    integration = oauth_service.get_user_integration(db, user_id, "google_calendar")
-    if not integration:
-        return 0
-    if integration_scope_known_to_exclude_google_tasks(integration):
-        return 0
-
-    try:
-        return await _sync_google_tasks_for_user_async(db, user_id=user_id, org_id=org_id)
-    except Exception as exc:
-        logger.warning(
-            "Google→Platform task async sync failed user=%s org=%s error=%s",
-            user_id,
-            org_id,
-            exc,
-        )
-        return 0
+    """Transfer exclusive session use to a worker until reconciliation finishes."""
+    return await anyio.to_thread.run_sync(
+        partial(sync_google_tasks_for_user, db, user_id=user_id, org_id=org_id)
+    )
 
 
 async def _check_google_tasks_access_async(db: Session, user_id: UUID) -> tuple[bool, str | None]:

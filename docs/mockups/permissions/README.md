@@ -1,6 +1,6 @@
 # Permission UI mock-ups
 
-Status: visual concepts awaiting feedback. Built-in Image Gen outputs with synthetic people and records; no application changes.
+Status: historical visual concepts, not screenshots of implemented behavior. These image-generation outputs use synthetic people and records. A production Roles editor and team/member access controls now exist; implementation evidence and remaining acceptance gaps are tracked in [verification](../../permission-upgrade-verification.md).
 
 The user preferred the role editor and selected [variant 2](role-variants/README.md) as its visual direction.
 
@@ -28,7 +28,7 @@ Alice has a surrogate stage-change addition in this example.
 
 ![Access explanation](03-check-access.png)
 
-The result explains both the granted action and the record-access route. Alice can edit the approved donor through Intake collaboration. She has no donor stage-change addition in this example. Linked intended-parent access remains separate.
+The concept explains both the granted action and the record-access route. The settled implementation is a visibility-only checker: action permission is evaluated separately. Do not treat the illustrated Edit conclusion as the current checker contract. Linked intended-parent access remains separate.
 
 ## Open design work
 

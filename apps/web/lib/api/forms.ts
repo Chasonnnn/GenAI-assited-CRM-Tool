@@ -206,6 +206,7 @@ export const DEFAULT_FORM_SURROGATE_FIELD_OPTIONS: FormSurrogateFieldOption[] = 
 ]
 
 export const DEFAULT_FORM_DONOR_FIELD_OPTIONS: FormSurrogateFieldOption[] = [
+    { value: "donor_type", label: "Donor Type", is_critical: false },
     { value: "full_name", label: "Full Name", is_critical: true },
     { value: "email", label: "Email", is_critical: true },
     { value: "phone", label: "Phone" },

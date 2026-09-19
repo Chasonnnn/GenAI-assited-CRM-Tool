@@ -13,21 +13,21 @@ import { cn } from "@/lib/utils"
 import { formatDueLabel, type TaskGroup } from "./surrogate-task-derivations"
 
 interface SurrogateTasksListViewProps {
-    canToggleTask: (task: TaskListItem) => boolean
     taskGroups: TaskGroup[]
     orphanedCompletedTasks: TaskListItem[]
     completedTaskCount: number
     onTaskToggle: (taskId: string, completed: boolean) => void
+    canToggleTask?: (task: TaskListItem) => boolean
     onTaskClick?: (task: TaskListItem) => void
 }
 
 export function SurrogateTasksListView({
-    canToggleTask,
     taskGroups,
     orphanedCompletedTasks,
     completedTaskCount,
     onTaskToggle,
     onTaskClick,
+    canToggleTask,
 }: SurrogateTasksListViewProps) {
     return (
         <Card className="overflow-hidden">
@@ -67,7 +67,7 @@ export function SurrogateTasksListView({
                                         )}
                                     >
                                         <Checkbox
-                                            disabled={!canToggleTask(task)}
+                                            disabled={canToggleTask ? !canToggleTask(task) : false}
                                             id={`task-${task.id}`}
                                             className="mt-0.5"
                                             checked={task.is_completed}
@@ -161,7 +161,7 @@ export function SurrogateTasksListView({
                                         className="flex items-start gap-3 py-2 px-3 rounded-lg opacity-50"
                                     >
                                         <Checkbox
-                                            disabled={!canToggleTask(task)}
+                                            disabled={canToggleTask ? !canToggleTask(task) : false}
                                             id={`task-completed-${task.id}`}
                                             className="mt-0.5"
                                             checked={true}

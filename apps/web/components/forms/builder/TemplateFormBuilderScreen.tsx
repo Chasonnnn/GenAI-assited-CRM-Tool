@@ -87,7 +87,6 @@ export function TemplateFormBuilderScreen({
                 onFormNameChange={controller.onFormNameChange}
                 onSave={controller.handleSave}
                 onPublish={controller.handlePublish}
-                publishDisabled={controller.state.isPublished}
                 {...(!controller.isNewForm
                     ? {
                         deleteAction: {

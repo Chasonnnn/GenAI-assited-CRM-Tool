@@ -1,8 +1,8 @@
 # Permission upgrade execution plan
 
-Status: permission version 2 and its affected module refactors are implemented and packaged in draft PR #691. Production organizations remain on version 1 until reviewed activation. The selected role editor is the September 12 module-first mockup, option 1.
+Status: permission version 2 foundations and focused authority/scope extractions are implemented in draft PR #691. The permission upgrade is not complete: combined-branch validation, frontend acceptance, and broader module refactors are distinct work. Production organizations remain on version 1 until reviewed activation. The selected role editor is the September 12 module-first mockup, option 1; a selected mockup is not implementation evidence.
 
-## Delivered packages
+## Implemented foundations
 
 | Package | Result | Boundary |
 |---|---|---|
@@ -10,7 +10,7 @@ Status: permission version 2 and its affected module refactors are implemented a
 | Record scope | Assignment, phase/stage rules, individual scope additions, retained Intake collaboration, access explanations | One SQL scope feeds lists, counts, details, linked work, and reports |
 | Approval | Surrogate, egg-donor, and sperm-donor approval gates; retained Intake owner and claim pool | Approval, stage changes, assignment, and ordinary editing remain distinct actions |
 | Organization authority | Durable workflow/campaign authority, personal audience rechecks, safe publication copies and proposer credit | Organization work survives proposer departure; personal work uses its owner's current authority |
-| Administration UI | Roles, People, Check access, migration review, individual additions, role carryover review | Server capabilities govern controls and inherited access has no individual deny |
+| Administration UI | Production Roles editor, existing team/member pages, visibility-only Check access, migration review, individual additions, role carryover review | Not a completed reproduction of every mockup; server capabilities govern controls and inherited access has no individual deny |
 | Consumer integration | Records, notes/interviews/profile, search, tasks, matches, attachments, appointments, status corrections, reporting, submission review, AI-approved actions | Related record access follows the same tenant and scope constraints |
 
 Detailed checks and local delivery status are in [permission-upgrade-verification.md](permission-upgrade-verification.md).
@@ -39,6 +39,8 @@ Detailed checks and local delivery status are in [permission-upgrade-verificatio
 Schema downgrade rejects active version 2 policies and personal campaigns that the old schema cannot represent. A rollback after activation requires a reviewed data and authority plan. The migration retains inserted Approved stages because live records or configuration may reference them.
 
 ## Remaining platform sequence
+
+The workflow execution/scheduling, campaign lifecycle, form-review transaction, and reporting dataset/cache refactors remain open. Follow the concrete boundaries in the [module refactor sequence](permission-module-refactor-plan.md#next-refactor-sequence); the permission-specific helpers above do not complete those extractions. Review the live frontend against the selected design before declaring UI acceptance.
 
 | Order | Work | Start condition |
 |---|---|---|

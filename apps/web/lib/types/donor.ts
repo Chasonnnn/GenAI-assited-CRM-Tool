@@ -1,3 +1,5 @@
+import type { DonorProfileUpdate } from "./donor-profile"
+
 export type DonorType = "egg" | "sperm"
 export type DonorPipelineEntityType = "egg_donor" | "sperm_donor"
 export type DonorOwnerType = "user" | "queue"
@@ -49,7 +51,7 @@ export interface DonorCreate {
     owner_id?: string | null
 }
 
-export type DonorUpdate = Partial<Omit<DonorCreate, "donor_type">>
+export type DonorUpdate = Partial<Omit<DonorCreate, "donor_type">> & DonorProfileUpdate
 
 export interface DonorStatusUpdate {
     stage_id: string

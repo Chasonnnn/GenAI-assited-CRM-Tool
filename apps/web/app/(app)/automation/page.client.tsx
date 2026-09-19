@@ -1,5 +1,6 @@
 "use client"
 
+import { FORM_LEAD_KIND_OPTIONS } from "@/lib/forms/form-lead-kind"
 import { useReducer, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
@@ -266,6 +267,7 @@ const conditionFieldLabels: Record<string, string> = {
     form_id: "Form",
     status: "Status",
     source_mode: "Submission Source",
+    lead_kind: "Applicant Type",
     match_status: "Match Status",
     created_at: "Created At",
     date_of_birth: "Date of Birth",
@@ -1108,6 +1110,7 @@ function useAutomationPageView({
         if (field === "owner_id") return ownerOptions
         if (field === "state") return stateOptions
         if (field === "source") return SOURCE_OPTIONS
+        if (field === "lead_kind") return FORM_LEAD_KIND_OPTIONS
         if (field === "source_mode") return FORM_SOURCE_MODE_OPTIONS
         if (field === "match_status") return FORM_MATCH_STATUS_OPTIONS
         if (field === "donor_type") return DONOR_TYPE_OPTIONS
@@ -2598,8 +2601,7 @@ function useAutomationPageView({
                                                 )}
                                                 {action.action_type === "auto_match_submission" && (
                                                     <p className="rounded-md border p-3 text-sm text-muted-foreground">
-                                                        Runs deterministic matching using name + DOB + phone/email and updates the
-                                                        submission to linked or ambiguous review.
+                                                        Matches existing applicants and holds conflicting identities for review.
                                                     </p>
                                                 )}
                                                 {action.action_type === "create_intake_lead" && (
@@ -2609,6 +2611,14 @@ function useAutomationPageView({
                                                             value={typeof action.source === "string" ? action.source : ""}
                                                             onChange={(e) => updateAction(index, { source: e.target.value })}
                                                         />
+                                                        <div className="flex items-center justify-between rounded-md border p-3">
+                                                            <Label htmlFor={`auto-promote-donor-${index}`}>Create donor after photo scan</Label>
+                                                            <Switch
+                                                                id={`auto-promote-donor-${index}`}
+                                                                checked={action.auto_promote === true}
+                                                                onCheckedChange={(checked) => updateAction(index, { auto_promote: checked })}
+                                                            />
+                                                        </div>
                                                         <p className="text-xs text-muted-foreground">
                                                             Skips automatically if the submission is already linked or has ambiguous
                                                             match candidates.
@@ -2655,7 +2665,7 @@ function useAutomationPageView({
                                                             <span className="text-xs text-muted-foreground">
                                                                 {isDonorSubject(subjectType)
                                                                     ? "Donor owner must approve before this action runs"
-                                                                    : "Surrogate owner must approve before this action runs"}
+                                                                    : "A reviewer must approve before this action runs"}
                                                             </span>
                                                         </div>
                                                         <Switch

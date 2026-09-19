@@ -15,6 +15,7 @@ type TemplateBuilderState = {
     hasHydrated: boolean
     formName: string
     formDescription: string
+    templateSettings: Record<string, unknown>
     publicEyebrow: string
     publicTitle: string
     publicSubtitle: string
@@ -60,6 +61,7 @@ const buildInitialState = (templateKey: string, isNewForm: boolean): TemplateBui
     hasHydrated: isNewForm,
     formName: isNewForm ? "" : "Surrogate Application Form",
     formDescription: "",
+    templateSettings: {},
     publicEyebrow: "",
     publicTitle: "",
     publicSubtitle: "",
@@ -102,6 +104,7 @@ function reducer(state: TemplateBuilderState, action: TemplateBuilderAction): Te
                 hasHydrated: true,
                 formName: action.payload.name,
                 formDescription: action.payload.description,
+                templateSettings: { ...action.payload.settings },
                 publicEyebrow: metadata.publicEyebrow,
                 publicTitle: metadata.publicTitle,
                 publicSubtitle: metadata.publicSubtitle,

@@ -14,6 +14,12 @@ vi.mock("next-themes", () => ({
 }))
 
 describe("ThemeToggle", () => {
+    it("shows its tooltip on keyboard focus", async () => {
+        render(<ThemeToggle />)
+        fireEvent.focus(screen.getByRole("button", { name: "Toggle theme" }))
+        expect(await screen.findByText("Toggle theme")).toBeVisible()
+    })
+
     it("uses a single accessible name source", async () => {
         const { container } = render(<ThemeToggle />)
 

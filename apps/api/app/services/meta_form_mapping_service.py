@@ -478,6 +478,26 @@ def build_mapping_preview(
     sample_rows: list[dict[str, str]] = []
     has_live_leads = len(leads) > 0
 
+    missing_ad_ids = set()
+    for lead in leads:
+        raw = lead.field_data_raw or lead.field_data or {}
+        ad_id = raw.get("meta_ad_id") or raw.get("ad_id")
+        if ad_id and not (raw.get("meta_ad_name") or raw.get("ad_name")):
+            missing_ad_ids.add(str(ad_id))
+    ad_names = {
+        ad.ad_external_id: ad.ad_name
+        for ad in (
+            db.query(MetaAd.ad_external_id, MetaAd.ad_name)
+            .filter(
+                MetaAd.organization_id == form.organization_id,
+                MetaAd.ad_external_id.in_(missing_ad_ids),
+            )
+            .all()
+            if missing_ad_ids
+            else []
+        )
+    }
+
     if has_live_leads:
         for lead in leads:
             raw = lead.field_data_raw or lead.field_data or {}
@@ -493,15 +513,7 @@ def build_mapping_preview(
                     if not ad_name:
                         ad_id = raw.get("meta_ad_id") or raw.get("ad_id")
                         if ad_id:
-                            meta_ad = (
-                                db.query(MetaAd)
-                                .filter(
-                                    MetaAd.organization_id == form.organization_id,
-                                    MetaAd.ad_external_id == str(ad_id),
-                                )
-                                .first()
-                            )
-                            ad_name = meta_ad.ad_name if meta_ad else None
+                            ad_name = ad_names.get(str(ad_id))
                     row[key] = _format_sample_value(ad_name)
                 elif key == "meta_form_name":
                     row[key] = form.form_name or ""

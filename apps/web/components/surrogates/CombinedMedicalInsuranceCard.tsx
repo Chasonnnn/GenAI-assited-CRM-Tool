@@ -41,13 +41,16 @@ import { InlineEditField } from "@/components/inline-edit-field"
 import { InlineDateField } from "@/components/inline-date-field"
 import { MedicalContactSection } from "@/components/surrogates/MedicalContactSection"
 import { SurrogateRead } from "@/lib/types/surrogate"
-import { SurrogateUpdatePayload } from "@/lib/api/surrogates"
+import { RecordEditingContext, useRecordEditing } from "@/components/records/RecordEditingContext"
+
+type MedicalKey = { [K in keyof SurrogateRead]: K extends `insurance_${string}` | `clinic_${string}` | `monitoring_clinic_${string}` | `ob_${string}` | `delivery_hospital_${string}` | `pcp_${string}` | `lab_clinic_${string}` ? K : never }[keyof SurrogateRead]
+export type MedicalProfile = Partial<Pick<SurrogateRead, NonNullable<MedicalKey>>>
 
 type SectionType = "insurance" | "pcp" | "lab_clinic" | "clinic" | "monitoring_clinic" | "ob" | "delivery_hospital"
 
 type OptimisticallyHiddenSection = {
     key: SectionType
-    dataSnapshot: SurrogateRead
+    dataSnapshot: MedicalProfile
 }
 
 interface SectionConfig {
@@ -164,8 +167,8 @@ const SECTION_CONFIGS: SectionConfig[] = [
 
 interface CombinedMedicalInsuranceCardProps {
     readOnly?: boolean
-    surrogateData: SurrogateRead
-    onUpdate: (data: Partial<SurrogateUpdatePayload>) => Promise<void>
+    surrogateData: MedicalProfile
+    onUpdate: (data: MedicalProfile) => Promise<void>
 }
 
 function SectionActionIcon({
@@ -189,6 +192,7 @@ function SectionActionIcon({
 }
 
 export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate, readOnly = false }: CombinedMedicalInsuranceCardProps) {
+    const canEdit = useRecordEditing() && !readOnly
     const [manuallyAdded, setManuallyAdded] = useState<SectionType[]>([])
     const [optimisticallyHiddenSections, setOptimisticallyHiddenSections] = useState<OptimisticallyHiddenSection[]>([])
     const [sectionPendingDelete, setSectionPendingDelete] = useState<SectionType | null>(null)
@@ -233,7 +237,7 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate, readOnly
     }
 
     const deletableSections = visibleSections
-    const canEditSections = !readOnly && (availableSections.length > 0 || deletableSections.length > 0)
+    const canEditSections = canEdit && (availableSections.length > 0 || deletableSections.length > 0)
 
     const handleFieldUpdate = async (field: string, value: string | null) => {
         await onUpdate({ [field]: value })
@@ -256,7 +260,7 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate, readOnly
         setIsDeletingSection(true)
         const clearedFields = Object.fromEntries(
             section.fields.map((field) => [field, null])
-        ) as Partial<SurrogateUpdatePayload>
+        ) as MedicalProfile
         const result = await onUpdate(clearedFields).then(() => ({
             status: "success" as const,
         })).catch((error: unknown) => ({
@@ -276,7 +280,7 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate, readOnly
     }
 
     return (
-        <>
+        <RecordEditingContext value={canEdit}>
             <Card className="gap-4 py-4">
                 <CardHeader className="px-4 pb-2">
                     <div className="flex items-center justify-between gap-3">
@@ -372,14 +376,14 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate, readOnly
                             {visibleSections.map((section) =>
                                 section.kind === "insurance" ? (
                                     <InsuranceSection
-                                        readOnly={readOnly}
+                                        readOnly={!canEdit}
                                         key={section.key}
                                         surrogateData={surrogateData}
                                         onUpdate={handleInsuranceFieldUpdate}
                                     />
                                 ) : (
                                     <MedicalContactSection
-                                        readOnly={readOnly}
+                                        readOnly={!canEdit}
                                         title={section.title}
                                         icon={section.icon}
                                         prefix={section.prefix}
@@ -416,18 +420,18 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate, readOnly
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel disabled={readOnly || isDeletingSection}>Cancel</AlertDialogCancel>
+                        <AlertDialogCancel disabled={isDeletingSection}>Cancel</AlertDialogCancel>
                         <AlertDialogAction
                             variant="destructive"
                             onClick={handleDeleteSection}
-                            disabled={readOnly || isDeletingSection}
+                            disabled={isDeletingSection}
                         >
                             Delete Section
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-        </>
+        </RecordEditingContext>
     )
 }
 
@@ -437,7 +441,7 @@ function InsuranceSection({
     onUpdate,
 }: {
     readOnly: boolean
-    surrogateData: SurrogateRead
+    surrogateData: MedicalProfile
     onUpdate: (field: string) => (value: string | null) => Promise<void>
 }) {
     return (
@@ -461,7 +465,6 @@ function InsuranceSection({
                 <div>
                     <span className="text-sm text-muted-foreground">Plan:</span>
                     <InlineEditField
-                        readOnly={readOnly}
                         value={surrogateData.insurance_plan_name}
                         onSave={onUpdate("insurance_plan_name")}
                         placeholder="Plan name"
@@ -474,7 +477,6 @@ function InsuranceSection({
                 <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground shrink-0">Policy #:</span>
                     <InlineEditField
-                        readOnly={readOnly}
                         value={surrogateData.insurance_policy_number}
                         onSave={onUpdate("insurance_policy_number")}
                         placeholder="Policy number"
@@ -483,7 +485,6 @@ function InsuranceSection({
                 <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground shrink-0">Member ID:</span>
                     <InlineEditField
-                        readOnly={readOnly}
                         value={surrogateData.insurance_member_id}
                         onSave={onUpdate("insurance_member_id")}
                         placeholder="Member ID"
@@ -495,7 +496,6 @@ function InsuranceSection({
                 <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground shrink-0">Group #:</span>
                     <InlineEditField
-                        readOnly={readOnly}
                         value={surrogateData.insurance_group_number}
                         onSave={onUpdate("insurance_group_number")}
                         placeholder="Group number"
@@ -504,7 +504,6 @@ function InsuranceSection({
                 <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground shrink-0">Phone:</span>
                     <InlineEditField
-                        readOnly={readOnly}
                         value={surrogateData.insurance_phone}
                         onSave={onUpdate("insurance_phone")}
                         type="tel"
@@ -517,8 +516,7 @@ function InsuranceSection({
             <div className="flex items-center gap-2">
                 <PrinterIcon className="size-3.5 text-muted-foreground shrink-0" />
                 <InlineEditField
-                    readOnly={readOnly}
-                    value={(surrogateData as unknown as Record<string, string | null>).insurance_fax ?? null}
+                    value={surrogateData.insurance_fax ?? null}
                     onSave={onUpdate("insurance_fax")}
                     type="tel"
                     placeholder="Fax"
@@ -532,7 +530,6 @@ function InsuranceSection({
                     <div className="flex items-center gap-2">
                         <span className="text-sm text-muted-foreground shrink-0">Name:</span>
                         <InlineEditField
-                            readOnly={readOnly}
                             value={surrogateData.insurance_subscriber_name}
                             onSave={onUpdate("insurance_subscriber_name")}
                             placeholder="Subscriber name"
@@ -541,7 +538,6 @@ function InsuranceSection({
                     <div className="flex items-center gap-2">
                         <span className="text-sm text-muted-foreground shrink-0">DOB:</span>
                         <InlineDateField
-                            disabled={readOnly}
                             value={surrogateData.insurance_subscriber_dob}
                             onSave={onUpdate("insurance_subscriber_dob")}
                             label="Subscriber date of birth"

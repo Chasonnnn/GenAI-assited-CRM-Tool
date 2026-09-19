@@ -193,6 +193,9 @@ function formatActivityDetails(
             return lines
         }
         case "info_edited":
+            if (Array.isArray(details.changed_fields)) {
+                return details.changed_fields.filter((field): field is string => typeof field === "string").map(formatInfoEditedFieldLabel).join(", ")
+            }
             if (isRecord(details.changes)) {
                 const changes = Object.entries(details.changes)
                     .map(

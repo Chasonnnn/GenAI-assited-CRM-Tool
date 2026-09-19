@@ -670,7 +670,14 @@ def update_donor(
     emit_workflow_events: bool = True,
 ) -> Donor:
     """Update mutable donor fields and audit in one transaction."""
+    from app.schemas.donor_profile import DonorProfileUpdate
+
     updates = data.model_dump(exclude_unset=True)
+    # Serialize sparse updates and explicit clears, including concurrent checklist edits.
+    db.refresh(donor, with_for_update=True)
+    profile_fields = set(DonorProfileUpdate.model_fields)
+    if donor.is_archived and profile_fields.intersection(updates):
+        raise ValueError("Restore the donor before editing profile information")
     old_owner_type = donor.owner_type
     old_owner_id = donor.owner_id
     try:
@@ -697,6 +704,13 @@ def update_donor(
         for field in ("state", "education", "source", "owner_type", "owner_id"):
             if field in updates:
                 setattr(donor, field, updates[field])
+        for field in profile_fields.intersection(updates):
+            setattr(donor, field, updates[field])
+            if field in ("ssn", "partner_ssn"):
+                setattr(donor, f"{field}_last4", updates[field][-4:] if updates[field] else None)
+        donor.profile_updated_fields = sorted(
+            set(donor.profile_updated_fields or []) | profile_fields.intersection(updates)
+        )
         donor.updated_at = datetime.now(UTC)
 
         audit_service.log_event(

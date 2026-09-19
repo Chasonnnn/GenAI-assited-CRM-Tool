@@ -603,7 +603,9 @@ class DefaultWorkflowDomainAdapter:
                 return _with_action_type(result)
 
             if action_type == WorkflowActionType.CREATE_INTAKE_LEAD.value:
-                result = self._action_create_intake_lead(db, action, entity)
+                result = self._action_create_intake_lead(
+                    db, action, entity, workflow_execution_id=workflow_execution_id
+                )
                 return _with_action_type(result)
 
             return _with_action_type(
@@ -1355,7 +1357,7 @@ class DefaultWorkflowDomainAdapter:
         if not isinstance(assign_to_user, bool):
             assign_to_user = None
 
-        surrogate, linked_submission_count = form_intake_service.promote_intake_lead(
+        record, linked_submission_count = form_intake_service.promote_intake_lead(
             db=db,
             lead=entity,
             user_id=entity.created_by_user_id,
@@ -1365,8 +1367,10 @@ class DefaultWorkflowDomainAdapter:
         )
         return {
             "success": True,
-            "description": "Promoted intake lead to surrogate",
-            "surrogate_id": str(surrogate.id),
+            "description": "Promoted intake lead to donor"
+            if entity.promoted_donor_id
+            else "Promoted intake lead to surrogate",
+            "donor_id" if entity.promoted_donor_id else "surrogate_id": str(record.id),
             "linked_submission_count": int(linked_submission_count),
         }
 
@@ -1385,9 +1389,13 @@ class DefaultWorkflowDomainAdapter:
         if outcome == "linked":
             return {
                 "success": True,
-                "description": "Matched submission to existing surrogate",
+                "description": "Matched submission to existing donor"
+                if submission.donor_id
+                else "Matched submission to existing surrogate",
                 "submission_id": str(submission.id),
-                "surrogate_id": str(submission.surrogate_id) if submission.surrogate_id else None,
+                "donor_id" if submission.donor_id else "surrogate_id": str(
+                    submission.donor_id or submission.surrogate_id
+                ),
                 "match_status": outcome,
             }
         return {
@@ -1402,6 +1410,8 @@ class DefaultWorkflowDomainAdapter:
         db: Session,
         action: dict,
         entity: FormSubmission,
+        *,
+        workflow_execution_id: UUID | None = None,
     ) -> dict:
         """Create an intake lead from a shared submission when no deterministic match exists."""
         from app.services import form_intake_service
@@ -1415,6 +1425,8 @@ class DefaultWorkflowDomainAdapter:
             submission=entity,
             user_id=None,
             source=source,
+            auto_promote=action.get("auto_promote") is True,
+            workflow_execution_id=workflow_execution_id,
         )
         if not lead:
             return {

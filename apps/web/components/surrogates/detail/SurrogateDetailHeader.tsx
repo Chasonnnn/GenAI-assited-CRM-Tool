@@ -10,6 +10,7 @@ import { stageMatchesKey } from "@/lib/surrogate-stage-context"
 import type { LatestContactOutcome, LatestInterviewOutcome } from "@/lib/types/surrogate"
 
 type SurrogateDetailHeaderProps = {
+    recordLabel?: string
     surrogateNumber: string
     currentStageKey?: string | null
     currentStageSlug?: string | null
@@ -24,6 +25,7 @@ type SurrogateDetailHeaderProps = {
 }
 
 export function SurrogateDetailHeader({
+    recordLabel = "Surrogate",
     surrogateNumber,
     currentStageKey = null,
     currentStageSlug = null,
@@ -51,7 +53,7 @@ export function SurrogateDetailHeader({
                     <ArrowLeftIcon className="mr-2 size-4" />
                     Back
                 </Button>
-                <h1 className="text-xl font-semibold">Surrogate #{surrogateNumber}</h1>
+                <h1 className="text-xl font-semibold">{recordLabel} #{surrogateNumber}</h1>
                 <Badge style={{ backgroundColor: statusColor, color: "white" }}>{statusLabel}</Badge>
                 {showContactOutcome && (
                     <OutcomeBadge

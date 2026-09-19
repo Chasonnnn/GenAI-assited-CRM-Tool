@@ -47,6 +47,7 @@ export const MULTISELECT_FIELDS = new Set([
     "state",
     "source",
     "source_mode",
+    "lead_kind",
     "match_status",
 ])
 

@@ -1,6 +1,6 @@
 # Permission upgrade verification
 
-Date: September 12, 2026. The completed upgrade is packaged in draft [PR #691](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/pull/691), based on `codex/platform-upgrades`. No production migration, activation, release, provider send, or deployment occurred.
+Historical verification: September 12, 2026. Permission foundations are packaged in draft [PR #691](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/pull/691), based on `codex/platform-upgrades`. These results do not establish completion of frontend acceptance or broader module refactors, and do not validate later integrations. No production migration, activation, release, provider send, or deployment occurred.
 
 ## PR branch validation
 

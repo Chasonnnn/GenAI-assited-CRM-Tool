@@ -1,13 +1,9 @@
 "use client"
 
-import { RecordCollaborators } from "@/components/permissions/record-collaborators"
-
 import * as React from "react"
 import { useParams } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -45,7 +41,6 @@ import {
     ChevronDownIcon,
     ClipboardCheckIcon,
     CopyIcon,
-    EyeIcon,
     InfoIcon,
     CheckIcon,
     PencilIcon,
@@ -58,14 +53,16 @@ import {
     WeightIcon,
     XIcon,
 } from "lucide-react"
-import { computeBmi, formatDate, formatHeight } from "@/components/surrogates/detail/surrogate-detail-utils"
+import { computeBmi, formatDate } from "@/components/surrogates/detail/surrogate-detail-utils"
 import { useSurrogateDetailContext } from "@/components/surrogates/detail/SurrogateDetailContext"
-import { serializeHeightSelection, splitHeightFt } from "@/lib/height"
 import { getMaritalStatusOptions } from "@/lib/intended-parent-marital-status"
 import { getSurrogateStageContext, stageHasCapability } from "@/lib/surrogate-stage-context"
 import type { SurrogateLeadIntakeWarning } from "@/lib/types/surrogate"
 import type { SurrogateUpdatePayload } from "@/lib/api/surrogates"
-import { formatRace } from "@/lib/formatters"
+
+import { PersonalInfoRow, InlineSelectField, ProfileMetric, InlineHeightField, InlineRaceField, InlineWeightField, PersonalInfoColumn, SectionActionIcon, getAgeLabel, SsnField } from "@/components/records/RecordProfileFields"
+import { RecordEditingContext } from "@/components/records/RecordEditingContext"
+import { RecordCollaborators } from "@/components/permissions/record-collaborators"
 
 const LEAD_WARNING_FIELD_LABELS = {
     email: "Email",
@@ -85,32 +82,6 @@ const LEAD_WARNING_REASON_COPY = {
     missing_value: "This value could not be structured, so the field needs review.",
 } as const
 
-const RACE_OPTIONS = [
-    "american_indian_or_alaska_native",
-    "asian",
-    "black_or_african_american",
-    "hispanic_or_latino",
-    "native_hawaiian_or_other_pacific_islander",
-    "white",
-    "other_please_specify",
-] as const
-
-const RACE_OPTION_ALIASES: Record<string, (typeof RACE_OPTIONS)[number]> = {
-    american_indian_alaska_native: "american_indian_or_alaska_native",
-    black_african_american: "black_or_african_american",
-    native_hawaiian_or_pacific_islander: "native_hawaiian_or_other_pacific_islander",
-    native_hawaiian_or_other_pacific_islanders: "native_hawaiian_or_other_pacific_islander",
-    other: "other_please_specify",
-    other_please_specified: "other_please_specify",
-}
-
-function normalizeRaceOptionKey(value: string | null | undefined): string {
-    const normalized = value?.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") ?? ""
-    if (!normalized) return ""
-    const aliased = RACE_OPTION_ALIASES[normalized] ?? normalized
-    return RACE_OPTIONS.includes(aliased as (typeof RACE_OPTIONS)[number]) ? aliased : ""
-}
-
 const CHECKLIST_BOOLEAN_FIELD_KEYS = [
     "is_age_eligible",
     "is_citizen_or_pr",
@@ -124,20 +95,6 @@ const JOURNEY_TIMING_OPTIONS = [
     { label: "3–6 months", value: "months_3_6" },
     { label: "Still deciding", value: "still_deciding" },
 ] as const
-
-type SelectOption = {
-    value: string
-    label: string
-}
-
-function formatSelectValue(
-    value: string | null | undefined,
-    options: readonly SelectOption[],
-    placeholder: string
-) {
-    if (!value) return placeholder
-    return options.find((option) => option.value === value)?.label ?? value
-}
 
 type ChecklistBooleanFieldKey = (typeof CHECKLIST_BOOLEAN_FIELD_KEYS)[number]
 
@@ -196,629 +153,23 @@ function LeadWarningIndicator({
     )
 }
 
-function PersonalInfoRow({
-    label,
-    children,
-}: {
-    label: string
-    children: React.ReactNode
-}) {
-    return (
-        <div className="grid gap-1 sm:grid-cols-[8.25rem_minmax(0,1fr)] sm:items-center">
-            <span className="text-sm text-muted-foreground">{label}:</span>
-            <div className="min-w-0 text-sm">{children}</div>
-        </div>
-    )
-}
-
-function InlineSelectField({
-    readOnly = false,
-    value,
-    options,
-    onSave,
-    label,
-    placeholder = "Not provided",
-    saveOnSelect = true,
-    triggerClassName = "w-48",
-}: {
-    readOnly?: boolean
-    value: string | null | undefined
-    options: readonly SelectOption[]
-    onSave: (value: string | null) => Promise<void>
-    label: string
-    placeholder?: string
-    saveOnSelect?: boolean
-    triggerClassName?: string
-}) {
-    const [isEditing, setIsEditing] = React.useState(false)
-    const [editValue, setEditValue] = React.useState(value ?? "")
-    const [isSaving, setIsSaving] = React.useState(false)
-    const [error, setError] = React.useState<string | null>(null)
-
-    const displayValue = formatSelectValue(value, options, placeholder)
-    const isPlaceholder = !value
-
-    const handleStartEdit = () => {
-        setEditValue(value ?? "")
-        setError(null)
-        setIsEditing(true)
-    }
-
-    const handleCancel = () => {
-        setEditValue(value ?? "")
-        setError(null)
-        setIsEditing(false)
-    }
-
-    const handleSave = async (nextValue = editValue) => {
-        const normalizedValue = nextValue || null
-        if ((value ?? "") === (nextValue ?? "")) {
-            setIsEditing(false)
-            return
-        }
-
-        setIsSaving(true)
-        const finishSaving = () => setIsSaving(false)
-        try {
-            await onSave(normalizedValue)
-            setIsEditing(false)
-            setError(null)
-            finishSaving()
-        } catch (err) {
-            setError(err instanceof Error ? err.message : `Failed to save ${label}`)
-            finishSaving()
-        }
-    }
-
-    if (readOnly) return <span>{displayValue}</span>
-
-    if (!isEditing) {
-        return (
-            <Button unstyled
-                type="button"
-                className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                onClick={handleStartEdit}
-                aria-label={`Edit ${label}`}
-            >
-                <span className={isPlaceholder ? "text-muted-foreground" : undefined}>
-                    {displayValue}
-                </span>
-                <PencilIcon
-                    className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-                    aria-hidden="true"
-                />
-            </Button>
-        )
-    }
-
-    return (
-        <div className="space-y-1">
-            <div className="flex max-w-full flex-wrap items-center gap-1">
-                <Select
-                    value={editValue}
-                    onValueChange={(nextValue) => {
-                        const normalizedValue = nextValue ?? ""
-                        setEditValue(normalizedValue)
-                        if (saveOnSelect) {
-                            void handleSave(normalizedValue)
-                        }
-                    }}
-                    disabled={isSaving}
-                >
-                    <SelectTrigger
-                        aria-label={label}
-                        size="sm"
-                        className={triggerClassName}
-                    >
-                        <SelectValue>
-                            {(selectedValue: string | null) =>
-                                formatSelectValue(selectedValue, options, placeholder)
-                            }
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent className={triggerClassName}>
-                        <SelectGroup>
-                            <SelectItem value="">{placeholder}</SelectItem>
-                            {options.map((option) => (
-                                <SelectItem key={option.value} value={option.value}>
-                                    {option.label}
-                                </SelectItem>
-                            ))}
-                        </SelectGroup>
-                    </SelectContent>
-                </Select>
-                {!saveOnSelect && (
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-6"
-                        onClick={() => void handleSave()}
-                        disabled={isSaving}
-                        aria-label={`Save ${label}`}
-                    >
-                        <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
-                    </Button>
-                )}
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-6"
-                    onClick={handleCancel}
-                    disabled={isSaving}
-                    aria-label={`Cancel ${label}`}
-                >
-                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
-                </Button>
-            </div>
-            {error && <p className="text-xs text-destructive">{error}</p>}
-        </div>
-    )
-}
-
-function ProfileMetric({
-    icon: Icon,
-    label,
-    primary,
-    secondary,
-    warning,
-    badge,
-}: {
-    icon: React.ComponentType<{ className?: string }>
-    label: string
-    primary: React.ReactNode
-    secondary?: React.ReactNode
-    warning?: React.ReactNode
-    badge?: React.ReactNode
-}) {
-    return (
-        <div className="grid h-full grid-cols-[2.25rem_minmax(0,1fr)] gap-3 rounded-lg p-2">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-rose-100/65 text-rose-900 dark:bg-rose-950/40 dark:text-rose-100">
-                <Icon className="size-4" />
-            </div>
-            <div className="min-w-0 space-y-0.5">
-                <div className="flex items-center gap-1.5">
-                    <span className="text-sm text-muted-foreground">{label}:</span>
-                    {warning}
-                </div>
-                <div className="min-w-0 text-sm text-foreground">{primary}</div>
-                {secondary && <div className="text-xs text-muted-foreground">{secondary}</div>}
-                {badge}
-            </div>
-        </div>
-    )
-}
-
-function InlineHeightField({
-    readOnly = false,
-    value,
-    onSave,
-}: {
-    readOnly?: boolean
-    value: number | string | null | undefined
-    onSave: (value: number | null) => Promise<void>
-}) {
-    const [isEditing, setIsEditing] = React.useState(false)
-    const [feet, setFeet] = React.useState("")
-    const [inches, setInches] = React.useState("")
-    const [isSaving, setIsSaving] = React.useState(false)
-    const [error, setError] = React.useState<string | null>(null)
-
-    const displayValue = value != null ? formatHeight(value) : "-"
-
-    const handleStartEdit = () => {
-        const selection = splitHeightFt(value)
-        setFeet(selection.feet)
-        setInches(selection.inches)
-        setError(null)
-        setIsEditing(true)
-    }
-
-    const handleCancel = () => {
-        const selection = splitHeightFt(value)
-        setFeet(selection.feet)
-        setInches(selection.inches)
-        setError(null)
-        setIsEditing(false)
-    }
-
-    const handleSave = async () => {
-        const nextValue = serializeHeightSelection(feet, inches)
-        if ((feet !== "" || inches !== "") && nextValue === null) {
-            setError("Invalid height")
-            return
-        }
-
-        setIsSaving(true)
-        const finishSaving = () => setIsSaving(false)
-        try {
-            await onSave(nextValue)
-            setIsEditing(false)
-            setError(null)
-            finishSaving()
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to save")
-            finishSaving()
-        }
-    }
-
-    if (readOnly) return <span>{displayValue}</span>
-
-    if (!isEditing) {
-        return (
-            <Button unstyled
-                type="button"
-                className="group -mx-1 flex cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                onClick={handleStartEdit}
-                aria-label="Edit Height"
-            >
-                <span className={value == null ? "text-muted-foreground" : undefined}>
-                    {displayValue}
-                </span>
-                <PencilIcon
-                    className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-                    aria-hidden="true"
-                />
-            </Button>
-        )
-    }
-
-    return (
-        <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-1">
-                <Select value={feet} onValueChange={(value) => setFeet(value ?? "")} disabled={isSaving}>
-                    <SelectTrigger aria-label="Height feet" size="sm" className="w-20">
-                        <SelectValue>
-                            {(value: string | null) => (value ? `${value} ft` : "ft")}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent className="w-24">
-                        <SelectGroup>
-                            <SelectItem value="">ft</SelectItem>
-                            {Array.from({ length: 9 }, (_, option) => option).map((option) => (
-                                <SelectItem key={`inline-height-feet-${option}`} value={String(option)}>
-                                    {option} ft
-                                </SelectItem>
-                            ))}
-                        </SelectGroup>
-                    </SelectContent>
-                </Select>
-                <Select value={inches} onValueChange={(value) => setInches(value ?? "")} disabled={isSaving}>
-                    <SelectTrigger aria-label="Height inches" size="sm" className="w-20">
-                        <SelectValue>
-                            {(value: string | null) => (value ? `${value} in` : "in")}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent className="w-24">
-                        <SelectGroup>
-                            <SelectItem value="">in</SelectItem>
-                            {Array.from({ length: 12 }, (_, option) => option).map((option) => (
-                                <SelectItem key={`inline-height-inches-${option}`} value={String(option)}>
-                                    {option} in
-                                </SelectItem>
-                            ))}
-                        </SelectGroup>
-                    </SelectContent>
-                </Select>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-6"
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    aria-label="Save Height"
-                >
-                    <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
-                </Button>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-6"
-                    onClick={handleCancel}
-                    disabled={isSaving}
-                    aria-label="Cancel Height"
-                >
-                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
-                </Button>
-            </div>
-            {error && <p className="text-xs text-destructive">{error}</p>}
-        </div>
-    )
-}
-
-function InlineRaceField({
-    readOnly = false,
-    value,
-    onSave,
-}: {
-    readOnly?: boolean
-    value: string | null | undefined
-    onSave: (value: string | null) => Promise<void>
-}) {
-    const [isEditing, setIsEditing] = React.useState(false)
-    const [editValue, setEditValue] = React.useState(() => normalizeRaceOptionKey(value))
-    const [isSaving, setIsSaving] = React.useState(false)
-    const [error, setError] = React.useState<string | null>(null)
-
-    const displayValue = formatRace(value)
-    const fieldLabel = "Race / Ethnicity"
-
-    const handleStartEdit = () => {
-        setEditValue(normalizeRaceOptionKey(value))
-        setError(null)
-        setIsEditing(true)
-    }
-
-    const handleCancel = () => {
-        setEditValue(normalizeRaceOptionKey(value))
-        setError(null)
-        setIsEditing(false)
-    }
-
-    const handleSave = async () => {
-        const currentValue = normalizeRaceOptionKey(value)
-        if (editValue === currentValue) {
-            setIsEditing(false)
-            return
-        }
-
-        setIsSaving(true)
-        const finishSaving = () => setIsSaving(false)
-        try {
-            await onSave(editValue || null)
-            setIsEditing(false)
-            setError(null)
-            finishSaving()
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to save")
-            finishSaving()
-        }
-    }
-
-    if (readOnly) return <span>{displayValue}</span>
-
-    if (!isEditing) {
-        return (
-            <Button unstyled
-                type="button"
-                className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                onClick={handleStartEdit}
-                aria-label={`Edit ${fieldLabel}`}
-            >
-                <span className={displayValue ? undefined : "text-muted-foreground"}>
-                    {displayValue || "-"}
-                </span>
-                <PencilIcon
-                    className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-                    aria-hidden="true"
-                />
-            </Button>
-        )
-    }
-
-    return (
-        <div className="space-y-1">
-            <div className="flex max-w-full flex-wrap items-center gap-1">
-                <Select
-                    value={editValue}
-                    onValueChange={(value) => setEditValue(value ?? "")}
-                    disabled={isSaving}
-                >
-                    <SelectTrigger
-                        aria-label={fieldLabel}
-                        size="sm"
-                        className="w-64 max-w-full"
-                    >
-                        <SelectValue>
-                            {(value: string | null) => (value ? formatRace(value) : "No race selected")}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent className="w-64 max-w-full">
-                        <SelectGroup>
-                            <SelectItem value="">No race selected</SelectItem>
-                            {RACE_OPTIONS.map((raceKey) => (
-                                <SelectItem key={raceKey} value={raceKey}>
-                                    {formatRace(raceKey)}
-                                </SelectItem>
-                            ))}
-                        </SelectGroup>
-                    </SelectContent>
-                </Select>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-6"
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    aria-label={`Save ${fieldLabel}`}
-                >
-                    <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
-                </Button>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-6"
-                    onClick={handleCancel}
-                    disabled={isSaving}
-                    aria-label={`Cancel ${fieldLabel}`}
-                >
-                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
-                </Button>
-            </div>
-            {error && <p className="text-xs text-destructive">{error}</p>}
-        </div>
-    )
-}
-
-function InlineWeightField({
-    readOnly = false,
-    value,
-    onSave,
-}: {
-    readOnly?: boolean
-    value: number | null | undefined
-    onSave: (value: number | null) => Promise<void>
-}) {
-    const [isEditing, setIsEditing] = React.useState(false)
-    const [editValue, setEditValue] = React.useState("")
-    const [isSaving, setIsSaving] = React.useState(false)
-    const [error, setError] = React.useState<string | null>(null)
-
-    const handleStartEdit = () => {
-        setEditValue("")
-        setError(null)
-        setIsEditing(true)
-    }
-
-    const handleCancel = () => {
-        setEditValue("")
-        setError(null)
-        setIsEditing(false)
-    }
-
-    const handleSave = async () => {
-        const trimmed = editValue.trim()
-        if (!trimmed) {
-            setIsEditing(false)
-            setError(null)
-            return
-        }
-        const parsed = trimmed ? Number(trimmed) : null
-        if (parsed !== null && (!Number.isFinite(parsed) || parsed < 0)) {
-            setError("Enter a valid weight")
-            return
-        }
-        if (parsed === value) {
-            setIsEditing(false)
-            setError(null)
-            return
-        }
-
-        setIsSaving(true)
-        const finishSaving = () => setIsSaving(false)
-        try {
-            await onSave(parsed)
-            setIsEditing(false)
-            setError(null)
-            finishSaving()
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to save")
-            finishSaving()
-        }
-    }
-
-    if (readOnly) return <span>{value != null ? `${value} lb` : "-"}</span>
-
-    if (!isEditing) {
-        return (
-            <Button unstyled
-                type="button"
-                className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                onClick={handleStartEdit}
-                aria-label="Edit Weight"
-            >
-                <span className={value == null ? "text-muted-foreground" : undefined}>
-                    {value != null ? `${value} lb` : "-"}
-                </span>
-                <PencilIcon
-                    className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-                    aria-hidden="true"
-                />
-            </Button>
-        )
-    }
-
-    return (
-        <div className="space-y-1">
-            <div className="flex items-center gap-1">
-                <Input
-                    type="number"
-                    min="0"
-                    value={editValue}
-                    onChange={(event) => setEditValue(event.target.value)}
-                    onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                            event.preventDefault()
-                            void handleSave()
-                        } else if (event.key === "Escape") {
-                            handleCancel()
-                        }
-                    }}
-                    className="h-7 w-24 text-sm"
-                    disabled={isSaving}
-                    aria-label="Weight"
-                    placeholder={value != null ? String(value) : undefined}
-                />
-                <span className="text-sm text-muted-foreground">lb</span>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-6"
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    aria-label="Save Weight"
-                >
-                    <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
-                </Button>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-6"
-                    onClick={handleCancel}
-                    disabled={isSaving}
-                    aria-label="Cancel Weight"
-                >
-                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
-                </Button>
-            </div>
-            {error && <p className="text-xs text-destructive">{error}</p>}
-        </div>
-    )
-}
-
-function PersonalInfoColumn({
-    title,
-    icon: Icon,
-    children,
-}: {
-    title: string
-    icon: React.ComponentType<{ className?: string }>
-    children: React.ReactNode
-}) {
-    return (
-        <section className="flex h-full min-w-0 flex-col rounded-lg border border-border/70 bg-card p-4 shadow-sm">
-            <h3 className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <Icon className="size-4 text-muted-foreground" />
-                {title}
-            </h3>
-            <div className="mt-4 space-y-3">{children}</div>
-        </section>
-    )
-}
-
 function ChecklistStatusButton({
-    readOnly = false,
     label,
     value,
     onChange,
+    readOnly = false,
 }: {
-    readOnly?: boolean
     label: string
     value: boolean | null | undefined
     onChange: (value: boolean | null) => Promise<void>
+    readOnly?: boolean
 }) {
     const [isSaving, setIsSaving] = React.useState(false)
     const nextValue = getNextChecklistValue(value)
     const statusLabel = value === true ? "Yes" : value === false ? "No" : "Not set"
 
     const cycleChecklistValue = async () => {
+        if (readOnly || isSaving) return
         setIsSaving(true)
         const finishSaving = () => setIsSaving(false)
         try {
@@ -835,7 +186,7 @@ function ChecklistStatusButton({
             className="flex size-6 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-60"
             onClick={cycleChecklistValue}
             disabled={readOnly || isSaving}
-            aria-label={`${label}: ${statusLabel}${readOnly ? "" : ". Click to change."}`}
+            aria-label={readOnly ? `${label}: ${statusLabel}` : `${label}: ${statusLabel}. Click to change.`}
         >
             {value === true && <CheckIcon className="size-4 text-green-500" />}
             {value === false && <XIcon className="size-4 text-red-500" />}
@@ -843,167 +194,6 @@ function ChecklistStatusButton({
                 <span className="text-sm leading-none text-muted-foreground">-</span>
             )}
         </Button>
-    )
-}
-
-function SectionActionIcon({
-    icon,
-    tone = "default",
-}: {
-    icon: React.ReactNode
-    tone?: "default" | "destructive"
-}) {
-    return (
-        <span
-            className={
-                tone === "destructive"
-                    ? "flex size-7 items-center justify-center rounded-full bg-destructive/10 text-destructive"
-                    : "flex size-7 items-center justify-center rounded-full bg-muted text-muted-foreground"
-            }
-        >
-            {icon}
-        </span>
-    )
-}
-
-function getAgeLabel(dateOfBirth: string | null | undefined) {
-    if (!dateOfBirth) return null
-    const parsed = new Date(`${dateOfBirth}T00:00:00`)
-    if (Number.isNaN(parsed.getTime())) return null
-    const today = new Date()
-    let age = today.getFullYear() - parsed.getFullYear()
-    const monthDelta = today.getMonth() - parsed.getMonth()
-    if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < parsed.getDate())) {
-        age -= 1
-    }
-    return `Age ${age}`
-}
-
-function SsnField({
-    readOnly = false,
-    label,
-    maskedValue,
-    revealedValue,
-    onReveal,
-    onSave,
-    isRevealPending,
-}: {
-    readOnly?: boolean
-    label: string
-    maskedValue: string | null | undefined
-    revealedValue: string | null
-    onReveal: () => Promise<void>
-    onSave: (value: string | null) => Promise<void>
-    isRevealPending: boolean
-}) {
-    const [isEditing, setIsEditing] = React.useState(false)
-    const [editValue, setEditValue] = React.useState("")
-    const [isSaving, setIsSaving] = React.useState(false)
-    const [error, setError] = React.useState<string | null>(null)
-    const displayValue = revealedValue || maskedValue || "-"
-
-    const save = async () => {
-        setIsSaving(true)
-        const finishSaving = () => setIsSaving(false)
-        try {
-            await onSave(editValue.trim() || null)
-            setEditValue("")
-            setError(null)
-            setIsEditing(false)
-            finishSaving()
-        } catch (err) {
-            setError(err instanceof Error ? err.message : `Failed to save ${label}`)
-            finishSaving()
-        }
-    }
-
-    if (isEditing && !readOnly) {
-        return (
-            <div className="space-y-1">
-                <div className="flex min-w-0 items-center gap-2">
-                    <Input
-                        aria-label={label}
-                        value={editValue}
-                        onChange={(event) => setEditValue(event.target.value)}
-                        onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                                event.preventDefault()
-                                void save()
-                            }
-                            if (event.key === "Escape") {
-                                setEditValue("")
-                                setError(null)
-                                setIsEditing(false)
-                            }
-                        }}
-                        placeholder="XXX-XX-XXXX"
-                        className="h-7 min-w-0 rounded-md border border-input bg-background px-2 text-sm"
-                    />
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-7"
-                        onClick={() => void save()}
-                        disabled={isSaving}
-                        aria-label={`Save ${label}`}
-                    >
-                        <CheckIcon className="size-3.5" aria-hidden="true" />
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-7"
-                        onClick={() => {
-                            setEditValue("")
-                            setError(null)
-                            setIsEditing(false)
-                        }}
-                        disabled={isSaving}
-                        aria-label={`Cancel editing ${label}`}
-                    >
-                        <XIcon className="size-3.5" aria-hidden="true" />
-                    </Button>
-                </div>
-                {error && <p className="text-xs text-destructive">{error}</p>}
-            </div>
-        )
-    }
-
-    return (
-        <div className="flex min-w-0 items-center gap-1.5">
-            <span className="shrink-0 whitespace-nowrap font-mono text-[13px] tabular-nums">
-                {displayValue}
-            </span>
-            {maskedValue && !revealedValue && (
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-7"
-                    onClick={() => void onReveal()}
-                    disabled={readOnly || isRevealPending}
-                    aria-label={`Reveal ${label}`}
-                >
-                    <EyeIcon className="size-3.5" aria-hidden="true" />
-                </Button>
-            )}
-            <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-7"
-                onClick={() => {
-                    setError(null)
-                    setIsEditing(true)
-                }}
-                disabled={readOnly}
-                aria-label={`Edit ${label}`}
-            >
-                <PencilIcon className="size-3.5" aria-hidden="true" />
-            </Button>
-        </div>
     )
 }
 
@@ -1089,7 +279,6 @@ export function SurrogateOverviewTab() {
     }
 
     const updateSurrogate = async (data: Partial<SurrogateUpdatePayload>) => {
-        if (readOnly) return
         await updateSurrogateMutation.mutateAsync({
             surrogateId: id,
             data,
@@ -1157,13 +346,13 @@ export function SurrogateOverviewTab() {
 
     return (
         <TabsContent value="overview" className="space-y-4">
+            <RecordEditingContext value={!readOnly}>
             <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
                 <div className="space-y-4">
                     <SurrogateOverviewCard title="Contact Information" icon={UserIcon}>
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Name:</span>
                             <InlineEditField
-                                readOnly={readOnly}
                                 value={surrogateData.full_name}
                                 onSave={async (value) => {
                                     await updateSurrogateMutation.mutateAsync({
@@ -1180,7 +369,6 @@ export function SurrogateOverviewTab() {
                             <span className="text-sm text-muted-foreground">Email:</span>
                             <div className="flex min-w-0 items-center gap-1.5">
                                 <InlineEditField
-                                    readOnly={readOnly}
                                     value={surrogateData.email}
                                     onSave={async (value) => {
                                         await updateSurrogateMutation.mutateAsync({
@@ -1218,7 +406,6 @@ export function SurrogateOverviewTab() {
                             <span className="text-sm text-muted-foreground">Phone:</span>
                             <div className="flex min-w-0 items-center gap-1.5">
                                 <InlineEditField
-                                    readOnly={readOnly}
                                     value={surrogateData.phone ?? undefined}
                                     onSave={async (value) => {
                                         await updateSurrogateMutation.mutateAsync({
@@ -1242,7 +429,6 @@ export function SurrogateOverviewTab() {
                             <span className="text-sm text-muted-foreground">State:</span>
                             <div className="flex min-w-0 items-center gap-1.5">
                                 <InlineEditField
-                                    readOnly={readOnly}
                                     value={surrogateData.state ?? undefined}
                                     onSave={async (value) => {
                                         await updateSurrogateMutation.mutateAsync({
@@ -1285,7 +471,6 @@ export function SurrogateOverviewTab() {
                                 label="Date of Birth"
                                 primary={
                                     <InlineDateField
-                                        disabled={readOnly}
                                         value={surrogateData.date_of_birth}
                                         onSave={async (value) => {
                                             await updateSurrogateMutation.mutateAsync({
@@ -1304,7 +489,6 @@ export function SurrogateOverviewTab() {
                                 label="Race / Ethnicity"
                                 primary={
                                     <InlineRaceField
-                                        readOnly={readOnly}
                                         value={surrogateData.race ?? undefined}
                                         onSave={async (value) => {
                                             await updateSurrogateMutation.mutateAsync({
@@ -1320,7 +504,6 @@ export function SurrogateOverviewTab() {
                                 label="Height"
                                 primary={
                                     <InlineHeightField
-                                        readOnly={readOnly}
                                         value={surrogateData.height_ft}
                                         onSave={async (value) => {
                                             await updateSurrogateMutation.mutateAsync({
@@ -1344,7 +527,6 @@ export function SurrogateOverviewTab() {
                                 label="Weight"
                                 primary={
                                     <InlineWeightField
-                                        readOnly={readOnly}
                                         value={surrogateData.weight_lb}
                                         onSave={async (value) => {
                                             await updateSurrogateMutation.mutateAsync({
@@ -1472,7 +654,6 @@ export function SurrogateOverviewTab() {
                                         <PersonalInfoColumn title="Surrogate" icon={UserIcon}>
                                         <PersonalInfoRow label="Marital Status">
                                             <InlineSelectField
-                                                readOnly={readOnly}
                                                 label="Marital Status"
                                                 value={surrogateData.marital_status}
                                                 options={maritalStatusOptions}
@@ -1484,7 +665,6 @@ export function SurrogateOverviewTab() {
                                         </PersonalInfoRow>
                                         <PersonalInfoRow label="SSN">
                                             <SsnField
-                                                readOnly={readOnly}
                                                 label="surrogate SSN"
                                                 maskedValue={surrogateData.ssn_masked}
                                                 revealedValue={revealedSsn}
@@ -1498,7 +678,6 @@ export function SurrogateOverviewTab() {
                                         </PersonalInfoRow>
                                         <PersonalInfoRow label="Address Line 1">
                                             <InlineEditField
-                                                readOnly={readOnly}
                                                 value={surrogateData.address_line1}
                                                 onSave={async (value) => updateSurrogate({ address_line1: value || null })}
                                                 placeholder="-"
@@ -1507,7 +686,6 @@ export function SurrogateOverviewTab() {
                                         </PersonalInfoRow>
                                         <PersonalInfoRow label="Address Line 2">
                                             <InlineEditField
-                                                readOnly={readOnly}
                                                 value={surrogateData.address_line2}
                                                 onSave={async (value) => updateSurrogate({ address_line2: value || null })}
                                                 placeholder="-"
@@ -1516,7 +694,6 @@ export function SurrogateOverviewTab() {
                                         </PersonalInfoRow>
                                         <PersonalInfoRow label="City">
                                             <InlineEditField
-                                                readOnly={readOnly}
                                                 value={surrogateData.address_city}
                                                 onSave={async (value) => updateSurrogate({ address_city: value || null })}
                                                 placeholder="-"
@@ -1525,7 +702,6 @@ export function SurrogateOverviewTab() {
                                         </PersonalInfoRow>
                                         <PersonalInfoRow label="State">
                                             <InlineEditField
-                                                readOnly={readOnly}
                                                 value={surrogateData.address_state}
                                                 onSave={async (value) => updateSurrogate({ address_state: value || null })}
                                                 placeholder="-"
@@ -1539,7 +715,6 @@ export function SurrogateOverviewTab() {
                                         </PersonalInfoRow>
                                         <PersonalInfoRow label="Postal Code">
                                             <InlineEditField
-                                                readOnly={readOnly}
                                                 value={surrogateData.address_postal}
                                                 onSave={async (value) => updateSurrogate({ address_postal: value || null })}
                                                 placeholder="-"
@@ -1553,7 +728,6 @@ export function SurrogateOverviewTab() {
                                         <PersonalInfoColumn title="Partner" icon={UsersIcon}>
                                             <PersonalInfoRow label="Full Name">
                                                 <InlineEditField
-                                                    readOnly={readOnly}
                                                     value={surrogateData.partner_name}
                                                     onSave={async (value) => updateSurrogate({ partner_name: value || null })}
                                                     placeholder="-"
@@ -1562,7 +736,6 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="DOB">
                                                 <InlineDateField
-                                                    disabled={readOnly}
                                                     value={surrogateData.partner_date_of_birth}
                                                     onSave={async (value) => updateSurrogate({ partner_date_of_birth: value })}
                                                     placeholder="-"
@@ -1571,7 +744,6 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="Email">
                                                 <InlineEditField
-                                                    readOnly={readOnly}
                                                     value={surrogateData.partner_email}
                                                     onSave={async (value) => updateSurrogate({ partner_email: value || null })}
                                                     type="email"
@@ -1582,7 +754,6 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="Phone">
                                                 <InlineEditField
-                                                    readOnly={readOnly}
                                                     value={surrogateData.partner_phone}
                                                     onSave={async (value) => updateSurrogate({ partner_phone: value || null })}
                                                     type="tel"
@@ -1592,7 +763,6 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="SSN">
                                                 <SsnField
-                                                    readOnly={readOnly}
                                                     label="partner SSN"
                                                     maskedValue={surrogateData.partner_ssn_masked}
                                                     revealedValue={revealedPartnerSsn}
@@ -1606,7 +776,6 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="Address Line 1">
                                                 <InlineEditField
-                                                    readOnly={readOnly}
                                                     value={surrogateData.partner_address_line1}
                                                     onSave={async (value) => updateSurrogate({ partner_address_line1: value || null })}
                                                     placeholder="-"
@@ -1615,7 +784,6 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="Address Line 2">
                                                 <InlineEditField
-                                                    readOnly={readOnly}
                                                     value={surrogateData.partner_address_line2}
                                                     onSave={async (value) => updateSurrogate({ partner_address_line2: value || null })}
                                                     placeholder="-"
@@ -1624,7 +792,6 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="City">
                                                 <InlineEditField
-                                                    readOnly={readOnly}
                                                     value={surrogateData.partner_city}
                                                     onSave={async (value) => updateSurrogate({ partner_city: value || null })}
                                                     placeholder="-"
@@ -1633,7 +800,6 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="State">
                                                 <InlineEditField
-                                                    readOnly={readOnly}
                                                     value={surrogateData.partner_state}
                                                     onSave={async (value) => updateSurrogate({ partner_state: value || null })}
                                                     placeholder="-"
@@ -1647,7 +813,6 @@ export function SurrogateOverviewTab() {
                                             </PersonalInfoRow>
                                             <PersonalInfoRow label="Postal Code">
                                                 <InlineEditField
-                                                    readOnly={readOnly}
                                                     value={surrogateData.partner_postal}
                                                     onSave={async (value) => updateSurrogate({ partner_postal: value || null })}
                                                     placeholder="-"
@@ -1678,11 +843,11 @@ export function SurrogateOverviewTab() {
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
-                                        <AlertDialogCancel disabled={readOnly || isDeletingPersonalSection}>Cancel</AlertDialogCancel>
+                                        <AlertDialogCancel disabled={isDeletingPersonalSection}>Cancel</AlertDialogCancel>
                                         <AlertDialogAction
                                             variant="destructive"
                                             onClick={deletePersonalSection}
-                                            disabled={readOnly || isDeletingPersonalSection}
+                                            disabled={isDeletingPersonalSection}
                                         >
                                             Delete Section
                                         </AlertDialogAction>
@@ -1704,6 +869,7 @@ export function SurrogateOverviewTab() {
                 </div>
 
                 <div className="space-y-4">
+                    <RecordCollaborators kind="surrogate" recordId={id} />
                     {isHeartbeatConfirmedOrLater && !isTerminalIntakeOutcome && (
                         <PregnancyTrackerCard
                             readOnly={readOnly}
@@ -1738,7 +904,6 @@ export function SurrogateOverviewTab() {
                         {...(effectiveStage?.id ? { effectiveStageId: effectiveStage.id } : {})}
                     />
 
-                    <RecordCollaborators kind="surrogate" recordId={id} />
                     <SurrogateOverviewCard title="Eligibility Checklist" icon={ClipboardCheckIcon}>
                         {(surrogateData.eligibility_checklist ?? []).map((item) => {
                             if (item.type === "boolean") {
@@ -1758,9 +923,9 @@ export function SurrogateOverviewTab() {
                                 return (
                                     <div key={item.key} className="flex items-center gap-2">
                                         <ChecklistStatusButton
-                                            readOnly={readOnly}
                                             label={item.label}
                                             value={currentValue}
+                                            readOnly={readOnly}
                                             onChange={async (value) => {
                                                 await updateSurrogateMutation.mutateAsync({
                                                     surrogateId: id,
@@ -1782,7 +947,6 @@ export function SurrogateOverviewTab() {
                                     <div key={item.key} className="grid gap-1 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
                                         <span className="text-sm text-muted-foreground">{item.label}:</span>
                                         <InlineSelectField
-                                            readOnly={readOnly}
                                             label={item.label}
                                             value={currentValue}
                                             options={JOURNEY_TIMING_OPTIONS}
@@ -1813,7 +977,6 @@ export function SurrogateOverviewTab() {
                                     <div key={item.key} className="grid gap-1 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
                                         <span className="text-sm text-muted-foreground">{item.label}:</span>
                                         <InlineEditField
-                                            readOnly={readOnly}
                                             value={currentValue != null ? String(currentValue) : undefined}
                                             onSave={async (value) => {
                                                 const trimmed = value.trim()
@@ -1851,6 +1014,7 @@ export function SurrogateOverviewTab() {
                     </SurrogateOverviewCard>
                 </div>
             </div>
+            </RecordEditingContext>
         </TabsContent>
     )
 }

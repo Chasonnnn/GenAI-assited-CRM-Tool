@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { fireEvent, render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen, within, waitFor } from "@testing-library/react"
 
 import DonorDetailPage from "../app/(app)/donors/[id]/page"
+import { donorProfileFixture } from "./fixtures/donor-profile"
 import { ApiError } from "@/lib/api"
 
+const mockUseDonorProfile = vi.fn()
+const mockRevealDonor = vi.fn()
 const mockUseDonor = vi.fn()
 const mockUseDonorNotes = vi.fn()
 const mockCreateDonorNote = vi.fn()
@@ -40,6 +43,7 @@ vi.mock("@/lib/hooks/use-permissions", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-entity-activity", () => ({
+    useInfiniteEntityActivity: () => ({ data: { pages: [{ items: [] }] }, isLoading: false, isError: false, hasNextPage: false }),
     useEntityActivity: () => ({
         data: { items: [], total: 0, page: 1, pages: 1 },
         isLoading: false,
@@ -69,6 +73,8 @@ vi.mock("@/components/ui/avatar", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-donors", () => ({
+    useDonorProfile: () => mockUseDonorProfile(),
+    useRevealDonorSensitiveInfo: () => ({ mutateAsync: mockRevealDonor, isPending: false, reset: vi.fn() }),
     useDonorOwnerOptions: () => ({ data: { users: [], queues: [] }, isLoading: false, isError: false }),
     useDonor: (id: string) => mockUseDonor(id),
     useDonorNotes: () => mockUseDonorNotes(),
@@ -169,6 +175,9 @@ describe("DonorDetailPage", () => {
         mockDetailSearchParams.delete("return_to")
         mockUseAuth.mockReset()
         mockUseAuth.mockReturnValue({ user: { user_id: "user-1", role: "admin" } })
+        mockDetailSearchParams.delete("tab")
+        mockUseDonorProfile.mockReset().mockReturnValue({ data: donorProfileFixture, isPending: false, isError: false, refetch: vi.fn() })
+        mockRevealDonor.mockReset().mockResolvedValue({ ssn: null, partner_ssn: null })
         mockUseDonor.mockReset()
         mockUseDonorNotes.mockReset()
         mockUseDonorNotes.mockReturnValue({
@@ -304,70 +313,43 @@ describe("DonorDetailPage", () => {
         render(<DonorDetailPage />)
 
         const header = screen.getByRole("banner")
-        const layout = header.firstElementChild
-        expect(layout).toHaveClass("flex-col", "lg:flex-row")
-        expect(within(header).getByRole("link", { name: "Back to donors" })).toBeInTheDocument()
-        expect(within(header).getByRole("heading", { name: "Maya Thompson" })).toBeInTheDocument()
-        expect(
-            within(header).getByText("D10001 • Egg Donor • maya@example.com"),
-        ).toBeInTheDocument()
-        const changeStage = within(header).getByRole("button", { name: "Change Stage" })
-        expect(changeStage).toBeInTheDocument()
-        expect(changeStage.parentElement).toHaveClass("w-full", "lg:w-auto")
+        expect(header).toHaveClass("min-h-16", "border-b")
+        expect(within(header).getByRole("button", { name: "Back" })).toBeInTheDocument()
+        expect(within(header).getByRole("heading", { name: "Donor #D10001" })).toBeInTheDocument()
+        expect(within(header).getByRole("button", { name: "Change Stage" })).toBeInTheDocument()
 
         fireEvent.click(within(header).getByRole("button", { name: "Actions for Maya Thompson" }))
         expect(await screen.findByRole("menuitem", { name: "Edit" })).toBeInTheDocument()
         expect(screen.getByRole("menuitem", { name: "Archive" })).toBeInTheDocument()
     })
 
-    it("uses a primary detail column with stage activity in the side column", () => {
+    it("uses the surrogate overview cards and keeps notes, tasks and attachments in their tabs", () => {
         render(<DonorDetailPage />)
-
-        const details = screen.getByRole("region", { name: "Donor details" })
-        expect(within(details).getByText("Contact Information")).toBeInTheDocument()
-        expect(within(details).getByText("Donor Information")).toBeInTheDocument()
-        expect(within(details).getByText("Created")).toBeInTheDocument()
-        expect(within(details).queryByText("Egg Donor")).not.toBeInTheDocument()
-        expect(within(details).getByRole("heading", { name: "Notes" })).toBeInTheDocument()
-        expect(within(details).getByRole("heading", { name: "Documents" })).toBeInTheDocument()
-        expect(within(details).getByRole("heading", { name: "Tasks" })).toBeInTheDocument()
-
-        const activity = screen.getByRole("complementary", { name: "Donor activity" })
-        expect(within(activity).getByRole("heading", { name: "Activity" })).toBeInTheDocument()
-        expect(within(activity).getByText("Screening completed")).toBeInTheDocument()
-        expect(screen.queryByRole("heading", { name: "Stage History" })).not.toBeInTheDocument()
-    })
-
-    it("renders donor identity and basic profile details", () => {
-        const { container } = render(<DonorDetailPage />)
-
-        expect(screen.getByRole("link", { name: "Back to donors" })).toHaveAttribute(
-            "href",
-            "/donors",
-        )
-        expect(screen.getByRole("heading", { name: "Maya Thompson" })).toBeInTheDocument()
-        expect(screen.getByText("D10001 • Egg Donor • maya@example.com")).toBeInTheDocument()
-        expect(screen.getByText("B.S. Biology")).toBeInTheDocument()
-        expect(screen.getAllByText("Ready to Match").length).toBeGreaterThan(0)
-        expect(screen.getByRole("heading", { name: "Activity" })).toBeInTheDocument()
+        expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual(["Overview", "Notes", "Tasks", "History"])
+        const overview = screen.getByRole("tabpanel", { name: "Overview" })
+        for (const title of ["Contact Information", "Demographics", "Personal Information", "Medical & Insurance", "Activity", "Eligibility Checklist", "Owner"]) {
+            expect(within(overview).getByText(title)).toBeInTheDocument()
+        }
+        for (const title of ["Appointments", "Propose Match", "Documents"]) {
+            expect(within(overview).queryByText(title)).not.toBeInTheDocument()
+        }
+        expect(screen.getByText("Maya Thompson")).toBeInTheDocument()
+        expect(screen.getByText("maya@example.com")).toBeInTheDocument()
+        expect(screen.getByText("21.8")).toBeInTheDocument()
         expect(screen.getByText("Screening completed")).toBeInTheDocument()
-        expect(screen.getByRole("button", { name: "Change Stage" })).toBeInTheDocument()
-        expect(screen.getByRole("heading", { name: "Tasks" })).toBeInTheDocument()
-        expect(screen.getAllByText("Review profile photo").length).toBeGreaterThanOrEqual(1)
-        expect(screen.getByRole("button", { name: "Review profile photo" })).toBeInTheDocument()
-        expect(mockUseTasks).toHaveBeenCalledWith(
-            expect.objectContaining({ donor_id: "donor-1", is_completed: false, per_page: 10 }),
-            { enabled: true },
-        )
-        expect(screen.getByRole("heading", { name: "Documents" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("tab", { name: "Notes" }))
+        expect(screen.getByRole("heading", { name: "Attachments" })).toBeInTheDocument()
         expect(screen.getByText("screening.pdf")).toBeInTheDocument()
-        expect(screen.getByLabelText("Upload donor documents")).toBeInTheDocument()
-        expect(screen.getByRole("heading", { name: "Notes" })).toBeInTheDocument()
         expect(screen.getByText("Screening call complete")).toBeInTheDocument()
-        expect(container.querySelector("main")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("tab", { name: "Tasks" }))
+        expect(screen.getByRole("button", { name: "List" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Calendar" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: /Review profile photo/ })).toBeInTheDocument()
+        expect(mockUseTasks).toHaveBeenCalledWith(expect.objectContaining({ donor_id: "donor-1", per_page: 100 }), { enabled: true })
     })
 
     it("adds and deletes donor notes", async () => {
+        mockDetailSearchParams.set("tab", "notes")
         render(<DonorDetailPage />)
 
         fireEvent.change(screen.getByPlaceholderText("Add a note..."), {
@@ -375,23 +357,24 @@ describe("DonorDetailPage", () => {
         })
         fireEvent.click(screen.getByRole("button", { name: "Add Note" }))
 
-        await vi.waitFor(() => expect(mockCreateDonorNote).toHaveBeenCalledWith({
+        await waitFor(() => expect(mockCreateDonorNote).toHaveBeenCalledWith({
             donorId: "donor-1",
             data: { content: "Follow up next week" },
         }))
-        await vi.waitFor(() => {
+        await waitFor(() => {
             expect(screen.getByPlaceholderText("Add a note...")).toHaveValue("")
         })
 
         fireEvent.click(screen.getByRole("button", { name: /Delete note by/ }))
         fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete Note" }))
-        await vi.waitFor(() => expect(mockDeleteDonorNote).toHaveBeenCalledWith({
+        await waitFor(() => expect(mockDeleteDonorNote).toHaveBeenCalledWith({
             donorId: "donor-1",
             noteId: "note-1",
         }))
     })
 
     it("renders donor note loading, error/retry, and empty states", () => {
+        mockDetailSearchParams.set("tab", "notes")
         mockUseDonorNotes.mockReturnValueOnce({
             data: undefined,
             isLoading: true,
@@ -426,6 +409,7 @@ describe("DonorDetailPage", () => {
     })
 
     it("limits donor note controls by edit permission and note ownership", () => {
+        mockDetailSearchParams.set("tab", "notes")
         mockUseEffectivePermissions.mockReturnValueOnce({
             data: { permissions: ["view_donors"] },
         })
@@ -468,13 +452,14 @@ describe("DonorDetailPage", () => {
             target: { files: [image] },
         })
 
-        await vi.waitFor(() => expect(mockUploadDonorProfilePhoto).toHaveBeenCalledWith({
+        await waitFor(() => expect(mockUploadDonorProfilePhoto).toHaveBeenCalledWith({
             donorId: "donor-1",
             file: image,
         }))
     })
 
     it("renders donor document loading, error/retry, and empty states", () => {
+        mockDetailSearchParams.set("tab", "notes")
         mockUseDonorAttachments.mockReturnValueOnce({
             data: undefined,
             isLoading: true,
@@ -509,6 +494,7 @@ describe("DonorDetailPage", () => {
     })
 
     it("downloads and deletes donor documents", async () => {
+        mockDetailSearchParams.set("tab", "notes")
         render(<DonorDetailPage />)
 
         fireEvent.click(screen.getByRole("button", { name: "Download screening.pdf" }))
@@ -516,7 +502,7 @@ describe("DonorDetailPage", () => {
         fireEvent.click(screen.getByRole("button", { name: "Delete screening.pdf" }))
         fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete" }))
 
-        await vi.waitFor(() => expect(mockDeleteDonorAttachment).toHaveBeenCalledWith({
+        await waitFor(() => expect(mockDeleteDonorAttachment).toHaveBeenCalledWith({
             donorId: "donor-1",
             attachmentId: "attachment-1",
         }))
@@ -535,7 +521,7 @@ describe("DonorDetailPage", () => {
         })
         fireEvent.click(screen.getByRole("button", { name: "Save Changes" }))
 
-        await vi.waitFor(() => {
+        await waitFor(() => {
             expect(mockUpdateDonor).toHaveBeenCalledWith({
                 id: "donor-1",
                 data: expect.objectContaining({
@@ -560,7 +546,7 @@ describe("DonorDetailPage", () => {
         })
         fireEvent.click(screen.getByRole("button", { name: "Save Change" }))
 
-        await vi.waitFor(() => {
+        await waitFor(() => {
             expect(mockUpdateDonorStatus).toHaveBeenCalledWith({
                 id: "donor-1",
                 data: {
@@ -585,7 +571,7 @@ describe("DonorDetailPage", () => {
         expect(saveButton).toBeEnabled()
         fireEvent.click(saveButton)
 
-        await vi.waitFor(() => {
+        await waitFor(() => {
             expect(mockUpdateDonorStatus).toHaveBeenCalledWith({
                 id: "donor-1",
                 data: {
@@ -620,7 +606,7 @@ describe("DonorDetailPage", () => {
         })
         fireEvent.click(submit)
 
-        await vi.waitFor(() => {
+        await waitFor(() => {
             expect(mockUpdateDonorStatus).toHaveBeenCalledWith({
                 id: "donor-1",
                 data: {
@@ -639,19 +625,17 @@ describe("DonorDetailPage", () => {
         vi.spyOn(window, "confirm").mockReturnValueOnce(true)
         render(<DonorDetailPage />)
 
-        expect(screen.getByRole("link", { name: "Back to donors" })).toHaveAttribute(
-            "href",
-            "/donors?type=sperm&stage=sperm-ready&q=maya&page=2",
-        )
+        fireEvent.click(screen.getByRole("button", { name: "Back" }))
+        expect(mockRouterPush).toHaveBeenCalledWith("/donors?type=sperm&stage=sperm-ready&q=maya&page=2")
         expect(screen.getByRole("link", { name: "View full history →" })).toHaveAttribute(
             "href",
-            "/donors/donor-1/history?return_to=%2Fdonors%3Ftype%3Dsperm%26stage%3Dsperm-ready%26q%3Dmaya%26page%3D2",
+            "/donors/donor-1?tab=history&return_to=%2Fdonors%3Ftype%3Dsperm%26stage%3Dsperm-ready%26q%3Dmaya%26page%3D2",
         )
 
         fireEvent.click(screen.getByRole("button", { name: "Actions for Maya Thompson" }))
         fireEvent.click(await screen.findByRole("menuitem", { name: "Archive" }))
 
-        await vi.waitFor(() => expect(mockArchiveDonor).toHaveBeenCalledWith("donor-1"))
+        await waitFor(() => expect(mockArchiveDonor).toHaveBeenCalledWith("donor-1"))
         expect(mockRouterPush).toHaveBeenCalledWith(
             "/donors?type=sperm&stage=sperm-ready&q=maya&page=2",
         )
@@ -677,7 +661,7 @@ describe("DonorDetailPage", () => {
         expect(screen.queryByRole("menuitem", { name: "Edit" })).not.toBeInTheDocument()
         fireEvent.click(await screen.findByRole("menuitem", { name: "Restore" }))
 
-        await vi.waitFor(() => expect(mockRestoreDonor).toHaveBeenCalledWith("donor-1"))
+        await waitFor(() => expect(mockRestoreDonor).toHaveBeenCalledWith("donor-1"))
     })
 
     it("distinguishes not found from permission and retryable errors", () => {
@@ -711,10 +695,31 @@ describe("DonorDetailPage", () => {
     it("rejects external and non-list return targets", () => {
         mockDetailSearchParams.set("return_to", "//evil.example/steal")
         render(<DonorDetailPage />)
-        expect(screen.getByRole("link", { name: "Back to donors" })).toHaveAttribute(
-            "href",
-            "/donors",
-        )
+        fireEvent.click(screen.getByRole("button", { name: "Back" }))
+        expect(mockRouterPush).toHaveBeenCalledWith("/donors")
+    })
+
+    it("renders profile loading and retry states without displaying blank saved fields", () => {
+        mockUseDonorProfile.mockReturnValueOnce({ isPending: true, isError: false })
+        const first = render(<DonorDetailPage />)
+        expect(screen.getByRole("status")).toHaveTextContent("Loading donor information")
+        expect(screen.queryByText("Demographics")).not.toBeInTheDocument()
+        first.unmount()
+        const refetch = vi.fn()
+        mockUseDonorProfile.mockReturnValueOnce({ isPending: false, isError: true, refetch })
+        render(<DonorDetailPage />)
+        expect(screen.getByRole("alert")).toHaveTextContent("Unable to load donor information")
+        fireEvent.click(screen.getByRole("button", { name: "Retry donor information" }))
+        expect(refetch).toHaveBeenCalledTimes(1)
+    })
+
+    it("disables profile edits for readers and archived records", () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ["view_donors"] } })
+        render(<DonorDetailPage />)
+        expect(screen.queryByRole("button", { name: "Edit Full name" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Edit Personal Information" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Edit Info" })).not.toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Nicotine / tobacco use: Not answered." })).toBeDisabled()
     })
 
     it("retries a failed detail request", () => {
@@ -747,6 +752,7 @@ describe("DonorDetailPage", () => {
     })
 
     it("keeps donor attachment mutations behind edit permission", () => {
+        mockDetailSearchParams.set("tab", "notes")
         mockUseEffectivePermissions.mockReturnValue({
             data: { permissions: ["view_donors"] },
         })

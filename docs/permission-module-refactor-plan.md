@@ -1,6 +1,6 @@
 # Module refactors for the permission upgrade
 
-Status: permission v2 and its shared record filters are implemented in draft PR #691 behind organization activation. Existing organizations remain on v1 until their access and execution reviews are resolved. Integrated verification is recorded in `permission-upgrade-verification.md`. No deployment, production migration, or provider testing has occurred.
+Status: permission-v2 foundations and shared record filters are implemented in draft PR #691 behind organization activation. Broader modularization is unfinished: workflow execution/scheduling, campaign lifecycle, form-review transaction ownership, and reporting datasets/cache invalidation remain in the sequence below. Existing organizations remain on v1 until their access and execution reviews are resolved. Integrated verification is recorded in `permission-upgrade-verification.md`. No deployment, production migration, or provider testing has occurred.
 
 ## Implemented boundaries
 
