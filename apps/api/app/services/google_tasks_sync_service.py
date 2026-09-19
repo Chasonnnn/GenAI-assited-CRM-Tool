@@ -1362,37 +1362,6 @@ async def _sync_google_tasks_for_user_async(db: Session, *, user_id: UUID, org_i
         task_list_id = task_list_id_raw
         google_tasks = await _list_google_tasks(token, task_list_id)
 
-        correlation_ids = set()
-        if can_view_donors:
-            for google_task in google_tasks:
-                correlation_id = _google_task_correlation_id(google_task.get("notes"))
-                if correlation_id is not None:
-                    correlation_ids.add(correlation_id)
-
-        correlated_locals_by_id = {}
-        if correlation_ids:
-            correlated_locals = (
-                db.query(Task)
-                .join(
-                    Donor,
-                    and_(
-                        Donor.id == Task.donor_id,
-                        Donor.organization_id == Task.organization_id,
-                    ),
-                )
-                .filter(
-                    Task.organization_id == org_id,
-                    Task.id.in_(correlation_ids),
-                    Task.owner_type == OwnerType.USER.value,
-                    Task.owner_id == user_id,
-                    Task.donor_id.is_not(None),
-                    Donor.is_archived.is_(False),
-                )
-                .with_for_update(of=Task)
-                .all()
-            )
-            correlated_locals_by_id = {task.id: task for task in correlated_locals}
-
         for google_task in google_tasks:
             google_task_id_raw = google_task.get("id")
             if not google_task_id_raw or not isinstance(google_task_id_raw, str):
@@ -1412,7 +1381,26 @@ async def _sync_google_tasks_for_user_async(db: Session, *, user_id: UUID, org_i
             if correlation_id is not None:
                 if not can_view_donors:
                     continue
-                correlated_local = correlated_locals_by_id.get(correlation_id)
+                correlated_local = (
+                    db.query(Task)
+                    .join(
+                        Donor,
+                        and_(
+                            Donor.id == Task.donor_id,
+                            Donor.organization_id == Task.organization_id,
+                        ),
+                    )
+                    .filter(
+                        Task.organization_id == org_id,
+                        Task.id == correlation_id,
+                        Task.owner_type == OwnerType.USER.value,
+                        Task.owner_id == user_id,
+                        Task.donor_id.is_not(None),
+                        Donor.is_archived.is_(False),
+                    )
+                    .with_for_update(of=Task)
+                    .one_or_none()
+                )
                 # A branded marker without its exact active tenant-owned source
                 # is stale donor data, never a generic task to import.
                 if correlated_local is None:

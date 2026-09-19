@@ -1,0 +1,3 @@
+## 2024-10-24 - Bulk Lookup Locking Order and Unnecessary Locks
+**Learning:** When refactoring loop-based N+1 queries into bulk lookups with `.with_for_update()` (e.g., in `google_tasks_sync_service.py`), collecting IDs too early before filtering out invalid or blocked items can lead to unnecessary row locks. Additionally, bulk locking without a deterministic order (e.g., `order_by(Task.id)`) can introduce potential deadlock vulnerabilities during concurrent syncs.
+**Action:** When extracting bulk lookups that require row locks, ensure correlation IDs are only collected from validated, non-blocked items. Always append a deterministic `.order_by()` clause (such as the primary key) to the `.with_for_update()` query to prevent deadlocks.
