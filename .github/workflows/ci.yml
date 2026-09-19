@@ -4,6 +4,7 @@ on:
   push:
     branches: [main, develop]
     paths:
+      - '.agents/**'
       - 'apps/**'
       - 'cloudbuild/**'
       - 'infra/terraform/**'
@@ -22,6 +23,7 @@ on:
   pull_request:
     branches: [main, develop]
     paths:
+      - '.agents/**'
       - 'apps/**'
       - 'cloudbuild/**'
       - 'infra/terraform/**'
