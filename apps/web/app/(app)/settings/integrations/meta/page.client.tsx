@@ -138,7 +138,7 @@ function ConnectionHealthBadge({ connection }: { connection: MetaOAuthConnection
     if (status === "needs_reauth") {
         return (
             <Tooltip>
-                <TooltipTrigger aria-label="Integration needs reauthentication">
+                <TooltipTrigger>
                     <Badge variant="destructive" className="gap-1">
                         <AlertTriangleIcon className="size-3" aria-hidden="true" />
                         Needs Reauth
@@ -154,7 +154,7 @@ function ConnectionHealthBadge({ connection }: { connection: MetaOAuthConnection
     if (status === "rate_limited") {
         return (
             <Tooltip>
-                <TooltipTrigger aria-label="Integration is rate limited">
+                <TooltipTrigger>
                     <Badge variant="secondary" className="gap-1 bg-yellow-500/10 text-yellow-600 border-yellow-500/20">
                         <AlertTriangleIcon className="size-3" aria-hidden="true" />
                         Rate Limited
@@ -170,7 +170,7 @@ function ConnectionHealthBadge({ connection }: { connection: MetaOAuthConnection
     if (status === "permission_error") {
         return (
             <Tooltip>
-                <TooltipTrigger aria-label="Integration has a permission error">
+                <TooltipTrigger>
                     <Badge variant="destructive" className="gap-1">
                         <AlertTriangleIcon className="size-3" aria-hidden="true" />
                         Permission Error
@@ -185,7 +185,7 @@ function ConnectionHealthBadge({ connection }: { connection: MetaOAuthConnection
 
     return (
         <Tooltip>
-            <TooltipTrigger aria-label="Integration has an error">
+            <TooltipTrigger>
                 <Badge variant="secondary" className="gap-1 bg-yellow-500/10 text-yellow-600 border-yellow-500/20">
                     <AlertTriangleIcon className="size-3" aria-hidden="true" />
                     Error
