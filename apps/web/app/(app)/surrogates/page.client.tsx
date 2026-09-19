@@ -1269,7 +1269,7 @@ export function SurrogatesPageClient() {
                                                     handleSourceChange(isSourceFilter(value) ? value : "all")
                                                 }
                                             >
-                                                <SelectTrigger aria-label="Filter by source">
+                                                <SelectTrigger>
                                                     <SelectValue placeholder="All Sources">
                                                         {(value: string | null) => getSourceFilterLabel(value)}
                                                     </SelectValue>
@@ -1294,7 +1294,7 @@ export function SurrogatesPageClient() {
                                                     value={queueFilter}
                                                     onValueChange={(value) => handleQueueChange(value || "all")}
                                                 >
-                                                    <SelectTrigger aria-label="Filter by queue">
+                                                    <SelectTrigger>
                                                         <SelectValue placeholder="All Queues">
                                                             {(value: string | null) =>
                                                                 getQueueFilterLabel(value, queues)
@@ -1351,7 +1351,7 @@ export function SurrogatesPageClient() {
                                                     )
                                                 }
                                             >
-                                                <SelectTrigger aria-label="Filter by smart filter">
+                                                <SelectTrigger>
                                                     <SelectValue placeholder="No smart filter">
                                                         {(value: string | null) =>
                                                             getDynamicFilterLabel(
