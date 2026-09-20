@@ -21,7 +21,7 @@ on:
       - '.github/workflows/ci.yml'
       - '.github/workflows/release-please.yml'
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, codex/platform-upgrades]
     paths:
       - '.agents/**'
       - 'apps/**'
