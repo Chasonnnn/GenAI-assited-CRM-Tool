@@ -2,8 +2,10 @@
 
 import logging
 from io import BytesIO
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 
 from app.db.enums import EmailStatus, SurrogateSource
@@ -175,6 +177,52 @@ async def test_send_email_logged_with_attachment_ids_loads_bytes_and_persists_li
     )
     assert len(links) == 1
     assert links[0].attachment_id == attachment.id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "outcome", ["timeout", 503, 501, 429, 401, "missing_id", "sent", "sender_changed"]
+)
+async def test_reviewed_gmail_transport_does_not_retry(monkeypatch, caplog, outcome):
+    calls = []
+
+    async def token(*args):
+        return "synthetic-access-token"
+
+    async def respond(request):
+        calls.append(request)
+        if outcome == "timeout":
+            raise httpx.ReadTimeout("sensitive-provider-body", request=request)
+        if isinstance(outcome, int):
+            return httpx.Response(outcome, json={"error": {"message": "sensitive-provider-body"}})
+        return httpx.Response(200, json={"id": "receipt"} if outcome == "sent" else {})
+
+    client = httpx.AsyncClient
+    monkeypatch.setattr(gmail_service.oauth_service, "get_access_token_async", token)
+    monkeypatch.setattr(
+        gmail_service.oauth_service,
+        "get_user_integration",
+        lambda *args: SimpleNamespace(account_email="sender@example.test"),
+    )
+    monkeypatch.setattr(
+        gmail_service.httpx, "AsyncClient", lambda: client(transport=httpx.MockTransport(respond))
+    )
+    result = await gmail_service.send_email(
+        db=None,
+        user_id=str(uuid4()),
+        to="recipient@example.test",
+        subject="Reviewed subject",
+        body="Reviewed body",
+        max_attempts=1,
+        expected_sender="different@example.test"
+        if outcome == "sender_changed"
+        else "sender@example.test",
+    )
+    assert len(calls) == (0 if outcome == "sender_changed" else 1)
+    assert result["success"] is (outcome == "sent")
+    assert bool(result.get("delivery_unknown")) is (outcome in {"timeout", 503, 501, "missing_id"})
+    assert "synthetic-access-token" not in caplog.text
+    assert "sensitive-provider-body" not in caplog.text
 
 
 @pytest.mark.asyncio

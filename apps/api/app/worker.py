@@ -176,6 +176,7 @@ if WORKER_STALE_CLAIM_REAPER_BATCH_SIZE <= 0:
 # approval transitions are guarded, and remote cleanup/reconciliation is idempotent.
 WORKER_STALE_CLAIM_RETRY_SAFE_JOB_TYPES = frozenset(
     {
+        JobType.AI_SEND_EMAIL.value,
         JobType.WORKFLOW_APPROVAL_EXPIRY.value,
         JobType.DONOR_INTAKE_PROMOTE.value,
         JobType.GOOGLE_TASK_REMOTE_DELETE.value,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any, TypedDict
 
 from fastapi import HTTPException
@@ -49,20 +50,6 @@ def _log_surrogate_activity(
             details={
                 **details_base,
                 "note_id": result.get("note_id"),
-            },
-        )
-        return
-
-    if action_type == "send_email":
-        activity_service.log_activity(
-            db=db,
-            surrogate_id=surrogate_id,
-            organization_id=org_id,
-            activity_type=SurrogateActivityType.EMAIL_SENT,
-            actor_user_id=user_id,
-            details={
-                **details_base,
-                "provider": "gmail",
             },
         )
         return
@@ -118,7 +105,9 @@ def approve_action_for_session(
     from app.services import ai_service, audit_service, permission_service, surrogate_service
     from app.services.ai_action_executor import execute_action
 
-    approval, message, conversation = ai_service.get_approval_with_conversation(db, approval_id)
+    approval, message, conversation = ai_service.get_approval_with_conversation(
+        db, approval_id, session.org_id
+    )
     if not approval:
         raise HTTPException(status_code=404, detail="Action not found")
 
@@ -150,63 +139,123 @@ def approve_action_for_session(
             detail=f"Action already processed (status: {approval.status})",
         )
 
-    user_permissions = permission_service.get_effective_permissions(
-        db, session.org_id, session.user_id, session.role.value
-    )
-    result = execute_action(
-        db=db,
-        approval=approval,
-        user_id=session.user_id,
-        org_id=session.org_id,
-        entity_id=conversation.entity_id,
-        user_permissions=user_permissions,
-    )
-
-    if result.get("success") and conversation.entity_type == "surrogate":
-        _log_surrogate_activity(
-            db,
-            org_id=session.org_id,
+    try:
+        user_permissions = permission_service.get_effective_permissions(
+            db, session.org_id, session.user_id, session.role.value
+        )
+        # Local mutations and email queue admission share this transaction.
+        result = execute_action(
+            db=db,
+            approval=approval,
             user_id=session.user_id,
-            approval_id=approval.id,
-            action_type=approval.action_type,
-            surrogate_id=conversation.entity_id,
-            result=result,
+            org_id=session.org_id,
+            entity_id=conversation.entity_id,
+            user_permissions=user_permissions,
         )
 
-    if result.get("success"):
-        audit_service.log_ai_action_approved(
+        if approval.status == "executed" and conversation.entity_type == "surrogate":
+            _log_surrogate_activity(
+                db,
+                org_id=session.org_id,
+                user_id=session.user_id,
+                approval_id=approval.id,
+                action_type=approval.action_type,
+                surrogate_id=conversation.entity_id,
+                result=result,
+            )
+
+        if result.get("success"):
+            audit_service.log_ai_action_approved(
+                db=db,
+                org_id=session.org_id,
+                user_id=session.user_id,
+                approval_id=approval.id,
+                action_type=approval.action_type,
+            )
+        else:
+            error_code = result.get("error_code")
+            if error_code == "permission_denied":
+                audit_service.log_ai_action_denied(
+                    db=db,
+                    org_id=session.org_id,
+                    user_id=session.user_id,
+                    approval_id=approval.id,
+                    action_type=approval.action_type,
+                    reason=result.get("error"),
+                )
+            else:
+                audit_service.log_ai_action_failed(
+                    db=db,
+                    org_id=session.org_id,
+                    user_id=session.user_id,
+                    approval_id=approval.id,
+                    action_type=approval.action_type,
+                    error=result.get("error"),
+                )
+
+        response = ActionApprovalResult(
+            success=result.get("success", False),
+            action_type=approval.action_type,
+            status=approval.status,
+            result=result if result.get("success") else None,
+            error=result.get("error") if not result.get("success") else None,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    if response["success"] and response["action_type"] == "add_note":
+        from app.services import note_service
+
+        note_service.dispatch_note_added(
+            db, note_id=uuid.UUID(result["note_id"]), org_id=session.org_id
+        )
+
+    return response
+
+
+def reject_action_for_session(
+    db: Session,
+    *,
+    approval_id: uuid.UUID,
+    session: UserSession,
+) -> dict[str, object]:
+    """Reject under the same row lock used by approval, without changing access rules."""
+    from app.services import ai_service, audit_service
+
+    approval, message, conversation = ai_service.get_approval_with_conversation(
+        db, approval_id, session.org_id
+    )
+    if not approval:
+        raise HTTPException(status_code=404, detail="Action not found")
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if not conversation or conversation.organization_id != session.org_id:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
+    if conversation.user_id != session.user_id and not is_manager:
+        raise HTTPException(status_code=403, detail="Not authorized to reject this action")
+    if approval.status != "pending":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Action already processed (status: {approval.status})",
+        )
+
+    try:
+        approval.status = "rejected"
+        approval.executed_at = datetime.now(UTC)
+        audit_service.log_ai_action_rejected(
             db=db,
             org_id=session.org_id,
             user_id=session.user_id,
             approval_id=approval.id,
             action_type=approval.action_type,
         )
-    else:
-        error_code = result.get("error_code")
-        if error_code == "permission_denied":
-            audit_service.log_ai_action_denied(
-                db=db,
-                org_id=session.org_id,
-                user_id=session.user_id,
-                approval_id=approval.id,
-                action_type=approval.action_type,
-                reason=result.get("error"),
-            )
-        else:
-            audit_service.log_ai_action_failed(
-                db=db,
-                org_id=session.org_id,
-                user_id=session.user_id,
-                approval_id=approval.id,
-                action_type=approval.action_type,
-                error=result.get("error"),
-            )
-
-    db.commit()
-    return ActionApprovalResult(
-        success=result.get("success", False),
-        action_type=approval.action_type,
-        status=approval.status,
-        result=result if result.get("success") else None,
-        error=result.get("error") if not result.get("success") else None,
-    )
+        response = {"success": True, "action_type": approval.action_type, "status": "rejected"}
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return response

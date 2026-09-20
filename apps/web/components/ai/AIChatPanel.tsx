@@ -39,7 +39,7 @@ import {
 } from "lucide-react"
 import { useConversation, useStreamChatMessage, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
 import { usePipelines } from "@/lib/hooks/use-pipelines"
-import type { ProposedAction } from "@/lib/api/ai"
+import { getActionStatusLabel, type ProposedAction } from "@/lib/api/ai"
 import type { ScheduleParserDialogProps } from "@/components/ai/ScheduleParserDialog"
 import { AssistantRichText } from "@/components/ai/AssistantRichText"
 import { useAIChatScrollToLatest } from "@/lib/hooks/use-ai-chat-scroll-to-latest"
@@ -340,7 +340,7 @@ function AIChatActionCards({
                     (item) => item.action_index === index
                 )
                 const approvalId = action.approval_id
-                const status = approval?.status || (approvalId ? "pending" : "unavailable")
+                const status = approval?.status || action.status || (approvalId ? "pending" : "unavailable")
 
                 return (
                     <ActionCard
@@ -942,15 +942,6 @@ interface ActionCardProps {
     stageLabelsById: ReadonlyMap<string, string>
 }
 
-const ACTION_STATUS_LABELS: Record<string, string> = {
-    pending: "Needs review",
-    approved: "Approved",
-    executed: "Done",
-    rejected: "Dismissed",
-    failed: "Failed",
-    unavailable: "Unavailable",
-}
-
 function getActionText(
     data: Record<string, unknown>,
     keys: string[]
@@ -1001,10 +992,13 @@ function ActionCard({
     const detailsId = React.useId()
     const icon = ACTION_ICONS[action.action_type] || <SparklesIcon className="size-4" />
     const label = ACTION_LABELS[action.action_type] || humanizeActionValue(action.action_type)
-    const statusLabel = ACTION_STATUS_LABELS[status] ?? "Status unavailable"
+    const statusLabel = getActionStatusLabel(status, action.action_type)
     const isPending = status === "pending"
     const reviewLabel = getActionReviewLabel(action.action_type, expanded)
     const executeLabel = getActionExecuteLabel(action.action_type)
+    const displayedError = status === "delivery_unknown"
+        ? "Check Gmail Sent before creating another email. This draft will not be resent automatically."
+        : errorMessage || (status === "failed" ? "This action could not be completed." : null)
 
     return (
         <Card
@@ -1060,12 +1054,12 @@ function ActionCard({
                 </div>
             ) : null}
 
-            {errorMessage ? (
+            {displayedError ? (
                 <div
                     role="alert"
                     className="mx-3 mt-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
                 >
-                    {errorMessage}
+                    {displayedError}
                 </div>
             ) : null}
 

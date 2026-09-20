@@ -72,6 +72,23 @@ interface ActionApproval {
     status: string;
 }
 
+export function getActionStatusLabel(status: string, actionType: string): string {
+    if (actionType === 'send_email') {
+        if (status === 'approved') return 'Queued';
+        if (status === 'executed') return 'Sent';
+    }
+    const labels: Record<string, string> = {
+        pending: 'Needs review',
+        approved: 'Approved',
+        executed: 'Done',
+        rejected: 'Dismissed',
+        failed: 'Failed',
+        delivery_unknown: 'Delivery unconfirmed',
+        unavailable: 'Unavailable',
+    };
+    return labels[status] ?? 'Status unavailable';
+}
+
 interface AIMessage {
     id: string;
     role: 'user' | 'assistant';
