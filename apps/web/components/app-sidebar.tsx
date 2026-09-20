@@ -612,7 +612,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const canViewReports = isDeveloper || permissionSet.has("view_reports")
 
     const navigationItems = navigation.filter((item) => {
-        if (item.url === "/tickets" || item.url === "/donors") return isDeveloper
+        if (item.url === "/tickets") return isDeveloper
         if ("requiredPermission" in item) {
             return isDeveloper || permissionSet.has(item.requiredPermission)
         }
