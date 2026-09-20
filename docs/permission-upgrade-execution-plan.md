@@ -15,6 +15,27 @@ Status: permission version 2 foundations and focused authority/scope extractions
 
 Detailed checks and local delivery status are in [permission-upgrade-verification.md](permission-upgrade-verification.md).
 
+## Active workplan — September 20
+
+Publish this plan with the existing work in draft PR #691, stacked on draft platform PR #690, then resume implementation. Keep changes in small logical commits and push verified increments to these drafts. This authorizes neither merge/deployment nor production migrations, provider sends, or organization activation.
+
+The published snapshot includes main through #714. Main has advanced since that snapshot; refresh from the remote before integration rather than treating the previous validation as evidence for the new version.
+
+| Order | Work | Completion evidence / boundary |
+|---|---|---|
+| 1 | Refresh platform and permission branches against latest main | Preserve current-main fixes and the removed record-page collaborator/photo controls; reconcile migration heads and generated contracts; run affected tests before pushing |
+| 2 | Review and finish permission frontend | People currently links to the existing Team page. Show proposed navigation/layout changes before implementation. Review donor Owner and member collaboration controls; keep Check access visibility-only unless a broader action checker is agreed. Exercise additions/removals, individual/bulk role changes, inactive members, publication, and revocation with representative loading/error/responsive/keyboard states |
+| 3 | Refactor workflow action execution | Keep existing definition/authority boundaries and separate scheduling module. Split concrete responsibilities out of the large action adapter without changing snapshots, approval, idempotency, retry/resume, or delivery admission |
+| 4 | Refactor campaign lifecycle | Separate definition/publication, audience selection, run lifecycle, and retries only where responsibilities remain combined. Preserve consent, suppression, authorization, immutable content, recipient counts, and locking |
+| 5 | Consolidate intake matching/retry transactions | Ordinary approve/reject already have service-owned transactions. Focus on matching/reset/retry and nested helpers that commit before the use case finishes; prove rollback and safe repeated execution |
+| 6 | Consolidate reporting datasets | Reuse the same authorized dataset across counts, charts, drill-downs, and exports. Preserve request-only v2 caching; restoring cross-request caching is a separate optimization requiring complete scope invalidation |
+| 7 | Validate the exact combined version | Full affected API/frontend suites, production builds, fresh/existing-database migrations, denied/cross-org/revoked-access tests, and surrogate/egg-donor/sperm-donor browser handoffs; repeat isolated activation rehearsal after relevant changes |
+| 8 | Release and real-organization activation | Separately authorized after frontend acceptance and final verification. Review actual organization access/execution changes; synthetic rehearsal is not real-organization approval |
+
+Backend work that preserves behavior can proceed while frontend decisions remain open. Do not add new UI, change permission defaults, or claim that mockup selection approves every implemented control. Refactoring and behavior changes must be separate commits with their own tests. Meta/Twilio configuration, onboarding, and broader redesign are outside this workplan.
+
+Current CI filters do not run the main/develop PR workflow for the stacked permission base. Record exact local validation and its source version; absent GitHub checks are not passing checks. Ensure the final combined version receives CI before merge without triggering deployment workflows.
+
 ## Agreed defaults
 
 - Personal workflows, templates, and campaign authoring are included for every active member. AI is included when enabled by the organization; provider settings remain Admin/Dev only.
@@ -40,7 +61,7 @@ Schema downgrade rejects active version 2 policies and personal campaigns that t
 
 ## Remaining platform sequence
 
-The workflow execution/scheduling, campaign lifecycle, form-review transaction, and reporting dataset/cache refactors remain open. Follow the concrete boundaries in the [module refactor sequence](permission-module-refactor-plan.md#next-refactor-sequence); the permission-specific helpers above do not complete those extractions. Review the live frontend against the selected design before declaring UI acceptance.
+The active workplan above governs this continuation. Follow the concrete boundaries in the [module refactor sequence](permission-module-refactor-plan.md#next-refactor-sequence); the permission-specific helpers do not complete the surrounding extractions. The longer-term platform items below are context, not additional scope authorized by resuming the permission work. Review the live frontend before declaring UI acceptance.
 
 | Order | Work | Start condition |
 |---|---|---|

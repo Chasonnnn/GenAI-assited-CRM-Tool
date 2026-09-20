@@ -71,7 +71,7 @@ The September 19 isolated synthetic-history rehearsal passed on the combined app
 
 ### 2. Split workflow execution by concrete use case
 
-Keep `workflow_definition_rules` as the definition validator and `workflow_execution_authority` as the authority boundary. Extract action execution from `workflow_engine_core` into existing action/adaptor modules by family: record changes, task creation, communications, and intake routing. Extract scheduled candidate selection separately from action execution.
+Keep `workflow_definition_rules` as the definition validator and `workflow_execution_authority` as the authority boundary. The core already delegates action execution to `DefaultWorkflowDomainAdapter.execute_action`, and scheduled candidate selection already lives in `workflow_triggers.trigger_scheduled_workflows`. Split the large adapter's concrete responsibilities by family: record changes, task creation, communications, and intake routing. Preserve the existing scheduling boundary rather than repeating an extraction that is already implemented.
 
 Preserve immutable action snapshots, scheduling timestamps, idempotency keys, approval results, and retry/resume behavior. Each extraction requires an existing caller and behavioral tests. Keep one coordinator for engine/adaptor/worker changes so dispatch and final delivery cannot drift apart.
 
@@ -83,7 +83,7 @@ Preview, materialized recipients, retry selection, and delivery admission must a
 
 ### 4. Separate form definition, intake routing, and review transactions
 
-Keep builder definition/publication separate from `view_form_submissions` and `review_form_submissions`. Move submission review transport orchestration into focused use cases that own matching, audit, and transaction completion together. Consolidate the current retry path's intermediate commits before adding more routing actions.
+Keep builder definition/publication separate from `view_form_submissions` and `review_form_submissions`. Ordinary approval/rejection already use service-owned transactions in `form_submission_service`; do not redo that boundary. Focus on `form_intake_service.retry_submission_match`, which commits its reset before rematching and can commit again through nested helpers. Make matching, audit, and transaction completion a coherent use case, with failure/rollback and repeated-execution tests before changing commit ownership.
 
 Retain the explicit unlinked queue and shared linked-record access. Public intake, draft tokens, published-schema snapshots, file scanning, and duplicate detection remain independent boundaries. UI simplification follows this split; it does not require a new form engine.
 
@@ -91,7 +91,7 @@ Retain the explicit unlinked queue and shared linked-record access. Public intak
 
 Keep metric calculation in existing analytics modules and supply the same authorized dataset to counts, charts, drill-downs, and exports. Group related metrics around an explicit dataset/query context as duplication appears.
 
-Before restoring cross-request v2 caches, define a scope revision covering role rules, individual additions, collaborators, membership changes, and record ownership/stage/archive changes. Test revocation on the next request. Agency-wide reporting requires explicit authority; ordinary report access uses the person's record scope.
+The current request-only v2 cache deliberately avoids stale grants. Restoring cross-request caching is a separate optimization, not a missing permission feature or a prerequisite for this refactor. Before restoring it, define a scope revision covering role rules, individual additions, collaborators, membership changes, and record ownership/stage/archive changes. Test revocation on the next request. Agency-wide reporting requires explicit authority; ordinary report access uses the person's record scope.
 
 ### 6. Refactor organization integrations, then broaden UI simplification
 
