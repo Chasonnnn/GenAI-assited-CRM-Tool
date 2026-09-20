@@ -377,6 +377,9 @@ class WorkflowTemplate(Base):
     )  # "onboarding", "follow-up", "notifications", "compliance", "general"
 
     # Workflow configuration (template content)
+    # NULL subject_type on a donor-trigger template means repair-required:
+    # the exact donor subtype was never recorded and must not be guessed.
+    subject_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     trigger_type: Mapped[str] = mapped_column(String(50), nullable=False)
     trigger_config: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     conditions: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")

@@ -38,10 +38,10 @@ separate follow-up phase.
       preview returns `unsupported_mapped_fields` and the mapping page shows a
       destructive "Mapping repair required" alert; conversion keeps canonical
       `"Meta"`; stored legacy mappings are surfaced, never rewritten or backfilled
-- [ ] feat: `WorkflowTemplate.subject_type` column + migration + backfill
+- [x] feat: `WorkflowTemplate.subject_type` column + migration + backfill
       (donor triggers → NULL/repair-required, never guessed; form/intake/match/appointment
       triggers → legacy subject mapping; others → surrogate)
-- [ ] feat: template save/use/publish preserve exact subject; `use_template` routes through
+- [x] feat: template save/use/publish preserve exact subject; `use_template` routes through
       `workflow_service.create_workflow`; donor permission checks in templates router;
       ambiguous legacy donor-intent templates error as repair-required, never silently
       enabled
@@ -137,3 +137,4 @@ retry, permission denied).
 | 2026-09-20 | (this commit) email preview full-audience counts | `uv run -m pytest tests/test_campaigns.py -q` (33 passed), `uv run -m pytest tests/test_donor_campaigns.py -q` (9 passed), `ruff check` clean | pass |
 | 2026-09-20 | (this commit) Zapier test-lead donor_id | `uv run -m pytest tests/test_zapier_webhooks.py -q` (21 passed; new donor regression failed before fix with KeyError donor_id), `pnpm run typecheck` clean, `vitest run tests/integrations-page.test.tsx` (44 passed) | pass |
 | 2026-09-20 | (this commit) donor Meta source mapping repair | `uv run -m pytest tests/test_meta_donor_routing.py tests/test_meta_donor_form_permissions.py tests/test_meta_form_mapping.py tests/test_meta_lead_kind_snapshot.py tests/test_meta_forms_delete.py tests/test_meta_forms_performance_status.py -q` (37 passed), `ruff check` clean, `pnpm run typecheck` clean, `vitest run tests/meta-form-mapping-page.test.tsx` (8 passed) | pass |
+| 2026-09-20 | (this commit) WorkflowTemplate.subject_type contract | `uv run alembic upgrade head` (20260920_0100 applied), `uv run -m pytest tests/test_workflows.py tests/test_donor_workflows.py tests/test_workflow_template_use_scope.py tests/test_workflow_template_subject_type.py tests/test_template_seeder_workflows.py tests/test_shared_donor_template_workflows.py -q` (85 passed), `uv run -m pytest tests/test_rbac_policies.py tests/test_org_scope_backstop.py tests/test_intelligent_suggestions.py -q` (44 passed), `ruff check` clean | pass |
