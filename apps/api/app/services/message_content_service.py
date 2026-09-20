@@ -487,21 +487,27 @@ def upload_media_assets(
     if content_classification not in _VALID_CLASSIFICATIONS:
         raise MessagingMediaValidationError("Unsupported content classification")
     _require_phi_gate_for_classification(db, organization_id, content_classification)
-    validated_uploads = [
-        (upload, *_validated_media_bytes(upload))
-        for upload in uploads
-    ]
+    validated_uploads: list[tuple[MediaUpload, str, bytes, str]] = []
+    for upload in uploads:
+        content_type, content = _validated_media_bytes(upload)
+        validated_uploads.append(
+            (upload, content_type, content, hashlib.sha256(content).hexdigest())
+        )
+    checksums = {checksum for _, _, _, checksum in validated_uploads}
 
     assets: list[MessageMediaAsset] = []
     try:
-        for upload, content_type, content in validated_uploads:
-            checksum = hashlib.sha256(content).hexdigest()
-            existing = db.execute(
+        existing_by_checksum = {
+            asset.checksum_sha256: asset
+            for asset in db.execute(
                 select(MessageMediaAsset).where(
                     MessageMediaAsset.organization_id == organization_id,
-                    MessageMediaAsset.checksum_sha256 == checksum,
+                    MessageMediaAsset.checksum_sha256.in_(checksums),
                 )
-            ).scalar_one_or_none()
+            ).scalars()
+        }
+        for upload, content_type, content, checksum in validated_uploads:
+            existing = existing_by_checksum.get(checksum)
             if existing is not None:
                 if existing.content_classification != content_classification:
                     raise MessagingMediaValidationError(
@@ -531,6 +537,7 @@ def upload_media_assets(
             )
             db.add(asset)
             db.flush()
+            existing_by_checksum[checksum] = asset
             _ensure_media_scan_job(
                 db,
                 organization_id=organization_id,

@@ -11,6 +11,7 @@ from app.services import pipeline_service
 from app.services.pipeline_default_rollout_service import rollout_surrogate_default_pipelines
 
 NEW_PLATFORM_STAGE_KEYS = {
+    "reschedule_needed",
     "pending_docusign",
     "life_insurance_application_started",
     "pbo_process_started",
@@ -172,6 +173,7 @@ def test_rollout_dry_run_reports_missing_platform_stages_for_legacy_default_pipe
     assert item["organization_id"] == str(test_org.id)
     assert item["pipeline_id"] == str(pipeline.id)
     assert item["missing_stage_keys"] == [
+        "reschedule_needed",
         "pending_docusign",
         "life_insurance_application_started",
         "pbo_process_started",
@@ -185,6 +187,7 @@ def test_rollout_dry_run_reports_missing_platform_stages_for_legacy_default_pipe
         (entry["stage_key"], entry["after_stage_key"], entry["before_stage_key"])
         for entry in item["target_insertions"]
     ] == [
+        ("reschedule_needed", "interview_scheduled", "pending_docusign"),
         ("pending_docusign", "interview_scheduled", "under_review"),
         ("life_insurance_application_started", "heartbeat_confirmed", "ob_care_established"),
         ("pbo_process_started", "ob_care_established", "anatomy_scanned"),
@@ -254,6 +257,7 @@ def test_rollout_apply_inserts_missing_platform_stages_and_preserves_custom_stag
         "pre_qualified",
         "application_submitted",
         "interview_scheduled",
+        "reschedule_needed",
         "pending_docusign",
         "under_review",
         "approved",
@@ -275,6 +279,17 @@ def test_rollout_apply_inserts_missing_platform_stages_and_preserves_custom_stag
         "lost",
         "disqualified",
     ]
+    assert pipeline.current_version == 2
+
+    repeat_report = rollout_surrogate_default_pipelines(
+        db,
+        organization_ids=[test_org.id],
+        apply=True,
+    )
+
+    assert repeat_report[0]["would_change"] is False
+    assert repeat_report[0]["applied"] is False
+    assert repeat_report[0]["missing_stage_keys"] == []
     assert pipeline.current_version == 2
 
 

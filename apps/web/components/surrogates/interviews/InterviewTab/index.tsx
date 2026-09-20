@@ -27,6 +27,8 @@ import { EditorDialog } from "./EditorDialog"
 import { DeleteDialog } from "./DeleteDialog"
 import { VersionHistoryDialog } from "./VersionHistoryDialog"
 import { MobileHeaderActions } from "./MobileHeaderActions"
+import { InterviewAppointmentManager } from "@/components/surrogates/InterviewAppointmentManager"
+import { useSurrogateDetailContext } from "@/components/surrogates/detail/SurrogateDetailContext"
 
 // Re-export context hook
 export { useInterviewTab } from "./context"
@@ -57,6 +59,7 @@ export function SurrogateInterviewTab({ surrogateId }: SurrogateInterviewTabProp
 // ============================================================================
 
 function InterviewTabContent() {
+    const detail = useSurrogateDetailContext()
     const {
         interviews,
         isLoading,
@@ -64,22 +67,26 @@ function InterviewTabContent() {
         openEditor,
     } = useInterviewTab()
 
+    const appointmentRow = detail?.surrogate ? (
+        <InterviewAppointmentManager surrogateId={detail.surrogate.id} stageId={detail.surrogate.stage_id} compact />
+    ) : null
+
     // Loading state
     if (isLoading) {
         return (
-            <Card>
+            <div className="space-y-4">{appointmentRow}<Card>
                 <CardContent className="flex items-center justify-center py-16">
                     <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                     <span className="ml-2 text-muted-foreground">Loading interviews</span>
                 </CardContent>
-            </Card>
+            </Card></div>
         )
     }
 
     // Empty state
     if (interviews.length === 0) {
         return (
-            <Card>
+            <div className="space-y-4">{appointmentRow}<Card>
                 <CardContent className="flex flex-col items-center justify-center py-16 text-center">
                     <FileTextIcon className="size-16 text-muted-foreground mb-4" />
                     <h3 className="text-lg font-semibold mb-2">No Interviews</h3>
@@ -96,12 +103,13 @@ function InterviewTabContent() {
                     {/* Dialogs */}
                     <EditorDialog />
                 </CardContent>
-            </Card>
+            </Card></div>
         )
     }
 
     return (
         <div className="space-y-4">
+            {appointmentRow}
             {/* Desktop Layout */}
             <DesktopLayout />
 

@@ -3812,9 +3812,13 @@
       "422"
     ]
   },
-  "/surrogates/{surrogate_id}/interview-outcomes": {
+  "/surrogates/{surrogate_id}/interview-appointment": {
+    "GET": [
+      "200",
+      "422"
+    ],
     "POST": [
-      "201",
+      "200",
       "422"
     ]
   },

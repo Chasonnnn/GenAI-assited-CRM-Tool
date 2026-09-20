@@ -37,6 +37,7 @@ import { BulkChangeStageModal } from "@/components/surrogates/BulkChangeStageMod
 import { SurrogatesFloatingScrollbar } from "@/components/surrogates/SurrogatesFloatingScrollbar"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import { useDebouncedSearchCommit } from "@/lib/hooks/use-debounced-search-commit"
+import { readableForeground } from "@/lib/stage-colors"
 
 const SHORT_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -246,7 +247,6 @@ const DATE_RANGE_LABELS: Record<Exclude<DateRangePreset, "custom">, string> = {
 const DYNAMIC_FILTER_LABELS: Record<DynamicSurrogateFilter, string> = {
     intelligent_any: "Intelligent Suggestions",
     intelligent_new_unread_stale: "New Unread Needs Follow-up",
-    intelligent_meeting_outcome_missing: "Meeting Outcome Missing",
     intelligent_stuck_preapproval: "Pre-approval Stuck Cases",
     attention_unreached: "Attention Needed: Unreached Leads",
     attention_stuck: "Attention Needed: Stuck Surrogates",
@@ -1269,7 +1269,7 @@ export function SurrogatesPageClient() {
                                                     handleSourceChange(isSourceFilter(value) ? value : "all")
                                                 }
                                             >
-                                                <SelectTrigger>
+                                                <SelectTrigger aria-label="Filter by source">
                                                     <SelectValue placeholder="All Sources">
                                                         {(value: string | null) => getSourceFilterLabel(value)}
                                                     </SelectValue>
@@ -1294,7 +1294,7 @@ export function SurrogatesPageClient() {
                                                     value={queueFilter}
                                                     onValueChange={(value) => handleQueueChange(value || "all")}
                                                 >
-                                                    <SelectTrigger>
+                                                    <SelectTrigger aria-label="Filter by queue">
                                                         <SelectValue placeholder="All Queues">
                                                             {(value: string | null) =>
                                                                 getQueueFilterLabel(value, queues)
@@ -1351,7 +1351,7 @@ export function SurrogatesPageClient() {
                                                     )
                                                 }
                                             >
-                                                <SelectTrigger>
+                                                <SelectTrigger aria-label="Filter by smart filter">
                                                     <SelectValue placeholder="No smart filter">
                                                         {(value: string | null) =>
                                                             getDynamicFilterLabel(
@@ -1634,7 +1634,7 @@ export function SurrogatesPageClient() {
                                                     {surrogateItem.phone || "—"}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge style={{ backgroundColor: statusColor, color: "white" }}>
+                                                    <Badge style={{ backgroundColor: statusColor, color: readableForeground(statusColor) }}>
                                                         {statusLabel}
                                                     </Badge>
                                                 </TableCell>

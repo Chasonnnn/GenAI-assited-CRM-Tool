@@ -117,7 +117,8 @@ vi.mock('@/components/surrogates/detail/SurrogateDetailContext', () => ({
 describe('SurrogatesPage Accessibility', () => {
     beforeEach(() => {
         // Reset mocks default return values
-        mockSearchParams.delete('page')
+        for (const key of [...mockSearchParams.keys()]) mockSearchParams.delete(key)
+        mockRouterReplace.mockClear()
         mockUseSurrogates.mockReturnValue({
             data: {
                 items: [
@@ -161,6 +162,33 @@ describe('SurrogatesPage Accessibility', () => {
     it('renders search input with aria-label', () => {
         render(<SurrogatesPage />)
         expect(screen.getByLabelText('Search surrogates')).toBeInTheDocument()
+    })
+
+    it('names secondary filters independently of their selected values', async () => {
+        mockUseQueues.mockReturnValue({ data: [{ id: 'queue-intake', name: 'Intake' }] })
+        const view = render(<SurrogatesPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'More Filters' }))
+
+        const source = await screen.findByRole('combobox', { name: 'Filter by source' })
+        expect(source).toHaveTextContent('All Sources')
+        expect(screen.getByRole('combobox', { name: 'Filter by queue' })).toHaveTextContent('All Queues')
+        expect(screen.getByRole('combobox', { name: 'Filter by smart filter' })).toHaveTextContent('No smart filter')
+
+        // Filter values come from the URL; simulate the next navigation result.
+        mockSearchParams.set('source', 'referral')
+        mockSearchParams.set('queue', 'queue-intake')
+        mockSearchParams.set('dynamic_filter', 'attention_unreached')
+        view.rerender(<SurrogatesPage />)
+        expect(screen.getByRole('combobox', { name: 'Filter by source' })).toHaveTextContent('Referral')
+        expect(screen.getByRole('combobox', { name: 'Filter by queue' })).toHaveTextContent('Intake')
+        expect(screen.getByRole('combobox', { name: 'Filter by smart filter' })).toHaveTextContent('Attention Needed: Unreached Leads')
+    })
+
+    it('omits the queue filter when no queues are available', async () => {
+        render(<SurrogatesPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'More Filters' }))
+        expect(await screen.findByRole('combobox', { name: 'Filter by source' })).toBeVisible()
+        expect(screen.queryByRole('combobox', { name: 'Filter by queue' })).not.toBeInTheDocument()
     })
 
     it('renders table checkboxes with aria-labels', () => {

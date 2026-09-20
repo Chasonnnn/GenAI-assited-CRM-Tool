@@ -316,6 +316,7 @@ def change_status(
     *,
     emit_events: bool = False,
     commit: bool = True,
+    schedule_interview_appointment: bool = True,
 ) -> StatusChangeResult:
     """
     Change surrogate stage and record history with backdating support.
@@ -393,7 +394,16 @@ def change_status(
         and paused_from_stage
         and paused_from_stage.id == new_stage.id
     )
-    is_regression = (not is_resume_from_on_hold) and new_stage.order < old_order
+    # Rebooking is an intentional lifecycle loop, not a generic regression. It must
+    # remain available to the assigned case manager without an approval request.
+    is_interview_rebooking = bool(
+        current_stage
+        and pipeline_service.stage_matches_key(current_stage, "reschedule_needed")
+        and pipeline_service.stage_matches_key(new_stage, "interview_scheduled")
+    )
+    is_regression = (
+        not is_resume_from_on_hold and not is_interview_rebooking and new_stage.order < old_order
+    )
 
     if (normalized_effective_at - now).total_seconds() > 1:
         raise ValueError("Cannot set future date for stage change")
@@ -421,7 +431,12 @@ def change_status(
         if pipeline_service.normalize_stage_ref(stage_key)
     }
     new_stage_key = pipeline_service.get_stage_semantic_key(new_stage) or new_stage.slug
-    if is_resume_from_on_hold:
+    is_interview_cancellation = bool(
+        current_stage
+        and pipeline_service.stage_matches_key(current_stage, "interview_scheduled")
+        and pipeline_service.stage_matches_key(new_stage, "reschedule_needed")
+    )
+    if is_resume_from_on_hold or is_interview_rebooking or is_interview_cancellation:
         pass
     elif not is_regression:
         if not pipeline_semantics_service.can_role_access_stage(
@@ -481,7 +496,9 @@ def change_status(
                 if pipeline_service.stage_matches_key(new_stage, "on_hold")
                 else paused_from_stage,
                 on_hold_follow_up_months=on_hold_follow_up_months,
-                interview_scheduled_at=normalized_interview_scheduled_at,
+                interview_scheduled_at=normalized_interview_scheduled_at
+                if schedule_interview_appointment
+                else None,
                 trigger_workflows=trigger_workflows,
                 commit=commit,
             )
@@ -518,7 +535,9 @@ def change_status(
                     else paused_from_stage
                 ),
                 on_hold_follow_up_months=on_hold_follow_up_months,
-                interview_scheduled_at=normalized_interview_scheduled_at,
+                interview_scheduled_at=normalized_interview_scheduled_at
+                if schedule_interview_appointment
+                else None,
                 trigger_workflows=trigger_workflows,
                 commit=commit,
             )
@@ -616,7 +635,9 @@ def change_status(
             else paused_from_stage
         ),
         on_hold_follow_up_months=on_hold_follow_up_months,
-        interview_scheduled_at=normalized_interview_scheduled_at,
+        interview_scheduled_at=normalized_interview_scheduled_at
+        if schedule_interview_appointment
+        else None,
         trigger_workflows=trigger_workflows,
         commit=commit,
     )

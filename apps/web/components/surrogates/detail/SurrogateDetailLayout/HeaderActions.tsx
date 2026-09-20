@@ -22,7 +22,6 @@ import {
     HeartHandshakeIcon,
     PhoneIcon,
     VideoIcon,
-    CalendarIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
@@ -77,25 +76,17 @@ export function HeaderActions() {
     const contactedStage = stageOptions.find((stage) =>
         stageHasCapability(stage, "counts_as_contacted")
     )
-    const interviewScheduledStage = stageOptions.find((stage) =>
-        stageHasCapability(stage, "tracks_interview_outcome")
-    )
     const workflowStageOrder = workflowStage?.order ?? null
     const isAtOrBeforeContacted =
         workflowStageOrder !== null && contactedStage
             ? workflowStageOrder <= contactedStage.order
             : isIntakeStage
-    const isAtOrAfterInterviewScheduled =
-        workflowStageOrder !== null && interviewScheduledStage
-            ? workflowStageOrder >= interviewScheduledStage.order
-            : false
     const isAssignee = !!(user?.user_id && surrogate.owner_id === user.user_id)
     const canLogInteraction =
         surrogate.owner_type === "user" &&
         (isAssignee || canManageQueue) &&
         !surrogate.is_archived
     const canLogContact = canLogInteraction && !isOnHold && isAtOrBeforeContacted
-    const canLogInterviewOutcome = canLogInteraction && !isOnHold && isAtOrAfterInterviewScheduled
 
     // Determine if propose match button should be shown
     const isReadyToMatchStage = stageHasCapability(
@@ -175,18 +166,6 @@ export function HeaderActions() {
                 >
                     <PhoneIcon className="size-4" />
                     Log Contact
-                </Button>
-            )}
-
-            {canLogInterviewOutcome && (
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openDialog({ type: "log_interview_outcome" })}
-                    className="gap-2"
-                >
-                    <CalendarIcon className="size-4" />
-                    Log Interview Outcome
                 </Button>
             )}
 

@@ -1,13 +1,37 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
 import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 CI_WORKFLOW = ROOT / ".github/workflows/ci.yml"
 RELEASE_WORKFLOW = ROOT / ".github/workflows/release-please.yml"
+
+
+def test_zap_permissions_only_change_report_directory(tmp_path):
+    workflow = CI_WORKFLOW.read_text()
+    command = re.search(r"- name: Allow ZAP to write workspace\n\s+run: (.+)", workflow)
+    assert command is not None
+    cache = tmp_path / "__pycache__"
+    cache.mkdir()
+    bytecode = cache / "module.pyc"
+    bytecode.write_bytes(b"test")
+    bytecode.chmod(0o644)
+    cache.chmod(0o755)
+    tmp_path.chmod(0o755)
+    subprocess.run(
+        ["bash", "-eu", "-c", command.group(1)],
+        env={**os.environ, "GITHUB_WORKSPACE": str(tmp_path)},
+        check=True,
+    )
+    assert tmp_path.stat().st_mode & 0o002
+    # Do not traverse API bytecode: temporary files can disappear during startup.
+    assert cache.stat().st_mode & 0o777 == 0o755
+    assert bytecode.stat().st_mode & 0o777 == 0o644
 
 
 def test_match_expansion_release_preflights_before_opening_compatibility_window():
