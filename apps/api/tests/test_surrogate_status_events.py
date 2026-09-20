@@ -80,14 +80,14 @@ def test_status_change_dispatches_event_bus(monkeypatch, db, test_org, test_user
 
     monkeypatch.setattr(surrogate_events, "handle_status_changed", fake_handler)
 
-    from app.services import notification_facade
+    from app.services import notification_service
 
     notified = {"count": 0}
 
     def mark_notify(*_args, **_kwargs):
         notified["count"] += 1
 
-    monkeypatch.setattr(notification_facade, "notify_surrogate_status_changed", mark_notify)
+    monkeypatch.setattr(notification_service, "notify_surrogate_status_changed", mark_notify)
 
     surrogate_status_service.change_status(
         db=db,
@@ -107,7 +107,7 @@ def test_event_bus_triggers_notification_and_workflow(monkeypatch, db, test_org,
 
     called = {"notify": False, "workflow": False}
 
-    from app.services import notification_facade, workflow_triggers
+    from app.services import notification_service, workflow_triggers
 
     def mark_notify(*_args, **_kwargs):
         called["notify"] = True
@@ -115,7 +115,7 @@ def test_event_bus_triggers_notification_and_workflow(monkeypatch, db, test_org,
     def mark_workflow(*_args, **_kwargs):
         called["workflow"] = True
 
-    monkeypatch.setattr(notification_facade, "notify_surrogate_status_changed", mark_notify)
+    monkeypatch.setattr(notification_service, "notify_surrogate_status_changed", mark_notify)
     monkeypatch.setattr(workflow_triggers, "trigger_status_changed", mark_workflow)
 
     event_kwargs = _event_kwargs(surrogate, new_stage, user_id=test_user.id)
@@ -133,7 +133,7 @@ def test_event_bus_assigns_pool_queue_on_approved(monkeypatch, db, test_org, tes
     pool_queue = SimpleNamespace(id=uuid.uuid4())
     called = {"assign": False, "ready": False}
 
-    from app.services import notification_facade, queue_service, workflow_triggers
+    from app.services import notification_service, queue_service, workflow_triggers
 
     def fake_assign(*_args, **_kwargs):
         called["assign"] = True
@@ -144,9 +144,9 @@ def test_event_bus_assigns_pool_queue_on_approved(monkeypatch, db, test_org, tes
 
     monkeypatch.setattr(queue_service, "get_or_create_surrogate_pool_queue", lambda *_: pool_queue)
     monkeypatch.setattr(queue_service, "assign_surrogate_to_queue", fake_assign)
-    monkeypatch.setattr(notification_facade, "notify_surrogate_ready_for_claim", mark_ready)
+    monkeypatch.setattr(notification_service, "notify_surrogate_ready_for_claim", mark_ready)
     monkeypatch.setattr(
-        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+        notification_service, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
     )
     monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
 
@@ -169,7 +169,7 @@ def test_event_bus_assigns_pool_queue_on_approved_when_slug_is_renamed(
     pool_queue = SimpleNamespace(id=uuid.uuid4())
     called = {"assign": False, "ready": False}
 
-    from app.services import notification_facade, queue_service, workflow_triggers
+    from app.services import notification_service, queue_service, workflow_triggers
 
     def fake_assign(*_args, **_kwargs):
         called["assign"] = True
@@ -180,9 +180,9 @@ def test_event_bus_assigns_pool_queue_on_approved_when_slug_is_renamed(
 
     monkeypatch.setattr(queue_service, "get_or_create_surrogate_pool_queue", lambda *_: pool_queue)
     monkeypatch.setattr(queue_service, "assign_surrogate_to_queue", fake_assign)
-    monkeypatch.setattr(notification_facade, "notify_surrogate_ready_for_claim", mark_ready)
+    monkeypatch.setattr(notification_service, "notify_surrogate_ready_for_claim", mark_ready)
     monkeypatch.setattr(
-        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+        notification_service, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
     )
     monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
 
@@ -220,10 +220,10 @@ def test_status_change_enqueues_zapier_stage_event(monkeypatch, db, test_org, te
     new_stage = _get_stage(db, test_org.id, "pre_qualified")
 
     monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *_args, **_kwargs: None)
-    from app.services import notification_facade, workflow_triggers
+    from app.services import notification_service, workflow_triggers
 
     monkeypatch.setattr(
-        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+        notification_service, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
     )
     monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
 
@@ -273,10 +273,10 @@ def test_status_change_enqueues_meta_crm_dataset_stage_event(monkeypatch, db, te
     new_stage = _get_stage(db, test_org.id, "pre_qualified")
 
     monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *_args, **_kwargs: None)
-    from app.services import notification_facade, workflow_triggers
+    from app.services import notification_service, workflow_triggers
 
     monkeypatch.setattr(
-        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+        notification_service, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
     )
     monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
 
@@ -391,10 +391,10 @@ def test_status_change_enqueues_meta_crm_dataset_event(monkeypatch, db, test_org
     new_stage = _get_stage(db, test_org.id, "pre_qualified")
 
     monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *_args, **_kwargs: None)
-    from app.services import notification_facade, workflow_triggers
+    from app.services import notification_service, workflow_triggers
 
     monkeypatch.setattr(
-        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+        notification_service, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
     )
     monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
 
@@ -431,10 +431,10 @@ def test_status_change_skips_zapier_event_without_meta_lead(monkeypatch, db, tes
     new_stage = _get_stage(db, test_org.id, "pre_qualified")
 
     monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *_args, **_kwargs: None)
-    from app.services import notification_facade, workflow_triggers
+    from app.services import notification_service, workflow_triggers
 
     monkeypatch.setattr(
-        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+        notification_service, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
     )
     monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
 
@@ -469,7 +469,7 @@ def test_event_bus_schedules_meta_capi_job(monkeypatch, db, test_org, test_user)
 
     new_stage = _get_stage(db, test_org.id, "contacted")
 
-    from app.services import job_service, meta_capi, notification_facade, workflow_triggers
+    from app.services import job_service, meta_capi, notification_service, workflow_triggers
 
     scheduled: dict[str, object] = {}
 
@@ -481,7 +481,7 @@ def test_event_bus_schedules_meta_capi_job(monkeypatch, db, test_org, test_user)
     monkeypatch.setattr(meta_capi, "should_send_capi_event", lambda *_: True)
     monkeypatch.setattr(job_service, "schedule_job", fake_schedule_job)
     monkeypatch.setattr(
-        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+        notification_service, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
     )
     monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
 
@@ -523,10 +523,10 @@ def test_status_change_dedupes_qualified_stage_updates(monkeypatch, db, test_org
     application_submitted = _get_stage(db, test_org.id, "application_submitted")
 
     monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *_args, **_kwargs: None)
-    from app.services import notification_facade, workflow_triggers
+    from app.services import notification_service, workflow_triggers
 
     monkeypatch.setattr(
-        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+        notification_service, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
     )
     monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
 
@@ -594,10 +594,10 @@ def test_status_change_dedupes_zapier_qualified_stage_updates_through_interview_
     interview_scheduled = _get_stage(db, test_org.id, "interview_scheduled")
 
     monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *_args, **_kwargs: None)
-    from app.services import notification_facade, workflow_triggers
+    from app.services import notification_service, workflow_triggers
 
     monkeypatch.setattr(
-        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+        notification_service, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
     )
     monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
 
@@ -666,10 +666,10 @@ def test_status_change_dedupes_meta_crm_dataset_qualified_stage_updates(
     interview_scheduled = _get_stage(db, test_org.id, "interview_scheduled")
 
     monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *_args, **_kwargs: None)
-    from app.services import notification_facade, workflow_triggers
+    from app.services import notification_service, workflow_triggers
 
     monkeypatch.setattr(
-        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+        notification_service, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
     )
     monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
 
@@ -714,10 +714,10 @@ def test_status_change_dedupes_meta_capi_qualified_stage_updates(
     pre_qualified = _get_stage(db, test_org.id, "pre_qualified")
     interview_scheduled = _get_stage(db, test_org.id, "interview_scheduled")
 
-    from app.services import notification_facade, workflow_triggers
+    from app.services import notification_service, workflow_triggers
 
     monkeypatch.setattr(
-        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+        notification_service, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
     )
     monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
 
@@ -772,10 +772,10 @@ def test_status_change_duplicate_meta_capi_job_leaves_session_usable(
 
     contacted = _get_stage(db, test_org.id, "contacted")
 
-    from app.services import notification_facade, workflow_triggers
+    from app.services import notification_service, workflow_triggers
 
     monkeypatch.setattr(
-        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+        notification_service, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
     )
     monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
 
@@ -826,10 +826,10 @@ def test_status_change_dedupes_converted_stage_updates(monkeypatch, db, test_org
     matched = _get_stage(db, test_org.id, "matched")
 
     monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *_args, **_kwargs: None)
-    from app.services import notification_facade, workflow_triggers
+    from app.services import notification_service, workflow_triggers
 
     monkeypatch.setattr(
-        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+        notification_service, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
     )
     monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
 
@@ -897,10 +897,10 @@ def test_status_change_dedupes_using_configured_bucket_mapping(
     ready_to_match = _get_stage(db, test_org.id, "ready_to_match")
 
     monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *_args, **_kwargs: None)
-    from app.services import notification_facade, workflow_triggers
+    from app.services import notification_service, workflow_triggers
 
     monkeypatch.setattr(
-        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+        notification_service, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
     )
     monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
 

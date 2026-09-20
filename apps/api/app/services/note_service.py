@@ -105,7 +105,7 @@ def _record_note_activity(
         )
 
 
-def _dispatch_note_added(db: Session, note: EntityNote) -> None:
+def dispatch_note_added(db: Session, *, note_id: UUID, org_id: UUID) -> None:
     """Isolate post-commit automation failures from the saved note."""
     from app.db.session import SessionLocal
     from app.services.workflow_triggers import trigger_note_added
@@ -117,7 +117,7 @@ def _dispatch_note_added(db: Session, note: EntityNote) -> None:
         else SessionLocal()
     )
     try:
-        persisted_note = get_note(side_effect_db, note.id, note.organization_id)
+        persisted_note = get_note(side_effect_db, note_id, org_id)
         if persisted_note is None:
             raise ValueError("Saved note unavailable for workflow dispatch")
         trigger_note_added(side_effect_db, persisted_note)
@@ -125,7 +125,7 @@ def _dispatch_note_added(db: Session, note: EntityNote) -> None:
         side_effect_db.rollback()
         logger.error(
             "Note workflow trigger failed",
-            extra={"note_id": str(note.id), "error_class": type(exc).__name__},
+            extra={"note_id": str(note_id), "error_class": type(exc).__name__},
         )
     finally:
         side_effect_db.close()
@@ -194,7 +194,7 @@ def create_note(
         raise
 
     if emit_events:
-        _dispatch_note_added(db, note)
+        dispatch_note_added(db, note_id=note.id, org_id=org_id)
 
     return note
 

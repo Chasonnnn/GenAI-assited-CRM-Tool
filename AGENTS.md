@@ -69,8 +69,8 @@ Use parallel agents only when independent work is useful and supported; they are
 
 Use repo-pinned runtimes in `mise.toml` and `mise.lock`, plus existing package scripts. Inspect manifests before adding commands.
 
-- Backend setup: `cd apps/api && uv sync --extra test`. Run focused tests while iterating; use `cd apps/api && uv run -m pytest -v` for cross-cutting API changes.
-- Frontend validation: focused Vitest files while iterating; `cd apps/web && pnpm run check` runs type checking, lint, and the test suite. `test:all` aliases the same test command and adds no coverage after `check`.
+- Backend verification: start local PostgreSQL only when needed, then use `apps/api/run_tests.sh <pytest args>` from the repo root. It selects pinned runtimes and creates, migrates, and drops a unique local database per invocation. Omit arguments for the full serial suite. Use direct `mise exec -- uv run -m pytest` only against an explicitly configured, migrated disposable database; never inherited shared data. See README for setup and `.github/workflows/ci.yml` for the parallel-safe test split.
+- Frontend validation: focused Vitest files while iterating; `cd apps/web && mise exec -- pnpm run check` runs type checking, lint, and the test suite. `test:all` aliases the same test command and adds no coverage after `check`.
 - Migrations and recovery: `docs/migration-runbook.md`.
 - Runtime versions: `mise.toml`; dependencies: manifests under `apps/`.
 - Environment contract: `apps/api/.env.example`; never put secrets in `NEXT_PUBLIC_*`.

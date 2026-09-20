@@ -309,45 +309,6 @@ def get_ai_activity(
     return counts, recent_logs, actor_names
 
 
-def log_config_changed(
-    db: Session,
-    org_id: UUID,
-    user_id: UUID,
-    entity_type: str,
-    entity_id: UUID,
-    before_version_id: UUID | None,
-    after_version_id: UUID,
-    action: str = "updated",  # "created", "updated", "rolled_back"
-    request: Request | None = None,
-) -> AuditLog:
-    """
-    Log versioned config change with before/after version links.
-
-    Used for: pipelines, email templates, AI settings, integrations
-    """
-    event_map = {
-        "pipeline": AuditEventType.CONFIG_PIPELINE_UPDATED,
-        "email_template": AuditEventType.CONFIG_TEMPLATE_UPDATED,
-        "ai_settings": AuditEventType.SETTINGS_AI_UPDATED,
-        "org_settings": AuditEventType.SETTINGS_ORG_UPDATED,
-        "integration": AuditEventType.INTEGRATION_CONNECTED,
-    }
-    event_type = event_map.get(entity_type, AuditEventType.SETTINGS_ORG_UPDATED)
-
-    return log_event(
-        db=db,
-        org_id=org_id,
-        event_type=event_type,
-        actor_user_id=user_id,
-        target_type=entity_type,
-        target_id=entity_id,
-        details={"action": action},
-        request=request,
-        before_version_id=before_version_id,
-        after_version_id=after_version_id,
-    )
-
-
 # =============================================================================
 # Authentication Events
 # =============================================================================
@@ -568,75 +529,8 @@ def log_ai_action_denied(
 
 
 # =============================================================================
-# Integration Events
-# =============================================================================
-
-
-def log_integration_connected(
-    db: Session,
-    org_id: UUID,
-    user_id: UUID,
-    integration_type: str,
-    request: Request | None = None,
-) -> AuditLog:
-    """Log integration connection."""
-    return log_event(
-        db=db,
-        org_id=org_id,
-        event_type=AuditEventType.INTEGRATION_CONNECTED,
-        actor_user_id=user_id,
-        target_type="integration",
-        details={"integration_type": integration_type},
-        request=request,
-    )
-
-
-def log_integration_disconnected(
-    db: Session,
-    org_id: UUID,
-    user_id: UUID,
-    integration_type: str,
-    request: Request | None = None,
-) -> AuditLog:
-    """Log integration disconnection."""
-    return log_event(
-        db=db,
-        org_id=org_id,
-        event_type=AuditEventType.INTEGRATION_DISCONNECTED,
-        actor_user_id=user_id,
-        target_type="integration",
-        details={"integration_type": integration_type},
-        request=request,
-    )
-
-
-# =============================================================================
 # Data Export/Import Events
 # =============================================================================
-
-
-def log_data_export(
-    db: Session,
-    org_id: UUID,
-    user_id: UUID,
-    export_type: str,  # 'cases', 'analytics'
-    record_count: int,
-    request: Request | None = None,
-) -> AuditLog:
-    """Log data export."""
-    event_type = (
-        AuditEventType.DATA_EXPORT_SURROGATES
-        if export_type == "cases"
-        else AuditEventType.DATA_EXPORT_ANALYTICS
-    )
-    return log_event(
-        db=db,
-        org_id=org_id,
-        event_type=event_type,
-        actor_user_id=user_id,
-        details={"export_type": export_type, "record_count": record_count},
-        request=request,
-    )
 
 
 def log_compliance_export_requested(
@@ -800,49 +694,6 @@ def log_compliance_purge_executed(
         actor_user_id=user_id,
         details={"results": formatted},
         request=request,
-    )
-
-
-def log_import_started(
-    db: Session,
-    org_id: UUID,
-    user_id: UUID,
-    import_id: UUID,
-    filename: str,
-    row_count: int,
-    request: Request | None = None,
-) -> AuditLog:
-    """Log import job started."""
-    return log_event(
-        db=db,
-        org_id=org_id,
-        event_type=AuditEventType.DATA_IMPORT_STARTED,
-        actor_user_id=user_id,
-        target_type="import",
-        target_id=import_id,
-        details={"filename": filename, "row_count": row_count},
-        request=request,
-    )
-
-
-def log_import_completed(
-    db: Session,
-    org_id: UUID,
-    user_id: UUID,
-    import_id: UUID,
-    imported: int,
-    skipped: int,
-    errors: int,
-) -> AuditLog:
-    """Log import job completion."""
-    return log_event(
-        db=db,
-        org_id=org_id,
-        event_type=AuditEventType.DATA_IMPORT_COMPLETED,
-        actor_user_id=user_id,
-        target_type="import",
-        target_id=import_id,
-        details={"imported": imported, "skipped": skipped, "errors": errors},
     )
 
 

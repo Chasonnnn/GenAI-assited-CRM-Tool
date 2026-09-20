@@ -192,7 +192,7 @@ class TestAdminExports:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_surrogates_export_csv(self, authed_client, db, test_org):
+    async def test_surrogates_export_csv(self, authed_client, db, test_org, caplog):
         response = await authed_client.post("/admin/exports/surrogates")
         assert response.status_code == 202
         job_id = response.json()["job_id"]
@@ -200,6 +200,11 @@ class TestAdminExports:
         job = job_service.get_job(db, uuid.UUID(job_id), test_org.id)
         assert job is not None
         await process_admin_export(db, job)
+        assert not [
+            record
+            for record in caplog.records
+            if record.name == "app.jobs.handlers.exports" and record.levelno >= 30
+        ]
         job_service.mark_job_completed(db, job)
 
         download = await authed_client.get(f"/admin/exports/jobs/{job_id}/file")

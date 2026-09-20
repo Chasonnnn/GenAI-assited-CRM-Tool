@@ -2014,7 +2014,7 @@ async def export_analytics_pdf_async(
     Returns:
         PDF file content as bytes
     """
-    from app.services import analytics_service
+    from app.services import analytics_meta_service, analytics_service
 
     # Get export data using existing service
     export_data = analytics_service.get_pdf_export_data(
@@ -2027,7 +2027,7 @@ async def export_analytics_pdf_async(
     # Fetch meta spend data asynchronously
     meta_start = start_dt or datetime(1970, 1, 1, tzinfo=UTC)
     meta_end = end_dt or datetime.now(UTC)
-    meta_spend = await analytics_service.get_meta_spend_summary(
+    meta_spend = await analytics_meta_service.get_meta_spend_summary(
         db=db,
         organization_id=organization_id,
         start=meta_start,

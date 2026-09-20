@@ -128,7 +128,7 @@ A modern, multi-tenant platform for surrogacy agencies. Manage surrogates, inten
 | **PDF export** | Playwright / Chromium |
 | **Search** | PostgreSQL Full-Text Search (tsvector + GIN) |
 | **Migrations** | Alembic |
-| **Testing** | pytest (backend), Vitest + React Testing Library + MSW (frontend) |
+| **Testing** | pytest (backend), Vitest + React Testing Library (frontend) |
 | **Observability** | Sentry, GCP Cloud Logging + Error Reporting, OpenTelemetry |
 
 ---
@@ -196,8 +196,8 @@ A modern, multi-tenant platform for surrogacy agencies. Manage surrogates, inten
 `.agents/setup` installs the locked mise toolchains, frozen backend/test and frontend
 dependencies, PostgreSQL 18, and Playwright Chromium. Amp caches this filesystem for
 fresh orbs; warm setup checks the existing installs. `.agents/resume` only checks
-that dependencies are present. Pinned tools are available in new login shells within
-this checkout, including supervised services.
+that dependencies are present. Use `mise exec -- <command>` within the checkout to
+select the pinned runtimes regardless of the invoking shell's `PATH`.
 
 Setup preserves existing environment files and copies `apps/api/.env.example` only
 when `.env` is absent. It does not provision integration credentials, seed users,
@@ -209,15 +209,15 @@ with Amp's supervisor (the durability settings below are for disposable orb data
 
 ```bash
 amp orb service start crm-db --port 5432 --command 'sudo -u postgres /usr/lib/postgresql/18/bin/postgres -D /var/lib/postgresql/18/main -c config_file=/etc/postgresql/18/main/postgresql.conf -c fsync=off -c synchronous_commit=off'
+# Wait for readiness before setting the disposable local cluster's password:
+until pg_isready -h 127.0.0.1 -p 5432; do sleep 1; done
 sudo -u postgres psql -h /var/run/postgresql -d postgres -c "ALTER USER postgres PASSWORD 'postgres'"
-sudo -u postgres createdb -h /var/run/postgresql crm
-# In apps/api, explicitly target disposable local data for migrations and tests:
-export DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/crm
+apps/api/run_tests.sh tests/test_analytics.py
 ```
 
-Create `crm` only once per orb, then run the backend migration command below before
-database tests. These commands target the orb's disposable local cluster, not a
-database from project secrets. Stop it after QA with `amp orb service stop crm-db`.
+The test helper creates, migrates, and drops its own database on each invocation.
+These commands target the orb's disposable local cluster, not a database from
+project secrets. Stop it after QA with `amp orb service stop crm-db`.
 Redis and external integrations are not needed for the normal test suite.
 
 ### 1) Start Database
@@ -389,10 +389,21 @@ Optional/conditional:
 ### Backend
 ```bash
 cd apps/api
-uv run -m pytest -v
-# or use the helper (frozen install + venv pytest):
-./run_tests.sh
+./run_tests.sh                             # Full suite, serially
+./run_tests.sh tests/test_analytics.py -x   # Focused loop; forwards pytest arguments
 ```
+
+Requires mise and PostgreSQL client tools, plus a running local cluster (Docker
+Compose or the orb command above). The helper uses `127.0.0.1:5432` with the local
+`postgres` credentials, ignoring inherited `DATABASE_URL` and libpq service settings.
+Set `TEST_DATABASE_PORT` for a different local port. Each invocation gets a unique
+database, including concurrent worktrees; normal exit, test failure, and handled
+signals trigger cleanup. Do not point that local port at a shared database tunnel.
+
+For an already-migrated disposable database, use
+`mise exec -- uv run -m pytest -v <tests>` with an explicitly configured `DATABASE_URL`.
+Do not run the entire suite with xdist against one database: migration and outbox
+tests require serial execution. CI documents the parallel-safe split.
 
 CI runs pytest with coverage (`--cov=app --cov-branch`) and enforces a separate `alembic check`
 migration-drift gate.
@@ -400,13 +411,15 @@ migration-drift gate.
 ### Frontend
 ```bash
 cd apps/web
-pnpm test              # Unit tests (Vitest)
-pnpm test:integration  # MSW-backed integration tests
-pnpm test:all          # Unit + integration
-pnpm typecheck
-pnpm lint
-pnpm check             # typecheck + lint + test
+mise exec -- pnpm test                 # Vitest suite
+mise exec -- pnpm test tests/forms-shared-intake.test.tsx
+mise exec -- pnpm test:watch           # Watch mode
+mise exec -- pnpm check                # Typecheck + lint + the same Vitest suite
 ```
+
+`test:all` aliases `test`; there is no separate integration or browser E2E suite.
+Vitest uses jsdom's per-environment browser storage, not Node's filesystem-backed
+experimental localStorage, so concurrent checkouts do not share a storage file.
 
 > Note: CI and local development both use `postgres:18.1` (see `docker-compose.yml`).
 

@@ -47,7 +47,7 @@ async def test_internal_contact_reminders_endpoint_runs_service(client, db, monk
 
 
 def test_contact_reminder_service_respects_user_setting(monkeypatch, db, test_org, test_user):
-    from app.services import contact_reminder_service, notification_facade
+    from app.services import contact_reminder_service, notification_service
 
     surrogate_data = {
         "id": test_org.id,
@@ -71,15 +71,15 @@ def test_contact_reminder_service_respects_user_setting(monkeypatch, db, test_or
         created["kwargs"] = kwargs
         return object()
 
-    monkeypatch.setattr(notification_facade, "create_notification", fake_create_notification)
-    monkeypatch.setattr(notification_facade, "should_notify", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(notification_service, "create_notification", fake_create_notification)
+    monkeypatch.setattr(notification_service, "should_notify", lambda *_args, **_kwargs: False)
 
     skipped = contact_reminder_service.check_contact_reminders_for_org(db, test_org.id)
     assert skipped["surrogates_checked"] == 1
     assert skipped["notifications_created"] == 0
     assert created["calls"] == 0
 
-    monkeypatch.setattr(notification_facade, "should_notify", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(notification_service, "should_notify", lambda *_args, **_kwargs: True)
     created_result = contact_reminder_service.check_contact_reminders_for_org(db, test_org.id)
     assert created_result["surrogates_checked"] == 1
     assert created_result["notifications_created"] == 1

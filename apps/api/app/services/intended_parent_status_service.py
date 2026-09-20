@@ -49,24 +49,6 @@ def _get_org_timezone(db: Session, org_id: UUID) -> str:
     return result or "America/Los_Angeles"
 
 
-def get_default_pipeline_stage(
-    db: Session,
-    org_id: UUID,
-    stage_id: UUID,
-) -> PipelineStage:
-    from app.services import pipeline_service
-
-    pipeline = pipeline_service.get_or_create_default_pipeline(
-        db,
-        org_id,
-        entity_type=INTENDED_PARENT_PIPELINE_ENTITY,
-    )
-    stage = pipeline_service.get_stage_by_id(db, stage_id)
-    if not stage or stage.pipeline_id != pipeline.id or not stage.is_active:
-        raise ValueError("Target stage not found")
-    return stage
-
-
 def get_current_stage(db: Session, ip: IntendedParent) -> PipelineStage:
     from app.services import pipeline_service
 
@@ -205,10 +187,10 @@ def change_status(
             raise ValueError("A pending regression request already exists for this stage and date.")
         db.refresh(request)
 
-        from app.services import notification_facade
+        from app.services import notification_service
 
         requester = _get_org_user(db, ip.organization_id, user_id)
-        notification_facade.notify_ip_status_change_request_pending(
+        notification_service.notify_ip_status_change_request_pending(
             db=db,
             request=request,
             intended_parent=ip,

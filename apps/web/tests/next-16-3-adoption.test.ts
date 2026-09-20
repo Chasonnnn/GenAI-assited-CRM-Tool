@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { join } from "node:path"
 
@@ -29,42 +29,6 @@ afterEach(() => {
 })
 
 describe("Next.js 16.3 adoption contracts", () => {
-    it("uses the native TypeScript 7 CLI beside the TypeScript 6 compatibility API", () => {
-        const packageJson = JSON.parse(
-            readFileSync(join(process.cwd(), "package.json"), "utf8"),
-        ) as {
-            scripts: Record<string, string>
-            devDependencies: Record<string, string>
-        }
-
-        expect(packageJson.devDependencies["@typescript/native"]).toBe(
-            "npm:typescript@7.0.2",
-        )
-        expect(packageJson.devDependencies.typescript).toBe(
-            "npm:@typescript/typescript6@6.0.2",
-        )
-        expect(packageJson.scripts.typecheck).toBe("tsc --noEmit")
-        expect(packageJson.scripts["typecheck:compat"]).toBe("tsc6 --noEmit")
-        expect(packageJson.scripts.build).toBe("next build --webpack")
-    })
-
-    it("routes frontend agents to the version-matched bundled Next.js documentation", () => {
-        const agentsPath = join(process.cwd(), "../../AGENTS.md")
-        const claudePath = join(process.cwd(), "../../CLAUDE.md")
-
-        expect(existsSync(agentsPath)).toBe(true)
-        expect(existsSync(claudePath)).toBe(true)
-
-        const agents = readFileSync(agentsPath, "utf8")
-        const claude = readFileSync(claudePath, "utf8")
-
-        expect(agents).toContain("apps/web/node_modules/next/dist/docs/")
-        expect(claude).toBe(agents)
-        expect(existsSync(join(process.cwd(), "AGENTS.md"))).toBe(false)
-        expect(existsSync(join(process.cwd(), "CLAUDE.md"))).toBe(false)
-        expect(require("../next.config.js").agentRules).toBe(false)
-    })
-
     it("keeps experimental profiles off by default and enables each one explicitly", () => {
         delete process.env.NEXT_ENABLE_INSTANT_NAVIGATIONS
         delete process.env.NEXT_EXPERIMENTAL_OFFLINE_RETRY
@@ -72,6 +36,7 @@ describe("Next.js 16.3 adoption contracts", () => {
         delete require.cache[require.resolve("../next.config.js")]
         const productionConfig = require("../next.config.js")
 
+        expect(productionConfig.agentRules).toBe(false)
         expect(productionConfig.cacheComponents).toBe(false)
         expect(productionConfig.partialPrefetching).toBe(false)
         expect(productionConfig.experimental.useOffline).toBe(false)

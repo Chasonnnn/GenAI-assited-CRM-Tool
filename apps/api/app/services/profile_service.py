@@ -409,20 +409,3 @@ def set_field_hidden(
             },
         )
         db.commit()
-
-
-def get_hidden_fields(
-    db: Session,
-    org_id: uuid.UUID,
-    surrogate_id: uuid.UUID,
-) -> list[str]:
-    """Get list of hidden field keys for a surrogate."""
-    hidden_list = (
-        db.query(SurrogateProfileHiddenField)
-        .filter(
-            SurrogateProfileHiddenField.surrogate_id == surrogate_id,
-            SurrogateProfileHiddenField.organization_id == org_id,
-        )
-        .all()
-    )
-    return [h.field_key for h in hidden_list]

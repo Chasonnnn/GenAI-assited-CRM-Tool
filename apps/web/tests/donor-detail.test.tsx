@@ -745,9 +745,24 @@ describe("DonorDetailPage", () => {
         render(<DonorDetailPage />)
         fireEvent.click(screen.getByRole("button", { name: "Actions for Maya Thompson" }))
         expect(await screen.findByRole("menuitem", { name: "Edit" })).toBeInTheDocument()
+        expect(screen.getByRole("menuitem", { name: "Assign" })).toBeInTheDocument()
         expect(screen.queryByRole("menuitem", { name: "Archive" })).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Change Stage" })).not.toBeInTheDocument()
         expect(screen.queryByRole("heading", { name: "Tasks" })).not.toBeInTheDocument()
+    })
+
+    it.each(["read-only", "archived"])("hides assignment for %s donors", async (state) => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["view_donors", "archive_donors", ...(state === "archived" ? ["edit_donors"] : [])] },
+        })
+        if (state === "archived") {
+            const query = mockUseDonor("donor-1")
+            mockUseDonor.mockReturnValue({ ...query, data: { ...query.data, is_archived: true } })
+        }
+        render(<DonorDetailPage />)
+        fireEvent.click(screen.getByRole("button", { name: "Actions for Maya Thompson" }))
+        expect(await screen.findByRole("menuitem", { name: state === "archived" ? "Restore" : "Archive" })).toBeInTheDocument()
+        expect(screen.queryByRole("menuitem", { name: "Assign" })).not.toBeInTheDocument()
     })
 
     it("keeps donor attachment mutations behind edit permission", () => {

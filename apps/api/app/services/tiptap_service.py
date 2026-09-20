@@ -380,24 +380,6 @@ def html_to_tiptap(html: str) -> dict | None:
     return {"type": "doc", "content": paragraphs}
 
 
-def extract_comment_ids(doc: dict | None) -> set[str]:
-    """
-    Extract all comment IDs from a TipTap document.
-
-    Args:
-        doc: TipTap JSON document
-
-    Returns:
-        Set of comment IDs found in the document
-    """
-    if not doc:
-        return set()
-
-    comment_ids: set[str] = set()
-    _extract_comment_ids_recursive(doc, comment_ids)
-    return comment_ids
-
-
 def _extract_comment_ids_recursive(node: dict, comment_ids: set[str]) -> None:
     """Recursively extract comment IDs from nodes."""
     if node.get("type") == "text":

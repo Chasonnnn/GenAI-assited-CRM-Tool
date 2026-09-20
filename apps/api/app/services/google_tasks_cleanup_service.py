@@ -307,20 +307,6 @@ def has_unresolved_prior_owner_work_for_source_task(
     )
 
 
-def has_unresolved_google_task_work_for_user(
-    db: Session,
-    *,
-    org_id: UUID,
-    user_id: UUID,
-) -> bool:
-    """Return whether credentials are still required by a durable donor-task job."""
-    return has_unresolved_google_task_work_for_user_in_organizations(
-        db,
-        org_ids={org_id},
-        user_id=user_id,
-    )
-
-
 def has_unresolved_google_task_work_for_user_in_organizations(
     db: Session,
     *,

@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation"
 import { TabsContent } from "@/components/ui/tabs"
-import { SurrogateInterviewTab } from "@/components/surrogates/interviews/SurrogateInterviewTab"
+import { SurrogateInterviewTab } from "@/components/surrogates/interviews/InterviewTab"
 
 export default function SurrogateInterviewsPage() {
     const params = useParams<{ id: string }>()

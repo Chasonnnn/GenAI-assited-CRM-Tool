@@ -568,11 +568,11 @@ def change_status(
             raise ValueError("A pending regression request already exists for this stage and date.")
         db.refresh(request)
 
-        from app.services import notification_facade
+        from app.services import notification_service
 
         requester = _get_org_user(db, surrogate.organization_id, user_id)
         try:
-            notification_facade.notify_status_change_request_pending(
+            notification_service.notify_status_change_request_pending(
                 db=db,
                 request=request,
                 surrogate=surrogate,

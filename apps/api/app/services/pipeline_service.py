@@ -834,18 +834,6 @@ def sync_missing_stages(
     return len(missing)
 
 
-def update_pipeline_stages(
-    db: Session,
-    pipeline: Pipeline,
-    stages: list[dict],
-    user_id: UUID,
-    expected_version: int | None = None,
-    comment: str | None = None,
-) -> Pipeline:
-    """Stage updates are handled via /stages endpoints in v2."""
-    raise ValueError("Stage updates must use /settings/pipelines/{id}/stages endpoints.")
-
-
 def update_pipeline_name(
     db: Session,
     pipeline: Pipeline,
@@ -2182,22 +2170,6 @@ def sync_surrogate_labels(db: Session, stage_id: UUID, new_label: str) -> int:
     )
     db.commit()
     return updated
-
-
-def validate_surrogate_stage(
-    db: Session,
-    pipeline_id: UUID,
-    stage_id: UUID,
-) -> bool:
-    """
-    Validate that a stage_id is valid for a pipeline.
-
-    Stage must exist, be active, and belong to the pipeline.
-    """
-    stage = get_stage_by_id(db, stage_id)
-    if not stage:
-        return False
-    return stage.pipeline_id == pipeline_id and stage.is_active
 
 
 def get_default_stage(db: Session, pipeline_id: UUID) -> PipelineStage | None:

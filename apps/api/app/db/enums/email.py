@@ -10,6 +10,7 @@ class EmailStatus(str, Enum):
     SENT = "sent"
     FAILED = "failed"
     SKIPPED = "skipped"
+    UNKNOWN = "unknown"  # Provider acceptance cannot be confirmed; do not resend.
 
 
 class SuppressionReason(str, Enum):

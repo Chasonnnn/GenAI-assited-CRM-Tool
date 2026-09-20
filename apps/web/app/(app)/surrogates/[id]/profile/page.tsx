@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation"
 import { TabsContent } from "@/components/ui/tabs"
-import { SurrogateProfileCard } from "@/components/surrogates/SurrogateProfileCard"
+import { ProfileCard } from "@/components/surrogates/profile/ProfileCard"
 import { useAuth } from "@/lib/auth-context"
 
 export default function SurrogateProfilePage() {
@@ -19,7 +19,7 @@ export default function SurrogateProfilePage() {
 
     return (
         <TabsContent value="profile" className="space-y-4">
-            <SurrogateProfileCard surrogateId={id} />
+            <ProfileCard surrogateId={id} />
         </TabsContent>
     )
 }

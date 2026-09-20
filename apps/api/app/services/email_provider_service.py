@@ -83,25 +83,3 @@ def _resolve_gmail(db: Session, settings: ResendSettings) -> tuple[str, UserInte
         )
 
     return "gmail", gmail
-
-
-def get_provider_display_name(provider: str | None) -> str:
-    """Get display name for a provider."""
-    if provider == "resend":
-        return "Resend"
-    if provider == "gmail":
-        return "Gmail"
-    return "Not configured"
-
-
-def is_provider_configured(db: Session, org_id: uuid.UUID) -> tuple[bool, str | None]:
-    """
-    Check if an email provider is properly configured.
-
-    Returns (is_configured, error_message).
-    """
-    try:
-        resolve_campaign_provider(db, org_id)
-        return True, None
-    except ConfigurationError as e:
-        return False, str(e)

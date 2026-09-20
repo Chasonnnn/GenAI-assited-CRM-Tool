@@ -23,7 +23,6 @@ from app.services.analytics_shared import (
     _apply_date_range_filters,
     _get_default_pipeline_stages,
     _get_or_compute_snapshot,
-    _get_or_compute_snapshot_async,
     get_analytics_stage_configuration,
     get_funnel_stage_keys,
 )
@@ -658,38 +657,6 @@ async def get_meta_spend_summary(
         "time_series": time_series_points,
         "breakdowns": breakdown_points,
     }
-
-
-async def get_cached_meta_spend_summary(
-    db: Session,
-    organization_id: uuid.UUID,
-    start: datetime,
-    end: datetime,
-    time_increment: int | None = None,
-    breakdowns: list[str] | None = None,
-) -> dict[str, Any]:
-    params = {
-        "start": start.isoformat(),
-        "end": end.isoformat(),
-        "time_increment": time_increment,
-        "breakdowns": breakdowns or [],
-    }
-    return await _get_or_compute_snapshot_async(
-        db,
-        organization_id,
-        "meta_spend",
-        params,
-        lambda: get_meta_spend_summary(
-            db=db,
-            organization_id=organization_id,
-            start=start,
-            end=end,
-            time_increment=time_increment,
-            breakdowns=breakdowns,
-        ),
-        range_start=start,
-        range_end=end,
-    )
 
 
 def get_meta_ad_accounts(

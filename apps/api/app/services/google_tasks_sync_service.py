@@ -57,14 +57,6 @@ def _normalize_scopes(scopes: object) -> set[str]:
     return {str(scope).strip() for scope in scopes if str(scope).strip()}
 
 
-def integration_has_google_tasks_scope(integration: object | None) -> bool:
-    """Return whether a Google integration has tasks scope."""
-    if integration is None:
-        return False
-    scopes = _normalize_scopes(getattr(integration, "granted_scopes", None))
-    return bool(scopes.intersection(GOOGLE_TASKS_SCOPES))
-
-
 def scopes_known_to_exclude_google_tasks(granted_scopes: object) -> bool:
     """
     Return True if scopes are explicitly known and exclude Google Tasks.

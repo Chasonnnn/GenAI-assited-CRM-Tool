@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.db.models import Donor, Surrogate, Task, User
-from app.services import notification_facade
+from app.services import notification_service
 
 
 def notify_task_assigned(
@@ -48,7 +48,7 @@ def notify_task_assigned(
             donor_number = donor.donor_number
             donor_type = donor.donor_type
 
-    notification_facade.notify_task_assigned(
+    notification_service.notify_task_assigned(
         db=db,
         task_id=task.id,
         task_title=task.title,

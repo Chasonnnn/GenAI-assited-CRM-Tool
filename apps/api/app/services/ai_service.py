@@ -26,36 +26,27 @@ def list_conversations_for_entity(
     )
 
 
-def get_action_approval(db: Session, approval_id: UUID) -> AIActionApproval | None:
-    """Get AI action approval by ID."""
-    return db.query(AIActionApproval).filter(AIActionApproval.id == approval_id).first()
-
-
-def get_message(db: Session, message_id: UUID) -> AIMessage | None:
-    """Get AI message by ID."""
-    return db.query(AIMessage).filter(AIMessage.id == message_id).first()
-
-
-def get_conversation(db: Session, conversation_id: UUID) -> AIConversation | None:
-    """Get AI conversation by ID."""
-    return db.query(AIConversation).filter(AIConversation.id == conversation_id).first()
-
-
 def get_approval_with_conversation(
     db: Session,
     approval_id: UUID,
+    org_id: UUID,
 ) -> tuple[AIActionApproval | None, AIMessage | None, AIConversation | None]:
-    """Load approval and related message/conversation."""
-    approval = get_action_approval(db, approval_id)
-    if not approval:
+    """Lock and refresh a tenant's approval before an approve/reject decision."""
+    row = (
+        db.query(AIActionApproval, AIMessage, AIConversation)
+        .join(AIMessage, AIActionApproval.message_id == AIMessage.id)
+        .join(AIConversation, AIMessage.conversation_id == AIConversation.id)
+        .filter(
+            AIActionApproval.id == approval_id,
+            AIConversation.organization_id == org_id,
+        )
+        .populate_existing()
+        .with_for_update(of=AIActionApproval)
+        .first()
+    )
+    if row is None:
         return None, None, None
-
-    message = get_message(db, approval.message_id)
-    if not message:
-        return approval, None, None
-
-    conversation = get_conversation(db, message.conversation_id)
-    return approval, message, conversation
+    return row[0], row[1], row[2]
 
 
 def list_pending_actions(
