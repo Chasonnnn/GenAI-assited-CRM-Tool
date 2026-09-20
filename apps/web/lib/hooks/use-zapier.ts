@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as zapierApi from '../api/zapier';
+import { donorKeys } from './use-donors';
 import { metaFormsKeys } from './use-meta-forms';
 import { invalidateSurrogateCrmCaches, surrogateKeys } from './use-surrogates';
 
@@ -85,6 +86,10 @@ export function useZapierTestLead() {
             void queryClient.invalidateQueries({ queryKey: metaFormsKeys.all });
             if (result.surrogate_id) {
                 invalidateSurrogateCrmCaches(queryClient, result.surrogate_id);
+            }
+            if (result.donor_id) {
+                void queryClient.invalidateQueries({ queryKey: donorKeys.lists() });
+                void queryClient.invalidateQueries({ queryKey: donorKeys.detail(result.donor_id) });
             }
         },
     });

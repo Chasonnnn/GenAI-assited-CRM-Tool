@@ -15,15 +15,19 @@ def _create_mapped_meta_form(
     form_external_id: str = "form_1",
     page_id: str = "page_123",
     form_name: str = "Lead Form",
+    lead_kind: str | None = None,
 ):
     from app.db.models import MetaForm, MetaFormVersion
 
-    form = MetaForm(
-        organization_id=org_id,
-        page_id=page_id,
-        form_external_id=form_external_id,
-        form_name=form_name,
-    )
+    form_values = {
+        "organization_id": org_id,
+        "page_id": page_id,
+        "form_external_id": form_external_id,
+        "form_name": form_name,
+    }
+    if lead_kind is not None:
+        form_values["lead_kind"] = lead_kind
+    form = MetaForm(**form_values)
     db.add(form)
     db.flush()
 
@@ -489,6 +493,36 @@ async def test_zapier_test_endpoint_creates_test_lead(authed_client, db, test_or
     surrogate = db.get(Surrogate, body["surrogate_id"])
     assert surrogate is not None
     assert surrogate.import_metadata.get("zapier_test") is True
+
+
+@pytest.mark.asyncio
+async def test_zapier_test_endpoint_returns_donor_id_for_donor_form(
+    authed_client, db, test_org, test_user
+):
+    from app.db.models import Donor
+
+    _create_mapped_meta_form(
+        db,
+        test_org.id,
+        test_user.id,
+        form_external_id="form_donor_test",
+        lead_kind="egg_donor",
+    )
+
+    res = await authed_client.post(
+        "/integrations/zapier/test-lead",
+        json={"form_id": "form_donor_test"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "converted"
+    assert body["surrogate_id"] is None
+    assert body["donor_id"], "donor_id must survive the response model"
+
+    donor = db.get(Donor, body["donor_id"])
+    assert donor is not None
+    assert donor.donor_type == "egg"
+    assert donor.organization_id == test_org.id
 
 
 @pytest.mark.asyncio

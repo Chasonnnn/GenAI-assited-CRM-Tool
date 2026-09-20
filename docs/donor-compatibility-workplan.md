@@ -30,7 +30,9 @@ separate follow-up phase.
       limited sample query; no full-audience row materialization, no `Query.count()`).
       Suppressed sample rows are now excluded in SQL, so the sample reaches `limit`
       whenever enough eligible recipients exist.
-- [ ] fix: Zapier test-lead response retains `donor_id` (`routers/zapier.py`)
+- [x] fix: Zapier test-lead response retains `donor_id` (`routers/zapier.py`); web
+      `useZapierTestLead` now also invalidates donor list/detail caches on donor
+      conversion (type already declared `donor_id`)
 - [ ] fix: donor Meta source mapping is unambiguous — remove `source` from donor mapping
       fields; flag stored donor mappings targeting `source` as repair-required; conversion
       keeps canonical `"Meta"`; no backfill of existing record sources
@@ -131,3 +133,4 @@ retry, permission denied).
 | date | commit | commands | result |
 |------|--------|----------|--------|
 | 2026-09-20 | (this commit) email preview full-audience counts | `uv run -m pytest tests/test_campaigns.py -q` (33 passed), `uv run -m pytest tests/test_donor_campaigns.py -q` (9 passed), `ruff check` clean | pass |
+| 2026-09-20 | (this commit) Zapier test-lead donor_id | `uv run -m pytest tests/test_zapier_webhooks.py -q` (21 passed; new donor regression failed before fix with KeyError donor_id), `pnpm run typecheck` clean, `vitest run tests/integrations-page.test.tsx` (44 passed) | pass |

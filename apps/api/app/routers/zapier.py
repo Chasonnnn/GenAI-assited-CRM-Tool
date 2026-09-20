@@ -95,6 +95,7 @@ class ZapierTestLeadResponse(BaseModel):
     duplicate: bool
     meta_lead_id: str
     surrogate_id: str | None = None
+    donor_id: str | None = None
     message: str | None = None
 
 
