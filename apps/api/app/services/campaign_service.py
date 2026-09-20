@@ -5,8 +5,8 @@ from copy import deepcopy
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import and_, case, func, or_, select
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import String, and_, any_, bindparam, case, func, or_, select
+from sqlalchemy.dialects.postgresql import ARRAY, insert
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.encryption import hash_email
@@ -1025,18 +1025,23 @@ def preview_recipients(
         entity_model = Donor
 
     # Entity emails are encrypted at rest, so suppression matching happens on
-    # the indexed email_hash column. Load the org's (bounded) suppression list,
-    # hash it, and aggregate the full audience in SQL: counts must cover the
-    # whole filtered audience, not just the sampled page, without
-    # materializing every recipient.
+    # the indexed email_hash column. Load and hash the org's suppression list,
+    # then pass it as one PostgreSQL array bind so large lists do not exceed the
+    # driver's bind-parameter limit. Counts still cover the whole filtered
+    # audience without materializing every recipient.
     suppression_query = db.query(EmailSuppression.email).filter(
         EmailSuppression.organization_id == org_id
     )
     if ignore_opt_out:
         suppression_query = suppression_query.filter(EmailSuppression.reason != "opt_out")
-    suppressed_hashes = {hash_email(email) for (email,) in suppression_query if email}
+    suppressed_hashes = list({hash_email(email) for (email,) in suppression_query if email})
 
-    suppressed_condition = entity_model.email_hash.in_(suppressed_hashes)
+    suppressed_hashes_param = bindparam(
+        "suppressed_email_hashes",
+        value=suppressed_hashes,
+        type_=ARRAY(String(64)),
+    )
+    suppressed_condition = entity_model.email_hash == any_(suppressed_hashes_param)
     total_count, suppressed_count = (
         query.order_by(None)
         .with_entities(

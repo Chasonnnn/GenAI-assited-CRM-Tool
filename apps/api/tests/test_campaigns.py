@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.orm import Query
 
 from app.core.encryption import hash_email
@@ -299,6 +300,102 @@ def test_campaign_preview_reports_full_audience_counts_beyond_sample_limit(db, t
     sampled_ids = {recipient.entity_id for recipient in preview.sample_recipients}
     assert suppressed_surrogate.id not in sampled_ids
     assert sampled_ids <= surrogate_ids
+
+
+def test_campaign_preview_handles_more_than_65535_tenant_suppressions(
+    db, db_engine, test_org, test_user
+):
+    """Large tenant suppression lists use one PostgreSQL array bind and stay scoped."""
+    from sqlalchemy import event as sqlalchemy_event
+
+    from app.db.models import EmailSuppression, Organization
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import campaign_service, surrogate_service
+
+    suppressed_email = normalize_email(f"preview-scale-suppressed-{uuid4().hex}@example.com")
+    foreign_suppressed_email = normalize_email(
+        f"preview-scale-foreign-{uuid4().hex}@example.com"
+    )
+    suppressed_surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(full_name="Preview Scale Suppressed", email=suppressed_email),
+    )
+    eligible_surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(full_name="Preview Scale Eligible", email=foreign_suppressed_email),
+    )
+    foreign_org = Organization(
+        id=uuid4(),
+        name="Preview Scale Foreign Organization",
+        slug=f"preview-scale-foreign-{uuid4().hex}",
+    )
+    db.add_all(
+        [
+            foreign_org,
+            EmailSuppression(
+                id=uuid4(),
+                organization_id=test_org.id,
+                email=suppressed_email,
+                reason="bounced",
+            ),
+            EmailSuppression(
+                id=uuid4(),
+                organization_id=foreign_org.id,
+                email=foreign_suppressed_email,
+                reason="bounced",
+            ),
+        ]
+    )
+    db.flush()
+    db.execute(
+        text(
+            """
+            INSERT INTO email_suppressions (organization_id, email, reason)
+            SELECT :organization_id,
+                   'preview-scale-' || value || '@example.com',
+                   'bounced'
+            FROM generate_series(1, 65535) AS value
+            """
+        ),
+        {"organization_id": test_org.id},
+    )
+
+    suppression_statements: list[tuple[str, dict]] = []
+
+    def capture_suppression_array_bind(
+        _conn, _cursor, statement, parameters, _context, _executemany
+    ):
+        if isinstance(parameters, dict) and "suppressed_email_hashes" in parameters:
+            suppression_statements.append((statement, parameters))
+
+    sqlalchemy_event.listen(db_engine, "before_cursor_execute", capture_suppression_array_bind)
+    try:
+        preview = campaign_service.preview_recipients(db, test_org.id, "case", {}, limit=10)
+    finally:
+        sqlalchemy_event.remove(
+            db_engine, "before_cursor_execute", capture_suppression_array_bind
+        )
+
+    assert preview.total_count == 2
+    assert preview.eligible_count == 1
+    assert preview.suppressed_count == 1
+    assert [recipient.entity_id for recipient in preview.sample_recipients] == [
+        eligible_surrogate.id
+    ]
+    assert suppressed_surrogate.id not in {
+        recipient.entity_id for recipient in preview.sample_recipients
+    }
+    assert len(suppression_statements) == 2
+    assert all(" = ANY (" in statement for statement, _ in suppression_statements)
+    assert all(len(parameters) < 20 for _, parameters in suppression_statements)
+    assert all(
+        len(parameters["suppressed_email_hashes"]) == 65536
+        for _, parameters in suppression_statements
+    )
 
 
 def test_campaign_preview_full_counts_for_donor_recipients(db, test_org, test_user):
