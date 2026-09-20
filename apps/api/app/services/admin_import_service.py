@@ -687,6 +687,9 @@ def import_org_config_zip(
             description=template_data.get("description"),
             icon=template_data.get("icon", "template"),
             category=template_data.get("category", "general"),
+            # Absent/None keeps legacy semantics: donor-trigger templates stay
+            # repair-required, other triggers fall back to the legacy mapping.
+            subject_type=template_data.get("subject_type"),
             trigger_type=template_data.get("trigger_type"),
             trigger_config=template_data.get("trigger_config") or {},
             conditions=template_data.get("conditions") or [],

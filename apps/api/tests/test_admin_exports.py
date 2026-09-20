@@ -540,6 +540,7 @@ class TestAdminExports:
             description="Workflow template",
             icon="template",
             category="general",
+            subject_type="surrogate",
             trigger_type="status_changed",
             trigger_config={"from": ["new_unread"]},
             conditions=[],
@@ -645,6 +646,12 @@ class TestAdminExports:
                 item for item in workflows_payload if item["id"] == str(donor_workflow_id)
             )
             assert exported_workflow["subject_type"] == "egg_donor"
+
+            templates_payload = json.loads(archive.read("workflow_templates.json"))
+            exported_template = next(
+                item for item in templates_payload if item["id"] == str(workflow_template_id)
+            )
+            assert exported_template["subject_type"] == "surrogate"
 
     @pytest.mark.asyncio
     async def test_analytics_export_zip(self, authed_client, db, test_org):

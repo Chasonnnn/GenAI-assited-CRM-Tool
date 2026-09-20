@@ -49,6 +49,7 @@ FIELDS = {
         "description",
         "icon",
         "category",
+        "subject_type",
         "trigger_type",
         "trigger_config",
         "conditions",
@@ -197,6 +198,20 @@ def validate_template(kind, draft, *, publishing=True, portable=True):
             trigger = WorkflowTriggerType(canonical["trigger_type"])
         except ValueError:
             raise TemplateInputError("draft.trigger_type: unsupported trigger") from None
+        subject_type = canonical.get("subject_type")
+        if subject_type is None:
+            from app.services import template_service
+
+            if trigger.value in template_service.DONOR_ONLY_TRIGGER_TYPES:
+                raise TemplateInputError(
+                    "draft.subject_type: donor triggers require an explicit "
+                    "egg_donor or sperm_donor subject"
+                )
+        else:
+            try:
+                workflow_service._validate_subject_trigger(subject_type, trigger)
+            except ValueError as exc:
+                raise TemplateInputError(f"draft.subject_type: {exc}") from None
         if canonical["condition_logic"] not in {"AND", "OR"}:
             raise TemplateInputError("draft.condition_logic: expected AND or OR")
         for condition in canonical["conditions"]:

@@ -106,6 +106,7 @@ def test_cli_organization_discovery_preserves_search_and_pagination(cli_api, db)
                 "description": "Not ready to publish",
                 "icon": "template",
                 "category": "general",
+                "subject_type": None,
                 "trigger_type": "surrogate_created",
                 "trigger_config": {},
                 "conditions": [],

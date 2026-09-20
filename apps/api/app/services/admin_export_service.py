@@ -1047,6 +1047,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "description": template.description,
             "icon": template.icon,
             "category": template.category,
+            "subject_type": template.subject_type,
             "trigger_type": template.trigger_type,
             "trigger_config": template.trigger_config,
             "conditions": template.conditions,

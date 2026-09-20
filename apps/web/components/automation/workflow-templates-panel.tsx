@@ -54,6 +54,7 @@ interface WorkflowTemplateListItem {
     description: string | null
     icon: string
     category: string
+    subject_type?: string | null
     trigger_type: string
     is_global: boolean
     usage_count: number

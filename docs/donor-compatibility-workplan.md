@@ -45,9 +45,9 @@ separate follow-up phase.
       `workflow_service.create_workflow`; donor permission checks in templates router;
       ambiguous legacy donor-intent templates error as repair-required, never silently
       enabled
-- [ ] feat: platform template publish/version snapshots and admin config export/import carry
-      `subject_type`
-- [ ] chore: web template contract sync (`subject_type` in template types/UI)
+- [x] feat: platform template publish/version snapshots and admin config export/import carry
+      `subject_type` (publish validates donor triggers require an explicit donor subject)
+- [x] chore: web template contract sync (`subject_type` in template types; no UI redesign)
 
 ## W1 — Recoverable intake/conversion occurrences (after W0 subject contracts)
 
@@ -138,3 +138,4 @@ retry, permission denied).
 | 2026-09-20 | (this commit) Zapier test-lead donor_id | `uv run -m pytest tests/test_zapier_webhooks.py -q` (21 passed; new donor regression failed before fix with KeyError donor_id), `pnpm run typecheck` clean, `vitest run tests/integrations-page.test.tsx` (44 passed) | pass |
 | 2026-09-20 | (this commit) donor Meta source mapping repair | `uv run -m pytest tests/test_meta_donor_routing.py tests/test_meta_donor_form_permissions.py tests/test_meta_form_mapping.py tests/test_meta_lead_kind_snapshot.py tests/test_meta_forms_delete.py tests/test_meta_forms_performance_status.py -q` (37 passed), `ruff check` clean, `pnpm run typecheck` clean, `vitest run tests/meta-form-mapping-page.test.tsx` (8 passed) | pass |
 | 2026-09-20 | (this commit) WorkflowTemplate.subject_type contract | `uv run alembic upgrade head` (20260920_0100 applied), `uv run -m pytest tests/test_workflows.py tests/test_donor_workflows.py tests/test_workflow_template_use_scope.py tests/test_workflow_template_subject_type.py tests/test_template_seeder_workflows.py tests/test_shared_donor_template_workflows.py -q` (85 passed), `uv run -m pytest tests/test_rbac_policies.py tests/test_org_scope_backstop.py tests/test_intelligent_suggestions.py -q` (44 passed), `ruff check` clean | pass |
+| 2026-09-20 | (this commit) platform publish + export/import subject_type | `uv run -m pytest tests/test_platform_template_studio.py tests/test_ops_cli_integration.py tests/test_ops_cli_templates.py tests/test_admin_exports.py tests/test_admin_imports.py tests/test_platform_router_template_studio_and_alerts.py -q` (68 passed), `ruff check` clean, `pnpm run typecheck` clean, `vitest run tests/templates-page.test.tsx tests/ops-templates-studio-page.test.tsx tests/platform-workflow-template-draft.test.tsx` (19 passed) | pass |
