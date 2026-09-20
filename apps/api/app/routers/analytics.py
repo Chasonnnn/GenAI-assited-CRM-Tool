@@ -17,7 +17,12 @@ from app.core.permissions import PermissionKey
 from app.core.policies import POLICIES
 from app.db.enums import Role
 from app.schemas.auth import UserSession
-from app.services import analytics_service
+from app.services import (
+    analytics_meta_service,
+    analytics_shared,
+    analytics_surrogate_service,
+    analytics_usage_service,
+)
 
 DASHBOARD_ANALYTICS_PATHS = {
     "/analytics/surrogates/by-status",
@@ -184,10 +189,8 @@ def get_analytics_summary(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get high-level analytics summary."""
-    from app.services import analytics_service
-
-    start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cached_analytics_summary(db, session.org_id, start, end)
+    start, end = analytics_shared.parse_date_range(from_date, to_date)
+    data = analytics_surrogate_service.get_cached_analytics_summary(db, session.org_id, start, end)
     return AnalyticsSummary(**data)
 
 
@@ -212,11 +215,11 @@ def get_surrogates_by_status(
     ):
         raise HTTPException(status_code=403, detail="Not authorized to view other users' analytics")
 
-    start, end = analytics_service.parse_date_range(from_date, to_date)
+    start, end = analytics_shared.parse_date_range(from_date, to_date)
     start_date = start.date() if start else None
     end_date = end.date() if end else None
 
-    data = analytics_service.get_cached_surrogates_by_status(
+    data = analytics_surrogate_service.get_cached_surrogates_by_status(
         db,
         session.org_id,
         start_date=start_date,
@@ -235,9 +238,7 @@ def get_surrogates_by_assignee(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get surrogate counts grouped by owner (user-owned surrogates only)."""
-    from app.services import analytics_service
-
-    data = analytics_service.get_cached_surrogates_by_assignee(db, session.org_id)
+    data = analytics_surrogate_service.get_cached_surrogates_by_assignee(db, session.org_id)
     return [AssigneeCount(**item) for item in data]
 
 
@@ -266,13 +267,13 @@ def get_surrogates_trend(
     ):
         raise HTTPException(status_code=403, detail="Not authorized to view other users' analytics")
 
-    start, end = analytics_service.parse_date_range(
+    start, end = analytics_shared.parse_date_range(
         from_date,
         to_date,
         inclusive_date_end=True,
         timezone_name=timezone_name,
     )
-    data = analytics_service.get_cached_surrogates_trend(
+    data = analytics_surrogate_service.get_cached_surrogates_trend(
         db,
         session.org_id,
         start=start,
@@ -304,7 +305,7 @@ def _optional_donor_date_range(
 ) -> tuple[datetime | None, datetime | None]:
     if not from_date and not to_date:
         return None, None
-    return analytics_service.parse_date_range(
+    return analytics_shared.parse_date_range(
         from_date,
         to_date,
         inclusive_date_end=True,
@@ -339,7 +340,7 @@ def get_donor_analytics_summary(
     from app.services import analytics_donor_service
 
     _require_allowed_analytics_owner(session, owner_id)
-    start, end = analytics_service.parse_date_range(
+    start, end = analytics_shared.parse_date_range(
         from_date,
         to_date,
         inclusive_date_end=True,
@@ -421,7 +422,7 @@ def get_donors_trend(
     from app.services import analytics_donor_service
 
     _require_allowed_analytics_owner(session, owner_id)
-    start, end = analytics_service.parse_date_range(
+    start, end = analytics_shared.parse_date_range(
         from_date,
         to_date,
         inclusive_date_end=True,
@@ -459,10 +460,8 @@ def get_meta_performance(
     Qualified = Lead's surrogate reached the configured qualification stage or later.
     Converted = Lead's surrogate reached the configured conversion stage or later.
     """
-    from app.services import analytics_service
-
-    start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cached_meta_performance(db, session.org_id, start, end)
+    start, end = analytics_shared.parse_date_range(from_date, to_date)
+    data = analytics_meta_service.get_cached_meta_performance(db, session.org_id, start, end)
     return MetaPerformance(**data)
 
 
@@ -580,7 +579,7 @@ def get_meta_ad_accounts(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get list of configured ad accounts for filter dropdown."""
-    data = analytics_service.get_meta_ad_accounts(db, session.org_id)
+    data = analytics_meta_service.get_meta_ad_accounts(db, session.org_id)
     return {"data": [MetaAdAccountItem(**item).model_dump() for item in data]}
 
 
@@ -602,10 +601,10 @@ def get_spend_totals(
     """
     from uuid import UUID as _UUID
 
-    start, end = analytics_service.parse_date_range(from_date, to_date)
+    start, end = analytics_shared.parse_date_range(from_date, to_date)
     account_uuid = _UUID(ad_account_id) if ad_account_id else None
 
-    data = analytics_service.get_spend_totals(
+    data = analytics_meta_service.get_spend_totals(
         db=db,
         organization_id=session.org_id,
         start_date=start.date() if start else None,
@@ -626,10 +625,10 @@ def get_spend_by_campaign(
     """Get spend aggregated by campaign from stored data."""
     from uuid import UUID as _UUID
 
-    start, end = analytics_service.parse_date_range(from_date, to_date)
+    start, end = analytics_shared.parse_date_range(from_date, to_date)
     account_uuid = _UUID(ad_account_id) if ad_account_id else None
 
-    data = analytics_service.get_cached_spend_by_campaign(
+    data = analytics_meta_service.get_cached_spend_by_campaign(
         db=db,
         organization_id=session.org_id,
         start_date=start.date() if start else None,
@@ -661,10 +660,10 @@ def get_spend_by_breakdown(
     """
     from uuid import UUID as _UUID
 
-    start, end = analytics_service.parse_date_range(from_date, to_date)
+    start, end = analytics_shared.parse_date_range(from_date, to_date)
     account_uuid = _UUID(ad_account_id) if ad_account_id else None
 
-    data = analytics_service.get_cached_spend_by_breakdown(
+    data = analytics_meta_service.get_cached_spend_by_breakdown(
         db=db,
         organization_id=session.org_id,
         start_date=start.date() if start else None,
@@ -689,10 +688,10 @@ def get_spend_trend(
     """Get daily spend time series from stored data."""
     from uuid import UUID as _UUID
 
-    start, end = analytics_service.parse_date_range(from_date, to_date)
+    start, end = analytics_shared.parse_date_range(from_date, to_date)
     account_uuid = _UUID(ad_account_id) if ad_account_id else None
 
-    data = analytics_service.get_cached_spend_trend(
+    data = analytics_meta_service.get_cached_spend_trend(
         db=db,
         organization_id=session.org_id,
         start_date=start.date() if start else None,
@@ -716,9 +715,9 @@ def get_form_performance(
     Returns lead counts from meta_leads and conversion rates
     from joined Cases.
     """
-    start, end = analytics_service.parse_date_range(from_date, to_date)
+    start, end = analytics_shared.parse_date_range(from_date, to_date)
 
-    data = analytics_service.get_cached_leads_by_form(
+    data = analytics_meta_service.get_cached_leads_by_form(
         db=db,
         organization_id=session.org_id,
         start_date=start.date() if start else None,
@@ -735,9 +734,9 @@ def get_meta_platform_breakdown(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get Meta platform distribution from lead data."""
-    start, end = analytics_service.parse_date_range(from_date, to_date)
+    start, end = analytics_shared.parse_date_range(from_date, to_date)
 
-    data = analytics_service.get_cached_meta_platform_breakdown(
+    data = analytics_meta_service.get_cached_meta_platform_breakdown(
         db=db,
         organization_id=session.org_id,
         start_date=start.date() if start else None,
@@ -754,9 +753,9 @@ def get_meta_ad_performance(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get Meta ad performance grouped by ad ID."""
-    start, end = analytics_service.parse_date_range(from_date, to_date)
+    start, end = analytics_shared.parse_date_range(from_date, to_date)
 
-    data = analytics_service.get_cached_leads_by_ad(
+    data = analytics_meta_service.get_cached_leads_by_ad(
         db=db,
         organization_id=session.org_id,
         start_date=start.date() if start else None,
@@ -776,7 +775,7 @@ def get_meta_campaign_list(
 
     account_uuid = _UUID(ad_account_id) if ad_account_id else None
 
-    data = analytics_service.get_meta_campaign_list(
+    data = analytics_meta_service.get_meta_campaign_list(
         db=db,
         organization_id=session.org_id,
         ad_account_id=account_uuid,
@@ -798,10 +797,8 @@ def get_surrogates_by_state(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get surrogate count by US state for map visualization."""
-    from app.services import analytics_service
-
-    start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cached_surrogates_by_state(
+    start, end = analytics_shared.parse_date_range(from_date, to_date)
+    data = analytics_surrogate_service.get_cached_surrogates_by_state(
         db,
         session.org_id,
         start.date() if start else None,
@@ -819,10 +816,8 @@ def get_surrogates_by_source(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get surrogate count by lead source."""
-    from app.services import analytics_service
-
-    start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cached_surrogates_by_source(
+    start, end = analytics_shared.parse_date_range(from_date, to_date)
+    data = analytics_surrogate_service.get_cached_surrogates_by_source(
         db, session.org_id, start.date() if start else None, end.date() if end else None
     )
     return {"data": data}
@@ -836,10 +831,8 @@ def get_conversion_funnel(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get conversion funnel data."""
-    from app.services import analytics_service
-
-    start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cached_conversion_funnel(
+    start, end = analytics_shared.parse_date_range(from_date, to_date)
+    data = analytics_surrogate_service.get_cached_conversion_funnel(
         db, session.org_id, start.date() if start else None, end.date() if end else None
     )
     return {"data": data}
@@ -853,10 +846,8 @@ def get_kpis(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get summary KPIs for dashboard cards."""
-    from app.services import analytics_service
-
-    start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cached_summary_kpis(
+    start, end = analytics_shared.parse_date_range(from_date, to_date)
+    data = analytics_surrogate_service.get_cached_summary_kpis(
         db, session.org_id, start.date() if start else None, end.date() if end else None
     )
     return data
@@ -868,9 +859,7 @@ def get_campaigns(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get campaigns for filter dropdown."""
-    from app.services import analytics_service
-
-    data = analytics_service.get_cached_campaigns(db, session.org_id)
+    data = analytics_meta_service.get_cached_campaigns(db, session.org_id)
     return {"data": data}
 
 
@@ -883,10 +872,8 @@ def get_funnel_compare(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get funnel with optional campaign filter for comparison."""
-    from app.services import analytics_service
-
-    start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cached_funnel_with_filter(
+    start, end = analytics_shared.parse_date_range(from_date, to_date)
+    data = analytics_meta_service.get_cached_funnel_with_filter(
         db,
         session.org_id,
         start.date() if start else None,
@@ -905,10 +892,8 @@ def get_surrogates_by_state_compare(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get surrogates by state with optional campaign filter."""
-    from app.services import analytics_service
-
-    start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cached_surrogates_by_state_with_filter(
+    start, end = analytics_shared.parse_date_range(from_date, to_date)
+    data = analytics_meta_service.get_cached_surrogates_by_state_with_filter(
         db,
         session.org_id,
         start.date() if start else None,
@@ -960,8 +945,8 @@ def get_performance_by_user(
     All metrics are attributed to the current surrogate owner. Surrogates without an owner
     are grouped in the `unassigned` bucket.
     """
-    start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cached_performance_by_user(
+    start, end = analytics_shared.parse_date_range(from_date, to_date)
+    data = analytics_surrogate_service.get_cached_performance_by_user(
         db=db,
         organization_id=session.org_id,
         start_date=start,
@@ -1027,7 +1012,7 @@ def get_activity_feed(
     Returns recent activities across all surrogates in the organization.
     Useful for admins to see what's happening across the team.
     """
-    items, has_more = analytics_service.get_activity_feed(
+    items, has_more = analytics_usage_service.get_activity_feed(
         db=db,
         organization_id=session.org_id,
         limit=limit,

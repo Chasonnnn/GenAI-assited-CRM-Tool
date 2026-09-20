@@ -25,7 +25,7 @@ from app.schemas.surrogate import (
 )
 from app.schemas.task import TaskListItem
 from app.services import (
-    analytics_service,
+    analytics_shared,
     intelligent_suggestions_service,
     org_service,
     permission_service,
@@ -100,7 +100,7 @@ def get_surrogate_stats(
     """Get aggregated surrogate statistics for dashboard with period comparisons."""
     _require_owner_filter_access(session, db, owner_id)
 
-    start, end = analytics_service.parse_date_range(
+    start, end = analytics_shared.parse_date_range(
         from_date,
         to_date,
         inclusive_date_end=True,

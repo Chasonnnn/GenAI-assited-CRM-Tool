@@ -58,14 +58,14 @@ def _build_performance_context(
     organization_id: uuid.UUID,
 ) -> str:
     """Build performance data context for global mode."""
-    from app.services import analytics_service
+    from app.services import analytics_surrogate_service
 
     try:
         # Get performance data (last 90 days by default)
         end_date = date.today()
         start_date = end_date - timedelta(days=90)
 
-        data = analytics_service.get_cached_performance_by_user(
+        data = analytics_surrogate_service.get_cached_performance_by_user(
             db=db,
             organization_id=organization_id,
             start_date=start_date,

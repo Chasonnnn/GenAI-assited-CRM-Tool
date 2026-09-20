@@ -67,7 +67,12 @@ from app.db.models import (
     UserPermissionOverride,
     WorkflowTemplate,
 )
-from app.services import ai_usage_service, analytics_service, attachment_service
+from app.services import (
+    ai_usage_service,
+    analytics_meta_service,
+    analytics_surrogate_service,
+    attachment_service,
+)
 
 CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@")
 MAX_DONOR_STATUS_HISTORY_JSON_BYTES = 1_048_576
@@ -1405,22 +1410,24 @@ def build_analytics_zip(
     ad_id: str | None,
     meta_spend: dict[str, Any],
 ) -> bytes:
-    summary = analytics_service.get_cached_analytics_summary(db, org_id, start, end)
-    surrogates_by_status = analytics_service.get_cached_surrogates_by_status(db, org_id)
-    surrogates_by_assignee = analytics_service.get_cached_surrogates_by_assignee(db, org_id)
-    surrogates_trend = analytics_service.get_cached_surrogates_trend(
+    summary = analytics_surrogate_service.get_cached_analytics_summary(db, org_id, start, end)
+    surrogates_by_status = analytics_surrogate_service.get_cached_surrogates_by_status(db, org_id)
+    surrogates_by_assignee = analytics_surrogate_service.get_cached_surrogates_by_assignee(
+        db, org_id
+    )
+    surrogates_trend = analytics_surrogate_service.get_cached_surrogates_trend(
         db, org_id, start=start, end=end, group_by="day"
     )
-    meta_performance = analytics_service.get_cached_meta_performance(db, org_id, start, end)
-    campaigns = analytics_service.get_campaigns(db, org_id)
-    funnel = analytics_service.get_funnel_with_filter(
+    meta_performance = analytics_meta_service.get_cached_meta_performance(db, org_id, start, end)
+    campaigns = analytics_meta_service.get_campaigns(db, org_id)
+    funnel = analytics_meta_service.get_funnel_with_filter(
         db,
         org_id,
         start.date(),
         end.date(),
         ad_id,
     )
-    surrogates_by_state = analytics_service.get_surrogates_by_state_with_filter(
+    surrogates_by_state = analytics_meta_service.get_surrogates_by_state_with_filter(
         db,
         org_id,
         start.date(),
