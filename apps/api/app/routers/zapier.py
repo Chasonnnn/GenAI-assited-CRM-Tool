@@ -46,6 +46,8 @@ class ZapierSettingsResponse(BaseModel):
     outbound_secret_configured: bool
     send_hashed_pii: bool
     event_mapping: list[ZapierEventMappingItem]
+    donor_outbound_enabled: bool
+    donor_event_mapping: list[ZapierDonorEventMappingItem]
 
 
 class RotateSecretResponse(BaseModel):
@@ -78,12 +80,22 @@ class ZapierEventMappingItem(BaseModel):
     bucket: Literal["qualified", "converted", "lost", "not_qualified"] | None = None
 
 
+class ZapierDonorEventMappingItem(BaseModel):
+    donor_type: Literal["egg", "sperm"]
+    pipeline_id: UUID
+    stage_id: UUID
+    event_name: Literal["Lead", "Qualified", "Converted", "Lost", "Not Qualified"]
+    enabled: bool = True
+
+
 class ZapierOutboundSettingsUpdate(BaseModel):
     outbound_webhook_url: str | None = None
     outbound_webhook_secret: str | None = None
     outbound_enabled: bool | None = None
     send_hashed_pii: bool | None = None
     event_mapping: list[ZapierEventMappingItem] | None = None
+    donor_outbound_enabled: bool | None = None
+    donor_event_mapping: list[ZapierDonorEventMappingItem] | None = None
 
 
 class ZapierTestLeadRequest(BaseModel):
@@ -124,6 +136,13 @@ class ZapierOutboundEventResponse(BaseModel):
     stage_slug: str | None = None
     stage_label: str | None = None
     surrogate_id: UUID | None = None
+    donor_id: UUID | None = None
+    donor_status_history_id: UUID | None = None
+    donor_type: Literal["egg", "sperm"] | None = None
+    pipeline_id: UUID | None = None
+    stage_id: UUID | None = None
+    attribution_source: Literal["meta", "website"] | None = None
+    first_party_submission_id: UUID | None = None
     attempts: int
     last_error: str | None = None
     created_at: datetime
@@ -337,6 +356,10 @@ def update_outbound_settings(
             send_hashed_pii=data.send_hashed_pii,
             event_mapping=[m.model_dump() for m in data.event_mapping]
             if data.event_mapping
+            else None,
+            donor_outbound_enabled=data.donor_outbound_enabled,
+            donor_event_mapping=[m.model_dump(mode="json") for m in data.donor_event_mapping]
+            if data.donor_event_mapping is not None
             else None,
         )
     except ValueError as exc:
@@ -607,6 +630,8 @@ def _serialize_settings(
         outbound_secret_configured=bool(settings.outbound_webhook_secret_encrypted),
         send_hashed_pii=bool(settings.outbound_send_hashed_pii),
         event_mapping=mapping,
+        donor_outbound_enabled=bool(settings.donor_outbound_enabled),
+        donor_event_mapping=list(settings.donor_outbound_event_mapping or []),
     )
 
 
@@ -623,6 +648,13 @@ def _serialize_outbound_event(event) -> ZapierOutboundEventResponse:
         stage_slug=event.stage_slug,
         stage_label=event.stage_label,
         surrogate_id=event.surrogate_id,
+        donor_id=event.donor_id,
+        donor_status_history_id=event.donor_status_history_id,
+        donor_type=event.donor_type,
+        pipeline_id=event.pipeline_id,
+        stage_id=event.stage_id,
+        attribution_source=event.attribution_source,
+        first_party_submission_id=event.first_party_submission_id,
         attempts=event.attempts,
         last_error=event.last_error,
         created_at=event.created_at,

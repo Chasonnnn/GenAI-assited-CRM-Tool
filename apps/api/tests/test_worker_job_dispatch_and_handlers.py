@@ -385,6 +385,93 @@ def test_worker_record_success_and_failure(monkeypatch, db):
     assert alerts
 
 
+@pytest.mark.parametrize(
+    ("job_type", "integration_type", "integration_key", "monitor_model"),
+    [
+        (
+            JobType.ZAPIER_STAGE_EVENT.value,
+            "zapier",
+            "webhook-1",
+            "zapier",
+        ),
+        (
+            JobType.META_CRM_DATASET_EVENT.value,
+            "meta_crm_dataset",
+            "dataset-1",
+            "meta",
+        ),
+    ],
+    ids=["zapier", "meta-crm-dataset"],
+)
+@pytest.mark.parametrize("monitor_status", ["skipped", "queued"])
+def test_worker_monitor_outcome_controls_integration_health_success(
+    db,
+    test_org,
+    job_type,
+    integration_type,
+    integration_key,
+    monitor_model,
+    monitor_status,
+):
+    from app.db.enums import IntegrationStatus, IntegrationType
+    from app.db.models import MetaCrmDatasetEvent, ZapierOutboundEvent
+    from app.services import ops_service
+
+    integration_enum = IntegrationType(integration_type)
+    health = ops_service.record_error(
+        db=db,
+        org_id=test_org.id,
+        integration_type=integration_enum,
+        integration_key=integration_key,
+        error_message="existing integration error",
+    )
+    health.last_success_at = datetime(2025, 1, 1, tzinfo=UTC)
+    db.commit()
+    db.refresh(health)
+    prior_success_at = health.last_success_at
+    prior_error_at = health.last_error_at
+
+    payload_key = "dataset_id" if monitor_model == "meta" else "webhook_id"
+    payload = {payload_key: integration_key}
+    job = Job(
+        organization_id=test_org.id,
+        job_type=job_type,
+        payload=payload,
+        run_at=datetime.now(UTC),
+        status=JobStatus.COMPLETED.value,
+        attempts=1,
+    )
+    db.add(job)
+    db.flush()
+    event_type = MetaCrmDatasetEvent if monitor_model == "meta" else ZapierOutboundEvent
+    event = event_type(
+        organization_id=test_org.id,
+        job_id=job.id,
+        source="test",
+        status=monitor_status,
+        reason="terminal_skip" if monitor_status == "skipped" else None,
+    )
+    db.add(event)
+    db.commit()
+
+    worker._record_job_success(db, job)
+
+    db.refresh(event)
+    db.refresh(health)
+    assert event.attempts == 1
+    if monitor_status == "skipped":
+        assert event.status == "skipped"
+        assert health.status == IntegrationStatus.ERROR.value
+        assert health.last_error == "existing integration error"
+        assert health.last_error_at == prior_error_at
+        assert health.last_success_at == prior_success_at
+    else:
+        assert event.status == "delivered"
+        assert health.status == IntegrationStatus.HEALTHY.value
+        assert health.last_error is None
+        assert health.last_success_at > prior_success_at
+
+
 def test_worker_rate_limit_classification(monkeypatch):
     from app.services import meta_token_service
 

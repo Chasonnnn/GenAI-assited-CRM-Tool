@@ -13,6 +13,14 @@ export interface ZapierEventMappingItem {
     bucket?: ZapierStageBucket | null;
 }
 
+export interface ZapierDonorEventMappingItem {
+    donor_type: 'egg' | 'sperm';
+    pipeline_id: string;
+    stage_id: string;
+    event_name: 'Lead' | 'Qualified' | 'Converted' | 'Lost' | 'Not Qualified';
+    enabled: boolean;
+}
+
 interface ZapierSettings {
     webhook_url: string;
     is_active: boolean;
@@ -23,6 +31,8 @@ interface ZapierSettings {
     outbound_secret_configured: boolean;
     send_hashed_pii: boolean;
     event_mapping: ZapierEventMappingItem[];
+    donor_outbound_enabled: boolean;
+    donor_event_mapping: ZapierDonorEventMappingItem[];
 }
 
 interface ZapierInboundWebhook {
@@ -46,6 +56,8 @@ interface ZapierOutboundSettingsRequest {
     outbound_enabled?: boolean;
     send_hashed_pii?: boolean;
     event_mapping?: ZapierEventMappingItem[];
+    donor_outbound_enabled?: boolean;
+    donor_event_mapping?: ZapierDonorEventMappingItem[];
 }
 
 interface ZapierTestLeadRequest {
@@ -105,6 +117,13 @@ export interface ZapierOutboundEvent {
     stage_slug?: string | null;
     stage_label?: string | null;
     surrogate_id?: string | null;
+    donor_id?: string | null;
+    donor_status_history_id?: string | null;
+    donor_type?: 'egg' | 'sperm' | null;
+    pipeline_id?: string | null;
+    stage_id?: string | null;
+    attribution_source?: 'meta' | 'website' | null;
+    first_party_submission_id?: string | null;
     attempts: number;
     last_error?: string | null;
     created_at: string;

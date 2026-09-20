@@ -135,6 +135,10 @@ class ZapierWebhookSettings(Base):
         Boolean, server_default=text("false"), nullable=False
     )
     outbound_event_mapping: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    donor_outbound_enabled: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
+    donor_outbound_event_mapping: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
@@ -220,6 +224,28 @@ class ZapierOutboundEvent(Base):
     stage_slug: Mapped[str | None] = mapped_column(String(80), nullable=True)
     stage_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
     surrogate_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    donor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("donors.id", ondelete="SET NULL"), nullable=True
+    )
+    donor_status_history_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("donor_status_history.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    donor_type: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    pipeline_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pipelines.id", ondelete="SET NULL"), nullable=True
+    )
+    stage_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pipeline_stages.id", ondelete="SET NULL"), nullable=True
+    )
+    attribution_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    first_party_submission_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("form_submissions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    config_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -245,6 +271,16 @@ class ZapierOutboundEvent(Base):
             "job_id",
             unique=True,
             postgresql_where=text("job_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_zapier_outbound_events_donor_history",
+            "donor_status_history_id",
+            unique=True,
+            postgresql_where=text("donor_status_history_id IS NOT NULL"),
+        ),
+        CheckConstraint(
+            "donor_type IS NULL OR donor_type IN ('egg', 'sperm')",
+            name="ck_zapier_outbound_events_donor_type",
         ),
     )
 

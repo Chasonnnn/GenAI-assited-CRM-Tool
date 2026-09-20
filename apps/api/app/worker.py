@@ -687,11 +687,12 @@ def _record_job_success(db, job) -> None:
     from app.db.enums import IntegrationType
     from app.services import ops_service
 
+    should_record_integration_success = True
     if job.job_type == JobType.ZAPIER_STAGE_EVENT.value:
         try:
             from app.services import zapier_monitor_service
 
-            zapier_monitor_service.mark_job_delivered(
+            should_record_integration_success = zapier_monitor_service.mark_job_delivered(
                 db=db,
                 job_id=job.id,
                 attempts=job.attempts,
@@ -702,13 +703,16 @@ def _record_job_success(db, job) -> None:
         try:
             from app.services import meta_crm_dataset_monitor_service
 
-            meta_crm_dataset_monitor_service.mark_job_delivered(
+            should_record_integration_success = meta_crm_dataset_monitor_service.mark_job_delivered(
                 db=db,
                 job_id=job.id,
                 attempts=job.attempts,
             )
         except Exception as e:
             logger.warning("Failed to mark Meta CRM dataset event delivered: %s", e)
+
+    if not should_record_integration_success:
+        return
 
     # Map job types to integration types
     job_to_integration = {

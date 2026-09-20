@@ -21,7 +21,16 @@ DEFAULT_WINDOW_HOURS = 24
 MIN_EVENTS_FOR_RATE_WARNING = 5
 FAILURE_RATE_WARNING_THRESHOLD = 0.2
 SKIPPED_RATE_WARNING_THRESHOLD = 0.25
-NON_ACTIONABLE_SKIP_REASONS = {"duplicate"}
+NON_ACTIONABLE_SKIP_REASONS = {
+    "duplicate",
+    "donor_config_changed",
+    "donor_dispatch_disabled",
+    "donor_mapping_changed",
+    "donor_outbound_disabled",
+    "donor_stage_inactive",
+    "donor_stage_undo",
+    "unmapped_donor_stage",
+}
 
 
 def _now_utc() -> datetime:
@@ -67,6 +76,14 @@ def _create_event_record(
     stage_slug: str | None = None,
     stage_label: str | None = None,
     surrogate_id: UUID | None = None,
+    donor_id: UUID | None = None,
+    donor_status_history_id: UUID | None = None,
+    donor_type: str | None = None,
+    pipeline_id: UUID | None = None,
+    stage_id: UUID | None = None,
+    attribution_source: str | None = None,
+    first_party_submission_id: UUID | None = None,
+    config_fingerprint: str | None = None,
     attempts: int = 0,
     last_error: str | None = None,
 ) -> ZapierOutboundEvent:
@@ -84,6 +101,14 @@ def _create_event_record(
         stage_slug=stage_slug,
         stage_label=stage_label,
         surrogate_id=surrogate_id,
+        donor_id=donor_id,
+        donor_status_history_id=donor_status_history_id,
+        donor_type=donor_type,
+        pipeline_id=pipeline_id,
+        stage_id=stage_id,
+        attribution_source=attribution_source,
+        first_party_submission_id=first_party_submission_id,
+        config_fingerprint=config_fingerprint,
         attempts=attempts,
         last_error=last_error,
         created_at=now,
@@ -92,7 +117,56 @@ def _create_event_record(
         delivered_at=now if status == "delivered" else None,
     )
     db.add(event)
+    db.flush()
     return event
+
+
+def create_donor_event(
+    db: Session,
+    *,
+    org_id: UUID,
+    source: str,
+    status: str,
+    reason: str | None,
+    event_id: str,
+    event_name: str | None,
+    lead_id: str | None,
+    stage_key: str,
+    stage_slug: str | None,
+    stage_label: str,
+    donor_id: UUID,
+    donor_status_history_id: UUID,
+    donor_type: str,
+    pipeline_id: UUID,
+    stage_id: UUID,
+    attribution_source: str | None = None,
+    first_party_submission_id: UUID | None = None,
+    config_fingerprint: str | None = None,
+    job_id: UUID | None = None,
+) -> ZapierOutboundEvent:
+    """Create a donor delivery record inside the caller-owned transaction."""
+    return _create_event_record(
+        db,
+        org_id=org_id,
+        source=source,
+        status=status,
+        reason=reason,
+        job_id=job_id,
+        event_id=event_id,
+        event_name=event_name,
+        lead_id=lead_id,
+        stage_key=stage_key,
+        stage_slug=stage_slug,
+        stage_label=stage_label,
+        donor_id=donor_id,
+        donor_status_history_id=donor_status_history_id,
+        donor_type=donor_type,
+        pipeline_id=pipeline_id,
+        stage_id=stage_id,
+        attribution_source=attribution_source,
+        first_party_submission_id=first_party_submission_id,
+        config_fingerprint=config_fingerprint,
+    )
 
 
 def record_skipped_event(
@@ -161,10 +235,20 @@ def record_queued_event(
     )
 
 
-def mark_job_delivered(*, job_id: UUID, attempts: int, db: Session | None = None) -> None:
-    def _update(db: Session) -> None:
-        event = db.query(ZapierOutboundEvent).filter(ZapierOutboundEvent.job_id == job_id).first()
+def mark_job_delivered(*, job_id: UUID, attempts: int, db: Session | None = None) -> bool:
+    should_record_success = True
+
+    def _update(inner_db: Session) -> None:
+        nonlocal should_record_success
+        event = (
+            inner_db.query(ZapierOutboundEvent).filter(ZapierOutboundEvent.job_id == job_id).first()
+        )
         if not event:
+            return
+        if event.status == "skipped":
+            should_record_success = False
+            event.attempts = attempts
+            event.updated_at = _now_utc()
             return
         now = _now_utc()
         event.status = "delivered"
@@ -175,6 +259,31 @@ def mark_job_delivered(*, job_id: UUID, attempts: int, db: Session | None = None
         event.delivered_at = now
 
     _persist(_update, db=db)
+    return should_record_success
+
+
+def mark_job_skipped(
+    *,
+    job_id: UUID,
+    reason: str,
+    db: Session | None = None,
+) -> None:
+    def _update(inner_db: Session) -> None:
+        event = (
+            inner_db.query(ZapierOutboundEvent).filter(ZapierOutboundEvent.job_id == job_id).first()
+        )
+        if not event:
+            return
+        event.status = "skipped"
+        event.reason = reason[:50]
+        event.last_error = None
+        event.updated_at = _now_utc()
+
+    if db is None:
+        _persist(_update)
+        return
+    _update(db)
+    db.commit()
 
 
 def mark_job_failed(

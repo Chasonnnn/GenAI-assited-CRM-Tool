@@ -11,7 +11,17 @@ from sqlalchemy.orm import Session
 
 from app.core.stage_definitions import LABEL_OVERRIDES
 from app.db.enums import JobType, SurrogateSource
-from app.db.models import MetaLead, Surrogate
+from app.db.models import (
+    Donor,
+    DonorStatusHistory,
+    FormSubmission,
+    IntakeLead,
+    LeadAttribution,
+    MetaLead,
+    PipelineStage,
+    Surrogate,
+    ZapierOutboundEvent,
+)
 from app.services import (
     job_service,
     meta_capi,
@@ -474,6 +484,265 @@ def enqueue_stage_event(
             event_name=event_name,
             lead_id=meta_lead.meta_lead_id,
         ) | {"idempotency_key": idempotency_key}
+
+
+def _resolve_donor_attribution(db: Session, donor: Donor) -> dict[str, object] | None:
+    meta_lead = (
+        db.query(MetaLead)
+        .filter(
+            MetaLead.organization_id == donor.organization_id,
+            MetaLead.converted_donor_id == donor.id,
+        )
+        .order_by(MetaLead.converted_at.desc().nullslast(), MetaLead.received_at.desc())
+        .first()
+    )
+    if meta_lead is not None:
+        return {
+            "source": "meta",
+            "lead_id": meta_lead.meta_lead_id or None,
+            "first_party_submission_id": None,
+            "fields": {
+                "meta_form_id": meta_lead.meta_form_id,
+                "meta_page_id": meta_lead.meta_page_id,
+            },
+        }
+
+    submission = (
+        db.query(FormSubmission)
+        .filter(
+            FormSubmission.organization_id == donor.organization_id,
+            FormSubmission.donor_id == donor.id,
+        )
+        .order_by(FormSubmission.submitted_at.desc(), FormSubmission.id.desc())
+        .first()
+    )
+    if submission is None:
+        submission = (
+            db.query(FormSubmission)
+            .join(IntakeLead, IntakeLead.form_submission_id == FormSubmission.id)
+            .filter(
+                FormSubmission.organization_id == donor.organization_id,
+                IntakeLead.organization_id == donor.organization_id,
+                IntakeLead.promoted_donor_id == donor.id,
+            )
+            .order_by(FormSubmission.submitted_at.desc(), FormSubmission.id.desc())
+            .first()
+        )
+    if submission is None:
+        return None
+
+    attribution = (
+        db.query(LeadAttribution)
+        .filter(
+            LeadAttribution.organization_id == donor.organization_id,
+            LeadAttribution.form_submission_id == submission.id,
+        )
+        .order_by(LeadAttribution.created_at.desc())
+        .first()
+    )
+    fields: dict[str, str | None] = {}
+    if attribution is not None:
+        fields = {
+            "ad_id": attribution.ad_id,
+            "adset_id": attribution.adset_id,
+            "campaign_id": attribution.campaign_id,
+            "fbclid": attribution.fbclid,
+            "fbc": _normalize_meta_click_id(attribution.fbc),
+            "fbp": _normalize_meta_click_id(attribution.fbp),
+        }
+    return {
+        "source": "website",
+        "lead_id": None,
+        "first_party_submission_id": submission.id,
+        "fields": fields,
+    }
+
+
+def build_donor_stage_event_payload(
+    *,
+    event_id: str,
+    event_name: str,
+    event_time: datetime,
+    attribution: dict[str, object],
+    include_hashed_pii: bool,
+    email: str | None,
+    phone: str | None,
+) -> dict[str, object]:
+    """Build the minimal external donor payload without internal stage/profile data."""
+    payload: dict[str, object] = {
+        "event_id": event_id,
+        "event_name": event_name,
+        "lifecycle_stage_name": event_name,
+        "stage_in_sales_process": event_name,
+        "event_time": event_time.astimezone(UTC).isoformat(),
+        "attribution_source": attribution["source"],
+    }
+    lead_id = attribution.get("lead_id")
+    if isinstance(lead_id, str) and lead_id:
+        payload["lead_id"] = lead_id
+        payload["facebook_lead_id"] = lead_id
+        payload["meta_lead_id"] = lead_id
+    submission_id = attribution.get("first_party_submission_id")
+    if isinstance(submission_id, UUID):
+        payload["first_party_submission_id"] = str(submission_id)
+
+    fields = attribution.get("fields")
+    if isinstance(fields, dict):
+        payload.update({str(key): value for key, value in fields.items() if value})
+
+    if include_hashed_pii:
+        user_data: dict[str, str] = {}
+        if email:
+            user_data["email_hash"] = meta_capi.hash_for_capi(email)
+        if phone:
+            user_data["phone_hash"] = meta_capi.hash_for_capi(phone)
+        if user_data:
+            payload["user_data"] = user_data
+    return payload
+
+
+def enqueue_donor_stage_event(
+    db: Session,
+    *,
+    donor: Donor,
+    history: DonorStatusHistory,
+    new_stage: PipelineStage,
+    source: str = "automatic",
+) -> dict[str, object]:
+    """Atomically attach a donor stage occurrence to its delivery job."""
+    existing = (
+        db.query(ZapierOutboundEvent)
+        .filter(
+            ZapierOutboundEvent.organization_id == donor.organization_id,
+            ZapierOutboundEvent.donor_status_history_id == history.id,
+        )
+        .first()
+    )
+    if existing is not None:
+        return {
+            "queued": existing.status == "queued",
+            "reason": "duplicate",
+            "event_id": existing.event_id,
+        }
+
+    event_id = f"zapier_donor_stage:{history.id}"
+    pipeline_id = new_stage.pipeline_id
+
+    def skip(reason: str, *, event_name: str | None = None, attribution=None):
+        attribution = attribution or {}
+        event = zapier_monitor_service.create_donor_event(
+            db,
+            org_id=donor.organization_id,
+            source=source,
+            status="skipped",
+            reason=reason,
+            event_id=event_id,
+            event_name=event_name,
+            lead_id=attribution.get("lead_id"),
+            stage_key=new_stage.stage_key,
+            stage_slug=new_stage.slug,
+            stage_label=new_stage.label,
+            donor_id=donor.id,
+            donor_status_history_id=history.id,
+            donor_type=donor.donor_type,
+            pipeline_id=pipeline_id,
+            stage_id=new_stage.id,
+            attribution_source=attribution.get("source"),
+            first_party_submission_id=attribution.get("first_party_submission_id"),
+        )
+        return {"queued": False, "reason": reason, "event_id": event.event_id}
+
+    if history.is_undo:
+        return skip("donor_stage_undo")
+
+    settings = zapier_settings_service.get_settings(db, donor.organization_id)
+    if settings is None or not settings.donor_outbound_enabled:
+        return skip("donor_outbound_disabled")
+    if not settings.outbound_webhook_url:
+        return skip("missing_webhook_url")
+
+    mapping_item = zapier_settings_service.resolve_donor_mapping_item(
+        settings.donor_outbound_event_mapping,
+        donor_type=donor.donor_type,
+        pipeline_id=pipeline_id,
+        stage_id=new_stage.id,
+    )
+    if mapping_item is None:
+        return skip("unmapped_donor_stage")
+    event_name = str(mapping_item["event_name"])
+
+    attribution = _resolve_donor_attribution(db, donor)
+    if attribution is None:
+        return skip("missing_donor_attribution", event_name=event_name)
+    if attribution["source"] == "meta" and not attribution.get("lead_id"):
+        return skip("missing_meta_lead_id", event_name=event_name, attribution=attribution)
+    attribution_fields = attribution.get("fields")
+    has_browser_matching = isinstance(attribution_fields, dict) and bool(
+        attribution_fields.get("fbc") or attribution_fields.get("fbp")
+    )
+    has_contact_matching = settings.outbound_send_hashed_pii and bool(donor.email or donor.phone)
+    if attribution["source"] == "website" and not (has_browser_matching or has_contact_matching):
+        return skip("missing_matching_data", event_name=event_name, attribution=attribution)
+
+    fingerprint = zapier_settings_service.donor_config_fingerprint(
+        webhook_url=settings.outbound_webhook_url,
+        donor_type=donor.donor_type,
+        pipeline_id=pipeline_id,
+        stage_id=new_stage.id,
+        event_name=event_name,
+    )
+    payload = build_donor_stage_event_payload(
+        event_id=event_id,
+        event_name=event_name,
+        event_time=history.effective_at,
+        attribution=attribution,
+        include_hashed_pii=settings.outbound_send_hashed_pii,
+        email=donor.email,
+        phone=donor.phone,
+    )
+    event = zapier_monitor_service.create_donor_event(
+        db,
+        org_id=donor.organization_id,
+        source=source,
+        status="queued",
+        reason=None,
+        event_id=event_id,
+        event_name=event_name,
+        lead_id=attribution.get("lead_id"),
+        stage_key=new_stage.stage_key,
+        stage_slug=new_stage.slug,
+        stage_label=new_stage.label,
+        donor_id=donor.id,
+        donor_status_history_id=history.id,
+        donor_type=donor.donor_type,
+        pipeline_id=pipeline_id,
+        stage_id=new_stage.id,
+        attribution_source=str(attribution["source"]),
+        first_party_submission_id=attribution.get("first_party_submission_id"),
+        config_fingerprint=fingerprint,
+    )
+    job = job_service.enqueue_job(
+        db,
+        org_id=donor.organization_id,
+        job_type=JobType.ZAPIER_STAGE_EVENT,
+        payload={
+            "delivery_kind": "donor_stage",
+            "event_record_id": str(event.id),
+            "config_fingerprint": fingerprint,
+            "data": payload,
+        },
+        idempotency_key=event_id,
+        commit=False,
+    )
+    event.job_id = job.id
+    db.flush()
+    return {
+        "queued": True,
+        "reason": None,
+        "event_id": event_id,
+        "event_name": event_name,
+        "job_id": str(job.id),
+    }
 
 
 def enqueue_test_event(

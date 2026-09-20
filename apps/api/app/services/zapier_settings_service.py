@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import secrets
 import uuid
 from datetime import UTC, datetime
+from hashlib import sha256
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -13,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.stage_definitions import canonicalize_stage_key, get_default_stage_defs
 from app.core.url_validation import validate_outbound_webhook_url
-from app.db.models import ZapierInboundWebhook, ZapierWebhookSettings
+from app.db.models import Pipeline, PipelineStage, ZapierInboundWebhook, ZapierWebhookSettings
 from app.services import oauth_service, pipeline_semantics_service, pipeline_service
 
 logger = logging.getLogger(__name__)
@@ -63,6 +65,11 @@ EVENT_NAME_BY_BUCKET = {
     LOST_BUCKET: LOST_EVENT_NAME,
     NOT_QUALIFIED_BUCKET: NOT_QUALIFIED_EVENT_NAME,
 }
+
+DONOR_TYPES = frozenset({"egg", "sperm"})
+SUPPORTED_DONOR_EVENT_NAMES = frozenset(
+    {"Lead", QUALIFIED_EVENT_NAME, CONVERTED_EVENT_NAME, LOST_EVENT_NAME, NOT_QUALIFIED_EVENT_NAME}
+)
 
 
 def build_default_event_mapping(
@@ -220,6 +227,109 @@ def get_settings(db: Session, organization_id: uuid.UUID) -> ZapierWebhookSettin
     )
 
 
+def normalize_donor_event_mapping(
+    db: Session,
+    organization_id: uuid.UUID,
+    mapping: list[dict] | None,
+) -> list[dict[str, str | bool]]:
+    """Validate exact donor pipeline-stage mappings without surrogate fallbacks."""
+    if not mapping:
+        return []
+
+    normalized: list[dict[str, str | bool]] = []
+    seen: set[tuple[str, uuid.UUID, uuid.UUID]] = set()
+    for item in mapping:
+        if not isinstance(item, dict):
+            raise ValueError("Each donor event mapping must be an object")
+        donor_type = str(item.get("donor_type") or "").strip().lower()
+        if donor_type not in DONOR_TYPES:
+            raise ValueError("Donor event mapping donor_type must be egg or sperm")
+        try:
+            pipeline_id = uuid.UUID(str(item.get("pipeline_id") or ""))
+            stage_id = uuid.UUID(str(item.get("stage_id") or ""))
+        except ValueError as exc:
+            raise ValueError("Donor event mapping requires valid pipeline_id and stage_id") from exc
+
+        event_name = str(item.get("event_name") or "").strip()
+        if event_name not in SUPPORTED_DONOR_EVENT_NAMES:
+            allowed = ", ".join(sorted(SUPPORTED_DONOR_EVENT_NAMES))
+            raise ValueError(f"Donor event name must be one of: {allowed}")
+
+        pipeline_and_stage = (
+            db.query(Pipeline, PipelineStage)
+            .join(PipelineStage, PipelineStage.pipeline_id == Pipeline.id)
+            .filter(
+                Pipeline.id == pipeline_id,
+                Pipeline.organization_id == organization_id,
+                Pipeline.entity_type == f"{donor_type}_donor",
+                PipelineStage.id == stage_id,
+                PipelineStage.is_active.is_(True),
+            )
+            .first()
+        )
+        if pipeline_and_stage is None:
+            raise ValueError(
+                "Donor event mapping stage was not found in the selected donor pipeline"
+            )
+
+        identity = (donor_type, pipeline_id, stage_id)
+        if identity in seen:
+            raise ValueError("Donor event mapping contains a duplicate donor pipeline stage")
+        seen.add(identity)
+        normalized.append(
+            {
+                "donor_type": donor_type,
+                "pipeline_id": str(pipeline_id),
+                "stage_id": str(stage_id),
+                "event_name": event_name,
+                "enabled": bool(item.get("enabled", True)),
+            }
+        )
+    return normalized
+
+
+def resolve_donor_mapping_item(
+    mapping: list[dict] | None,
+    *,
+    donor_type: str,
+    pipeline_id: uuid.UUID,
+    stage_id: uuid.UUID,
+) -> dict | None:
+    for item in mapping or []:
+        if not isinstance(item, dict) or not bool(item.get("enabled", True)):
+            continue
+        if (
+            str(item.get("donor_type") or "") == donor_type
+            and str(item.get("pipeline_id") or "") == str(pipeline_id)
+            and str(item.get("stage_id") or "") == str(stage_id)
+            and str(item.get("event_name") or "") in SUPPORTED_DONOR_EVENT_NAMES
+        ):
+            return item
+    return None
+
+
+def donor_config_fingerprint(
+    *,
+    webhook_url: str,
+    donor_type: str,
+    pipeline_id: uuid.UUID,
+    stage_id: uuid.UUID,
+    event_name: str,
+) -> str:
+    canonical = json.dumps(
+        {
+            "webhook_url": webhook_url,
+            "donor_type": donor_type,
+            "pipeline_id": str(pipeline_id),
+            "stage_id": str(stage_id),
+            "event_name": event_name,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return sha256(canonical.encode()).hexdigest()
+
+
 def list_inbound_webhooks(db: Session, organization_id: uuid.UUID) -> list[ZapierInboundWebhook]:
     return list(
         db.query(ZapierInboundWebhook)
@@ -262,6 +372,8 @@ def get_or_create_settings(
             outbound_enabled=False,
             outbound_send_hashed_pii=False,
             outbound_event_mapping=build_default_event_mapping(db, organization_id),
+            donor_outbound_enabled=False,
+            donor_outbound_event_mapping=[],
         )
         db.add(settings_row)
         db.commit()
@@ -481,6 +593,8 @@ def update_outbound_settings(
     outbound_enabled: bool | None = None,
     send_hashed_pii: bool | None = None,
     event_mapping: list[dict] | None = None,
+    donor_outbound_enabled: bool | None = None,
+    donor_event_mapping: list[dict] | None = None,
 ) -> ZapierWebhookSettings:
     settings_row = get_or_create_settings(db, organization_id)
 
@@ -500,6 +614,14 @@ def update_outbound_settings(
             event_mapping,
             db=db,
             organization_id=organization_id,
+        )
+    if donor_outbound_enabled is not None:
+        settings_row.donor_outbound_enabled = donor_outbound_enabled
+    if donor_event_mapping is not None:
+        settings_row.donor_outbound_event_mapping = normalize_donor_event_mapping(
+            db,
+            organization_id,
+            donor_event_mapping,
         )
 
     settings_row.updated_at = _now_utc()
