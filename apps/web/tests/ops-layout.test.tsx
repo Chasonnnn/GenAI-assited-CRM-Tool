@@ -10,6 +10,7 @@ vi.unmock("@tanstack/react-query")
 const mockGetPlatformMe = vi.fn()
 const mockGetPlatformStats = vi.fn()
 const mockReplace = vi.fn()
+const mockPathname = vi.fn(() => '/ops')
 
 vi.mock("@/lib/api/platform", () => ({
     getPlatformMe: () => mockGetPlatformMe(),
@@ -18,7 +19,7 @@ vi.mock("@/lib/api/platform", () => ({
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ replace: mockReplace }),
-    usePathname: () => "/ops",
+    usePathname: () => mockPathname(),
 }))
 
 vi.mock("@/components/app-link", () => ({
@@ -53,6 +54,24 @@ function renderOpsLayout(queryClient: QueryClient) {
 describe("OpsLayout", () => {
     afterEach(() => {
         vi.clearAllMocks()
+        mockPathname.mockReturnValue('/ops')
+        sessionStorage.clear()
+    })
+
+    it('returns to CLI approval after normal OPS authentication', async () => {
+        mockPathname.mockReturnValue('/ops/cli')
+        mockGetPlatformMe.mockRejectedValue(new Error('Sign in'))
+        mockGetPlatformStats.mockResolvedValue({ open_alerts: 0 })
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        const first = renderOpsLayout(client)
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/ops/login'))
+        expect(sessionStorage.getItem('ops_cli_login_pending')).toBe('1')
+        first.unmount()
+        mockPathname.mockReturnValue('/ops')
+        mockGetPlatformMe.mockResolvedValue({ email: 'admin@example.test' })
+        renderOpsLayout(new QueryClient({ defaultOptions: { queries: { retry: false } } }))
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/ops/cli'))
+        expect(sessionStorage.getItem('ops_cli_login_pending')).toBeNull()
     })
 
     it("starts stats fetch without waiting for platform me", async () => {

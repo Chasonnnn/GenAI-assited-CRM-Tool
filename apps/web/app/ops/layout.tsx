@@ -1,12 +1,13 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { redirect, usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from "@/components/app-link";
 import { getPlatformMe, getPlatformStats } from '@/lib/api/platform';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, Building2, Bell, LogOut, Loader2, LayoutTemplate } from 'lucide-react';
+import { ShieldCheck, Building2, Bell, LogOut, Loader2, LayoutTemplate, Terminal } from 'lucide-react';
 import api, { ApiError } from '@/lib/api';
 
 function NavLink({
@@ -61,6 +62,7 @@ async function logoutFromOps() {
 
 export default function OpsLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
+    const { replace } = useRouter();
     const isLoginPage = pathname === '/ops/login';
     const platformMeQuery = useQuery({
         queryKey: ['platform', 'me'],
@@ -77,13 +79,26 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
         staleTime: 60_000,
     });
 
+    useEffect(() => {
+        if (isLoginPage) return;
+        if (platformMeQuery.isError) {
+            if (pathname === '/ops/cli') {
+                sessionStorage.setItem('ops_cli_login_pending', '1');
+            }
+            replace(getOpsAccessRedirect(platformMeQuery.error));
+        } else if (pathname === '/ops' && platformMeQuery.isSuccess && sessionStorage.getItem('ops_cli_login_pending') === '1') {
+            sessionStorage.removeItem('ops_cli_login_pending');
+            replace('/ops/cli');
+        }
+    }, [isLoginPage, pathname, platformMeQuery.isError, platformMeQuery.isSuccess, platformMeQuery.error, replace]);
+
     // Don't show layout for login page
     if (isLoginPage) {
         return <>{children}</>;
     }
 
     if (platformMeQuery.isError) {
-        redirect(getOpsAccessRedirect(platformMeQuery.error));
+        return null;
     }
 
     if (platformMeQuery.isPending || platformStatsQuery.isPending) {
@@ -142,6 +157,12 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
                                 <span className="flex items-center gap-1.5">
                                     <LayoutTemplate className="size-4" />
                                     Templates
+                                </span>
+                            </NavLink>
+                            <NavLink href="/ops/cli">
+                                <span className="flex items-center gap-1.5">
+                                    <Terminal className="size-4" />
+                                    CLI
                                 </span>
                             </NavLink>
                         </nav>
