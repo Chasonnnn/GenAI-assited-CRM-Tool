@@ -2,9 +2,116 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
+from app.core.deps import COOKIE_NAME, get_db
+from app.core.security import create_session_token
+from app.db.enums import Role
+from app.db.models import Membership, User, UserPermissionOverride
+from app.main import app
+from app.services import session_service
+
+
+def _integration_user_with_donor_access(
+    db,
+    org_id,
+    *,
+    can_view_donors: bool = False,
+    can_edit_donors: bool = False,
+):
+    user = User(
+        id=uuid4(),
+        email=f"zapier-donor-scope-{uuid4().hex[:8]}@test.com",
+        display_name="Zapier Donor Scope Tester",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+    db.add(
+        Membership(
+            id=uuid4(),
+            user_id=user.id,
+            organization_id=org_id,
+            role=Role.CASE_MANAGER.value,
+        )
+    )
+    db.add_all(
+        [
+            UserPermissionOverride(
+                id=uuid4(),
+                organization_id=org_id,
+                user_id=user.id,
+                permission="view_donors",
+                override_type="grant" if can_view_donors else "revoke",
+            ),
+            UserPermissionOverride(
+                id=uuid4(),
+                organization_id=org_id,
+                user_id=user.id,
+                permission="edit_donors",
+                override_type="grant" if can_edit_donors else "revoke",
+            ),
+            UserPermissionOverride(
+                id=uuid4(),
+                organization_id=org_id,
+                user_id=user.id,
+                permission="manage_integrations",
+                override_type="grant",
+            ),
+        ]
+    )
+    db.flush()
+    return user
+
+
+@asynccontextmanager
+async def _client_for(db, org_id, user):
+    membership = (
+        db.query(Membership)
+        .filter(
+            Membership.organization_id == org_id,
+            Membership.user_id == user.id,
+        )
+        .one()
+    )
+    token = create_session_token(
+        user_id=user.id,
+        org_id=org_id,
+        role=membership.role,
+        token_version=user.token_version,
+        mfa_verified=True,
+        mfa_required=True,
+    )
+    session_service.create_session(
+        db=db,
+        user_id=user.id,
+        org_id=org_id,
+        token=token,
+        request=None,
+    )
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        csrf_token = generate_csrf_token()
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="https://test",
+            cookies={COOKIE_NAME: token, CSRF_COOKIE_NAME: csrf_token},
+            headers={CSRF_HEADER: csrf_token},
+        ) as client:
+            yield client
+    finally:
+        app.dependency_overrides.pop(get_db, None)
 
 
 def _create_mapped_meta_form(
@@ -523,6 +630,163 @@ async def test_zapier_test_endpoint_returns_donor_id_for_donor_form(
     assert donor is not None
     assert donor.donor_type == "egg"
     assert donor.organization_id == test_org.id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lead_kind", ["egg_donor", "sperm_donor"])
+async def test_zapier_test_endpoint_denies_explicit_donor_form_without_donor_access(
+    db, test_org, test_user, lead_kind
+):
+    from app.db.models import Donor, MetaLead
+
+    form = _create_mapped_meta_form(
+        db,
+        test_org.id,
+        test_user.id,
+        form_external_id=f"zapier-{lead_kind}",
+        page_id="zapier",
+        lead_kind=lead_kind,
+    )
+    user = _integration_user_with_donor_access(db, test_org.id)
+    db.commit()
+
+    async with _client_for(db, test_org.id, user) as client:
+        response = await client.post(
+            "/integrations/zapier/test-lead",
+            json={"form_id": form.form_external_id},
+        )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Missing permission: view_donors"
+    assert db.query(Donor).filter(Donor.organization_id == test_org.id).count() == 0
+    assert db.query(MetaLead).filter(MetaLead.organization_id == test_org.id).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_zapier_test_endpoint_denies_donor_form_without_edit_access(
+    db, test_org, test_user
+):
+    from app.db.models import Donor, MetaLead
+
+    form = _create_mapped_meta_form(
+        db,
+        test_org.id,
+        test_user.id,
+        form_external_id="zapier-donor-view-only",
+        page_id="zapier",
+        lead_kind="egg_donor",
+    )
+    user = _integration_user_with_donor_access(
+        db,
+        test_org.id,
+        can_view_donors=True,
+    )
+    db.commit()
+
+    async with _client_for(db, test_org.id, user) as client:
+        response = await client.post(
+            "/integrations/zapier/test-lead",
+            json={"form_id": form.form_external_id},
+        )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Missing permission: edit_donors"
+    assert db.query(Donor).filter(Donor.organization_id == test_org.id).count() == 0
+    assert db.query(MetaLead).filter(MetaLead.organization_id == test_org.id).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_zapier_test_endpoint_denies_auto_selected_donor_form_without_donor_access(
+    db, test_org, test_user
+):
+    from app.db.models import Donor, MetaLead
+
+    _create_mapped_meta_form(
+        db,
+        test_org.id,
+        test_user.id,
+        form_external_id="zapier-auto-donor",
+        page_id="zapier",
+        lead_kind="egg_donor",
+    )
+    user = _integration_user_with_donor_access(db, test_org.id)
+    db.commit()
+
+    async with _client_for(db, test_org.id, user) as client:
+        response = await client.post("/integrations/zapier/test-lead", json={})
+
+    assert response.status_code == 403
+    assert db.query(Donor).filter(Donor.organization_id == test_org.id).count() == 0
+    assert db.query(MetaLead).filter(MetaLead.organization_id == test_org.id).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_zapier_test_endpoint_keeps_surrogate_and_cross_org_forms_isolated(
+    db, test_org, test_user
+):
+    from app.db.models import Donor, MetaForm, MetaLead, Organization, Surrogate
+
+    surrogate_form = _create_mapped_meta_form(
+        db,
+        test_org.id,
+        test_user.id,
+        form_external_id="zapier-surrogate-limited-user",
+        page_id="zapier",
+        lead_kind="surrogate",
+    )
+    foreign_org = Organization(
+        id=uuid4(),
+        name="Foreign Zapier org",
+        slug=f"foreign-zapier-{uuid4().hex[:8]}",
+    )
+    db.add(foreign_org)
+    db.flush()
+    _create_mapped_meta_form(
+        db,
+        foreign_org.id,
+        None,
+        form_external_id="foreign-donor-form",
+        page_id="zapier",
+        lead_kind="sperm_donor",
+    )
+    user = _integration_user_with_donor_access(db, test_org.id)
+    db.commit()
+
+    async with _client_for(db, test_org.id, user) as client:
+        surrogate_response = await client.post(
+            "/integrations/zapier/test-lead",
+            json={"form_id": surrogate_form.form_external_id},
+        )
+        foreign_response = await client.post(
+            "/integrations/zapier/test-lead",
+            json={"form_id": "foreign-donor-form"},
+        )
+
+    assert surrogate_response.status_code == 200, surrogate_response.text
+    assert surrogate_response.json()["surrogate_id"]
+    assert foreign_response.status_code == 200, foreign_response.text
+    assert foreign_response.json()["donor_id"] is None
+    assert foreign_response.json()["status"] == "awaiting_mapping"
+    assert db.query(Donor).filter(Donor.organization_id == test_org.id).count() == 0
+    assert db.query(Surrogate).filter(Surrogate.organization_id == test_org.id).count() == 1
+    local_form = (
+        db.query(MetaForm)
+        .filter(
+            MetaForm.organization_id == test_org.id,
+            MetaForm.form_external_id == "foreign-donor-form",
+        )
+        .one()
+    )
+    assert local_form.lead_kind == "surrogate"
+    assert (
+        db.query(MetaLead)
+        .filter(
+            MetaLead.organization_id == test_org.id,
+            MetaLead.meta_form_id == "foreign-donor-form",
+        )
+        .count()
+        == 1
+    )
 
 
 @pytest.mark.asyncio

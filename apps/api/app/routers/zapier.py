@@ -15,6 +15,7 @@ from app.core.permissions import PermissionKey as P
 from app.schemas.auth import UserSession
 from app.services import (
     meta_form_mapping_service,
+    workflow_access,
     zapier_monitor_service,
     zapier_outbound_service,
     zapier_settings_service,
@@ -176,6 +177,19 @@ def _is_zapier_form(form) -> bool:
     page_id = (getattr(form, "page_id", None) or "").strip().lower()
     form_external_id = (getattr(form, "form_external_id", None) or "").strip().lower()
     return page_id == "zapier" or form_external_id.startswith("zapier-")
+
+
+def _require_donor_test_lead_access(
+    db: Session,
+    session: UserSession,
+    lead_kind: str | None,
+) -> None:
+    if lead_kind not in workflow_access.DONOR_SUBJECT_TYPES:
+        return
+    if not workflow_access.can_view_subject(db, session, lead_kind):
+        raise HTTPException(status_code=403, detail="Missing permission: view_donors")
+    if not workflow_access.can_edit_subject(db, session, lead_kind):
+        raise HTTPException(status_code=403, detail="Missing permission: edit_donors")
 
 
 @router.get("/settings", response_model=ZapierSettingsResponse)
@@ -341,6 +355,7 @@ def send_test_lead(
     ),
 ):
     form_id = data.form_id
+    selected_form = None
     if not form_id:
         forms = [
             form
@@ -357,7 +372,15 @@ def send_test_lead(
                 status_code=400,
                 detail="form_id is required when multiple active Zapier forms exist.",
             )
-        form_id = forms[0].form_external_id
+        selected_form = forms[0]
+        form_id = selected_form.form_external_id
+    else:
+        selected_form = meta_form_mapping_service.get_form_by_external_id(
+            db, session.org_id, form_id
+        )
+
+    if selected_form is not None:
+        _require_donor_test_lead_access(db, session, selected_form.lead_kind)
 
     payload = zapier_webhook_service.build_test_payload(form_id, fields=data.fields)
     result = zapier_webhook_service.process_zapier_payload(
