@@ -182,8 +182,27 @@ separate from local validation.
       match/create workflow. Verify real form/link IDs and avoid duplicate routing.
 - [ ] Bind real egg/sperm Meta forms and Zapier destination/stage mappings; validate
       provider acceptance before activation. Website work is owned separately.
-- [ ] Handle donor Zapier mapping dependencies when donor pipeline stages are
-      removed; the existing stale-mapping guard currently requires stage recovery.
+- [x] Allow donor reporting to be disabled when saved stages are unavailable.
+      Explicit mapping repair removes unavailable stages and preserves live mappings.
 
 Production form configuration, cloud deployment, and Meta/Zapier activation are
 not established by local QA. Broader W1–W5 checkboxes above remain authoritative.
+
+## Review corrections — 2026-09-20
+
+- [x] Validate all five review findings against `31be5940` before correction.
+- [x] Edit, hydrate, and save workflow-template subjects in OPS, including explicit
+      egg/sperm selection for legacy donor templates and compatible donor controls.
+      Subject changes reset stage references and canonical keys, retain conditions
+      for repair, and normalize email recipients for the selected subject.
+- [x] Require donor view/edit for donor reporting changes, active donor delivery
+      destination changes, and donor retries. Hide donor settings and monitoring
+      from users without donor view; retain surrogate-only access.
+- [x] Commit website Meta jobs and their required monitor rows atomically. Verify
+      monitor-write failure rolls back the job while retaining failure monitoring.
+- [x] Verify stale mapping disable and repair through the local browser/API, with
+      valid sperm mappings preserved and no provider jobs or calls.
+- [x] Frontend type checking, lint, and the full test suite pass. React Doctor reports no
+      new warnings; the two OPS complexity warnings predate these changes.
+
+Exact-head hosted CI and correction commit identifiers are recorded on PR #719.
