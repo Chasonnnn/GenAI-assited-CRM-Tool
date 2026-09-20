@@ -1,17 +1,17 @@
 """Explicitly scoped library-template API for the operations CLI."""
 
+from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.core.ops_cli_auth import OpsCliContext, require_ops_cli
-from app.db.models import Organization
-from app.services import email_service
+from app.schemas.platform_templates import TemplateStatus
+from app.services import email_service, ops_cli_service
 from app.services import platform_template_write_service as writes
 
 router = APIRouter(prefix="/platform/cli", tags=["platform-cli"])
@@ -43,6 +43,52 @@ class ApplyRequest(DraftRequest):
 
 class PreviewRequest(DraftRequest):
     variables: dict[str, str] = Field(default_factory=dict)
+
+
+class OrganizationSummary(BaseModel):
+    id: UUID
+    name: str
+    slug: str
+
+
+class OrganizationList(BaseModel):
+    items: list[OrganizationSummary]
+    total: int
+
+
+class TemplateAudience(BaseModel):
+    publish_all: bool
+    org_ids: list[UUID]
+
+
+class TemplateRecord(BaseModel):
+    id: UUID
+    type: Kind
+    key: str | None
+    revision: int
+    published_version: int
+    status: TemplateStatus
+    draft: dict
+    published: dict | None
+    audience: TemplateAudience
+    published_at: datetime | None
+    hidden_org_ids: list[UUID]
+
+
+class TemplateApplyResponse(TemplateRecord):
+    result: Literal["created", "updated", "published", "unchanged"]
+
+
+class TemplateValidationResponse(BaseModel):
+    draft: dict
+    warnings: list[str]
+    bindings: list[str]
+
+
+class EmailPreviewResponse(BaseModel):
+    subject: str
+    html: str
+    warnings: list[str]
 
 
 def template_error(exc):
@@ -77,39 +123,23 @@ def template_error(exc):
     )
 
 
-@router.get("/orgs")
+@router.get("/orgs", response_model=OrganizationList)
 def organizations(
     context: Context,
     db: Database,
     search: str = "",
-    limit: int = Query(100, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ):
-    query = db.query(Organization).filter(Organization.deleted_at.is_(None))
-    if search:
-        filters = [Organization.slug.ilike(f"%{search}%"), Organization.name.ilike(f"%{search}%")]
-        try:
-            filters.append(Organization.id == UUID(search))
-        except ValueError:
-            pass
-        query = query.filter(or_(*filters))
-    return {
-        "items": [
-            {"id": row.id, "name": row.name, "slug": row.slug}
-            for row in query.order_by(Organization.slug, Organization.id)
-            .offset(offset)
-            .limit(limit)
-        ],
-        "total": query.count(),
-    }
+    return ops_cli_service.list_organizations(db, search=search, limit=limit, offset=offset)
 
 
-@router.get("/templates/{kind}")
+@router.get("/templates/{kind}", response_model=list[TemplateRecord])
 def list_templates(kind: Kind, context: Context, db: Database):
     return [writes.record(db, kind, row) for row in writes.template_query(db, kind).all()]
 
 
-@router.post("/templates/{kind}/validate")
+@router.post("/templates/{kind}/validate", response_model=TemplateValidationResponse)
 def validate(kind: Kind, body: DraftRequest, context: Context):
     try:
         return writes.validate_template(kind, body.draft)
@@ -117,7 +147,7 @@ def validate(kind: Kind, body: DraftRequest, context: Context):
         raise template_error(exc) from None
 
 
-@router.post("/templates/email/preview")
+@router.post("/templates/email/preview", response_model=EmailPreviewResponse)
 def preview_email(body: PreviewRequest, context: Context):
     try:
         checked = writes.validate_template("email", body.draft)
@@ -142,7 +172,7 @@ def preview_email(body: PreviewRequest, context: Context):
     }
 
 
-@router.get("/templates/{kind}/by-id/{template_id}")
+@router.get("/templates/{kind}/by-id/{template_id}", response_model=TemplateRecord)
 def get_by_id(kind: Kind, template_id: UUID, context: Context, db: Database):
     template = writes.find_template(db, kind, template_id=template_id)
     if template is None:
@@ -150,7 +180,7 @@ def get_by_id(kind: Kind, template_id: UUID, context: Context, db: Database):
     return writes.record(db, kind, template)
 
 
-@router.get("/templates/{kind}/{key}")
+@router.get("/templates/{kind}/{key}", response_model=TemplateRecord)
 def get_template(kind: Kind, key: Key, context: Context, db: Database):
     template = writes.find_template(db, kind, key=key)
     if template is None:
@@ -158,7 +188,7 @@ def get_template(kind: Kind, key: Key, context: Context, db: Database):
     return writes.record(db, kind, template)
 
 
-@router.put("/templates/{kind}/{key}/apply")
+@router.put("/templates/{kind}/{key}/apply", response_model=TemplateApplyResponse)
 def apply(
     kind: Kind, key: Key, body: ApplyRequest, request: Request, context: Context, db: Database
 ):

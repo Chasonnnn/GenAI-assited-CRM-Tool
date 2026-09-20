@@ -1,6 +1,7 @@
 """Exercise the installed CLI contract against FastAPI and real disposable PostgreSQL."""
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -10,7 +11,7 @@ from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
 from app.core.deps import get_db
-from app.db.models import AdminActionLog, AutomationWorkflow, EmailTemplate, Form, Job
+from app.db.models import AdminActionLog, AutomationWorkflow, EmailTemplate, Form, Job, Organization
 from app.main import app
 from app.services import ops_cli_service
 from app.services import platform_template_write_service as writes
@@ -48,6 +49,96 @@ def cli_api(db, test_user, monkeypatch, tmp_path):
         app.dependency_overrides.pop(get_db, None)
     else:
         app.dependency_overrides[get_db] = previous
+
+
+def test_cli_organization_discovery_preserves_search_and_pagination(cli_api, db):
+    _, _, api, headers = cli_api
+    first = Organization(name="CLI Search Zulu", slug="cli-search-a")
+    second = Organization(name="CLI Search Alpha", slug="cli-search-z")
+    deleted = Organization(
+        name="CLI Search Deleted", slug="cli-search-deleted", deleted_at=datetime.now(UTC)
+    )
+    db.add_all([first, second, deleted])
+    db.commit()
+    second_item = {"id": str(second.id), "name": second.name, "slug": second.slug}
+
+    response = api.get(
+        "/platform/cli/orgs",
+        headers=headers,
+        params={"search": "CLI SEARCH", "limit": 1, "offset": 1},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"items": [second_item], "total": 2}
+    for search in (second.slug, str(second.id)):
+        response = api.get("/platform/cli/orgs", headers=headers, params={"search": search})
+        assert response.status_code == 200
+        assert response.json() == {"items": [second_item], "total": 1}
+    for search in (str(deleted.id), "no-matching-organization"):
+        response = api.get("/platform/cli/orgs", headers=headers, params={"search": search})
+        assert response.status_code == 200
+        assert response.json() == {"items": [], "total": 0}
+    for params in ({"limit": 0}, {"limit": 201}, {"offset": -1}):
+        assert api.get("/platform/cli/orgs", headers=headers, params=params).status_code == 422
+    assert api.get("/platform/cli/orgs").status_code == 401
+
+
+@pytest.mark.parametrize(
+    ("kind", "draft"),
+    [
+        (
+            "email",
+            {
+                "name": "Email draft",
+                "subject": "Hello",
+                "body": "<p>Review</p>",
+                "from_email": None,
+                "category": "intake",
+            },
+        ),
+        (
+            "form",
+            {"name": "Form draft", "description": None, "schema_json": None, "settings_json": None},
+        ),
+        (
+            "workflow",
+            {
+                "name": "Workflow draft",
+                "description": "Not ready to publish",
+                "icon": "template",
+                "category": "general",
+                "trigger_type": "surrogate_created",
+                "trigger_config": {},
+                "conditions": [],
+                "condition_logic": "AND",
+                "actions": [],
+            },
+        ),
+    ],
+)
+def test_template_read_contract_preserves_unbound_drafts(cli_api, db, test_user, kind, draft):
+    _, _, api, headers = cli_api
+    template, _ = writes.apply_template(
+        db, kind, actor_id=test_user.id, draft=draft, portable=False
+    )
+    expected = {
+        "id": str(template.id),
+        "type": kind,
+        "key": None,
+        "revision": 1,
+        "published_version": 0,
+        "status": "draft",
+        "draft": draft,
+        "published": None,
+        "audience": {"publish_all": False, "org_ids": []},
+        "published_at": None,
+        "hidden_org_ids": [],
+    }
+    response = api.get(f"/platform/cli/templates/{kind}/by-id/{template.id}", headers=headers)
+    assert response.status_code == 200
+    assert response.json() == expected
+    response = api.get(f"/platform/cli/templates/{kind}", headers=headers)
+    assert response.status_code == 200
+    assert next(item for item in response.json() if item["id"] == str(template.id)) == expected
 
 
 def test_bundle_publish_roundtrip_and_no_execution(cli_api, db, test_user):

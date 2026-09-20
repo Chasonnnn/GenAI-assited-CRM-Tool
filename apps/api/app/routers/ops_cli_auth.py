@@ -12,8 +12,7 @@ from app.core.config import settings
 from app.core.deps import PlatformUserSession, get_db, require_csrf_header, require_platform_admin
 from app.core.ops_cli_auth import OpsCliContext, require_ops_cli
 from app.core.rate_limit import limiter
-from app.db.models import User
-from app.services import ops_cli_service
+from app.services import ops_cli_service, user_service
 
 router = APIRouter(prefix="/platform/cli", tags=["platform-cli"])
 
@@ -53,7 +52,9 @@ def require_verified_ops_admin(
 
 @router.post("/login/start", dependencies=[Depends(require_tls)])
 @limiter.limit("10/minute")
-def start_login(request: Request, response: Response, db: Session = Depends(get_db)) -> dict:
+def start_login(
+    request: Request, response: Response, db: Annotated[Session, Depends(get_db)]
+) -> dict:
     response.headers["Cache-Control"] = "no-store"
     return ops_cli_service.start_login(db)
 
@@ -61,7 +62,10 @@ def start_login(request: Request, response: Response, db: Session = Depends(get_
 @router.post("/login/exchange", dependencies=[Depends(require_tls)])
 @limiter.limit("60/minute")
 def exchange_login(
-    body: LoginExchange, request: Request, response: Response, db: Session = Depends(get_db)
+    body: LoginExchange,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
 ) -> dict:
     response.headers["Cache-Control"] = "no-store"
     return ops_cli_service.exchange_login(db, body.device_code, request)
@@ -77,7 +81,7 @@ def approve_login(
     db: Annotated[Session, Depends(get_db)],
 ) -> dict:
     response.headers["Cache-Control"] = "no-store"
-    user = db.query(User).filter(User.id == session.user_id).one()
+    user = user_service.get_user_by_id(db, session.user_id)
     if not ops_cli_service.approve_login(db, user, body.code, request):
         raise HTTPException(
             status_code=400, detail="Login code is invalid, expired, or already used"
@@ -116,7 +120,7 @@ def whoami(
     context: Annotated[OpsCliContext, Depends(require_ops_cli)],
     db: Annotated[Session, Depends(get_db)],
 ) -> dict:
-    user = db.query(User).filter(User.id == context.user_id).one()
+    user = user_service.get_user_by_id(db, context.user_id)
     return {"user_id": user.id, "email": user.email, "expires_at": context.expires_at}
 
 

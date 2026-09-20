@@ -1,4 +1,4 @@
-"""Lifecycle operations for short-lived ops CLI credentials."""
+"""CLI credential lifecycle and platform organization discovery."""
 
 import hashlib
 import secrets
@@ -6,10 +6,11 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import Request
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.models import OpsCliToken, User
+from app.db.models import OpsCliToken, Organization, User
 from app.db.models.ops_cli import OpsCliLogin
 from app.services.platform_service import log_admin_action
 
@@ -153,3 +154,24 @@ def revoke_token(
         )
         db.commit()
     return True
+
+
+def list_organizations(db: Session, *, search: str = "", limit: int = 100, offset: int = 0) -> dict:
+    """Discover publication targets for an authenticated platform CLI session."""
+    query = db.query(Organization).filter(Organization.deleted_at.is_(None))
+    if search:
+        filters = [Organization.slug.ilike(f"%{search}%"), Organization.name.ilike(f"%{search}%")]
+        try:
+            filters.append(Organization.id == UUID(search))
+        except ValueError:
+            pass
+        query = query.filter(or_(*filters))
+    return {
+        "items": [
+            {"id": row.id, "name": row.name, "slug": row.slug}
+            for row in query.order_by(Organization.slug, Organization.id)
+            .offset(offset)
+            .limit(limit)
+        ],
+        "total": query.count(),
+    }
