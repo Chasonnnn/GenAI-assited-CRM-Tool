@@ -19,13 +19,13 @@ Detailed checks and local delivery status are in [permission-upgrade-verificatio
 
 Publish this plan with the existing work in draft PR #691, stacked on draft platform PR #690, then resume implementation. Keep changes in small logical commits and push verified increments to these drafts. This authorizes neither merge/deployment nor production migrations, provider sends, or organization activation.
 
-The published snapshot includes main through #714. Main has advanced since that snapshot; refresh from the remote before integration rather than treating the previous validation as evidence for the new version.
+The September 20 refresh incorporates fetched main through #716 and #717, including OPS template CLI and interview-appointment management. Platform and permission migration histories have additive join revisions. Verification for this refresh is recorded separately from the September 19 results.
 
 | Order | Work | Completion evidence / boundary |
 |---|---|---|
-| 1 | Refresh platform and permission branches against latest main | Preserve current-main fixes and the removed record-page collaborator/photo controls; reconcile migration heads and generated contracts; run affected tests before pushing |
+| 1 | Refresh platform and permission branches against latest main | Completed for the September 20 fetched-main snapshot. Main fixes, removed collaborator/photo controls, generated contracts, and both migration branches are preserved. See the current verification record |
 | 2 | Review and finish permission frontend | People currently links to the existing Team page. Show proposed navigation/layout changes before implementation. Review donor Owner and member collaboration controls; keep Check access visibility-only unless a broader action checker is agreed. Exercise additions/removals, individual/bulk role changes, inactive members, publication, and revocation with representative loading/error/responsive/keyboard states |
-| 3 | Refactor workflow action execution | Keep existing definition/authority boundaries and separate scheduling module. Split concrete responsibilities out of the large action adapter without changing snapshots, approval, idempotency, retry/resume, or delivery admission |
+| 3 | Refactor workflow action execution | In progress: the three intake actions now live in `workflow_intake_actions`; 117 baseline tests passed before extraction and 245 workflow/intake tests afterward. Record changes, task creation, and communication actions remain in the adapter. Preserve snapshots, approval, idempotency, retry/resume, and delivery admission |
 | 4 | Refactor campaign lifecycle | Separate definition/publication, audience selection, run lifecycle, and retries only where responsibilities remain combined. Preserve consent, suppression, authorization, immutable content, recipient counts, and locking |
 | 5 | Consolidate intake matching/retry transactions | Ordinary approve/reject already have service-owned transactions. Focus on matching/reset/retry and nested helpers that commit before the use case finishes; prove rollback and safe repeated execution |
 | 6 | Consolidate reporting datasets | Reuse the same authorized dataset across counts, charts, drill-downs, and exports. Preserve request-only v2 caching; restoring cross-request caching is a separate optimization requiring complete scope invalidation |
@@ -34,7 +34,7 @@ The published snapshot includes main through #714. Main has advanced since that 
 
 Backend work that preserves behavior can proceed while frontend decisions remain open. Do not add new UI, change permission defaults, or claim that mockup selection approves every implemented control. Refactoring and behavior changes must be separate commits with their own tests. Meta/Twilio configuration, onboarding, and broader redesign are outside this workplan.
 
-Current CI filters do not run the main/develop PR workflow for the stacked permission base. Record exact local validation and its source version; absent GitHub checks are not passing checks. Ensure the final combined version receives CI before merge without triggering deployment workflows.
+The CI PR-base filter now includes `codex/platform-upgrades`, with a regression test. Push and release triggers are unchanged. Inspect actual remote check results after publication; local validation or an absent check is not a passing GitHub run. The final accepted combined version must receive CI before merge without triggering deployment workflows.
 
 ## Agreed defaults
 

@@ -1,5 +1,31 @@
 # Permission upgrade verification
 
+## September 20 continuation
+
+Draft #690 now incorporates fetched main through #716 and #717 at [the platform integration](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/29ee3fae1876eaaccfe01cf23d82bb00f2a800c3). Draft #691 incorporates that branch, reconciles the new interview-appointment lifecycle with v2 authorization, enables CI for its stacked PR base, and extracts three intake workflow actions without changing behavior. The final application source for the checks below is [the intake extraction](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dd738446083881806fc247e2aab937c17278d565); subsequent workplan edits contain no application changes.
+
+**Permission frontend acceptance and broader modularization remain unfinished.** No new permission screen, record collaborator card, donor photo control, permission default, or production activation was added in this continuation. Donor Owner and member-settings collaboration controls still require review. The workplan identifies the remaining workflow, campaign, intake-transaction, and reporting boundaries.
+
+| Check | Result |
+|---|---|
+| `uv run -m pytest tests/ -q --tb=short --ignore-glob 'tests/test_migration_*.py' --ignore tests/test_email_delivery_outbox.py -n 2 --dist loadscope` | 3,553 passed on the final application source |
+| `uv run -m pytest tests/test_migration_*.py tests/test_email_delivery_outbox.py -q --tb=short` | 98 passed; non-overlapping with the preceding selection |
+| `pnpm run check` | TypeScript and ESLint passed; 284 files / 1,703 tests passed |
+| `pnpm build` | Production standalone build passed; rendered checks used this output |
+| `uv run -m pytest -q` in `apps/ops-cli` | 19 passed |
+| Workflow extraction | 117 baseline tests passed before moving code; 245 workflow/intake tests passed afterward, including seven new dispatcher contracts |
+| Changed API Python surfaces / new files | Ruff passed; new intake module and tests passed formatting checks |
+| Fresh database `alembic upgrade head` and `alembic check` | Single head `20260920_0310_permission_heads`; no new upgrade operations detected |
+| Existing permission-schema upgrade | Synthetic activated-v2 and v1 organizations retained their policy versions and configuration revisions (7 and 3); schema check passed |
+
+The final API selections total **3,651 tests**. Focused selections overlap and are not additive. The platform-only pre-integration checks passed 83 focused API tests, two migration upgrade tests, TypeScript, and 149 frontend tests. These do not claim a separate full platform-only suite run.
+
+The first combined API run had four fixture failures because the disposable database role could not disable system triggers or set `session_replication_role`. The local disposable role was configured consistently with CI, and both subsequent full runs passed without test exclusions. The first frontend run retained an obsolete permission assertion for `Log Interview Outcome`; it now asserts that current main's retired control remains absent. CI's new stacked-base regression failed before the filter correction and passed afterward; push and release triggers were not broadened.
+
+Real-browser checks used a separate synthetic v2 organization and the production standalone frontend. Admin opened the inherited appointment manager with Reschedule/Cancel controls. Operations saw disabled Manage, Change Stage, and Send Email controls. Inspected screenshots showed readable, unclipped appointment states. Both donor types had zero enabled inline edit controls and no photo/upload or collaborator controls; the surrogate also had no collaborator card or retired outcome action. API regressions separately cover each required appointment action, cross-organization denial, collaborator revocation despite appointment ownership, cancellation/rebooking, idempotent retry, and revoked retry. No appointment notification was sent during browser checks.
+
+These rendered checks are focused integration evidence, not acceptance of the People/role/member designs. The complete three-record browser handoffs and production-shaped activation rehearsal documented below were not repeated in this continuation. Docker image builds were not rerun locally. Repeat these gates on the final accepted version and inspect actual GitHub check results before merge; neither local checks nor an absent remote check means CI passed. Release and real-organization activation remain separately authorized.
+
 ## September 19 scope correction
 
 The record-page **Intake collaborators** card and its Add/Remove controls were unrequested and have been removed from surrogate and donor overviews. Earlier screenshots and browser results involving that card document a historical implementation, not approved product UI. Backend collaboration retention and the separate member-settings controls remain unchanged; this correction does not establish user approval of either.

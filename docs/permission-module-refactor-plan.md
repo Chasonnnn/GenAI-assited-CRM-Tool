@@ -1,6 +1,6 @@
 # Module refactors for the permission upgrade
 
-Status: permission-v2 foundations and shared record filters are implemented in draft PR #691 behind organization activation. Broader modularization is unfinished: workflow execution/scheduling, campaign lifecycle, form-review transaction ownership, and reporting datasets/cache invalidation remain in the sequence below. Existing organizations remain on v1 until their access and execution reviews are resolved. Integrated verification is recorded in `permission-upgrade-verification.md`. No deployment, production migration, or provider testing has occurred.
+Status: permission-v2 foundations and shared record filters are implemented in draft PR #691 behind organization activation. Broader modularization is unfinished: remaining workflow actions, campaign lifecycle, intake matching/retry transactions, and reporting datasets remain in the sequence below. Existing organizations remain on v1 until their access and execution reviews are resolved. Integrated verification is recorded in `permission-upgrade-verification.md`. No deployment, production migration, or provider testing has occurred.
 
 ## Implemented boundaries
 
@@ -11,6 +11,7 @@ Status: permission-v2 foundations and shared record filters are implemented in d
 | Approval handoff | `services/approval_handoff_service.py`, surrogate/donor status services | Canonical approval crossing, retained Intake collaboration, and pool ownership in the domain transaction; `record_phase` shares list/detail phase semantics |
 | Workflow definitions | `services/workflow_definition_rules.py` | Trigger validation and action ordering independently of CRUD, execution, and authorization |
 | Workflow authority | `services/workflow_access.py`, `services/workflow_execution_authority.py` | Human management, personal subject eligibility, organization execution snapshots, action authorization, retry/resume, and delivery admission |
+| Workflow intake actions | `services/workflow_intake_actions.py` | Promotion, matching, and lead-creation action arguments/results; dispatcher guards and execution identity remain unchanged, with transactions still in `form_intake_service` |
 | Campaign authority | `services/campaign_access.py`, existing campaign audience and run services | View/Edit/Send, personal versus organization ownership, viewer-scoped preview/recipient/count queries, durable execution audience, send authorization, recipient rechecks, and publication |
 | Template authorization/publication | `services/email_template_access.py`, `services/email_template_publication.py` | Shared edit decisions and independent organization copies; proposal credit is separate from execution authority |
 | Submission review | `services/form_submission_access.py` | Submission actions, unlinked Intake/Admin/Dev queue, linked record scope, form picker, and intake-lead access; builder authority remains in `manage_forms` |
@@ -71,7 +72,9 @@ The September 19 isolated synthetic-history rehearsal passed on the combined app
 
 ### 2. Split workflow execution by concrete use case
 
-Keep `workflow_definition_rules` as the definition validator and `workflow_execution_authority` as the authority boundary. The core already delegates action execution to `DefaultWorkflowDomainAdapter.execute_action`, and scheduled candidate selection already lives in `workflow_triggers.trigger_scheduled_workflows`. Split the large adapter's concrete responsibilities by family: record changes, task creation, communications, and intake routing. Preserve the existing scheduling boundary rather than repeating an extraction that is already implemented.
+Keep `workflow_definition_rules` as the definition validator and `workflow_execution_authority` as the authority boundary. The core already delegates action execution to `DefaultWorkflowDomainAdapter.execute_action`, and scheduled candidate selection already lives in `workflow_triggers.trigger_scheduled_workflows`. The September 20 slice extracted intake routing into `workflow_intake_actions` without changing its behavior. Record changes, task creation, and communications remain in the adapter. Preserve the existing scheduling boundary rather than repeating an extraction that is already implemented.
+
+The intake extraction preserves result keys, creator attribution, strict auto-promotion flags, execution binding, matching outcomes, and existing transaction ownership. Seven dispatcher contract cases were added before the move; 117 baseline tests passed before extraction and 245 workflow/intake tests passed afterward. The separate matching/retry transaction problem below is not fixed by moving these actions.
 
 Preserve immutable action snapshots, scheduling timestamps, idempotency keys, approval results, and retry/resume behavior. Each extraction requires an existing caller and behavioral tests. Keep one coordinator for engine/adaptor/worker changes so dispatch and final delivery cannot drift apart.
 
