@@ -13,7 +13,11 @@ def test_platform_migrations_have_one_head_with_both_upgrade_histories():
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
     assert len(scripts.get_heads()) == 1
     ancestors = {revision.revision for revision in scripts.walk_revisions()}
-    assert {"20260907_1200", "20260914_1200_donor_profile"} <= ancestors
+    assert {
+        "20260907_1200",
+        "20260914_1200_donor_profile",
+        "20260919_0300_ops_cli_login",
+    } <= ancestors
 
 
 def test_google_model_upgrade_and_downgrade(monkeypatch):

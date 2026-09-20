@@ -79,7 +79,7 @@ async def test_intelligent_suggestion_settings_defaults_and_update(authed_client
     get_payload = get_response.json()
     assert get_payload["enabled"] is True
     assert get_payload["new_unread_business_days"] == 1
-    assert get_payload["meeting_outcome_business_days"] == 1
+    assert "meeting_outcome_business_days" not in get_payload
     assert get_payload["stuck_business_days"] == 5
     assert get_payload["digest_hour_local"] == 9
 
@@ -87,7 +87,6 @@ async def test_intelligent_suggestion_settings_defaults_and_update(authed_client
         "/settings/intelligent-suggestions",
         json={
             "new_unread_business_days": 2,
-            "meeting_outcome_business_days": 3,
             "stuck_business_days": 7,
             "digest_hour_local": 11,
             "daily_digest_enabled": False,
@@ -96,7 +95,7 @@ async def test_intelligent_suggestion_settings_defaults_and_update(authed_client
     assert patch_response.status_code == 200, patch_response.text
     patched_payload = patch_response.json()
     assert patched_payload["new_unread_business_days"] == 2
-    assert patched_payload["meeting_outcome_business_days"] == 3
+    assert "meeting_outcome_business_days" not in patched_payload
     assert patched_payload["stuck_business_days"] == 7
     assert patched_payload["digest_hour_local"] == 11
     assert patched_payload["daily_digest_enabled"] is False
@@ -115,7 +114,7 @@ async def test_intelligent_suggestion_templates_and_rule_crud(
     templates = templates_response.json()
     template_keys = {template["template_key"] for template in templates}
     assert "stage_followup_custom" in template_keys
-    assert "meeting_outcome_missing" in template_keys
+    assert "meeting_outcome_missing" not in template_keys
     new_unread_template = next(
         template for template in templates if template["template_key"] == "new_unread_followup"
     )
@@ -125,7 +124,7 @@ async def test_intelligent_suggestion_templates_and_rule_crud(
     rules_response = await authed_client.get("/settings/intelligent-suggestions/rules")
     assert rules_response.status_code == 200, rules_response.text
     initial_rules = rules_response.json()
-    assert len(initial_rules) >= 3
+    assert len(initial_rules) >= 2
 
     create_response = await authed_client.post(
         "/settings/intelligent-suggestions/rules",

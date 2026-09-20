@@ -11,14 +11,11 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.db.enums import (
-    AppointmentStatus,
     NotificationType,
     OwnerType,
     Role,
-    SurrogateActivityType,
 )
 from app.db.models import (
-    Appointment,
     Membership,
     Organization,
     OrgIntelligentSuggestionRule,
@@ -40,7 +37,6 @@ from app.utils.business_hours import is_business_day
 # Dynamic filter values used by /surrogates endpoint.
 FILTER_INTELLIGENT_ANY = "intelligent_any"
 FILTER_INTELLIGENT_NEW_UNREAD = "intelligent_new_unread_stale"
-FILTER_INTELLIGENT_MEETING_OUTCOME = "intelligent_meeting_outcome_missing"
 FILTER_INTELLIGENT_STUCK_PREAPPROVAL = "intelligent_stuck_preapproval"
 FILTER_ATTENTION_UNREACHED = "attention_unreached"
 FILTER_ATTENTION_STUCK = "attention_stuck"
@@ -48,7 +44,6 @@ FILTER_ATTENTION_STUCK = "attention_stuck"
 ALLOWED_DYNAMIC_FILTERS = {
     FILTER_INTELLIGENT_ANY,
     FILTER_INTELLIGENT_NEW_UNREAD,
-    FILTER_INTELLIGENT_MEETING_OUTCOME,
     FILTER_INTELLIGENT_STUCK_PREAPPROVAL,
     FILTER_ATTENTION_UNREACHED,
     FILTER_ATTENTION_STUCK,
@@ -56,17 +51,14 @@ ALLOWED_DYNAMIC_FILTERS = {
 
 INTELLIGENT_RULE_KEYS = (
     FILTER_INTELLIGENT_NEW_UNREAD,
-    FILTER_INTELLIGENT_MEETING_OUTCOME,
     FILTER_INTELLIGENT_STUCK_PREAPPROVAL,
 )
 
 RULE_KIND_STAGE_INACTIVITY = "stage_inactivity"
-RULE_KIND_MEETING_OUTCOME_MISSING = "meeting_outcome_missing"
 
 TEMPLATE_NEW_UNREAD_FOLLOWUP = "new_unread_followup"
 TEMPLATE_STAGE_FOLLOWUP_CUSTOM = "stage_followup_custom"
 TEMPLATE_PREAPPROVAL_STUCK = "preapproval_stuck"
-TEMPLATE_MEETING_OUTCOME_MISSING = "meeting_outcome_missing"
 
 _DEFAULT_BUSINESS_DAYS_BY_PROFILE = {
     TEMPLATE_NEW_UNREAD_FOLLOWUP: 1,
@@ -87,15 +79,12 @@ _DEFAULT_BUSINESS_DAYS_BY_PROFILE = {
     "anatomy_scan_followup": 7,
     TEMPLATE_STAGE_FOLLOWUP_CUSTOM: 2,
     TEMPLATE_PREAPPROVAL_STUCK: 5,
-    TEMPLATE_MEETING_OUTCOME_MISSING: 1,
 }
 
 DEFAULTS = {
     "enabled": True,
     "new_unread_enabled": True,
     "new_unread_business_days": 1,
-    "meeting_outcome_enabled": True,
-    "meeting_outcome_business_days": 1,
     "stuck_enabled": True,
     "stuck_business_days": 5,
     "daily_digest_enabled": True,
@@ -200,19 +189,6 @@ def list_rule_templates(
             "default_business_days": _DEFAULT_BUSINESS_DAYS_BY_PROFILE[TEMPLATE_PREAPPROVAL_STUCK],
             "is_default": True,
         },
-        {
-            "template_key": TEMPLATE_MEETING_OUTCOME_MISSING,
-            "name": "Meeting outcome missing",
-            "description": "Interview outcome still missing X business days after a meeting.",
-            "rule_kind": RULE_KIND_MEETING_OUTCOME_MISSING,
-            "default_stage_slug": None,
-            "default_stage_key": None,
-            "default_stage_label": None,
-            "default_business_days": _DEFAULT_BUSINESS_DAYS_BY_PROFILE[
-                TEMPLATE_MEETING_OUTCOME_MISSING
-            ],
-            "is_default": True,
-        },
     ]
     return [dict(template) for template in templates]
 
@@ -310,8 +286,6 @@ def serialize_settings(settings: OrgIntelligentSuggestionSettings) -> dict:
         "enabled": settings.enabled,
         "new_unread_enabled": settings.new_unread_enabled,
         "new_unread_business_days": settings.new_unread_business_days,
-        "meeting_outcome_enabled": settings.meeting_outcome_enabled,
-        "meeting_outcome_business_days": settings.meeting_outcome_business_days,
         "stuck_enabled": settings.stuck_enabled,
         "stuck_business_days": settings.stuck_business_days,
         "daily_digest_enabled": settings.daily_digest_enabled,
@@ -389,10 +363,6 @@ def _validate_rule_payload(
             raise ValueError("stage_slug is required for stage inactivity rules")
         if not _stage_slug_exists_for_org(db, org_id, stage_slug):
             raise ValueError("stage_slug is not valid for this organization")
-    else:
-        # Meeting outcome rules ignore stage.
-        if stage_slug:
-            raise ValueError("stage_slug is not allowed for meeting outcome rules")
 
 
 def _default_rules_from_settings(
@@ -420,15 +390,6 @@ def _default_rules_from_settings(
             "sort_order": 0,
         },
         {
-            "template_key": TEMPLATE_MEETING_OUTCOME_MISSING,
-            "name": "Meeting outcome missing",
-            "rule_kind": RULE_KIND_MEETING_OUTCOME_MISSING,
-            "stage_slug": None,
-            "business_days": settings.meeting_outcome_business_days,
-            "enabled": settings.meeting_outcome_enabled,
-            "sort_order": 1,
-        },
-        {
             "template_key": TEMPLATE_PREAPPROVAL_STUCK,
             "name": "Pre-approval stuck",
             "rule_kind": RULE_KIND_STAGE_INACTIVITY,
@@ -443,7 +404,10 @@ def _default_rules_from_settings(
 def _ensure_default_rules(db: Session, org_id: UUID) -> None:
     existing_count = (
         db.query(func.count(OrgIntelligentSuggestionRule.id))
-        .filter(OrgIntelligentSuggestionRule.organization_id == org_id)
+        .filter(
+            OrgIntelligentSuggestionRule.organization_id == org_id,
+            OrgIntelligentSuggestionRule.rule_kind == RULE_KIND_STAGE_INACTIVITY,
+        )
         .scalar()
         or 0
     )
@@ -471,7 +435,10 @@ def list_rules(db: Session, organization_id: UUID) -> list[OrgIntelligentSuggest
     _ensure_default_rules(db, organization_id)
     return (
         db.query(OrgIntelligentSuggestionRule)
-        .filter(OrgIntelligentSuggestionRule.organization_id == organization_id)
+        .filter(
+            OrgIntelligentSuggestionRule.organization_id == organization_id,
+            OrgIntelligentSuggestionRule.rule_kind == RULE_KIND_STAGE_INACTIVITY,
+        )
         .order_by(
             OrgIntelligentSuggestionRule.sort_order.asc(),
             OrgIntelligentSuggestionRule.created_at.asc(),
@@ -675,95 +642,6 @@ def _stage_inactivity_ids(
     }
 
 
-def _meeting_outcome_missing_ids(
-    db: Session,
-    *,
-    org_id: UUID,
-    user_id: UUID,
-    user_role: Role | str,
-    threshold_business_days: int,
-    now_utc: datetime,
-    org_tz: str,
-) -> set[UUID]:
-    meeting_anchor = func.coalesce(
-        Appointment.meeting_ended_at,
-        Appointment.scheduled_end,
-        Appointment.scheduled_start,
-    )
-    latest_meeting_subquery = (
-        db.query(
-            Appointment.surrogate_id.label("surrogate_id"),
-            func.max(meeting_anchor).label("latest_meeting_at"),
-        )
-        .filter(
-            Appointment.organization_id == org_id,
-            Appointment.surrogate_id.is_not(None),
-            Appointment.status.in_(
-                [
-                    AppointmentStatus.CONFIRMED.value,
-                    AppointmentStatus.COMPLETED.value,
-                    AppointmentStatus.NO_SHOW.value,
-                ]
-            ),
-        )
-        .group_by(Appointment.surrogate_id)
-        .subquery()
-    )
-    latest_outcome_subquery = (
-        db.query(
-            SurrogateActivityLog.surrogate_id.label("surrogate_id"),
-            func.max(SurrogateActivityLog.created_at).label("latest_outcome_at"),
-        )
-        .filter(
-            SurrogateActivityLog.organization_id == org_id,
-            SurrogateActivityLog.activity_type
-            == SurrogateActivityType.INTERVIEW_OUTCOME_LOGGED.value,
-        )
-        .group_by(SurrogateActivityLog.surrogate_id)
-        .subquery()
-    )
-
-    query = (
-        db.query(
-            Surrogate.id,
-            latest_meeting_subquery.c.latest_meeting_at,
-            latest_outcome_subquery.c.latest_outcome_at,
-        )
-        .outerjoin(
-            latest_meeting_subquery,
-            latest_meeting_subquery.c.surrogate_id == Surrogate.id,
-        )
-        .outerjoin(
-            latest_outcome_subquery,
-            latest_outcome_subquery.c.surrogate_id == Surrogate.id,
-        )
-        .filter(
-            Surrogate.organization_id == org_id,
-            Surrogate.is_archived.is_(False),
-            latest_meeting_subquery.c.latest_meeting_at.is_not(None),
-            latest_meeting_subquery.c.latest_meeting_at <= now_utc,
-            or_(
-                latest_outcome_subquery.c.latest_outcome_at.is_(None),
-                latest_outcome_subquery.c.latest_outcome_at
-                <= latest_meeting_subquery.c.latest_meeting_at,
-            ),
-            *_strict_owner_filters(user_role, user_id),
-        )
-    )
-
-    cutoff_exclusive_utc = _business_day_cutoff_exclusive_utc(
-        end_at_utc=now_utc,
-        threshold_business_days=threshold_business_days,
-        timezone_name=org_tz,
-    )
-    return {
-        surrogate_id
-        for surrogate_id, _latest_meeting_at, _latest_outcome_at in query.filter(
-            latest_meeting_subquery.c.latest_meeting_at < cutoff_exclusive_utc
-        ).all()
-    }
-
-
 def _attention_owner_filters(
     db: Session,
     *,
@@ -940,16 +818,6 @@ def _rule_ids_for_user(
                 stage_slug=rule.stage_slug,
                 template_key=rule.template_key,
             )
-        elif rule.rule_kind == RULE_KIND_MEETING_OUTCOME_MISSING:
-            results[rule.id] = _meeting_outcome_missing_ids(
-                db,
-                org_id=org_id,
-                user_id=user_id,
-                user_role=user_role,
-                threshold_business_days=rule.business_days,
-                now_utc=now_utc,
-                org_tz=org_tz,
-            )
         else:
             results[rule.id] = set()
 
@@ -986,9 +854,6 @@ def get_intelligent_rule_ids(
                 rule,
                 TEMPLATE_NEW_UNREAD_FOLLOWUP,
             ):
-                matched.update(rule_ids)
-        elif rule_key == FILTER_INTELLIGENT_MEETING_OUTCOME:
-            if rule.rule_kind == RULE_KIND_MEETING_OUTCOME_MISSING:
                 matched.update(rule_ids)
         elif rule_key == FILTER_INTELLIGENT_STUCK_PREAPPROVAL:
             if rule.template_key == TEMPLATE_PREAPPROVAL_STUCK:
@@ -1028,8 +893,6 @@ def get_intelligent_summary(
             TEMPLATE_NEW_UNREAD_FOLLOWUP,
         ):
             counts[FILTER_INTELLIGENT_NEW_UNREAD] += len(rule_ids)
-        if rule.rule_kind == RULE_KIND_MEETING_OUTCOME_MISSING:
-            counts[FILTER_INTELLIGENT_MEETING_OUTCOME] += len(rule_ids)
         if rule.template_key == TEMPLATE_PREAPPROVAL_STUCK:
             counts[FILTER_INTELLIGENT_STUCK_PREAPPROVAL] += len(rule_ids)
 

@@ -32,7 +32,29 @@ export function getPublicFieldValidationError(
     if (field.required && isEmptyPublicFieldValue(value)) {
         return `${field.label} is required.`
     }
-    if (isEmptyPublicFieldValue(value)) {
+    if (isEmptyPublicFieldValue(value) && !(field.type === "repeatable_table" && Array.isArray(value))) {
+        return null
+    }
+
+    if (field.type === "repeatable_table") {
+        if (!Array.isArray(value)) return `Please complete: ${field.label}`
+        if (field.min_rows != null && value.length < field.min_rows) {
+            return `Please add at least ${field.min_rows} rows for ${field.label}`
+        }
+        if (field.max_rows != null && value.length > field.max_rows) {
+            return `Please limit ${field.label} to ${field.max_rows} rows`
+        }
+        for (const row of value) {
+            if (!row || typeof row !== "object" || Array.isArray(row)) {
+                return `Please complete: ${field.label}`
+            }
+            for (const column of field.columns ?? []) {
+                const cellValue = row[column.key]
+                if (column.required && (cellValue == null || cellValue === "")) {
+                    return `Please complete: ${column.label}`
+                }
+            }
+        }
         return null
     }
 

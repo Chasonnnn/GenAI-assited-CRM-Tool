@@ -36,11 +36,6 @@ export type LatestContactOutcome = {
     at: string;
 };
 
-export type LatestInterviewOutcome = {
-    outcome: 'completed' | 'no_show' | 'rescheduled' | 'cancelled';
-    at: string;
-};
-
 export type SurrogateRead = Omit<
     GeneratedSurrogateRead,
     | 'owner_type'
@@ -49,7 +44,6 @@ export type SurrogateRead = Omit<
     | 'delivery_baby_weight'
     | 'lead_intake_warnings'
     | 'latest_contact_outcome'
-    | 'latest_interview_outcome'
 > & {
     owner_type: 'user' | 'queue' | null;
     stage_slug: string | null;
@@ -63,7 +57,6 @@ export type SurrogateRead = Omit<
     delivery_baby_weight: string | null;
     lead_intake_warnings?: SurrogateLeadIntakeWarning[];
     latest_contact_outcome: LatestContactOutcome | null;
-    latest_interview_outcome: LatestInterviewOutcome | null;
 };
 
 export type SurrogateListResponse = Omit<GeneratedSurrogateListResponse, 'items'> & {

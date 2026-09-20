@@ -34,6 +34,15 @@ describe("opt-in consent preset", () => {
 })
 
 describe("form builder journey timing preset", () => {
+    it.each(["table", "repeatable_table"] as const)("preserves %s column values when labels differ", (type) => {
+        const options = [{ label: "Vaginal", value: "vaginal" }, { label: "C-section", value: "c_section" }]
+        const pages = schemaToPages({ pages: [{ fields: [{
+            key: "history", label: "History", type,
+            columns: [{ key: "delivery", label: "Delivery", type: "select", options }],
+        }] }] }, new Map())
+        expect(buildFormSchema(pages, metadata).pages[0]?.fields[0]?.columns?.[0]?.options).toEqual(options)
+    })
+
     it("serializes the journey timing preset with canonical option values", () => {
         const journeyTimingTemplate = PRESET_FIELD_GROUPS
             .flatMap((group) => group.fields)

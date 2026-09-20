@@ -355,7 +355,16 @@ class WorkflowTemplate(Base):
         UniqueConstraint("organization_id", "name", name="uq_template_name"),
         Index("idx_template_org", "organization_id"),
         Index("idx_template_category", "category"),
+        Index(
+            "uq_global_workflow_external_key",
+            "external_key",
+            unique=True,
+            postgresql_where=text("is_global AND organization_id IS NULL"),
+        ),
     )
+
+    external_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    current_version: Mapped[int] = mapped_column(Integer, server_default=text("1"), default=1)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 

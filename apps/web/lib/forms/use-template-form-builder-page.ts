@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef } from "react"
+import { useEffect, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "@/components/ui/toast"
 
@@ -67,7 +67,7 @@ type TemplateCreateMutation = {
 type TemplateUpdateMutation = {
     mutateAsync: (variables: {
         id: string
-        payload: TemplateDraftPayload & { expected_version: number | null }
+        payload: TemplateDraftPayload & { expected_version: number }
     }) => Promise<PlatformFormTemplate>
 }
 
@@ -158,16 +158,14 @@ const persistTemplatePayload = async ({
             ? templateIdentityRef.current
             : null
     const templateId = trackedIdentity?.templateId ?? routeTemplateId
-    const expectedVersions = [
-        trackedIdentity?.currentVersion,
-        templateCurrentVersion,
-    ].filter((version): version is number => typeof version === "number")
-    const expectedVersion =
-        expectedVersions.length > 0 ? Math.max(...expectedVersions) : null
     if (!templateId) {
         savedTemplate = await createTemplateMutation.mutateAsync(payload)
         router.replace(`/ops/templates/forms/${savedTemplate.id}`)
     } else {
+        const expectedVersion = trackedIdentity?.currentVersion ?? templateCurrentVersion
+        if (typeof expectedVersion !== "number") {
+            throw new Error("Template revision is unavailable")
+        }
         savedTemplate = await updateTemplateMutation.mutateAsync({
             id: templateId,
             payload: {
@@ -182,7 +180,7 @@ const persistTemplatePayload = async ({
         currentVersion:
             typeof savedTemplate.current_version === "number"
                 ? savedTemplate.current_version
-                : expectedVersion,
+                : null,
         routeKey: templateKey,
         templateId: savedTemplate.id,
     }
@@ -222,6 +220,15 @@ export function useTemplateFormBuilderPage() {
     const deleteTemplateMutation = useDeletePlatformFormTemplate()
     const templateIdentityRef = useRef<TemplateSaveIdentityRef["current"]>(null)
     const saveQueueRef = useRef<Promise<void> | null>(null)
+
+    useEffect(() => {
+        if (!templateData || templateIdentityRef.current?.routeKey === templateKey) return
+        templateIdentityRef.current = {
+            currentVersion: templateData.current_version,
+            routeKey: templateKey,
+            templateId: templateData.id,
+        }
+    }, [templateData, templateKey])
 
     const { state, patchState, resetForForm, hydrateFromTemplate } =
         useTemplateFormBuilderState(templateKey, isNewForm)
@@ -470,13 +477,19 @@ export function useTemplateFormBuilderPage() {
                 }),
             )
             patchState(buildSavedState(draftFingerprint, savedTemplate))
-            await publishTemplateMutation.mutateAsync({
+            const publishedTemplate = await publishTemplateMutation.mutateAsync({
                 id: savedTemplate.id,
                 payload: {
                     publish_all: true,
                     org_ids: null,
+                    expected_version: savedTemplate.current_version,
                 },
             })
+            templateIdentityRef.current = {
+                currentVersion: publishedTemplate.current_version,
+                routeKey: templateKey,
+                templateId: publishedTemplate.id,
+            }
             patchState({
                 isPublished: true,
                 showPublishDialog: false,

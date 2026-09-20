@@ -8,6 +8,7 @@ const templateState = vi.hoisted(() => ({
     data: {
         id: "workflow-template-1",
         status: "draft" as const,
+        current_version: 4,
         published_version: 0,
         is_published_globally: true,
         draft: {
@@ -82,7 +83,9 @@ vi.mock("@/lib/hooks/use-workflows", () => ({
 }))
 
 vi.mock("@/components/ops/templates/PublishDialog", () => ({
-    PublishDialog: () => null,
+    PublishDialog: ({ onPublish }: { onPublish: (publishAll: boolean, orgIds: string[]) => void }) => (
+        <button onClick={() => onPublish(true, [])}>Confirm workflow publish</button>
+    ),
 }))
 
 describe("platform workflow template draft ownership", () => {
@@ -93,6 +96,11 @@ describe("platform workflow template draft ownership", () => {
         mutationMocks.remove.mockReset()
         workflowOptions.statuses = []
         workflowOptions.trigger_types = []
+        mutationMocks.update.mockImplementation(async () => ({
+            ...templateState.data,
+            current_version: templateState.data.current_version + 1,
+        }))
+        mutationMocks.publish.mockResolvedValue(templateState.data)
         templateState.data = {
             ...templateState.data,
             draft: {
@@ -126,8 +134,31 @@ describe("platform workflow template draft ownership", () => {
             id: "workflow-template-1",
             payload: expect.objectContaining({
                 conditions: [{ field: "lead_kind", operator: "in", value: ["egg_donor", "sperm_donor"] }],
-                actions: [expect.objectContaining({ action_type: "create_intake_lead", auto_promote: true })],
+                actions: [{ action_type: "create_intake_lead", source: "website", auto_promote: true }],
             }),
+        }))
+    })
+
+    it("edits with current_version and publishes the revision returned by the save", async () => {
+        templateState.data.draft.actions = [{ action_type: "add_note", content: "Follow up" }]
+        mutationMocks.publish.mockResolvedValue({ ...templateState.data, current_version: 6 })
+        render(<PlatformWorkflowTemplatePage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Publish" }))
+        fireEvent.click(screen.getByRole("button", { name: "Confirm workflow publish" }))
+
+        await waitFor(() => expect(mutationMocks.update).toHaveBeenCalledWith({
+            id: "workflow-template-1",
+            payload: expect.objectContaining({ expected_version: 4 }),
+        }))
+        expect(mutationMocks.publish).toHaveBeenCalledWith({
+            id: "workflow-template-1",
+            payload: { publish_all: true, org_ids: null, expected_version: 5 },
+        })
+        await waitFor(() => expect(screen.getByRole("button", { name: "Save Draft" })).toBeEnabled())
+        fireEvent.click(screen.getByRole("button", { name: "Save Draft" }))
+        await waitFor(() => expect(mutationMocks.update).toHaveBeenLastCalledWith({
+            id: "workflow-template-1", payload: expect.objectContaining({ expected_version: 6 }),
         }))
     })
 
