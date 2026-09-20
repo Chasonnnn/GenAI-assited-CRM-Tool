@@ -184,6 +184,7 @@ def record_queued_event(
     stage_label: str | None = None,
     surrogate_id: UUID | None = None,
     db: Session | None = None,
+    commit: bool = True,
 ) -> MetaCrmDatasetEvent | None:
     event_holder: dict[str, MetaCrmDatasetEvent] = {}
 
@@ -205,7 +206,12 @@ def record_queued_event(
             surrogate_id=surrogate_id,
         )
 
-    _persist(_create, db=db)
+    if not commit:
+        if db is None:
+            raise ValueError("db is required when commit is False")
+        _create(db)
+    else:
+        _persist(_create, db=db)
     return event_holder.get("event")
 
 

@@ -415,6 +415,129 @@ def test_enqueue_website_lead_event_is_submission_owned_and_can_attach_lead_late
     assert monitor_event.intake_lead_id == intake_lead_id
 
 
+def test_enqueue_website_lead_event_publishes_job_and_monitor_atomically(
+    monkeypatch,
+    db,
+    test_org,
+):
+    from app.db.models import Job, MetaCrmDatasetEvent
+    from app.services import meta_crm_dataset_service
+
+    _configure_meta_dataset(db, test_org.id)
+    submission_id = _create_form_submission_for_meta_event(db, test_org.id)
+    idempotency_key = f"sf_lead_{submission_id}"
+    commit_boundaries = []
+    original_commit = db.commit
+
+    def observe_commit_boundary():
+        db.flush()
+        job = (
+            db.query(Job)
+            .filter(
+                Job.organization_id == test_org.id,
+                Job.idempotency_key == idempotency_key,
+            )
+            .first()
+        )
+        if job is not None:
+            monitor = (
+                db.query(MetaCrmDatasetEvent)
+                .filter(
+                    MetaCrmDatasetEvent.organization_id == test_org.id,
+                    MetaCrmDatasetEvent.job_id == job.id,
+                )
+                .first()
+            )
+            commit_boundaries.append(monitor.form_submission_id if monitor else None)
+        original_commit()
+
+    monkeypatch.setattr(db, "commit", observe_commit_boundary)
+
+    result = meta_crm_dataset_service.enqueue_website_lead_event(
+        db,
+        organization_id=test_org.id,
+        submission_id=submission_id,
+        event_source_url="https://ewi-surrogacy.com",
+        attribution={"fbc": "fb.1.1772942400.test-click"},
+        email="lead@example.com",
+        phone=None,
+    )
+
+    assert result["queued"] is True
+    assert commit_boundaries == [submission_id]
+
+
+def test_enqueue_website_lead_event_rolls_back_job_when_monitor_persistence_fails(
+    monkeypatch,
+):
+    from app.db.models import Job, MetaCrmDatasetEvent, Organization
+    from app.db.session import SessionLocal
+    from app.services import meta_crm_dataset_monitor_service, meta_crm_dataset_service
+
+    isolated_db = SessionLocal()
+    organization_id = uuid4()
+    try:
+        isolated_db.add(
+            Organization(
+                id=organization_id,
+                name="Atomic Meta Enqueue Org",
+                slug=f"atomic-meta-enqueue-{organization_id.hex[:8]}",
+            )
+        )
+        isolated_db.commit()
+        _configure_meta_dataset(isolated_db, organization_id)
+        submission_id = _create_form_submission_for_meta_event(isolated_db, organization_id)
+        isolated_db.commit()
+
+        def fail_monitor_persistence(**_kwargs):
+            raise RuntimeError("monitor persistence failed")
+
+        monkeypatch.setattr(
+            meta_crm_dataset_monitor_service,
+            "record_queued_event",
+            fail_monitor_persistence,
+        )
+
+        result = meta_crm_dataset_service.enqueue_website_lead_event(
+            isolated_db,
+            organization_id=organization_id,
+            submission_id=submission_id,
+            event_source_url="https://ewi-surrogacy.com",
+            attribution={"fbc": "fb.1.1772942400.test-click"},
+            email="lead@example.com",
+            phone=None,
+        )
+
+        assert result["queued"] is False
+        assert result["reason"] == "enqueue_failed"
+        assert (
+            isolated_db.query(Job)
+            .filter(
+                Job.organization_id == organization_id,
+                Job.idempotency_key == f"sf_lead_{submission_id}",
+            )
+            .count()
+            == 0
+        )
+        skipped_event = (
+            isolated_db.query(MetaCrmDatasetEvent)
+            .filter(
+                MetaCrmDatasetEvent.organization_id == organization_id,
+                MetaCrmDatasetEvent.form_submission_id == submission_id,
+            )
+            .one()
+        )
+        assert skipped_event.status == "skipped"
+        assert skipped_event.reason == "enqueue_failed"
+    finally:
+        isolated_db.rollback()
+        organization = isolated_db.get(Organization, organization_id)
+        if organization is not None:
+            isolated_db.delete(organization)
+            isolated_db.commit()
+        isolated_db.close()
+
+
 @pytest.mark.parametrize("lead_kind", ["egg_donor", "sperm_donor"])
 def test_enqueue_website_lead_event_skips_donor_submissions(db, test_org, lead_kind):
     from app.db.enums import JobType

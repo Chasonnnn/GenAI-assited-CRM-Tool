@@ -439,12 +439,13 @@ def enqueue_website_lead_event(
         ) | {"idempotency_key": idempotency_key}
 
     try:
-        job = job_service.schedule_job(
+        job = job_service.enqueue_job(
             db=db,
             org_id=organization_id,
             job_type=JobType.META_CRM_DATASET_EVENT,
             payload=job_payload,
             idempotency_key=idempotency_key,
+            commit=False,
         )
         meta_crm_dataset_monitor_service.record_queued_event(
             db=db,
@@ -460,7 +461,9 @@ def enqueue_website_lead_event(
             stage_slug="form_submitted",
             stage_label="Form Submitted",
             surrogate_id=None,
+            commit=False,
         )
+        db.commit()
         return {
             "queued": True,
             "reason": None,
