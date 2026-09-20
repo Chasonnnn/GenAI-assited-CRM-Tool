@@ -81,6 +81,7 @@ import { getTasks, type TaskListParams } from "@/lib/api/tasks"
 import { getSurrogates, type SurrogateListParams } from "@/lib/api/surrogates"
 import { listDonors } from "@/lib/api/donors"
 import { getSurrogateFieldLabel } from "@/lib/constants/surrogate-field-labels"
+import { getWorkflowExecutionStatusLabel } from "@/lib/constants/workflow-execution-status"
 import { US_STATES } from "@/lib/constants/us-states"
 import { parseDateInput } from "@/lib/utils/date"
 import type { JsonObject, JsonValue } from "@/lib/types/json"
@@ -2847,8 +2848,9 @@ function useAutomationPageView({
                                         <div className="flex gap-3">
                                             <div
                                                 className={`relative z-10 mt-1 flex size-4 shrink-0 items-center justify-center rounded-full ${execution.status === "success" ? "bg-green-500" :
-                                                    execution.status === "partial" ? "bg-yellow-500" :
-                                                        execution.status === "skipped" ? "bg-gray-400" : "bg-red-500"
+                                                    execution.status === "running" ? "bg-blue-500" :
+                                                        execution.status === "partial" ? "bg-yellow-500" :
+                                                            execution.status === "skipped" ? "bg-gray-400" : "bg-red-500"
                                                     }`}
                                             >
                                                 <div className="size-2 rounded-full bg-white" />
@@ -2861,10 +2863,10 @@ function useAutomationPageView({
                                                     </div>
                                                     <Badge
                                                         variant={execution.status === "success" ? "default" :
-                                                            execution.status === "skipped" ? "secondary" : "destructive"}
-                                                        className="text-xs"
+                                                            execution.status === "skipped" || execution.status === "running" ? "secondary" : "destructive"}
+                                                        className={`text-xs ${execution.status === "running" ? "border-blue-500/20 bg-blue-500/10 text-blue-500" : ""}`}
                                                     >
-                                                        {execution.status}
+                                                        {getWorkflowExecutionStatusLabel(execution.status)}
                                                     </Badge>
                                                 </div>
                                                 <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">

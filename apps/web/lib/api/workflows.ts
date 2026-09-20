@@ -116,7 +116,7 @@ export interface WorkflowExecution {
     trigger_event: JsonObject
     matched_conditions: boolean
     actions_executed: ActionResult[]
-    status: "success" | "partial" | "failed" | "skipped" | "paused" | "canceled" | "expired"
+    status: "running" | "success" | "partial" | "failed" | "skipped" | "paused" | "canceled" | "expired"
     error_message: string | null
     duration_ms: number | null
     executed_at: string

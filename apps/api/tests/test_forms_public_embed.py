@@ -452,6 +452,16 @@ async def test_embed_session_submit_stores_submission_attribution_consent_and_tr
     link_uuid = uuid.UUID(link_id)
     submission = db.query(FormSubmission).filter(FormSubmission.id == submission_id).first()
     assert submission is not None
+    workflow_job = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == submission.organization_id,
+            Job.job_type == JobType.FORM_SUBMISSION_WORKFLOW.value,
+            Job.payload["submission_id"].astext == str(submission_id),
+        )
+        .one()
+    )
+    assert workflow_job.status == "completed"
     assert submission.published_version_id is not None
     assert submission.idempotency_key == "idem-embed-1"
     assert submission.form_schema_hash

@@ -196,6 +196,7 @@ async def test_worker_periodically_recovers_stale_claims_before_claiming(monkeyp
     assert recovered[0]["retry_safe_job_types"] == {
         JobType.AI_SEND_EMAIL.value,
         JobType.DONOR_INTAKE_PROMOTE.value,
+        JobType.FORM_SUBMISSION_WORKFLOW.value,
         JobType.GOOGLE_TASK_REMOTE_DELETE.value,
         JobType.GOOGLE_TASK_CREATION_RECONCILE.value,
         JobType.STORAGE_DELETE.value,

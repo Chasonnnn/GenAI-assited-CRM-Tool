@@ -39,6 +39,7 @@ class JobType(str, Enum):
     INTERVIEW_TRANSCRIPTION = "interview_transcription"
     ATTACHMENT_SCAN = "attachment_scan"
     FORM_SUBMISSION_FILE_SCAN = "form_submission_file_scan"
+    FORM_SUBMISSION_WORKFLOW = "form_submission_workflow"
     DONOR_INTAKE_PROMOTE = "donor_intake_promote"
     MESSAGE_MEDIA_SCAN = "message_media_scan"
     WORKFLOW_APPROVAL_EXPIRY = "workflow_approval_expiry"  # Sweep for expired approvals

@@ -854,7 +854,7 @@ describe('AutomationPage', () => {
                         trigger_event: {},
                         matched_conditions: true,
                         actions_executed: [],
-                        status: 'success',
+                        status: 'running',
                         error_message: null,
                         duration_ms: 8,
                         executed_at: '2026-08-29T00:00:00Z',
@@ -897,6 +897,7 @@ describe('AutomationPage', () => {
             'href',
             '/donors/donor-private-id',
         )
+        expect(screen.getByText('Running')).toHaveClass('border-blue-500/20')
         expect(screen.getByText('Donor unavailable')).toBeInTheDocument()
         expect(screen.queryByRole('link', { name: 'Donor unavailable' })).not.toBeInTheDocument()
         expect(screen.queryByText(/donor-(private|hidden)-id/i)).not.toBeInTheDocument()

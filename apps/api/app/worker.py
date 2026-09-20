@@ -177,6 +177,7 @@ if WORKER_STALE_CLAIM_REAPER_BATCH_SIZE <= 0:
 WORKER_STALE_CLAIM_RETRY_SAFE_JOB_TYPES = frozenset(
     {
         JobType.AI_SEND_EMAIL.value,
+        JobType.FORM_SUBMISSION_WORKFLOW.value,
         JobType.WORKFLOW_APPROVAL_EXPIRY.value,
         JobType.DONOR_INTAKE_PROMOTE.value,
         JobType.GOOGLE_TASK_REMOTE_DELETE.value,

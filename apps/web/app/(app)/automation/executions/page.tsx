@@ -35,6 +35,7 @@ import api, { ApiError } from "@/lib/api"
 import { parseDateInput } from "@/lib/utils/date"
 import { useRetryWorkflowExecution } from "@/lib/hooks/use-workflows"
 import { toast } from "@/components/ui/toast"
+import { getWorkflowExecutionStatusLabel } from "@/lib/constants/workflow-execution-status"
 
 // Types for executions
 interface ExecutionAction {
@@ -47,7 +48,7 @@ interface ExecutionAction {
 
 interface Execution {
     id: string
-    status: "success" | "failed" | "partial" | "skipped" | "paused" | "canceled" | "expired"
+    status: "running" | "success" | "failed" | "partial" | "skipped" | "paused" | "canceled" | "expired"
     workflow_id: string
     workflow_name: string
     entity_type: string
@@ -73,38 +74,35 @@ interface ExecutionStats {
 }
 
 const statusConfig = {
+    running: {
+        color: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+        icon: Loader2Icon,
+    },
     success: {
-        label: "Success",
         color: "bg-green-500/10 text-green-500 border-green-500/20",
         icon: CheckCircle2Icon,
     },
     failed: {
-        label: "Failed",
         color: "bg-red-500/10 text-red-500 border-red-500/20",
         icon: XCircleIcon,
     },
     partial: {
-        label: "Partial",
         color: "bg-orange-500/10 text-orange-500 border-orange-500/20",
         icon: AlertCircleIcon,
     },
     skipped: {
-        label: "Skipped",
         color: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
         icon: MinusCircleIcon,
     },
     paused: {
-        label: "Paused",
         color: "bg-blue-500/10 text-blue-500 border-blue-500/20",
         icon: AlertCircleIcon,
     },
     canceled: {
-        label: "Canceled",
         color: "bg-gray-500/10 text-gray-500 border-gray-500/20",
         icon: MinusCircleIcon,
     },
     expired: {
-        label: "Expired",
         color: "bg-orange-500/10 text-orange-500 border-orange-500/20",
         icon: AlertCircleIcon,
     },
@@ -471,7 +469,7 @@ function WorkflowExecutionFilters({
                         {(value: string | null) => {
                             if (!value || value === "all") return "All Statuses"
                             if (isStatusKey(value)) {
-                                return statusConfig[value].label
+                                return getWorkflowExecutionStatusLabel(value)
                             }
                             return value
                         }}
@@ -479,6 +477,7 @@ function WorkflowExecutionFilters({
                 </SelectTrigger>
                 <SelectContent>
                     <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="running">Running</SelectItem>
                     <SelectItem value="success">Success</SelectItem>
                     <SelectItem value="failed">Failed</SelectItem>
                     <SelectItem value="skipped">Skipped</SelectItem>
@@ -601,7 +600,7 @@ function WorkflowExecutionsTable({
                                                     className={statusConfig[execution.status]?.color || ""}
                                                 >
                                                     <StatusIcon className="mr-1 size-3" />
-                                                    {statusConfig[execution.status]?.label || execution.status}
+                                                    {getWorkflowExecutionStatusLabel(execution.status)}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="font-medium">{execution.workflow_name}</TableCell>
