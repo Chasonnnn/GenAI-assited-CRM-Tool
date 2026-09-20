@@ -14,8 +14,139 @@ record the original findings, not an instruction to implement the reliability ba
 The active audit covers dead code, pass-through wrappers, redundant abstractions,
 low-value tests, unused dependencies, measured performance waste, and verification
 friction. Preserve product behavior; report larger correctness issues separately.
-Fable is independently auditing the current source so findings can be compared before
-the next cleanup implementation is selected.
+Fable completed the independent audit and one comparison round. The agreed cleanup
+constraints and acceptance checks below govern the next implementation slice.
+
+## Fresh slop audit and cleanup order (2026-09-20)
+
+This audit revisits live code, not the historical counts in `over-engineering-audit.md`.
+Fable inspected the transferred implementation snapshot and compared upstream interview
+changes; the execution thread independently checked the findings on the PR branch.
+The audit spans API/web code, tests, dependency manifests, the donor prototype, scripts,
+CI, infrastructure configuration, and guidance. It is a repository-wide evidence-led
+pass, not a proof that every unused export, dependency, or performance issue is known.
+No new cleanup implementation is included in this audit pass.
+
+### A. Remove unused dependencies and test-only modules first
+
+- **Five FullCalendar packages have no active web imports.** References remain in
+  `apps/web/package.json:24-28` and `next.config.js:47-51`, but not app/components/lib/tests.
+  `autoprefixer` is likewise unused by the PostCSS configuration, which only loads
+  `@tailwindcss/postcss`. Remove those six direct dependencies and obsolete optimizer
+  entries using the package manager; verify the lockfile, full frontend check, and
+  production build. This reduces dependency maintenance; bundle/runtime savings are
+  not established. The prototype has its own dependency graph and needs a separate check.
+- **Two components only have test callers:** `DonorOwnershipSection.tsx` and
+  `IntendedParentActivityTimeline.tsx`. Together with their dedicated tests they occupy
+  578 lines (131 production, 447 test). Before deleting, compare owner-label/permissions
+  and timeline assertions with the active donor-detail, intended-parent-detail, and
+  `EntityActivityTimeline` tests; move only uniquely useful assertions to live surfaces.
+  Acceptance: no production import changes required, useful behaviors still covered,
+  frontend check/build pass. Do not equate deleting tests with improving coverage.
+- **Compatibility aliases add navigation without policy:**
+  `SurrogateDetailLayoutClient`, `SurrogateProfileCard`, and
+  `surrogates/interviews/{SurrogateInterviewTab,InterviewWithComments}` only re-export
+  existing components/types. Migrate actual callers and tests to their owner modules,
+  retain existing client boundaries, then delete aliases. Verify detail/profile/interview
+  tests and production route rendering; inspect the version-matched Next guidance.
+- **`notification_facade.py:1-26` is an eager alias table.** It adds no authorization,
+  transaction ownership, or cycle break, and patching the original function does not
+  change already-bound aliases. Replace imports and monkeypatch targets directly.
+  This is lower priority because notification callers span many services; run the full
+  backend suite rather than adding another facade-delegation test.
+
+### B. Remove tests that freeze spelling, not behavior
+
+- `ui-description-policy.test.ts:9-129` maintains a historical copy-removal ledger,
+  hard-codes 49 placements, and asserts exact AGENTS prose. Delete that bookkeeping.
+  Keep the third test's seven safety/recovery-copy assertions at lines 132-154 in the
+  first cleanup slice. They cover deletion consequences, template isolation, reconciliation,
+  import validation, AI consent, and login guidance. Remove them only after equivalent
+  rendered behavior coverage exists; neither reviewer established that replacement yet.
+- `test_pipelines.py:1216-1226` forbids the literal `.count()` through source slicing.
+  The adjacent test at lines 1230-1297 already records executed SQL and asserts a single
+  grouped aggregate. Remove the redundant source scan; retain that query regression
+  and the actual pipeline behavior tests. No new test framework is needed.
+- `test_router_service_boundaries.py` pins exact service callee names at lines 27, 38,
+  48, 59, and 70. Remove rename-sensitive positive assertions. Retain the intended
+  per-route transaction/PHI boundary checks until equivalent coverage is demonstrated;
+  do not replace them with a repo-wide ban that existing routes cannot satisfy.
+- `test_fastapi_conventions_async_sync.py:50-68` counts any `await`; it cannot prove
+  that synchronous database work leaves the event loop. Correct its claimed guarantee
+  or remove it in a focused follow-up. Pinned `ruff rule RUF029` confirms that rule is
+  also only an unused-async check and is preview-only, not an offloading guarantee.
+  Do not introduce a broad preview-rule rollout to replace this weak assertion.
+- Keep tenant/permission negatives, real transaction/concurrency tests, migration
+  preservation checks, the durable Resend transport boundary, and nested-interactive
+  accessibility checks. Source inspection alone does not make a test useless.
+
+### C. Make existing verification commands honest and reproducible
+
+- `.github/workflows/ci.yml:314-346` labels a job "Lint" but only compiles `main.py`
+  and repeats the frontend typecheck already run by the build job. Run the existing
+  pinned Ruff and ESLint commands there; retain one clear typecheck gate. Prove a
+  synthetic lint violation fails the gate and the normal repository passes.
+- The ZAP step at `ci.yml:485-493` targets `/health` and uses `-I || true`. It does not
+  prove authenticated API coverage or reliably signal scan failure. Repair or explicitly
+  retire that step, not the entire security job (Bandit and dependency audits remain).
+  Any replacement needs a failing injected finding and scoped exceptions, not another
+  success-only report. The committed root ZAP report and `.build-test` are cleanup candidates.
+- Terraform CI uses 1.6.6 while `infra/terraform/versions.tf:2` requires >=1.14.0.
+  Align the local/CI CLI and add backend-disabled validation if feasible, without
+  credentials, plan/apply, or state changes. Formatting success does not validate this contract.
+- `AGENTS.md:44` points to missing `docs/layouts.md`; repair the reference rather than
+  creating a second design-policy document. Existing historical audits must be labeled
+  as historical, not treated as current removal inventories.
+- Browser QA currently requires ad hoc setup. The existing donor preview script checks
+  fixed DB/API ports (`scripts/preview_donor_forms.py:22-31`); it is not a general QA runner.
+  Reuse existing dev seed/login and supervised services for a small opt-in synthetic QA
+  path, with per-worktree ports/database names, readiness, fake external providers, and
+  deterministic teardown. No production auth bypass or new test platform. Acceptance:
+  start twice, exercise one meaningful browser flow, inspect its result, and clean up
+  without touching another worktree. Full provider E2E remains outside this audit.
+
+### D. Measure performance candidates before cutting work
+
+- **Measured and already implemented:** attachment metadata reads for 10 attachments
+  fell from 12 SELECTs to 3, with ordered content and cross-org negatives verified.
+- **Confirmed duplicate construction, unmeasured runtime cost:** the shell bell calls
+  `useNotificationSocket` (`notification-bell.tsx:64`); the notifications page also calls
+  it (`notifications/page.tsx:78`), while the dashboard independently opens the same
+  endpoint (`use-dashboard-socket.ts:76`). Source inspection predicts two simultaneous
+  sockets on either route, excluding transient reconnect/Strict Mode activity.
+  `useUnreadCount` also polls every 30 seconds while healthy (`use-notifications.ts:46-51`).
+  First record actual connection/request counts. Then consolidate existing transport
+  ownership and connected polling, keeping server data in TanStack Query. Test logout,
+  account change, route transitions, reconnect, unmount, and both event types; compare
+  before/after counts rather than claim a speedup from fewer source lines.
+- Task-delete invalidation breadth, per-member queue inserts, campaign remap lookups,
+  and repeated digest queries remain hypotheses. Measure fixed-fixture query/network
+  budgets and preserve visibility/transaction semantics before choosing a small fix.
+
+### Comparison decisions and exclusions
+
+- Fable agreed after comparison: mechanical removals first, CI/verification next,
+  measured performance last. It withdrew the bulk-output deletion, finalizer registry,
+  and broad RUF029 rollout recommendations. Its useful refinement was to retain the
+  third UI-copy test while removing only the historical ledger/policy assertions.
+- Fable judged the pending approval/Gmail safeguards and independent-session transaction
+  tests substantive. Keep no-resend markers, sender pinning, receipt persistence,
+  bounded legacy-key recovery, and queued-only polling. Do not remove safety to shrink code.
+- Do not add a failure-finalizer registry for a single special job or a `_relock` wrapper
+  that merely renames a query. The repeated finalization calls occur at different
+  transaction boundaries; their presence alone does not justify a new extension mechanism.
+- Do not delete all `output/` on a no-caller search. Its donor prototype includes hosting
+  metadata, a sites worker, and tests; external use has not been established either way.
+  Verify ownership before archiving. Shared UI imports mean its dependencies cannot be
+  pruned by searching only its local `src/` directory. Re-audit retained dependencies;
+  historical vulnerability counts are not a current security assessment.
+- `scripts/prepare_tf_secrets.sh:32-51` prints credential values to stdout. This is a
+  separate operational safety finding, not evidence of leaked production credentials.
+  Do not run it with real secrets; a future change needs an explicit restricted-output
+  contract and synthetic redaction tests.
+- No exhaustive unused-export/Python dependency analysis, load test, production query
+  inspection, or external hosting audit was performed. Import recovery, unsubscribe
+  behavior, token contracts, worker redesign, and live IAM changes remain deferred.
 
 ## Outcome and execution rules
 
@@ -405,3 +536,7 @@ documented replacement.
   AIChatPanel state capture; no new visual changes were made during this pass.
 - Zero disposable test databases remained; the PostgreSQL QA service was stopped
   and its processes exited. No real email/provider calls or production writes.
+- Published the implementation in [PR #718](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/pull/718).
+  All 14 checks in the [implementation CI run](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions/runs/35484275579)
+  passed, including backend coverage/migration gates, frontend build/tests, security
+  scans, and API/web/worker container builds. The fresh audit adds documentation only.
