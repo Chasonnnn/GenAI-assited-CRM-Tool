@@ -25,9 +25,11 @@ separate follow-up phase.
 - [x] fix: email campaign preview reports full-audience eligible/suppressed counts
       (email branch of `campaign_service.preview_recipients`; sampled page must not cap
       `eligible_count`). Implementation note: entity emails are encrypted at rest, so the
-      full-audience aggregation hashes the org's bounded suppression list in Python and
-      counts in SQL on the indexed `email_hash` column (one aggregate query + one
-      limited sample query; no full-audience row materialization, no `Query.count()`).
+      full-audience aggregation hashes the org's suppression list in Python and passes it
+      as one typed PostgreSQL `VARCHAR(64)[]` bind to indexed `email_hash = ANY(...)`
+      predicates (one aggregate query + one limited sample query; no full-audience row
+      materialization, no `Query.count()`). A 65,536-suppression regression covers the
+      driver parameter limit and tenant isolation.
       Suppressed sample rows are now excluded in SQL, so the sample reaches `limit`
       whenever enough eligible recipients exist.
 - [x] fix: Zapier test-lead response retains `donor_id` (`routers/zapier.py`); web
@@ -47,6 +49,11 @@ separate follow-up phase.
       enabled
 - [x] feat: platform template publish/version snapshots and admin config export/import carry
       `subject_type` (publish validates donor triggers require an explicit donor subject)
+- [x] fix (reviewed; hosted validation pending): template list/get/create/use/delete
+      and from-workflow enforce the effective donor subject plus personal-workflow visibility;
+      Zapier donor test leads require donor view/edit before mutation; platform publish reuses
+      canonical donor condition/action validation and serializes `subject_type`; migration
+      independently backfills stored and draft subjects and removes the draft key on downgrade
 - [x] chore: web template contract sync (`subject_type` in template types; no UI redesign)
 
 ## W1 — Recoverable intake/conversion occurrences (after W0 subject contracts)
@@ -139,3 +146,16 @@ retry, permission denied).
 | 2026-09-20 | (this commit) donor Meta source mapping repair | `uv run -m pytest tests/test_meta_donor_routing.py tests/test_meta_donor_form_permissions.py tests/test_meta_form_mapping.py tests/test_meta_lead_kind_snapshot.py tests/test_meta_forms_delete.py tests/test_meta_forms_performance_status.py -q` (37 passed), `ruff check` clean, `pnpm run typecheck` clean, `vitest run tests/meta-form-mapping-page.test.tsx` (8 passed) | pass |
 | 2026-09-20 | (this commit) WorkflowTemplate.subject_type contract | `uv run alembic upgrade head` (20260920_0100 applied), `uv run -m pytest tests/test_workflows.py tests/test_donor_workflows.py tests/test_workflow_template_use_scope.py tests/test_workflow_template_subject_type.py tests/test_template_seeder_workflows.py tests/test_shared_donor_template_workflows.py -q` (85 passed), `uv run -m pytest tests/test_rbac_policies.py tests/test_org_scope_backstop.py tests/test_intelligent_suggestions.py -q` (44 passed), `ruff check` clean | pass |
 | 2026-09-20 | (this commit) platform publish + export/import subject_type | `uv run -m pytest tests/test_platform_template_studio.py tests/test_ops_cli_integration.py tests/test_ops_cli_templates.py tests/test_admin_exports.py tests/test_admin_imports.py tests/test_platform_router_template_studio_and_alerts.py -q` (68 passed), `ruff check` clean, `pnpm run typecheck` clean, `vitest run tests/templates-page.test.tsx tests/ops-templates-studio-page.test.tsx tests/platform-workflow-template-draft.test.tsx` (19 passed) | pass |
+| 2026-09-20 | W0 CI and authorization repair; commits below | Focused template and Zapier permission regressions (17 passed); CI-equivalent parallel-safe backend suite with FastAPI convention/contract gates included (3,085 passed); serial email-outbox and migration suite (91 passed); `alembic check` reports no new operations; Ruff and `git diff --check` clean | local integrated checks pass; four unchanged Linux-orb setup parametrizations were excluded because macOS lacks `dpkg`; hosted CI has not been rerun |
+
+## W0 correction commits
+
+- `f5b9047e` fix: preserve workflow sweep organization identifiers
+- `26adc541` test: correct donor intake subject overrides
+- `70c69cb6` fix: enforce donor template and integration access
+- `bbab4fb0` fix: validate and preserve platform workflow subjects
+- `fdd2ec9f` fix: preserve workflow template drafts across migration
+- `7c667b55` fix: avoid campaign suppression parameter limits
+
+Publication was authorized on 2026-09-20. Keep the PR in draft; hosted checks on
+the new head and final live QA remain separate from the local validation above.
