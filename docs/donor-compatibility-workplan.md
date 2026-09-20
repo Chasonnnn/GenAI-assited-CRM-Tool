@@ -82,8 +82,10 @@ separate follow-up phase.
       filtered before pagination); shared-phone donor viewer cannot read surrogate content
       (same-contact same-route negative test); STOP stays contact-global; phone edits do not
       transfer consent or retarget queued sends.
-- [ ] Operations: permission-based donor navigation and correspondence access (replace
-      developer-role gates in sidebar and `record_correspondence` router); mount existing
+- [x] Operations navigation: expose Donors through `view_donors`; retain the Tickets
+      developer gate and cover denied/non-developer users.
+- [ ] Operations: permission-based correspondence access (replace the developer-role
+      gate in `record_correspondence`); mount existing
       donor-ready appointments/matches cards on donor detail; no broad Tickets grant; no visual
       redesign.
 - [ ] AI: donor-aware workflow generation through the canonical validator/registry (saved
@@ -157,5 +159,31 @@ retry, permission denied).
 - `fdd2ec9f` fix: preserve workflow template drafts across migration
 - `7c667b55` fix: avoid campaign suppression parameter limits
 
-Publication was authorized on 2026-09-20. Keep the PR in draft; hosted checks on
-the new head and final live QA remain separate from the local validation above.
+Publication was authorized on 2026-09-20. Hosted checks and live QA remain
+separate from local validation.
+
+## Urgent donor launch checkpoint — 2026-09-20
+
+- [x] Recoverable donor form dispatch and isolated donor stage reporting, published
+      in `2b8bdc41` and `b573da0a`; all 14 hosted checks passed at `b573da0a`.
+- [x] Four-tab Zapier dialog: Incoming leads, Form routing, Stage reporting, Activity.
+      Separate donor/surrogate enablement; egg/sperm mappings use live pipeline and
+      stage IDs. Unavailable donor settings/pipelines preserve stored configuration.
+- [x] Browser QA: saved donor settings and mappings persist; route editing and
+      field extraction work; donor navigation is visible to an authorized
+      non-developer; tabs and footer remain usable at 320 px.
+- [x] Local HTTP Zapier intake creates separate egg/sperm donors; replay is
+      idempotent and does not create surrogate records. No real provider call.
+- [x] Frontend type checking, lint, and 1,578 tests passed; final helper extraction
+      also passed 51 integration-page tests, type checking, and scoped lint.
+- [ ] Merge/release and verify production API, web, worker, scanner, and migration.
+      Current production is 0.91.65, migration `20260914_1200_donor_profile`.
+- [ ] Authenticate to EWI and configure its shared donor questionnaire and one
+      match/create workflow. Verify real form/link IDs and avoid duplicate routing.
+- [ ] Bind real egg/sperm Meta forms and Zapier destination/stage mappings; validate
+      provider acceptance before activation. Website work is owned separately.
+- [ ] Handle donor Zapier mapping dependencies when donor pipeline stages are
+      removed; the existing stale-mapping guard currently requires stage recovery.
+
+Production form configuration, cloud deployment, and Meta/Zapier activation are
+not established by local QA. Broader W1–W5 checkboxes above remain authoritative.

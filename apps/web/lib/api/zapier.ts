@@ -31,8 +31,8 @@ interface ZapierSettings {
     outbound_secret_configured: boolean;
     send_hashed_pii: boolean;
     event_mapping: ZapierEventMappingItem[];
-    donor_outbound_enabled: boolean;
-    donor_event_mapping: ZapierDonorEventMappingItem[];
+    donor_outbound_enabled?: boolean;
+    donor_event_mapping?: ZapierDonorEventMappingItem[];
 }
 
 interface ZapierInboundWebhook {

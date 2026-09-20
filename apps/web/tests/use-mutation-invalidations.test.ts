@@ -70,7 +70,12 @@ import { taskKeys, useCreateTaskBatch, useDeleteTask } from '@/lib/hooks/use-tas
 import { entityActivityKeys } from '@/lib/hooks/use-entity-activity'
 import { useCreateZoomMeeting, useSendZoomInvite, useSyncGoogleCalendarNow } from '@/lib/hooks/use-user-integrations'
 import { useDeleteWorkflow, useDuplicateWorkflow, useToggleWorkflow, useUpdateWorkflow } from '@/lib/hooks/use-workflows'
-import { useZapierOutboundTest, useZapierTestLead, zapierKeys } from '@/lib/hooks/use-zapier'
+import {
+    useZapierFieldPaste,
+    useZapierOutboundTest,
+    useZapierTestLead,
+    zapierKeys,
+} from '@/lib/hooks/use-zapier'
 
 vi.mock('@/lib/utils/csv-download-warning', () => ({
     openDownloadUrlWithSpreadsheetWarning: vi.fn(() => true),
@@ -697,6 +702,19 @@ describe('mutation invalidation contracts', () => {
         expect(invalidateQueries).toHaveBeenCalledWith({
             queryKey: [...zapierKeys.all, 'outbound-events-summary'],
             exact: false,
+        })
+    })
+
+    it('refreshes Zapier settings and form routes after extracting pasted fields', () => {
+        useZapierFieldPaste()
+
+        capturedOptions?.onSuccess?.({}, {})
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: zapierKeys.settings(),
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: metaFormsKeys.list(),
         })
     })
 

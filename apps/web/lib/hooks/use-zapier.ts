@@ -150,6 +150,7 @@ export function useZapierFieldPaste() {
         mutationFn: zapierApi.parseZapierFieldPaste,
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
+            void queryClient.invalidateQueries({ queryKey: metaFormsKeys.list() });
         },
     });
 }
