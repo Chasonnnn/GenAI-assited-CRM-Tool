@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
 import EmbedFormPageClient from "../app/embed/forms/[slug]/page.client"
+import { getPublicFieldValidationError, type PublicFieldValue } from "@/lib/forms/public-field-validation"
 
 vi.unmock("@tanstack/react-query")
 
@@ -200,6 +201,97 @@ describe("EmbedFormPageClient", () => {
         expect(await screen.findByRole("heading", { name: "Request received" })).toBeInTheDocument()
     })
 
+    it.each<{ value: PublicFieldValue | undefined; error: string | null }>([
+        { value: undefined, error: null },
+        { value: [], error: "Please add at least 2 rows for History" },
+        { value: [{}], error: "Please add at least 2 rows for History" },
+        { value: [{}, {}], error: null },
+        { value: [{}, {}, {}], error: null },
+        { value: [{}, {}, {}, {}], error: "Please limit History to 3 rows" },
+    ])("validates explicit optional table row counts: %o", ({ value, error }) => {
+        expect(getPublicFieldValidationError({
+            key: "history", label: "History", type: "repeatable_table",
+            required: false, min_rows: 2, max_rows: 3,
+            columns: [{ key: "detail", label: "Detail", type: "text" }],
+        }, value)).toBe(error)
+    })
+
+    it.each([
+        { required: true, columnRequired: false },
+        { required: true, columnRequired: true },
+        { required: false, columnRequired: true },
+    ])("submits visible minimum rows without requiring untouched optional tables: %o", async ({ required, columnRequired }) => {
+        getEmbedPublicForm.mockResolvedValue({
+            ...embedForm,
+            form_schema: {
+                ...embedForm.form_schema,
+                pages: [{
+                    title: "Contact",
+                    fields: [
+                        ...embedForm.form_schema.pages[0].fields,
+                        {
+                            key: "history", label: "History", type: "repeatable_table",
+                            required, min_rows: 2, max_rows: 3,
+                            columns: [{ key: "detail", label: "Detail", type: "text", required: columnRequired }],
+                        },
+                        {
+                            key: "follow_up", label: "History follow-up", type: "text",
+                            show_if: { field_key: "history", operator: "is_not_empty" },
+                        },
+                        {
+                            key: "hidden", label: "Hidden table", type: "repeatable_table",
+                            required: true, min_rows: 3,
+                            columns: [{ key: "detail", label: "Hidden detail", type: "text" }],
+                            show_if: { field_key: "full_name", operator: "equals", value: "Other applicant" },
+                        },
+                    ],
+                }],
+            },
+        })
+        renderEmbedForm({ slug: "lead-form", initialParentOrigin: "https://www.ewisurrogacy.com" })
+        expect(await screen.findAllByLabelText(/detail/i)).toHaveLength(2)
+        if (required) {
+            expect(await screen.findByLabelText("History follow-up")).toBeInTheDocument()
+        } else {
+            expect(screen.queryByLabelText("History follow-up")).not.toBeInTheDocument()
+        }
+        await waitForEmbedMessageListener()
+        window.dispatchEvent(new MessageEvent("message", {
+            origin: "https://www.ewisurrogacy.com",
+            data: { type: "sf:form:init", attribution: {} },
+        }))
+        await waitFor(() => expect(createEmbedFormSession).toHaveBeenCalled())
+        fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: "Embed Lead" } })
+        fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "embed@example.com" } })
+        const submitButton = screen.getByRole("button", { name: /submit/i })
+        fireEvent.click(submitButton)
+
+        if (required && columnRequired) {
+            expect(await screen.findByText("Please complete: Detail")).toBeInTheDocument()
+            expect(submitEmbedPublicForm).not.toHaveBeenCalled()
+            const cells = screen.getAllByLabelText(/detail/i)
+            fireEvent.change(cells[0]!, { target: { value: "First row" } })
+            fireEvent.click(submitButton)
+            expect(submitEmbedPublicForm).not.toHaveBeenCalled()
+            fireEvent.change(cells[1]!, { target: { value: "Second row" } })
+            fireEvent.click(submitButton)
+        }
+
+        await waitFor(() => expect(submitEmbedPublicForm).toHaveBeenCalledWith(
+            "lead-form",
+            expect.objectContaining({
+                answers: {
+                    full_name: "Embed Lead",
+                    email: "embed@example.com",
+                    ...(required ? {
+                        history: columnRequired ? [{ detail: "First row" }, { detail: "Second row" }] : [{}, {}],
+                    } : {}),
+                },
+            }),
+        ))
+        expect(await screen.findByRole("heading", { name: "Request received" })).toBeInTheDocument()
+    })
+
     it("keeps the newest form when an older slug request finishes last", async () => {
         let resolveFirst: (value: typeof embedForm) => void = () => undefined
         let resolveSecond: (value: typeof embedForm) => void = () => undefined
@@ -382,9 +474,30 @@ describe("EmbedFormPageClient", () => {
         })
 
         try {
+            getEmbedPublicForm.mockResolvedValue({
+                ...embedForm,
+                form_schema: {
+                    ...embedForm.form_schema,
+                    pages: [{
+                        title: "Contact",
+                        fields: [
+                            ...embedForm.form_schema.pages[0].fields,
+                            {
+                                key: "history", label: "History", type: "repeatable_table",
+                                required: true, min_rows: 2,
+                                columns: [{ key: "detail", label: "Detail", type: "text" }],
+                            },
+                        ],
+                    }],
+                },
+            })
             renderEmbedForm({ slug: "lead-form", initialParentOrigin: "https://www.ewisurrogacy.com" })
 
             expect(await screen.findByRole("heading", { name: "Become a Surrogate" })).toBeInTheDocument()
+            expect(screen.getAllByLabelText("Detail")).toHaveLength(2)
+            expect(postMessage).not.toHaveBeenCalledWith(
+                { type: "sf:form:started" }, "https://www.ewisurrogacy.com",
+            )
             await waitForEmbedMessageListener()
             window.dispatchEvent(
                 new MessageEvent("message", {

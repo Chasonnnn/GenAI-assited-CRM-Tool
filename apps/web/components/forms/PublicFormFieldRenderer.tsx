@@ -30,7 +30,7 @@ export type PublicFormAnswerValue =
 interface PublicFormFieldRendererProps {
     field: FormField
     value: PublicFormAnswerValue | undefined
-    updateField: (fieldKey: string, value: PublicFormAnswerValue) => void
+    updateField: (fieldKey: string, value: PublicFormAnswerValue, isInitialization?: boolean) => void
     datePickerOpen: Record<string, boolean>
     setDatePickerOpen: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
     density?: PublicFormDensity
@@ -342,7 +342,7 @@ function TableFieldInput({
     field: FormField
     value: PublicFormAnswerValue | undefined
     requiredMark: React.ReactNode
-    updateField: (fieldKey: string, value: PublicFormAnswerValue) => void
+    updateField: (fieldKey: string, value: PublicFormAnswerValue, isInitialization?: boolean) => void
 }) {
     const columns = field.columns || []
     const repeatable = field.type === "repeatable_table"
@@ -355,6 +355,12 @@ function TableFieldInput({
             ...existingRows[index],
         }))
         : normalizeFixedTableRows(field, value)
+
+    React.useEffect(() => {
+        if (repeatable && field.required && columns.length > 0 && existingRows.length < minRows) {
+            updateField(field.key, rows, true)
+        }
+    }, [repeatable, field.required, field.key, columns.length, existingRows.length, minRows, rows, updateField])
 
     const updateCell = (rowKey: string, columnKey: string, nextValue: string) => {
         const nextRows = rows.map((row, index) =>

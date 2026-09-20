@@ -236,9 +236,11 @@ function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: 
         if (field.type !== "file") renderableFields.push(field)
     }
 
-    const updateField = (fieldKey: string, value: PublicFormAnswerValue) => {
+    const updateField = (fieldKey: string, value: PublicFormAnswerValue, isInitialization = false) => {
         dispatch({ type: "answerChanged", fieldKey, value })
-        postEmbedMessageToParent(parentOrigin, { type: "sf:form:started" })
+        if (!isInitialization) {
+            postEmbedMessageToParent(parentOrigin, { type: "sf:form:started" })
+        }
     }
 
     const validate = (): string | null => {

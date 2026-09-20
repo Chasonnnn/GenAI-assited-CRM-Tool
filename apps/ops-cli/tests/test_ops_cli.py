@@ -38,6 +38,56 @@ def test_init_and_offline_validate(tmp_path: Path) -> None:
         assert json.loads(result.output)["templates"][0]["valid"] is True
 
 
+@pytest.mark.parametrize("existing", [False, True])
+def test_set_env_rejects_ops_paths_without_changing_profiles(tmp_path, monkeypatch, existing):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    path = config.config_dir() / "config.json"
+    if existing:
+        config.set_environment("test", "https://api.example.test", "https://ops.example.test")
+    before = path.read_bytes() if existing else None
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "--json",
+            "config",
+            "set-env",
+            "test",
+            "--api-url",
+            "https://new-api.example.test",
+            "--ops-url",
+            "https://ops.example.test/internal",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert json.loads(result.output) == {"error": "invalid Ops URL"}
+    assert (path.read_bytes() if path.exists() else None) == before
+
+
+@pytest.mark.parametrize("ops_url", ["https://ops.example.test", "https://ops.example.test/"])
+def test_set_env_accepts_reloadable_ops_origins(tmp_path, monkeypatch, ops_url):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    result = CliRunner().invoke(
+        main,
+        [
+            "config",
+            "set-env",
+            "test",
+            "--api-url",
+            "https://api.example.test/",
+            "--ops-url",
+            ops_url,
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert config.environment("test") == {
+        "api_url": "https://api.example.test",
+        "ops_url": "https://ops.example.test",
+    }
+
+
 def test_path_escape_through_symlink_is_rejected(tmp_path: Path) -> None:
     root = tmp_path / "bundle"
     root.mkdir()

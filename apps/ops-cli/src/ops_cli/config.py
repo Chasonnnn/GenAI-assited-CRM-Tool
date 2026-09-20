@@ -58,7 +58,7 @@ def set_environment(name: str, api_url: str, ops_url: str) -> None:
     environments = _read("config.json", {"environments": {}})
     environments.setdefault("environments", {})[name] = {
         "api_url": validate_url(api_url, "API URL", origin_only=True),
-        "ops_url": validate_url(ops_url, "Ops URL"),
+        "ops_url": validate_url(ops_url, "Ops URL", origin_only=True),
     }
     _atomic("config.json", environments)
 
