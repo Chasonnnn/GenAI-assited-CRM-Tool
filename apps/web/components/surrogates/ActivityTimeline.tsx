@@ -1,11 +1,12 @@
 "use client"
 
 import { EntityActivityTimeline } from "@/components/activity/EntityActivityTimeline"
-import { getStageSemantics } from "@/lib/surrogate-stage-context"
+import { getStageSemantics, stageMatchesKey } from "@/lib/surrogate-stage-context"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import type { SurrogateActivity } from "@/lib/api/surrogates"
 import { useSurrogateHistory } from "@/lib/hooks/use-surrogates"
 import type { TaskListItem } from "@/lib/types/task"
+import { InterviewAppointmentManager } from "@/components/surrogates/InterviewAppointmentManager"
 
 interface ActivityTimelineProps {
     surrogateId: string
@@ -33,6 +34,9 @@ export function ActivityTimeline({
     onRetryActivity,
 }: ActivityTimelineProps) {
     const historyQuery = useSurrogateHistory(surrogateId)
+    const currentStage = stages.find((stage) => stage.id === currentStageId)
+    const canHaveInterviewAppointment = stageMatchesKey(currentStage, "interview_scheduled")
+        || stageMatchesKey(currentStage, "reschedule_needed")
     const status = historyQuery.isLoading || activityStatus === "loading"
         ? "loading"
         : historyQuery.isError || activityStatus === "error"
@@ -40,6 +44,8 @@ export function ActivityTimeline({
           : "ready"
 
     return (
+        <div className="space-y-3">
+        {canHaveInterviewAppointment ? <InterviewAppointmentManager surrogateId={surrogateId} stageId={currentStageId} compact /> : null}
         <EntityActivityTimeline
             currentStageId={currentStageId}
             stages={stages.map((stage) => ({ ...stage, semantics: getStageSemantics(stage) }))}
@@ -57,5 +63,6 @@ export function ActivityTimeline({
             {...(activities ? { activities } : {})}
             {...(tasks ? { tasks } : {})}
         />
+        </div>
     )
 }

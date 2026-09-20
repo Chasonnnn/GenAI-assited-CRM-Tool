@@ -30,8 +30,6 @@ export interface IntelligentSuggestionSettings {
     enabled: boolean;
     new_unread_enabled: boolean;
     new_unread_business_days: number;
-    meeting_outcome_enabled: boolean;
-    meeting_outcome_business_days: number;
     stuck_enabled: boolean;
     stuck_business_days: number;
     daily_digest_enabled: boolean;

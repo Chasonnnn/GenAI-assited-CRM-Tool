@@ -182,6 +182,7 @@ interface ChangeStageModalProps {
     initialDeliveryBabyWeight?: string | null
     onHoldFollowUpAssigneeLabel?: string | null
     canSelfApproveRegression?: boolean
+    appointmentManager?: React.ReactNode
 }
 
 function StageSelectionList({
@@ -691,6 +692,7 @@ function ChangeStageModalContent({
     initialDeliveryBabyWeight = null,
     onHoldFollowUpAssigneeLabel = null,
     canSelfApproveRegression = false,
+    appointmentManager,
 }: ChangeStageModalProps) {
     const [selectedStageId, setSelectedStageId] = useState<string | null>(null)
     const [effectiveNow, setEffectiveNow] = useState(true)
@@ -741,6 +743,7 @@ function ChangeStageModalContent({
 
     const isRegression = (() => {
         if (!selectedStage || !comparisonStage) return false
+        if (stageMatchesKey(currentStage, "reschedule_needed") && stageMatchesKey(selectedStage, "interview_scheduled")) return false
         return !isResumeSelection && selectedStage.order < comparisonStage.order
     })()
     const requiresApproval = isRegression && !canSelfApproveRegression
@@ -888,6 +891,7 @@ function ChangeStageModalContent({
                         selectedStageId={selectedStageId}
                         onStageSelect={handleStageSelect}
                     />
+                    {appointmentManager}
                     <EffectiveScheduleSection
                         effectiveNow={effectiveNow}
                         selectedDate={selectedDate}

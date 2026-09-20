@@ -29,9 +29,7 @@ from app.db.models import (
     SurrogateStatusHistory,
     User,
 )
-from app.schemas.auth import UserSession
 from app.schemas.surrogate import (
-    InterviewOutcomeCreate,
     SurrogateCreate,
     SurrogateUpdate,
     mask_ssn_last4,
@@ -2520,62 +2518,3 @@ def list_surrogate_activity(
     offset = (page - 1) * per_page
 
     return items[offset : offset + per_page], total
-
-
-def log_interview_outcome(
-    db: Session,
-    surrogate: Surrogate,
-    data: InterviewOutcomeCreate,
-    user: UserSession,
-) -> tuple[dict, str | None]:
-    """Log an interview outcome activity for a surrogate."""
-    from app.services import activity_service, appointment_service
-
-    occurred_at = data.occurred_at or datetime.now(UTC)
-    now = datetime.now(UTC)
-    if occurred_at > now:
-        raise ValueError("Cannot log future outcomes")
-
-    appointment = None
-    if data.appointment_id:
-        appointment = appointment_service.get_appointment(db, data.appointment_id, user.org_id)
-        if not appointment:
-            raise ValueError("Appointment not found")
-        if appointment.surrogate_id != surrogate.id:
-            raise ValueError("Appointment is not linked to this surrogate")
-
-    details: dict[str, str | None] = {
-        "outcome": data.outcome,
-        "occurred_at": occurred_at.isoformat(),
-        "appointment_id": str(data.appointment_id) if data.appointment_id else None,
-        "logged_from": "appointment_detail" if data.appointment_id else "surrogate_detail",
-    }
-    if data.notes:
-        details["notes"] = data.notes
-    if appointment:
-        details["scheduled_start"] = (
-            appointment.scheduled_start.isoformat() if appointment.scheduled_start else None
-        )
-        details["scheduled_end"] = (
-            appointment.scheduled_end.isoformat() if appointment.scheduled_end else None
-        )
-
-    activity = activity_service.log_activity(
-        db=db,
-        surrogate_id=surrogate.id,
-        organization_id=user.org_id,
-        activity_type=SurrogateActivityType.INTERVIEW_OUTCOME_LOGGED,
-        actor_user_id=user.user_id,
-        details=details,
-    )
-
-    actor_name = db.query(User.display_name).filter(User.id == user.user_id).scalar()
-    payload = {
-        "id": activity.id,
-        "activity_type": activity.activity_type,
-        "actor_user_id": activity.actor_user_id,
-        "actor_name": actor_name,
-        "details": activity.details,
-        "created_at": activity.created_at,
-    }
-    return payload, actor_name

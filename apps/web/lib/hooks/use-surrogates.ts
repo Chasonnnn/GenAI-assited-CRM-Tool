@@ -453,32 +453,6 @@ export function useInfiniteSurrogateActivity(surrogateId: string) {
 }
 
 // =============================================================================
-// Interview Outcome Tracking Hooks
-// =============================================================================
-
-/**
- * Log a structured interview outcome for a surrogate.
- */
-export function useLogInterviewOutcome() {
-    const queryClient = useQueryClient();
-
-    return useMutation({
-        mutationFn: ({
-            surrogateId,
-            data,
-        }: {
-            surrogateId: string;
-            data: surrogatesApi.InterviewOutcomeCreatePayload;
-        }) => surrogatesApi.logInterviewOutcome(surrogateId, data),
-        onSuccess: (_, { surrogateId }) => {
-            void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
-            void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
-            void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
-        },
-    });
-}
-
-// =============================================================================
 // Contact Attempts Tracking Hooks
 // =============================================================================
 

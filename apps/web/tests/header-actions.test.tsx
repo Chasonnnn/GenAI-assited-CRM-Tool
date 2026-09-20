@@ -386,7 +386,7 @@ describe("HeaderActions", () => {
         expect(screen.queryByRole("button", { name: /log interview outcome/i })).not.toBeInTheDocument()
     })
 
-    it("shows Log Interview Outcome at interview scheduled", () => {
+    it("does not offer obsolete interview outcome entry at interview scheduled", () => {
         mockUseAuth.mockReturnValue({
             user: { role: "intake_specialist", user_id: "intake-user-1" },
         })
@@ -438,7 +438,7 @@ describe("HeaderActions", () => {
         })
 
         render(<HeaderActions />)
-        expect(screen.getByRole("button", { name: /log interview outcome/i })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /log interview outcome/i })).not.toBeInTheDocument()
     })
 
     it("shows Resume for On-Hold and sends the paused-from stage id", () => {

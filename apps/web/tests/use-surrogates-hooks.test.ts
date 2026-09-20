@@ -18,7 +18,6 @@ import {
     useBulkAssign,
     useChangeSurrogateStatus,
     useCreateContactAttempt,
-    useLogInterviewOutcome,
     useRevealSurrogateSensitiveInfo,
     useRestoreSurrogate,
     useUpdateSurrogate,
@@ -75,28 +74,6 @@ describe("surrogate mutation hooks", () => {
         })
         expect(invalidateQueries).toHaveBeenCalledWith({
             queryKey: ["tasks", "list"],
-        })
-    })
-
-    it("invalidates surrogate lists after logging an interview outcome", () => {
-        useLogInterviewOutcome()
-
-        capturedOptions?.onSuccess?.(
-            {},
-            {
-                surrogateId: "surrogate-1",
-                data: { interview_id: "interview-1", outcome: "pass" },
-            }
-        )
-
-        expect(invalidateQueries).toHaveBeenCalledWith({
-            queryKey: surrogateKeys.activity("surrogate-1"),
-        })
-        expect(invalidateQueries).toHaveBeenCalledWith({
-            queryKey: surrogateKeys.detail("surrogate-1"),
-        })
-        expect(invalidateQueries).toHaveBeenCalledWith({
-            queryKey: surrogateKeys.lists(),
         })
     })
 
