@@ -1,0 +1,30 @@
+[project]
+name = "surrogacy-force-ops"
+version = "0.1.0"
+description = "Version-controlled operations templates CLI"
+requires-python = ">=3.14,<3.15"
+dependencies = ["click==8.3.3", "httpx==0.28.1"]
+
+[project.optional-dependencies]
+keyring = ["keyring>=25,<27"]
+test = ["pytest==9.0.3", "ruff==0.16.0"]
+
+[project.scripts]
+ops = "ops_cli.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ops_cli"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

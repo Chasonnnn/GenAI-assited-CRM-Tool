@@ -1,6 +1,6 @@
 import React from "react"
 import { describe, expect, it, vi } from "vitest"
-import { fireEvent, render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen, within, waitFor } from "@testing-library/react"
 
 import type { FormField } from "@/lib/api/forms"
 import { PublicFormFieldRenderer } from "@/components/forms/PublicFormFieldRenderer"
@@ -32,6 +32,28 @@ function chooseBaseUiOption(trigger: HTMLElement, optionName: string | RegExp) {
 }
 
 describe("PublicFormFieldRenderer", () => {
+    it("edits repeatable rows with canonical choices and enforces row limits", async () => {
+        const update = vi.fn()
+        function Preview() {
+            const [value, setValue] = React.useState<import('@/components/forms/PublicFormFieldRenderer').PublicFormAnswerValue>(null)
+            return <PublicFormFieldRenderer
+                field={{ key: 'history', label: 'History', type: 'repeatable_table', min_rows: 1, max_rows: 2,
+                    columns: [{ key: 'delivery', label: 'Delivery', type: 'select', options: [{ label: 'C-section', value: 'c_section' }, { label: 'Vaginal', value: 'vaginal' }] }] }}
+                value={value} updateField={(_, next) => { setValue(next); update(next) }} datePickerOpen={{}} setDatePickerOpen={vi.fn()} />
+        }
+        render(<Preview />)
+        expect(screen.getByRole('button', { name: 'Remove row 1' })).toBeDisabled()
+        chooseBaseUiOption(screen.getByRole('combobox', { name: 'Delivery' }), 'C-section')
+        expect(update).toHaveBeenLastCalledWith([{ delivery: 'c_section' }])
+        await waitFor(() => expect(screen.queryByRole('option', { name: 'Vaginal' })).not.toBeInTheDocument())
+        fireEvent.click(screen.getByRole('button', { name: 'Add Row' }))
+        expect(screen.getByRole('button', { name: 'Add Row' })).toBeDisabled()
+        chooseBaseUiOption(screen.getAllByRole('combobox', { name: 'Delivery' })[1]!, 'Vaginal')
+        fireEvent.click(screen.getByRole('button', { name: 'Remove row 1' }))
+        expect(update).toHaveBeenLastCalledWith([{ delivery: 'vaginal' }])
+        expect(screen.getByRole('button', { name: 'Remove row 1' })).toBeDisabled()
+    })
+
     it("renders an unchecked opt-in with agency-provided privacy links", () => {
         const updateField = vi.fn()
         render(<PublicFormFieldRenderer

@@ -13,7 +13,7 @@ type PreviewColumn = {
     label: string
     type: FormFieldColumn["type"]
     required: boolean
-    options?: string[]
+    options?: BuilderFormField["options"]
     validation?: FormFieldValidation | null
 }
 
@@ -215,7 +215,7 @@ export function FormBuilderFieldPreview({
                                                 {(column.options && column.options.length > 0 ? column.options : ["No", "Yes"])
                                                     .slice(0, 2)
                                                     .map((option) => (
-                                                        <PreviewBox key={option}>{option}</PreviewBox>
+                                                        <PreviewBox key={getBuilderOptionValue(option)}>{getBuilderOptionLabel(option)}</PreviewBox>
                                                     ))}
                                             </div>
                                         ) : column.type === "textarea" ? (

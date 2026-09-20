@@ -209,7 +209,7 @@ export function FormBuilderCanvasPreview({
                     <div className="space-y-4">
                         {visibleFields.length > 0 ? (
                             visibleFields.map((field) =>
-                                ["address", "file", "repeatable_table"].includes(field.type) ? (
+                                ["address", "file"].includes(field.type) ? (
                                     <PreviewFallbackField key={field.key} field={field} />
                                 ) : (
                                     <PublicFormFieldRenderer

@@ -6,6 +6,7 @@ import PlatformEmailTemplatePage from "../app/ops/templates/email/[id]/page.clie
 const richTextEditorSpy = vi.fn()
 const mocks = vi.hoisted(() => ({
     updateTemplate: vi.fn(),
+    publishTemplate: vi.fn(),
     sendTest: vi.fn(),
     refetchTemplate: vi.fn(),
     state: {
@@ -21,7 +22,9 @@ vi.mock("@/components/rich-text-editor", () => ({
 }))
 
 vi.mock("@/components/ops/templates/PublishDialog", () => ({
-    PublishDialog: () => <div data-testid="publish-dialog" />,
+    PublishDialog: ({ onPublish }: { onPublish: (publishAll: boolean, orgIds: string[]) => void }) => (
+        <button onClick={() => onPublish(true, [])}>Confirm email publish</button>
+    ),
 }))
 
 const templateBodyWithTable =
@@ -76,7 +79,7 @@ vi.mock("@/lib/hooks/use-platform-templates", () => ({
     usePlatformEmailTemplateVariables: () => ({ data: [], isLoading: false }),
     useCreatePlatformEmailTemplate: () => ({ mutateAsync: vi.fn() }),
     useUpdatePlatformEmailTemplate: () => ({ mutateAsync: mocks.updateTemplate }),
-    usePublishPlatformEmailTemplate: () => ({ mutateAsync: vi.fn() }),
+    usePublishPlatformEmailTemplate: () => ({ mutateAsync: mocks.publishTemplate }),
     useDeletePlatformEmailTemplate: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useSendTestPlatformEmailTemplate: () => ({ mutateAsync: mocks.sendTest }),
 }))
@@ -85,10 +88,12 @@ describe("PlatformEmailTemplatePage", () => {
     beforeEach(() => {
         richTextEditorSpy.mockClear()
         mocks.updateTemplate.mockReset()
+        mocks.publishTemplate.mockReset()
         mocks.sendTest.mockReset()
         mocks.refetchTemplate.mockReset()
         mocks.state.templateQueryError = false
         mocks.updateTemplate.mockResolvedValue(mockTemplateData)
+        mocks.publishTemplate.mockResolvedValue(mockTemplateData)
         mocks.sendTest.mockResolvedValue({ queued: true, provider_used: "resend" })
         mocks.refetchTemplate.mockResolvedValue(undefined)
     })
@@ -177,5 +182,23 @@ describe("PlatformEmailTemplatePage", () => {
         } finally {
             mockTemplateData.draft.body = previousBody
         }
+    })
+
+    it("publishes the revision returned by the preceding save", async () => {
+        mocks.updateTemplate.mockResolvedValue({ ...mockTemplateData, current_version: 3 })
+        mocks.publishTemplate.mockResolvedValue({ ...mockTemplateData, current_version: 4 })
+        render(<PlatformEmailTemplatePage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Publish" }))
+        fireEvent.click(screen.getByRole("button", { name: "Confirm email publish" }))
+
+        await waitFor(() => expect(mocks.publishTemplate).toHaveBeenCalledWith({
+            id: "tpl_1",
+            payload: { publish_all: true, org_ids: null, expected_version: 3 },
+        }))
+        fireEvent.click(screen.getByRole("button", { name: "Save Draft" }))
+        await waitFor(() => expect(mocks.updateTemplate).toHaveBeenLastCalledWith({
+            id: "tpl_1", payload: expect.objectContaining({ expected_version: 4 }),
+        }))
     })
 })

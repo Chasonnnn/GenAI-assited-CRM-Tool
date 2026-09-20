@@ -28,6 +28,8 @@ class PlatformEmailTemplate(Base):
     __tablename__ = "platform_email_templates"
     __table_args__ = (Index("idx_platform_email_templates_status", "status"),)
 
+    external_key: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
+
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
@@ -136,6 +138,8 @@ class PlatformFormTemplate(Base):
 
     __tablename__ = "platform_form_templates"
     __table_args__ = (Index("idx_platform_form_templates_status", "status"),)
+
+    external_key: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")

@@ -24,7 +24,7 @@ from fastapi import (
     UploadFile,
 )
 from PIL import Image
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -69,6 +69,7 @@ from app.services import (
     storage_client,
     storage_url_service,
 )
+from app.services import platform_template_write_service as template_writes
 from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
 
 router = APIRouter(prefix="/platform", tags=["platform"])
@@ -1895,6 +1896,7 @@ def _workflow_read(template, db: Session) -> PlatformWorkflowTemplateRead:
     return PlatformWorkflowTemplateRead(
         id=template.id,
         status=template.status,
+        current_version=template.current_version,
         published_version=template.published_version,
         is_published_globally=template.is_published_globally,
         target_org_ids=target_org_ids,
@@ -1910,11 +1912,33 @@ def _workflow_list_item(template) -> PlatformWorkflowTemplateListItem:
     return PlatformWorkflowTemplateListItem(
         id=template.id,
         status=template.status,
+        current_version=template.current_version,
         published_version=template.published_version,
         is_published_globally=template.is_published_globally,
         draft=_workflow_draft_from_model(template),
         published_at=template.published_at,
         updated_at=template.updated_at,
+    )
+
+
+def _template_write_error(
+    exc: ValueError | LookupError, *, domain_status: int = 422
+) -> HTTPException:
+    if isinstance(exc, template_writes.TemplateConflict):
+        return HTTPException(status_code=409, detail=str(exc))
+    if isinstance(exc, LookupError):
+        return HTTPException(status_code=404, detail="Template not found")
+    if isinstance(exc, ValidationError):
+        return HTTPException(
+            status_code=422,
+            detail=[
+                {"loc": item["loc"], "type": item["type"]}
+                for item in exc.errors(include_input=False)
+            ],
+        )
+    return HTTPException(
+        status_code=domain_status,
+        detail="Invalid template or audience; review the template and publication targets",
     )
 
 
@@ -1990,24 +2014,18 @@ def create_platform_email_template(
     session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformEmailTemplateRead:
-    from app.services import platform_template_service
-
-    template = platform_template_service.create_platform_email_template(
-        db,
-        name=body.name,
-        subject=body.subject,
-        body=body.body,
-        from_email=body.from_email,
-        category=body.category,
-    )
-    platform_service.log_admin_action(
-        db=db,
-        actor_id=session.user_id,
-        action="platform_template.email.create",
-        metadata={"template_id": str(template.id)},
-        request=request,
-    )
-    db.commit()
+    try:
+        template, _ = template_writes.apply_template(
+            db,
+            "email",
+            actor_id=session.user_id,
+            request=request,
+            draft=body.model_dump(by_alias=True, mode="json"),
+            mode="draft",
+            portable=False,
+        )
+    except (ValueError, LookupError) as exc:
+        raise _template_write_error(exc) from None
     return _email_read(template, db)
 
 
@@ -2037,38 +2055,26 @@ def update_platform_email_template(
     session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformEmailTemplateRead:
-    from app.services import platform_template_service
-
-    template = platform_template_service.get_platform_email_template(db, template_id)
-    if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
-
     try:
-        template = platform_template_service.update_platform_email_template(
+        template, _ = template_writes.apply_template(
             db,
-            template,
-            name=body.name,
-            subject=body.subject,
-            body=body.body,
-            from_email=body.from_email
-            if "from_email" in body.model_fields_set
-            else platform_template_service._UNSET,
-            category=body.category
-            if "category" in body.model_fields_set
-            else platform_template_service._UNSET,
-            expected_version=body.expected_version,
+            "email",
+            actor_id=session.user_id,
+            request=request,
+            template_id=template_id,
+            expected_revision=body.expected_version,
+            draft=body.model_dump(
+                exclude_unset=True,
+                exclude={"expected_version"},
+                by_alias=True,
+                mode="json",
+            ),
+            mode="draft",
+            patch=True,
+            portable=False,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
-
-    platform_service.log_admin_action(
-        db=db,
-        actor_id=session.user_id,
-        action="platform_template.email.update",
-        metadata={"template_id": str(template.id)},
-        request=request,
-    )
-    db.commit()
+    except (ValueError, LookupError) as exc:
+        raise _template_write_error(exc) from None
     return _email_read(template, db)
 
 
@@ -2084,33 +2090,22 @@ def publish_platform_email_template(
     session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformEmailTemplateRead:
-    from app.services import platform_template_service
-
-    template = platform_template_service.get_platform_email_template(db, template_id)
-    if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
     try:
-        template = platform_template_service.publish_platform_email_template(
+        template, _ = template_writes.apply_template(
             db,
-            template,
-            publish_all=body.publish_all,
-            org_ids=body.org_ids,
+            "email",
+            actor_id=session.user_id,
+            request=request,
+            template_id=template_id,
+            expected_revision=body.expected_version,
+            draft=None,
+            mode="publish",
+            audience={"publish_all": body.publish_all, "org_ids": body.org_ids or []},
+            replace_audience=True,
+            portable=False,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    platform_service.log_admin_action(
-        db=db,
-        actor_id=session.user_id,
-        action="platform_template.email.publish",
-        metadata={
-            "template_id": str(template.id),
-            "publish_all": body.publish_all,
-            "org_ids": [str(org_id) for org_id in body.org_ids or []],
-        },
-        request=request,
-    )
-    db.commit()
+    except (ValueError, LookupError) as exc:
+        raise _template_write_error(exc, domain_status=400) from None
     return _email_read(template, db)
 
 
@@ -2240,23 +2235,18 @@ def create_platform_form_template(
     session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformFormTemplateRead:
-    from app.services import platform_template_service
-
-    template = platform_template_service.create_platform_form_template(
-        db,
-        name=body.name,
-        description=body.description,
-        schema_json=body.form_schema.model_dump() if body.form_schema else None,
-        settings_json=body.settings_json,
-    )
-    platform_service.log_admin_action(
-        db=db,
-        actor_id=session.user_id,
-        action="platform_template.form.create",
-        metadata={"template_id": str(template.id)},
-        request=request,
-    )
-    db.commit()
+    try:
+        template, _ = template_writes.apply_template(
+            db,
+            "form",
+            actor_id=session.user_id,
+            request=request,
+            draft=body.model_dump(by_alias=True, mode="json"),
+            mode="draft",
+            portable=False,
+        )
+    except (ValueError, LookupError) as exc:
+        raise _template_write_error(exc) from None
     return _form_read(template, db)
 
 
@@ -2286,41 +2276,26 @@ def update_platform_form_template(
     session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformFormTemplateRead:
-    from app.services import platform_template_service
-
-    template = platform_template_service.get_platform_form_template(db, template_id)
-    if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
-
     try:
-        template = platform_template_service.update_platform_form_template(
+        template, _ = template_writes.apply_template(
             db,
-            template,
-            name=body.name,
-            description=body.description,
-            schema_json=(
-                body.form_schema.model_dump()
-                if "form_schema" in body.model_fields_set
-                else platform_template_service._UNSET
+            "form",
+            actor_id=session.user_id,
+            request=request,
+            template_id=template_id,
+            expected_revision=body.expected_version,
+            draft=body.model_dump(
+                exclude_unset=True,
+                exclude={"expected_version"},
+                by_alias=True,
+                mode="json",
             ),
-            settings_json=(
-                body.settings_json
-                if "settings_json" in body.model_fields_set
-                else platform_template_service._UNSET
-            ),
-            expected_version=body.expected_version,
+            mode="draft",
+            patch=True,
+            portable=False,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
-
-    platform_service.log_admin_action(
-        db=db,
-        actor_id=session.user_id,
-        action="platform_template.form.update",
-        metadata={"template_id": str(template.id)},
-        request=request,
-    )
-    db.commit()
+    except (ValueError, LookupError) as exc:
+        raise _template_write_error(exc) from None
     return _form_read(template, db)
 
 
@@ -2336,33 +2311,22 @@ def publish_platform_form_template(
     session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformFormTemplateRead:
-    from app.services import platform_template_service
-
-    template = platform_template_service.get_platform_form_template(db, template_id)
-    if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
     try:
-        template = platform_template_service.publish_platform_form_template(
+        template, _ = template_writes.apply_template(
             db,
-            template,
-            publish_all=body.publish_all,
-            org_ids=body.org_ids,
+            "form",
+            actor_id=session.user_id,
+            request=request,
+            template_id=template_id,
+            expected_revision=body.expected_version,
+            draft=None,
+            mode="publish",
+            audience={"publish_all": body.publish_all, "org_ids": body.org_ids or []},
+            replace_audience=True,
+            portable=False,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    platform_service.log_admin_action(
-        db=db,
-        actor_id=session.user_id,
-        action="platform_template.form.publish",
-        metadata={
-            "template_id": str(template.id),
-            "publish_all": body.publish_all,
-            "org_ids": [str(org_id) for org_id in body.org_ids or []],
-        },
-        request=request,
-    )
-    db.commit()
+    except (ValueError, LookupError) as exc:
+        raise _template_write_error(exc, domain_status=400) from None
     return _form_read(template, db)
 
 
@@ -2418,22 +2382,18 @@ def create_platform_workflow_template(
     session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformWorkflowTemplateRead:
-    from app.services import platform_template_service
-
-    payload = body.model_dump()
-    template = platform_template_service.create_platform_workflow_template(
-        db,
-        user_id=session.user_id,
-        payload=payload,
-    )
-    platform_service.log_admin_action(
-        db=db,
-        actor_id=session.user_id,
-        action="platform_template.workflow.create",
-        metadata={"template_id": str(template.id)},
-        request=request,
-    )
-    db.commit()
+    try:
+        template, _ = template_writes.apply_template(
+            db,
+            "workflow",
+            actor_id=session.user_id,
+            request=request,
+            draft=body.model_dump(by_alias=True, mode="json"),
+            mode="draft",
+            portable=False,
+        )
+    except (ValueError, LookupError) as exc:
+        raise _template_write_error(exc) from None
     return _workflow_read(template, db)
 
 
@@ -2463,33 +2423,26 @@ def update_platform_workflow_template(
     session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformWorkflowTemplateRead:
-    from app.services import platform_template_service
-
-    template = platform_template_service.get_platform_workflow_template(db, template_id)
-    if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
-
-    payload = {
-        k: v for k, v in body.model_dump().items() if v is not None and k != "expected_version"
-    }
     try:
-        template = platform_template_service.update_platform_workflow_template(
+        template, _ = template_writes.apply_template(
             db,
-            template,
-            payload=payload,
-            expected_version=body.expected_version,
+            "workflow",
+            actor_id=session.user_id,
+            request=request,
+            template_id=template_id,
+            expected_revision=body.expected_version,
+            draft=body.model_dump(
+                exclude_unset=True,
+                exclude={"expected_version"},
+                by_alias=True,
+                mode="json",
+            ),
+            mode="draft",
+            patch=True,
+            portable=False,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
-
-    platform_service.log_admin_action(
-        db=db,
-        actor_id=session.user_id,
-        action="platform_template.workflow.update",
-        metadata={"template_id": str(template.id)},
-        request=request,
-    )
-    db.commit()
+    except (ValueError, LookupError) as exc:
+        raise _template_write_error(exc) from None
     return _workflow_read(template, db)
 
 
@@ -2505,33 +2458,22 @@ def publish_platform_workflow_template(
     session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformWorkflowTemplateRead:
-    from app.services import platform_template_service
-
-    template = platform_template_service.get_platform_workflow_template(db, template_id)
-    if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
     try:
-        template = platform_template_service.publish_platform_workflow_template(
+        template, _ = template_writes.apply_template(
             db,
-            template,
-            publish_all=body.publish_all,
-            org_ids=body.org_ids,
+            "workflow",
+            actor_id=session.user_id,
+            request=request,
+            template_id=template_id,
+            expected_revision=body.expected_version,
+            draft=None,
+            mode="publish",
+            audience={"publish_all": body.publish_all, "org_ids": body.org_ids or []},
+            replace_audience=True,
+            portable=False,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    platform_service.log_admin_action(
-        db=db,
-        actor_id=session.user_id,
-        action="platform_template.workflow.publish",
-        metadata={
-            "template_id": str(template.id),
-            "publish_all": body.publish_all,
-            "org_ids": [str(org_id) for org_id in body.org_ids or []],
-        },
-        request=request,
-    )
-    db.commit()
+    except (ValueError, LookupError) as exc:
+        raise _template_write_error(exc, domain_status=400) from None
     return _workflow_read(template, db)
 
 

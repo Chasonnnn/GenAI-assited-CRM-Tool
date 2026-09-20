@@ -125,6 +125,7 @@ from app.db.models.meta import (
     MetaPageMapping,
 )
 from app.db.models.notifications import Notification, UserNotificationSettings
+from app.db.models.ops_cli import OpsCliToken
 from app.db.models.pipelines import EntityVersion, Pipeline, PipelineStage
 from app.db.models.platform_templates import (
     PlatformBranding,
@@ -280,6 +281,7 @@ __all__ = [
     "PublishedIntakeVersion",
     "OrgCounter",
     "OrgInvite",
+    "OpsCliToken",
     "Organization",
     "OrganizationSubscription",
     "Pipeline",
