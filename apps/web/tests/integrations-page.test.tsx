@@ -596,7 +596,7 @@ describe('IntegrationsPage', () => {
         }
         mockUseAuth.mockReturnValue({ user: { role: 'admin', user_id: 'u1' } })
         mockUseEffectivePermissions.mockReturnValue({
-            data: { permissions: ['manage_integrations'] },
+            data: { permissions: ['manage_integrations', 'view_donors', 'edit_donors'] },
         })
         mockUsePipelines.mockImplementation((entityType = 'surrogate') => ({
             data: entityType === 'surrogate'
@@ -1878,6 +1878,96 @@ describe('IntegrationsPage', () => {
         )
     })
 
+    it.each([false, true])('allows donor reporting to stop with stale mappings (no pipelines: %s)', async (noPipelines) => {
+        zapierSettingsData = {
+            ...createZapierSettingsData(),
+            donor_outbound_enabled: true,
+            donor_event_mapping: [{
+                donor_type: 'egg', pipeline_id: 'removed-pipeline', stage_id: 'removed-stage',
+                event_name: 'Converted', enabled: true,
+            }],
+        }
+        if (noPipelines) {
+            mockUsePipelines.mockImplementation((entityType = 'surrogate') => ({
+                data: entityType === 'surrogate' ? pipelineData : [],
+                isLoading: false, isError: false,
+            }))
+        }
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /stage reporting/i }))
+        const donorSwitch = within(dialog).getByLabelText('Enable donor stage events')
+        expect(donorSwitch).not.toBeDisabled()
+        fireEvent.click(donorSwitch)
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
+        })
+        expect(mockZapierOutboundUpdate.mock.calls[0]?.[0]).toHaveProperty('donor_outbound_enabled', false)
+        expect(mockZapierOutboundUpdate.mock.calls[0]?.[0]).not.toHaveProperty('donor_event_mapping')
+    })
+
+    it('requires an explicit repair before removing stale donor mappings and preserves live entries', async () => {
+        const validMapping = {
+            donor_type: 'sperm', pipeline_id: 'sperm-pipeline-1', stage_id: 'sperm-stage-new',
+            event_name: 'Qualified', enabled: true,
+        }
+        zapierSettingsData = {
+            ...createZapierSettingsData(),
+            donor_outbound_enabled: true,
+            donor_event_mapping: [validMapping, {
+                donor_type: 'egg', pipeline_id: 'removed-pipeline', stage_id: 'removed-stage',
+                event_name: 'Converted', enabled: true,
+            }],
+        }
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
+        })
+        expect(mockZapierOutboundUpdate.mock.calls[0]?.[0]).not.toHaveProperty('donor_event_mapping')
+        mockZapierOutboundUpdate.mockClear()
+        fireEvent.click(within(dialog).getByRole('tab', { name: /stage reporting/i }))
+        fireEvent.click(within(dialog).getByRole('tab', { name: 'Egg donors' }))
+        fireEvent.click(within(dialog).getAllByRole('button', { name: 'Remove unavailable mappings' })[0])
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
+        })
+        const payload = mockZapierOutboundUpdate.mock.calls[0]?.[0]
+        expect(payload.donor_outbound_enabled).toBe(true)
+        expect(payload.donor_event_mapping).toContainEqual(validMapping)
+        expect(payload.donor_event_mapping).not.toContainEqual(expect.objectContaining({ stage_id: 'removed-stage' }))
+    })
+
+    it('clears only stale mappings and disables reporting when no donor pipelines remain', async () => {
+        zapierSettingsData = {
+            ...createZapierSettingsData(),
+            donor_outbound_enabled: true,
+            donor_event_mapping: [{
+                donor_type: 'egg', pipeline_id: 'removed-pipeline', stage_id: 'removed-stage',
+                event_name: 'Converted', enabled: true,
+            }],
+        }
+        mockUsePipelines.mockImplementation((entityType = 'surrogate') => ({
+            data: entityType === 'surrogate' ? pipelineData : [],
+            isLoading: false, isError: false,
+        }))
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /stage reporting/i }))
+        fireEvent.click(within(dialog).getByRole('tab', { name: 'Egg donors' }))
+        fireEvent.click(within(dialog).getAllByRole('button', { name: 'Remove unavailable mappings' })[0])
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
+        })
+        expect(mockZapierOutboundUpdate).toHaveBeenCalledWith(expect.objectContaining({
+            donor_outbound_enabled: false,
+            donor_event_mapping: [],
+        }))
+    })
+
     it('preserves donor settings when donor pipeline access fails', async () => {
         zapierSettingsData = {
             ...createZapierSettingsData(),
@@ -1916,6 +2006,23 @@ describe('IntegrationsPage', () => {
         })
 
         expect(mockZapierOutboundUpdate).toHaveBeenCalledTimes(1)
+        expect(mockZapierOutboundUpdate.mock.calls[0]?.[0]).not.toHaveProperty('donor_outbound_enabled')
+        expect(mockZapierOutboundUpdate.mock.calls[0]?.[0]).not.toHaveProperty('donor_event_mapping')
+    })
+
+    it('omits donor configuration for an integration manager with donor view but no edit access', async () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['manage_integrations', 'view_donors'] },
+        })
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /stage reporting/i }))
+        fireEvent.click(within(dialog).getByRole('tab', { name: 'Egg donors' }))
+        expect(within(dialog).queryByLabelText('Enable Egg donor Egg Donor Pipeline Ready to match')).not.toBeInTheDocument()
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
+        })
         expect(mockZapierOutboundUpdate.mock.calls[0]?.[0]).not.toHaveProperty('donor_outbound_enabled')
         expect(mockZapierOutboundUpdate.mock.calls[0]?.[0]).not.toHaveProperty('donor_event_mapping')
     })

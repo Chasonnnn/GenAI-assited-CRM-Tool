@@ -842,6 +842,7 @@ type ZapierOutboundFormState = {
     sendHashedPii: boolean
     eventMapping: ZapierEventMappingItem[]
     donorEventMapping: ZapierDonorEventMappingItem[]
+    removeUnavailableDonorMappings: boolean
     selectedOutboundStage: string
 }
 
@@ -1059,6 +1060,7 @@ function createZapierOutboundDraftState(
                 settings?.donor_event_mapping,
                 donorPipelinesByType,
             ),
+            removeUnavailableDonorMappings: false,
             selectedOutboundStage,
         },
     }
@@ -4127,8 +4129,8 @@ function ZapierOutboundSettingsCard({
         !donorSettingsAvailable
         || donorPipelinesLoading
         || donorPipelinesError
-        || donorMappingsUnresolved
     const hasDonorPipelines = DONOR_TYPES.some((donorType) => donorPipelinesByType[donorType]?.length)
+    const donorMappingNeedsRepair = donorMappingsUnresolved && !outboundForm.removeUnavailableDonorMappings
 
     return (
         <div className="space-y-6">
@@ -4146,7 +4148,7 @@ function ZapierOutboundSettingsCard({
                     <Switch
                         checked={outboundForm.donorOutboundEnabled}
                         onCheckedChange={(checked) => onOutboundFormChange("donorOutboundEnabled", checked)}
-                        disabled={donorControlsUnavailable || !hasDonorPipelines}
+                        disabled={donorControlsUnavailable || ((!hasDonorPipelines || donorMappingNeedsRepair) && !outboundForm.donorOutboundEnabled)}
                         aria-label="Enable donor stage events"
                     />
                 </div>
@@ -4228,7 +4230,7 @@ function ZapierOutboundSettingsCard({
                             pipelinesByType={donorPipelinesByType}
                             pipelinesLoading={donorPipelinesLoading}
                             pipelinesError={donorPipelinesError}
-                            mappingsUnresolved={donorMappingsUnresolved}
+                            mappingsUnresolved={donorMappingsUnresolved && !outboundForm.removeUnavailableDonorMappings}
                             onOutboundFormChange={onOutboundFormChange}
                         />
                     </TabsContent>
@@ -4413,9 +4415,11 @@ function getZapierDonorMappingAvailability({
 function ZapierDonorMappingAvailabilityMessage({
     availability,
     donorType,
+    onRemoveUnavailableMappings,
 }: {
     availability: Exclude<ZapierDonorMappingAvailability, "ready">
     donorType: ZapierDonorType
+    onRemoveUnavailableMappings?: () => void
 }) {
     switch (availability) {
         case "unavailable":
@@ -4423,7 +4427,7 @@ function ZapierDonorMappingAvailabilityMessage({
                 <Alert>
                     <AlertTitle>Donor reporting unavailable</AlertTitle>
                     <AlertDescription>
-                        This environment does not expose donor reporting settings. Existing settings will be preserved.
+                        Donor reporting controls are unavailable. Existing settings will be preserved.
                     </AlertDescription>
                 </Alert>
             )
@@ -4450,8 +4454,11 @@ function ZapierDonorMappingAvailabilityMessage({
                     <AlertTriangleIcon className="size-4" aria-hidden="true" />
                     <AlertTitle>Saved donor mapping needs review</AlertTitle>
                     <AlertDescription>
-                        A saved donor stage is no longer available. Donor settings will be preserved until the pipeline is restored.
+                        Remove unavailable stages before saving mappings, or turn off donor stage events. Live mappings will be preserved.
                     </AlertDescription>
+                    <Button variant="outline" size="sm" onClick={onRemoveUnavailableMappings}>
+                        Remove unavailable mappings
+                    </Button>
                 </Alert>
             )
         case "empty":
@@ -4581,6 +4588,12 @@ function ZapierDonorStageMappingRows({
             <ZapierDonorMappingAvailabilityMessage
                 availability={availability}
                 donorType={donorType}
+                onRemoveUnavailableMappings={() => {
+                    onOutboundFormChange("removeUnavailableDonorMappings", true)
+                    if (!outboundForm.donorEventMapping.some((item) => item.enabled)) {
+                        onOutboundFormChange("donorOutboundEnabled", false)
+                    }
+                }}
             />
         )
     }
@@ -4689,6 +4702,11 @@ function ZapierOutboundTestControls({
 }
 
 function useZapierWebhookController(variant: "page" | "dialog") {
+    const { user } = useAuth()
+    const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
+    const permissions = effectivePermissions?.permissions ?? []
+    const canEditDonorSettings = user?.role === "developer"
+        || (permissions.includes("view_donors") && permissions.includes("edit_donors"))
     const { data: pipelines } = usePipelines("surrogate")
     const eggDonorPipelinesQuery = usePipelines("egg_donor")
     const spermDonorPipelinesQuery = usePipelines("sperm_donor")
@@ -4697,7 +4715,7 @@ function useZapierWebhookController(variant: "page" | "dialog") {
     const getStageKeyLabel = (stageKey: string) => stageLabelByKey[stageKey] ?? "Unknown stage"
     const { data: settings, isLoading, isError } = useZapierSettings()
     const donorSettingsState = getZapierDonorSettingsState({
-        settings,
+        settings: canEditDonorSettings ? settings : undefined,
         eggPipelines: eggDonorPipelinesQuery.data,
         spermPipelines: spermDonorPipelinesQuery.data,
         eggLoading: eggDonorPipelinesQuery.isLoading,
@@ -4950,9 +4968,22 @@ function useZapierWebhookController(variant: "page" | "dialog") {
                 send_hashed_pii: outboundForm.sendHashedPii,
                 event_mapping: outboundForm.eventMapping,
             }
-            if (canSaveDonorSettings) {
+            if (canSaveDonorSettings || (
+                donorSettingsAvailable
+                && !donorPipelinesLoading
+                && !donorPipelinesError
+                && outboundForm.removeUnavailableDonorMappings
+            )) {
                 payload.donor_outbound_enabled = outboundForm.donorOutboundEnabled
                 payload.donor_event_mapping = outboundForm.donorEventMapping
+            } else if (
+                donorSettingsAvailable
+                && !donorPipelinesLoading
+                && !donorPipelinesError
+                && settings?.donor_outbound_enabled
+                && !outboundForm.donorOutboundEnabled
+            ) {
+                payload.donor_outbound_enabled = false
             }
             const secret = outboundSecret.trim()
             if (secret) {
