@@ -73,7 +73,7 @@ def test_attachment_infected_respects_security_alerts_toggle(monkeypatch, db):
 
 
 def test_expire_approval_task_notifies_with_workflow_approval_expired_type(monkeypatch):
-    from app.services import notification_facade
+    from app.services import notification_service
 
     class DummyDB:
         commits = 0
@@ -103,8 +103,8 @@ def test_expire_approval_task_notifies_with_workflow_approval_expired_type(monke
         captured["notification"] = kwargs
         return None
 
-    monkeypatch.setattr(notification_facade, "should_notify", fake_should_notify)
-    monkeypatch.setattr(notification_facade, "create_notification", fake_create_notification)
+    monkeypatch.setattr(notification_service, "should_notify", fake_should_notify)
+    monkeypatch.setattr(notification_service, "create_notification", fake_create_notification)
 
     task_service.expire_approval_task(db, task)
 

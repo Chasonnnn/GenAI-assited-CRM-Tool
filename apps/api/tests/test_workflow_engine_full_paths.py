@@ -779,7 +779,7 @@ def test_default_adapter_action_helpers(monkeypatch):
 
     notifications: list[dict] = []
     monkeypatch.setattr(
-        "app.services.notification_facade.create_notification",
+        "app.services.notification_service.create_notification",
         lambda **kwargs: notifications.append(kwargs) or SimpleNamespace(id=uuid4()),
     )
     notify_result = adapter._action_send_notification(

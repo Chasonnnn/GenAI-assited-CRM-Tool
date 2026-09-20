@@ -1707,12 +1707,12 @@ def expire_approval_task(
 
     # Notify owner that approval expired
     from app.db.enums import NotificationType
-    from app.services import notification_facade
+    from app.services import notification_service
 
-    if notification_facade.should_notify(
+    if notification_service.should_notify(
         db, task.owner_id, task.organization_id, "approval_timeouts"
     ):
-        notification_facade.create_notification(
+        notification_service.create_notification(
             db=db,
             org_id=task.organization_id,
             user_id=task.owner_id,

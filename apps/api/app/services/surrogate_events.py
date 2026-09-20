@@ -69,7 +69,12 @@ def handle_status_changed(
 ) -> None:
     """Dispatch surrogate status change side effects."""
     from app.db.enums import AlertType
-    from app.services import notification_facade, pipeline_service, queue_service, workflow_triggers
+    from app.services import (
+        notification_service,
+        pipeline_service,
+        queue_service,
+        workflow_triggers,
+    )
 
     actor = _get_org_user(db, surrogate.organization_id, user_id)
     actor_name = actor.display_name if actor else "Someone"
@@ -79,7 +84,7 @@ def handle_status_changed(
 
     if not pipeline_service.stage_matches_key(new_stage, "application_submitted"):
         try:
-            notification_facade.notify_surrogate_status_changed(
+            notification_service.notify_surrogate_status_changed(
                 db=db,
                 surrogate=surrogate,
                 from_status=old_label,
@@ -121,7 +126,7 @@ def handle_status_changed(
                 db.commit()
                 db.refresh(surrogate)
             if pool_queue:
-                notification_facade.notify_surrogate_ready_for_claim(db=db, surrogate=surrogate)
+                notification_service.notify_surrogate_ready_for_claim(db=db, surrogate=surrogate)
         except Exception:
             logger.debug("surrogate_ready_for_claim_notify_failed", exc_info=True)
 

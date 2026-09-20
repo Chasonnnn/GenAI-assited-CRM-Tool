@@ -17,6 +17,27 @@ friction. Preserve product behavior; report larger correctness issues separately
 Fable completed the independent audit and one comparison round. The agreed cleanup
 constraints and acceptance checks below govern the next implementation slice.
 
+## Draft implementation checkpoint (2026-09-20)
+
+The user requested an immediate commit and push with this workplan, with PR #718
+kept as a draft while implementation continues. This checkpoint is not a completion
+or merge recommendation; earlier green results do not validate the new cleanup.
+
+- Implemented, pending combined verification: remove six unused frontend dependencies
+  and their optimizer entries, four re-export modules, and the notification facade;
+  redirect actual callers and monkeypatch targets to the owning modules.
+- Removed historical UI-copy bookkeeping, the redundant pipeline source scan, and
+  exact service-callee spelling assertions. Retained seven safety/recovery-copy
+  assertions, executed-SQL coverage, and negative router boundary checks.
+- In progress: migrate useful donor-assignment and timeline assertions to live
+  components. Keep the two dead components and their old tests until the replacement
+  coverage passes, then remove them.
+- Checkpoint validation: dependency removal completed and the lockfile diff was
+  inspected. Full frontend/backend suites and production build remain pending.
+- Fable has a separate, deeper API audit in progress, excluding these active edits.
+  Assess its findings before accepting another cleanup; no performance win is claimed
+  for this checkpoint. CI/QA tooling and measured performance remain later slices.
+
 ## Fresh slop audit and cleanup order (2026-09-20)
 
 This audit revisits live code, not the historical counts in `over-engineering-audit.md`.
@@ -25,7 +46,7 @@ changes; the execution thread independently checked the findings on the PR branc
 The audit spans API/web code, tests, dependency manifests, the donor prototype, scripts,
 CI, infrastructure configuration, and guidance. It is a repository-wide evidence-led
 pass, not a proof that every unused export, dependency, or performance issue is known.
-No new cleanup implementation is included in this audit pass.
+The findings below were recorded before the draft implementation checkpoint above.
 
 ### A. Remove unused dependencies and test-only modules first
 
