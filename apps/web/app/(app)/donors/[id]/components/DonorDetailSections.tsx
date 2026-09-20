@@ -16,7 +16,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { DonorAssignMenu } from "@/components/donors/DonorAssignMenu"
 import { DonorDocumentsSection } from "@/components/donors/DonorDocumentsSection"
 import { DonorNotesSection } from "@/components/donors/DonorNotesSection"
-import { DonorProfilePhoto } from "@/components/donors/DonorProfilePhoto"
 import { DonorTasksSection } from "@/components/donors/DonorTasksSection"
 import { DonorOverviewTab } from "@/components/donors/DonorOverviewTab"
 import { DonorOwnershipSection } from "@/components/donors/DonorOwnershipSection"
@@ -122,7 +121,6 @@ export function DonorDetailSections({
             statusColor={String(getDonorStageStyle(stages, donor).color)}
             isArchived={donor.is_archived}
             onBack={() => router.push(returnTo as Route)}>
-            <DonorProfilePhoto donor={donor} canEdit={canEdit} compact />
             {access.changeStage && !donor.is_archived && <Button size="sm" variant="outline" onClick={onChangeStage}>Change Stage</Button>}
             {(canEdit || access.archive || user?.role === "developer") && <DropdownMenu>
                 <DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={`Actions for ${donor.full_name}`} />}><MoreVerticalIcon className="size-4" /></DropdownMenuTrigger>

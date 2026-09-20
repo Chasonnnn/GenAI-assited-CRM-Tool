@@ -440,12 +440,18 @@ describe("DonorDetailPage", () => {
         expect(screen.queryByRole("button", { name: /Delete note by/ })).not.toBeInTheDocument()
     })
 
-    it("renders and replaces the donor profile photo", async () => {
+    it.each([
+        { donorType: "egg", photoId: null },
+        { donorType: "egg", photoId: "profile-1" },
+        { donorType: "sperm", photoId: null },
+        { donorType: "sperm", photoId: "profile-1" },
+    ])("omits header photo controls for $donorType donors with photo $photoId", ({ donorType, photoId }) => {
         mockUseDonor.mockReturnValue({
             ...mockUseDonor(),
             data: {
                 ...mockUseDonor().data,
-                profile_photo_attachment_id: "profile-1",
+                donor_type: donorType,
+                profile_photo_attachment_id: photoId,
             },
         })
         mockUseAttachmentPreviewUrl.mockReturnValue({
@@ -454,21 +460,13 @@ describe("DonorDetailPage", () => {
         })
         render(<DonorDetailPage />)
 
-        expect(screen.getByRole("img", { name: "Maya Thompson profile photo" })).toHaveAttribute(
-            "data-src",
-            "https://files.example/profile.jpg",
-        )
-        const image = new File(["image"], "replacement.jpg", { type: "image/jpeg" })
-        const photoInput = screen.getByLabelText("Choose replacement donor profile photo")
-        expect(photoInput).toHaveAttribute("accept", "image/jpeg,image/png")
-        fireEvent.change(photoInput, {
-            target: { files: [image] },
-        })
-
-        await waitFor(() => expect(mockUploadDonorProfilePhoto).toHaveBeenCalledWith({
-            donorId: "donor-1",
-            file: image,
-        }))
+        const header = within(screen.getByRole("banner"))
+        expect(header.queryByRole("img", { name: "Maya Thompson profile photo" })).not.toBeInTheDocument()
+        expect(header.queryByRole("button", { name: /donor profile photo/i })).not.toBeInTheDocument()
+        expect(header.queryByLabelText(/Choose .*donor profile photo/i)).not.toBeInTheDocument()
+        expect(header.getByRole("button", { name: "Change Stage" })).toBeInTheDocument()
+        expect(mockUseAttachmentPreviewUrl).not.toHaveBeenCalled()
+        expect(mockUploadDonorProfilePhoto).not.toHaveBeenCalled()
     })
 
     it("renders donor document loading, error/retry, and empty states", () => {
