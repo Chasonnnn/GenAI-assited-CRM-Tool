@@ -3,7 +3,9 @@
 Legacy rows are backfilled from their trigger type using the same mapping
 workflow creation applies (LEGACY_TRIGGER_SUBJECT_TYPES). Donor-trigger
 templates stay NULL: their exact donor subtype (egg_donor vs sperm_donor)
-cannot be inferred and they must be repaired explicitly before use.
+cannot be inferred and they must be repaired explicitly before use. Existing
+draft configs resolve their own trigger type so publishing a pending draft
+cannot overwrite the backfill with a stale or missing subject.
 
 Revision ID: 20260920_0100_workflow_template_subject_type
 Revises: 20260919_0300_ops_cli_login
@@ -55,7 +57,39 @@ def upgrade() -> None:
         "UPDATE workflow_templates SET subject_type = 'surrogate' "
         f"WHERE subject_type IS NULL AND trigger_type NOT IN ({donor_triggers})"
     )
+    op.execute(
+        """
+        UPDATE workflow_templates
+        SET draft_config = draft_config || jsonb_build_object('subject_type', 'surrogate')
+        WHERE draft_config IS NOT NULL
+        """
+    )
+    for trigger_type, subject_type in LEGACY_TRIGGER_SUBJECT_TYPES.items():
+        op.execute(
+            sa.text(
+                "UPDATE workflow_templates "
+                "SET draft_config = draft_config || "
+                "jsonb_build_object('subject_type', :subject_type) "
+                "WHERE draft_config IS NOT NULL "
+                "AND draft_config->>'trigger_type' = :trigger_type"
+            ).bindparams(subject_type=subject_type, trigger_type=trigger_type)
+        )
+    op.execute(
+        sa.text(
+            "UPDATE workflow_templates "
+            "SET draft_config = draft_config || jsonb_build_object('subject_type', NULL) "
+            "WHERE draft_config IS NOT NULL "
+            "AND draft_config->>'trigger_type' IN :donor_triggers"
+        ).bindparams(sa.bindparam("donor_triggers", expanding=True, value=DONOR_ONLY_TRIGGER_TYPES))
+    )
 
 
 def downgrade() -> None:
+    op.execute(
+        """
+        UPDATE workflow_templates
+        SET draft_config = draft_config - 'subject_type'
+        WHERE draft_config IS NOT NULL AND draft_config ? 'subject_type'
+        """
+    )
     op.drop_column("workflow_templates", "subject_type")
