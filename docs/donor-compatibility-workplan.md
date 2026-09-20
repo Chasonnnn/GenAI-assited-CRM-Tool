@@ -22,9 +22,14 @@ separate follow-up phase.
 
 ## W0 — Repair defects and preserve donor subject contracts
 
-- [ ] fix: email campaign preview reports full-audience eligible/suppressed counts
+- [x] fix: email campaign preview reports full-audience eligible/suppressed counts
       (email branch of `campaign_service.preview_recipients`; sampled page must not cap
-      `eligible_count`)
+      `eligible_count`). Implementation note: entity emails are encrypted at rest, so the
+      full-audience aggregation hashes the org's bounded suppression list in Python and
+      counts in SQL on the indexed `email_hash` column (one aggregate query + one
+      limited sample query; no full-audience row materialization, no `Query.count()`).
+      Suppressed sample rows are now excluded in SQL, so the sample reaches `limit`
+      whenever enough eligible recipients exist.
 - [ ] fix: Zapier test-lead response retains `donor_id` (`routers/zapier.py`)
 - [ ] fix: donor Meta source mapping is unambiguous — remove `source` from donor mapping
       fields; flag stored donor mappings targeting `source` as repair-required; conversion
@@ -125,3 +130,4 @@ retry, permission denied).
 
 | date | commit | commands | result |
 |------|--------|----------|--------|
+| 2026-09-20 | (this commit) email preview full-audience counts | `uv run -m pytest tests/test_campaigns.py -q` (33 passed), `uv run -m pytest tests/test_donor_campaigns.py -q` (9 passed), `ruff check` clean | pass |

@@ -255,6 +255,108 @@ def test_campaign_preview_skips_count_for_short_first_page(db, test_org, test_us
     assert [recipient.entity_id for recipient in preview.sample_recipients] == [surrogate.id]
 
 
+def test_campaign_preview_reports_full_audience_counts_beyond_sample_limit(db, test_org, test_user):
+    """Eligible/suppressed counts must cover the whole audience, not the sampled page."""
+    from app.db.models import EmailSuppression
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import campaign_service, surrogate_service
+
+    suppressed_email = normalize_email(f"preview-suppressed-{uuid4().hex[:8]}@example.com")
+    surrogate_ids = set()
+    for index in range(4):
+        surrogate = surrogate_service.create_surrogate(
+            db,
+            test_org.id,
+            test_user.id,
+            SurrogateCreate(
+                full_name=f"Preview Full Count {index}",
+                email=f"preview-full-count-{index}-{uuid4().hex[:8]}@example.com",
+            ),
+        )
+        surrogate_ids.add(surrogate.id)
+    suppressed_surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(full_name="Preview Suppressed", email=suppressed_email),
+    )
+    db.add(
+        EmailSuppression(
+            id=uuid4(),
+            organization_id=test_org.id,
+            email=suppressed_email,
+            reason="opt_out",
+        )
+    )
+    db.flush()
+
+    preview = campaign_service.preview_recipients(db, test_org.id, "case", {}, limit=2)
+
+    assert preview.total_count == 5
+    assert preview.eligible_count == 4
+    assert preview.suppressed_count == 1
+    assert len(preview.sample_recipients) == 2
+    sampled_ids = {recipient.entity_id for recipient in preview.sample_recipients}
+    assert suppressed_surrogate.id not in sampled_ids
+    assert sampled_ids <= surrogate_ids
+
+
+def test_campaign_preview_full_counts_for_donor_recipients(db, test_org, test_user):
+    """Donor previews count the full subtype audience and exclude the other subtype."""
+    from app.db.models import EmailSuppression
+    from app.schemas.donor import DonorCreate
+    from app.services import campaign_service, donor_service
+
+    suppressed_email = normalize_email(f"donor-suppressed-{uuid4().hex[:8]}@example.com")
+    egg_donor_ids = set()
+    for index in range(2):
+        donor = donor_service.create_donor(
+            db,
+            test_org.id,
+            test_user.id,
+            DonorCreate(
+                donor_type="egg",
+                full_name=f"Preview Egg Donor {index}",
+                email=f"preview-egg-{index}-{uuid4().hex[:8]}@example.com",
+            ),
+        )
+        egg_donor_ids.add(donor.id)
+    suppressed_donor = donor_service.create_donor(
+        db,
+        test_org.id,
+        test_user.id,
+        DonorCreate(donor_type="egg", full_name="Preview Suppressed Egg", email=suppressed_email),
+    )
+    donor_service.create_donor(
+        db,
+        test_org.id,
+        test_user.id,
+        DonorCreate(
+            donor_type="sperm",
+            full_name="Preview Sperm Donor",
+            email=f"preview-sperm-{uuid4().hex[:8]}@example.com",
+        ),
+    )
+    db.add(
+        EmailSuppression(
+            id=uuid4(),
+            organization_id=test_org.id,
+            email=suppressed_email,
+            reason="bounced",
+        )
+    )
+    db.flush()
+
+    preview = campaign_service.preview_recipients(db, test_org.id, "egg_donor", {}, limit=1)
+
+    assert preview.total_count == 3
+    assert preview.eligible_count == 2
+    assert preview.suppressed_count == 1
+    assert len(preview.sample_recipients) == 1
+    assert preview.sample_recipients[0].entity_id in egg_donor_ids
+    assert suppressed_donor.id not in {r.entity_id for r in preview.sample_recipients}
+
+
 def test_list_suppressions_skips_count_for_short_first_page(db, test_org, monkeypatch):
     from app.db.models import EmailSuppression
     from app.services import campaign_service
