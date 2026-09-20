@@ -387,19 +387,20 @@ def maybe_schedule_workflow_sweep_jobs(
     bucket = now.astimezone(UTC).strftime("%Y%m%dT%H%MZ")
     jobs_created = 0
     duplicates_skipped = 0
-    orgs = org_service.list_orgs(db)
-    for org in orgs:
+    # Job scheduling commits or rolls back, which expires ORM objects still in this loop.
+    org_ids = [org.id for org in org_service.list_orgs(db)]
+    for org_id in org_ids:
         if not workflow_triggers.has_due_scheduled_workflows(
             db,
-            org.id,
+            org_id,
             evaluated_at=now,
         ):
             continue
-        idempotency_key = f"workflow-sweep:scheduled:{org.id}:{bucket}"
+        idempotency_key = f"workflow-sweep:scheduled:{org_id}:{bucket}"
         try:
             existing = job_service.get_job_by_idempotency_key(
                 db,
-                org_id=org.id,
+                org_id=org_id,
                 idempotency_key=idempotency_key,
             )
             if existing is not None:
@@ -407,10 +408,10 @@ def maybe_schedule_workflow_sweep_jobs(
                 continue
             job_service.schedule_job(
                 db=db,
-                org_id=org.id,
+                org_id=org_id,
                 job_type=JobType.WORKFLOW_SWEEP,
                 payload={
-                    "org_id": str(org.id),
+                    "org_id": str(org_id),
                     "sweep_type": "scheduled",
                     "evaluated_at": now.isoformat(),
                 },
@@ -424,7 +425,7 @@ def maybe_schedule_workflow_sweep_jobs(
 
     logger.info(
         "Workflow sweep fallback scheduled (organizations=%s jobs=%s duplicates=%s)",
-        len(orgs),
+        len(org_ids),
         jobs_created,
         duplicates_skipped,
     )
