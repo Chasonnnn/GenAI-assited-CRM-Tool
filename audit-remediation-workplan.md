@@ -2,6 +2,23 @@
 
 Audit and plan: 2026-09-19
 
+## Review checkpoint (2026-09-20)
+
+The current batch is closed to further scope expansion. The 63-function backend
+cleanup is already committed in `bd7a466f`; notification transport, ZAP, Terraform,
+reusable browser QA, and the deferred reliability work remain separate backlog.
+
+Independent review covered all 131 changed paths against `c6095f2d` and the relevant
+callers. No blocking code finding was identified. The source-map references to
+removed modules and the new AI approval/email services were corrected after review.
+`git diff --check` passed for the documentation correction. No application code
+changed in this review checkpoint, and no tests were rerun for the documentation.
+
+All 14 hosted checks passed on `bd7a466f`. That result predates this local documentation
+correction; the owner authorized publication of the reviewed changes on 2026-09-20.
+Keep the PR draft pending fresh CI and the separate merge decision. Nothing was
+merged or deployed.
+
 ## Scope correction (2026-09-20)
 
 The user clarified that this work should remove slop, not expand product workflows.
