@@ -756,7 +756,7 @@ describe("DonorDetailPage", () => {
             data: { permissions: ["view_donors", "archive_donors", ...(state === "archived" ? ["edit_donors"] : [])] },
         })
         if (state === "archived") {
-            const query = mockUseDonor.mock.results.at(-1)?.value ?? mockUseDonor("donor-1")
+            const query = mockUseDonor("donor-1")
             mockUseDonor.mockReturnValue({ ...query, data: { ...query.data, is_archived: true } })
         }
         render(<DonorDetailPage />)

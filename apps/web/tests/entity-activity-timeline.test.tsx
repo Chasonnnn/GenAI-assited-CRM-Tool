@@ -74,8 +74,8 @@ describe("EntityActivityTimeline", () => {
         const { rerender } = render(<EntityActivityTimeline {...props} currentStageId={stage.id} />)
         expect(screen.getByText("Screening note")).toBeInTheDocument()
         expect(screen.queryByText("Review note")).not.toBeInTheDocument()
-        fireEvent.click(screen.getByText("Screening").closest("button")!)
-        expect(screen.queryByText("Screening note")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByText("Review").closest("button")!)
+        expect(screen.getByText("Review note")).toBeInTheDocument()
 
         rerender(<EntityActivityTimeline {...props} currentStageId={nextStage.id} />)
         expect(screen.getByText("Review note")).toBeInTheDocument()

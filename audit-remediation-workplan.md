@@ -20,23 +20,60 @@ constraints and acceptance checks below govern the next implementation slice.
 ## Draft implementation checkpoint (2026-09-20)
 
 The user requested an immediate commit and push with this workplan, with PR #718
-kept as a draft while implementation continues. This checkpoint is not a completion
-or merge recommendation; earlier green results do not validate the new cleanup.
+kept as a draft while implementation continues. The initial checkpoint below preceded
+full validation; the completed checks are recorded under resumed implementation.
+The PR remains a draft because the broader audit workplan is not complete.
 
-- Implemented, pending combined verification: remove six unused frontend dependencies
+- At publication, implemented but pending verification: remove six unused frontend dependencies
   and their optimizer entries, four re-export modules, and the notification facade;
   redirect actual callers and monkeypatch targets to the owning modules.
 - Removed historical UI-copy bookkeeping, the redundant pipeline source scan, and
   exact service-callee spelling assertions. Retained seven safety/recovery-copy
   assertions, executed-SQL coverage, and negative router boundary checks.
-- In progress: migrate useful donor-assignment and timeline assertions to live
-  components. Keep the two dead components and their old tests until the replacement
-  coverage passes, then remove them.
+- Coverage migration was in progress: keep the two dead components and their old tests
+  until useful donor-assignment and timeline assertions pass on live components.
 - Checkpoint validation: dependency removal completed and the lockfile diff was
-  inspected. Full frontend/backend suites and production build remain pending.
-- Fable has a separate, deeper API audit in progress, excluding these active edits.
-  Assess its findings before accepting another cleanup; no performance win is claimed
-  for this checkpoint. CI/QA tooling and measured performance remain later slices.
+  inspected. Full frontend/backend suites and production build were pending.
+- Fable's deeper API audit was in progress, excluding these active edits. Its completed
+  recheck appears in section E. No performance win is claimed for this cleanup.
+
+### Resumed implementation
+
+- Removed the two test-only components after 137 focused tests passed. Assignment
+  payloads, owner labels, loading/retry/error behavior, permission/archive gates, and
+  timeline stage changes are now covered on live components. Existing SSR, collapse,
+  task, and layout assertions remain on the shared timeline and intended-parent page.
+- Removed two Next adoption tests that duplicate package pins and agent-document
+  spelling. Kept the actual Next configuration checks, including `agentRules: false`,
+  experimental feature defaults, generated-route validation, and cache safeguards.
+- The CI Lint job now runs the already-pinned Ruff and ESLint commands. The frontend
+  build job retains type checking; the duplicate Lint typecheck is gone. Temporary
+  fixtures passed syntax/type checking but failed Ruff (`F401`) and ESLint
+  (`no-explicit-any`) with exit 1. Those fixtures were removed, not committed.
+- Backend validation after the remote OPS CLI merge: 3,111 parallel-safe tests and
+  90 serial migration/outbox tests passed (3,201 total). Full API Ruff passed.
+- Final checks for this slice:
+  - `apps/api/run_tests.sh -n 4 --dist loadscope --ignore=tests/test_email_delivery_outbox.py --ignore-glob='tests/test_migration_*.py' --tb=short`: 3,111 passed.
+  - From `apps/api`, `./run_tests.sh tests/test_email_delivery_outbox.py tests/test_migration_*.py --tb=short`: 90 passed.
+  - `apps/api/run_tests.sh tests/test_release_ci.py --tb=short`: 11 passed after the CI edit.
+  - From `apps/api`, `mise exec -- uv run ruff check .`: all checks passed.
+  - From `apps/web`, `mise exec -- pnpm run check`: typecheck, ESLint, and 270 files / 1,563 tests passed.
+  - `mise exec -- pnpm run build`: successful production compilation, TypeScript,
+    page generation, and standalone output; generated contracts remained unchanged.
+  - Authenticated Chromium smoke on that standalone build: populated surrogate
+    overview, profile empty state, interview empty state, create/edit/save a synthetic
+    interview, saved transcript, and expanded General Notes passed. The inspected
+    2x capture showed no missing content or rendering defects; browser errors were
+    empty. Local API/database only, no worker or external-provider calls. The browser
+    used loopback-only traffic with a platform-host header for production routing.
+  - Browser sessions closed, task-started API/web/Postgres stopped, and the synthetic
+    database dropped. No QA service intentionally remains running.
+- This cleanup slice has a net reduction of 782 lines across code, tests, configuration,
+  and dependencies (excluding this workplan); six direct dependencies and four
+  transitive packages are removed. These are maintenance reductions, not measured
+  runtime speedups.
+- The immediate draft checkpoint is published. Continue to keep PR #718 in draft;
+  no merge, deployment, shared database writes, or provider sends are authorized.
 
 ## Fresh slop audit and cleanup order (2026-09-20)
 
@@ -168,6 +205,79 @@ The findings below were recorded before the draft implementation checkpoint abov
 - No exhaustive unused-export/Python dependency analysis, load test, production query
   inspection, or external hosting audit was performed. Import recovery, unsubscribe
   behavior, token contracts, worker redesign, and live IAM changes remain deferred.
+
+### E. Deeper API audit: queued removal candidates
+
+Fable repeated its AST/reference scan against the published draft checkpoint after
+the OPS CLI merge. It reports 61 public service functions (1,248 function-body lines)
+with no code or test references, including in-file callers. The scan covered all
+tracked files, including `apps/ops-cli`, and checked worker registrations and the new
+template service's dynamic access. This is static evidence, not runtime coverage or
+proof against out-of-repository callers. No bulk deletion is included in this slice.
+
+The recheck removed `template_variable_catalog.extract_template_variables` from the
+dead list because `platform_template_write_service` now calls it. This confirms that
+inventories must be rechecked after merges. Before each removal group: read its owner
+module, repeat caller/registration searches at current HEAD, delete only the unused
+functions and newly unused imports, run Ruff and affected suites, then the full API
+suite. Do not add delegation tests for deleted wrappers.
+
+All paths below are under `apps/api/app/services/`:
+
+| Module | Candidate functions |
+| --- | --- |
+| `ai_settings_service.py` | `get_ai_settings_versions`, `rollback_ai_settings` |
+| `analytics_meta_service.py` | `get_cached_meta_spend_summary` |
+| `analytics_surrogate_service.py` | `get_status_trend`, `get_surrogates_by_user`, `get_performance_stage_ids` |
+| `appointment_email_service.py` | `send_reminder` |
+| `audit_service.py` | `log_config_changed`, `log_integration_connected`, `log_integration_disconnected`, `log_data_export`, `log_import_started`, `log_import_completed` |
+| `email_provider_service.py` | `get_provider_display_name`, `is_provider_configured` |
+| `form_draft_service.py` | `delete_draft` |
+| `google_tasks_cleanup_service.py` | `has_unresolved_google_task_work_for_user` |
+| `google_tasks_sync_service.py` | `integration_has_google_tasks_scope` |
+| `http_service.py` | `request_with_retries_sync` |
+| `intake_pool_access_service.py` | `has_pool_access`, `list_accessible_intake_owners` |
+| `intended_parent_status_service.py` | `get_default_pipeline_stage` |
+| `interview_attachment_service.py` | `update_transcription_status` |
+| `interview_service.py` | `to_interview_list_item` |
+| `invite_service.py` | `list_pending_invites` |
+| `message_content_service.py` | `pending_media_scan_job` |
+| `meta_admin_service.py` | `get_ad_account_by_external_id` |
+| `meta_lead_service.py` | `get_unconverted`, `get_meta_lead` |
+| `meta_oauth_service.py` | `get_active_oauth_connections`, `get_oauth_connection_by_id` |
+| `meta_page_service.py` | `get_mapping_by_page_id_any_org`, `update_mapping`, `delete_mapping` |
+| `meta_token_service.py` | `get_connection_health_status` |
+| `metrics_service.py` | `get_request_metrics` |
+| `notification_service.py` | `notify_form_submission_received` |
+| `org_service.py` | `get_org_versions`, `rollback_org_settings` |
+| `permission_service.py` | `backfill_new_permissions` |
+| `pii_anonymizer.py` | `anonymize_surrogate_context` |
+| `pipeline_semantics_service.py` | `get_stage_integration_bucket`, `get_stage_terminal_outcome` |
+| `pipeline_service.py` | `update_pipeline_stages`, `validate_surrogate_stage` |
+| `platform_template_service.py` | `list_published_workflow_templates_for_org` |
+| `profile_service.py` | `get_hidden_fields` |
+| `resend_settings_service.py` | `clear_default_sender` |
+| `scan_dispatch_service.py` | `dispatch_message_media_scan_job_sync` |
+| `task_service.py` | `count_pending_tasks`, `get_pending_approval_tasks`, `get_expired_approval_tasks` |
+| `tiptap_service.py` | `extract_comment_ids` |
+| `tracking_service.py` | `get_recipient_events`, `get_run_events` |
+| `user_service.py` | `update_user_signature` |
+| `workflow_access.py` | `get_editable_scope` |
+| `workflow_email_provider.py` | `get_provider_display_info` |
+| `workflow_triggers.py` | `trigger_surrogate_updated`, `trigger_form_started`, `trigger_appointment_completed` |
+
+Exceptions: `log_data_export` has a wish-list reference in `ENTERPRISE_GAPS.md`;
+`update_mapping` collides with an unrelated frontend reducer action. Keep the three
+import-recovery helpers outside this pass. `alert_service.count_alerts` is separate:
+it has one dedicated test, so compare its coverage with the live alert path before
+removing both. Dead audit/workflow hooks alone do not establish that equivalent
+behavior is absent elsewhere; investigate any product gaps separately.
+
+Fable also found an unused `db` serializer argument in `surrogates_shared.py` and
+optional table-driven simplification of the dependency-security ratchet. Keep all
+security minimum-version assertions. No new hot-list N+1 was established: surrogate
+owner/stage reads are eager-loaded; interview counts and ticket associations are
+batched. Cold-path query smells and notification sockets still need measurements.
 
 ## Outcome and execution rules
 
