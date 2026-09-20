@@ -584,7 +584,7 @@ export interface PlatformEmailTemplateUpdate {
     body?: string
     from_email?: string | null
     category?: string | null
-    expected_version?: number | null
+    expected_version: number
 }
 
 export interface PlatformEmailTemplateTestSendRequest {
@@ -634,7 +634,7 @@ export interface PlatformFormTemplateUpdate {
     description?: string | null
     schema_json?: FormSchema | null
     settings_json?: Record<string, unknown> | null
-    expected_version?: number | null
+    expected_version: number
 }
 
 interface PlatformWorkflowTemplateDraft {
@@ -652,6 +652,7 @@ interface PlatformWorkflowTemplateDraft {
 export interface PlatformWorkflowTemplateListItem {
     id: string
     status: TemplateStatus
+    current_version: number
     published_version: number
     is_published_globally: boolean
     draft: PlatformWorkflowTemplateDraft
@@ -677,12 +678,13 @@ export interface PlatformWorkflowTemplateUpdate {
     conditions?: Condition[]
     condition_logic?: string
     actions?: ActionConfig[]
-    expected_version?: number | null
+    expected_version: number
 }
 
 export interface TemplatePublishRequest {
     publish_all: boolean
     org_ids?: string[] | null
+    expected_version: number
 }
 
 export function listPlatformEmailTemplates(): Promise<PlatformEmailTemplateListItem[]> {

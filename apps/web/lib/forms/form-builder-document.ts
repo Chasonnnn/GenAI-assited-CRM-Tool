@@ -29,7 +29,7 @@ export type BuilderFormField = {
         label: string
         type: FormFieldColumn["type"]
         required: boolean
-        options?: string[]
+        options?: BuilderOption[]
         validation?: FormFieldValidation | null
     }[]
     rows?: {
@@ -272,7 +272,7 @@ export function schemaToPages(schema: FormSchema, mappings: Map<string, string>)
         fields: page.fields.map((field) => {
             const options = toBuilderOptions(field.options)
             const columns = field.columns?.map((column) => {
-                const columnOptions = column.options?.map((option) => option.label || option.value)
+                const columnOptions = toBuilderOptions(column.options)
                 return {
                     id: column.key,
                     label: column.label,

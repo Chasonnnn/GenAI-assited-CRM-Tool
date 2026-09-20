@@ -89,6 +89,8 @@ from app.routers import (
     notifications,
     oidc,
     ops,
+    ops_cli_auth,
+    ops_cli_templates,
     permissions,
     pipelines,
     platform,
@@ -735,6 +737,8 @@ app.include_router(ops.router)
 
 # Platform admin endpoints (ops console - cross-org)
 app.include_router(platform.router)
+app.include_router(ops_cli_auth.router)
+app.include_router(ops_cli_templates.router)
 
 # AI Assistant endpoints
 app.include_router(ai.router)

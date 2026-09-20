@@ -162,11 +162,11 @@ describe("HeaderActions", () => {
         expect(screen.getByRole('button', { name: 'Send Email' })).toBeDisabled()
     })
 
-    it('allows delegated proposal and interview outcome actions for retained Intake under v2', () => {
+    it('allows delegated proposals without restoring retired interview outcomes under v2', () => {
         setV2Access(['view_surrogates', 'edit_surrogates', 'view_matches', 'propose_matches', 'view_intended_parents'], 'intake_specialist', { readyToMatch: true })
         render(<HeaderActions />)
         expect(screen.getByRole('button', { name: 'Propose Match' })).toBeEnabled()
-        expect(screen.getByRole('button', { name: 'Log Interview Outcome' })).toBeEnabled()
+        expect(screen.queryByRole('button', { name: 'Log Interview Outcome' })).not.toBeInTheDocument()
     })
 
     it.each(['view_matches', 'propose_matches', 'view_intended_parents'])('hides proposal when a Case Manager lacks %s under v2', (missing) => {
@@ -470,7 +470,7 @@ describe("HeaderActions", () => {
         expect(screen.queryByRole("button", { name: /log interview outcome/i })).not.toBeInTheDocument()
     })
 
-    it("shows Log Interview Outcome at interview scheduled", () => {
+    it("does not offer obsolete interview outcome entry at interview scheduled", () => {
         mockUseAuth.mockReturnValue({
             user: { role: "intake_specialist", user_id: "intake-user-1" },
         })
@@ -522,7 +522,7 @@ describe("HeaderActions", () => {
         })
 
         render(<HeaderActions />)
-        expect(screen.getByRole("button", { name: /log interview outcome/i })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /log interview outcome/i })).not.toBeInTheDocument()
     })
 
     it("shows Resume for On-Hold and sends the paused-from stage id", () => {

@@ -234,7 +234,6 @@ const baseSurrogateData = {
     delivery_baby_gender: null,
     delivery_baby_weight: null,
     latest_contact_outcome: null,
-    latest_interview_outcome: null,
 }
 
 const defaultPipelineStages = [
@@ -879,7 +878,6 @@ describe('SurrogateDetailPage', () => {
                 statusLabel="Contacted"
                 statusColor="#111111"
                 latestContactOutcome={{ outcome: "reached", at: "2024-02-01T10:00:00Z" }}
-                latestInterviewOutcome={{ outcome: "no_show", at: "2024-02-01T12:00:00Z" }}
                 isArchived={false}
                 onBack={vi.fn()}
             />
@@ -890,42 +888,6 @@ describe('SurrogateDetailPage', () => {
         expect(screen.getByText("Contacted")).toHaveStyle({ backgroundColor: "#111111" })
     })
 
-    it("shows only the interview outcome pill at the interview scheduled stage", () => {
-        render(
-            <SurrogateDetailHeader
-                surrogateNumber="S12345"
-                currentStageKey="interview_scheduled"
-                statusLabel="Interview Scheduled"
-                statusColor="#222222"
-                latestContactOutcome={{ outcome: "reached", at: "2024-02-01T10:00:00Z" }}
-                latestInterviewOutcome={{ outcome: "no_show", at: "2024-02-01T12:00:00Z" }}
-                isArchived={false}
-                onBack={vi.fn()}
-            />
-        )
-
-        expect(screen.queryByText("Contact: Reached")).not.toBeInTheDocument()
-        expect(screen.getByText("Interview: No Show")).toBeInTheDocument()
-    })
-
-    it("shows the upcoming interview pill at the interview scheduled stage before an outcome is logged", () => {
-        render(
-            <SurrogateDetailHeader
-                surrogateNumber="S12345"
-                currentStageKey="interview_scheduled"
-                statusLabel="Interview Scheduled"
-                statusColor="#222222"
-                latestContactOutcome={{ outcome: "reached", at: "2024-02-01T10:00:00Z" }}
-                latestInterviewOutcome={null}
-                isArchived={false}
-                onBack={vi.fn()}
-            />
-        )
-
-        expect(screen.queryByText("Contact: Reached")).not.toBeInTheDocument()
-        expect(screen.getByText("Upcoming")).toBeInTheDocument()
-    })
-
     it("hides outcome pills after the surrogate moves past the corresponding stages", () => {
         render(
             <SurrogateDetailHeader
@@ -934,7 +896,6 @@ describe('SurrogateDetailPage', () => {
                 statusLabel="Under Review"
                 statusColor="#333333"
                 latestContactOutcome={{ outcome: "reached", at: "2024-02-01T10:00:00Z" }}
-                latestInterviewOutcome={{ outcome: "no_show", at: "2024-02-01T12:00:00Z" }}
                 isArchived={false}
                 onBack={vi.fn()}
             />

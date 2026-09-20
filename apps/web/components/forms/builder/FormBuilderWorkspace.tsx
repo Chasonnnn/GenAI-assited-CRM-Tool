@@ -125,7 +125,9 @@ function buildCanvasField(field: BuilderFormField): FormField {
             label: column.label,
             type: column.type,
             required: column.required,
-            options: column.options?.map((option) => ({ label: option, value: option })) ?? null,
+            options: column.options?.map((option) => ({
+                label: getBuilderOptionLabel(option), value: getBuilderOptionValue(option),
+            })) ?? null,
             validation: column.validation ?? null,
         })) ?? null,
         rows: field.rows?.map((row) => ({
@@ -831,7 +833,7 @@ function useFieldInspectorView({
                                 <div className="space-y-3">
                                     {(selectedFieldData.columns || []).map((column) => (
                                         <div key={column.id} className="rounded-2xl border border-border/70 bg-muted/20 p-3">
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex flex-wrap items-center gap-2">
                                                 <Input
                                                     value={column.label}
                                                     onChange={(event) =>
@@ -894,21 +896,30 @@ function useFieldInspectorView({
                                                 </Button>
                                             </div>
                                             {column.type === "select" || column.type === "radio" ? (
-                                                <Input
-                                                    className="mt-2"
-                                                    value={(column.options || []).join(", ")}
-                                                    onChange={(event) =>
-                                                        onUpdateColumn(selectedFieldData.id, column.id, {
-                                                            options: event.target.value
-                                                                .split(",")
-                                                                .flatMap((entry) => {
-                                                                    const trimmed = entry.trim()
-                                                                    return trimmed ? [trimmed] : []
-                                                                }),
-                                                        })
-                                                    }
-                                                    placeholder="Options (comma separated)"
-                                                />
+                                                <div className="mt-2 space-y-2">
+                                                    {(column.options || []).map((option, optionIndex) => (
+                                                        <div key={optionIndex} className="flex gap-2">
+                                                            <Input
+                                                                aria-label={`Option ${optionIndex + 1} for ${column.label}`}
+                                                                value={getBuilderOptionLabel(option)}
+                                                                onChange={(event) => onUpdateColumn(selectedFieldData.id, column.id, {
+                                                                    options: (column.options || []).map((item, index) => index === optionIndex ? updateBuilderOptionLabel(item, event.target.value) : item),
+                                                                })}
+                                                            />
+                                                            <Button type="button" variant="ghost" size="icon"
+                                                                aria-label={`Remove option ${optionIndex + 1} from ${column.label}`}
+                                                                onClick={() => onUpdateColumn(selectedFieldData.id, column.id, {
+                                                                    options: (column.options || []).filter((_, index) => index !== optionIndex),
+                                                                })}>
+                                                                <XIcon className="size-4" />
+                                                            </Button>
+                                                        </div>
+                                                    ))}
+                                                    <Button type="button" variant="outline" size="sm"
+                                                        onClick={() => onUpdateColumn(selectedFieldData.id, column.id, {
+                                                            options: [...(column.options || []), "New option"],
+                                                        })}>Add option</Button>
+                                                </div>
                                             ) : null}
                                         </div>
                                     ))}

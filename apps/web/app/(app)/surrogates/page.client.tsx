@@ -38,6 +38,7 @@ import { BulkChangeStageModal } from "@/components/surrogates/BulkChangeStageMod
 import { SurrogatesFloatingScrollbar } from "@/components/surrogates/SurrogatesFloatingScrollbar"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import { useDebouncedSearchCommit } from "@/lib/hooks/use-debounced-search-commit"
+import { readableForeground } from "@/lib/stage-colors"
 
 const SHORT_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -250,7 +251,6 @@ const DATE_RANGE_LABELS: Record<Exclude<DateRangePreset, "custom">, string> = {
 const DYNAMIC_FILTER_LABELS: Record<DynamicSurrogateFilter, string> = {
     intelligent_any: "Intelligent Suggestions",
     intelligent_new_unread_stale: "New Unread Needs Follow-up",
-    intelligent_meeting_outcome_missing: "Meeting Outcome Missing",
     intelligent_stuck_preapproval: "Pre-approval Stuck Cases",
     attention_unreached: "Attention Needed: Unreached Leads",
     attention_stuck: "Attention Needed: Stuck Surrogates",
@@ -1645,7 +1645,7 @@ export function SurrogatesPageClient() {
                                                     {surrogateItem.phone || "—"}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge style={{ backgroundColor: statusColor, color: "white" }}>
+                                                    <Badge style={{ backgroundColor: statusColor, color: readableForeground(statusColor) }}>
                                                         {statusLabel}
                                                     </Badge>
                                                 </TableCell>

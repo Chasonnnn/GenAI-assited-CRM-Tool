@@ -14,6 +14,10 @@ from app.services import pipeline_semantics_service, pipeline_service
 ROLLOUT_COMMENT = "Rolled out platform default surrogate pipeline"
 
 TARGET_INSERTIONS: dict[str, dict[str, str]] = {
+    "reschedule_needed": {
+        "after_stage_key": "interview_scheduled",
+        "before_stage_key": "pending_docusign",
+    },
     "pending_docusign": {
         "after_stage_key": "interview_scheduled",
         "before_stage_key": "under_review",

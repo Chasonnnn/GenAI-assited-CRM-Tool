@@ -103,6 +103,18 @@ const ACTIVITY_TYPE_CONFIG: Record<string, ActivityTypeConfig> = {
         bgColor: "bg-sky-100 dark:bg-sky-900/30",
         label: "Interview scheduled",
     },
+    interview_rescheduled: {
+        icon: CalendarIcon,
+        color: "bg-sky-500",
+        bgColor: "bg-sky-100 dark:bg-sky-900/30",
+        label: "Interview rescheduled",
+    },
+    interview_cancelled: {
+        icon: CalendarIcon,
+        color: "bg-red-500",
+        bgColor: "bg-red-100 dark:bg-red-900/30",
+        label: "Interview cancelled",
+    },
     note_added: { icon: FileTextIcon, color: "bg-blue-500", bgColor: "bg-blue-100 dark:bg-blue-900/30", label: "Note" },
     note_deleted: { icon: FileTextIcon, color: "bg-blue-400", bgColor: "bg-blue-100 dark:bg-blue-900/30", label: "Note deleted" },
     task_created: { icon: PlusCircleIcon, color: "bg-green-500", bgColor: "bg-green-100 dark:bg-green-900/30", label: "Task created" },
@@ -266,6 +278,8 @@ function getActivityPreview(activity: EntityActivity): string {
                     .join(" • ")
             }
         case "interview_scheduled":
+        case "interview_rescheduled":
+        case "interview_cancelled":
             {
                 const scheduledStart = formatActivityTimestamp(details.scheduled_start)
                 return scheduledStart ? `Appointment: ${scheduledStart}` : ""

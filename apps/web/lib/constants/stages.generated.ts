@@ -56,11 +56,19 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "intake"
     },
     {
+        "stageKey": "reschedule_needed",
+        "slug": "reschedule_needed",
+        "label": "Reschedule Needed",
+        "color": "#FDE68A",
+        "order": 6,
+        "stageType": "intake"
+    },
+    {
         "stageKey": "pending_docusign",
         "slug": "pending_docusign",
         "label": "Pending-DocuSign",
         "color": "#F59E0B",
-        "order": 6,
+        "order": 7,
         "stageType": "intake"
     },
     {
@@ -68,7 +76,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "under_review",
         "label": "Under Review",
         "color": "#F59E0B",
-        "order": 7,
+        "order": 8,
         "stageType": "intake"
     },
     {
@@ -76,7 +84,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "approved",
         "label": "Approved",
         "color": "#22C55E",
-        "order": 8,
+        "order": 9,
         "stageType": "intake"
     },
     {
@@ -84,7 +92,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "ready_to_match",
         "label": "Ready to Match",
         "color": "#0EA5E9",
-        "order": 9,
+        "order": 10,
         "stageType": "post_approval"
     },
     {
@@ -92,7 +100,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "matched",
         "label": "Matched",
         "color": "#6366F1",
-        "order": 10,
+        "order": 11,
         "stageType": "post_approval"
     },
     {
@@ -100,7 +108,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "medical_clearance_passed",
         "label": "Medical Clearance Passed",
         "color": "#14B8A6",
-        "order": 11,
+        "order": 12,
         "stageType": "post_approval"
     },
     {
@@ -108,7 +116,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "legal_clearance_passed",
         "label": "Legal Clearance Passed",
         "color": "#059669",
-        "order": 12,
+        "order": 13,
         "stageType": "post_approval"
     },
     {
@@ -116,7 +124,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "transfer_cycle",
         "label": "Transfer Cycle Initiated",
         "color": "#0D9488",
-        "order": 13,
+        "order": 14,
         "stageType": "post_approval"
     },
     {
@@ -124,7 +132,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "second_hcg_confirmed",
         "label": "Second hCG confirmed",
         "color": "#10B981",
-        "order": 14,
+        "order": 15,
         "stageType": "post_approval"
     },
     {
@@ -132,7 +140,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "heartbeat_confirmed",
         "label": "Heartbeat Confirmed",
         "color": "#22C55E",
-        "order": 15,
+        "order": 16,
         "stageType": "post_approval"
     },
     {
@@ -140,7 +148,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "life_insurance_application_started",
         "label": "Life Insurance Application Started",
         "color": "#0891B2",
-        "order": 16,
+        "order": 17,
         "stageType": "post_approval"
     },
     {
@@ -148,7 +156,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "ob_care_established",
         "label": "OB Care Established",
         "color": "#84CC16",
-        "order": 17,
+        "order": 18,
         "stageType": "post_approval"
     },
     {
@@ -156,7 +164,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "pbo_process_started",
         "label": "PBO Process Started",
         "color": "#DB2777",
-        "order": 18,
+        "order": 19,
         "stageType": "post_approval"
     },
     {
@@ -164,7 +172,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "anatomy_scanned",
         "label": "Anatomy Scanned",
         "color": "#16A34A",
-        "order": 19,
+        "order": 20,
         "stageType": "post_approval"
     },
     {
@@ -172,7 +180,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "delivered",
         "label": "Delivered",
         "color": "#16A34A",
-        "order": 20,
+        "order": 21,
         "stageType": "post_approval"
     },
     {
@@ -180,7 +188,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "on_hold",
         "label": "On-Hold",
         "color": "#B4536A",
-        "order": 21,
+        "order": 22,
         "stageType": "paused"
     },
     {
@@ -188,7 +196,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "cold_leads",
         "label": "Cold Leads",
         "color": "#64748B",
-        "order": 22,
+        "order": 23,
         "stageType": "terminal"
     },
     {
@@ -196,7 +204,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "lost",
         "label": "Lost",
         "color": "#EF4444",
-        "order": 23,
+        "order": 24,
         "stageType": "terminal"
     },
     {
@@ -204,7 +212,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "disqualified",
         "label": "Disqualified",
         "color": "#EF4444",
-        "order": 24,
+        "order": 25,
         "stageType": "terminal"
     }
 ]
@@ -259,11 +267,19 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "stageType": "intake"
         },
         {
+            "stageKey": "reschedule_needed",
+            "slug": "reschedule_needed",
+            "label": "Reschedule Needed",
+            "color": "#FDE68A",
+            "order": 6,
+            "stageType": "intake"
+        },
+        {
             "stageKey": "pending_docusign",
             "slug": "pending_docusign",
             "label": "Pending-DocuSign",
             "color": "#F59E0B",
-            "order": 6,
+            "order": 7,
             "stageType": "intake"
         },
         {
@@ -271,7 +287,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "under_review",
             "label": "Under Review",
             "color": "#F59E0B",
-            "order": 7,
+            "order": 8,
             "stageType": "intake"
         },
         {
@@ -279,7 +295,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "approved",
             "label": "Approved",
             "color": "#22C55E",
-            "order": 8,
+            "order": 9,
             "stageType": "intake"
         },
         {
@@ -287,7 +303,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "ready_to_match",
             "label": "Ready to Match",
             "color": "#0EA5E9",
-            "order": 9,
+            "order": 10,
             "stageType": "post_approval"
         },
         {
@@ -295,7 +311,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "matched",
             "label": "Matched",
             "color": "#6366F1",
-            "order": 10,
+            "order": 11,
             "stageType": "post_approval"
         },
         {
@@ -303,7 +319,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "medical_clearance_passed",
             "label": "Medical Clearance Passed",
             "color": "#14B8A6",
-            "order": 11,
+            "order": 12,
             "stageType": "post_approval"
         },
         {
@@ -311,7 +327,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "legal_clearance_passed",
             "label": "Legal Clearance Passed",
             "color": "#059669",
-            "order": 12,
+            "order": 13,
             "stageType": "post_approval"
         },
         {
@@ -319,7 +335,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "transfer_cycle",
             "label": "Transfer Cycle Initiated",
             "color": "#0D9488",
-            "order": 13,
+            "order": 14,
             "stageType": "post_approval"
         },
         {
@@ -327,7 +343,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "second_hcg_confirmed",
             "label": "Second hCG confirmed",
             "color": "#10B981",
-            "order": 14,
+            "order": 15,
             "stageType": "post_approval"
         },
         {
@@ -335,7 +351,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "heartbeat_confirmed",
             "label": "Heartbeat Confirmed",
             "color": "#22C55E",
-            "order": 15,
+            "order": 16,
             "stageType": "post_approval"
         },
         {
@@ -343,7 +359,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "life_insurance_application_started",
             "label": "Life Insurance Application Started",
             "color": "#0891B2",
-            "order": 16,
+            "order": 17,
             "stageType": "post_approval"
         },
         {
@@ -351,7 +367,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "ob_care_established",
             "label": "OB Care Established",
             "color": "#84CC16",
-            "order": 17,
+            "order": 18,
             "stageType": "post_approval"
         },
         {
@@ -359,7 +375,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "pbo_process_started",
             "label": "PBO Process Started",
             "color": "#DB2777",
-            "order": 18,
+            "order": 19,
             "stageType": "post_approval"
         },
         {
@@ -367,7 +383,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "anatomy_scanned",
             "label": "Anatomy Scanned",
             "color": "#16A34A",
-            "order": 19,
+            "order": 20,
             "stageType": "post_approval"
         },
         {
@@ -375,7 +391,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "delivered",
             "label": "Delivered",
             "color": "#16A34A",
-            "order": 20,
+            "order": 21,
             "stageType": "post_approval"
         },
         {
@@ -383,7 +399,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "on_hold",
             "label": "On-Hold",
             "color": "#B4536A",
-            "order": 21,
+            "order": 22,
             "stageType": "paused"
         },
         {
@@ -391,7 +407,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "cold_leads",
             "label": "Cold Leads",
             "color": "#64748B",
-            "order": 22,
+            "order": 23,
             "stageType": "terminal"
         },
         {
@@ -399,7 +415,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "lost",
             "label": "Lost",
             "color": "#EF4444",
-            "order": 23,
+            "order": 24,
             "stageType": "terminal"
         },
         {
@@ -407,7 +423,7 @@ export const STAGE_DEFS_BY_ENTITY: Record<PipelineEntityType, StageDef[]> = {
             "slug": "disqualified",
             "label": "Disqualified",
             "color": "#EF4444",
-            "order": 24,
+            "order": 25,
             "stageType": "terminal"
         }
     ],
@@ -697,6 +713,7 @@ export const STAGE_TYPE_MAP: Record<string, StageType> = {
     "pending_docusign": "intake",
     "pre_qualified": "intake",
     "ready_to_match": "post_approval",
+    "reschedule_needed": "intake",
     "second_hcg_confirmed": "post_approval",
     "transfer_cycle": "post_approval",
     "under_review": "intake"
@@ -763,6 +780,7 @@ export const STAGE_TYPE_MAP_BY_ENTITY: Record<PipelineEntityType, Record<string,
         "pending_docusign": "intake",
         "pre_qualified": "intake",
         "ready_to_match": "post_approval",
+        "reschedule_needed": "intake",
         "second_hcg_confirmed": "post_approval",
         "transfer_cycle": "post_approval",
         "under_review": "intake"
@@ -775,6 +793,7 @@ export const DEFAULT_STAGE_ORDER: string[] = [
     "pre_qualified",
     "application_submitted",
     "interview_scheduled",
+    "reschedule_needed",
     "pending_docusign",
     "under_review",
     "approved",
@@ -803,6 +822,7 @@ export const DEFAULT_STAGE_ORDER_BY_ENTITY: Record<PipelineEntityType, string[]>
         "pre_qualified",
         "application_submitted",
         "interview_scheduled",
+        "reschedule_needed",
         "pending_docusign",
         "under_review",
         "approved",
@@ -1198,6 +1218,22 @@ export const DEFAULT_STAGE_SEMANTICS_BY_KEY: Record<string, StageSemantics> = {
         "pause_behavior": "none",
         "requires_reason_on_enter": false,
         "suggestion_profile_key": "ready_to_match_followup",
+        "terminal_outcome": "none"
+    },
+    "reschedule_needed": {
+        "analytics_bucket": "reschedule_needed",
+        "capabilities": {
+            "counts_as_contacted": true,
+            "eligible_for_matching": false,
+            "locks_match_state": false,
+            "requires_delivery_details": false,
+            "shows_pregnancy_tracking": false,
+            "tracks_interview_outcome": false
+        },
+        "integration_bucket": "none",
+        "pause_behavior": "none",
+        "requires_reason_on_enter": false,
+        "suggestion_profile_key": null,
         "terminal_outcome": "none"
     },
     "second_hcg_confirmed": {

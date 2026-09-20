@@ -56,9 +56,14 @@ async def test_ops_shared_template_preserves_donor_routing_when_agency_uses_it(
         },
     )
     assert created.status_code == 201, created.text
-    template_id = created.json()["id"]
+    template = created.json()
+    template_id = template["id"]
     published = await authed_client.post(
-        f"/platform/templates/forms/{template_id}/publish", json={"publish_all": True}
+        f"/platform/templates/forms/{template_id}/publish",
+        json={
+            "publish_all": True,
+            "expected_version": template["current_version"],
+        },
     )
     assert published.status_code == 200, published.text
     assert published.json()["is_published_globally"] is True
@@ -225,9 +230,14 @@ async def test_ops_rejects_invalid_donor_template_before_publication(
         },
     )
     assert created.status_code == 201, created.text
-    template_id = created.json()["id"]
+    template = created.json()
+    template_id = template["id"]
     published = await authed_client.post(
-        f"/platform/templates/forms/{template_id}/publish", json={"publish_all": True}
+        f"/platform/templates/forms/{template_id}/publish",
+        json={
+            "publish_all": True,
+            "expected_version": template["current_version"],
+        },
     )
     assert published.status_code == 400, published.text
     saved = await authed_client.get(f"/platform/templates/forms/{template_id}")

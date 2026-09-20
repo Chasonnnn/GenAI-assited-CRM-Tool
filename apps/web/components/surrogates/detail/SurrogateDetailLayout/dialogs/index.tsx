@@ -3,7 +3,6 @@
 import { EmailComposeDialog } from "@/components/email/EmailComposeDialog"
 import { ProposeMatchDialog } from "@/components/matches/ProposeMatchDialog"
 import { LogContactAttemptDialog } from "@/components/surrogates/LogContactAttemptDialog"
-import { LogInterviewOutcomeDialog } from "@/components/surrogates/LogInterviewOutcomeDialog"
 import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
 import { useAuth } from "@/lib/auth-context"
 import {
@@ -14,6 +13,8 @@ import {
 import { EditDialog } from "./EditDialog"
 import { ReleaseQueueDialog } from "./ReleaseQueueDialog"
 import { ZoomMeetingDialog } from "./ZoomMeetingDialog"
+import { InterviewAppointmentManager } from "@/components/surrogates/InterviewAppointmentManager"
+import { stageMatchesKey } from "@/lib/surrogate-stage-context"
 
 export function Dialogs() {
     const { user } = useAuth()
@@ -72,15 +73,6 @@ export function Dialogs() {
                 surrogateName={surrogate.full_name}
             />
 
-            {activeDialog.type === "log_interview_outcome" && canEditSurrogate && (
-                <LogInterviewOutcomeDialog
-                    open
-                    onOpenChange={(open) => !open && closeDialog()}
-                    surrogateId={surrogate.id}
-                    surrogateName={surrogate.full_name}
-                />
-            )}
-
             <ChangeStageModal
                 open={activeDialog.type === "change_stage" && (!isV2 || canChangeStage)}
                 onOpenChange={(open) => !open && closeDialog()}
@@ -89,6 +81,11 @@ export function Dialogs() {
                 comparisonStageId={surrogate.paused_from_stage_id ?? surrogate.stage_id}
                 currentStageLabel={statusLabel}
                 canSelfApproveRegression={["admin", "developer"].includes(user?.role ?? "")}
+                appointmentManager={
+                    (stageMatchesKey(surrogate, "interview_scheduled") || stageMatchesKey(surrogate, "reschedule_needed"))
+                        ? <InterviewAppointmentManager surrogateId={surrogate.id} stageId={surrogate.stage_id} compact />
+                        : undefined
+                }
                 onSubmit={changeStatus}
                 isPending={isChangeStatusPending}
                 deliveryFieldsEnabled

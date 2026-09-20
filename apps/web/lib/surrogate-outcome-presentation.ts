@@ -1,11 +1,11 @@
 import type { LucideIcon } from "lucide-react"
 import { AlertTriangleIcon, CalendarClockIcon, CheckCircleIcon, ClockIcon, MinusIcon } from "lucide-react"
 
-import type { ContactOutcome, InterviewOutcome } from "@/lib/api/surrogates"
+import type { ContactOutcome } from "@/lib/api/surrogates"
 
 type OutcomeTone = "success" | "follow_up" | "failed" | "neutral" | "upcoming"
 export type SurrogateOutcomeKind = "contact" | "interview"
-type InterviewPresentationOutcome = InterviewOutcome | "upcoming"
+type InterviewPresentationOutcome = "completed" | "no_show" | "rescheduled" | "cancelled" | "upcoming"
 
 type OutcomeDefinition<T extends string> = {
     label: string
@@ -90,7 +90,7 @@ export function getContactOutcomePresentation(
 }
 
 export function getInterviewOutcomePresentation(
-    outcome: InterviewOutcome | string | null | undefined,
+    outcome: string | null | undefined,
 ): OutcomePresentation<InterviewPresentationOutcome> | null {
     if (!outcome || !(outcome in INTERVIEW_OUTCOMES)) {
         return null

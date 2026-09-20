@@ -2823,6 +2823,86 @@
       "422"
     ]
   },
+  "/platform/cli/login/approve": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/cli/login/exchange": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/cli/login/start": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/platform/cli/logout": {
+    "POST": [
+      "204"
+    ]
+  },
+  "/platform/cli/orgs": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/cli/templates/email/preview": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/cli/templates/{kind}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/cli/templates/{kind}/by-id/{template_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/cli/templates/{kind}/validate": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/cli/templates/{kind}/{key}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/cli/templates/{kind}/{key}/apply": {
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/cli/tokens": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/platform/cli/tokens/{token_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ]
+  },
+  "/platform/cli/whoami": {
+    "GET": [
+      "200"
+    ]
+  },
   "/platform/email/branding": {
     "GET": [
       "200"
@@ -3922,9 +4002,13 @@
       "422"
     ]
   },
-  "/surrogates/{surrogate_id}/interview-outcomes": {
+  "/surrogates/{surrogate_id}/interview-appointment": {
+    "GET": [
+      "200",
+      "422"
+    ],
     "POST": [
-      "201",
+      "200",
       "422"
     ]
   },

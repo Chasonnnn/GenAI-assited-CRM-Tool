@@ -57,6 +57,7 @@ SURROGATE_DEFAULT_COLORS = {
     "contacted": "#06B6D4",  # Cyan
     "pre_qualified": "#10B981",  # Green
     "interview_scheduled": "#A855F7",  # Purple
+    "reschedule_needed": "#FDE68A",  # Pale yellow
     "application_submitted": "#8B5CF6",  # Violet
     "pending_docusign": "#F59E0B",  # Amber
     "under_review": "#F59E0B",  # Amber
@@ -127,6 +128,7 @@ SURROGATE_STAGE_TYPE_MAP = {
     "contacted": "intake",
     "pre_qualified": "intake",
     "interview_scheduled": "intake",
+    "reschedule_needed": "intake",
     "application_submitted": "intake",
     "pending_docusign": "intake",
     "under_review": "intake",
@@ -343,6 +345,7 @@ DEFAULT_STAGE_ORDER_BY_ENTITY = {
         "pre_qualified",
         "application_submitted",
         "interview_scheduled",
+        "reschedule_needed",
         "pending_docusign",
         "under_review",
         "approved",

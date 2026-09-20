@@ -15,6 +15,7 @@ import {
 } from "./context"
 import { HeaderActions } from "./HeaderActions"
 import { Dialogs } from "./dialogs"
+import { AppointmentHeaderBadge } from "@/components/surrogates/InterviewAppointmentManager"
 
 // ============================================================================
 // Main Layout Component
@@ -76,7 +77,6 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
                 statusLabel={statusLabel}
                 statusColor={statusColor}
                 latestContactOutcome={surrogate.latest_contact_outcome}
-                latestInterviewOutcome={surrogate.latest_interview_outcome}
                 pausedFromLabel={
                     surrogate.paused_from_stage_id
                         ? surrogate.paused_from_stage_label ?? pausedFromStage?.label ?? null
@@ -85,6 +85,7 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
                 isArchived={surrogate.is_archived}
                 onBack={navigateToList}
             >
+                <AppointmentHeaderBadge surrogateId={surrogate.id} />
                 <HeaderActions />
             </SurrogateDetailHeader>
 

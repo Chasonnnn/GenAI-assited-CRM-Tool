@@ -911,9 +911,6 @@ function useIntelligentSuggestionsController() {
   }
 
   const describeRule = (rule: IntelligentSuggestionRule) => {
-    if (rule.rule_kind === "meeting_outcome_missing") {
-      return `Passed scheduled meeting ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"} but no outcome logged`
-    }
     if (rule.template_key === "preapproval_stuck") {
       return `No updates in intake pre-approval stages for ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"}`
     }
@@ -921,9 +918,6 @@ function useIntelligentSuggestionsController() {
   }
 
   const getRuleStageLabel = (rule: IntelligentSuggestionRule) => {
-    if (rule.rule_kind === "meeting_outcome_missing") {
-      return "All Stages Applied"
-    }
     if (rule.template_key === "preapproval_stuck") {
       return "Intake Pre-approval Stages"
     }

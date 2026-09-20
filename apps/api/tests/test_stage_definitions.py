@@ -20,6 +20,16 @@ def test_application_submitted_before_interview_scheduled() -> None:
     )
 
 
+def test_reschedule_needed_immediately_follows_interview_scheduled() -> None:
+    interview_index = DEFAULT_STAGE_ORDER.index("interview_scheduled")
+    assert DEFAULT_STAGE_ORDER[interview_index + 1] == "reschedule_needed"
+
+    stage_defs = {stage["stage_key"]: stage for stage in get_default_stage_defs()}
+    assert stage_defs["interview_scheduled"]["color"] == "#A855F7"
+    assert stage_defs["reschedule_needed"]["color"] == "#FDE68A"
+    assert stage_defs["reschedule_needed"]["stage_type"] == "intake"
+
+
 def test_default_stage_defs_follow_default_order() -> None:
     stage_defs = get_default_stage_defs()
     assert [stage["slug"] for stage in stage_defs] == DEFAULT_STAGE_ORDER
@@ -49,6 +59,7 @@ def test_default_stage_defs_match_recommended_platform_labels() -> None:
         ("pre_qualified", "Pre-Qualified"),
         ("application_submitted", "Application Submitted"),
         ("interview_scheduled", "Interview Scheduled"),
+        ("reschedule_needed", "Reschedule Needed"),
         ("pending_docusign", "Pending-DocuSign"),
         ("under_review", "Under Review"),
         ("approved", "Approved"),
@@ -96,6 +107,14 @@ def test_new_surrogate_platform_stages_use_expected_default_semantics() -> None:
     assert contacted["analytics_bucket"] == "contacted"
     assert contacted["suggestion_profile_key"] == "contacted_followup"
 
+    reschedule_needed = default_stage_semantics("reschedule_needed", "intake")
+    assert reschedule_needed["capabilities"]["counts_as_contacted"] is True
+    assert reschedule_needed["capabilities"]["eligible_for_matching"] is False
+    assert reschedule_needed["capabilities"]["tracks_interview_outcome"] is False
+    assert reschedule_needed["terminal_outcome"] == "none"
+    assert reschedule_needed["integration_bucket"] == "none"
+    assert reschedule_needed["suggestion_profile_key"] is None
+
     pending_docusign = default_stage_semantics("pending_docusign", "intake")
     assert pending_docusign["capabilities"]["counts_as_contacted"] is True
     assert pending_docusign["capabilities"]["eligible_for_matching"] is False
@@ -138,6 +157,9 @@ def test_default_surrogate_journey_mappings_cover_new_platform_stages_conservati
     }
 
     assert "pending_docusign" in milestones["screening_interviews"]
+    assert all(
+        "reschedule_needed" not in mapped_stage_keys for mapped_stage_keys in milestones.values()
+    )
     assert "life_insurance_application_started" in milestones["ongoing_care"]
     assert "pbo_process_started" in milestones["ongoing_care"]
     assert all("cold_leads" not in mapped_stage_keys for mapped_stage_keys in milestones.values())

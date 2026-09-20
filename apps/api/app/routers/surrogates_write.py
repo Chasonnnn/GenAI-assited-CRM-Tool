@@ -21,8 +21,6 @@ from app.schemas.surrogate import (
     BulkAssign,
     BulkStageChange,
     BulkStageChangeResult,
-    InterviewOutcomeCreate,
-    SurrogateActivityRead,
     SurrogateAssign,
     SurrogateCreate,
     SurrogateRead,
@@ -344,47 +342,6 @@ def reveal_sensitive_info(
         ssn=surrogate.ssn,
         partner_ssn=surrogate.partner_ssn,
     )
-
-
-@router.post(
-    "/{surrogate_id:uuid}/interview-outcomes",
-    response_model=SurrogateActivityRead,
-    status_code=201,
-    dependencies=[Depends(require_csrf_header)],
-)
-def log_interview_outcome(
-    surrogate_id: UUID,
-    data: InterviewOutcomeCreate,
-    session: Annotated[UserSession, "fastapi_param"] = Depends(
-        require_permission(POLICIES["surrogates"].actions["edit"])
-    ),
-    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-):
-    """Log a structured interview outcome for a surrogate."""
-    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
-    if not surrogate:
-        raise HTTPException(status_code=404, detail="Surrogate not found")
-
-    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
-
-    try:
-        item, _ = surrogate_service.log_interview_outcome(
-            db=db,
-            surrogate=surrogate,
-            data=data,
-            user=session,
-        )
-        db.commit()
-        return SurrogateActivityRead(
-            id=item["id"],
-            activity_type=item["activity_type"],
-            actor_user_id=item["actor_user_id"],
-            actor_name=item["actor_name"],
-            details=item["details"],
-            created_at=item["created_at"],
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.patch(

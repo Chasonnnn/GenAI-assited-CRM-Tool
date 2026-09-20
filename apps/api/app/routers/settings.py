@@ -151,8 +151,6 @@ class IntelligentSuggestionSettingsRead(BaseModel):
     enabled: bool
     new_unread_enabled: bool
     new_unread_business_days: int
-    meeting_outcome_enabled: bool
-    meeting_outcome_business_days: int
     stuck_enabled: bool
     stuck_business_days: int
     daily_digest_enabled: bool
@@ -163,8 +161,6 @@ class IntelligentSuggestionSettingsUpdate(BaseModel):
     enabled: bool | None = None
     new_unread_enabled: bool | None = None
     new_unread_business_days: int | None = Field(None, ge=1, le=30)
-    meeting_outcome_enabled: bool | None = None
-    meeting_outcome_business_days: int | None = Field(None, ge=1, le=30)
     stuck_enabled: bool | None = None
     stuck_business_days: int | None = Field(None, ge=1, le=60)
     daily_digest_enabled: bool | None = None
