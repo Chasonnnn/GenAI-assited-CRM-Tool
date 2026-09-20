@@ -418,6 +418,19 @@ async def test_platform_workflow_templates_publish_targets(authed_client, db, te
         },
     )
     assert publish_resp.status_code == 200
+    published = publish_resp.json()
+    assert published["draft"]["subject_type"] == "surrogate"
+    assert published["published"]["subject_type"] == "surrogate"
+
+    platform_get = await authed_client.get(f"/platform/templates/workflows/{template_id}")
+    assert platform_get.status_code == 200
+    assert platform_get.json()["draft"]["subject_type"] == "surrogate"
+    assert platform_get.json()["published"]["subject_type"] == "surrogate"
+
+    platform_list = await authed_client.get("/platform/templates/workflows")
+    assert platform_list.status_code == 200
+    platform_listed = next(item for item in platform_list.json() if item["id"] == template_id)
+    assert platform_listed["draft"]["subject_type"] == "surrogate"
 
     list_resp = await authed_client.get("/templates")
     assert list_resp.status_code == 200
@@ -493,6 +506,19 @@ async def test_platform_workflow_template_donor_subject_publish_gate(
         },
     )
     assert publish_resp.status_code == 200, publish_resp.text
+    published = publish_resp.json()
+    assert published["draft"]["subject_type"] == "egg_donor"
+    assert published["published"]["subject_type"] == "egg_donor"
+
+    platform_get = await authed_client.get(f"/platform/templates/workflows/{template_id}")
+    assert platform_get.status_code == 200
+    assert platform_get.json()["draft"]["subject_type"] == "egg_donor"
+    assert platform_get.json()["published"]["subject_type"] == "egg_donor"
+
+    platform_list = await authed_client.get("/platform/templates/workflows")
+    assert platform_list.status_code == 200
+    platform_listed = next(item for item in platform_list.json() if item["id"] == template_id)
+    assert platform_listed["draft"]["subject_type"] == "egg_donor"
 
     list_resp = await authed_client.get("/templates")
     assert list_resp.status_code == 200
@@ -537,6 +563,110 @@ async def test_platform_workflow_template_donor_subject_publish_gate(
             publishing=True,
             portable=False,
         )
+
+
+@pytest.mark.parametrize(
+    ("draft_overrides", "error"),
+    [
+        (
+            {
+                "conditions": [{"field": "age", "operator": "greater_than", "value": 21}],
+                "actions": [{"action_type": "add_note", "content": "Review donor"}],
+            },
+            "Condition fields do not support egg_donor",
+        ),
+        (
+            {
+                "conditions": [],
+                "actions": [
+                    {
+                        "action_type": "send_message",
+                        "purpose": "operational",
+                        "message_template_version_id": str(uuid.uuid4()),
+                    }
+                ],
+            },
+            "Action send_message does not support donor workflows",
+        ),
+        (
+            {
+                "conditions": [],
+                "actions": [{"action_type": "send_email"}],
+            },
+            "Donor email actions require review approval",
+        ),
+    ],
+)
+def test_platform_workflow_template_rejects_donor_incompatible_content(
+    draft_overrides, error
+):
+    from app.services import platform_template_write_service as template_writes
+
+    draft = {
+        "name": "Donor review workflow",
+        "subject_type": "egg_donor",
+        "trigger_type": "donor_created",
+        "trigger_config": {},
+        "condition_logic": "AND",
+        **draft_overrides,
+    }
+
+    with pytest.raises(template_writes.TemplateInputError, match=error):
+        template_writes.validate_template("workflow", draft, publishing=True, portable=False)
+
+
+@pytest.mark.parametrize(
+    "trigger_config",
+    [
+        {"form_name": "Application"},
+        {"form_id": str(uuid.uuid4()), "lead_kind": "surrogate"},
+    ],
+)
+def test_platform_workflow_template_treats_unbound_form_as_donor_context(trigger_config):
+    from app.services import platform_template_write_service as template_writes
+
+    with pytest.raises(
+        template_writes.TemplateInputError,
+        match="Action send_message does not support donor workflows",
+    ):
+        template_writes.validate_template(
+            "workflow",
+            {
+                "name": "Form follow-up",
+                "subject_type": "form_submission",
+                "trigger_type": "form_submitted",
+                "trigger_config": trigger_config,
+                "actions": [
+                    {
+                        "action_type": "send_message",
+                        "purpose": "operational",
+                        "message_template_version_id": str(uuid.uuid4()),
+                    }
+                ],
+            },
+            publishing=True,
+            portable=False,
+        )
+
+
+def test_platform_workflow_template_allows_reviewed_donor_email_binding():
+    from app.services import platform_template_write_service as template_writes
+
+    result = template_writes.validate_template(
+        "workflow",
+        {
+            "name": "Reviewed donor email",
+            "subject_type": "egg_donor",
+            "trigger_type": "donor_created",
+            "actions": [{"action_type": "send_email", "requires_approval": True}],
+        },
+        publishing=True,
+        portable=True,
+    )
+
+    assert result["bindings"] == [
+        "actions.0.template_id: select an organization email template"
+    ]
 
 
 @pytest.mark.asyncio
