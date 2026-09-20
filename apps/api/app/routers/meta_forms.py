@@ -254,6 +254,7 @@ def preview_meta_form_mapping(
         has_live_leads=preview["has_live_leads"],
         available_fields=preview["available_fields"],
         ai_available=preview["ai_available"],
+        unsupported_mapped_fields=preview["unsupported_mapped_fields"],
         mapping_rules=[ColumnMappingItem(**m) for m in (form.mapping_rules or [])]
         if form.mapping_rules
         else None,

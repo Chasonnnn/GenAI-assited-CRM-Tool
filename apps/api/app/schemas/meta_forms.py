@@ -50,6 +50,7 @@ class MetaFormMappingPreviewResponse(BaseModel):
     has_live_leads: bool
     available_fields: list[str]
     ai_available: bool
+    unsupported_mapped_fields: list[str] = Field(default_factory=list)
     mapping_rules: list[ColumnMappingItem] | None
     unknown_column_behavior: Literal["ignore", "metadata", "warn"] = "metadata"
 

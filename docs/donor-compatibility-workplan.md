@@ -33,9 +33,11 @@ separate follow-up phase.
 - [x] fix: Zapier test-lead response retains `donor_id` (`routers/zapier.py`); web
       `useZapierTestLead` now also invalidates donor list/detail caches on donor
       conversion (type already declared `donor_id`)
-- [ ] fix: donor Meta source mapping is unambiguous — remove `source` from donor mapping
-      fields; flag stored donor mappings targeting `source` as repair-required; conversion
-      keeps canonical `"Meta"`; no backfill of existing record sources
+- [x] fix: donor Meta source mapping is unambiguous — removed `source` from
+      `DONOR_META_MAPPING_FIELDS`; save now rejects donor mappings targeting it;
+      preview returns `unsupported_mapped_fields` and the mapping page shows a
+      destructive "Mapping repair required" alert; conversion keeps canonical
+      `"Meta"`; stored legacy mappings are surfaced, never rewritten or backfilled
 - [ ] feat: `WorkflowTemplate.subject_type` column + migration + backfill
       (donor triggers → NULL/repair-required, never guessed; form/intake/match/appointment
       triggers → legacy subject mapping; others → surrogate)
@@ -134,3 +136,4 @@ retry, permission denied).
 |------|--------|----------|--------|
 | 2026-09-20 | (this commit) email preview full-audience counts | `uv run -m pytest tests/test_campaigns.py -q` (33 passed), `uv run -m pytest tests/test_donor_campaigns.py -q` (9 passed), `ruff check` clean | pass |
 | 2026-09-20 | (this commit) Zapier test-lead donor_id | `uv run -m pytest tests/test_zapier_webhooks.py -q` (21 passed; new donor regression failed before fix with KeyError donor_id), `pnpm run typecheck` clean, `vitest run tests/integrations-page.test.tsx` (44 passed) | pass |
+| 2026-09-20 | (this commit) donor Meta source mapping repair | `uv run -m pytest tests/test_meta_donor_routing.py tests/test_meta_donor_form_permissions.py tests/test_meta_form_mapping.py tests/test_meta_lead_kind_snapshot.py tests/test_meta_forms_delete.py tests/test_meta_forms_performance_status.py -q` (37 passed), `ruff check` clean, `pnpm run typecheck` clean, `vitest run tests/meta-form-mapping-page.test.tsx` (8 passed) | pass |
