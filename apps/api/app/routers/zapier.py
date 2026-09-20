@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
@@ -46,8 +47,8 @@ class ZapierSettingsResponse(BaseModel):
     outbound_secret_configured: bool
     send_hashed_pii: bool
     event_mapping: list[ZapierEventMappingItem]
-    donor_outbound_enabled: bool
-    donor_event_mapping: list[ZapierDonorEventMappingItem]
+    donor_outbound_enabled: bool | None = None
+    donor_event_mapping: list[ZapierDonorEventMappingItem] | None = None
 
 
 class RotateSecretResponse(BaseModel):
@@ -205,13 +206,49 @@ def _require_donor_test_lead_access(
 ) -> None:
     if lead_kind not in workflow_access.DONOR_SUBJECT_TYPES:
         return
-    if not workflow_access.can_view_subject(db, session, lead_kind):
+    _require_donor_view(db, session)
+    _require_donor_edit(db, session)
+
+
+def _can_view_donors(db: Session, session: UserSession) -> bool:
+    return workflow_access.can_view_subject(db, session, "donor")
+
+
+def _require_donor_view(db: Session, session: UserSession) -> None:
+    if not _can_view_donors(db, session):
         raise HTTPException(status_code=403, detail="Missing permission: view_donors")
-    if not workflow_access.can_edit_subject(db, session, lead_kind):
+
+
+def _require_donor_edit(db: Session, session: UserSession) -> None:
+    if not workflow_access.can_edit_subject(db, session, "donor"):
         raise HTTPException(status_code=403, detail="Missing permission: edit_donors")
 
 
-@router.get("/settings", response_model=ZapierSettingsResponse)
+def _shared_outbound_settings_changed(data: ZapierOutboundSettingsUpdate, settings) -> bool:
+    if data.outbound_webhook_url is not None:
+        requested_url = data.outbound_webhook_url.strip() or None
+        if requested_url != settings.outbound_webhook_url:
+            return True
+    if data.outbound_webhook_secret is not None:
+        current_secret = zapier_settings_service.decrypt_webhook_secret(
+            settings.outbound_webhook_secret_encrypted
+        )
+        if not secrets.compare_digest(
+            data.outbound_webhook_secret.encode("utf-8"),
+            current_secret.encode("utf-8"),
+        ):
+            return True
+    return (
+        data.send_hashed_pii is not None
+        and data.send_hashed_pii != settings.outbound_send_hashed_pii
+    )
+
+
+@router.get(
+    "/settings",
+    response_model=ZapierSettingsResponse,
+    response_model_exclude_unset=True,
+)
 def get_settings(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(
@@ -220,7 +257,13 @@ def get_settings(
 ):
     settings = zapier_settings_service.get_or_create_settings(db, session.org_id)
     inbound_webhooks = zapier_settings_service.list_inbound_webhooks(db, session.org_id)
-    return _serialize_settings(db, session.org_id, settings, inbound_webhooks)
+    return _serialize_settings(
+        db,
+        session.org_id,
+        settings,
+        inbound_webhooks,
+        include_donor_settings=_can_view_donors(db, session),
+    )
 
 
 @router.post("/settings/rotate-secret", response_model=RotateSecretResponse)
@@ -337,7 +380,11 @@ def delete_inbound_webhook(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.post("/settings/outbound", response_model=ZapierSettingsResponse)
+@router.post(
+    "/settings/outbound",
+    response_model=ZapierSettingsResponse,
+    response_model_exclude_unset=True,
+)
 def update_outbound_settings(
     data: ZapierOutboundSettingsUpdate,
     _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
@@ -346,6 +393,18 @@ def update_outbound_settings(
         require_permission(P.INTEGRATIONS_MANAGE)
     ),
 ):
+    current_settings = zapier_settings_service.get_or_create_settings(db, session.org_id)
+    donor_settings_changed = (
+        data.donor_outbound_enabled is not None or data.donor_event_mapping is not None
+    )
+    donor_delivery_changed = (
+        current_settings.donor_outbound_enabled
+        and _shared_outbound_settings_changed(data, current_settings)
+    )
+    if donor_settings_changed or donor_delivery_changed:
+        _require_donor_view(db, session)
+        _require_donor_edit(db, session)
+
     try:
         settings = zapier_settings_service.update_outbound_settings(
             db,
@@ -365,7 +424,13 @@ def update_outbound_settings(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     inbound_webhooks = zapier_settings_service.list_inbound_webhooks(db, session.org_id)
-    return _serialize_settings(db, session.org_id, settings, inbound_webhooks)
+    return _serialize_settings(
+        db,
+        session.org_id,
+        settings,
+        inbound_webhooks,
+        include_donor_settings=_can_view_donors(db, session),
+    )
 
 
 @router.post("/test-lead", response_model=ZapierTestLeadResponse)
@@ -547,6 +612,7 @@ def list_outbound_events(
         status=status,
         limit=limit,
         offset=offset,
+        include_donor=_can_view_donors(db, session),
     )
     return ZapierOutboundEventsResponse(
         items=[_serialize_outbound_event(item) for item in items],
@@ -567,6 +633,7 @@ def get_outbound_events_summary(
             db,
             org_id=session.org_id,
             window_hours=window_hours,
+            include_donor=_can_view_donors(db, session),
         )
     )
 
@@ -581,6 +648,13 @@ def retry_outbound_event(
         require_permission(P.INTEGRATIONS_MANAGE)
     ),
 ):
+    event = zapier_monitor_service.get_event(db, org_id=session.org_id, event_id=event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if zapier_monitor_service.is_donor_event(event):
+        _require_donor_view(db, session)
+        _require_donor_edit(db, session)
+
     try:
         event = zapier_monitor_service.retry_failed_event(
             db,
@@ -599,6 +673,8 @@ def _serialize_settings(
     organization_id: UUID,
     settings,
     inbound_webhooks: list,
+    *,
+    include_donor_settings: bool,
 ) -> ZapierSettingsResponse:
     mapping = zapier_settings_service.normalize_event_mapping(
         settings.outbound_event_mapping,
@@ -618,21 +694,27 @@ def _serialize_settings(
     ]
     primary = inbound_webhooks[0] if inbound_webhooks else None
     webhook_id = primary.webhook_id if primary else settings.webhook_id
-    return ZapierSettingsResponse(
-        webhook_url=zapier_settings_service.get_webhook_url(webhook_id),
-        is_active=primary.is_active if primary else settings.is_active,
-        secret_configured=bool(primary.webhook_secret_encrypted)
-        if primary
-        else bool(settings.webhook_secret_encrypted),
-        inbound_webhooks=inbound_payload,
-        outbound_webhook_url=settings.outbound_webhook_url,
-        outbound_enabled=bool(settings.outbound_enabled),
-        outbound_secret_configured=bool(settings.outbound_webhook_secret_encrypted),
-        send_hashed_pii=bool(settings.outbound_send_hashed_pii),
-        event_mapping=mapping,
-        donor_outbound_enabled=bool(settings.donor_outbound_enabled),
-        donor_event_mapping=list(settings.donor_outbound_event_mapping or []),
-    )
+    response_data = {
+        "webhook_url": zapier_settings_service.get_webhook_url(webhook_id),
+        "is_active": primary.is_active if primary else settings.is_active,
+        "secret_configured": (
+            bool(primary.webhook_secret_encrypted)
+            if primary
+            else bool(settings.webhook_secret_encrypted)
+        ),
+        "inbound_webhooks": inbound_payload,
+        "outbound_webhook_url": settings.outbound_webhook_url,
+        "outbound_enabled": bool(settings.outbound_enabled),
+        "outbound_secret_configured": bool(settings.outbound_webhook_secret_encrypted),
+        "send_hashed_pii": bool(settings.outbound_send_hashed_pii),
+        "event_mapping": mapping,
+    }
+    if include_donor_settings:
+        response_data.update(
+            donor_outbound_enabled=bool(settings.donor_outbound_enabled),
+            donor_event_mapping=list(settings.donor_outbound_event_mapping or []),
+        )
+    return ZapierSettingsResponse(**response_data)
 
 
 def _serialize_outbound_event(event) -> ZapierOutboundEventResponse:

@@ -7,7 +7,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from sqlalchemy.orm import Query, Session
 
 from app.db.enums import JobStatus
 from app.db.models import ZapierOutboundEvent
@@ -315,8 +316,10 @@ def list_events(
     status: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    include_donor: bool = True,
 ) -> tuple[list[ZapierOutboundEvent], int]:
     query = db.query(ZapierOutboundEvent).filter(ZapierOutboundEvent.organization_id == org_id)
+    query = _filter_donor_events(query, include_donor=include_donor)
     if status:
         query = query.filter(ZapierOutboundEvent.status == status)
     effective_offset = max(0, offset)
@@ -335,18 +338,16 @@ def get_summary(
     *,
     org_id: UUID,
     window_hours: int = DEFAULT_WINDOW_HOURS,
+    include_donor: bool = True,
 ) -> dict[str, Any]:
     window_hours = max(1, min(window_hours, 24 * 30))
     cutoff = _now_utc() - timedelta(hours=window_hours)
-    items = (
-        db.query(ZapierOutboundEvent)
-        .filter(
-            ZapierOutboundEvent.organization_id == org_id,
-            ZapierOutboundEvent.created_at >= cutoff,
-            ZapierOutboundEvent.source != "test",
-        )
-        .all()
+    query = db.query(ZapierOutboundEvent).filter(
+        ZapierOutboundEvent.organization_id == org_id,
+        ZapierOutboundEvent.created_at >= cutoff,
+        ZapierOutboundEvent.source != "test",
     )
+    items = _filter_donor_events(query, include_donor=include_donor).all()
 
     counts = {"queued": 0, "delivered": 0, "failed": 0, "skipped": 0}
     actionable_skipped = 0
@@ -391,6 +392,43 @@ def get_summary(
         "skipped_rate_alert": skipped_rate_alert,
         "warning_messages": warning_messages,
     }
+
+
+def _donor_event_filter():
+    return or_(
+        ZapierOutboundEvent.donor_id.is_not(None),
+        ZapierOutboundEvent.donor_status_history_id.is_not(None),
+        ZapierOutboundEvent.donor_type.is_not(None),
+    )
+
+
+def _filter_donor_events(query: Query, *, include_donor: bool) -> Query:
+    if include_donor:
+        return query
+    return query.filter(~_donor_event_filter())
+
+
+def is_donor_event(event: ZapierOutboundEvent) -> bool:
+    return any(
+        value is not None
+        for value in (event.donor_id, event.donor_status_history_id, event.donor_type)
+    )
+
+
+def get_event(
+    db: Session,
+    *,
+    org_id: UUID,
+    event_id: UUID,
+) -> ZapierOutboundEvent | None:
+    return (
+        db.query(ZapierOutboundEvent)
+        .filter(
+            ZapierOutboundEvent.id == event_id,
+            ZapierOutboundEvent.organization_id == org_id,
+        )
+        .first()
+    )
 
 
 def retry_failed_event(
