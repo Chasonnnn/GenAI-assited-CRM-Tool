@@ -30,6 +30,7 @@ from app.jobs.handlers import (
     workflows,
     zapier,
 )
+from app.services import ai_email_service
 
 JobHandler = Callable[[object, object], Awaitable[None]]
 
@@ -51,6 +52,7 @@ JOB_HANDLERS: Mapping[str, JobHandler] = {
     JobType.STORAGE_DELETE.value: storage.process_storage_delete,
     JobType.CAMPAIGN_SEND.value: campaigns.process_campaign_send,
     JobType.AI_CHAT.value: ai.process_ai_chat,
+    JobType.AI_SEND_EMAIL.value: ai_email_service.process_email,
     JobType.CONTACT_REMINDER_CHECK.value: contact_reminders.process_contact_reminder_check,
     JobType.INTERVIEW_TRANSCRIPTION.value: interviews.process_interview_transcription,
     JobType.ATTACHMENT_SCAN.value: attachments.process_attachment_scan,

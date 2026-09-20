@@ -50,7 +50,7 @@ async def test_global_chat_performance_requires_view_reports(db, test_org, test_
         return {"data": []}
 
     monkeypatch.setattr(
-        "app.services.analytics_service.get_cached_performance_by_user",
+        "app.services.analytics_surrogate_service.get_cached_performance_by_user",
         fake_get_cached_performance_by_user,
     )
 

@@ -402,45 +402,6 @@ def get_cached_surrogates_by_status(
     )
 
 
-def get_status_trend(
-    db: Session,
-    organization_id: uuid.UUID,
-    start_date: date | None = None,
-    end_date: date | None = None,
-) -> list[dict[str, Any]]:
-    """Get status distribution over time (using status history)."""
-    if not end_date:
-        end_date = date.today()
-    if not start_date:
-        start_date = end_date - timedelta(days=30)
-
-    query = db.query(
-        func.date(SurrogateStatusHistory.changed_at).label("date"),
-        func.coalesce(SurrogateStatusHistory.to_label_snapshot, "unknown").label("status_label"),
-        func.count(SurrogateStatusHistory.id).label("count"),
-    ).filter(SurrogateStatusHistory.organization_id == organization_id)
-    query = _apply_date_range_filters(
-        query, SurrogateStatusHistory.changed_at, start_date, end_date
-    )
-    results = (
-        query.group_by(
-            func.date(SurrogateStatusHistory.changed_at),
-            func.coalesce(SurrogateStatusHistory.to_label_snapshot, "unknown"),
-        )
-        .order_by(func.date(SurrogateStatusHistory.changed_at))
-        .all()
-    )
-
-    data_by_date: dict[str, dict[str, int]] = {}
-    for r in results:
-        date_str = r.date.isoformat()
-        if date_str not in data_by_date:
-            data_by_date[date_str] = {}
-        data_by_date[date_str][r.status_label] = r.count
-
-    return [{"date": d, **statuses} for d, statuses in sorted(data_by_date.items())]
-
-
 def get_surrogates_by_state(
     db: Session,
     organization_id: uuid.UUID,
@@ -550,45 +511,6 @@ def get_cached_surrogates_by_source(
         range_start=range_start,
         range_end=range_end,
     )
-
-
-def get_surrogates_by_user(
-    db: Session,
-    organization_id: uuid.UUID,
-    start_date: date | None = None,
-    end_date: date | None = None,
-) -> list[dict[str, Any]]:
-    """Get surrogate count by owner (user-owned surrogates only)."""
-    query = (
-        db.query(
-            Surrogate.owner_id,
-            User.display_name,
-            func.count(Surrogate.id).label("count"),
-        )
-        .outerjoin(User, Surrogate.owner_id == User.id)
-        .filter(
-            Surrogate.organization_id == organization_id,
-            Surrogate.owner_type == OwnerType.USER.value,
-            Surrogate.is_archived.is_(False),
-        )
-    )
-
-    query = _apply_date_range_filters(query, Surrogate.created_at, start_date, end_date)
-
-    results = (
-        query.group_by(Surrogate.owner_id, User.display_name)
-        .order_by(func.count(Surrogate.id).desc())
-        .all()
-    )
-
-    return [
-        {
-            "user_id": str(r.owner_id) if r.owner_id else None,
-            "user_name": r.display_name or "Unassigned",
-            "count": r.count,
-        }
-        for r in results
-    ]
 
 
 def get_surrogates_by_assignee(
@@ -895,24 +817,6 @@ def get_cached_summary_kpis(
 
 
 PERFORMANCE_STAGE_SLUGS: list[str] = []
-
-
-def get_performance_stage_ids(
-    db: Session,
-    pipeline_id: uuid.UUID,
-) -> dict[str, uuid.UUID | None]:
-    """Resolve performance stage keys to IDs for a pipeline."""
-    from app.services import pipeline_semantics_service
-
-    snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline_id)
-    performance_stage_keys = snapshot.feature_config.analytics.performance_stage_keys or [
-        stage.stage_key for stage in snapshot.stages if stage.is_active
-    ]
-    stage_ids: dict[str, uuid.UUID | None] = {}
-    for stage_key in performance_stage_keys:
-        stage = snapshot.stage_by_key.get(stage_key)
-        stage_ids[stage_key] = stage.id if stage and stage.is_active else None
-    return stage_ids
 
 
 def _load_active_users(

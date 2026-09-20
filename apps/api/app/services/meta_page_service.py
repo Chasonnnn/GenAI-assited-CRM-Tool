@@ -58,20 +58,6 @@ def get_mapping_by_page_id(
     )
 
 
-def get_mapping_by_page_id_any_org(
-    db: Session,
-    page_id: str,
-) -> MetaPageMapping | None:
-    """Get mapping by page id without org scoping."""
-    return (
-        db.query(MetaPageMapping)
-        .filter(
-            MetaPageMapping.page_id == page_id,
-        )
-        .first()
-    )
-
-
 def get_active_mapping_by_page_id(
     db: Session,
     page_id: str,
@@ -124,37 +110,6 @@ def create_mapping(
         db.commit()
         db.refresh(mapping)
     return mapping
-
-
-def update_mapping(
-    db: Session,
-    mapping: MetaPageMapping,
-    page_name: str | None = None,
-    access_token_encrypted: str | None = None,
-    token_expires_at: datetime | None = None,
-    is_active: bool | None = None,
-) -> MetaPageMapping:
-    """Update a meta page mapping."""
-    if page_name is not None:
-        mapping.page_name = page_name
-    if access_token_encrypted is not None:
-        mapping.access_token_encrypted = access_token_encrypted
-    if token_expires_at is not None:
-        mapping.token_expires_at = token_expires_at
-    if is_active is not None:
-        mapping.is_active = is_active
-        if is_active:
-            mapping.last_error = None
-
-    db.commit()
-    db.refresh(mapping)
-    return mapping
-
-
-def delete_mapping(db: Session, mapping: MetaPageMapping) -> None:
-    """Delete a meta page mapping."""
-    db.delete(mapping)
-    db.commit()
 
 
 def unlink_pages_by_connection(db: Session, connection_id: UUID) -> list[UUID]:

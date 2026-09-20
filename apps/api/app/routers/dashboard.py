@@ -163,7 +163,7 @@ def get_dashboard_donors_by_status(
     include_archived: Annotated[bool, Query()] = False,
 ) -> list[DonorStatusCount]:
     """Get subtype pipeline distribution for the dashboard card."""
-    from app.services import analytics_donor_service, analytics_service
+    from app.services import analytics_donor_service, analytics_shared
 
     if (
         owner_id
@@ -174,7 +174,7 @@ def get_dashboard_donors_by_status(
 
     start = end = None
     if from_date or to_date:
-        start, end = analytics_service.parse_date_range(
+        start, end = analytics_shared.parse_date_range(
             from_date,
             to_date,
             inclusive_date_end=True,

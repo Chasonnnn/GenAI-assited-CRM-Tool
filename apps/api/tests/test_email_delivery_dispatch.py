@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 from pydantic import SecretStr
+from sqlalchemy import event
 
 from app.core.config import settings
 from app.db.enums import (
@@ -48,7 +49,10 @@ from app.services.email_delivery_service import (
 from app.services.email_provider_admission_service import (
     reserve_provider_request_slot,
 )
-from app.services.email_service import EmailAttachmentValidationError
+from app.services.email_service import (
+    EmailAttachmentValidationError,
+    load_email_log_provider_attachments,
+)
 from app.services.resend_transport import ResendSendResult
 
 
@@ -842,6 +846,77 @@ async def test_dispatch_claim_fails_terminally_before_sending_partial_attachment
     assert "recipient@example.com" not in caplog.text
     db.expire_all()
     assert queued.email_log.status == EmailStatus.FAILED.value
+
+
+@pytest.mark.parametrize("count", [0, 1, 10])
+def test_load_provider_attachments_batches_reads_and_preserves_manifest_order(
+    count, db, test_org, monkeypatch
+):
+    contents = [f"document {index}".encode() for index in range(count)]
+    attachments = [
+        _attachment(
+            organization_id=test_org.id,
+            filename=f"guide-{index}.pdf",
+            size_bytes=len(content),
+            sha256=hashlib.sha256(content).hexdigest(),
+        )
+        for index, content in enumerate(contents)
+    ]
+    db.add_all(attachments)
+    db.flush()
+    bytes_by_key = {
+        attachment.storage_key: content
+        for attachment, content in zip(attachments, contents, strict=True)
+    }
+    monkeypatch.setattr(attachment_service, "load_file_bytes", bytes_by_key.__getitem__)
+    queued, _claim = _queue_and_claim(db, test_org, attachments=list(reversed(attachments)))
+    org_id, email_log_id = test_org.id, queued.email_log.id
+    db.expire_all()
+    statements = []
+
+    def collect_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
+        if statement.lstrip().lower().startswith("select"):
+            statements.append(statement)
+
+    event.listen(db.bind, "before_cursor_execute", collect_sql)
+    try:
+        result = load_email_log_provider_attachments(db, org_id, email_log_id)
+    finally:
+        event.remove(db.bind, "before_cursor_execute", collect_sql)
+
+    assert result == [
+        {
+            "filename": f"guide-{index}.pdf",
+            "content_type": "application/pdf",
+            "content_bytes": contents[index],
+        }
+        for index in reversed(range(count))
+    ]
+    # One manifest, one link set, and at most one attachment query, independent of count.
+    assert len(statements) == (3 if count else 2)
+
+
+@pytest.mark.parametrize("foreign_resource", ["email_log", "attachment"])
+def test_load_provider_attachments_rejects_foreign_organization(
+    foreign_resource, db, test_org, monkeypatch
+):
+    other_org = Organization(id=uuid4(), name="Other org", slug=f"other-{uuid4().hex}")
+    db.add(other_org)
+    attachment = _attachment(organization_id=test_org.id)
+    db.add(attachment)
+    db.flush()
+    queued, _claim = _queue_and_claim(db, test_org, attachments=[attachment])
+    if foreign_resource == "attachment":
+        attachment.organization_id = other_org.id
+        db.flush()
+
+    def unexpected_storage_read(_storage_key):
+        pytest.fail("Must not read attachment bytes across organizations")
+
+    monkeypatch.setattr(attachment_service, "load_file_bytes", unexpected_storage_read)
+    org_id = other_org.id if foreign_resource == "email_log" else test_org.id
+    with pytest.raises(EmailAttachmentValidationError, match="unavailable"):
+        load_email_log_provider_attachments(db, org_id, queued.email_log.id)
 
 
 @pytest.mark.asyncio

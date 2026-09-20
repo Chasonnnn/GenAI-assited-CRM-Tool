@@ -1,4 +1,4 @@
-"""Analytics service facade for Reports dashboard."""
+"""Compose analytics data for PDF reports."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ from app.db.models import Surrogate, Task
 from app.services import analytics_meta_service as _meta
 from app.services import analytics_shared as _shared
 from app.services import analytics_surrogate_service as _surrogate
-from app.services import analytics_usage_service as _usage
 
 
 def get_pdf_export_data(
@@ -164,81 +163,3 @@ def get_pdf_export_data(
         "performance_data": performance_data,
         "org_name": org_name,
     }
-
-
-_SHARED_EXPORTS = {
-    "DEFAULT_FUNNEL_STAGE_KEYS",
-    "_normalize_date_bounds",
-    "get_analytics_stage_configuration",
-    "get_funnel_stage_keys",
-    "parse_date_range",
-}
-_SURROGATE_EXPORTS = {
-    "get_cached_analytics_summary",
-    "get_cached_conversion_funnel",
-    "get_cached_performance_by_user",
-    "get_cached_summary_kpis",
-    "get_cached_surrogates_by_assignee",
-    "get_cached_surrogates_by_source",
-    "get_cached_surrogates_by_state",
-    "get_cached_surrogates_by_status",
-    "get_cached_surrogates_trend",
-    "get_analytics_summary",
-    "get_conversion_funnel",
-    "get_performance_by_user",
-    "get_performance_stage_ids",
-    "get_status_trend",
-    "get_summary_kpis",
-    "get_surrogates_by_assignee",
-    "get_surrogates_by_source",
-    "get_surrogates_by_state",
-    "get_surrogates_by_status",
-    "get_surrogates_by_user",
-    "get_surrogates_trend",
-}
-_META_EXPORTS = {
-    "get_cached_leads_by_ad",
-    "get_cached_campaigns",
-    "get_cached_funnel_with_filter",
-    "get_cached_leads_by_form",
-    "get_cached_meta_performance",
-    "get_cached_meta_platform_breakdown",
-    "get_cached_meta_spend_summary",
-    "get_cached_spend_by_breakdown",
-    "get_cached_spend_by_campaign",
-    "get_cached_spend_trend",
-    "get_cached_surrogates_by_state_with_filter",
-    "get_campaigns",
-    "get_funnel_with_filter",
-    "get_leads_by_form",
-    "get_leads_by_ad",
-    "get_meta_ad_accounts",
-    "get_meta_campaign_list",
-    "get_meta_performance",
-    "get_meta_platform_breakdown",
-    "get_meta_spend_summary",
-    "get_spend_by_breakdown",
-    "get_spend_by_campaign",
-    "get_spend_sync_status",
-    "get_spend_totals",
-    "get_spend_trend",
-    "get_surrogates_by_state_with_filter",
-}
-_USAGE_EXPORTS = {"get_activity_feed"}
-
-
-def __getattr__(name: str):
-    if name in _SHARED_EXPORTS:
-        return getattr(_shared, name)
-    if name in _SURROGATE_EXPORTS:
-        return getattr(_surrogate, name)
-    if name in _META_EXPORTS:
-        return getattr(_meta, name)
-    if name in _USAGE_EXPORTS:
-        return getattr(_usage, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-__all__ = sorted(_SHARED_EXPORTS | _SURROGATE_EXPORTS | _META_EXPORTS | _USAGE_EXPORTS) + [
-    "get_pdf_export_data"
-]

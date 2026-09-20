@@ -888,13 +888,3 @@ def send_cancelled(
 ) -> AppointmentEmailLog | None:
     """Send cancellation notification to client."""
     return send_appointment_email(db, appointment, AppointmentEmailType.CANCELLED, base_url)
-
-
-def send_reminder(
-    db: Session,
-    appointment: Appointment,
-    base_url: str = "",
-    hours_before: int = 24,
-) -> AppointmentEmailLog | None:
-    """Send/schedule reminder email to client."""
-    return schedule_reminder_email(db, appointment, base_url, hours_before)

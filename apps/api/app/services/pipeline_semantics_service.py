@@ -97,14 +97,6 @@ def get_first_active_stage_with_capability(
     return None
 
 
-def get_stage_integration_bucket(stage: PipelineStage | dict[str, Any] | None) -> str:
-    return get_stage_semantics(stage).integration_bucket
-
-
-def get_stage_terminal_outcome(stage: PipelineStage | dict[str, Any] | None) -> str:
-    return get_stage_semantics(stage).terminal_outcome
-
-
 def get_pipeline_semantics_snapshot(
     db: Session,
     pipeline_or_id: Pipeline | UUID,

@@ -199,7 +199,7 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
     )
 
 
-def _surrogate_to_list_item(surrogate, db: Session, last_activity_at=None) -> SurrogateListItem:
+def _surrogate_to_list_item(surrogate, last_activity_at=None) -> SurrogateListItem:
     """Convert Surrogate model to SurrogateListItem schema."""
     from datetime import date
 

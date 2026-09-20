@@ -7,7 +7,7 @@ from app.db.enums import NotificationType, OwnerType
 
 
 def test_workflow_send_notification_uses_workflow_notification_type(monkeypatch):
-    from app.services import notification_facade
+    from app.services import notification_service
     from app.services.workflow_engine_adapters import DefaultWorkflowDomainAdapter
 
     adapter = DefaultWorkflowDomainAdapter()
@@ -17,7 +17,7 @@ def test_workflow_send_notification_uses_workflow_notification_type(monkeypatch)
         captured["kwargs"] = kwargs
         return None
 
-    monkeypatch.setattr(notification_facade, "create_notification", fake_create_notification)
+    monkeypatch.setattr(notification_service, "create_notification", fake_create_notification)
 
     owner_id = uuid4()
     surrogate = SimpleNamespace(

@@ -1,6 +1,5 @@
 """Interview attachment service - link existing attachments to interviews."""
 
-from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -161,29 +160,6 @@ def list_interview_attachments(
 # =============================================================================
 # Transcription Status
 # =============================================================================
-
-
-def update_transcription_status(
-    db: Session,
-    link: InterviewAttachment,
-    status: str,
-    job_id: str | None = None,
-    error: str | None = None,
-) -> InterviewAttachment:
-    """
-    Update transcription status for an attachment.
-
-    Status: 'pending', 'processing', 'completed', 'failed'
-    """
-    link.transcription_status = status
-    link.transcription_job_id = job_id
-    link.transcription_error = error[:500] if error else None
-
-    if status == "completed":
-        link.transcription_completed_at = datetime.now(UTC)
-
-    db.flush()
-    return link
 
 
 def is_audio_video(content_type: str) -> bool:

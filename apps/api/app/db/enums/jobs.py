@@ -34,6 +34,7 @@ class JobType(str, Enum):
     STORAGE_DELETE = "storage_delete"
     CAMPAIGN_SEND = "campaign_send"  # Bulk email campaign execution
     AI_CHAT = "ai_chat"
+    AI_SEND_EMAIL = "ai_send_email"
     CONTACT_REMINDER_CHECK = "contact_reminder_check"  # Daily contact follow-up check
     INTERVIEW_TRANSCRIPTION = "interview_transcription"
     ATTACHMENT_SCAN = "attachment_scan"

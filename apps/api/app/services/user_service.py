@@ -116,20 +116,3 @@ def update_user_profile(
     db.commit()
     db.refresh(user)
     return user
-
-
-def update_user_signature(
-    db: Session,
-    user: User,
-    signature_linkedin: str | None = None,
-    signature_twitter: str | None = None,
-    signature_instagram: str | None = None,
-) -> User:
-    """Update a user's email signature social links."""
-    user.signature_linkedin = signature_linkedin
-    user.signature_twitter = signature_twitter
-    user.signature_instagram = signature_instagram
-
-    db.commit()
-    db.refresh(user)
-    return user

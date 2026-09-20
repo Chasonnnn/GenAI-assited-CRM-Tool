@@ -54,20 +54,6 @@ def get_ad_account(db: Session, account_id: UUID, org_id: UUID) -> MetaAdAccount
     )
 
 
-def get_ad_account_by_external_id(
-    db: Session,
-    org_id: UUID,
-    external_id: str,
-) -> MetaAdAccount | None:
-    """Get Meta ad account by external ID (org-scoped)."""
-    return db.scalar(
-        select(MetaAdAccount).where(
-            MetaAdAccount.organization_id == org_id,
-            MetaAdAccount.ad_account_external_id == external_id,
-        )
-    )
-
-
 def create_ad_account(
     db: Session,
     *,

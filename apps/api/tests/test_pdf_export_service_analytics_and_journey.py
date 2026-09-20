@@ -115,7 +115,7 @@ def test_generate_analytics_html_includes_sections():
 
 @pytest.mark.asyncio
 async def test_export_analytics_pdf_async_uses_renderer(db, test_org, monkeypatch):
-    from app.services import analytics_service
+    from app.services import analytics_meta_service, analytics_service
 
     monkeypatch.setattr(
         analytics_service,
@@ -151,7 +151,7 @@ async def test_export_analytics_pdf_async_uses_renderer(db, test_org, monkeypatc
     async def _fake_meta_spend_summary(**_kwargs):
         return {"total_spend": 0, "cost_per_lead": None}
 
-    monkeypatch.setattr(analytics_service, "get_meta_spend_summary", _fake_meta_spend_summary)
+    monkeypatch.setattr(analytics_meta_service, "get_meta_spend_summary", _fake_meta_spend_summary)
 
     rendered_html: dict[str, str] = {}
 

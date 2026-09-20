@@ -322,10 +322,18 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.14.6'
-      
-      - name: Check Python syntax
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: '0.12.0'
+          cache-suffix: ${{ github.job }}
+
+      - name: Run Ruff
         working-directory: apps/api
-        run: python -m py_compile app/main.py
+        run: |
+          uv sync --frozen --extra test
+          uv run ruff check .
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -339,11 +347,11 @@ jobs:
           corepack enable
           corepack prepare pnpm@11.18.0 --activate
       
-      - name: TypeScript check
+      - name: Run ESLint
         working-directory: apps/web
         run: |
           pnpm install --frozen-lockfile
-          pnpm run typecheck
+          pnpm run lint
 
   terraform-fmt:
     name: Terraform Format

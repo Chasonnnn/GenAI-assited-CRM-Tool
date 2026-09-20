@@ -838,29 +838,6 @@ def build_interview_exports(
 # =============================================================================
 
 
-def to_interview_list_item(db: Session, interview: SurrogateInterview) -> dict:
-    """Convert interview to list item response."""
-    conducted_by_name = "Unknown"
-    if interview.conducted_by:
-        conducted_by_name = interview.conducted_by.display_name or interview.conducted_by.email
-
-    return {
-        "id": interview.id,
-        "interview_type": interview.interview_type,
-        "conducted_at": interview.conducted_at,
-        "conducted_by_user_id": interview.conducted_by_user_id,
-        "conducted_by_name": conducted_by_name,
-        "duration_minutes": interview.duration_minutes,
-        "status": interview.status,
-        "has_transcript": interview.transcript_version > 0
-        or bool(interview.transcript_storage_key),
-        "transcript_version": interview.transcript_version,
-        "notes_count": get_notes_count(db, interview.id),
-        "attachments_count": get_attachments_count(db, interview.id),
-        "created_at": interview.created_at,
-    }
-
-
 def to_interview_read(db: Session, interview: SurrogateInterview) -> dict:
     """Convert interview to full response."""
     conducted_by_name = "Unknown"

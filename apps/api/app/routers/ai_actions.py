@@ -1,16 +1,14 @@
 """AI action approval routes."""
 
 import uuid
-from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
 from app.core.permissions import PermissionKey as P
-from app.db.enums import Role
 from app.schemas.auth import UserSession
 from app.services import ai_action_approval_service
 
@@ -58,52 +56,9 @@ def reject_action(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> dict[str, object]:
     """Reject a proposed action."""
-    from app.services import ai_service, audit_service
-
-    # Get the approval with related data
-    approval, message, conversation = ai_service.get_approval_with_conversation(db, approval_id)
-    if not approval:
-        raise HTTPException(status_code=404, detail="Action not found")
-
-    # Get conversation to verify org access
-    if not message:
-        raise HTTPException(status_code=404, detail="Message not found")
-
-    if not conversation or conversation.organization_id != session.org_id:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-
-    # Verify user owns this conversation or has admin role
-    is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
-    if conversation.user_id != session.user_id and not is_manager:
-        raise HTTPException(status_code=403, detail="Not authorized to reject this action")
-
-    # Check status
-    if approval.status != "pending":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Action already processed (status: {approval.status})",
-        )
-
-    # Mark as rejected
-    approval.status = "rejected"
-    approval.executed_at = datetime.now(UTC)
-
-    # Audit log
-    audit_service.log_ai_action_rejected(
-        db=db,
-        org_id=session.org_id,
-        user_id=session.user_id,
-        approval_id=approval.id,
-        action_type=approval.action_type,
+    return ai_action_approval_service.reject_action_for_session(
+        db=db, approval_id=approval_id, session=session
     )
-
-    db.commit()
-
-    return {
-        "success": True,
-        "action_type": approval.action_type,
-        "status": "rejected",
-    }
 
 
 @router.get("/actions/pending")

@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings as app_settings
-from app.db.enums import JobStatus, JobType
+from app.db.enums import JobType
 from app.db.models import Job, MessageMediaAsset, MessageTemplate, TwilioSettings
 from app.services import attachment_service, job_service
 
@@ -685,23 +685,3 @@ def load_signed_media(
     if len(content) != asset.byte_size or hashlib.sha256(content).hexdigest() != asset.checksum_sha256:
         raise MessagingMediaStorageError("Messaging media storage integrity check failed")
     return MediaContent(asset=asset, content=content)
-
-
-def pending_media_scan_job(
-    db: Session,
-    *,
-    organization_id: uuid.UUID,
-    asset_id: uuid.UUID,
-) -> Job | None:
-    """Return the current in-flight media scan job, if any."""
-    jobs = db.execute(
-        select(Job)
-        .where(
-            Job.organization_id == organization_id,
-            Job.job_type == JobType.MESSAGE_MEDIA_SCAN.value,
-            Job.status.in_((JobStatus.PENDING.value, JobStatus.RUNNING.value)),
-        )
-        .order_by(Job.created_at.desc())
-    ).scalars()
-    expected = str(asset_id)
-    return next((job for job in jobs if (job.payload or {}).get("media_asset_id") == expected), None)

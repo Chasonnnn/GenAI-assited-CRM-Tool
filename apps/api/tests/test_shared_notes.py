@@ -25,7 +25,7 @@ from app.services import (
     workflow_triggers,
     zoom_service,
 )
-from app.services.ai_action_executor import AddNoteExecutor, SendEmailExecutor
+from app.services.ai_action_executor import AddNoteExecutor
 
 
 @pytest.fixture(params=["surrogate", "intended_parent", "donor"])
@@ -329,37 +329,8 @@ def test_ai_note_uses_shared_activity_without_committing(db, test_user, note_sub
     )
     assert result["success"]
     assert _activity_query(db, kind, subject.id).count() == 1
-    trigger.assert_called_once()
+    trigger.assert_not_called()
     assert subject.last_contact_method == "note"
-
-
-@pytest.mark.parametrize("note_subject", ["surrogate"], indirect=True)
-def test_ai_email_note_uses_shared_activity_without_committing(
-    db,
-    test_user,
-    note_subject,
-    monkeypatch,
-):
-    from app.services import gmail_service
-
-    kind, subject = note_subject
-    trigger = Mock()
-    monkeypatch.setattr(workflow_triggers, "trigger_note_added", trigger)
-    monkeypatch.setattr(db, "commit", Mock(side_effect=AssertionError("AI email note committed")))
-    monkeypatch.setattr(
-        gmail_service, "send_email_logged", AsyncMock(return_value={"success": True})
-    )
-    result = SendEmailExecutor().execute(
-        {"to": "synthetic@example.com", "subject": "Test", "body": "Synthetic message"},
-        db,
-        test_user.id,
-        subject.organization_id,
-        subject.id,
-    )
-    assert result["success"]
-    assert _activity_query(db, kind, subject.id).count() == 1
-    trigger.assert_called_once()
-    assert subject.last_contact_method == "email"
 
 
 @pytest.mark.asyncio

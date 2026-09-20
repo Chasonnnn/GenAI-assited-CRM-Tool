@@ -1407,17 +1407,19 @@ def load_email_log_provider_attachments(
             "Stored email attachment links do not match the immutable manifest."
         )
 
+    attachments_by_id = {
+        attachment.id: attachment
+        for attachment in db.query(Attachment)
+        .filter(
+            Attachment.id.in_(seen_ids),
+            Attachment.organization_id == org_id,
+        )
+        .all()
+    }
     total_bytes = 0
     provider_attachments: list[ProviderAttachment] = []
     for attachment_id, item in expected:
-        attachment = (
-            db.query(Attachment)
-            .filter(
-                Attachment.id == attachment_id,
-                Attachment.organization_id == org_id,
-            )
-            .one_or_none()
-        )
+        attachment = attachments_by_id.get(attachment_id)
         if (
             attachment is None
             or attachment.deleted_at is not None

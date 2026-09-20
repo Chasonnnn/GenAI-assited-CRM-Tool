@@ -56,21 +56,6 @@ def list_invites(db: Session, org_id: uuid.UUID) -> list[OrgInvite]:
     )
 
 
-def list_pending_invites(db: Session, org_id: uuid.UUID) -> list[OrgInvite]:
-    """List only pending (active) invites."""
-    return (
-        db.query(OrgInvite)
-        .filter(
-            OrgInvite.organization_id == org_id,
-            OrgInvite.accepted_at.is_(None),
-            OrgInvite.revoked_at.is_(None),
-            or_(OrgInvite.expires_at.is_(None), OrgInvite.expires_at > func.now()),
-        )
-        .order_by(OrgInvite.created_at.desc())
-        .all()
-    )
-
-
 def count_pending_invites(db: Session, org_id: uuid.UUID) -> int:
     """Count active pending invites for rate limiting."""
     return (

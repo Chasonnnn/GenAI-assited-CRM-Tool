@@ -9,7 +9,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import case, func, select, text
+from sqlalchemy import case, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -198,21 +198,6 @@ def list_alerts(
         limit=limit,
         count_query=query,
     )
-
-
-def count_alerts(
-    db: Session,
-    org_id: UUID,
-    status: AlertStatus | None = None,
-    severity: AlertSeverity | None = None,
-) -> int:
-    """Count alerts with optional status and severity filter."""
-    stmt = select(func.count(SystemAlert.id)).where(SystemAlert.organization_id == org_id)
-    if status:
-        stmt = stmt.where(SystemAlert.status == status.value)
-    if severity:
-        stmt = stmt.where(SystemAlert.severity == severity.value)
-    return db.scalar(stmt) or 0
 
 
 def get_alert_for_org(db: Session, org_id: UUID, alert_id: UUID) -> SystemAlert | None:

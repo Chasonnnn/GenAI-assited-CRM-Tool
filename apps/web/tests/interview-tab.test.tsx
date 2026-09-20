@@ -1,7 +1,7 @@
 import type { ReactNode, ButtonHTMLAttributes } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { SurrogateInterviewTab } from '../components/surrogates/interviews/SurrogateInterviewTab'
+import { SurrogateInterviewTab } from '../components/surrogates/interviews/InterviewTab'
 
 const mockUseInterviews = vi.fn()
 const mockUseInterview = vi.fn()

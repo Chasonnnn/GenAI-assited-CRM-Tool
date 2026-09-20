@@ -1318,52 +1318,6 @@ def notify_appointment_cancelled(
 # =============================================================================
 
 
-def notify_form_submission_received(
-    db: Session,
-    surrogate: Surrogate,
-    submission_id: UUID,
-) -> None:
-    """Notify surrogate owner and admins when application form is submitted."""
-    recipients: set[UUID] = set()
-
-    # Add owner if owned by user
-    if surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id:
-        recipients.add(surrogate.owner_id)
-
-    # Add all admins+developers in org
-    admins = (
-        db.query(Membership)
-        .filter(
-            Membership.organization_id == surrogate.organization_id,
-            Membership.role.in_([Role.ADMIN, Role.DEVELOPER]),
-            Membership.is_active.is_(True),
-        )
-        .all()
-    )
-    recipients.update({m.user_id for m in admins if m.user_id})
-
-    if not recipients:
-        return
-
-    for user_id in recipients:
-        # Respect user settings (using surrogate_status_changed as proxy for now)
-        if not should_notify(db, user_id, surrogate.organization_id, "surrogate_status_changed"):
-            continue
-
-        dedupe_key = f"form_submission:{submission_id}:{user_id}"
-        create_notification(
-            db=db,
-            org_id=surrogate.organization_id,
-            user_id=user_id,
-            type=NotificationType.FORM_SUBMISSION_RECEIVED,
-            title=f"Application submitted for Surrogate #{surrogate.surrogate_number}",
-            body=f"{surrogate.full_name} submitted their application",
-            entity_type="surrogate",
-            entity_id=surrogate.id,
-            dedupe_key=dedupe_key,
-        )
-
-
 # =============================================================================
 # Attachment Notification Triggers
 # =============================================================================

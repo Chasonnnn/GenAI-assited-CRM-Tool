@@ -164,31 +164,3 @@ def validate_email_provider(
         return True, None
     except EmailProviderError as e:
         return False, str(e)
-
-
-def get_provider_display_info(
-    db: Session,
-    scope: str,
-    org_id: UUID,
-    owner_user_id: UUID | None,
-) -> dict:
-    """
-    Get display information about the email provider for a workflow.
-
-    Returns a dict with provider info for the UI, or error info if not available.
-    """
-    try:
-        provider_type, config = resolve_workflow_email_provider(db, scope, org_id, owner_user_id)
-        return {
-            "available": True,
-            "provider_type": provider_type,
-            "from_email": config.get("email") or config.get("from_email"),
-            "error": None,
-        }
-    except EmailProviderError as e:
-        return {
-            "available": False,
-            "provider_type": None,
-            "from_email": None,
-            "error": str(e),
-        }
