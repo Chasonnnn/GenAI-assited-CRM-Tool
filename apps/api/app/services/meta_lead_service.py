@@ -725,31 +725,6 @@ def process_stored_meta_lead(
     return meta_lead.status, subject
 
 
-def get_unconverted(db: Session, org_id: UUID) -> list[MetaLead]:
-    """Get unconverted Meta leads for an org."""
-    return (
-        db.query(MetaLead)
-        .filter(
-            MetaLead.organization_id == org_id,
-            MetaLead.is_converted.is_(False),
-        )
-        .order_by(MetaLead.received_at.desc())
-        .all()
-    )
-
-
-def get_meta_lead(db: Session, meta_lead_id: UUID, org_id: UUID) -> MetaLead | None:
-    """Get Meta lead by ID (org-scoped)."""
-    return (
-        db.query(MetaLead)
-        .filter(
-            MetaLead.id == meta_lead_id,
-            MetaLead.organization_id == org_id,
-        )
-        .first()
-    )
-
-
 def _apply_mapping_rules(
     field_data: dict,
     mapping_rules: list[dict],

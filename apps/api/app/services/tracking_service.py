@@ -13,7 +13,6 @@ import re
 import secrets
 from datetime import UTC, datetime
 from urllib.parse import quote, unquote, urlsplit
-from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -275,40 +274,3 @@ def record_click(
 # =============================================================================
 # Analytics
 # =============================================================================
-
-
-def get_recipient_events(
-    db: Session,
-    recipient_id: UUID,
-    limit: int = 100,
-) -> list[CampaignTrackingEvent]:
-    """Get tracking events for a specific recipient."""
-    return (
-        db.query(CampaignTrackingEvent)
-        .filter(CampaignTrackingEvent.recipient_id == recipient_id)
-        .order_by(CampaignTrackingEvent.created_at.desc())
-        .limit(limit)
-        .all()
-    )
-
-
-def get_run_events(
-    db: Session,
-    run_id: UUID,
-    event_type: str | None = None,
-    limit: int = 1000,
-) -> list[CampaignTrackingEvent]:
-    """Get all tracking events for a campaign run."""
-    query = (
-        db.query(CampaignTrackingEvent)
-        .join(
-            CampaignRecipient,
-            CampaignTrackingEvent.recipient_id == CampaignRecipient.id,
-        )
-        .filter(CampaignRecipient.run_id == run_id)
-    )
-
-    if event_type:
-        query = query.filter(CampaignTrackingEvent.event_type == event_type)
-
-    return query.order_by(CampaignTrackingEvent.created_at.desc()).limit(limit).all()

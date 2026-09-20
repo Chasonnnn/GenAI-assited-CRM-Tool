@@ -161,7 +161,7 @@ def list_unassigned_queue(
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
 
     return SurrogateListResponse(
-        items=[_surrogate_to_list_item(s, db) for s in surrogates],
+        items=[_surrogate_to_list_item(s) for s in surrogates],
         total=total,
         page=page,
         per_page=per_page,
@@ -283,7 +283,7 @@ def list_surrogates(
 
     return SurrogateListResponse(
         items=[
-            _surrogate_to_list_item(s, db, last_activity_at=getattr(s, "last_activity_at", None))
+            _surrogate_to_list_item(s, last_activity_at=getattr(s, "last_activity_at", None))
             for s in surrogates
         ],
         total=total,
@@ -396,7 +396,7 @@ def list_claim_queue(
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
 
     return SurrogateListResponse(
-        items=[_surrogate_to_list_item(s, db) for s in surrogates],
+        items=[_surrogate_to_list_item(s) for s in surrogates],
         total=total,
         page=page,
         per_page=per_page,

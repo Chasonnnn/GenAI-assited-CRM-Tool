@@ -1252,24 +1252,6 @@ def list_tasks_for_session(
     )
 
 
-def count_pending_tasks(
-    db: Session,
-    org_id: UUID,
-    *,
-    can_view_donors: bool = True,
-) -> int:
-    """Count incomplete tasks for dashboard metrics."""
-    filters = [
-        Task.organization_id == org_id,
-        task_subjects_belong_to_org(org_id),
-        Task.is_completed.is_(False),
-        Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
-    ]
-    if not can_view_donors:
-        filters.append(Task.donor_id.is_(None))
-    return db.scalar(select(func.count(Task.id)).where(*filters)) or 0
-
-
 def count_overdue_tasks(
     db: Session,
     org_id: UUID,
@@ -1636,43 +1618,6 @@ def _log_approval_activity(
             else None,
             "approval_latency_hours": round(latency_hours, 2),
         },
-    )
-
-
-def get_pending_approval_tasks(
-    db: Session,
-    org_id: UUID,
-    user_id: UUID | None = None,
-) -> list[Task]:
-    """Get pending workflow approval tasks, optionally filtered by assignee."""
-    query = db.query(Task).filter(
-        Task.organization_id == org_id,
-        Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
-        Task.status.in_([TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]),
-    )
-
-    if user_id:
-        query = query.filter(
-            Task.owner_type == OwnerType.USER.value,
-            Task.owner_id == user_id,
-        )
-
-    return query.order_by(Task.due_at.asc()).all()
-
-
-def get_expired_approval_tasks(db: Session) -> list[Task]:
-    """Get approval tasks that have passed their due_at deadline."""
-    now = datetime.now(UTC)
-
-    return (
-        db.query(Task)
-        .filter(
-            Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
-            Task.status.in_([TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]),
-            Task.due_at < now,
-        )
-        .with_for_update(skip_locked=True)
-        .all()
     )
 
 

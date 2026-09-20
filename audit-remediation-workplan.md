@@ -75,6 +75,32 @@ The PR remains a draft because the broader audit workplan is not complete.
 - The immediate draft checkpoint is published. Continue to keep PR #718 in draft;
   no merge, deployment, shared database writes, or provider sends are authorized.
 
+### Backend cleanup checkpoint and user-requested stop (2026-09-20)
+
+- Removed the 61 unused service functions inventoried in section E, plus the newly
+  orphaned `get_source_user_ids_for_grantee` and test-only `count_alerts`: 63 functions
+  across 40 service files. Caller/registration searches included the OPS CLI. An AST
+  comparison confirmed every retained service function and class was unchanged.
+- Moved alert status/severity and cross-organization coverage to the live `list_alerts`
+  path, asserting exact items and totals. Removed the unused serializer `db` argument
+  and corrected the async-convention test's claim: any `await` does not prove DB offloading.
+- This batch removes 1,474 net lines, excluding this workplan. No runtime speedup is
+  claimed for unused-code removal; public API and database schemas are unchanged.
+- Verification on this checkpoint:
+  - Parallel-safe backend suite: 3,114 passed in 68.91 seconds.
+  - Serial outbox/migration suite plus CI-contract checks: 101 passed in 42.66 seconds
+    (90 serial tests and 11 repeated CI checks; 3,204 distinct backend tests overall).
+  - Full API Ruff and `git diff --check`: passed.
+  - No frontend changes were included in this batch; prior frontend checks remain
+    recorded above, not rerun or claimed as new evidence.
+- The user requested commit/push to the existing draft PR, then stop. Remaining
+  notification transport, ZAP retirement, Terraform alignment, and reusable browser-QA
+  work are paused. A temporary Terraform regression reproduced CI 1.6.6 being below
+  the module's >=1.14.0 requirement; the incomplete failing test was removed from this
+  checkpoint, and neither CI nor Terraform configuration was changed.
+- Fable was asked to stop and preserve its separate notification work. It has not
+  been transferred into this checkpoint. Resume only on a new user request.
+
 ## Fresh slop audit and cleanup order (2026-09-20)
 
 This audit revisits live code, not the historical counts in `over-engineering-audit.md`.
@@ -206,14 +232,14 @@ The findings below were recorded before the draft implementation checkpoint abov
   inspection, or external hosting audit was performed. Import recovery, unsubscribe
   behavior, token contracts, worker redesign, and live IAM changes remain deferred.
 
-### E. Deeper API audit: queued removal candidates
+### E. Deeper API audit: removed in the backend cleanup checkpoint
 
 Fable repeated its AST/reference scan against the published draft checkpoint after
 the OPS CLI merge. It reports 61 public service functions (1,248 function-body lines)
 with no code or test references, including in-file callers. The scan covered all
 tracked files, including `apps/ops-cli`, and checked worker registrations and the new
 template service's dynamic access. This is static evidence, not runtime coverage or
-proof against out-of-repository callers. No bulk deletion is included in this slice.
+proof against out-of-repository callers. The verified removals are recorded above.
 
 The recheck removed `template_variable_catalog.extract_template_variables` from the
 dead list because `platform_template_write_service` now calls it. This confirms that

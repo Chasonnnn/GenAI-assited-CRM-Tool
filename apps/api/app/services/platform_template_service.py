@@ -243,27 +243,3 @@ def get_platform_workflow_template_target_org_ids(db: Session, template_id: UUID
             .all()
         )
     ]
-
-
-def list_published_workflow_templates_for_org(db: Session, org_id: UUID) -> list[WorkflowTemplate]:
-    target_exists = (
-        db.query(WorkflowTemplateTarget)
-        .filter(
-            WorkflowTemplateTarget.template_id == WorkflowTemplate.id,
-            WorkflowTemplateTarget.organization_id == org_id,
-        )
-        .exists()
-    )
-    return (
-        db.query(WorkflowTemplate)
-        .filter(
-            WorkflowTemplate.is_global.is_(True),
-            WorkflowTemplate.published_version > 0,
-            or_(
-                WorkflowTemplate.is_published_globally.is_(True),
-                target_exists,
-            ),
-        )
-        .order_by(WorkflowTemplate.updated_at.desc())
-        .all()
-    )
