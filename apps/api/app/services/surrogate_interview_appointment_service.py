@@ -1,5 +1,6 @@
 """Atomic management of stage-created surrogate interview appointments."""
 
+import hashlib
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -9,7 +10,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.db.enums import AppointmentStatus, AuditEventType, Role, SurrogateActivityType
-from app.db.models import Appointment, AppointmentType, Surrogate, User
+from app.db.models import Appointment, AppointmentType, AuditLog, Surrogate, User
 from app.schemas.interview_appointment import SurrogateInterviewAppointmentAction
 
 
@@ -47,6 +48,15 @@ def _same_time(left: datetime | None, right: datetime | None) -> bool:
     if left is None or right is None:
         return left is right
     return left.astimezone(UTC) == right.astimezone(UTC)
+
+
+def _result_state(surrogate: Surrogate, appointment: Appointment) -> dict[str, str]:
+    return {
+        "stage_id": str(surrogate.stage_id),
+        "status": appointment.status,
+        "start": appointment.scheduled_start.astimezone(UTC).isoformat(),
+        "end": appointment.scheduled_end.astimezone(UTC).isoformat(),
+    }
 
 
 def _assert_no_conflict(
@@ -103,12 +113,6 @@ def manage(
     appointment = get_latest(db, org_id, surrogate.id)
     if appointment:
         db.refresh(appointment, with_for_update=True)
-    if surrogate.stage_id != data.expected_stage_id:
-        raise InterviewAppointmentError("Surrogate stage changed; refresh and try again", 409)
-    if (appointment.id if appointment else None) != data.expected_appointment_id or not _same_time(
-        appointment.scheduled_start if appointment else None, data.expected_scheduled_start
-    ):
-        raise InterviewAppointmentError("Interview appointment changed; refresh and try again", 409)
 
     role = actor_role.value if hasattr(actor_role, "value") else actor_role
     if appointment and role not in {Role.ADMIN.value, Role.DEVELOPER.value}:
@@ -116,6 +120,37 @@ def manage(
             raise InterviewAppointmentError(
                 "Only the appointment owner can manage this interview", 403
             )
+
+    # The audit receipt is committed atomically with the mutation. Match the actor,
+    # entire request and current result, not merely a coincidentally matching time.
+    request_digest = hashlib.sha256(data.model_dump_json().encode()).hexdigest()
+    if appointment:
+        receipt = (
+            db.query(AuditLog)
+            .filter(
+                AuditLog.organization_id == org_id,
+                AuditLog.target_type == "appointment",
+                AuditLog.target_id == appointment.id,
+            )
+            .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+            .first()
+        )
+        if (
+            receipt
+            and receipt.actor_user_id == actor_user_id
+            and receipt.details
+            and receipt.details.get("request_digest") == request_digest
+            and receipt.details.get("surrogate_id") == str(surrogate.id)
+            and receipt.details.get("result") == _result_state(surrogate, appointment)
+        ):
+            return surrogate
+
+    if surrogate.stage_id != data.expected_stage_id:
+        raise InterviewAppointmentError("Surrogate stage changed; refresh and try again", 409)
+    if (appointment.id if appointment else None) != data.expected_appointment_id or not _same_time(
+        appointment.scheduled_start if appointment else None, data.expected_scheduled_start
+    ):
+        raise InterviewAppointmentError("Interview appointment changed; refresh and try again", 409)
 
     current_stage = pipeline_service.get_stage_by_id(db, surrogate.stage_id)
     pipeline_id = current_stage.pipeline_id if current_stage else None
@@ -148,9 +183,6 @@ def manage(
     prior_start = appointment.scheduled_start if appointment else None
     if data.action == "schedule":
         if appointment and appointment.status in ACTIVE_STATUSES:
-            # An identical retry has already succeeded.
-            if _same_time(appointment.scheduled_start, data.scheduled_start):
-                return surrogate
             raise InterviewAppointmentError("An active interview appointment already exists", 409)
         if not data.move_stage and current_key != "interview_scheduled":
             raise InterviewAppointmentError(
@@ -229,6 +261,9 @@ def manage(
                 interview_scheduled_at=data.scheduled_start
                 if data.action == "reschedule"
                 else None,
+                # This service already updated the existing appointment and owns
+                # its reschedule activity; the stage service must not book it again.
+                schedule_interview_appointment=False,
                 commit=False,
             )
             after_commit = result.get("after_commit")
@@ -252,7 +287,12 @@ def manage(
         }[data.action],
         target_type="appointment",
         target_id=appointment.id,
-        details={"surrogate_id": str(surrogate.id), "action": data.action},
+        details={
+            "surrogate_id": str(surrogate.id),
+            "action": data.action,
+            "request_digest": request_digest,
+            "result": _result_state(surrogate, appointment),
+        },
     )
     if data.action != "schedule" or current_key == "interview_scheduled":
         activity_service.log_activity(
@@ -280,6 +320,19 @@ def manage(
     except Exception:
         db.rollback()
         raise
+    if data.action in {"reschedule", "cancel"}:
+        from app.services import org_service
+
+        try:
+            org = org_service.get_org_by_id(db, org_id)
+            base_url = org_service.get_org_portal_base_url(org)
+            if data.action == "reschedule":
+                appointment_email_service.send_rescheduled(db, appointment, prior_start, base_url)
+            else:
+                appointment_email_service.send_cancelled(db, appointment, base_url)
+        except Exception:
+            db.rollback()
+            logger.warning("Interview changed but client notification failed")
     if after_commit:
         after_commit()
     if data.action == "reschedule":

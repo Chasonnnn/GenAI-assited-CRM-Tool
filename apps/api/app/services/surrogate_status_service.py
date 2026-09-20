@@ -316,6 +316,7 @@ def change_status(
     *,
     emit_events: bool = False,
     commit: bool = True,
+    schedule_interview_appointment: bool = True,
 ) -> StatusChangeResult:
     """
     Change surrogate stage and record history with backdating support.
@@ -495,7 +496,9 @@ def change_status(
                 if pipeline_service.stage_matches_key(new_stage, "on_hold")
                 else paused_from_stage,
                 on_hold_follow_up_months=on_hold_follow_up_months,
-                interview_scheduled_at=normalized_interview_scheduled_at,
+                interview_scheduled_at=normalized_interview_scheduled_at
+                if schedule_interview_appointment
+                else None,
                 trigger_workflows=trigger_workflows,
                 commit=commit,
             )
@@ -532,7 +535,9 @@ def change_status(
                     else paused_from_stage
                 ),
                 on_hold_follow_up_months=on_hold_follow_up_months,
-                interview_scheduled_at=normalized_interview_scheduled_at,
+                interview_scheduled_at=normalized_interview_scheduled_at
+                if schedule_interview_appointment
+                else None,
                 trigger_workflows=trigger_workflows,
                 commit=commit,
             )
@@ -630,7 +635,9 @@ def change_status(
             else paused_from_stage
         ),
         on_hold_follow_up_months=on_hold_follow_up_months,
-        interview_scheduled_at=normalized_interview_scheduled_at,
+        interview_scheduled_at=normalized_interview_scheduled_at
+        if schedule_interview_appointment
+        else None,
         trigger_workflows=trigger_workflows,
         commit=commit,
     )
