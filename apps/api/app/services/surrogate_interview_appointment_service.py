@@ -150,7 +150,7 @@ def manage(
         and preview.status in ACTIVE_STATUSES
         and preview.google_event_id
         and not preview.zoom_meeting_id
-        and preview.meeting_mode != "zoom"
+        and not preview.zoom_join_url
     ):
         try:
             prepared_link = appointment_google_sync_service.prepare_link(db, preview)
@@ -285,10 +285,11 @@ def manage(
     else:
         if appointment is None or appointment.status not in ACTIVE_STATUSES:
             raise InterviewAppointmentError("No active interview appointment was found", 409)
+        # Stage-created interviews can inherit a video mode without a provider meeting.
         if (
             appointment.zoom_meeting_id
-            or appointment.meeting_mode == "zoom"
-            or (appointment.meeting_mode == "google_meet" and not appointment.google_event_id)
+            or appointment.zoom_join_url
+            or (appointment.google_meet_url and not appointment.google_event_id)
         ):
             raise InterviewAppointmentError(
                 "This interview is linked to an external meeting and cannot be changed here", 409
