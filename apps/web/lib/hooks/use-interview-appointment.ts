@@ -4,7 +4,7 @@ import { surrogateKeys } from "@/lib/hooks/use-surrogates"
 import { appointmentKeys } from "@/lib/hooks/use-appointments"
 
 export const interviewAppointmentKeys = {
-    detail: (id: string) => ["surrogates", "interview-appointment", id] as const,
+    detail: surrogateKeys.interviewAppointment,
 }
 
 export function useInterviewAppointment(surrogateId: string) {
