@@ -8,6 +8,7 @@ from app.core.csrf import CSRF_HEADER
 from app.db.enums import Role
 from app.db.models import (
     Appointment,
+    AuditLog,
     Job,
     Organization,
     SurrogateActivityLog,
@@ -31,13 +32,20 @@ def notifications(monkeypatch):
 
 
 @pytest.fixture
-def interview(db, test_org, test_user):
+def interview(db, test_org, test_user, request):
     surrogate = surrogate_service.create_surrogate(
         db,
         test_org.id,
         test_user.id,
         SurrogateCreate(full_name="Interview QA", email=f"{uuid4()}@example.com"),
     )
+    if meeting_mode := getattr(request, "param", None):
+        appointment_type = surrogate_status_service._get_or_create_interview_appointment_type(
+            db, org_id=test_org.id, user_id=test_user.id
+        )
+        appointment_type.meeting_mode = meeting_mode
+        appointment_type.meeting_modes = [meeting_mode]
+        db.flush()
     pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id)
     scheduled = pipeline_service.get_stage_by_key(db, pipeline.id, "interview_scheduled")
     surrogate_status_service.change_status(
@@ -127,16 +135,113 @@ def test_cancel_keep_stage_then_book_again(db, interview):
     assert surrogate.stage_id == stage_id
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("interview", ["zoom", "google_meet"], indirect=True)
+@pytest.mark.parametrize("action", ["reschedule", "cancel"])
+@pytest.mark.parametrize("move", [False, True])
+async def test_unlinked_video_interview_can_be_managed(
+    authed_client, db, interview, action, move, notifications
+):
+    surrogate, _user = interview
+    appointment = service.get_latest(db, surrogate.organization_id, surrogate.id)
+    assert appointment.meeting_mode in {"zoom", "google_meet"}
+    assert not any(
+        (
+            appointment.zoom_meeting_id,
+            appointment.zoom_join_url,
+            appointment.google_event_id,
+            appointment.google_meet_url,
+        )
+    )
+    original_start = appointment.scheduled_start
+    start = datetime.now(UTC) + timedelta(days=8) if action == "reschedule" else None
+    request = payload(command(db, surrogate, action, move=move, start=start))
+    path = f"/surrogates/{surrogate.id}/interview-appointment"
+
+    response = await authed_client.post(path, json=request)
+    assert response.status_code == 200, response.text
+    retry = await authed_client.post(path, json=request)
+    assert retry.status_code == 200, retry.text
+    db.refresh(appointment)
+    db.refresh(surrogate)
+    assert appointment.status == ("cancelled" if action == "cancel" else "confirmed")
+    assert appointment.scheduled_start == (start or original_start)
+    assert surrogate.status_label == (
+        "Reschedule Needed" if action == "cancel" and move else "Interview Scheduled"
+    )
+    assert db.query(Appointment).filter_by(surrogate_id=surrogate.id).count() == 1
+    assert (
+        db.query(AuditLog).filter_by(target_type="appointment", target_id=appointment.id).count()
+        == 1
+    )
+    assert (
+        db.query(Job)
+        .filter_by(organization_id=surrogate.organization_id, job_type="appointment_google_sync")
+        .count()
+        == 0
+    )
+    notifications[
+        "send_cancelled" if action == "cancel" else "send_rescheduled"
+    ].assert_called_once()
+
+
+@pytest.mark.parametrize("action", ["reschedule", "cancel"])
+@pytest.mark.parametrize(
+    ("link_field", "link_value"),
+    [
+        ("zoom_meeting_id", "linked-zoom-meeting"),
+        ("zoom_join_url", "https://zoom.us/j/123456789"),
+        ("google_meet_url", "https://meet.google.com/abc-defg-hij"),
+    ],
+)
+def test_unsupported_external_link_is_blocked_regardless_of_meeting_mode(
+    db, interview, action, link_field, link_value, notifications
+):
+    surrogate, user = interview
+    appointment = service.get_latest(db, surrogate.organization_id, surrogate.id)
+    assert appointment.meeting_mode == "phone"
+    setattr(appointment, link_field, link_value)
+    db.commit()
+    original_start, original_stage = appointment.scheduled_start, surrogate.stage_id
+
+    with pytest.raises(
+        service.InterviewAppointmentError, match="linked to an external meeting"
+    ) as exc:
+        manage(
+            db,
+            surrogate,
+            user,
+            command(
+                db,
+                surrogate,
+                action,
+                start=datetime.now(UTC) + timedelta(days=8) if action == "reschedule" else None,
+            ),
+        )
+
+    assert exc.value.status_code == 409
+    assert appointment.status == "confirmed"
+    assert appointment.scheduled_start == original_start
+    assert surrogate.stage_id == original_stage
+    assert (
+        db.query(AuditLog).filter_by(target_type="appointment", target_id=appointment.id).count()
+        == 0
+    )
+    for notification in notifications.values():
+        notification.assert_not_called()
+
+
+@pytest.mark.parametrize("meeting_mode", ["google_meet", "zoom"])
 @pytest.mark.parametrize("action", ["reschedule", "cancel"])
 def test_google_linked_interview_change_commits_with_sync_intent(
-    db, interview, action, monkeypatch
+    db, interview, action, meeting_mode, monkeypatch
 ):
     from app.services import appointment_google_sync_service
 
     surrogate, user = interview
     appointment = service.get_latest(db, surrogate.organization_id, surrogate.id)
     appointment.google_event_id = "linked-google-event"
-    appointment.meeting_mode = "google_meet"
+    appointment.meeting_mode = meeting_mode
     integration = UserIntegration(
         user_id=user.id,
         integration_type="google_calendar",
