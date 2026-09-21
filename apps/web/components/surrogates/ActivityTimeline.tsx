@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { EntityActivityTimeline } from "@/components/activity/EntityActivityTimeline"
 import { getStageSemantics, stageMatchesKey } from "@/lib/surrogate-stage-context"
 import type { PipelineStage } from "@/lib/api/pipelines"
@@ -33,6 +34,7 @@ export function ActivityTimeline({
     activityStatus = "ready",
     onRetryActivity,
 }: ActivityTimelineProps) {
+    const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false)
     const historyQuery = useSurrogateHistory(surrogateId)
     const currentStage = stages.find((stage) => stage.id === currentStageId)
     const canHaveInterviewAppointment = stageMatchesKey(currentStage, "interview_scheduled")
@@ -48,10 +50,17 @@ export function ActivityTimeline({
           : "ready"
 
     return (
+        <>
         <EntityActivityTimeline
             {...(latestInterviewActivity ? { activityAction: {
                 activityId: latestInterviewActivity.id,
-                content: <InterviewAppointmentManager surrogateId={surrogateId} stageId={currentStageId} triggerOnly />,
+                content: <InterviewAppointmentManager
+                    surrogateId={surrogateId}
+                    stageId={currentStageId}
+                    triggerOnly
+                    renderDialog={false}
+                    onManage={() => setAppointmentDialogOpen(true)}
+                />,
             } } : {})}
             currentStageId={currentStageId}
             stages={stages.map((stage) => ({ ...stage, semantics: getStageSemantics(stage) }))}
@@ -69,5 +78,13 @@ export function ActivityTimeline({
             {...(activities ? { activities } : {})}
             {...(tasks ? { tasks } : {})}
         />
+        <InterviewAppointmentManager
+            surrogateId={surrogateId}
+            stageId={currentStageId}
+            hideTrigger
+            open={appointmentDialogOpen}
+            onOpenChange={setAppointmentDialogOpen}
+        />
+        </>
     )
 }

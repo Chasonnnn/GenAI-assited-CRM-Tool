@@ -12,6 +12,7 @@ const mockUseInterviewAppointment = vi.fn()
 vi.mock('@/lib/hooks/use-interview-appointment', () => ({
     useInterviewAppointment: () => mockUseInterviewAppointment(),
     useManageInterviewAppointment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useRetryInterviewAppointmentGoogleSync: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 function escapeRegExp(value: string): string {
@@ -170,6 +171,53 @@ describe('ActivityTimeline', () => {
             expect(screen.getByText('No active appointment')).toBeInTheDocument()
         },
     )
+
+    it('keeps the appointment dialog open when an activity refresh moves the Manage action', async () => {
+        mockUseInterviewAppointment.mockReturnValue({
+            data: {
+                appointment: null,
+                can_manage: true,
+                scheduled_stage: { id: 'scheduled', label: 'Interview Scheduled', color: '#a855f7' },
+                reschedule_stage: { id: 'reschedule', label: 'Reschedule Needed', color: '#eab308' },
+                external_sync_status: 'pending',
+            },
+            isLoading: false,
+            isError: false,
+        })
+        const stages = [
+            makeStage({ id: 'scheduled', stage_key: 'interview_scheduled', label: 'Interview Scheduled', order: 1 }),
+            makeStage({ id: 'reschedule', stage_key: 'reschedule_needed', label: 'Reschedule Needed', order: 2 }),
+        ]
+        const initial = [makeActivity({
+            id: 'scheduled-activity',
+            activity_type: 'interview_scheduled',
+            details: { appointment_id: 'appt-1', scheduled_start: '2026-06-01T17:00:00Z' },
+        })]
+        const rendered = render(<ActivityTimeline
+            surrogateId="surr1"
+            currentStageId="scheduled"
+            stages={stages}
+            activities={initial}
+        />)
+
+        fireEvent.click(within(screen.getByTestId('timeline-activity-scheduled-activity')).getByRole('button', { name: 'Manage' }))
+        expect(await screen.findByRole('dialog', { name: 'Manage appointment' })).toBeInTheDocument()
+        expect(screen.getByText('Interview saved. Updating Google Calendar…')).toBeInTheDocument()
+
+        rendered.rerender(<ActivityTimeline
+            surrogateId="surr1"
+            currentStageId="scheduled"
+            stages={stages}
+            activities={[makeActivity({
+                id: 'rescheduled-activity',
+                activity_type: 'interview_rescheduled',
+                details: { appointment_id: 'appt-1', scheduled_start: '2026-06-02T17:00:00Z' },
+            })]}
+        />)
+
+        expect(screen.getByRole('dialog', { name: 'Manage appointment' })).toBeInTheDocument()
+        expect(screen.getByText('Interview saved. Updating Google Calendar…')).toBeInTheDocument()
+    })
 
     it.each(['loading', 'error'] as const)('keeps the Activity header free of appointment actions while %s', (activityStatus) => {
         render(<ActivityTimeline
