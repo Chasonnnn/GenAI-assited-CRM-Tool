@@ -11,12 +11,9 @@ from app.services import job_service
 
 
 def test_claim_pending_jobs_marks_running(db_engine):
-    conn = db_engine.connect()
-    session = SessionLocal(bind=conn)
-    verification_conn = db_engine.connect()
-    verification_session = SessionLocal(bind=verification_conn)
-    cleanup_conn = db_engine.connect()
-    cleanup_session = SessionLocal(bind=cleanup_conn)
+    session = SessionLocal(bind=db_engine)
+    verification_session = SessionLocal(bind=db_engine)
+    cleanup_session = SessionLocal(bind=db_engine)
 
     org_id = None
     job_ids: list[uuid.UUID] = []
@@ -86,23 +83,17 @@ def test_claim_pending_jobs_marks_running(db_engine):
             )
         cleanup_session.commit()
         cleanup_session.close()
-        cleanup_conn.close()
         verification_session.close()
-        verification_conn.close()
         session.close()
-        conn.close()
 
 
 def test_claim_pending_jobs_skip_locked(db_engine):
     if db_engine.dialect.name != "postgresql":
         pytest.skip("SKIP LOCKED behavior requires PostgreSQL")
 
-    conn1 = db_engine.connect()
-    conn2 = db_engine.connect()
-    session1 = SessionLocal(bind=conn1)
-    session2 = SessionLocal(bind=conn2)
-    cleanup_conn = db_engine.connect()
-    cleanup_session = SessionLocal(bind=cleanup_conn)
+    session1 = SessionLocal(bind=db_engine)
+    session2 = SessionLocal(bind=db_engine)
+    cleanup_session = SessionLocal(bind=db_engine)
 
     org_id = None
     job_id = None
@@ -145,11 +136,8 @@ def test_claim_pending_jobs_skip_locked(db_engine):
             cleanup_session.query(Organization).filter(Organization.id == org_id).delete()
         cleanup_session.commit()
         cleanup_session.close()
-        cleanup_conn.close()
         session1.close()
         session2.close()
-        conn1.close()
-        conn2.close()
 
 
 def test_claim_pending_jobs_filters_by_type(db, test_org):

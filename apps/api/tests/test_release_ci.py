@@ -4,8 +4,12 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
+
+import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
 CI_WORKFLOW = ROOT / ".github/workflows/ci.yml"
@@ -51,9 +55,53 @@ def test_match_expansion_release_preflights_before_opening_compatibility_window(
         'worker_env="GCP_SERVICE_NAME=$_WORKER_SERVICE,DB_MIGRATION_CHECK=true,DB_AUTO_MIGRATE=false"'
         in build
     )
-    assert (
-        'rollout_env=(--update-env-vars "DB_MIGRATION_CHECK=true,DB_AUTO_MIGRATE=false")' in build
+
+
+@pytest.mark.parametrize("expansion", ["false", "true"])
+def test_release_deploys_bounded_pools_without_losing_migration_flags(tmp_path, expansion):
+    build = yaml.safe_load((ROOT / "cloudbuild/api.yaml").read_text())
+    calls = tmp_path / "calls.jsonl"
+    gcloud = tmp_path / "gcloud"
+    gcloud.write_text(
+        f"#!{sys.executable}\n"
+        "import json, os, sys\n"
+        "with open(os.environ['GCLOUD_CALLS'], 'a') as output:\n"
+        "    output.write(json.dumps(sys.argv[1:]) + '\\n')\n"
     )
+    gcloud.chmod(0o755)
+    for service in ("api", "worker"):
+        (tmp_path / f"release-{service}-image-ref").write_text(f"example/{service}@sha256:test\n")
+    env = {
+        **os.environ,
+        **build["substitutions"],
+        "_MATCH_EXPANSION_ROLLOUT": expansion,
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "GCLOUD_CALLS": str(calls),
+    }
+    for step in build["steps"]:
+        script = step.get("args", [""])[-1]
+        if 'gcloud run services update "$_' not in script or "--image" not in script:
+            continue
+        script = script.replace("$$", "$").replace("/workspace/", f"{tmp_path}/")
+        subprocess.run(["bash", "-ceu", script], env=env, check=True)
+
+    recorded = [json.loads(line) for line in calls.read_text().splitlines()]
+    assert len(recorded) == 2
+    for argv in recorded:
+        service = argv[3]
+        ceiling = "2" if service == "crm-api" else "3"
+        assert argv[argv.index("--max") + 1] == ceiling
+        assert argv[argv.index("--max-instances") + 1] == ceiling
+        variables = dict(
+            item.split("=", 1) for item in argv[argv.index("--update-env-vars") + 1].split(",")
+        )
+        assert variables["DB_POOL_SIZE"] == "2"
+        assert variables["DB_MAX_OVERFLOW"] == "0"
+        assert variables["DB_MIGRATION_CHECK"] == "true"
+        assert variables["DB_AUTO_MIGRATE"] == "false"
+        assert variables.get("MATCH_CASE_EXPANSION_ENABLED") == (
+            "false" if expansion == "true" else None
+        )
 
 
 def _trigger_paths(workflow: str, event: str) -> set[str]:
@@ -132,7 +180,9 @@ def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations() -> None:
 def test_ci_runs_committed_outbox_tests_outside_shared_database_workers() -> None:
     workflow = CI_WORKFLOW.read_text()
     parallel = workflow.split("- name: Run parallel-safe tests", 1)[1].split("- name:", 1)[0]
-    serial = workflow.split("- name: Run shared-database tests serially", 1)[1].split("- name:", 1)[0]
+    serial = workflow.split("- name: Run shared-database tests serially", 1)[1].split("- name:", 1)[
+        0
+    ]
 
     assert "--ignore tests/test_email_delivery_outbox.py" in parallel
     assert "tests/test_email_delivery_outbox.py" in serial

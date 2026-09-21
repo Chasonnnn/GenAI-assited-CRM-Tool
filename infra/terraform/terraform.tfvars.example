@@ -25,6 +25,9 @@ enable_domain_mapping = true
 # Cloud Run scaling / perf
 # run_min_instances = 1
 # run_max_instances = 10
+# api_max_instances = 2
+# db_pool_size = 2
+# db_max_overflow = 0
 # api_cpu = "1"
 # api_memory = "1Gi"
 # web_cpu = "1"
@@ -33,7 +36,7 @@ enable_domain_mapping = true
 # worker_cpu = "1000m"
 # worker_memory = "512Mi"
 # worker_min_instances = 1
-# worker_max_instances = 1
+# worker_max_instances = 3
 # worker_cpu_idle = false
 # messaging_delivery_dispatch_enabled = false
 

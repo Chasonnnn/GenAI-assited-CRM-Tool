@@ -12,7 +12,7 @@ resource "google_cloud_run_v2_service" "api" {
 
     scaling {
       min_instance_count = var.run_min_instances
-      max_instance_count = var.run_max_instances
+      max_instance_count = var.api_max_instances
     }
 
     vpc_access {

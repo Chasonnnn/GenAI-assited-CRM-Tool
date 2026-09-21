@@ -107,10 +107,8 @@ def test_concurrent_audit_appends_form_one_linear_org_chain(db_engine):
     if db_engine.dialect.name != "postgresql":
         pytest.skip("Audit-chain concurrency requires PostgreSQL")
 
-    setup_connection = db_engine.connect()
-    setup_session = SessionLocal(bind=setup_connection)
-    cleanup_connection = db_engine.connect()
-    cleanup_session = SessionLocal(bind=cleanup_connection)
+    setup_session = SessionLocal()
+    cleanup_session = SessionLocal()
     org_id = uuid.uuid4()
     first_flushed = Event()
     release_first_commit = Event()
@@ -126,6 +124,7 @@ def test_concurrent_audit_appends_form_one_linear_org_chain(db_engine):
             )
         )
         setup_session.commit()
+        setup_session.close()
 
         def _append_first() -> uuid.UUID:
             connection = db_engine.connect()
@@ -197,6 +196,4 @@ def test_concurrent_audit_appends_form_one_linear_org_chain(db_engine):
         cleanup_session.query(Organization).filter(Organization.id == org_id).delete()
         cleanup_session.commit()
         cleanup_session.close()
-        cleanup_connection.close()
         setup_session.close()
-        setup_connection.close()

@@ -103,7 +103,7 @@ variable "worker_min_instances" {
 variable "worker_max_instances" {
   description = "Max instances for the worker service."
   type        = number
-  default     = 1
+  default     = 3
 }
 
 variable "worker_cpu" {
@@ -404,9 +404,37 @@ variable "run_min_instances" {
 }
 
 variable "run_max_instances" {
-  description = "Maximum number of Cloud Run instances."
+  description = "Maximum number of Cloud Run web instances."
   type        = number
   default     = 10
+}
+
+variable "api_max_instances" {
+  description = "Maximum API instances; budget two processes and their database pools per instance."
+  type        = number
+  default     = 2
+}
+
+variable "db_pool_size" {
+  description = "Database connections retained per process; excludes the API metrics connection."
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.db_pool_size >= 1 && floor(var.db_pool_size) == var.db_pool_size
+    error_message = "db_pool_size must be a positive integer."
+  }
+}
+
+variable "db_max_overflow" {
+  description = "Additional database connections per process above db_pool_size."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.db_max_overflow >= 0 && floor(var.db_max_overflow) == var.db_max_overflow
+    error_message = "db_max_overflow must be a nonnegative integer."
+  }
 }
 
 variable "storage_backend" {

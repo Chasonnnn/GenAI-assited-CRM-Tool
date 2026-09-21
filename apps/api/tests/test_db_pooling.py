@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import event, text
 from sqlalchemy.exc import TimeoutError
 from sqlalchemy.pool import QueuePool
@@ -50,7 +51,7 @@ def test_metrics_pool_is_isolated_and_connection_timeouts_are_scoped():
             event.listen(engine, "do_connect", capture_connect)
             with pytest.raises(RuntimeError, match="Skip real connection"):
                 engine.connect()
-        assert "connect_timeout" not in captured[0]
+        assert captured[0]["connect_timeout"] <= 5
         assert "statement_timeout" not in captured[0]["options"]
         assert captured[1]["connect_timeout"] <= 5
         assert "statement_timeout=1000" in captured[1]["options"]
@@ -58,6 +59,41 @@ def test_metrics_pool_is_isolated_and_connection_timeouts_are_scoped():
     finally:
         request_engine.dispose()
         metrics_engine.dispose()
+
+
+@pytest.mark.parametrize("overrides", [{"DB_POOL_SIZE": 0}, {"DB_MAX_OVERFLOW": -1}])
+def test_unbounded_database_pools_are_rejected(overrides):
+    with pytest.raises(ValidationError):
+        Settings(
+            ENV="test",
+            DATABASE_URL="postgresql+psycopg://user:pass@localhost/db",
+            **overrides,
+        )
+
+
+def test_default_request_pool_bounds_connections_and_recovers_after_saturation(db_engine):
+    config = Settings(
+        _env_file=None,
+        ENV="test",
+        DATABASE_URL=db_engine.url.render_as_string(hide_password=False),
+        DB_POOL_TIMEOUT=1,
+    )
+    request_engine = create_engine_with_settings(config)
+    opened_connections = []
+    event.listen(
+        request_engine, "connect", lambda connection, _: opened_connections.append(connection)
+    )
+    try:
+        with request_engine.connect() as first, request_engine.connect() as second:
+            assert first.scalar(text("SELECT 1")) == 1
+            assert second.scalar(text("SELECT 1")) == 1
+            with pytest.raises(TimeoutError):
+                request_engine.connect()
+        with request_engine.connect() as reused:
+            assert reused.scalar(text("SELECT 1")) == 1
+        assert len(opened_connections) == 2
+    finally:
+        request_engine.dispose()
 
 
 def test_exhausted_request_pool_does_not_block_metrics_connection(db_engine):

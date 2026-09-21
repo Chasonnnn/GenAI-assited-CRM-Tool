@@ -136,6 +136,41 @@ gcloud run deploy crm-api \
 ```
 CI note: `cloudbuild/api.yaml` runs the migrate job and waits for completion before updating the API service.
 
+### Database connection budget
+
+The default API image runs two processes per instance. Each process keeps at most
+two request connections, with no overflow, plus one independent metrics connection.
+Cloud Build caps the API at two instances and the worker at three, at both service
+and revision level. Terraform uses the same pool and revision limits; the web
+instance limit is separate because it does not connect to PostgreSQL.
+
+| Consumer | Maximum connections per revision |
+| --- | ---: |
+| API: 2 instances × 2 processes × (2 request + 1 metrics) | 12 |
+| Worker: 3 instances × 2 connections | 6 |
+| Total | 18 |
+
+Two overlapping revisions can consume 36 connections, leaving 14 for jobs,
+administration and PostgreSQL reserved connections under the documented
+[`db-g1-small` default of 50](https://docs.cloud.google.com/sql/docs/postgres/flags).
+This is a capacity estimate: Cloud Run can briefly exceed scaling limits, and
+concurrent job executions also consume connections. Verify `SHOW max_connections`
+and active connections before raising process counts, pools, overflow or scaling.
+Keep the defaults in `cloudbuild/api.yaml`, Terraform variables and application
+settings aligned. Existing Terraform deployments must set `api_max_instances`
+separately from the web's `run_max_instances`.
+
+Pool acquisition and new database connections time out after five seconds;
+metrics connections retain their separate short timeouts. Saturated pools wait
+for a returned connection instead of opening overflow connections. Peak requests
+may wait longer with these limits. No automatic transaction retry is added.
+
+After an approved release, verify the live scaling limits and pool environment,
+confirm older revisions have drained, and repeat the connection-exhaustion log
+query. Existing revisions retain their original pools until they stop. Check
+request latency and pool-timeout errors under representative traffic before
+claiming the capacity issue is resolved in production.
+
 ## 10) Migrations (Cloud Run Job)
 ```bash
 gcloud run jobs create crm-migrate \

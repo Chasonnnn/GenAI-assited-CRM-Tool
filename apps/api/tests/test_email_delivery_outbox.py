@@ -751,6 +751,7 @@ def test_claim_due_deliveries_skips_a_row_locked_by_another_worker(
         )
         delivery_id = queued.delivery.id
 
+        setup.close()
         (
             locker.query(EmailDelivery)
             .filter(EmailDelivery.id == delivery_id)
