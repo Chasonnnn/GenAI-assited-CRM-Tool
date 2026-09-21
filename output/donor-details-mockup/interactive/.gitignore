@@ -1,5 +1,0 @@
-node_modules
-dist/
-preview-process.json
-.openai/*
-!.openai/hosting.json
