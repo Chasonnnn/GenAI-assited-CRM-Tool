@@ -135,6 +135,9 @@ gcloud run deploy crm-api \
   --set-secrets "JWT_SECRET=JWT_SECRET:latest,DEV_SECRET=DEV_SECRET:latest,INTERNAL_SECRET=INTERNAL_SECRET:latest,FERNET_KEY=FERNET_KEY:latest,DATA_ENCRYPTION_KEY=DATA_ENCRYPTION_KEY:latest,PII_HASH_KEY=PII_HASH_KEY:latest,META_ENCRYPTION_KEY=META_ENCRYPTION_KEY:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,ZOOM_CLIENT_ID=ZOOM_CLIENT_ID:latest,ZOOM_CLIENT_SECRET=ZOOM_CLIENT_SECRET:latest,GMAIL_CLIENT_ID=GMAIL_CLIENT_ID:latest,GMAIL_CLIENT_SECRET=GMAIL_CLIENT_SECRET:latest,REDIS_URL=REDIS_URL:latest"
 ```
 CI note: `cloudbuild/api.yaml` runs the migrate job and waits for completion before updating the API service.
+Routine releases run one migration execution, including its schema preflight under
+the migration lock. Match-expansion rollouts retain an additional check-only
+execution before opening the compatibility window.
 
 ### Database connection budget
 

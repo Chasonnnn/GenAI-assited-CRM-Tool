@@ -58,7 +58,7 @@ def test_match_expansion_release_preflights_before_opening_compatibility_window(
 
 
 @pytest.mark.parametrize("expansion", ["false", "true"])
-def test_release_deploys_bounded_pools_without_losing_migration_flags(tmp_path, expansion):
+def test_release_preserves_migration_gates_and_deploys_bounded_pools(tmp_path, expansion):
     build = yaml.safe_load((ROOT / "cloudbuild/api.yaml").read_text())
     calls = tmp_path / "calls.jsonl"
     gcloud = tmp_path / "gcloud"
@@ -78,16 +78,43 @@ def test_release_deploys_bounded_pools_without_losing_migration_flags(tmp_path, 
         "PATH": f"{tmp_path}:{os.environ['PATH']}",
         "GCLOUD_CALLS": str(calls),
     }
-    for step in build["steps"]:
+    release_steps = build["steps"][
+        next(
+            i for i, step in enumerate(build["steps"]) if step.get("id") == "resolve-release-images"
+        )
+        + 1 :
+    ]
+    for step in release_steps:
         script = step.get("args", [""])[-1]
-        if 'gcloud run services update "$_' not in script or "--image" not in script:
-            continue
         script = script.replace("$$", "$").replace("/workspace/", f"{tmp_path}/")
         subprocess.run(["bash", "-ceu", script], env=env, check=True)
 
     recorded = [json.loads(line) for line in calls.read_text().splitlines()]
-    assert len(recorded) == 2
-    for argv in recorded:
+    executions = [
+        i for i, argv in enumerate(recorded) if argv[:4] == ["beta", "run", "jobs", "execute"]
+    ]
+    assert len(executions) == (2 if expansion == "true" else 1)
+    assert all("--wait" in recorded[i] for i in executions)
+    compatibility_updates = [
+        i
+        for i, argv in enumerate(recorded)
+        if any("DB_MIGRATION_CHECK=false" in arg for arg in argv)
+    ]
+    if expansion == "true":
+        assert len(compatibility_updates) == 2
+        assert (
+            executions[0] < min(compatibility_updates) <= max(compatibility_updates) < executions[1]
+        )
+    else:
+        assert not compatibility_updates
+    deployments = [
+        (i, argv)
+        for i, argv in enumerate(recorded)
+        if argv[:3] == ["run", "services", "update"] and "--image" in argv
+    ]
+    assert len(deployments) == 2
+    for index, argv in deployments:
+        assert executions[-1] < index
         service = argv[3]
         ceiling = "2" if service == "crm-api" else "3"
         assert argv[argv.index("--max") + 1] == ceiling

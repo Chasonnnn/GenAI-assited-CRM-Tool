@@ -133,10 +133,14 @@ steps:
     args:
       - -ceu
       - |
-        gcloud beta run jobs execute "$_MIGRATE_JOB" \
-          --region "$_REGION" \
-          --wait \
-          --quiet
+        # Ordinary migrations already preflight under the migration lock.
+        # Expansion needs a separate check before changing service readiness.
+        if [[ "$_MATCH_EXPANSION_ROLLOUT" == "true" ]]; then
+          gcloud beta run jobs execute "$_MIGRATE_JOB" \
+            --region "$_REGION" \
+            --wait \
+            --quiet
+        fi
   # Old binaries cannot recognize the expanded Alembic head. Keep their normal
   # DB health checks while temporarily disabling exact-head checks. New data
   # remains fenced until an operator verifies cutover and activates it.
