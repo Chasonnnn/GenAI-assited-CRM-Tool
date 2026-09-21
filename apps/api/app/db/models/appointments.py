@@ -247,6 +247,14 @@ class Appointment(Base):
     __tablename__ = "appointments"
     __table_args__ = (
         CheckConstraint(
+            "google_sync_revision >= 0", name="ck_appointments_google_sync_revision_nonnegative"
+        ),
+        CheckConstraint(
+            "google_sync_state IS NULL OR google_sync_state IN "
+            "('pending', 'completed', 'failed', 'conflict', 'unlinked')",
+            name="ck_appointments_google_sync_state",
+        ),
+        CheckConstraint(
             "attempt_id IS NULL OR match_id IS NOT NULL", name="ck_appointments_attempt_match"
         ),
         ForeignKeyConstraint(
@@ -365,6 +373,16 @@ class Appointment(Base):
 
     # Integration IDs
     google_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_calendar_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_account_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_integration_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user_integrations.id", ondelete="SET NULL"), nullable=True
+    )
+    google_event_etag: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_sync_revision: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    google_sync_state: Mapped[str | None] = mapped_column(String(20), nullable=True)
     google_meet_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     zoom_meeting_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     zoom_join_url: Mapped[str | None] = mapped_column(String(500), nullable=True)

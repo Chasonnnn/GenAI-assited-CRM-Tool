@@ -46,6 +46,7 @@ class JobType(str, Enum):
     WORKFLOW_RESUME = "workflow_resume"  # Resume workflow after approval resolution
     ORG_DELETE = "org_delete"  # Hard delete org after grace period
     GOOGLE_CALENDAR_SYNC = "google_calendar_sync"  # Two-way Google calendar reconciliation
+    APPOINTMENT_GOOGLE_SYNC = "appointment_google_sync"
     GOOGLE_TASKS_SYNC = "google_tasks_sync"  # Two-way Google Tasks reconciliation
     GOOGLE_TASK_CREATION_RECONCILE = (
         "google_task_creation_reconcile"  # Recover an uncertain donor-task POST
