@@ -239,6 +239,7 @@ export interface FormSubmissionRead {
     review_notes?: string | null
     answers: JsonObject
     schema_snapshot?: FormSchema | null
+    mapping_snapshot?: FormFieldMappingItem[] | null
     source_mode: FormLinkMode
     intake_link_id?: string | null
     intake_lead_id?: string | null

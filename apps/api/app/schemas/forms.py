@@ -204,6 +204,11 @@ class FormSubmissionFileDownloadResponse(BaseModel):
     filename: str
 
 
+class FormFieldMappingItem(BaseModel):
+    field_key: str = Field(min_length=1, max_length=100)
+    surrogate_field: str = Field(min_length=1, max_length=100)
+
+
 class FormSubmissionRead(BaseModel):
     id: UUID
     form_id: UUID
@@ -218,6 +223,7 @@ class FormSubmissionRead(BaseModel):
     review_notes: str | None
     answers: dict[str, object]
     schema_snapshot: dict[str, object] | None
+    mapping_snapshot: list[FormFieldMappingItem] | None
     source_mode: str
     intake_link_id: UUID | None
     intake_lead_id: UUID | None
@@ -237,11 +243,6 @@ class FormDeliverySettingsUpdate(BaseModel):
 
 class FormSubmissionStatusUpdate(BaseModel):
     review_notes: str | None = None
-
-
-class FormFieldMappingItem(BaseModel):
-    field_key: str = Field(min_length=1, max_length=100)
-    surrogate_field: str = Field(min_length=1, max_length=100)
 
 
 class FormMappingOption(BaseModel):
