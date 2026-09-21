@@ -1,6 +1,6 @@
 """An ordinary release cannot accidentally cross the match expansion boundary."""
 
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 from sqlalchemy import inspect, text
@@ -15,6 +15,22 @@ def test_pending_expansion_requires_explicit_cutover(revision, monkeypatch):
     monkeypatch.setattr(release_migration, "_current_heads", lambda _: (revision,))
     with pytest.raises(RuntimeError, match="explicit match expansion rollout"):
         release_migration.preflight(Mock(), allow_match_expansion=False)
+
+
+def test_normal_migration_checks_expansion_before_upgrading(monkeypatch):
+    db_engine = MagicMock()
+    connection = db_engine.connect.return_value.__enter__.return_value
+    connection.execute.return_value.scalar_one.return_value = True
+    monkeypatch.setattr(release_migration, "_current_heads", lambda _: ("20260830_0100",))
+    upgrade = Mock()
+    monkeypatch.setattr(release_migration.command, "upgrade", upgrade)
+
+    with pytest.raises(RuntimeError, match="explicit match expansion rollout"):
+        release_migration.run_migration(db_engine, check_only=False, allow_match_expansion=False)
+
+    upgrade.assert_not_called()
+    connection.rollback.assert_called_once()
+    assert "pg_advisory_unlock" in str(connection.execute.call_args.args[0])
 
 
 def test_expanded_schema_allows_normal_release(monkeypatch):

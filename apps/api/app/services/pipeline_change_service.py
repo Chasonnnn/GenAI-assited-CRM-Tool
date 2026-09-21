@@ -92,7 +92,12 @@ def validate_protected_stage_layout(
 
     if (
         current_protected_stage_keys is not None
-        and draft_protected_stage_keys != current_protected_stage_keys
+        and [
+            stage_key
+            for stage_key in draft_protected_stage_keys
+            if stage_key in current_protected_stage_keys
+        ]
+        != current_protected_stage_keys
     ):
         errors.append("Protected system stages cannot be reordered.")
 

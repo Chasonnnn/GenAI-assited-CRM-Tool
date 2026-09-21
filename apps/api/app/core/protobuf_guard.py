@@ -35,28 +35,18 @@ def apply_protobuf_json_depth_guard() -> None:
         message: Any,
         ignore_unknown_fields: bool = False,
         descriptor_pool: Any | None = None,
-        *args: Any,
-        **kwargs: Any,
+        max_recursion_depth: int = DEFAULT_MAX_RECURSION_DEPTH,
     ) -> Any:
-        if _exceeds_depth(js_dict, max_depth):
+        depth_limit = min(max_depth, max_recursion_depth)
+        if _exceeds_depth(js_dict, depth_limit):
             raise json_format.ParseError("Protobuf JSON exceeds maximum recursion depth")
-        try:
-            return original_parse_dict(
-                js_dict,
-                message,
-                ignore_unknown_fields=ignore_unknown_fields,
-                descriptor_pool=descriptor_pool,
-                *args,
-                **kwargs,
-            )
-        except TypeError:
-            return original_parse_dict(
-                js_dict,
-                message,
-                ignore_unknown_fields=ignore_unknown_fields,
-                *args,
-                **kwargs,
-            )
+        return original_parse_dict(
+            js_dict,
+            message,
+            ignore_unknown_fields=ignore_unknown_fields,
+            descriptor_pool=descriptor_pool,
+            max_recursion_depth=depth_limit,
+        )
 
     json_format.ParseDict = guarded_parse_dict
     json_format._sf_depth_guard_applied = True

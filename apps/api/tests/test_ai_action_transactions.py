@@ -10,7 +10,8 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
+from sqlalchemy.pool import NullPool
 
 from app.core.csrf import CSRF_HEADER
 from app.core.encryption import hash_email
@@ -50,6 +51,16 @@ from app.services import (
     permission_service,
     workflow_triggers,
 )
+
+
+@pytest.fixture
+def observation_engine(db_engine):
+    # Test-only lock control and inspection must not consume the two actor slots.
+    engine = create_engine(db_engine.url, poolclass=NullPool)
+    try:
+        yield engine
+    finally:
+        engine.dispose()
 
 
 @pytest.fixture
@@ -195,7 +206,9 @@ def _assert_no_domain_changes(db, seeded):
 
 @pytest.mark.parametrize("committed_approval", ["add_note", "send_email"], indirect=True)
 @pytest.mark.parametrize("competing_operation", ["approve", "reject"])
-def test_competing_decisions_have_one_winner(db_engine, committed_approval, competing_operation):
+def test_competing_decisions_have_one_winner(
+    db_engine, observation_engine, committed_approval, competing_operation
+):
     seeded = committed_approval
     ready = Queue()
 
@@ -219,14 +232,17 @@ def test_competing_decisions_have_one_winner(db_engine, committed_approval, comp
 
     # Queue both operations behind a real row lock. In the broken implementation,
     # they execute before blocking on UPDATE; in the fixed one they block on SELECT.
-    with SessionLocal(bind=db_engine) as blocker, ThreadPoolExecutor(max_workers=2) as pool:
+    with (
+        SessionLocal(bind=observation_engine) as blocker,
+        ThreadPoolExecutor(max_workers=2) as pool,
+    ):
         blocker.query(AIActionApproval).filter(
             AIActionApproval.id == seeded.approval_id
         ).with_for_update().one()
         futures = [pool.submit(decide, operation) for operation in ("approve", competing_operation)]
         try:
             pids = [ready.get(timeout=10), ready.get(timeout=10)]
-            with db_engine.connect() as monitor:
+            with observation_engine.connect() as monitor:
                 deadline = monotonic() + 10
                 while monotonic() < deadline:
                     waiting = monitor.scalar(

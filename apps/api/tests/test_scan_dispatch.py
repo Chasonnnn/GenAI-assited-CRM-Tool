@@ -520,8 +520,11 @@ def test_two_scan_executions_with_same_token_invoke_scanner_once(db_engine, monk
 
 
 def test_two_scan_jobs_for_same_resource_invoke_scanner_once(db_engine, monkeypatch):
+    from sqlalchemy.orm import sessionmaker
+
     from app import scan_job_runner
-    from app.db.session import SessionLocal
+    from app.core.config import settings
+    from app.db.session import SessionLocal, create_engine_with_settings
 
     org_id = uuid4()
     resource_id = uuid4()
@@ -567,6 +570,12 @@ def test_two_scan_jobs_for_same_resource_invoke_scanner_once(db_engine, monkeypa
     release_scan = threading.Event()
     calls = 0
     calls_lock = threading.Lock()
+    # Each Cloud Run job execution has its own process and bounded pool.
+    job_engines = [create_engine_with_settings(settings) for _ in job_ids]
+    job_sessions = threading.local()
+
+    def _job_session():
+        return job_sessions.factory()
 
     def _scan_once(_resource_id):
         nonlocal calls
@@ -574,18 +583,19 @@ def test_two_scan_jobs_for_same_resource_invoke_scanner_once(db_engine, monkeypa
             calls += 1
         scan_started.set()
         assert release_scan.wait(timeout=3)
-        update_db = SessionLocal()
-        update_db.query(Attachment).filter(Attachment.id == resource_id).update(
-            {"scan_status": "clean", "quarantined": False}
-        )
-        update_db.commit()
-        update_db.close()
+        with _job_session() as update_db:
+            update_db.query(Attachment).filter(Attachment.id == resource_id).update(
+                {"scan_status": "clean", "quarantined": False}
+            )
+            update_db.commit()
         return True
 
     monkeypatch.setattr(scan_job_runner, "_prepare_scanner", lambda: None)
     monkeypatch.setattr(scan_job_runner, "scan_attachment_job", _scan_once)
+    monkeypatch.setattr(scan_job_runner, "SessionLocal", _job_session)
 
     def _run(index):
+        job_sessions.factory = sessionmaker(bind=job_engines[index])
         return scan_job_runner.run_scan_job(
             scan_type="attachment",
             resource_id=resource_id,
@@ -610,6 +620,8 @@ def test_two_scan_jobs_for_same_resource_invoke_scanner_once(db_engine, monkeypa
         assert statuses == {job_id: JobStatus.COMPLETED.value for job_id in job_ids}
         assert calls == 1
     finally:
+        for job_engine in job_engines:
+            job_engine.dispose()
         cleanup = SessionLocal()
         cleanup.query(Organization).filter(Organization.id == org_id).delete()
         cleanup.commit()

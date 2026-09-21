@@ -12,6 +12,7 @@ def _create_engine_with_settings(config: Settings, *, metrics: bool = False):
     connect_args = {}
     if backend.startswith("postgresql"):
         connect_args["options"] = "-c timezone=utc"
+        connect_args["connect_timeout"] = config.DB_CONNECT_TIMEOUT
         if metrics:
             connect_args["connect_timeout"] = 2
             connect_args["options"] += " -c statement_timeout=1000 -c lock_timeout=500"

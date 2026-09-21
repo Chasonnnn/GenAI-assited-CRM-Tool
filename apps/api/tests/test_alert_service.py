@@ -187,10 +187,8 @@ def test_create_or_update_alert_concurrent_dedupe_upsert(db_engine):
     if db_engine.dialect.name != "postgresql":
         pytest.skip("Concurrent upsert semantics require PostgreSQL")
 
-    setup_conn = db_engine.connect()
-    setup_session = SessionLocal(bind=setup_conn)
-    cleanup_conn = db_engine.connect()
-    cleanup_session = SessionLocal(bind=cleanup_conn)
+    setup_session = SessionLocal()
+    cleanup_session = SessionLocal()
 
     org_id = None
     try:
@@ -202,12 +200,13 @@ def test_create_or_update_alert_concurrent_dedupe_upsert(db_engine):
         setup_session.add(org)
         setup_session.commit()
         org_id = org.id
+        setup_session.close()
 
         workers = 6
 
         def _write_alert() -> None:
             alert = alert_service.record_alert_isolated(
-                org_id=org.id,
+                org_id=org_id,
                 alert_type=AlertType.WORKER_JOB_FAILED,
                 severity=AlertSeverity.ERROR,
                 title="Concurrent failure",
@@ -223,7 +222,7 @@ def test_create_or_update_alert_concurrent_dedupe_upsert(db_engine):
         alerts = (
             cleanup_session.query(SystemAlert)
             .filter(
-                SystemAlert.organization_id == org.id,
+                SystemAlert.organization_id == org_id,
                 SystemAlert.alert_type == AlertType.WORKER_JOB_FAILED.value,
                 SystemAlert.integration_key == "worker",
                 SystemAlert.title == "Concurrent failure",
@@ -240,6 +239,4 @@ def test_create_or_update_alert_concurrent_dedupe_upsert(db_engine):
             cleanup_session.query(Organization).filter(Organization.id == org_id).delete()
             cleanup_session.commit()
         cleanup_session.close()
-        cleanup_conn.close()
         setup_session.close()
-        setup_conn.close()

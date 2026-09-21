@@ -774,13 +774,18 @@ def sync_missing_stages(
     commit: bool = True,
 ) -> int:
     """
-    Add missing default stages to an existing pipeline.
+    Add or reactivate missing default stages in an existing pipeline.
 
-    Compares existing stages against DEFAULT_STAGE_ORDER and adds any missing ones.
-    Returns count of stages added.
+    Reuse soft-deleted rows to preserve references and unique stage identities.
+    Returns count of stages added or restored.
     """
     active_stages = [stage for stage in pipeline.stages if not stage.deleted_at]
-    existing_stage_keys = {s.stage_key for s in active_stages}
+    existing_stage_keys = {
+        _normalize_stage_key(stage.stage_key or stage.slug) for stage in active_stages
+    }
+    stages_by_key = {
+        _normalize_stage_key(stage.stage_key or stage.slug): stage for stage in pipeline.stages
+    }
 
     # Find missing stage keys
     default_defs = stage_defs or get_protected_system_stage_defs(pipeline.entity_type)
@@ -801,30 +806,32 @@ def sync_missing_stages(
             item.updated_at = datetime.now(UTC)
             continue
 
-        db.add(
-            PipelineStage(
+        stage_key = _normalize_stage_key(item.get("stage_key") or item["slug"])
+        stage = stages_by_key.get(stage_key)
+        if stage is None:
+            stage = PipelineStage(
                 pipeline_id=pipeline.id,
-                stage_key=_normalize_stage_key(item.get("stage_key") or item["slug"]),
+                stage_key=stage_key,
                 slug=item["slug"],
                 label=item["label"],
                 color=item["color"],
-                order=index,
-                stage_type=item["stage_type"],
-                semantics=default_stage_semantics(
-                    _normalize_stage_key(item.get("stage_key") or item["slug"]),
-                    item["stage_type"],
-                    pipeline.entity_type,
-                ),
-                is_intake_stage=item["stage_type"] == "intake",
-                is_active=True,
             )
+            db.add(stage)
+        stage.order = index
+        stage.stage_type = item["stage_type"]
+        stage.semantics = default_stage_semantics(
+            stage_key, item["stage_type"], pipeline.entity_type
         )
+        stage.is_intake_stage = item["stage_type"] == "intake"
+        stage.is_active = True
+        stage.deleted_at = None
+        stage.updated_at = datetime.now(UTC)
 
     db.flush()
     db.refresh(pipeline)
     _ensure_pipeline_semantics_defaults(db, pipeline)
     _validate_pipeline_configuration(db, pipeline)
-    _bump_pipeline_version(db, pipeline, user_id, f"Added {len(missing)} missing stages")
+    _bump_pipeline_version(db, pipeline, user_id, f"Synced {len(missing)} missing stages")
 
     if commit:
         db.commit()

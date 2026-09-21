@@ -493,8 +493,9 @@ def test_hold_creation_serializes_before_destructive_preservation_checks(
     from threading import Event
     from time import monotonic, sleep
 
-    from sqlalchemy import event, text
+    from sqlalchemy import create_engine, event, text
     from sqlalchemy.orm import Session
+    from sqlalchemy.pool import NullPool
 
     from app.db.models import User
     from app.services.record_preservation_service import PreservationDependencyError
@@ -521,6 +522,8 @@ def test_hold_creation_serializes_before_destructive_preservation_checks(
         record_id = record.id
         setup.commit()
 
+    # Observing locks must not consume either concurrent transaction's pool slot.
+    observer_engine = create_engine(db_engine.url, poolclass=NullPool)
     hold_fenced, release_hold, deleting = Event(), Event(), Event()
     delete_pids = []
 
@@ -561,7 +564,7 @@ def test_hold_creation_serializes_before_destructive_preservation_checks(
                 destroying = pool.submit(destroy_record)
                 assert deleting.wait(5)
                 deadline = monotonic() + 5
-                with Session(db_engine) as observer:
+                with Session(observer_engine) as observer:
                     while monotonic() < deadline:
                         if observer.execute(
                             text("SELECT cardinality(pg_blocking_pids(:pid))"),
@@ -579,6 +582,7 @@ def test_hold_creation_serializes_before_destructive_preservation_checks(
             assert verify.get(model, record_id) is not None
     finally:
         release_hold.set()
+        observer_engine.dispose()
         with db_engine.begin() as cleanup:
             cleanup.execute(text("DELETE FROM organizations WHERE id=:id"), {"id": org_id})
             cleanup.execute(text("DELETE FROM users WHERE id=:id"), {"id": user_id})
