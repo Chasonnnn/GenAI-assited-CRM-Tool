@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.70](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.69...surrogacy-crm-platform-v0.91.70) (2026-09-21)
+
+
+### Bug Fixes
+
+* allow managing unlinked video interviews ([bd0b82f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bd0b82f6b94705d3434bb73b9a8fb0c5dc86694f))
+* allow managing unlinked video interviews ([e912850](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e91285065cfa84d2fd0dbe4577ca2edc8533bcb9))
+
 ## [0.91.69](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.68...surrogacy-crm-platform-v0.91.69) (2026-09-21)
 
 
