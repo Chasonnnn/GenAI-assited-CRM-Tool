@@ -12,8 +12,8 @@ import time
 from urllib.parse import urlparse
 from uuid import UUID
 
+from anyio import CapacityLimiter, to_thread
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, WebSocketException
-from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -27,6 +27,8 @@ from app.services import session_service
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
 # Periodic DB check to close revoked sessions if Redis pub/sub is unavailable.
 SESSION_RECHECK_SECONDS = 60
+# Keep WebSocket database waits from consuming HTTP worker capacity.
+_websocket_db_limiter = CapacityLimiter(2)
 
 
 def _normalize_origin(origin: str) -> str:
@@ -272,8 +274,13 @@ async def websocket_notifications(
         )
         return
     try:
-        org_id = await run_in_threadpool(
-            _authorize_websocket_session, token_hash, user_id, org_id, origin
+        org_id = await to_thread.run_sync(
+            _authorize_websocket_session,
+            token_hash,
+            user_id,
+            org_id,
+            origin,
+            limiter=_websocket_db_limiter,
         )
     except WebSocketException as exc:
         await _reject_websocket(
@@ -307,7 +314,9 @@ async def websocket_notifications(
                 break
 
             if time.monotonic() - last_recheck >= SESSION_RECHECK_SECONDS:
-                if not await run_in_threadpool(_websocket_session_is_active, token_hash):
+                if not await to_thread.run_sync(
+                    _websocket_session_is_active, token_hash, limiter=_websocket_db_limiter
+                ):
                     await websocket.close(code=4001, reason="Session revoked")
                     break
                 last_recheck = time.monotonic()

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
+from anyio import to_thread
 from fastapi import WebSocketDisconnect
 from sqlalchemy.pool import QueuePool
 
@@ -17,7 +18,10 @@ from app.services import membership_service, org_service, session_service
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("phase", ["handshake", "revocation_check"])
-async def test_database_wait_allows_other_requests_to_release_connections(monkeypatch, phase):
+@pytest.mark.parametrize("release_in_worker", [False, True])
+async def test_database_wait_allows_other_requests_to_release_connections(
+    monkeypatch, phase, release_in_worker
+):
     pool = QueuePool(Mock, pool_size=2, max_overflow=0, timeout=0.2)
     held = []
     release_task = None
@@ -27,9 +31,16 @@ async def test_database_wait_allows_other_requests_to_release_connections(monkey
     disconnected = False
     closed = None
 
+    if release_in_worker:
+        # Reproduce shared-worker saturation with one socket instead of forty.
+        monkeypatch.setattr(to_thread.current_default_thread_limiter(), "total_tokens", 1)
+
     async def release_slot():
         await asyncio.sleep(0.01)
-        held.pop().close()
+        if release_in_worker:
+            await to_thread.run_sync(lambda: held.pop().close())
+        else:
+            held.pop().close()
 
     def occupy_pool():
         nonlocal release_task
