@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { renderToString } from 'react-dom/server'
 import { ActivityTimeline } from '@/components/surrogates/ActivityTimeline'
 import type { PipelineStage } from '@/lib/api/pipelines'
@@ -7,6 +7,12 @@ import type { SurrogateActivity, SurrogateStatusHistory } from '@/lib/api/surrog
 import type { TaskListItem } from '@/lib/types/task'
 
 const mockUseSurrogateHistory = vi.fn()
+const mockUseInterviewAppointment = vi.fn()
+
+vi.mock('@/lib/hooks/use-interview-appointment', () => ({
+    useInterviewAppointment: () => mockUseInterviewAppointment(),
+    useManageInterviewAppointment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}))
 
 function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -118,6 +124,62 @@ function makeTask(overrides: Partial<TaskListItem> = {}): TaskListItem {
 describe('ActivityTimeline', () => {
     beforeEach(() => {
         mockUseSurrogateHistory.mockReturnValue({ data: [] })
+        mockUseInterviewAppointment.mockReturnValue({
+            data: {
+                appointment: null,
+                can_manage: true,
+                scheduled_stage: { id: 'scheduled', label: 'Interview Scheduled', color: '#a855f7' },
+                reschedule_stage: { id: 'reschedule', label: 'Reschedule Needed', color: '#eab308' },
+            },
+            isLoading: false,
+            isError: false,
+        })
+    })
+
+    it.each(['interview_scheduled', 'interview_rescheduled', 'interview_cancelled'])(
+        'keeps Manage on the latest scheduling entry after %s',
+        async (activityType) => {
+            const currentStageId = activityType === 'interview_cancelled' ? 'reschedule' : 'scheduled'
+            mockUseSurrogateHistory.mockReturnValue({ data: [makeHistory({ to_stage_id: 'scheduled' })] })
+            const activities = [
+                ...(activityType === 'interview_cancelled' ? [makeActivity({ id: 'cancelled', activity_type: 'interview_cancelled', created_at: '2026-05-05T12:00:00Z' })] : []),
+                makeActivity({ id: 'latest', activity_type: activityType === 'interview_cancelled' ? 'interview_scheduled' : activityType, created_at: '2026-05-04T12:00:00Z', details: { appointment_id: 'appt-1', scheduled_start: '2026-06-01T17:00:00Z' } }),
+                ...[1, 2, 3, 4].map((day) => makeActivity({ id: `old-${day}`, activity_type: 'interview_scheduled', created_at: `2026-04-0${day}T12:00:00Z` })),
+            ]
+            render(<ActivityTimeline
+                surrogateId="surr1"
+                currentStageId={currentStageId}
+                stages={[
+                    makeStage({ id: 'scheduled', stage_key: 'interview_scheduled', label: 'Interview Scheduled', order: 1 }),
+                    makeStage({ id: 'reschedule', stage_key: 'reschedule_needed', label: 'Reschedule Needed', order: 2 }),
+                ]}
+                activities={activities}
+            />)
+
+            const header = screen.getByRole('heading', { name: 'Activity' }).closest('[data-slot="card-header"]')
+            expect(within(header as HTMLElement).queryByRole('button', { name: 'Manage' })).not.toBeInTheDocument()
+            expect(screen.getAllByRole('button', { name: 'Manage' })).toHaveLength(1)
+            const entry = screen.getByTestId('timeline-activity-latest')
+            const manage = within(entry).getByRole('button', { name: 'Manage' })
+            expect(manage).toBeVisible()
+            expect(within(entry).getByText(/Appointment:/)).toBeInTheDocument()
+            expect(screen.queryByText('Interview appointment')).not.toBeInTheDocument()
+
+            fireEvent.click(manage)
+            expect(await screen.findByRole('dialog', { name: 'Manage appointment' })).toBeInTheDocument()
+            expect(screen.getByText('No active appointment')).toBeInTheDocument()
+        },
+    )
+
+    it.each(['loading', 'error'] as const)('keeps the Activity header free of appointment actions while %s', (activityStatus) => {
+        render(<ActivityTimeline
+            surrogateId="surr1"
+            currentStageId="scheduled"
+            stages={[makeStage({ id: 'scheduled', stage_key: 'interview_scheduled' })]}
+            activities={[makeActivity({ activity_type: 'interview_scheduled' })]}
+            activityStatus={activityStatus}
+        />)
+        expect(screen.queryByRole('button', { name: 'Manage' })).not.toBeInTheDocument()
     })
 
     it('shows only the current stage details by default', () => {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { InterviewAppointmentManager, localDateTimeToIso } from "@/components/surrogates/InterviewAppointmentManager"
 import type { InterviewAppointmentState } from "@/lib/api/interview-appointment"
@@ -51,6 +51,19 @@ describe("InterviewAppointmentManager", () => {
         mutateAsync.mockReset().mockResolvedValue({})
         refetch.mockReset()
         useInterviewAppointment.mockReset()
+    })
+
+    it("groups Reschedule, Cancel appointment, and Done in the same action row", async () => {
+        renderManager(activeState())
+        fireEvent.click(screen.getByRole("button", { name: "Manage" }))
+        const dialog = await screen.findByRole("dialog", { name: "Manage appointment" })
+        const footer = dialog.querySelector('[data-slot="dialog-footer"]')
+        expect(footer).not.toBeNull()
+        expect(within(footer as HTMLElement).getAllByRole("button").map((button) => button.textContent)).toEqual([
+            "Reschedule", "Cancel appointment", "Done",
+        ])
+        fireEvent.click(within(footer as HTMLElement).getByRole("button", { name: "Done" }))
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
     })
 
     it("cancels with an explicit move to Reschedule Needed choice", async () => {
@@ -149,6 +162,31 @@ describe("InterviewAppointmentManager", () => {
     it("disables management for read-only users", () => {
         renderManager(activeState({ can_manage: false }))
         expect(screen.getByRole("button", { name: "Manage" })).toBeDisabled()
+    })
+
+    it("keeps the inline trigger disabled while appointment data loads", () => {
+        useInterviewAppointment.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch })
+        render(<InterviewAppointmentManager surrogateId="surrogate-1" stageId={scheduledStage.id} triggerOnly />)
+
+        expect(screen.getByRole("button", { name: "Loading interview appointment" })).toBeDisabled()
+        expect(screen.queryByText("Loading appointment")).not.toBeInTheDocument()
+    })
+
+    it("offers a compact retry action when the inline appointment query fails", () => {
+        useInterviewAppointment.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
+        render(<InterviewAppointmentManager surrogateId="surrogate-1" stageId={scheduledStage.id} triggerOnly />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Retry appointment" }))
+        expect(refetch).toHaveBeenCalledOnce()
+        expect(screen.queryByText("Appointment unavailable")).not.toBeInTheDocument()
+    })
+
+    it("preserves read-only access in the inline trigger", () => {
+        useInterviewAppointment.mockReturnValue({ data: activeState({ can_manage: false }), isLoading: false, isError: false, refetch })
+        render(<InterviewAppointmentManager surrogateId="surrogate-1" stageId={scheduledStage.id} triggerOnly />)
+
+        expect(screen.getByRole("button", { name: "Manage" })).toBeDisabled()
+        expect(screen.queryByText("Interview appointment")).not.toBeInTheDocument()
     })
 
     it("offers retry when loading the appointment fails", () => {
