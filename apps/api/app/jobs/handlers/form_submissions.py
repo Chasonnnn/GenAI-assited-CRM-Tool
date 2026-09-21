@@ -8,6 +8,25 @@ from uuid import UUID
 logger = logging.getLogger(__name__)
 
 
+async def process_form_submission_workflow(db, job) -> None:
+    from app.services import form_intake_service
+
+    if not job.organization_id:
+        raise ValueError("Form submission workflow job requires organization scope")
+    submission_id = job.payload.get("submission_id")
+    if not submission_id:
+        raise ValueError("Form submission workflow job requires submission_id")
+    try:
+        form_intake_service.process_form_submission_workflow(
+            db,
+            org_id=job.organization_id,
+            submission_id=UUID(submission_id),
+        )
+    except Exception:
+        # Worker errors are persisted; workflow/action failures may contain applicant data.
+        raise RuntimeError("Form submission workflow processing failed") from None
+
+
 async def process_donor_intake_promote(db, job) -> None:
     from app.services import donor_intake_service
 

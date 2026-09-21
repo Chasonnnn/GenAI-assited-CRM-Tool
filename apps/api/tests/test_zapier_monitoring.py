@@ -95,6 +95,48 @@ async def test_zapier_outbound_events_summary_excludes_test_events(authed_client
 
 
 @pytest.mark.asyncio
+async def test_zapier_summary_excludes_intentional_donor_skips_from_alert_rate(
+    authed_client, db, test_org
+):
+    from app.db.models import ZapierOutboundEvent
+
+    now = datetime.now(UTC)
+    reasons = (
+        "donor_outbound_disabled",
+        "donor_stage_undo",
+        "unmapped_donor_stage",
+        "missing_donor_attribution",
+        "donor_dispatch_url_missing",
+    )
+    db.add_all(
+        [
+            ZapierOutboundEvent(
+                organization_id=test_org.id,
+                source="donor_stage",
+                status="skipped",
+                reason=reason,
+                created_at=now - timedelta(minutes=index),
+                updated_at=now - timedelta(minutes=index),
+            )
+            for index, reason in enumerate(reasons)
+        ]
+    )
+    db.commit()
+
+    response = await authed_client.get("/integrations/zapier/events/summary")
+    assert response.status_code == 200
+    summary = response.json()
+    assert summary["total_count"] == 5
+    assert summary["skipped_count"] == 5
+    assert summary["actionable_skipped_count"] == 2
+    assert summary["skipped_rate"] == pytest.approx(0.4)
+    assert summary["skipped_rate_alert"] is True
+    assert summary["warning_messages"] == [
+        "Skipped-event rate is elevated for Zapier outbound events."
+    ]
+
+
+@pytest.mark.asyncio
 async def test_retry_failed_zapier_outbound_event_replays_job(authed_client, db, test_org):
     from app.db.enums import JobStatus, JobType
     from app.db.models import Job, ZapierOutboundEvent

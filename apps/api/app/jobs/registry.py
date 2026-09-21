@@ -57,6 +57,7 @@ JOB_HANDLERS: Mapping[str, JobHandler] = {
     JobType.INTERVIEW_TRANSCRIPTION.value: interviews.process_interview_transcription,
     JobType.ATTACHMENT_SCAN.value: attachments.process_attachment_scan,
     JobType.FORM_SUBMISSION_FILE_SCAN.value: form_submissions.process_form_submission_file_scan,
+    JobType.FORM_SUBMISSION_WORKFLOW.value: form_submissions.process_form_submission_workflow,
     JobType.DONOR_INTAKE_PROMOTE.value: form_submissions.process_donor_intake_promote,
     JobType.MESSAGE_MEDIA_SCAN.value: message_media.process_message_media_scan,
     JobType.WORKFLOW_APPROVAL_EXPIRY.value: workflows.process_workflow_approval_expiry,

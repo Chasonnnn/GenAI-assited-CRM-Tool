@@ -177,6 +177,7 @@ if WORKER_STALE_CLAIM_REAPER_BATCH_SIZE <= 0:
 WORKER_STALE_CLAIM_RETRY_SAFE_JOB_TYPES = frozenset(
     {
         JobType.AI_SEND_EMAIL.value,
+        JobType.FORM_SUBMISSION_WORKFLOW.value,
         JobType.WORKFLOW_APPROVAL_EXPIRY.value,
         JobType.DONOR_INTAKE_PROMOTE.value,
         JobType.GOOGLE_TASK_REMOTE_DELETE.value,
@@ -388,19 +389,20 @@ def maybe_schedule_workflow_sweep_jobs(
     bucket = now.astimezone(UTC).strftime("%Y%m%dT%H%MZ")
     jobs_created = 0
     duplicates_skipped = 0
-    orgs = org_service.list_orgs(db)
-    for org in orgs:
+    # Job scheduling commits or rolls back, which expires ORM objects still in this loop.
+    org_ids = [org.id for org in org_service.list_orgs(db)]
+    for org_id in org_ids:
         if not workflow_triggers.has_due_scheduled_workflows(
             db,
-            org.id,
+            org_id,
             evaluated_at=now,
         ):
             continue
-        idempotency_key = f"workflow-sweep:scheduled:{org.id}:{bucket}"
+        idempotency_key = f"workflow-sweep:scheduled:{org_id}:{bucket}"
         try:
             existing = job_service.get_job_by_idempotency_key(
                 db,
-                org_id=org.id,
+                org_id=org_id,
                 idempotency_key=idempotency_key,
             )
             if existing is not None:
@@ -408,10 +410,10 @@ def maybe_schedule_workflow_sweep_jobs(
                 continue
             job_service.schedule_job(
                 db=db,
-                org_id=org.id,
+                org_id=org_id,
                 job_type=JobType.WORKFLOW_SWEEP,
                 payload={
-                    "org_id": str(org.id),
+                    "org_id": str(org_id),
                     "sweep_type": "scheduled",
                     "evaluated_at": now.isoformat(),
                 },
@@ -425,7 +427,7 @@ def maybe_schedule_workflow_sweep_jobs(
 
     logger.info(
         "Workflow sweep fallback scheduled (organizations=%s jobs=%s duplicates=%s)",
-        len(orgs),
+        len(org_ids),
         jobs_created,
         duplicates_skipped,
     )
@@ -685,11 +687,12 @@ def _record_job_success(db, job) -> None:
     from app.db.enums import IntegrationType
     from app.services import ops_service
 
+    should_record_integration_success = True
     if job.job_type == JobType.ZAPIER_STAGE_EVENT.value:
         try:
             from app.services import zapier_monitor_service
 
-            zapier_monitor_service.mark_job_delivered(
+            should_record_integration_success = zapier_monitor_service.mark_job_delivered(
                 db=db,
                 job_id=job.id,
                 attempts=job.attempts,
@@ -700,13 +703,16 @@ def _record_job_success(db, job) -> None:
         try:
             from app.services import meta_crm_dataset_monitor_service
 
-            meta_crm_dataset_monitor_service.mark_job_delivered(
+            should_record_integration_success = meta_crm_dataset_monitor_service.mark_job_delivered(
                 db=db,
                 job_id=job.id,
                 attempts=job.attempts,
             )
         except Exception as e:
             logger.warning("Failed to mark Meta CRM dataset event delivered: %s", e)
+
+    if not should_record_integration_success:
+        return
 
     # Map job types to integration types
     job_to_integration = {

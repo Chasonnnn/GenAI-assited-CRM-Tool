@@ -30,7 +30,7 @@ import {
     useUpdatePlatformWorkflowTemplate,
 } from "@/lib/hooks/use-platform-templates"
 import type { PlatformWorkflowTemplate } from "@/lib/api/platform"
-import type { ActionConfig, Condition } from "@/lib/api/workflows"
+import type { ActionConfig, Condition, WorkflowSubjectType } from "@/lib/api/workflows"
 import type { JsonObject, JsonValue } from "@/lib/types/json"
 import { PublishDialog } from "@/components/ops/templates/PublishDialog"
 import { getSurrogateFieldLabel } from "@/lib/constants/surrogate-field-labels"
@@ -87,6 +87,94 @@ const triggerLabels: Record<string, string> = {
     appointment_completed: "Appointment Completed",
     note_added: "Note Added",
     document_uploaded: "Document Uploaded",
+    donor_created: "Donor Created",
+    donor_stage_changed: "Donor Stage Changed",
+    donor_assigned: "Donor Assigned",
+    donor_updated: "Donor Updated",
+}
+
+const WORKFLOW_SUBJECT_LABELS: Record<WorkflowSubjectType, string> = {
+    surrogate: "Surrogate",
+    form_submission: "Form Submission",
+    intake_lead: "Intake Lead",
+    match: "Match",
+    appointment: "Appointment",
+    egg_donor: "Egg Donor",
+    sperm_donor: "Sperm Donor",
+}
+
+const WORKFLOW_SUBJECT_TYPE_OPTIONS = Object.entries(WORKFLOW_SUBJECT_LABELS).map(
+    ([value, label]) => ({ value: value as WorkflowSubjectType, label })
+)
+
+const WORKFLOW_SUBJECT_TYPE_VALUES = new Set<WorkflowSubjectType>(
+    WORKFLOW_SUBJECT_TYPE_OPTIONS.map((option) => option.value)
+)
+
+const DONOR_SUBJECT_TYPES = new Set<WorkflowSubjectType>(["egg_donor", "sperm_donor"])
+
+const DONOR_ONLY_TRIGGER_TYPES = new Set([
+    "donor_created",
+    "donor_stage_changed",
+    "donor_assigned",
+    "donor_updated",
+])
+
+const DONOR_COMPATIBLE_TRIGGER_TYPES = new Set([
+    ...DONOR_ONLY_TRIGGER_TYPES,
+    "task_due",
+    "task_overdue",
+    "scheduled",
+    "inactivity",
+    "note_added",
+    "document_uploaded",
+])
+
+const STAGE_CHANGE_TRIGGER_TYPES = new Set(["status_changed", "donor_stage_changed"])
+const STAGE_REFERENCE_FIELDS = new Set(["stage_id", "status_label"])
+const STAGE_TRIGGER_REFERENCE_KEYS = [
+    "to_stage_id",
+    "from_stage_id",
+    "to_stage_key",
+    "from_stage_key",
+    "to_status",
+    "from_status",
+]
+const UPDATED_TRIGGER_TYPES = new Set(["surrogate_updated", "donor_updated"])
+const ASSIGNED_TRIGGER_TYPES = new Set(["surrogate_assigned", "donor_assigned"])
+
+function isWorkflowSubjectType(value: string | null | undefined): value is WorkflowSubjectType {
+    return !!value && WORKFLOW_SUBJECT_TYPE_VALUES.has(value as WorkflowSubjectType)
+}
+
+function isDonorSubjectType(
+    value: string | null
+): value is Extract<WorkflowSubjectType, "egg_donor" | "sperm_donor"> {
+    return isWorkflowSubjectType(value) && DONOR_SUBJECT_TYPES.has(value)
+}
+
+function getWorkflowOptionsSubjectType(value: string | null): WorkflowSubjectType {
+    return isWorkflowSubjectType(value) ? value : "surrogate"
+}
+
+function getWorkflowSubjectValidationError(subjectType: string | null, triggerType: string): string | null {
+    if (!isWorkflowSubjectType(subjectType)) return "Subject type is required."
+    if (DONOR_ONLY_TRIGGER_TYPES.has(triggerType) && !isDonorSubjectType(subjectType)) {
+        return "Donor triggers require an Egg Donor or Sperm Donor subject."
+    }
+    if (isDonorSubjectType(subjectType) && triggerType && !DONOR_COMPATIBLE_TRIGGER_TYPES.has(triggerType)) {
+        return `${WORKFLOW_SUBJECT_LABELS[subjectType]} does not support this trigger.`
+    }
+    return null
+}
+
+function getWorkflowDetailsValidationError(
+    name: string,
+    subjectType: string | null,
+    triggerType: string
+): string | null {
+    if (!name.trim()) return "Template name is required."
+    return getWorkflowSubjectValidationError(subjectType, triggerType)
 }
 
 const ICON_OPTIONS = ["template", "mail", "clock", "bell", "activity", "alert-circle"]
@@ -129,6 +217,9 @@ const conditionFieldLabels: Record<string, string> = {
     meta_lead_id: "Meta Lead ID",
     meta_ad_external_id: "Meta Ad External ID",
     meta_form_id: "Meta Form ID",
+    education: "Education",
+    donor_type: "Donor Type",
+    donor_number: "Donor Number",
 }
 
 function getConditionFieldLabel(value: string): string {
@@ -173,6 +264,142 @@ const FALLBACK_ACTION_TYPES = [
     { value: "create_intake_lead", label: "Create Intake Lead", description: "Create lead for unmatched submission" },
 ]
 
+const FALLBACK_DONOR_TRIGGER_TYPES = [
+    { value: "donor_created", label: "Donor Created", description: "When a donor record is created" },
+    { value: "donor_stage_changed", label: "Donor Stage Changed", description: "When a donor changes pipeline stage" },
+    { value: "donor_assigned", label: "Donor Assigned", description: "When a donor is assigned" },
+    { value: "donor_updated", label: "Donor Updated", description: "When donor fields change" },
+    { value: "task_due", label: "Task Due", description: "Before a donor task is due" },
+    { value: "task_overdue", label: "Task Overdue", description: "When a donor task becomes overdue" },
+    { value: "scheduled", label: "Scheduled", description: "On a recurring schedule" },
+    { value: "inactivity", label: "Inactivity", description: "When a donor has no activity" },
+    { value: "note_added", label: "Note Added", description: "When a donor note is added" },
+    { value: "document_uploaded", label: "Document Uploaded", description: "When a donor document is uploaded" },
+]
+
+const FALLBACK_DONOR_ACTION_TYPES = [
+    { value: "send_email", label: "Send Email", description: "Send email using template" },
+    { value: "create_task", label: "Create Task", description: "Create a task on the donor" },
+    { value: "assign_donor", label: "Assign Donor", description: "Assign to user or queue" },
+    { value: "send_notification", label: "Send Notification", description: "Send in-app notification" },
+    { value: "update_field", label: "Update Field", description: "Update a donor field" },
+    { value: "add_note", label: "Add Note", description: "Add a note to the donor" },
+]
+
+const DONOR_COMPATIBLE_ACTION_TYPES = new Set(
+    FALLBACK_DONOR_ACTION_TYPES.map((option) => option.value)
+)
+
+const FALLBACK_DONOR_CONDITION_FIELDS = [
+    "status_label",
+    "stage_id",
+    "source",
+    "state",
+    "created_at",
+    "owner_type",
+    "owner_id",
+    "email",
+    "phone",
+    "full_name",
+    "education",
+    "donor_type",
+    "donor_number",
+]
+
+const FALLBACK_DONOR_UPDATE_FIELDS = [
+    "stage_id",
+    "state",
+    "education",
+    "source",
+    "owner_type",
+    "owner_id",
+]
+
+function getWorkflowTemplateFallbackOptions(isDonorSubject: boolean) {
+    if (isDonorSubject) {
+        return {
+            actionTypes: FALLBACK_DONOR_ACTION_TYPES,
+            triggerTypes: FALLBACK_DONOR_TRIGGER_TYPES,
+            updateFields: FALLBACK_DONOR_UPDATE_FIELDS,
+            conditionFields: FALLBACK_DONOR_CONDITION_FIELDS,
+        }
+    }
+    return {
+        actionTypes: FALLBACK_ACTION_TYPES,
+        triggerTypes: FALLBACK_TRIGGER_TYPES,
+        updateFields: ["stage_id", "is_priority", "owner_type", "owner_id"],
+        conditionFields: Object.keys(conditionFieldLabels),
+    }
+}
+
+function getWorkflowActionSubjectValidationError(
+    action: ActionConfig,
+    isDonorSubject: boolean
+): string | null {
+    if (isDonorSubject && !DONOR_COMPATIBLE_ACTION_TYPES.has(action.action_type)) {
+        return `Action ${action.action_type} does not support donor workflows.`
+    }
+    if (!isDonorSubject && action.action_type === "assign_donor") {
+        return "Assign Donor requires a donor subject."
+    }
+    if (isDonorSubject && action.action_type === "send_email" && action.requires_approval !== true) {
+        return "Donor email actions require review approval."
+    }
+    return null
+}
+
+function getWorkflowActionValidationErrorForSubject(
+    action: ActionConfig,
+    isDonorSubject: boolean
+): string | null {
+    return getWorkflowActionSubjectValidationError(action, isDonorSubject)
+        ?? getActionValidationError(action)
+}
+
+function getWorkflowStageConditionValidationError(conditions: EditableCondition[]): string | null {
+    for (const condition of conditions) {
+        if (!STAGE_REFERENCE_FIELDS.has(condition.field) || VALUELESS_OPERATORS.has(condition.operator)) {
+            continue
+        }
+        if (
+            condition.value === undefined ||
+            condition.value === null ||
+            condition.value === "" ||
+            (Array.isArray(condition.value) && condition.value.length === 0)
+        ) {
+            return "Select a stage for each stage condition."
+        }
+    }
+    return null
+}
+
+function getWorkflowEmailRecipientOptions(isDonorSubject: boolean): SelectOption[] {
+    if (!isDonorSubject) return EMAIL_RECIPIENT_OPTIONS
+    return [
+        { value: "donor", label: "Donor" },
+        ...EMAIL_RECIPIENT_OPTIONS.flatMap((option) => {
+            if (option.value === "surrogate") return []
+            return [option.value === "owner" ? { ...option, label: "Donor Owner" } : option]
+        }),
+    ]
+}
+
+function normalizeWorkflowTemplateActionsForSave(
+    actions: EditableAction[],
+    isDonorSubject: boolean
+): ActionConfig[] {
+    return normalizeActionsForSave(actions).map((action) => {
+        if (
+            isDonorSubject &&
+            action.action_type === "send_email" &&
+            (action.recipients === undefined || action.recipients === "surrogate")
+        ) {
+            return { ...action, recipients: "donor" }
+        }
+        return action
+    })
+}
+
 const FALLBACK_OPERATORS = [
     { value: "equals", label: "Equals" },
     { value: "not_equals", label: "Does not equal" },
@@ -196,6 +423,7 @@ const ZAPIER_CONVERSION_SAMPLE = {
         "Queues outbound Zapier stage events for critical conversion buckets based on integration mapping.",
     icon: "activity",
     category: "integrations",
+    subject_type: "surrogate" as const,
     trigger_type: "status_changed",
     trigger_config: {},
     conditions: [] as Condition[],
@@ -209,7 +437,7 @@ function normalizeTriggerConfigForUi(
     statuses: WorkflowStatusOption[],
 ): JsonObject {
     const next: JsonObject = { ...triggerConfig }
-    if (triggerType === "status_changed") {
+    if (STAGE_CHANGE_TRIGGER_TYPES.has(triggerType)) {
         if (
             (typeof next.to_stage_id !== "string" || !next.to_stage_id) &&
             typeof next.to_status === "string"
@@ -243,10 +471,10 @@ function normalizeTriggerConfigForUi(
     if (triggerType === "task_due" && typeof next.hours_before !== "number") {
         next.hours_before = 24
     }
-    if (triggerType === "surrogate_updated" && !Array.isArray(next.fields)) {
+    if (UPDATED_TRIGGER_TYPES.has(triggerType) && !Array.isArray(next.fields)) {
         next.fields = []
     }
-    if (triggerType === "surrogate_assigned" && typeof next.to_user_id !== "string") {
+    if (ASSIGNED_TRIGGER_TYPES.has(triggerType) && typeof next.to_user_id !== "string") {
         delete next.to_user_id
     }
     if (
@@ -279,7 +507,7 @@ function getActionValidationError(action: ActionConfig): string | null {
     if (action.action_type === "send_email" && Array.isArray(action.recipients) && action.recipients.length === 0) {
         return "Select an email recipient."
     }
-    if (action.action_type === "assign_surrogate") {
+    if (["assign_surrogate", "assign_donor"].includes(action.action_type)) {
         if (!action.owner_type) return "Assign actions need an owner type."
         if (!action.owner_id) return "Assign actions need a target owner."
     }
@@ -301,6 +529,7 @@ type WorkflowTemplateEditorState = {
     description: string
     icon: string
     category: string
+    subjectType: string | null
     triggerType: string
     triggerConfig: JsonObject
     conditions: EditableCondition[]
@@ -324,6 +553,7 @@ type WorkflowTemplateEditorAction =
     | { type: "setDescription"; value: string }
     | { type: "setIcon"; value: string }
     | { type: "setCategory"; value: string }
+    | { type: "setSubjectType"; value: WorkflowSubjectType }
     | { type: "setTriggerType"; value: string }
     | { type: "setTriggerConfig"; value: SetStateAction<JsonObject> }
     | { type: "setConditionLogic"; value: "AND" | "OR" }
@@ -342,6 +572,7 @@ function createInitialWorkflowTemplateEditorState(): WorkflowTemplateEditorState
         description: "",
         icon: "template",
         category: "general",
+        subjectType: "surrogate",
         triggerType: "",
         triggerConfig: {},
         conditions: [],
@@ -359,6 +590,59 @@ function mergeActionConfig(action: EditableAction, updates: Partial<ActionConfig
         }
     }
     return next
+}
+
+function hasConfiguredStageTriggerReference(state: WorkflowTemplateEditorState): boolean {
+    if (!STAGE_CHANGE_TRIGGER_TYPES.has(state.triggerType)) return false
+    return STAGE_TRIGGER_REFERENCE_KEYS.some((key) => {
+        const value = state.triggerConfig[key]
+        return typeof value === "string" && value.length > 0
+    })
+}
+
+function changeWorkflowTemplateSubject(
+    state: WorkflowTemplateEditorState,
+    subjectType: WorkflowSubjectType
+): WorkflowTemplateEditorState {
+    if (subjectType === state.subjectType) return state
+    if (state.subjectType === null) return { ...state, subjectType }
+
+    const clearTrigger = hasConfiguredStageTriggerReference(state)
+    return {
+        ...state,
+        subjectType,
+        triggerType: clearTrigger ? "" : state.triggerType,
+        triggerConfig: clearTrigger ? {} : state.triggerConfig,
+        conditions: state.conditions.map((condition) => {
+            if (!STAGE_REFERENCE_FIELDS.has(condition.field)) return condition
+            const nextCondition = { ...condition, value: "" } as EditableCondition & {
+                stage_key?: JsonValue
+                stage_keys?: JsonValue
+            }
+            delete nextCondition.stage_key
+            delete nextCondition.stage_keys
+            return nextCondition
+        }),
+        actions: state.actions.map((templateAction) => {
+            let nextAction = templateAction
+            if (
+                templateAction.action_type === "update_field" &&
+                typeof templateAction.field === "string" &&
+                STAGE_REFERENCE_FIELDS.has(templateAction.field)
+            ) {
+                nextAction = { ...templateAction, value: "" }
+                delete nextAction.value_stage_key
+            }
+            if (
+                !isDonorSubjectType(subjectType) &&
+                templateAction.action_type === "send_email" &&
+                templateAction.recipients === "donor"
+            ) {
+                nextAction = { ...nextAction, recipients: "surrogate" }
+            }
+            return nextAction
+        }),
+    }
 }
 
 function workflowTemplateEditorReducer(
@@ -381,6 +665,7 @@ function workflowTemplateEditorReducer(
                 description: draft.description ?? "",
                 icon: draft.icon ?? "template",
                 category: draft.category ?? "general",
+                subjectType: draft.subject_type ?? null,
                 triggerType: draft.trigger_type ?? "",
                 triggerConfig: normalizeTriggerConfigForUi(
                     draft.trigger_type ?? "",
@@ -400,6 +685,7 @@ function workflowTemplateEditorReducer(
                 description: ZAPIER_CONVERSION_SAMPLE.description,
                 icon: ZAPIER_CONVERSION_SAMPLE.icon,
                 category: ZAPIER_CONVERSION_SAMPLE.category,
+                subjectType: ZAPIER_CONVERSION_SAMPLE.subject_type,
                 triggerType: ZAPIER_CONVERSION_SAMPLE.trigger_type,
                 triggerConfig: ZAPIER_CONVERSION_SAMPLE.trigger_config,
                 conditions: normalizeConditionsForUi(ZAPIER_CONVERSION_SAMPLE.conditions),
@@ -414,6 +700,7 @@ function workflowTemplateEditorReducer(
                     "When a shared application is submitted, auto-match to an existing surrogate first; if no deterministic match exists, create an intake lead.",
                 icon: "activity",
                 category: "intake",
+                subjectType: "form_submission",
                 triggerType: "form_submitted",
                 triggerConfig: {},
                 conditions: normalizeConditionsForUi([
@@ -433,6 +720,8 @@ function workflowTemplateEditorReducer(
             return { ...state, icon: action.value }
         case "setCategory":
             return { ...state, category: action.value }
+        case "setSubjectType":
+            return changeWorkflowTemplateSubject(state, action.value)
         case "setTriggerType":
             if (action.value === state.triggerType) return state
             return {
@@ -651,6 +940,8 @@ type WorkflowTemplateDetailsSectionProps = {
     setCategory: (value: string) => void
     icon: string
     setIcon: (value: string) => void
+    subjectType: string | null
+    setSubjectType: (value: WorkflowSubjectType) => void
     onLoadSharedIntakeSample: () => void
     onLoadZapierSample: () => void
 }
@@ -662,6 +953,8 @@ function WorkflowTemplateDetailsSection({
     setCategory,
     icon,
     setIcon,
+    subjectType,
+    setSubjectType,
     onLoadSharedIntakeSample,
     onLoadZapierSample,
 }: WorkflowTemplateDetailsSectionProps) {
@@ -690,6 +983,30 @@ function WorkflowTemplateDetailsSection({
                         placeholder="Describe what this workflow does"
                         rows={3}
                     />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                    <Label>Subject Type *</Label>
+                    <Select
+                        value={subjectType ?? ""}
+                        onValueChange={(value) => value && setSubjectType(value as WorkflowSubjectType)}
+                    >
+                        <SelectTrigger className="w-full" aria-label="Subject type">
+                            <SelectValue placeholder="Select subject type">
+                                {(value: string | null) =>
+                                    value && isWorkflowSubjectType(value)
+                                        ? WORKFLOW_SUBJECT_LABELS[value]
+                                        : "Select subject type"
+                                }
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {WORKFLOW_SUBJECT_TYPE_OPTIONS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
                 <div className="space-y-2">
                     <Label>Category (optional)</Label>
@@ -992,6 +1309,39 @@ type WorkflowTemplateTriggerConfigFieldsProps = {
     userOptions: TemplateUserOption[]
 }
 
+function WorkflowTemplateRecordTriggerFields({
+    triggerType,
+    triggerConfig,
+    setTriggerConfig,
+    conditionFields,
+    userOptions,
+}: Pick<
+    WorkflowTemplateTriggerConfigFieldsProps,
+    "triggerType" | "triggerConfig" | "setTriggerConfig" | "conditionFields" | "userOptions"
+>) {
+    if (UPDATED_TRIGGER_TYPES.has(triggerType)) {
+        return (
+            <WorkflowTemplateSurrogateUpdatedTriggerFields
+                triggerConfig={triggerConfig}
+                setTriggerConfig={setTriggerConfig}
+                conditionFields={conditionFields}
+            />
+        )
+    }
+
+    if (ASSIGNED_TRIGGER_TYPES.has(triggerType)) {
+        return (
+            <WorkflowTemplateAssignedTriggerFields
+                triggerConfig={triggerConfig}
+                setTriggerConfig={setTriggerConfig}
+                userOptions={userOptions}
+            />
+        )
+    }
+
+    return null
+}
+
 function WorkflowTemplateTriggerConfigFields({
     triggerType,
     triggerConfig,
@@ -1001,7 +1351,7 @@ function WorkflowTemplateTriggerConfigFields({
     conditionFields,
     userOptions,
 }: WorkflowTemplateTriggerConfigFieldsProps) {
-    if (triggerType === "status_changed") {
+    if (STAGE_CHANGE_TRIGGER_TYPES.has(triggerType)) {
         return (
             <WorkflowTemplateStageTriggerFields
                 triggerConfig={triggerConfig}
@@ -1095,27 +1445,15 @@ function WorkflowTemplateTriggerConfigFields({
         )
     }
 
-    if (triggerType === "surrogate_updated") {
-        return (
-            <WorkflowTemplateSurrogateUpdatedTriggerFields
-                triggerConfig={triggerConfig}
-                setTriggerConfig={setTriggerConfig}
-                conditionFields={conditionFields}
-            />
-        )
-    }
-
-    if (triggerType === "surrogate_assigned") {
-        return (
-            <WorkflowTemplateAssignedTriggerFields
-                triggerConfig={triggerConfig}
-                setTriggerConfig={setTriggerConfig}
-                userOptions={userOptions}
-            />
-        )
-    }
-
-    return null
+    return (
+        <WorkflowTemplateRecordTriggerFields
+            triggerType={triggerType}
+            triggerConfig={triggerConfig}
+            setTriggerConfig={setTriggerConfig}
+            conditionFields={conditionFields}
+            userOptions={userOptions}
+        />
+    )
 }
 
 type WorkflowTemplateTriggerSectionProps = {
@@ -1333,6 +1671,7 @@ type WorkflowTemplateSendEmailFieldsProps = {
     index: number
     updateAction: UpdateActionHandler
     userOptions: TemplateUserOption[]
+    isDonorSubject: boolean
 }
 
 function WorkflowTemplateSendEmailFields({
@@ -1340,7 +1679,10 @@ function WorkflowTemplateSendEmailFields({
     index,
     updateAction,
     userOptions,
+    isDonorSubject,
 }: WorkflowTemplateSendEmailFieldsProps) {
+    const recipientKind = getEmailRecipientKind(action)
+    const recipientOptions = getWorkflowEmailRecipientOptions(isDonorSubject)
     return (
         <div className="space-y-3">
             <div className="space-y-2">
@@ -1355,7 +1697,7 @@ function WorkflowTemplateSendEmailFields({
             <div className="space-y-2">
                 <Label>Recipient</Label>
                 <Select
-                    value={getEmailRecipientKind(action)}
+                    value={isDonorSubject && recipientKind === "surrogate" ? "donor" : recipientKind}
                     onValueChange={(value) => {
                         if (value === "user") {
                             const currentUser = getEmailRecipientUserId(action)
@@ -1369,7 +1711,7 @@ function WorkflowTemplateSendEmailFields({
                         <SelectValue placeholder="Select recipient" />
                     </SelectTrigger>
                     <SelectContent>
-                        {EMAIL_RECIPIENT_OPTIONS.map((option) => (
+                        {recipientOptions.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
                                 {option.label}
                             </SelectItem>
@@ -1377,7 +1719,7 @@ function WorkflowTemplateSendEmailFields({
                     </SelectContent>
                 </Select>
             </div>
-            {getEmailRecipientKind(action) === "user" && (
+            {recipientKind === "user" && (
                 <Select
                     value={getEmailRecipientUserId(action)}
                     onValueChange={(value) => updateAction(index, { recipients: value ? [value] : [] })}
@@ -1782,6 +2124,7 @@ type WorkflowTemplateActionFieldsProps = {
     queueOptions: TemplateQueueOption[]
     updateFields: string[]
     stageIdOptions: SelectOption[]
+    isDonorSubject: boolean
 }
 
 function WorkflowTemplateActionFields({
@@ -1792,6 +2135,7 @@ function WorkflowTemplateActionFields({
     queueOptions,
     updateFields,
     stageIdOptions,
+    isDonorSubject,
 }: WorkflowTemplateActionFieldsProps) {
     if (action.action_type === "send_email") {
         return (
@@ -1800,6 +2144,7 @@ function WorkflowTemplateActionFields({
                 index={index}
                 updateAction={updateAction}
                 userOptions={userOptions}
+                isDonorSubject={isDonorSubject}
             />
         )
     }
@@ -1826,7 +2171,7 @@ function WorkflowTemplateActionFields({
         )
     }
 
-    if (action.action_type === "assign_surrogate") {
+    if (action.action_type === "assign_surrogate" || action.action_type === "assign_donor") {
         return (
             <WorkflowTemplateAssignSurrogateFields
                 action={action}
@@ -1920,6 +2265,7 @@ type WorkflowTemplateActionCardProps = {
     queueOptions: TemplateQueueOption[]
     updateFields: string[]
     stageIdOptions: SelectOption[]
+    isDonorSubject: boolean
 }
 
 function WorkflowTemplateActionCard({
@@ -1932,6 +2278,7 @@ function WorkflowTemplateActionCard({
     queueOptions,
     updateFields,
     stageIdOptions,
+    isDonorSubject,
 }: WorkflowTemplateActionCardProps) {
     return (
         <Card>
@@ -1972,6 +2319,7 @@ function WorkflowTemplateActionCard({
                     queueOptions={queueOptions}
                     updateFields={updateFields}
                     stageIdOptions={stageIdOptions}
+                    isDonorSubject={isDonorSubject}
                 />
 
                 {action.action_type && action.action_type !== "promote_intake_lead" && (
@@ -2003,6 +2351,7 @@ type WorkflowTemplateActionsSectionProps = {
     queueOptions: TemplateQueueOption[]
     updateFields: string[]
     stageIdOptions: SelectOption[]
+    isDonorSubject: boolean
 }
 
 function WorkflowTemplateActionsSection({
@@ -2015,6 +2364,7 @@ function WorkflowTemplateActionsSection({
     queueOptions,
     updateFields,
     stageIdOptions,
+    isDonorSubject,
 }: WorkflowTemplateActionsSectionProps) {
     return (
         <Card>
@@ -2046,6 +2396,7 @@ function WorkflowTemplateActionsSection({
                             queueOptions={queueOptions}
                             updateFields={updateFields}
                             stageIdOptions={stageIdOptions}
+                            isDonorSubject={isDonorSubject}
                         />
                     ))
                 )}
@@ -2120,13 +2471,14 @@ function useWorkflowTemplatePageState() {
     const updateTemplate = useUpdatePlatformWorkflowTemplate()
     const publishTemplate = usePublishPlatformWorkflowTemplate()
     const deleteTemplate = useDeletePlatformWorkflowTemplate()
-    const { data: options } = useWorkflowOptions("org")
 
     const [editorState, dispatchEditor] = useReducer(
         workflowTemplateEditorReducer,
         undefined,
         createInitialWorkflowTemplateEditorState
     )
+    const optionsSubjectType = getWorkflowOptionsSubjectType(editorState.subjectType)
+    const { data: options } = useWorkflowOptions("org", optionsSubjectType)
     const [showPublishDialog, setShowPublishDialog] = useState(false)
     const [showDeleteDialog, setShowDeleteDialog] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
@@ -2158,6 +2510,7 @@ function useWorkflowTemplatePageState() {
         description,
         icon,
         category,
+        subjectType,
         triggerType,
         triggerConfig,
         conditions,
@@ -2180,6 +2533,8 @@ function useWorkflowTemplatePageState() {
     const setDescription = (value: string) => dispatchEditor({ type: "setDescription", value })
     const setIcon = (value: string) => dispatchEditor({ type: "setIcon", value })
     const setCategory = (value: string) => dispatchEditor({ type: "setCategory", value })
+    const setSubjectType = (value: WorkflowSubjectType) =>
+        dispatchEditor({ type: "setSubjectType", value })
     const setTriggerType = (value: string) => dispatchEditor({ type: "setTriggerType", value })
     const setTriggerConfig: TriggerConfigSetter = (value) => {
         dispatchEditor({ type: "setTriggerConfig", value })
@@ -2188,11 +2543,13 @@ function useWorkflowTemplatePageState() {
         dispatchEditor({ type: "setConditionLogic", value })
     const setIsPublished = (value: boolean) => dispatchEditor({ type: "setIsPublished", value })
 
-    const actionTypeOptions = options?.action_types ?? FALLBACK_ACTION_TYPES
-    const triggerTypeOptions = options?.trigger_types ?? FALLBACK_TRIGGER_TYPES
-    const updateFields = options?.update_fields ?? ["stage_id", "is_priority", "owner_type", "owner_id"]
+    const isDonorSubject = isDonorSubjectType(subjectType)
+    const fallbackOptions = getWorkflowTemplateFallbackOptions(isDonorSubject)
+    const actionTypeOptions = options?.action_types ?? fallbackOptions.actionTypes
+    const triggerTypeOptions = options?.trigger_types ?? fallbackOptions.triggerTypes
+    const updateFields = options?.update_fields ?? fallbackOptions.updateFields
     const conditionOperators = options?.condition_operators ?? FALLBACK_OPERATORS
-    const conditionFields = options?.condition_fields ?? Object.keys(conditionFieldLabels)
+    const conditionFields = options?.condition_fields ?? fallbackOptions.conditionFields
     const userOptions = options?.users ?? []
     const queueOptions = options?.queues ?? []
     const formOptions: SelectOption[] = (options?.forms ?? []).map((form) => ({ value: form.id, label: form.name }))
@@ -2287,7 +2644,7 @@ function useWorkflowTemplatePageState() {
             const hours = triggerConfig.hours_before
             if (!hours || typeof hours !== "number") return "Hours before due is required."
         }
-        if (triggerType === "surrogate_updated") {
+        if (UPDATED_TRIGGER_TYPES.has(triggerType)) {
             const fields = triggerConfig.fields
             if (!Array.isArray(fields) || fields.length === 0) return "Select at least one field."
         }
@@ -2295,9 +2652,12 @@ function useWorkflowTemplatePageState() {
     }
 
     const getWorkflowValidationError = (): string | null => {
-        if (!name.trim()) return "Template name is required."
+        const detailsError = getWorkflowDetailsValidationError(name, subjectType, triggerType)
+        if (detailsError) return detailsError
         const triggerError = getTriggerValidationError()
         if (triggerError) return triggerError
+        const stageConditionError = getWorkflowStageConditionValidationError(conditions)
+        if (stageConditionError) return stageConditionError
         if (actions.length === 0) return "Add at least one action."
         if (triggerType === "form_submitted") {
             const autoMatchIndex = actions.findIndex(
@@ -2311,7 +2671,7 @@ function useWorkflowTemplatePageState() {
             }
         }
         for (const action of actions) {
-            const error = getActionValidationError(action)
+            const error = getWorkflowActionValidationErrorForSubject(action, isDonorSubject)
             if (error) return error
         }
         return null
@@ -2321,7 +2681,7 @@ function useWorkflowTemplatePageState() {
 
     const buildTriggerConfig = (): JsonObject => {
         const next: JsonObject = { ...triggerConfig }
-        if (triggerType === "status_changed") {
+        if (STAGE_CHANGE_TRIGGER_TYPES.has(triggerType)) {
             if (typeof next.to_stage_id !== "string" || !next.to_stage_id) delete next.to_stage_id
             if (typeof next.from_stage_id !== "string" || !next.from_stage_id) delete next.from_stage_id
             delete next.to_status
@@ -2339,10 +2699,10 @@ function useWorkflowTemplatePageState() {
             const hours = Number(next.hours_before)
             next.hours_before = Number.isFinite(hours) ? hours : 24
         }
-        if (triggerType === "surrogate_updated") {
+        if (UPDATED_TRIGGER_TYPES.has(triggerType)) {
             if (!Array.isArray(next.fields)) next.fields = []
         }
-        if (triggerType === "surrogate_assigned") {
+        if (ASSIGNED_TRIGGER_TYPES.has(triggerType)) {
             if (typeof next.to_user_id !== "string") delete next.to_user_id
         }
         if (triggerType === "form_started") {
@@ -2363,11 +2723,12 @@ function useWorkflowTemplatePageState() {
             description: description.trim() || null,
             icon: icon || "template",
             category: category || "general",
+            subject_type: subjectType,
             trigger_type: triggerType,
             trigger_config: buildTriggerConfig(),
             conditions: normalizeConditionsForSave(conditions),
             condition_logic: conditionLogic,
-            actions: normalizeActionsForSave(actions),
+            actions: normalizeWorkflowTemplateActionsForSave(actions, isDonorSubject),
         }
 
         if (isNew) {
@@ -2478,6 +2839,8 @@ function useWorkflowTemplatePageState() {
         setCategory,
         icon,
         setIcon,
+        subjectType,
+        setSubjectType,
         triggerType,
         setTriggerType,
         triggerTypeOptions,
@@ -2535,6 +2898,8 @@ export default function PlatformWorkflowTemplatePage() {
         setCategory,
         icon,
         setIcon,
+        subjectType,
+        setSubjectType,
         triggerType,
         setTriggerType,
         triggerTypeOptions,
@@ -2622,6 +2987,8 @@ export default function PlatformWorkflowTemplatePage() {
                         setCategory={setCategory}
                         icon={icon}
                         setIcon={setIcon}
+                        subjectType={subjectType}
+                        setSubjectType={setSubjectType}
                         onLoadSharedIntakeSample={applySharedIntakeSample}
                         onLoadZapierSample={applyZapierConversionSample}
                     />
@@ -2660,6 +3027,7 @@ export default function PlatformWorkflowTemplatePage() {
                         queueOptions={queueOptions}
                         updateFields={updateFields}
                         stageIdOptions={stageIdOptions}
+                        isDonorSubject={isDonorSubjectType(subjectType)}
                     />
                 </div>
 

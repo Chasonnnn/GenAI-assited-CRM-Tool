@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { useQuery } from '@tanstack/react-query'
 
 vi.mock("@tanstack/react-query", async (importOriginal) => {
@@ -92,6 +92,28 @@ describe('WorkflowExecutionsPage', () => {
         expect(screen.getByText('2.5s')).toBeInTheDocument()
         expect(screen.getByText('800ms')).toBeInTheDocument()
         expect(screen.getByText(/workflow email bounced via resend webhook/i)).toBeInTheDocument()
+    })
+
+    it('labels running intake recovery and exposes a running filter', async () => {
+        const queryMock = useQuery as ReturnType<typeof vi.fn>
+        const existingQuery = queryMock.getMockImplementation()
+        queryMock.mockImplementation((options) => {
+            if (options.queryKey[0] === 'workflow-executions') {
+                return {
+                    data: { items: [{ ...mockExecution, status: 'running' }], total: 1 },
+                    isLoading: false,
+                    error: null,
+                }
+            }
+            return existingQuery?.(options)
+        })
+        render(<WorkflowExecutionsPage />)
+        expect(screen.getByText('Running')).toBeInTheDocument()
+        fireEvent.click(screen.getAllByRole('combobox')[0])
+        const option = screen.getByRole('option', { name: 'Running' })
+        fireEvent.mouseMove(option)
+        fireEvent.click(option)
+        await waitFor(() => expect(screen.getAllByRole('combobox')[0]).toHaveTextContent('Running'))
     })
 
     it('routes donor executions through their donor subject context', () => {

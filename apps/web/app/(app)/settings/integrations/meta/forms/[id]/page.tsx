@@ -240,6 +240,20 @@ function MetaColumnMappingCard({
                 </div>
             </CardHeader>
             <CardContent>
+                {(data.unsupported_mapped_fields?.length ?? 0) > 0 ? (
+                    <Alert variant="destructive" className="mb-4">
+                        <AlertTitle>Mapping repair required</AlertTitle>
+                        <AlertDescription>
+                            This donor form&apos;s saved mapping targets{" "}
+                            {(data.unsupported_mapped_fields ?? [])
+                                .map((field) => getSurrogateFieldLabel(field) ?? field)
+                                .join(", ")}
+                            , which donor conversions do not use. Donor records converted from
+                            Meta always use the Meta source. Remap or unmap the affected
+                            column(s) and save.
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
                 {leadKind !== "surrogate" ? (
                     <Alert className="mb-4">
                         <AlertTitle>Profile photo follow-up required</AlertTitle>

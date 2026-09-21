@@ -9,7 +9,13 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 
 from app.core.encryption import hash_email, hash_phone
-from app.db.enums import FormSubmissionMatchStatus, IntakeLeadStatus
+from app.db.enums import (
+    FormSubmissionMatchStatus,
+    IntakeLeadStatus,
+    JobStatus,
+    JobType,
+    WorkflowExecutionStatus,
+)
 from app.db.models import (
     AutomationWorkflow,
     FormIntakeDraft,
@@ -17,6 +23,7 @@ from app.db.models import (
     FormSubmission,
     FormSubmissionFile,
     IntakeLead,
+    Job,
     Surrogate,
     Task,
     WorkflowExecution,
@@ -716,6 +723,73 @@ async def test_shared_submit_duplicate_applicant_conflicts_but_same_idempotency_
 
 
 @pytest.mark.asyncio
+async def test_shared_submit_idempotency_insert_race_returns_bound_original(
+    authed_client,
+    db,
+    monkeypatch,
+):
+    from app.services import form_intake_service
+
+    _form_id, link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    first_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Race Original",
+                    "date_of_birth": "1993-04-12",
+                    "phone": "+1 (555) 100-1003",
+                    "email": "race-original@example.com",
+                }
+            ),
+            "idempotency_key": "hosted-race-idem",
+        },
+    )
+    assert first_res.status_code == 200
+
+    original_lookup = form_intake_service._get_idempotent_embed_submission
+    lookup_count = 0
+
+    def miss_stale_read_then_find_existing(*args, **kwargs):
+        nonlocal lookup_count
+        lookup_count += 1
+        if lookup_count == 1:
+            return None
+        return original_lookup(*args, **kwargs)
+
+    monkeypatch.setattr(
+        form_intake_service,
+        "_get_idempotent_embed_submission",
+        miss_stale_read_then_find_existing,
+    )
+    raced_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Race Losing Request",
+                    "date_of_birth": "1990-01-01",
+                    "phone": "+1 (555) 100-1004",
+                    "email": "race-loser@example.com",
+                }
+            ),
+            "idempotency_key": "hosted-race-idem",
+        },
+    )
+
+    assert raced_res.status_code == 200
+    assert raced_res.json()["id"] == first_res.json()["id"]
+    stored = db.query(FormSubmission).filter_by(id=uuid.UUID(first_res.json()["id"])).one()
+    assert stored.intake_link_id == uuid.UUID(link_id)
+    assert stored.organization_id == stored.form.organization_id
+    assert stored.answers_json["full_name"] == "Race Original"
+    assert db.query(FormSubmission).filter_by(
+        intake_link_id=uuid.UUID(link_id),
+        idempotency_key="hosted-race-idem",
+    ).count() == 1
+
+
+@pytest.mark.asyncio
 async def test_shared_submit_workflow_lead_preserves_link_source_metadata(
     authed_client,
     db,
@@ -852,7 +926,10 @@ async def test_shared_submit_auto_match_requires_approval_without_surrogate_cont
         trigger_config={"form_id": form_id},
         conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
         condition_logic="AND",
-        actions=[{"action_type": "auto_match_submission", "requires_approval": True}],
+        actions=[
+            {"action_type": "auto_match_submission", "requires_approval": True},
+            {"action_type": "create_intake_lead"},
+        ],
         is_enabled=True,
         scope="org",
         owner_user_id=None,
@@ -889,6 +966,11 @@ async def test_shared_submit_auto_match_requires_approval_without_surrogate_cont
     )
     assert execution is not None
     assert execution.status == "paused"
+    workflow_job = db.query(Job).filter_by(
+        organization_id=test_org.id,
+        job_type=JobType.FORM_SUBMISSION_WORKFLOW.value,
+    ).one()
+    assert workflow_job.status == JobStatus.COMPLETED.value
 
     task = (
         db.query(Task)
@@ -903,6 +985,10 @@ async def test_shared_submit_auto_match_requires_approval_without_surrogate_cont
     assert task.owner_id == test_user.id
     assert task.surrogate_id is None
 
+    workflow.actions = [
+        {"action_type": "auto_match_submission", "requires_approval": True}
+    ]
+    db.commit()
     resolve_res = await authed_client.post(
         f"/tasks/{task.id}/resolve",
         json={"decision": "approve"},
@@ -910,6 +996,12 @@ async def test_shared_submit_auto_match_requires_approval_without_surrogate_cont
     assert resolve_res.status_code == 200
     db.refresh(task)
     assert task.status == "completed"
+    from app.services.workflow_engine import engine
+
+    engine.continue_execution(db, execution.id, task, "approve")
+    assert db.query(IntakeLead).filter_by(
+        form_submission_id=uuid.UUID(submission_id)
+    ).count() == 1
 
 
 @pytest.mark.asyncio
@@ -1338,3 +1430,483 @@ async def test_shared_submit_no_match_workflow_can_auto_promote_to_surrogate(
     assert lead is not None
     assert lead.status == IntakeLeadStatus.PROMOTED.value
     assert lead.promoted_surrogate_id == submission.surrogate_id
+
+
+@pytest.mark.asyncio
+async def test_shared_submission_and_workflow_job_roll_back_together(
+    authed_client,
+    db,
+    monkeypatch,
+):
+    _form_id, link_id, slug = await _create_published_form_and_shared_link(authed_client)
+
+    def fail_enqueue(*_args, **_kwargs):
+        raise ValueError("workflow queue unavailable")
+
+    monkeypatch.setattr(
+        "app.services.form_intake_service._enqueue_form_submission_workflow_job",
+        fail_enqueue,
+    )
+    response = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Atomic Applicant",
+                    "date_of_birth": "1991-02-03",
+                    "phone": "+1 (555) 200-1000",
+                    "email": "atomic-applicant@example.com",
+                }
+            )
+        },
+    )
+
+    assert response.status_code == 400
+    assert db.query(FormSubmission).filter_by(intake_link_id=uuid.UUID(link_id)).count() == 0
+    assert db.query(Job).filter_by(job_type=JobType.FORM_SUBMISSION_WORKFLOW.value).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_shared_workflow_job_recovers_transient_trigger_failure_without_duplicates(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+    monkeypatch,
+):
+    from app.jobs.handlers import form_submissions as form_submission_jobs
+    from app.services import form_intake_service, job_service
+
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Recover submission {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[],
+        condition_logic="AND",
+        actions=[{"action_type": "create_intake_lead"}],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.commit()
+
+    original_trigger = form_intake_service._trigger_form_submitted_workflow
+    monkeypatch.setattr(
+        form_intake_service,
+        "_trigger_form_submitted_workflow",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("transient")),
+    )
+    response = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Transient Applicant",
+                    "date_of_birth": "1991-02-03",
+                    "phone": "+1 (555) 200-1001",
+                    "email": "transient-applicant@example.com",
+                }
+            )
+        },
+    )
+    assert response.status_code == 200
+    submission_id = uuid.UUID(response.json()["id"])
+    job = db.query(Job).filter_by(
+        job_type=JobType.FORM_SUBMISSION_WORKFLOW.value,
+        organization_id=test_org.id,
+    ).one()
+    assert job.status == JobStatus.PENDING.value
+    assert job.last_error == "Form submission workflow processing failed"
+
+    monkeypatch.setattr(
+        form_intake_service,
+        "_trigger_form_submitted_workflow",
+        original_trigger,
+    )
+    claimed_job = job_service.claim_job_for_dispatch(db, job.id)
+    assert claimed_job is not None and claimed_job.claim_token is not None
+    assert job_service.claim_job_for_dispatch(db, job.id) is None
+    await form_submission_jobs.process_form_submission_workflow(db, claimed_job)
+    job_service.complete_claimed_job(
+        db,
+        job_id=claimed_job.id,
+        claim_token=claimed_job.claim_token,
+    )
+
+    assert db.query(IntakeLead).filter_by(form_submission_id=submission_id).count() == 1
+    assert db.query(WorkflowExecution).filter_by(
+        workflow_id=workflow.id,
+        entity_id=submission_id,
+    ).count() == 1
+    assert db.query(Job).filter_by(id=job.id).one().status == JobStatus.COMPLETED.value
+    with pytest.raises(ValueError, match="Form submission not found"):
+        form_intake_service.process_form_submission_workflow(
+            db,
+            org_id=uuid.uuid4(),
+            submission_id=submission_id,
+        )
+
+
+@pytest.mark.asyncio
+async def test_shared_workflow_retries_only_failed_action_indexes(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+    monkeypatch,
+):
+    from app.jobs.handlers import form_submissions as form_submission_jobs
+    from app.services import job_service
+    from app.services.workflow_engine import engine
+
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Retry failed action {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[],
+        condition_logic="AND",
+        actions=[
+            {"action_type": "create_intake_lead"},
+            {"action_type": "create_intake_lead"},
+        ],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.commit()
+
+    original_execute_action = engine.adapter.execute_action
+    called_indexes: list[int] = []
+    fail_second_action = True
+
+    def flaky_execute_action(**kwargs):
+        nonlocal fail_second_action
+        action_index = kwargs["workflow_action_index"]
+        called_indexes.append(action_index)
+        if action_index == 1 and fail_second_action:
+            fail_second_action = False
+            return {
+                "success": False,
+                "action_type": "create_intake_lead",
+                "error": "transient action failure",
+            }
+        return original_execute_action(**kwargs)
+
+    monkeypatch.setattr(engine.adapter, "execute_action", flaky_execute_action)
+    response = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Partial Applicant",
+                    "date_of_birth": "1991-02-03",
+                    "phone": "+1 (555) 200-1002",
+                    "email": "partial-applicant@example.com",
+                }
+            )
+        },
+    )
+    assert response.status_code == 200
+    submission_id = uuid.UUID(response.json()["id"])
+    execution = db.query(WorkflowExecution).filter_by(workflow_id=workflow.id).one()
+    assert execution.status == WorkflowExecutionStatus.PARTIAL.value
+    execution.status = WorkflowExecutionStatus.FAILED.value
+    db.commit()
+
+    job = db.query(Job).filter_by(
+        job_type=JobType.FORM_SUBMISSION_WORKFLOW.value,
+        organization_id=test_org.id,
+    ).one()
+    claimed_job = job_service.claim_job_for_dispatch(db, job.id)
+    assert claimed_job is not None and claimed_job.claim_token is not None
+    await form_submission_jobs.process_form_submission_workflow(db, claimed_job)
+    job_service.complete_claimed_job(
+        db,
+        job_id=claimed_job.id,
+        claim_token=claimed_job.claim_token,
+    )
+
+    db.refresh(execution)
+    assert execution.status == WorkflowExecutionStatus.SUCCESS.value
+    assert called_indexes == [0, 1, 1]
+    assert db.query(IntakeLead).filter_by(form_submission_id=submission_id).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_shared_workflow_retry_does_not_rerun_successful_sibling(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+    monkeypatch,
+):
+    from app.jobs.handlers import form_submissions as form_submission_jobs
+    from app.services import job_service
+    from app.services.workflow_engine import engine
+
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    successful_workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Successful sibling {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[],
+        condition_logic="AND",
+        actions=[{"action_type": "create_intake_lead", "source": "successful-sibling"}],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    failing_workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Failing sibling {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[],
+        condition_logic="AND",
+        actions=[{"action_type": "create_intake_lead", "source": "failing-sibling"}],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    db.add_all([successful_workflow, failing_workflow])
+    db.commit()
+
+    original_execute_action = engine.adapter.execute_action
+    calls: list[str] = []
+    fail_once = True
+
+    def fail_one_sibling_once(**kwargs):
+        nonlocal fail_once
+        source = kwargs["action"].get("source")
+        calls.append(source)
+        if source == "failing-sibling" and fail_once:
+            fail_once = False
+            return {
+                "success": False,
+                "action_type": "create_intake_lead",
+                "error": "transient sibling failure",
+            }
+        return original_execute_action(**kwargs)
+
+    monkeypatch.setattr(engine.adapter, "execute_action", fail_one_sibling_once)
+    response = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Sibling Applicant",
+                    "date_of_birth": "1991-02-03",
+                    "phone": "+1 (555) 200-1005",
+                    "email": "sibling-applicant@example.com",
+                }
+            )
+        },
+    )
+    assert response.status_code == 200
+    submission_id = uuid.UUID(response.json()["id"])
+
+    job = db.query(Job).filter_by(
+        job_type=JobType.FORM_SUBMISSION_WORKFLOW.value,
+        organization_id=test_org.id,
+    ).one()
+    claimed_job = job_service.claim_job_for_dispatch(db, job.id)
+    assert claimed_job is not None and claimed_job.claim_token is not None
+    await form_submission_jobs.process_form_submission_workflow(db, claimed_job)
+    job_service.complete_claimed_job(
+        db,
+        job_id=claimed_job.id,
+        claim_token=claimed_job.claim_token,
+    )
+
+    assert calls.count("successful-sibling") == 1
+    assert calls.count("failing-sibling") == 2
+    sibling_executions = db.query(WorkflowExecution).filter(
+        WorkflowExecution.entity_id == submission_id,
+        WorkflowExecution.workflow_id.in_([successful_workflow.id, failing_workflow.id]),
+    )
+    assert sibling_executions.count() == 2
+    assert sibling_executions.filter(
+        WorkflowExecution.status == WorkflowExecutionStatus.SUCCESS.value
+    ).count() == 2
+    assert db.query(IntakeLead).filter_by(form_submission_id=submission_id).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_shared_workflow_recovers_crash_from_frozen_action_snapshot(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+    monkeypatch,
+):
+    from app.jobs.handlers import form_submissions as form_submission_jobs
+    from app.services import job_service
+    from app.services.workflow_engine import engine
+
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Crash recovery {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[],
+        condition_logic="AND",
+        actions=[
+            {"action_type": "create_intake_lead", "source": "original"},
+            {"action_type": "create_intake_lead", "source": "original"},
+        ],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.commit()
+
+    original_execute_action = engine.adapter.execute_action
+    crash_once = True
+
+    def crash_after_committed_action(**kwargs):
+        nonlocal crash_once
+        result = original_execute_action(**kwargs)
+        if crash_once:
+            crash_once = False
+            raise RuntimeError("crash after committed action")
+        return result
+
+    monkeypatch.setattr(engine.adapter, "execute_action", crash_after_committed_action)
+    response = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Crash Applicant",
+                    "date_of_birth": "1991-02-03",
+                    "phone": "+1 (555) 200-1003",
+                    "email": "crash-applicant@example.com",
+                }
+            )
+        },
+    )
+    assert response.status_code == 200
+    submission_id = uuid.UUID(response.json()["id"])
+    execution = db.query(WorkflowExecution).filter_by(workflow_id=workflow.id).one()
+    assert execution.status == WorkflowExecutionStatus.RUNNING.value
+    assert execution.actions_executed == []
+
+    workflow.actions = [{"action_type": "create_intake_lead", "source": "edited"}]
+    db.commit()
+    job = db.query(Job).filter_by(
+        job_type=JobType.FORM_SUBMISSION_WORKFLOW.value,
+        organization_id=test_org.id,
+    ).one()
+    claimed_job = job_service.claim_job_for_dispatch(db, job.id)
+    assert claimed_job is not None and claimed_job.claim_token is not None
+    await form_submission_jobs.process_form_submission_workflow(db, claimed_job)
+    job_service.complete_claimed_job(
+        db,
+        job_id=claimed_job.id,
+        claim_token=claimed_job.claim_token,
+    )
+
+    db.refresh(execution)
+    assert execution.status == WorkflowExecutionStatus.SUCCESS.value
+    assert len(execution.actions_executed) == 2
+    lead = db.query(IntakeLead).filter_by(form_submission_id=submission_id).one()
+    assert lead.source_metadata["source"] == "original"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("workflow_change", ["disabled", "trigger_changed"])
+async def test_shared_workflow_marks_undiscoverable_crash_for_manual_review(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+    monkeypatch,
+    workflow_change,
+):
+    from app.services import form_intake_service
+    from app.services.workflow_engine import engine
+
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Undiscoverable recovery {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[],
+        condition_logic="AND",
+        actions=[{"action_type": "create_intake_lead"}],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.commit()
+
+    original_execute_action = engine.adapter.execute_action
+    action_calls = 0
+
+    def crash_after_committed_action(**kwargs):
+        nonlocal action_calls
+        action_calls += 1
+        original_execute_action(**kwargs)
+        raise RuntimeError("crash after committed action")
+
+    monkeypatch.setattr(engine.adapter, "execute_action", crash_after_committed_action)
+    response = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": f"Undiscoverable {workflow_change}",
+                    "date_of_birth": "1991-02-03",
+                    "phone": "+1 (555) 200-1006",
+                    "email": f"undiscoverable-{workflow_change}@example.com",
+                }
+            )
+        },
+    )
+    assert response.status_code == 200
+    submission_id = uuid.UUID(response.json()["id"])
+    execution = db.query(WorkflowExecution).filter_by(workflow_id=workflow.id).one()
+    assert execution.status == WorkflowExecutionStatus.RUNNING.value
+
+    if workflow_change == "disabled":
+        workflow.is_enabled = False
+    else:
+        workflow.trigger_config = {"form_id": str(uuid.uuid4())}
+    db.commit()
+
+    with pytest.raises(RuntimeError, match="execution incomplete"):
+        form_intake_service.process_form_submission_workflow(
+            db,
+            org_id=test_org.id,
+            submission_id=submission_id,
+        )
+
+    db.refresh(execution)
+    assert execution.status == WorkflowExecutionStatus.FAILED.value
+    assert execution.error_message == (
+        form_intake_service.FORM_SUBMISSION_WORKFLOW_MANUAL_REVIEW_ERROR
+    )
+    assert action_calls == 1

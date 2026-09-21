@@ -303,6 +303,53 @@ def test_maybe_schedule_workflow_sweep_jobs_enqueues_each_org_when_due(db, test_
     assert job.idempotency_key == f"workflow-sweep:scheduled:{test_org.id}:20260726T0901Z"
 
 
+def test_workflow_sweep_scheduler_snapshots_org_ids_before_job_commits(monkeypatch):
+    import uuid
+
+    from app import worker
+    from app.services import job_service, org_service, workflow_triggers
+
+    expired = False
+
+    class ExpiringOrg:
+        def __init__(self, org_id):
+            self._id = org_id
+
+        @property
+        def id(self):
+            if expired:
+                raise RuntimeError("organization instance expired")
+            return self._id
+
+    expected_org_ids = [uuid.uuid4(), uuid.uuid4()]
+    orgs = [ExpiringOrg(org_id) for org_id in expected_org_ids]
+    scheduled_org_ids = []
+
+    monkeypatch.setattr(worker, "WORKFLOW_SWEEP_FALLBACK_ENABLED", True)
+    monkeypatch.setattr(org_service, "list_orgs", lambda db: orgs)
+    monkeypatch.setattr(
+        workflow_triggers,
+        "has_due_scheduled_workflows",
+        lambda db, org_id, evaluated_at: True,
+    )
+    monkeypatch.setattr(
+        job_service,
+        "get_job_by_idempotency_key",
+        lambda db, org_id, idempotency_key: None,
+    )
+
+    def schedule_job(**kwargs):
+        nonlocal expired
+        scheduled_org_ids.append(kwargs["org_id"])
+        expired = True
+
+    monkeypatch.setattr(job_service, "schedule_job", schedule_job)
+
+    now = datetime(2026, 7, 26, 9, 1, 37, tzinfo=UTC)
+    assert worker.maybe_schedule_workflow_sweep_jobs(object(), now=now, last_run_at=None) == now
+    assert scheduled_org_ids == expected_org_ids
+
+
 def test_maybe_schedule_workflow_sweep_jobs_skips_org_without_a_due_cron(db, test_org, monkeypatch):
     from sqlalchemy import select
 

@@ -152,6 +152,7 @@ class PlatformWorkflowTemplateDraft(BaseModel):
     description: str | None = None
     icon: str = Field(default="template", max_length=50)
     category: str = Field(default="general", max_length=50)
+    subject_type: str | None = Field(default=None, max_length=50)
     trigger_type: str
     trigger_config: dict = Field(default_factory=dict)
     conditions: list[dict] = Field(default_factory=list)
@@ -168,6 +169,7 @@ class PlatformWorkflowTemplateUpdate(BaseModel):
     description: str | None = None
     icon: str | None = Field(default=None, max_length=50)
     category: str | None = Field(default=None, max_length=50)
+    subject_type: str | None = Field(default=None, max_length=50)
     trigger_type: str | None = None
     trigger_config: dict | None = None
     conditions: list[dict] | None = None

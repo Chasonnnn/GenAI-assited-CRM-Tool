@@ -135,6 +135,9 @@ async def test_meta_mapping_api_exposes_and_updates_exact_lead_kind_values(
     assert donor_preview.status_code == 200
     assert "education" in donor_preview.json()["available_fields"]
     assert "journey_timing_preference" not in donor_preview.json()["available_fields"]
+    # Donor conversions always set source="Meta"; a source mapping would be dead.
+    assert "source" not in donor_preview.json()["available_fields"]
+    assert donor_preview.json()["unsupported_mapped_fields"] == []
     listed = await authed_client.get("/integrations/meta/forms")
     assert listed.status_code == 200
     listed_form = next(item for item in listed.json() if item["id"] == str(form.id))
@@ -145,6 +148,49 @@ async def test_meta_mapping_api_exposes_and_updates_exact_lead_kind_values(
         json={**payload, "lead_kind": "donor"},
     )
     assert invalid.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_donor_mapping_rejects_source_and_flags_legacy_source_mapping(
+    authed_client: AsyncClient, db, test_org
+):
+    form = _mapped_form(db, test_org.id, external_id="donor-source", lead_kind="egg_donor")
+
+    source_mapping = {
+        "csv_column": "education",
+        "surrogate_field": "source",
+        "transformation": None,
+        "action": "map",
+        "custom_field_key": None,
+    }
+    rejected = await authed_client.put(
+        f"/integrations/meta/forms/{form.id}/mapping",
+        json={
+            "lead_kind": "egg_donor",
+            "column_mappings": [*MAPPINGS[:2], source_mapping],
+            "unknown_column_behavior": "metadata",
+        },
+    )
+    assert rejected.status_code == 400
+    assert "source" in rejected.json()["detail"]
+
+    # A legacy stored donor mapping targeting source is surfaced as
+    # repair-required on read; it is never silently applied or rewritten.
+    form.mapping_rules = [*MAPPINGS[:2], source_mapping]
+    db.commit()
+
+    preview = await authed_client.get(f"/integrations/meta/forms/{form.id}/mapping")
+    assert preview.status_code == 200
+    assert preview.json()["unsupported_mapped_fields"] == ["source"]
+
+    # Surrogate forms keep source as a mappable field.
+    surrogate_form = _mapped_form(db, test_org.id, external_id="surrogate-source")
+    surrogate_preview = await authed_client.get(
+        f"/integrations/meta/forms/{surrogate_form.id}/mapping"
+    )
+    assert surrogate_preview.status_code == 200
+    assert "source" in surrogate_preview.json()["available_fields"]
+    assert surrogate_preview.json()["unsupported_mapped_fields"] == []
 
 
 @pytest.mark.parametrize(

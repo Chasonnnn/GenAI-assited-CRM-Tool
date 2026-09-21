@@ -36,6 +36,7 @@ export interface MetaFormMappingPreview {
     has_live_leads: boolean
     available_fields: string[]
     ai_available: boolean
+    unsupported_mapped_fields?: string[]
     mapping_rules: ColumnMappingItem[] | null
     unknown_column_behavior: 'ignore' | 'metadata' | 'warn'
 }

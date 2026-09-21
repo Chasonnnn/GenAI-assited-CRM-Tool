@@ -1,5 +1,6 @@
 """Workflow engine core - executes workflows with loop protection and action handling."""
 
+import copy
 import logging
 import time
 import uuid as uuid_module
@@ -18,7 +19,7 @@ from app.db.enums import (
     WorkflowExecutionStatus,
     WorkflowTriggerType,
 )
-from app.db.models import AutomationWorkflow, Membership, User, WorkflowExecution
+from app.db.models import AutomationWorkflow, Membership, Task, User, WorkflowExecution
 from app.services import workflow_service
 from app.services.workflow_engine_adapters import WorkflowDomainAdapter
 
@@ -26,6 +27,13 @@ logger = logging.getLogger(__name__)
 
 # Maximum recursion depth for workflow-triggered events
 MAX_DEPTH = 3
+FORM_SUBMISSION_ACTION_SNAPSHOT_KEY = "_form_submission_workflow_actions"
+RECOVERABLE_FORM_SUBMISSION_ACTIONS = frozenset(
+    {
+        "auto_match_submission",
+        "create_intake_lead",
+    }
+)
 
 
 class WorkflowEngineCore:
@@ -53,6 +61,8 @@ class WorkflowEngineCore:
         entity_owner_id: UUID | None = None,
         subject_type: str | None = None,
         subject_id: UUID | None = None,
+        recover_incomplete: bool = False,
+        include_existing: bool = False,
     ) -> list[WorkflowExecution]:
         """
         Trigger workflows for an event.
@@ -119,6 +129,8 @@ class WorkflowEngineCore:
                 source=source,
                 subject_type=subject_type,
                 subject_id=subject_id,
+                recover_incomplete=recover_incomplete,
+                include_existing=include_existing,
             )
             if execution:
                 executions.append(execution)
@@ -139,6 +151,8 @@ class WorkflowEngineCore:
         bypass_dedupe: bool = False,
         subject_type: str | None = None,
         subject_id: UUID | None = None,
+        recover_incomplete: bool = False,
+        include_existing: bool = False,
     ) -> WorkflowExecution | None:
         """Execute a single workflow directly (used for manual retries)."""
         event_id = event_id or uuid_module.uuid4()
@@ -154,6 +168,8 @@ class WorkflowEngineCore:
             bypass_dedupe=bypass_dedupe,
             subject_type=subject_type or workflow.subject_type,
             subject_id=subject_id or entity_id,
+            recover_incomplete=recover_incomplete,
+            include_existing=include_existing,
         )
 
     def _find_matching_workflows(
@@ -294,6 +310,8 @@ class WorkflowEngineCore:
         bypass_dedupe: bool = False,
         subject_type: str | None = None,
         subject_id: UUID | None = None,
+        recover_incomplete: bool = False,
+        include_existing: bool = False,
     ) -> WorkflowExecution | None:
         """Execute a single workflow and log the result."""
         start_time = time.time()
@@ -306,8 +324,20 @@ class WorkflowEngineCore:
         if dedupe_key and bypass_dedupe:
             # Allow manual retries for sweep-based triggers by namespacing the key.
             dedupe_key = f"{dedupe_key}:retry:{event_id}"
-        elif dedupe_key and self._is_duplicate(db, dedupe_key):
-            return None
+        elif dedupe_key:
+            existing_execution = self._get_duplicate_execution(db, dedupe_key)
+            if existing_execution:
+                if recover_incomplete and existing_execution.status in {
+                    WorkflowExecutionStatus.RUNNING.value,
+                    WorkflowExecutionStatus.PARTIAL.value,
+                    WorkflowExecutionStatus.FAILED.value,
+                }:
+                    return self._resume_incomplete_execution(
+                        db=db,
+                        workflow=workflow,
+                        execution=existing_execution,
+                    )
+                return existing_execution if include_existing else None
 
         # Check rate limits
         rate_limit_error = self._check_rate_limits(db, workflow, subject_id)
@@ -433,6 +463,14 @@ class WorkflowEngineCore:
             db.commit()
             return execution
 
+        # Form-submission executions checkpoint action progress for durable recovery.
+        execution_event = dict(event_data)
+        durable_form_submission = workflow.trigger_type == WorkflowTriggerType.FORM_SUBMITTED.value
+        if durable_form_submission:
+            execution_event[FORM_SUBMISSION_ACTION_SNAPSHOT_KEY] = copy.deepcopy(
+                workflow.actions
+            )
+
         # Create execution record first (needed for approval task FK)
         execution = WorkflowExecution(
             organization_id=workflow.organization_id,
@@ -444,11 +482,15 @@ class WorkflowEngineCore:
             entity_id=entity_id,
             subject_type=subject_type,
             subject_id=subject_id,
-            trigger_event=event_data,
+            trigger_event=execution_event,
             dedupe_key=dedupe_key,
             matched_conditions=True,
             actions_executed=[],
-            status=WorkflowExecutionStatus.SUCCESS.value,  # Will update if needed
+            status=(
+                WorkflowExecutionStatus.RUNNING.value
+                if durable_form_submission
+                else WorkflowExecutionStatus.SUCCESS.value
+            ),
         )
         db.add(execution)
         db.flush()  # Get execution.id
@@ -524,6 +566,10 @@ class WorkflowEngineCore:
             action_results.append(result)
             if not result.get("success"):
                 all_success = False
+            if durable_form_submission:
+                execution.actions_executed = action_results
+                execution.duration_ms = int((time.time() - start_time) * 1000)
+                db.commit()
 
         # Update workflow stats
         workflow.run_count += 1
@@ -545,6 +591,124 @@ class WorkflowEngineCore:
         execution.duration_ms = int((time.time() - start_time) * 1000)
         db.commit()
 
+        return execution
+
+    def _resume_incomplete_execution(
+        self,
+        *,
+        db: Session,
+        workflow: AutomationWorkflow,
+        execution: WorkflowExecution,
+    ) -> WorkflowExecution:
+        """Recover checkpointed form actions without replaying successful effects."""
+        execution = (
+            db.query(WorkflowExecution)
+            .filter(
+                WorkflowExecution.id == execution.id,
+                WorkflowExecution.organization_id == workflow.organization_id,
+                WorkflowExecution.workflow_id == workflow.id,
+            )
+            .with_for_update()
+            .populate_existing()
+            .one()
+        )
+        if execution.status not in {
+            WorkflowExecutionStatus.RUNNING.value,
+            WorkflowExecutionStatus.PARTIAL.value,
+            WorkflowExecutionStatus.FAILED.value,
+        }:
+            return execution
+
+        entity = self.adapter.get_entity(db, execution.entity_type, execution.entity_id)
+        if entity is None or getattr(entity, "organization_id", None) != workflow.organization_id:
+            raise ValueError("Workflow execution entity is unavailable")
+
+        actions_snapshot = (execution.trigger_event or {}).get(
+            FORM_SUBMISSION_ACTION_SNAPSHOT_KEY
+        )
+        if not isinstance(actions_snapshot, list) or not all(
+            isinstance(action, dict) for action in actions_snapshot
+        ):
+            execution.status = WorkflowExecutionStatus.FAILED.value
+            execution.error_message = "Workflow action snapshot unavailable for safe recovery"
+            db.commit()
+            return execution
+
+        previous_status = execution.status
+        action_results = list(execution.actions_executed or [])
+        for index, action in enumerate(actions_snapshot):
+            prior_result = action_results[index] if index < len(action_results) else None
+            if prior_result and prior_result.get("success") is True:
+                continue
+            if action.get("requires_approval"):
+                approval_task = (
+                    db.query(Task)
+                    .filter(
+                        Task.workflow_execution_id == execution.id,
+                        Task.workflow_action_index == index,
+                        Task.status == TaskStatus.PENDING.value,
+                    )
+                    .first()
+                )
+                if approval_task:
+                    execution.status = WorkflowExecutionStatus.PAUSED.value
+                    execution.paused_at_action_index = index
+                    execution.paused_task_id = approval_task.id
+                    db.commit()
+                return execution
+            if action.get("action_type") not in RECOVERABLE_FORM_SUBMISSION_ACTIONS:
+                execution.status = WorkflowExecutionStatus.FAILED.value
+                execution.error_message = "Workflow action requires manual recovery review"
+                db.commit()
+                return execution
+
+            result = self.adapter.execute_action(
+                db=db,
+                action=action,
+                entity=entity,
+                entity_type=execution.entity_type,
+                event_id=execution.event_id,
+                depth=execution.depth,
+                workflow_scope=workflow.scope,
+                workflow_owner_id=workflow.owner_user_id,
+                workflow_creator_user_id=workflow.created_by_user_id,
+                trigger_callback=self.trigger,
+                workflow_execution_id=execution.id,
+                workflow_action_index=index,
+                subject_type=execution.subject_type,
+                subject_id=execution.subject_id,
+            )
+            if index < len(action_results):
+                action_results[index] = result
+            else:
+                action_results.append(result)
+            execution.actions_executed = action_results
+            execution.status = WorkflowExecutionStatus.RUNNING.value
+            db.commit()
+
+        all_success = len(action_results) == len(actions_snapshot) and all(
+            result.get("success") is True for result in action_results
+        )
+        execution.actions_executed = action_results
+        execution.status = (
+            WorkflowExecutionStatus.SUCCESS.value
+            if all_success
+            else WorkflowExecutionStatus.PARTIAL.value
+        )
+        execution.error_message = next(
+            (
+                str(result.get("error"))
+                for result in reversed(action_results)
+                if result.get("success") is not True and result.get("error")
+            ),
+            None,
+        )
+        workflow.last_error = execution.error_message
+        if previous_status == WorkflowExecutionStatus.RUNNING.value:
+            workflow.run_count += 1
+            workflow.last_run_at = datetime.now(UTC)
+        db.commit()
+        db.refresh(execution)
         return execution
 
     def continue_execution(
@@ -622,6 +786,31 @@ class WorkflowEngineCore:
         action_results = list(execution.actions_executed or [])
 
         if task.status == TaskStatus.COMPLETED.value:
+            remaining_action_source = workflow.actions
+            if execution.entity_type == "form_submission":
+                execution_event = execution.trigger_event or {}
+                if not isinstance(execution_event, dict):
+                    execution.status = WorkflowExecutionStatus.FAILED.value
+                    execution.error_message = (
+                        "Workflow action snapshot unavailable for safe continuation"
+                    )
+                    db.commit()
+                    return
+                if FORM_SUBMISSION_ACTION_SNAPSHOT_KEY in execution_event:
+                    actions_snapshot = execution_event[
+                        FORM_SUBMISSION_ACTION_SNAPSHOT_KEY
+                    ]
+                    if not isinstance(actions_snapshot, list) or not all(
+                        isinstance(action, dict) for action in actions_snapshot
+                    ):
+                        execution.status = WorkflowExecutionStatus.FAILED.value
+                        execution.error_message = (
+                            "Workflow action snapshot unavailable for safe continuation"
+                        )
+                        db.commit()
+                        return
+                    remaining_action_source = actions_snapshot
+
             # APPROVED: Execute the action using snapshot
             action = task.workflow_action_payload
             if not action:
@@ -658,7 +847,7 @@ class WorkflowEngineCore:
             action_results.append(result)
 
             # Continue with remaining actions
-            remaining_actions = workflow.actions[action_index + 1 :]
+            remaining_actions = remaining_action_source[action_index + 1 :]
             for idx, next_action in enumerate(remaining_actions):
                 actual_idx = action_index + 1 + idx
 
@@ -938,10 +1127,14 @@ class WorkflowEngineCore:
 
     def _is_duplicate(self, db: Session, dedupe_key: str) -> bool:
         """Check if this execution would be a duplicate."""
-        existing = (
-            db.query(WorkflowExecution).filter(WorkflowExecution.dedupe_key == dedupe_key).first()
-        )
-        return existing is not None
+        return self._get_duplicate_execution(db, dedupe_key) is not None
+
+    def _get_duplicate_execution(
+        self,
+        db: Session,
+        dedupe_key: str,
+    ) -> WorkflowExecution | None:
+        return db.query(WorkflowExecution).filter(WorkflowExecution.dedupe_key == dedupe_key).first()
 
     def _check_rate_limits(
         self,

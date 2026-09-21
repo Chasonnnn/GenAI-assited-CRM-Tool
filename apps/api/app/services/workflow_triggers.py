@@ -17,6 +17,7 @@ from app.db.models import (
     PipelineStage,
     Surrogate,
     Task,
+    WorkflowExecution,
 )
 from app.schemas.workflow import is_supported_simple_cron
 from app.services.workflow_engine import engine
@@ -311,7 +312,7 @@ def trigger_form_submitted(
     surrogate_id: UUID | None = None,
     source_mode: str | None = None,
     entity_owner_id: UUID | None = None,
-) -> None:
+) -> list[WorkflowExecution]:
     """Trigger workflows when an applicant submits a form."""
     submission = (
         db.query(FormSubmission)
@@ -321,7 +322,7 @@ def trigger_form_submitted(
         )
         .first()
     )
-    engine.trigger(
+    return engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.FORM_SUBMITTED,
         entity_type="form_submission",
@@ -337,6 +338,8 @@ def trigger_form_submitted(
         org_id=org_id,
         source=WorkflowEventSource.SYSTEM,
         entity_owner_id=entity_owner_id,
+        recover_incomplete=True,
+        include_existing=True,
     )
 
 

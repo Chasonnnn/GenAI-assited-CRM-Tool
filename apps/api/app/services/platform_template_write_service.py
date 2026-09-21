@@ -49,6 +49,7 @@ FIELDS = {
         "description",
         "icon",
         "category",
+        "subject_type",
         "trigger_type",
         "trigger_config",
         "conditions",
@@ -197,15 +198,44 @@ def validate_template(kind, draft, *, publishing=True, portable=True):
             trigger = WorkflowTriggerType(canonical["trigger_type"])
         except ValueError:
             raise TemplateInputError("draft.trigger_type: unsupported trigger") from None
+        subject_type = canonical.get("subject_type")
+        if subject_type is None:
+            from app.services import template_service
+
+            if trigger.value in template_service.DONOR_ONLY_TRIGGER_TYPES:
+                raise TemplateInputError(
+                    "draft.subject_type: donor triggers require an explicit "
+                    "egg_donor or sperm_donor subject"
+                )
+        else:
+            try:
+                workflow_service._validate_subject_trigger(subject_type, trigger)
+            except ValueError as exc:
+                raise TemplateInputError(f"draft.subject_type: {exc}") from None
         if canonical["condition_logic"] not in {"AND", "OR"}:
             raise TemplateInputError("draft.condition_logic: expected AND or OR")
         for condition in canonical["conditions"]:
             schemas.Condition.model_validate(condition)
+        resolved_subject_type = subject_type or workflow_service.LEGACY_TRIGGER_SUBJECT_TYPES.get(
+            trigger.value, "surrogate"
+        )
+        canonical["subject_type"] = resolved_subject_type
+        try:
+            workflow_service._validate_subject_conditions(
+                resolved_subject_type, canonical["conditions"]
+            )
+        except ValueError as exc:
+            raise TemplateInputError(f"draft.conditions: {exc}") from None
         if portable:
             _reject_tenant_ids(
                 {key: canonical[key] for key in ("trigger_config", "conditions", "actions")}
             )
         config = canonical["trigger_config"]
+        effective_subject_type = workflow_service.resolve_unbound_workflow_subject_type(
+            subject_type=resolved_subject_type,
+            trigger_type=trigger,
+            trigger_config=config,
+        )
         if trigger.value in {
             "form_started",
             "form_submitted",
@@ -231,6 +261,14 @@ def validate_template(kind, draft, *, publishing=True, portable=True):
             model = models.get(action_type)
             if model is None:
                 raise TemplateInputError(f"draft.actions.{index}.action_type: unsupported action")
+            try:
+                workflow_service._validate_action_subject_compatibility(
+                    action,
+                    subject_type=resolved_subject_type,
+                    effective_subject_type=effective_subject_type,
+                )
+            except ValueError as exc:
+                raise TemplateInputError(f"draft.actions.{index}: {exc}") from None
             if action_type == "send_email" and not action.get("template_id"):
 
                 class LibraryEmailAction(schemas.SendEmailActionConfig):

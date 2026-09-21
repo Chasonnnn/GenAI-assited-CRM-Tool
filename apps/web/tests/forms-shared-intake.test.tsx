@@ -88,6 +88,7 @@ describe('Shared Intake Public Page', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         window.localStorage.clear()
+        window.sessionStorage.clear()
         Object.defineProperty(window, 'scrollTo', {
             configurable: true,
             value: vi.fn(),
@@ -390,12 +391,51 @@ describe('Shared Intake Public Page', () => {
                 undefined,
                 undefined,
                 'version-1',
+                expect.any(String),
             )
         })
 
         expect(
             await screen.findByText(/added to intake review/i),
         ).toBeInTheDocument()
+    })
+
+    it('reuses the submission attempt after a lost response and a page remount', async () => {
+        submitSharedPublicForm.mockRejectedValueOnce(new Error('Response lost'))
+        const firstPage = render(<PublicIntakeFormClient slug="retry-form" />)
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        fireEvent.click(screen.getByRole('checkbox'))
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
+        await waitFor(() => {
+            expect(submitSharedPublicForm).toHaveBeenCalledTimes(1)
+            expect(screen.getByRole('button', { name: 'Submit Application' })).toBeEnabled()
+        })
+        const attemptKey = submitSharedPublicForm.mock.calls[0]?.[7]
+        expect(attemptKey).toEqual(expect.any(String))
+
+        firstPage.unmount()
+        render(<PublicIntakeFormClient slug="retry-form" />)
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        fireEvent.click(screen.getByRole('checkbox'))
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
+        await screen.findByText(/added to intake review/i)
+        expect(submitSharedPublicForm.mock.calls[1]?.[7]).toBe(attemptKey)
+        expect(window.sessionStorage.getItem('intake-submit:retry-form:version-1')).toBeNull()
+    })
+
+    it('keeps submission attempts isolated by intake link and published version', async () => {
+        window.sessionStorage.setItem('intake-submit:other-form:version-1', 'other-attempt')
+        window.sessionStorage.setItem('intake-submit:event-abc:old-version', 'old-attempt')
+        render(<PublicIntakeFormClient slug="event-abc" />)
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        fireEvent.click(screen.getByRole('checkbox'))
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
+        await screen.findByText(/added to intake review/i)
+        const attemptKey = submitSharedPublicForm.mock.calls[0]?.[7]
+        expect(attemptKey).toEqual(expect.any(String))
+        expect(attemptKey).not.toBe('other-attempt')
+        expect(attemptKey).not.toBe('old-attempt')
+        expect(window.sessionStorage.getItem('intake-submit:other-form:version-1')).toBe('other-attempt')
     })
 
     it('keeps both SMS choices unchecked and optional on hosted intake', async () => {
@@ -438,6 +478,7 @@ describe('Shared Intake Public Page', () => {
                 undefined,
                 { operational: false, promotional: false },
                 'version-1',
+                expect.any(String),
             )
         })
     })
@@ -496,6 +537,7 @@ describe('Shared Intake Public Page', () => {
                 undefined,
                 undefined,
                 'version-1',
+                expect.any(String),
             )
         })
     })
@@ -557,6 +599,7 @@ describe('Shared Intake Public Page', () => {
                 undefined,
                 undefined,
                 'version-1',
+                expect.any(String),
             )
         })
     })

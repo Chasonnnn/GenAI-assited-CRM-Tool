@@ -184,6 +184,7 @@ def record_queued_event(
     stage_label: str | None = None,
     surrogate_id: UUID | None = None,
     db: Session | None = None,
+    commit: bool = True,
 ) -> MetaCrmDatasetEvent | None:
     event_holder: dict[str, MetaCrmDatasetEvent] = {}
 
@@ -205,16 +206,29 @@ def record_queued_event(
             surrogate_id=surrogate_id,
         )
 
-    _persist(_create, db=db)
+    if not commit:
+        if db is None:
+            raise ValueError("db is required when commit is False")
+        _create(db)
+    else:
+        _persist(_create, db=db)
     return event_holder.get("event")
 
 
-def mark_job_delivered(*, job_id: UUID, attempts: int, db: Session | None = None) -> None:
+def mark_job_delivered(*, job_id: UUID, attempts: int, db: Session | None = None) -> bool:
+    should_record_success = True
+
     def _update(inner_db: Session) -> None:
+        nonlocal should_record_success
         event = (
             inner_db.query(MetaCrmDatasetEvent).filter(MetaCrmDatasetEvent.job_id == job_id).first()
         )
         if not event:
+            return
+        if event.status == "skipped":
+            should_record_success = False
+            event.attempts = attempts
+            event.updated_at = _now_utc()
             return
         now = _now_utc()
         event.status = "delivered"
@@ -225,6 +239,33 @@ def mark_job_delivered(*, job_id: UUID, attempts: int, db: Session | None = None
         event.delivered_at = now
 
     _persist(_update, db=db)
+    return should_record_success
+
+
+def mark_job_skipped(
+    *,
+    job_id: UUID,
+    reason: str,
+    org_id: UUID | None = None,
+    db: Session | None = None,
+) -> None:
+    def _update(inner_db: Session) -> None:
+        query = inner_db.query(MetaCrmDatasetEvent).filter(MetaCrmDatasetEvent.job_id == job_id)
+        if org_id is not None:
+            query = query.filter(MetaCrmDatasetEvent.organization_id == org_id)
+        event = query.first()
+        if not event:
+            return
+        event.status = "skipped"
+        event.reason = reason[:50]
+        event.last_error = None
+        event.updated_at = _now_utc()
+
+    if db is None:
+        _persist(_update)
+        return
+    _update(db)
+    db.commit()
 
 
 def record_provider_result(

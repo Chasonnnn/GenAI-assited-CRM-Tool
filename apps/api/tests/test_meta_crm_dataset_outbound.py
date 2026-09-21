@@ -9,7 +9,7 @@ from uuid import uuid4
 import pytest
 
 
-def _create_form_submission_for_meta_event(db, org_id):
+def _create_form_submission_for_meta_event(db, org_id, *, lead_kind="surrogate"):
     from app.db.enums import FormStatus, FormSubmissionMatchStatus, FormSubmissionStatus
     from app.db.models import Form, FormSubmission
 
@@ -18,6 +18,7 @@ def _create_form_submission_for_meta_event(db, org_id):
         organization_id=org_id,
         name=f"Meta Website Lead Form {uuid4().hex[:6]}",
         status=FormStatus.PUBLISHED.value,
+        lead_kind=lead_kind,
         published_schema_json={"pages": []},
     )
     db.add(form)
@@ -30,6 +31,7 @@ def _create_form_submission_for_meta_event(db, org_id):
         answers_json={},
         schema_snapshot={},
         source_mode="shared",
+        lead_kind=lead_kind,
         status=FormSubmissionStatus.PENDING_REVIEW.value,
         match_status=FormSubmissionMatchStatus.WORKFLOW_PENDING.value,
         match_reason="workflow_pending",
@@ -38,6 +40,69 @@ def _create_form_submission_for_meta_event(db, org_id):
     db.add(submission)
     db.flush()
     return submission.id
+
+
+def _configure_meta_dataset(db, org_id, *, dataset_id="1428122951556949"):
+    from app.services import meta_crm_dataset_settings_service
+
+    settings = meta_crm_dataset_settings_service.get_or_create_settings(db, org_id)
+    settings.dataset_id = dataset_id
+    settings.access_token_encrypted = meta_crm_dataset_settings_service.encrypt_access_token(
+        "meta-token"
+    )
+    settings.enabled = True
+    settings.send_hashed_pii = True
+    db.commit()
+    return settings
+
+
+def _queue_meta_dataset_job(
+    db,
+    org_id,
+    settings,
+    *,
+    action_source="website",
+    form_submission_id=None,
+    source="form_embed",
+):
+    from app.db.enums import JobType
+    from app.db.models import MetaCrmDatasetEvent
+    from app.services import job_service
+
+    job = job_service.schedule_job(
+        db=db,
+        org_id=org_id,
+        job_type=JobType.META_CRM_DATASET_EVENT,
+        payload={
+            "settings_id": str(settings.id),
+            "dataset_id": settings.dataset_id,
+            "body": {
+                "data": [
+                    {
+                        "event_name": "Lead",
+                        "event_time": 1772942400,
+                        "action_source": action_source,
+                        "user_data": {"fbc": "fb.1.1772942400.test-click"},
+                    }
+                ]
+            },
+        },
+    )
+    db.add(
+        MetaCrmDatasetEvent(
+            organization_id=org_id,
+            job_id=job.id,
+            source=source,
+            status="queued",
+            event_id=f"meta-crm-event-{job.id}",
+            event_name="Lead",
+            form_submission_id=form_submission_id,
+            stage_key="form_submitted" if form_submission_id else "pre_qualified",
+            attempts=0,
+        )
+    )
+    db.commit()
+    return job
 
 
 @pytest.mark.asyncio
@@ -350,6 +415,220 @@ def test_enqueue_website_lead_event_is_submission_owned_and_can_attach_lead_late
     assert monitor_event.intake_lead_id == intake_lead_id
 
 
+def test_enqueue_website_lead_event_publishes_job_and_monitor_atomically(
+    monkeypatch,
+    db,
+    test_org,
+):
+    from app.db.models import Job, MetaCrmDatasetEvent
+    from app.services import meta_crm_dataset_service
+
+    _configure_meta_dataset(db, test_org.id)
+    submission_id = _create_form_submission_for_meta_event(db, test_org.id)
+    idempotency_key = f"sf_lead_{submission_id}"
+    commit_boundaries = []
+    original_commit = db.commit
+
+    def observe_commit_boundary():
+        db.flush()
+        job = (
+            db.query(Job)
+            .filter(
+                Job.organization_id == test_org.id,
+                Job.idempotency_key == idempotency_key,
+            )
+            .first()
+        )
+        if job is not None:
+            monitor = (
+                db.query(MetaCrmDatasetEvent)
+                .filter(
+                    MetaCrmDatasetEvent.organization_id == test_org.id,
+                    MetaCrmDatasetEvent.job_id == job.id,
+                )
+                .first()
+            )
+            commit_boundaries.append(monitor.form_submission_id if monitor else None)
+        original_commit()
+
+    monkeypatch.setattr(db, "commit", observe_commit_boundary)
+
+    result = meta_crm_dataset_service.enqueue_website_lead_event(
+        db,
+        organization_id=test_org.id,
+        submission_id=submission_id,
+        event_source_url="https://ewi-surrogacy.com",
+        attribution={"fbc": "fb.1.1772942400.test-click"},
+        email="lead@example.com",
+        phone=None,
+    )
+
+    assert result["queued"] is True
+    assert commit_boundaries == [submission_id]
+
+
+def test_enqueue_website_lead_event_rolls_back_job_when_monitor_persistence_fails(
+    monkeypatch,
+):
+    from app.db.models import Job, MetaCrmDatasetEvent, Organization
+    from app.db.session import SessionLocal
+    from app.services import meta_crm_dataset_monitor_service, meta_crm_dataset_service
+
+    isolated_db = SessionLocal()
+    organization_id = uuid4()
+    try:
+        isolated_db.add(
+            Organization(
+                id=organization_id,
+                name="Atomic Meta Enqueue Org",
+                slug=f"atomic-meta-enqueue-{organization_id.hex[:8]}",
+            )
+        )
+        isolated_db.commit()
+        _configure_meta_dataset(isolated_db, organization_id)
+        submission_id = _create_form_submission_for_meta_event(isolated_db, organization_id)
+        isolated_db.commit()
+
+        def fail_monitor_persistence(**_kwargs):
+            raise RuntimeError("monitor persistence failed")
+
+        monkeypatch.setattr(
+            meta_crm_dataset_monitor_service,
+            "record_queued_event",
+            fail_monitor_persistence,
+        )
+
+        result = meta_crm_dataset_service.enqueue_website_lead_event(
+            isolated_db,
+            organization_id=organization_id,
+            submission_id=submission_id,
+            event_source_url="https://ewi-surrogacy.com",
+            attribution={"fbc": "fb.1.1772942400.test-click"},
+            email="lead@example.com",
+            phone=None,
+        )
+
+        assert result["queued"] is False
+        assert result["reason"] == "enqueue_failed"
+        assert (
+            isolated_db.query(Job)
+            .filter(
+                Job.organization_id == organization_id,
+                Job.idempotency_key == f"sf_lead_{submission_id}",
+            )
+            .count()
+            == 0
+        )
+        skipped_event = (
+            isolated_db.query(MetaCrmDatasetEvent)
+            .filter(
+                MetaCrmDatasetEvent.organization_id == organization_id,
+                MetaCrmDatasetEvent.form_submission_id == submission_id,
+            )
+            .one()
+        )
+        assert skipped_event.status == "skipped"
+        assert skipped_event.reason == "enqueue_failed"
+    finally:
+        isolated_db.rollback()
+        organization = isolated_db.get(Organization, organization_id)
+        if organization is not None:
+            isolated_db.delete(organization)
+            isolated_db.commit()
+        isolated_db.close()
+
+
+@pytest.mark.parametrize("lead_kind", ["egg_donor", "sperm_donor"])
+def test_enqueue_website_lead_event_skips_donor_submissions(db, test_org, lead_kind):
+    from app.db.enums import JobType
+    from app.db.models import Job, MetaCrmDatasetEvent
+    from app.services import meta_crm_dataset_service
+
+    _configure_meta_dataset(db, test_org.id)
+    submission_id = _create_form_submission_for_meta_event(
+        db,
+        test_org.id,
+        lead_kind=lead_kind,
+    )
+
+    result = meta_crm_dataset_service.enqueue_website_lead_event(
+        db,
+        organization_id=test_org.id,
+        submission_id=submission_id,
+        event_source_url="https://ewi-surrogacy.com",
+        attribution={"fbc": "fb.1.1772942400.test-click"},
+        email="donor@example.com",
+        phone=None,
+    )
+
+    assert result["queued"] is False
+    assert result["reason"] == "donor_submission"
+    assert (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.META_CRM_DATASET_EVENT.value,
+        )
+        .count()
+        == 0
+    )
+    monitor_event = (
+        db.query(MetaCrmDatasetEvent)
+        .filter(MetaCrmDatasetEvent.event_id == f"sf_lead_{submission_id}")
+        .one()
+    )
+    assert monitor_event.status == "skipped"
+    assert monitor_event.reason == "donor_submission"
+
+
+def test_enqueue_website_lead_event_rejects_cross_org_submission(db, test_org):
+    from app.db.enums import JobType
+    from app.db.models import Job, MetaCrmDatasetEvent, Organization
+    from app.services import meta_crm_dataset_service
+
+    _configure_meta_dataset(db, test_org.id)
+    foreign_org = Organization(
+        id=uuid4(),
+        name="Foreign Meta Submission Org",
+        slug=f"foreign-meta-submission-{uuid4().hex[:8]}",
+    )
+    db.add(foreign_org)
+    db.flush()
+    submission_id = _create_form_submission_for_meta_event(db, foreign_org.id)
+
+    result = meta_crm_dataset_service.enqueue_website_lead_event(
+        db,
+        organization_id=test_org.id,
+        submission_id=submission_id,
+        event_source_url="https://ewi-surrogacy.com",
+        attribution={"fbc": "fb.1.1772942400.test-click"},
+        email="lead@example.com",
+        phone=None,
+    )
+
+    assert result["queued"] is False
+    assert result["reason"] == "submission_not_found"
+    assert result["event_id"] is None
+    assert (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.META_CRM_DATASET_EVENT.value,
+        )
+        .count()
+        == 0
+    )
+    assert (
+        db.query(MetaCrmDatasetEvent)
+        .filter(
+            MetaCrmDatasetEvent.organization_id == test_org.id,
+            MetaCrmDatasetEvent.form_submission_id == submission_id,
+        )
+        .count()
+        == 0
+    )
+
+
 def test_enqueue_meta_crm_dataset_stage_event_includes_fbc_from_meta_lead(db, test_org, test_user):
     from app.db.enums import JobType, SurrogateSource
     from app.db.models import Job, MetaLead
@@ -505,6 +784,243 @@ def test_enqueue_meta_crm_dataset_stage_event_skips_meta_leads_older_than_90_day
         .count()
         == 0
     )
+
+
+async def _run_meta_job_worker_iteration(db, job):
+    from app import worker
+    from app.db.enums import JobType
+    from app.services import job_service
+
+    claimed_jobs = job_service.claim_pending_jobs(
+        db,
+        limit=1,
+        job_types=[JobType.META_CRM_DATASET_EVENT],
+    )
+    assert [claimed.id for claimed in claimed_jobs] == [job.id]
+    claimed = claimed_jobs[0]
+    assert claimed.claim_token is not None
+    assert await worker.process_job(db, claimed) is True
+    completed = job_service.complete_claimed_job(
+        db,
+        job_id=claimed.id,
+        claim_token=claimed.claim_token,
+    )
+    worker._record_job_success(db, completed)
+    return completed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("scenario", "expected_reason"),
+    [
+        ("donor", "donor_submission"),
+        ("disabled", "disabled"),
+        ("destination_changed", "destination_changed"),
+        ("foreign_settings", "settings_not_found"),
+        ("invalid_event", "invalid_event"),
+    ],
+)
+async def test_meta_crm_dataset_worker_completes_permanent_rejections_as_skipped(
+    monkeypatch,
+    db,
+    test_org,
+    scenario,
+    expected_reason,
+):
+    from app.db.enums import JobStatus
+    from app.db.models import MetaCrmDatasetEvent, Organization
+
+    settings = _configure_meta_dataset(db, test_org.id)
+    submission_id = None
+    action_source = "system_generated"
+    source = "test"
+    if scenario == "donor":
+        submission_id = _create_form_submission_for_meta_event(
+            db,
+            test_org.id,
+            lead_kind="egg_donor",
+        )
+        action_source = "website"
+        source = "form_embed"
+    elif scenario == "invalid_event":
+        action_source = "unsupported"
+    job = _queue_meta_dataset_job(
+        db,
+        test_org.id,
+        settings,
+        action_source=action_source,
+        form_submission_id=submission_id,
+        source=source,
+    )
+    if scenario == "disabled":
+        settings.enabled = False
+    elif scenario == "destination_changed":
+        settings.dataset_id = "changed-dataset-destination"
+    elif scenario == "foreign_settings":
+        foreign_org = Organization(
+            id=uuid4(),
+            name="Foreign Meta Settings Org",
+            slug=f"foreign-meta-settings-{uuid4().hex[:8]}",
+        )
+        db.add(foreign_org)
+        db.flush()
+        foreign_settings = _configure_meta_dataset(db, foreign_org.id)
+        job.payload = {**job.payload, "settings_id": str(foreign_settings.id)}
+    db.commit()
+
+    class UnexpectedClient:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("permanently rejected dataset job reached HTTP dispatch")
+
+    monkeypatch.setattr("app.services.meta_crm_dataset_service.httpx.AsyncClient", UnexpectedClient)
+
+    completed = await _run_meta_job_worker_iteration(db, job)
+
+    db.refresh(completed)
+    assert completed.status == JobStatus.COMPLETED.value
+    assert completed.attempts == 1
+    monitor_event = db.query(MetaCrmDatasetEvent).filter(MetaCrmDatasetEvent.job_id == job.id).one()
+    assert monitor_event.status == "skipped"
+    assert monitor_event.reason == expected_reason
+    assert monitor_event.attempts == completed.attempts
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_point", ["database", "provider"])
+async def test_meta_crm_dataset_worker_keeps_transient_failures_retryable(
+    monkeypatch,
+    db,
+    test_org,
+    failure_point,
+):
+    from app import worker
+    from app.db.models import MetaCrmDatasetEvent
+    from app.services import meta_crm_dataset_settings_service
+
+    settings = _configure_meta_dataset(db, test_org.id)
+    job = _queue_meta_dataset_job(
+        db,
+        test_org.id,
+        settings,
+        action_source="system_generated",
+        source="test",
+    )
+    if failure_point == "database":
+        job.payload = {key: value for key, value in job.payload.items() if key != "settings_id"}
+
+        def _raise_database_error(*args, **kwargs):
+            raise RuntimeError("transient database failure")
+
+        monkeypatch.setattr(
+            meta_crm_dataset_settings_service, "get_settings", _raise_database_error
+        )
+        expected_error = "transient database failure"
+    else:
+
+        class FailingClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, url, json):
+                raise RuntimeError("transient provider failure")
+
+        monkeypatch.setattr(
+            "app.services.meta_crm_dataset_service.httpx.AsyncClient", FailingClient
+        )
+        expected_error = "transient provider failure"
+    db.commit()
+
+    with pytest.raises(RuntimeError, match=expected_error):
+        await worker.process_job(db, job)
+
+    monitor_event = db.query(MetaCrmDatasetEvent).filter(MetaCrmDatasetEvent.job_id == job.id).one()
+    assert monitor_event.status == "queued"
+    assert monitor_event.reason is None
+
+
+@pytest.mark.asyncio
+async def test_meta_crm_dataset_job_handler_rejects_cross_org_submission(
+    monkeypatch,
+    db,
+    test_org,
+):
+    from app.db.models import MetaCrmDatasetEvent, Organization
+    from app.jobs.handlers import meta
+
+    settings = _configure_meta_dataset(db, test_org.id)
+    foreign_org = Organization(
+        id=uuid4(),
+        name="Foreign Queued Submission Org",
+        slug=f"foreign-queued-submission-{uuid4().hex[:8]}",
+    )
+    db.add(foreign_org)
+    db.flush()
+    submission_id = _create_form_submission_for_meta_event(db, foreign_org.id)
+    job = _queue_meta_dataset_job(
+        db,
+        test_org.id,
+        settings,
+        form_submission_id=submission_id,
+    )
+
+    class UnexpectedClient:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("cross-org dataset job reached HTTP dispatch")
+
+    monkeypatch.setattr("app.services.meta_crm_dataset_service.httpx.AsyncClient", UnexpectedClient)
+
+    await meta.process_meta_crm_dataset_event(db, job)
+
+    monitor_event = db.query(MetaCrmDatasetEvent).filter(MetaCrmDatasetEvent.job_id == job.id).one()
+    assert monitor_event.status == "skipped"
+    assert monitor_event.reason == "submission_not_found"
+
+
+@pytest.mark.asyncio
+async def test_meta_crm_dataset_job_handler_posts_queued_surrogate_submission(
+    monkeypatch,
+    db,
+    test_org,
+):
+    from app.jobs.handlers import meta
+
+    settings = _configure_meta_dataset(db, test_org.id)
+    submission_id = _create_form_submission_for_meta_event(db, test_org.id)
+    job = _queue_meta_dataset_job(
+        db,
+        test_org.id,
+        settings,
+        form_submission_id=submission_id,
+    )
+    captured: dict[str, object] = {}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, json):
+            captured["url"] = url
+            captured["json"] = json
+            return SimpleNamespace(status_code=200, json=lambda: {"events_received": 1}, text="ok")
+
+    monkeypatch.setattr("app.services.meta_crm_dataset_service.httpx.AsyncClient", FakeClient)
+
+    await meta.process_meta_crm_dataset_event(db, job)
+
+    assert "/1428122951556949/events" in str(captured["url"])
+    assert captured["json"]["data"][0]["action_source"] == "website"
 
 
 @pytest.mark.asyncio

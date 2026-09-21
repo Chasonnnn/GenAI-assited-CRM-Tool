@@ -1867,6 +1867,7 @@ def _workflow_payload_from_model(template) -> dict:
         "description": template.description,
         "icon": template.icon,
         "category": template.category,
+        "subject_type": template.subject_type,
         "trigger_type": template.trigger_type,
         "trigger_config": template.trigger_config or {},
         "conditions": template.conditions or [],

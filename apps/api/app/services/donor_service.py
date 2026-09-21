@@ -1145,6 +1145,14 @@ def apply_status_change(
             },
             request=request,
         )
+        from app.services import zapier_outbound_service
+
+        zapier_outbound_service.enqueue_donor_stage_event(
+            db,
+            donor=donor,
+            history=history,
+            new_stage=new_stage,
+        )
         if commit:
             db.commit()
             refreshed = get_donor(db, donor.organization_id, donor.id) or donor

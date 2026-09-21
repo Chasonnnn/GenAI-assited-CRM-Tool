@@ -18,6 +18,7 @@ class TemplateBase(BaseModel):
 class TemplateCreate(TemplateBase):
     """Schema for creating a template from workflow config."""
 
+    subject_type: str | None = None
     trigger_type: str
     trigger_config: dict = Field(default_factory=dict)
     conditions: list[dict] = Field(default_factory=list)
@@ -38,6 +39,7 @@ class TemplateRead(TemplateBase):
     """Schema for reading a template."""
 
     id: UUID
+    subject_type: str | None = None
     trigger_type: str
     trigger_config: dict
     conditions: list[dict]
@@ -60,6 +62,7 @@ class TemplateListItem(BaseModel):
     description: str | None
     icon: str
     category: str
+    subject_type: str | None = None
     trigger_type: str
     is_global: bool
     usage_count: int
