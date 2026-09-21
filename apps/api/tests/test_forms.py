@@ -1143,6 +1143,18 @@ async def test_shared_submit_accepts_custom_identity_fields_when_mapped(authed_c
     assert submission_res.status_code == 200
     assert submission_res.json()["outcome"] == "workflow_pending"
 
+    submissions_res = await authed_client.get(f"/forms/{form_id}/submissions")
+    assert submissions_res.status_code == 200
+    assert {
+        (item["field_key"], item["surrogate_field"])
+        for item in submissions_res.json()[0]["mapping_snapshot"]
+    } == {
+        ("legal_name", "full_name"),
+        ("dob", "date_of_birth"),
+        ("mobile", "phone"),
+        ("email_address", "email"),
+    }
+
 
 @pytest.mark.asyncio
 async def test_default_surrogate_application_form_reconciles_on_purpose_change(

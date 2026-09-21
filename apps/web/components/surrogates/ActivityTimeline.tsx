@@ -37,6 +37,10 @@ export function ActivityTimeline({
     const currentStage = stages.find((stage) => stage.id === currentStageId)
     const canHaveInterviewAppointment = stageMatchesKey(currentStage, "interview_scheduled")
         || stageMatchesKey(currentStage, "reschedule_needed")
+    const latestInterviewActivity = canHaveInterviewAppointment
+        ? activities?.filter((activity) => ["interview_scheduled", "interview_rescheduled"].includes(activity.activity_type))
+            .toSorted((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+        : undefined
     const status = historyQuery.isLoading || activityStatus === "loading"
         ? "loading"
         : historyQuery.isError || activityStatus === "error"
@@ -44,9 +48,11 @@ export function ActivityTimeline({
           : "ready"
 
     return (
-        <div className="space-y-3">
-        {canHaveInterviewAppointment ? <InterviewAppointmentManager surrogateId={surrogateId} stageId={currentStageId} compact /> : null}
         <EntityActivityTimeline
+            {...(latestInterviewActivity ? { activityAction: {
+                activityId: latestInterviewActivity.id,
+                content: <InterviewAppointmentManager surrogateId={surrogateId} stageId={currentStageId} triggerOnly />,
+            } } : {})}
             currentStageId={currentStageId}
             stages={stages.map((stage) => ({ ...stage, semantics: getStageSemantics(stage) }))}
             stageHistory={historyQuery.data ?? []}
@@ -63,6 +69,5 @@ export function ActivityTimeline({
             {...(activities ? { activities } : {})}
             {...(tasks ? { tasks } : {})}
         />
-        </div>
     )
 }

@@ -12,6 +12,7 @@ import type {
 const mockPush = vi.fn()
 const mockReplace = vi.fn()
 const mockUseForm = vi.fn()
+const mockFormMappings = vi.fn()
 const mockFormSubmissions = vi.fn()
 const mockCreateForm = vi.fn()
 const mockUpdateForm = vi.fn()
@@ -81,7 +82,7 @@ vi.mock("@/lib/hooks/use-forms", () => ({
     useFormIntakeLinks: () => ({ data: [], refetch: mockRefetchIntakeLinks }),
     useFormSubmissions: (formId: string | null, params: ListFormSubmissionsParams) =>
         mockFormSubmissions(formId, params),
-    useFormMappings: () => ({ data: [], isLoading: false }),
+    useFormMappings: () => mockFormMappings(),
     usePublishForm: () => ({ mutateAsync: mockPublishForm, isPending: false }),
     useRetrySubmissionMatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useResolveSubmissionMatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -101,6 +102,7 @@ describe("FormBuilderPage", () => {
         mockPush.mockReset()
         mockReplace.mockReset()
         mockUseForm.mockReset()
+        mockFormMappings.mockReset()
         mockFormSubmissions.mockReset()
         mockCreateForm.mockReset()
         mockUpdateForm.mockReset()
@@ -125,6 +127,7 @@ describe("FormBuilderPage", () => {
                       ],
         }))
         mockUseForm.mockReturnValue({ data: undefined, isLoading: false })
+        mockFormMappings.mockReturnValue({ data: [], isLoading: false })
         mockFormSubmissions.mockReturnValue({
             data: [],
             refetch: vi.fn(),
@@ -517,6 +520,105 @@ describe("FormBuilderPage", () => {
         fireEvent.click(screen.getByRole("button", { name: "Promote to Sperm Donor" }))
         await vi.waitFor(() =>
             expect(toastError).toHaveBeenCalledWith("Missing permission: donors.edit"),
+        )
+    })
+
+    it("renders donor submission identity through saved custom field mappings", async () => {
+        const donorForm: FormRead = {
+            id: "form-donor",
+            name: "Egg Donor Application",
+            status: "published",
+            purpose: "lead_capture",
+            lead_kind: "egg_donor",
+            created_at: "2026-09-21T00:00:00Z",
+            updated_at: "2026-09-21T00:00:00Z",
+            description: null,
+            form_schema: {
+                pages: [
+                    {
+                        title: "Application",
+                        fields: [
+                            { key: "applicant_name", label: "Full Name", type: "text" },
+                            { key: "email_address", label: "Email", type: "email" },
+                            { key: "mobile", label: "Phone", type: "phone" },
+                            { key: "home_state", label: "State", type: "text" },
+                            { key: "education_background", label: "Education", type: "text" },
+                        ],
+                    },
+                ],
+            },
+            published_schema: null,
+            max_file_size_bytes: 10 * 1024 * 1024,
+            max_file_count: 10,
+            allowed_mime_types: ["image/png", "image/jpeg"],
+            default_application_email_template_id: null,
+        }
+        const submission: FormSubmissionRead = {
+            id: "submission-donor",
+            form_id: donorForm.id,
+            surrogate_id: null,
+            donor_id: "donor-1",
+            donor_number: "D10001",
+            lead_kind: "egg_donor",
+            status: "pending_review",
+            submitted_at: "2026-09-21T00:46:49Z",
+            reviewed_at: null,
+            reviewed_by_user_id: null,
+            review_notes: null,
+            answers: {
+                applicant_name: "Maya Bennett",
+                email_address: "maya.bennett@example.com",
+                mobile: "+16075550181",
+                home_state: "NY",
+                education_background: "MS in Biochemistry",
+            },
+            schema_snapshot: donorForm.form_schema,
+            mapping_snapshot: [
+                { field_key: "applicant_name", surrogate_field: "full_name" },
+                { field_key: "email_address", surrogate_field: "email" },
+                { field_key: "mobile", surrogate_field: "phone" },
+                { field_key: "home_state", surrogate_field: "state" },
+                { field_key: "education_background", surrogate_field: "education" },
+            ],
+            source_mode: "shared",
+            intake_link_id: "link-1",
+            intake_lead_id: null,
+            match_status: "linked",
+            match_reason: "donor_email_name_type_exact",
+            matched_at: "2026-09-21T00:46:49Z",
+            files: [],
+        }
+
+        navigationState.formId = donorForm.id
+        mockUseForm.mockReturnValue({ data: donorForm, isLoading: false })
+        mockFormMappings.mockReturnValue({
+            data: [
+                { field_key: "preferred_name", surrogate_field: "full_name" },
+                { field_key: "email_address", surrogate_field: "email" },
+                { field_key: "cell", surrogate_field: "phone" },
+                { field_key: "region", surrogate_field: "state" },
+                { field_key: "schooling", surrogate_field: "education" },
+            ],
+            isLoading: false,
+        })
+        mockFormSubmissions.mockImplementation(
+            (_formId: string | null, params: ListFormSubmissionsParams = {}) => ({
+                data: params.match_status ? [] : [submission],
+                refetch: vi.fn(),
+                isLoading: false,
+            }),
+        )
+
+        render(<FormBuilderPage />)
+        fireEvent.click(screen.getByRole("tab", { name: /^submissions$/i }))
+
+        expect(await screen.findByText("Maya Bennett")).toBeInTheDocument()
+        expect(screen.getByText("+16075550181")).toBeInTheDocument()
+        expect(screen.getByText("NY")).toBeInTheDocument()
+        expect(screen.getByText("MS in Biochemistry")).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Open donor D10001" })).toHaveAttribute(
+            "href",
+            "/donors/donor-1",
         )
     })
 

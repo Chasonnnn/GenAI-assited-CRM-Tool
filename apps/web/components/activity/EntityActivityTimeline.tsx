@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import Link from "@/components/app-link"
 import { formatDistanceToNow, isBefore, parseISO, startOfToday } from "date-fns"
 import {
@@ -70,6 +70,11 @@ interface ActivityItem {
     exactTimestamp?: string
     outcomeKind?: ActivityOutcomeKind
     outcomeValue?: string
+}
+
+interface ActivityAction {
+    activityId: string
+    content: ReactNode
 }
 
 // ============================================================================
@@ -435,7 +440,8 @@ function resolveActivityStageId(
     return assignActivityToStage(activity, stageHistory)
 }
 
-function getActivitySortRank(item: ActivityItem): number {
+function getActivitySortRank(item: ActivityItem, actionActivityId?: string): number {
+    if (item.id === actionActivityId) return -1
     if (item.type === "interview_scheduled") return 0
     return 1
 }
@@ -454,7 +460,8 @@ function getVisibleStages(
     stageGroups: StageGroup[],
     showFullJourney: boolean,
     anchorStageId?: string | null,
-    currentStageId?: string | null
+    currentStageId?: string | null,
+    actionStageId?: string
 ): StageGroup[] {
     if (showFullJourney) return stageGroups
 
@@ -467,6 +474,7 @@ function getVisibleStages(
     }
 
     const visibleIds = new Set<string>()
+    if (actionStageId) visibleIds.add(actionStageId)
     const anchorIdx = getStageIndexById(stageGroups, anchorStageId ?? currentStageId)
     collectVisibleIds(anchorIdx, visibleIds)
 
@@ -486,7 +494,8 @@ function buildTimelineData(
     stageHistory: EntityStageHistory[],
     activities: EntityActivity[],
     currentStageId: string,
-    effectiveStageId?: string
+    effectiveStageId?: string,
+    actionActivityId?: string
 ): { stageGroups: StageGroup[] } {
     const stageLabelById = new Map(allPipelineStages.map((stage) => [stage.id, stage.label]))
 
@@ -537,7 +546,7 @@ function buildTimelineData(
     // 5. Sort activities within each stage by timestamp DESC
     for (const [, items] of activitiesByStage.entries()) {
         items.sort((a, b) => {
-            const rankDiff = getActivitySortRank(a) - getActivitySortRank(b)
+            const rankDiff = getActivitySortRank(a, actionActivityId) - getActivitySortRank(b, actionActivityId)
             if (rankDiff !== 0) return rankDiff
             const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
             return diff !== 0 ? diff : a.id.localeCompare(b.id)
@@ -590,7 +599,7 @@ function buildTimelineData(
 // Activity Row Component
 // ============================================================================
 
-function ActivityRow({ item }: { item: ActivityItem }) {
+function ActivityRow({ item, action }: { item: ActivityItem; action?: ReactNode }) {
     const baseConfig = getActivityConfig(item.type)
     const outcomePresentation =
         item.outcomeKind && item.outcomeValue
@@ -606,7 +615,7 @@ function ActivityRow({ item }: { item: ActivityItem }) {
     const Icon = config.icon
 
     return (
-        <div className="flex items-start gap-3 py-2">
+        <div className="flex items-start gap-3 py-2" data-testid={`timeline-activity-${item.id}`}>
             <div className={cn("w-1 self-stretch rounded-full", config.color)} />
             <div
                 className={cn(
@@ -625,13 +634,16 @@ function ActivityRow({ item }: { item: ActivityItem }) {
                     <div className="text-xs text-muted-foreground line-clamp-2">{item.preview}</div>
                 )}
             </div>
-            <div className="shrink-0 text-right text-xs text-muted-foreground">
-                {item.actorName ? <div>{item.actorName}</div> : null}
-                {item.exactTimestamp ? (
-                    <time dateTime={item.timestamp}>{item.exactTimestamp}</time>
-                ) : (
-                    <div>{item.relativeDate}</div>
-                )}
+            <div className="flex shrink-0 flex-col items-end self-stretch gap-2 text-right text-xs text-muted-foreground">
+                <div>
+                    {item.actorName ? <div>{item.actorName}</div> : null}
+                    {item.exactTimestamp ? (
+                        <time dateTime={item.timestamp}>{item.exactTimestamp}</time>
+                    ) : (
+                        <div>{item.relativeDate}</div>
+                    )}
+                </div>
+                {action ? <div className="mt-auto">{action}</div> : null}
             </div>
         </div>
     )
@@ -744,10 +756,12 @@ function ActivityTimelineStageList({
     stages,
     openStageIds,
     onStageToggle,
+    activityAction,
 }: {
     stages: StageGroup[]
     openStageIds: Set<string>
     onStageToggle: (stageId: string, isOpen: boolean) => void
+    activityAction?: ActivityAction | undefined
 }) {
     return (
         <div className="space-y-0">
@@ -864,7 +878,7 @@ function ActivityTimelineStageList({
                                 ) : null}
                                 {stage.activities.length > 0 ? (
                                     stage.activities.map((item) => (
-                                        <ActivityRow key={item.id} item={item} />
+                                        <ActivityRow key={item.id} item={item} action={item.id === activityAction?.activityId ? activityAction.content : null} />
                                     ))
                                 ) : !showStageEntryRow ? (
                                     <div className="py-2 text-xs italic text-muted-foreground/60">
@@ -979,6 +993,7 @@ function ActivityTimelineLinks({
 // ============================================================================
 
 export interface EntityActivityTimelineProps {
+    activityAction?: ActivityAction
     currentStageId: string
     effectiveStageId?: string
     stages: PipelineStage[]
@@ -998,6 +1013,7 @@ const EMPTY_ACTIVITIES: EntityActivity[] = []
 const EMPTY_TASKS: TaskListItem[] = []
 
 export function EntityActivityTimeline({
+    activityAction,
     currentStageId,
     effectiveStageId,
     stages,
@@ -1014,13 +1030,16 @@ export function EntityActivityTimeline({
 }: EntityActivityTimelineProps) {
     const [showFullJourney, setShowFullJourney] = useState(false)
 
-    const { stageGroups } = buildTimelineData(stages, stageHistory, activities, currentStageId, effectiveStageId)
-    const visibleStages = getVisibleStages(stageGroups, showFullJourney, effectiveStageId, currentStageId)
+    const { stageGroups } = buildTimelineData(stages, stageHistory, activities, currentStageId, effectiveStageId, activityAction?.activityId)
+    const actionStageId = activityAction
+        ? stageGroups.find((stage) => stage.activities.some((item) => item.id === activityAction.activityId))?.id
+        : undefined
+    const visibleStages = getVisibleStages(stageGroups, showFullJourney, effectiveStageId, currentStageId, actionStageId)
     const defaultOpenStageId = stageGroups.find((stage) => stage.id === currentStageId)?.id ?? null
-    const defaultStageKey = defaultOpenStageId ?? `missing:${currentStageId}`
-    const createDefaultOpenStageIds = () => defaultOpenStageId
-        ? new Set([defaultOpenStageId])
-        : new Set<string>()
+    const defaultStageKey = `${defaultOpenStageId ?? `missing:${currentStageId}`}:${actionStageId ?? ""}`
+    const createDefaultOpenStageIds = () => new Set(
+        [defaultOpenStageId, actionStageId].filter((id): id is string => Boolean(id))
+    )
     const [openStageState, setOpenStageState] = useState(() => ({
         defaultStageKey,
         openStageIds: createDefaultOpenStageIds(),
@@ -1144,6 +1163,7 @@ export function EntityActivityTimeline({
                     stages={visibleStages}
                     openStageIds={openStageIds}
                     onStageToggle={handleStageToggle}
+                    activityAction={activityAction}
                 />
                 <ActivityTimelineNextSteps
                     status={tasksStatus}

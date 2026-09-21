@@ -12,6 +12,7 @@ import {
 } from "@/lib/api/forms"
 import type {
     FormCreatePayload,
+    FormFieldMappingItem,
     FormIntakeLinkRead,
     FormLeadKind,
     FormPurpose,
@@ -284,8 +285,15 @@ async function handleCopySharedLink(link: FormIntakeLinkRead) {
     }
 }
 
-function readAnswerValue(submission: FormSubmissionRead, keys: string[]) {
-    for (const key of keys) {
+function readAnswerValue(
+    submission: FormSubmissionRead,
+    keys: string[],
+    mappings: FormFieldMappingItem[],
+) {
+    const mappedKeys = mappings
+        .filter((mapping) => keys.includes(mapping.surrogate_field))
+        .map((mapping) => mapping.field_key)
+    for (const key of [...new Set([...mappedKeys, ...keys])]) {
         const rawValue = submission.answers?.[key]
         if (typeof rawValue === "string" && rawValue.trim()) {
             return rawValue.trim()
@@ -1171,7 +1179,12 @@ export function useAutomationFormBuilderPage() {
             promoteIntakeLeadPending: promoteIntakeLeadMutation.isPending,
             manualSurrogateId: state.manualSurrogateId,
             resolveReviewNotes: state.resolveReviewNotes,
-            readAnswerValue,
+            readAnswerValue: (submission: FormSubmissionRead, keys: string[]) =>
+                readAnswerValue(
+                    submission,
+                    keys,
+                    submission.mapping_snapshot ?? mappingData ?? [],
+                ),
             formatSubmissionDateTime,
             submissionOutcomeLabel,
             submissionOutcomeBadgeClass,

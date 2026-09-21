@@ -49,7 +49,8 @@ const mockUseSurrogateCreatedDates = vi.fn()
 const mockUseRevealSurrogateSensitiveInfo = vi.fn()
 const mockUseQueues = vi.fn()
 
-vi.mock('@/lib/hooks/use-surrogates', () => ({
+vi.mock('@/lib/hooks/use-surrogates', async (importOriginal) => ({
+    surrogateKeys: (await importOriginal<typeof import('@/lib/hooks/use-surrogates')>()).surrogateKeys,
     useSurrogates: (filters: unknown) => mockUseSurrogates(filters),
     useArchiveSurrogate: () => mockUseArchiveSurrogate(),
     useRestoreSurrogate: () => mockUseRestoreSurrogate(),
