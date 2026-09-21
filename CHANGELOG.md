@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.69](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.68...surrogacy-crm-platform-v0.91.69) (2026-09-21)
+
+
+### Bug Fixes
+
+* isolate WebSocket database worker capacity ([8e5e45e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8e5e45e11a774c9c5495d773388fd5a73a2f54e3))
+* move WebSocket database checks off the event loop ([893b285](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/893b2857bf4c5c34ef995cb906014ac53f5f8204))
+* preserve CORS responses without blocking on error alerts ([6ae9946](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6ae994651006f5ce089e21f05553e42bad317b60))
+* prevent WebSocket pool waits from stalling API requests ([1dcc9a3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1dcc9a35dda8fc30672bc15d9e9e0ea73800bf52))
+
 ## [0.91.68](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.67...surrogacy-crm-platform-v0.91.68) (2026-09-21)
 
 
