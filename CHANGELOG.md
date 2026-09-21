@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.68](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.67...surrogacy-crm-platform-v0.91.68) (2026-09-21)
+
+
+### Features
+
+* add durable Google appointment delivery ([2c65d4a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2c65d4aef3795e28bae5375bc728525a12ecf08a))
+
+
+### Bug Fixes
+
+* show Google appointment delivery and retry states ([8a97961](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8a979616398391c5dbee53dae802764c9707862c))
+* synchronize Google-linked interview changes ([135b301](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/135b3010da687d1bdaa7d2389be6284a3306d304))
+* synchronize Google-linked interview reschedules and cancellations ([fb228d1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fb228d153241ee1ecdb53592a986f7f30cef4f4b))
+
 ## [0.91.67](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.66...surrogacy-crm-platform-v0.91.67) (2026-09-21)
 
 
