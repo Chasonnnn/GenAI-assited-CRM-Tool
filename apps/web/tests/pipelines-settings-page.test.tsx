@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import PipelinesSettingsPage from "../app/(app)/settings/pipelines/page"
+import { DEFAULT_STAGE_SEMANTICS_BY_KEY, STAGE_DEFS } from "@/lib/constants/stages.generated"
 
 const mockUseAuth = vi.fn()
 const mockUsePipelines = vi.fn()
@@ -627,6 +628,39 @@ describe("PipelinesSettingsPage", () => {
         expect(
             screen.getByText(/locked because platform workflows depend on it/i),
         ).toBeInTheDocument()
+    })
+
+    it("locks the interview stages in order and hides their removal actions", () => {
+        const interviewStages = STAGE_DEFS.filter((stage) =>
+            ["interview_scheduled", "reschedule_needed"].includes(stage.stageKey),
+        ).map((stage) => ({
+            ...pipelineFixture.stages[0],
+            id: stage.stageKey,
+            stage_key: stage.stageKey,
+            slug: stage.slug,
+            label: stage.label,
+            color: stage.color,
+            semantics: DEFAULT_STAGE_SEMANTICS_BY_KEY[stage.stageKey],
+            system_role: stage.stageKey,
+        }))
+        currentSurrogatePipeline = {
+            ...pipelineFixture,
+            stages: [
+                ...pipelineFixture.stages.slice(0, 2),
+                ...interviewStages,
+                ...pipelineFixture.stages.slice(2),
+            ].map((stage, index) => ({ ...stage, order: index + 1 })),
+        }
+
+        render(<PipelinesSettingsPage />)
+
+        for (const label of ["Interview Scheduled", "Reschedule Needed"]) {
+            expect(screen.getByDisplayValue(label)).toBeDisabled()
+            expect(screen.queryByRole("button", { name: `Remove ${label}` })).not.toBeInTheDocument()
+            expect(screen.queryByRole("button", { name: `Duplicate ${label}` })).not.toBeInTheDocument()
+        }
+        expect(screen.getByTestId("stage-order-slot-interview_scheduled")).toHaveTextContent("#3")
+        expect(screen.getByTestId("stage-order-slot-reschedule_needed")).toHaveTextContent("#4")
     })
 
     it("uses dedicated order slots and aligned action rails for locked and unlocked stages", () => {
