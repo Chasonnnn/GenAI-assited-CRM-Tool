@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.67](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.66...surrogacy-crm-platform-v0.91.67) (2026-09-21)
+
+
+### Bug Fixes
+
+* align surrogate detail tabs and appointment controls ([340b461](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/340b461e107507461066821393e1ae2999d09c27))
+* align surrogate detail tabs and appointment controls ([4f4105f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4f4105f0c87805092d1e03d15a41c6ffe9ef4e74))
+* bound database pools and Cloud Run connection budget ([57bcfdd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/57bcfddf4d69dab55c7f16d539d8eb242dac4ff1))
+* harden CRM runtime reliability and streamline releases ([9790d74](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9790d74c10872b451b9310199fcee5f82193d744))
+* preserve protobuf parser arguments in error reporting ([c7679be](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c7679be79361598a193e8ad40f875b0eb7ad4b04))
+* protect required interview pipeline stages ([b447048](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b4470487aaec658f02c4a7abf829ef3cb708c140))
+* restore soft-deleted required pipeline stages ([b28f036](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b28f036f7e8fea437adc72d577dbaa2c664d4a53))
+
+
+### Maintenance
+
+* pin GitHub Actions runners to Ubuntu 26.04 ([c1def14](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c1def148dbb459d364e814e1cf26560f81537bed))
+* remove saved QA and prototype output artifacts ([a0bef7d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a0bef7deac3b49f2310e49413cf9803f3f2d92db))
+
 ## [0.91.66](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.65...surrogacy-crm-platform-v0.91.66) (2026-09-21)
 
 
