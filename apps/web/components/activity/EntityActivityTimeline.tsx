@@ -615,8 +615,8 @@ function ActivityRow({ item, action }: { item: ActivityItem; action?: ReactNode 
     const Icon = config.icon
 
     return (
-        <div className="flex items-start gap-3 py-2" data-testid={`timeline-activity-${item.id}`}>
-            <div className={cn("w-1 self-stretch rounded-full", config.color)} />
+        <div className="grid grid-cols-[0.25rem_1.5rem_minmax(0,1fr)_auto] items-start gap-x-3 py-2" data-testid={`timeline-activity-${item.id}`}>
+            <div className={cn("row-span-2 self-stretch rounded-full", config.color)} />
             <div
                 className={cn(
                     "size-6 rounded flex items-center justify-center shrink-0",
@@ -643,8 +643,8 @@ function ActivityRow({ item, action }: { item: ActivityItem; action?: ReactNode 
                         <div>{item.relativeDate}</div>
                     )}
                 </div>
-                {action ? <div className="mt-auto">{action}</div> : null}
             </div>
+            {action ? <div className="col-span-3 col-start-2 mt-2">{action}</div> : null}
         </div>
     )
 }
