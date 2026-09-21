@@ -237,7 +237,8 @@ const defaultPipelineStages = [
 ]
 let mockPipelineStages = [...defaultPipelineStages]
 
-vi.mock('@/lib/hooks/use-surrogates', () => ({
+vi.mock('@/lib/hooks/use-surrogates', async (importOriginal) => ({
+    surrogateKeys: (await importOriginal<typeof import('@/lib/hooks/use-surrogates')>()).surrogateKeys,
     useSurrogate: (id: string) => mockUseSurrogate(id),
     useSurrogateActivity: (id: string) => mockUseSurrogateActivity(id),
     useSurrogateHistory: (id: string) => mockUseSurrogateHistory(id),
