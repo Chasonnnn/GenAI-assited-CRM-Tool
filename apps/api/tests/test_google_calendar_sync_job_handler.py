@@ -1,7 +1,10 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
+
+from app.db.models import Appointment
 
 
 @pytest.mark.asyncio
@@ -48,6 +51,68 @@ async def test_google_calendar_sync_job_handler_invokes_reconciler(db, test_auth
     assert called["date_start"] is None
     assert called["date_end"] is None
     assert called["strict"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("snapshot_has_event", [True, False])
+async def test_importer_fences_pending_managed_google_edit(
+    db, test_auth, monkeypatch, snapshot_has_event
+):
+    from app.services import appointment_integrations, calendar_service
+
+    start = datetime.now(UTC).replace(microsecond=0) + timedelta(days=3)
+    appointment = Appointment(
+        organization_id=test_auth.org.id,
+        user_id=test_auth.user.id,
+        appointment_type_id=None,
+        client_name="Linked interview",
+        client_email="client@example.com",
+        client_phone="555-0100",
+        client_timezone="UTC",
+        scheduled_start=start,
+        scheduled_end=start + timedelta(minutes=30),
+        duration_minutes=30,
+        meeting_mode="phone",
+        status="confirmed",
+        google_event_id="managed-google-event",
+        google_calendar_id="qa-interviews@group.calendar.google.com",
+        google_sync_revision=1,
+        google_sync_state="pending",
+    )
+    db.add(appointment)
+    db.commit()
+
+    async def calendars(**_kwargs):
+        return ["qa-interviews@group.calendar.google.com"]
+
+    async def events(**_kwargs):
+        return {
+            "connected": True,
+            "error": None,
+            "complete": True,
+            "events": [
+                {
+                    "id": "managed-google-event",
+                    "summary": "Old Google snapshot",
+                    "start": start - timedelta(hours=1),
+                    "end": start - timedelta(minutes=30),
+                }
+            ]
+            if snapshot_has_event
+            else [],
+        }
+
+    monkeypatch.setattr(calendar_service, "list_user_google_calendar_ids", calendars)
+    monkeypatch.setattr(calendar_service, "get_user_calendar_events", events)
+    changed = await appointment_integrations.sync_manual_google_events_for_appointments_async(
+        db, user_id=test_auth.user.id, org_id=test_auth.org.id, strict=True
+    )
+
+    db.refresh(appointment)
+    assert changed == 0
+    assert appointment.status == "confirmed"
+    assert appointment.scheduled_start == start
+    assert appointment.meeting_mode == "phone"
 
 
 @pytest.mark.asyncio

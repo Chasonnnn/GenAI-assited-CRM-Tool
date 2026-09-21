@@ -26,8 +26,15 @@ class InterviewStageRead(BaseModel):
 class SurrogateInterviewAppointmentState(BaseModel):
     appointment: InterviewAppointmentRead | None
     can_manage: bool
+    external_sync_status: (
+        Literal["pending", "completed", "failed", "conflict", "unlinked"] | None
+    ) = None
     scheduled_stage: InterviewStageRead | None
     reschedule_stage: InterviewStageRead | None
+
+
+class InterviewGoogleSyncCheck(BaseModel):
+    expected_appointment_id: UUID
 
 
 class SurrogateInterviewAppointmentAction(BaseModel):
