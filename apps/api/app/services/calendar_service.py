@@ -73,6 +73,21 @@ class CalendarDiscoveryError(RuntimeError):
     """Raised when the connected account's calendar list cannot be discovered."""
 
 
+class GoogleEventConflict(RuntimeError):
+    """The exact Google resource changed before a conditional write."""
+
+
+class LinkedGoogleEvent(TypedDict):
+    id: str
+    etag: str
+    start: datetime | None
+    end: datetime | None
+    status: str
+    organizer_email: str | None
+    organizer_self: bool
+    attendee_emails: list[str]
+
+
 WATCH_RENEW_BUFFER = timedelta(hours=6)
 WATCH_CHANNEL_TTL_SECONDS = 24 * 60 * 60
 
@@ -560,6 +575,128 @@ async def list_google_calendar_ids(
         deduped.append(calendar_id)
 
     return deduped or ["primary"]
+
+
+async def list_writable_google_calendar_ids(access_token: str) -> list[str]:
+    """Discover concrete writable calendars; never substitute the primary alias."""
+    ids: list[str] = []
+    page_token: str | None = None
+    async with httpx.AsyncClient(timeout=GOOGLE_CALENDAR_TIMEOUT_SECONDS) as client:
+        while True:
+            params = {"minAccessRole": "writer", "maxResults": "250"}
+            if page_token:
+                params["pageToken"] = page_token
+            response = await client.get(
+                "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+                headers={"Authorization": f"Bearer {access_token}"},
+                params=params,
+            )
+            if response.status_code != 200:
+                raise CalendarDiscoveryError("writable Google calendars unavailable")
+            data = response.json()
+            for item in data.get("items", []):
+                calendar_id = item.get("id")
+                if item.get("accessRole") in {"owner", "writer"} and isinstance(calendar_id, str):
+                    ids.append(calendar_id)
+            page_token = data.get("nextPageToken")
+            if not page_token:
+                break
+            if len(ids) >= 500:
+                raise CalendarDiscoveryError("writable Google calendar list incomplete")
+    return list(dict.fromkeys(ids))
+
+
+async def get_linked_google_event(
+    access_token: str, calendar_id: str, event_id: str
+) -> LinkedGoogleEvent | None:
+    """Read one exact event with the version and ownership needed for safe writes."""
+    async with httpx.AsyncClient(timeout=GOOGLE_CALENDAR_TIMEOUT_SECONDS) as client:
+        response = await client.get(
+            _calendar_event_endpoint(calendar_id, event_id),
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+    if response.status_code in {404, 410}:
+        return None
+    if response.status_code != 200:
+        raise RuntimeError("Google event lookup failed")
+    return _linked_google_event_from_response(response)
+
+
+def _linked_google_event_from_response(response: httpx.Response) -> LinkedGoogleEvent:
+    data = response.json()
+    status = data.get("status", "confirmed")
+    start_text = (data.get("start") or {}).get("dateTime")
+    end_text = (data.get("end") or {}).get("dateTime")
+    etag = data.get("etag") or response.headers.get("ETag")
+    if not isinstance(etag, str) or not etag:
+        raise RuntimeError("Google event version is unavailable")
+    if status != "cancelled" and not all(
+        isinstance(value, str) and value for value in (start_text, end_text)
+    ):
+        raise RuntimeError("Google event is not timed")
+    organizer = data.get("organizer") or {}
+    return LinkedGoogleEvent(
+        id=str(data.get("id") or ""),
+        etag=etag,
+        start=datetime.fromisoformat(start_text.replace("Z", "+00:00")).astimezone(UTC)
+        if start_text
+        else None,
+        end=datetime.fromisoformat(end_text.replace("Z", "+00:00")).astimezone(UTC)
+        if end_text
+        else None,
+        status=status,
+        organizer_email=organizer.get("email"),
+        organizer_self=organizer.get("self") is True,
+        attendee_emails=[
+            email
+            for attendee in data.get("attendees", [])
+            if isinstance(attendee, dict) and isinstance((email := attendee.get("email")), str)
+        ],
+    )
+
+
+async def update_linked_google_event(
+    access_token: str,
+    calendar_id: str,
+    event_id: str,
+    *,
+    etag: str,
+    start: datetime,
+    end: datetime,
+) -> LinkedGoogleEvent:
+    """Patch only the time interval and require the observed provider version."""
+    async with httpx.AsyncClient(timeout=GOOGLE_CALENDAR_TIMEOUT_SECONDS) as client:
+        response = await client.patch(
+            _calendar_event_endpoint(calendar_id, event_id),
+            headers={"Authorization": f"Bearer {access_token}", "If-Match": etag},
+            params={"sendUpdates": "all"},
+            json={
+                "start": {"dateTime": start.isoformat()},
+                "end": {"dateTime": end.isoformat()},
+            },
+        )
+    if response.status_code == 412:
+        raise GoogleEventConflict("Google event changed")
+    if response.status_code != 200:
+        raise RuntimeError("Google event update failed")
+    return _linked_google_event_from_response(response)
+
+
+async def delete_linked_google_event(
+    access_token: str, calendar_id: str, event_id: str, *, etag: str
+) -> None:
+    async with httpx.AsyncClient(timeout=GOOGLE_CALENDAR_TIMEOUT_SECONDS) as client:
+        response = await client.delete(
+            _calendar_event_endpoint(calendar_id, event_id),
+            headers={"Authorization": f"Bearer {access_token}", "If-Match": etag},
+            params={"sendUpdates": "all"},
+        )
+    if response.status_code == 412:
+        raise GoogleEventConflict("Google event changed")
+    if response.status_code in {404, 410}:
+        raise GoogleEventConflict("Google event disappeared during deletion")
+    if response.status_code not in {200, 204}:
+        raise RuntimeError("Google event deletion failed")
 
 
 async def list_user_google_calendar_ids(

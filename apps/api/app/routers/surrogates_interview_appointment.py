@@ -12,11 +12,13 @@ from app.core.surrogate_access import can_modify_surrogate, check_surrogate_acce
 from app.schemas.auth import UserSession
 from app.schemas.interview_appointment import (
     InterviewAppointmentRead,
+    InterviewGoogleSyncCheck,
     InterviewStageRead,
     SurrogateInterviewAppointmentAction,
     SurrogateInterviewAppointmentState,
 )
 from app.services import (
+    appointment_google_sync_service,
     permission_service,
     pipeline_service,
     surrogate_interview_appointment_service,
@@ -65,6 +67,7 @@ def _state(db: Session, surrogate, session: UserSession) -> SurrogateInterviewAp
         if appointment
         else None,
         can_manage=modifiable and owner_ok and sensible_stage and not surrogate.is_archived,
+        external_sync_status=appointment_google_sync_service.status(db, appointment),
         scheduled_stage=InterviewStageRead.model_validate(scheduled, from_attributes=True)
         if scheduled and scheduled.is_active
         else None,
@@ -131,4 +134,46 @@ def manage_interview_appointment(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(400, str(exc)) from exc
+    return _state(db, surrogate, session)
+
+
+@router.post(
+    "/{surrogate_id:uuid}/interview-appointment/sync/retry",
+    response_model=SurrogateInterviewAppointmentState,
+    dependencies=[
+        Depends(require_csrf_header),
+        Depends(require_permission(POLICIES["appointments"].default)),
+    ],
+)
+def retry_interview_google_sync(
+    surrogate_id: UUID,
+    data: InterviewGoogleSyncCheck,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["surrogates"].actions["change_status"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    surrogate = _load(db, session, surrogate_id)
+    if not can_modify_surrogate(
+        surrogate, session.user_id, session.role, db=db, org_id=session.org_id
+    ):
+        raise HTTPException(403, "You cannot modify this surrogate")
+    db.refresh(surrogate, with_for_update=True)
+    if surrogate.is_archived:
+        raise HTTPException(403, "Archived surrogates cannot manage appointments")
+    appointment = surrogate_interview_appointment_service.get_latest(
+        db, session.org_id, surrogate_id
+    )
+    if appointment is None or appointment.id != data.expected_appointment_id:
+        raise HTTPException(409, "Interview appointment changed; refresh and try again")
+    db.refresh(appointment, with_for_update=True)
+    if appointment.id != data.expected_appointment_id:
+        raise HTTPException(409, "Interview appointment changed; refresh and try again")
+    if appointment.user_id != session.user_id and session.role not in {"admin", "developer"}:
+        raise HTTPException(403, "Only the appointment owner can manage this interview")
+    try:
+        appointment_google_sync_service.retry(db, appointment)
+    except appointment_google_sync_service.GoogleLinkError as exc:
+        db.rollback()
+        raise HTTPException(409, str(exc)) from None
     return _state(db, surrogate, session)

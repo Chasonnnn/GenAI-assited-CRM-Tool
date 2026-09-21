@@ -256,6 +256,14 @@ async def _sync_manual_google_events_for_appointments_async(
     if time_max < time_min:
         return 0
 
+    # Capture the local generation before fetching the remote snapshot. A newer
+    # CRM edit must win even if it commits while Google is being queried.
+    initial_revisions = dict(
+        db.query(Appointment.id, Appointment.google_sync_revision)
+        .filter(Appointment.organization_id == org_id, Appointment.user_id == user_id)
+        .all()
+    )
+
     try:
         discovered_calendar_ids = await calendar_service.list_user_google_calendar_ids(
             db=db,
@@ -297,13 +305,15 @@ async def _sync_manual_google_events_for_appointments_async(
                 raise CalendarSyncIncompleteError("Google Calendar event snapshot incomplete")
             return 0
         any_connected = True
-        raw_events.extend(result.get("events") or [])
+        raw_events.extend(
+            {**event, "_calendar_id": calendar_id} for event in result.get("events") or []
+        )
 
     if not any_connected:
         return 0
 
     returned_event_ids: set[str] = {event["id"] for event in raw_events if event.get("id")}
-    timed_events: list[tuple[str, str, datetime, datetime]] = []
+    timed_events: list[tuple[str, str, datetime, datetime, str]] = []
     seen_event_ids: set[str] = set()
     for event in raw_events:
         event_id = event.get("id")
@@ -330,7 +340,7 @@ async def _sync_manual_google_events_for_appointments_async(
             continue
 
         summary = (event.get("summary") or "(No title)").strip()
-        timed_events.append((event_id, summary[:255], start, end))
+        timed_events.append((event_id, summary[:255], start, end, str(event["_calendar_id"])))
 
     # Reconcile deletions/cancellations first for all confirmed appointments with Google IDs.
     google_confirmed = (
@@ -343,10 +353,20 @@ async def _sync_manual_google_events_for_appointments_async(
             Appointment.scheduled_start >= time_min,
             Appointment.scheduled_start <= time_max,
         )
+        .with_for_update()
+        .populate_existing()
         .all()
     )
     cancelled_count = 0
     for appt in google_confirmed:
+        if (
+            appt.google_sync_revision != initial_revisions.get(appt.id)
+            or appt.google_sync_state in {"pending", "failed", "conflict", "unlinked"}
+            or appt.google_sync_revision > 0
+        ):
+            # Managed links need exact-event lifecycle reconciliation, not a
+            # bounded-window absence interpreted as a cancellation.
+            continue
         if appt.google_event_id and appt.google_event_id not in returned_event_ids:
             _mark_cancelled_from_google(appt)
             cancelled_count += 1
@@ -356,7 +376,7 @@ async def _sync_manual_google_events_for_appointments_async(
             db.flush()
         return cancelled_count
 
-    event_ids = [event_id for event_id, _, _, _ in timed_events]
+    event_ids = [event_id for event_id, _, _, _, _ in timed_events]
     existing = (
         db.query(Appointment)
         .filter(
@@ -364,15 +384,24 @@ async def _sync_manual_google_events_for_appointments_async(
             Appointment.user_id == user_id,
             Appointment.google_event_id.in_(event_ids),
         )
+        .with_for_update()
+        .populate_existing()
         .all()
     )
     existing_by_event_id = {appt.google_event_id: appt for appt in existing if appt.google_event_id}
 
     synced_count = 0
-    for event_id, summary, start, end in timed_events:
+    for event_id, summary, start, end, calendar_id in timed_events:
         duration_minutes = max(1, int((end - start).total_seconds() // 60))
         appt = existing_by_event_id.get(event_id)
         if appt:
+            if (
+                appt.google_sync_revision != initial_revisions.get(appt.id)
+                or appt.google_sync_state in {"pending", "failed", "conflict", "unlinked"}
+                or appt.google_sync_revision > 0
+                or (appt.google_calendar_id and appt.google_calendar_id != calendar_id)
+            ):
+                continue
             changed = False
             if appt.status == AppointmentStatus.CANCELLED.value:
                 # Re-open only rows previously cancelled by Google sync.
@@ -396,7 +425,10 @@ async def _sync_manual_google_events_for_appointments_async(
             if appt.duration_minutes != duration_minutes:
                 appt.duration_minutes = duration_minutes
                 changed = True
-            if appt.meeting_mode != MeetingMode.GOOGLE_MEET.value:
+            if (
+                appt.appointment_type_id is None
+                and appt.meeting_mode != MeetingMode.GOOGLE_MEET.value
+            ):
                 appt.meeting_mode = MeetingMode.GOOGLE_MEET.value
                 changed = True
 
@@ -426,6 +458,7 @@ async def _sync_manual_google_events_for_appointments_async(
             meeting_mode=MeetingMode.GOOGLE_MEET.value,
             status=AppointmentStatus.CONFIRMED.value,
             google_event_id=event_id,
+            google_calendar_id=calendar_id if calendar_id != "primary" else None,
         )
         db.add(appt)
         synced_count += 1

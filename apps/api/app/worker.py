@@ -182,6 +182,7 @@ WORKER_STALE_CLAIM_RETRY_SAFE_JOB_TYPES = frozenset(
         JobType.DONOR_INTAKE_PROMOTE.value,
         JobType.GOOGLE_TASK_REMOTE_DELETE.value,
         JobType.GOOGLE_TASK_CREATION_RECONCILE.value,
+        JobType.APPOINTMENT_GOOGLE_SYNC.value,
         JobType.STORAGE_DELETE.value,
     }
 )

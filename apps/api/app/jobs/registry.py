@@ -68,6 +68,7 @@ JOB_HANDLERS: Mapping[str, JobHandler] = {
     JobType.ORG_DELETE.value: orgs.process_org_delete,
     JobType.ZAPIER_STAGE_EVENT.value: zapier.process_zapier_stage_event,
     JobType.GOOGLE_CALENDAR_SYNC.value: appointments.process_google_calendar_sync,
+    JobType.APPOINTMENT_GOOGLE_SYNC.value: appointments.process_appointment_google_sync,
     JobType.GOOGLE_TASKS_SYNC.value: appointments.process_google_tasks_sync,
     JobType.GOOGLE_TASK_CREATION_RECONCILE.value: (
         appointments.process_google_task_creation_reconcile

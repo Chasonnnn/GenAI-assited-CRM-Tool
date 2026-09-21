@@ -94,11 +94,68 @@ def manage(
     from app.services import (
         activity_service,
         appointment_email_service,
+        appointment_google_sync_service,
         audit_service,
         pipeline_service,
         surrogate_status_service,
     )
 
+    # Resolve provider identity before taking the surrogate/appointment locks.
+    # Token refresh and Google discovery can perform I/O or commit internally.
+    preview_surrogate = (
+        db.query(Surrogate)
+        .filter(Surrogate.id == surrogate_id, Surrogate.organization_id == org_id)
+        .one_or_none()
+    )
+    if preview_surrogate is None:
+        raise InterviewAppointmentError("Surrogate not found", 404)
+    if preview_surrogate.is_archived:
+        raise InterviewAppointmentError("Archived surrogates cannot manage appointments", 403)
+    preview = get_latest(db, org_id, surrogate_id)
+    role = actor_role.value if hasattr(actor_role, "value") else actor_role
+    if preview and role not in {Role.ADMIN.value, Role.DEVELOPER.value}:
+        if preview.user_id != actor_user_id:
+            raise InterviewAppointmentError(
+                "Only the appointment owner can manage this interview", 403
+            )
+    request_digest = hashlib.sha256(data.model_dump_json().encode()).hexdigest()
+    exact_retry = False
+    if preview:
+        receipt = (
+            db.query(AuditLog)
+            .filter(
+                AuditLog.organization_id == org_id,
+                AuditLog.target_type == "appointment",
+                AuditLog.target_id == preview.id,
+            )
+            .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+            .first()
+        )
+        exact_retry = bool(
+            receipt
+            and receipt.actor_user_id == actor_user_id
+            and receipt.details
+            and receipt.details.get("request_digest") == request_digest
+            and receipt.details.get("surrogate_id") == str(surrogate_id)
+            and receipt.details.get("result") == _result_state(preview_surrogate, preview)
+        )
+    prepared_link = None
+    preview_google_revision = preview.google_sync_revision if preview else None
+    preview_google_account = preview.google_account_email if preview else None
+    preview_google_calendar = preview.google_calendar_id if preview else None
+    if (
+        preview
+        and not exact_retry
+        and data.action in {"reschedule", "cancel"}
+        and preview.status in ACTIVE_STATUSES
+        and preview.google_event_id
+        and not preview.zoom_meeting_id
+        and preview.meeting_mode != "zoom"
+    ):
+        try:
+            prepared_link = appointment_google_sync_service.prepare_link(db, preview)
+        except appointment_google_sync_service.GoogleLinkError as exc:
+            raise InterviewAppointmentError(str(exc), 409) from None
     surrogate = (
         db.query(Surrogate)
         .filter(Surrogate.id == surrogate_id, Surrogate.organization_id == org_id)
@@ -114,7 +171,6 @@ def manage(
     if appointment:
         db.refresh(appointment, with_for_update=True)
 
-    role = actor_role.value if hasattr(actor_role, "value") else actor_role
     if appointment and role not in {Role.ADMIN.value, Role.DEVELOPER.value}:
         if appointment.user_id != actor_user_id:
             raise InterviewAppointmentError(
@@ -123,7 +179,6 @@ def manage(
 
     # The audit receipt is committed atomically with the mutation. Match the actor,
     # entire request and current result, not merely a coincidentally matching time.
-    request_digest = hashlib.sha256(data.model_dump_json().encode()).hexdigest()
     if appointment:
         receipt = (
             db.query(AuditLog)
@@ -144,6 +199,17 @@ def manage(
             and receipt.details.get("result") == _result_state(surrogate, appointment)
         ):
             return surrogate
+
+    if data.action == "schedule" and appointment and appointment.google_event_id:
+        if appointment_google_sync_service.status(db, appointment) in {
+            "pending",
+            "failed",
+            "conflict",
+            "unlinked",
+        }:
+            raise InterviewAppointmentError(
+                "Finish reviewing Google synchronization before booking another interview", 409
+            )
 
     if surrogate.stage_id != data.expected_stage_id:
         raise InterviewAppointmentError("Surrogate stage changed; refresh and try again", 409)
@@ -220,12 +286,26 @@ def manage(
         if appointment is None or appointment.status not in ACTIVE_STATUSES:
             raise InterviewAppointmentError("No active interview appointment was found", 409)
         if (
-            appointment.meeting_mode in {"zoom", "google_meet"}
-            or appointment.google_event_id
-            or appointment.zoom_meeting_id
+            appointment.zoom_meeting_id
+            or appointment.meeting_mode == "zoom"
+            or (appointment.meeting_mode == "google_meet" and not appointment.google_event_id)
         ):
             raise InterviewAppointmentError(
                 "This interview is linked to an external meeting and cannot be changed here", 409
+            )
+        if appointment.google_event_id and (
+            prepared_link is None
+            or appointment.google_sync_revision != preview_google_revision
+            or appointment.google_account_email != preview_google_account
+            or appointment.google_calendar_id != preview_google_calendar
+            or appointment.google_event_id != prepared_link.event_id
+            or appointment.google_integration_id not in {None, prepared_link.integration_id}
+            or appointment.google_calendar_id not in {None, prepared_link.calendar_id}
+            or not _same_time(appointment.scheduled_start, prepared_link.start)
+            or not _same_time(appointment.scheduled_end, prepared_link.end)
+        ):
+            raise InterviewAppointmentError(
+                "Google appointment changed; refresh and try again", 409
             )
         after_commit = None
         if data.action == "reschedule":
@@ -275,6 +355,10 @@ def manage(
             reason_message="Interview appointment changed",
             commit=False,
         )
+        if prepared_link:
+            appointment_google_sync_service.enqueue(
+                db, appointment, action=data.action, link=prepared_link
+            )
 
     audit_service.log_event(
         db=db,
