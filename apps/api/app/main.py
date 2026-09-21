@@ -10,11 +10,13 @@ from time import perf_counter
 from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
+from starlette.middleware.errors import ServerErrorMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.core import migrations as db_migrations
@@ -280,7 +282,8 @@ async def gcp_error_reporting_middleware(request, call_next):
             )
             context["status_code"] = response.status_code
             logging.error("HTTP 5xx response", extra=context)
-            _record_api_error_alert(
+            await run_in_threadpool(
+                _record_api_error_alert,
                 request,
                 response.status_code,
                 error_class="http_response",
@@ -298,7 +301,8 @@ async def gcp_error_reporting_middleware(request, call_next):
                 method=request.method,
             )
             logging.exception("Unhandled HTTPException", extra=context)
-            _record_api_error_alert(
+            await run_in_threadpool(
+                _record_api_error_alert,
                 request,
                 exc.status_code,
                 error_class=exc.__class__.__name__,
@@ -317,7 +321,8 @@ async def gcp_error_reporting_middleware(request, call_next):
             method=request.method,
         )
         logging.exception("Unhandled exception", extra=context)
-        _record_api_error_alert(
+        await run_in_threadpool(
+            _record_api_error_alert,
             request,
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             error_class=exc.__class__.__name__,
@@ -558,6 +563,8 @@ if settings.PLATFORM_BASE_DOMAIN:
 
 allow_origins = settings.cors_allowed_origins
 
+# Generate 500 responses inside CORS while preserving ASGI exception propagation.
+app.add_middleware(ServerErrorMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
