@@ -12,7 +12,8 @@ import time
 from urllib.parse import urlparse
 from uuid import UUID
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, WebSocketException
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -147,6 +148,39 @@ def _origin_is_allowed(origin: str | None, *, allowed: set[str], is_dev: bool) -
     return _validate_websocket_origin(origin, is_dev=is_dev)
 
 
+def _authorize_websocket_session(
+    token_hash: str, user_id: UUID, org_id: UUID | None, origin: str | None
+) -> UUID:
+    """Own the database session entirely inside the worker thread."""
+    from app.services import membership_service, org_service
+
+    with SessionLocal() as db:
+        db_session = session_service.get_session_by_token_hash(db, token_hash)
+        if not db_session:
+            raise WebSocketException(code=4001, reason="Session revoked")
+        if not org_id:
+            org_id = db_session.organization_id
+        if not membership_service.get_membership_for_org(db, org_id, user_id):
+            raise WebSocketException(code=4001, reason="Membership inactive")
+
+        if origin and not settings.is_dev:
+            org = org_service.get_org_by_id(db, org_id, include_deleted=True)
+            if org:
+                origin_host = (urlparse(origin).hostname or "").lower()
+                expected_host = f"{org.slug}.{settings.PLATFORM_BASE_DOMAIN}"
+                if (
+                    origin_host != expected_host
+                    and _normalize_origin(origin) not in _allowed_origins()
+                ):
+                    raise WebSocketException(code=4003, reason="Origin invalid for organization")
+        return org_id
+
+
+def _websocket_session_is_active(token_hash: str) -> bool:
+    with SessionLocal() as db:
+        return session_service.get_session_by_token_hash(db, token_hash) is not None
+
+
 @router.websocket("/notifications")
 async def websocket_notifications(
     websocket: WebSocket,
@@ -237,55 +271,20 @@ async def websocket_notifications(
             org_id=org_id,
         )
         return
-    with SessionLocal() as db:
-        from app.services import membership_service, org_service
-
-        db_session = session_service.get_session_by_token_hash(db, token_hash)
-        if not db_session:
-            await _reject_websocket(
-                websocket,
-                code=4001,
-                reason="Session revoked",
-                origin=origin,
-                user_id=user_id,
-                org_id=org_id,
-            )
-            return
-        if not org_id:
-            org_id = db_session.organization_id
-        membership = membership_service.get_membership_for_org(db, org_id, user_id)
-        if not membership:
-            await _reject_websocket(
-                websocket,
-                code=4001,
-                reason="Membership inactive",
-                origin=origin,
-                user_id=user_id,
-                org_id=org_id,
-            )
-            return
-
-        # Validate origin matches org's subdomain (cross-tenant protection)
-        if origin and not settings.is_dev:
-            org = org_service.get_org_by_id(db, org_id, include_deleted=True)
-            if org:
-                parsed = urlparse(origin)
-                origin_host = (parsed.hostname or "").lower()
-                expected_host = f"{org.slug}.{settings.PLATFORM_BASE_DOMAIN}"
-                # Allow both exact match and static CORS origins
-                if (
-                    origin_host != expected_host
-                    and _normalize_origin(origin) not in _allowed_origins()
-                ):
-                    await _reject_websocket(
-                        websocket,
-                        code=4003,
-                        reason="Origin invalid for organization",
-                        origin=origin,
-                        user_id=user_id,
-                        org_id=org_id,
-                    )
-                    return
+    try:
+        org_id = await run_in_threadpool(
+            _authorize_websocket_session, token_hash, user_id, org_id, origin
+        )
+    except WebSocketException as exc:
+        await _reject_websocket(
+            websocket,
+            code=exc.code,
+            reason=exc.reason,
+            origin=origin,
+            user_id=user_id,
+            org_id=org_id,
+        )
+        return
 
     # Register connection with org tracking
     await manager.connect(websocket, user_id, org_id, token_hash=token_hash)
@@ -308,11 +307,9 @@ async def websocket_notifications(
                 break
 
             if time.monotonic() - last_recheck >= SESSION_RECHECK_SECONDS:
-                with SessionLocal() as db:
-                    db_session = session_service.get_session_by_token_hash(db, token_hash)
-                    if not db_session:
-                        await websocket.close(code=4001, reason="Session revoked")
-                        break
+                if not await run_in_threadpool(_websocket_session_is_active, token_hash):
+                    await websocket.close(code=4001, reason="Session revoked")
+                    break
                 last_recheck = time.monotonic()
     finally:
         await manager.disconnect(websocket, user_id)
