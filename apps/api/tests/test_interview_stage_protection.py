@@ -1,11 +1,17 @@
 """Interview workflow stages are required, protected surrogate pipeline stages."""
 
 from copy import deepcopy
+from datetime import UTC, datetime
+from uuid import UUID
 
 import pytest
 
-from app.core.stage_definitions import get_stage_protection_metadata
+from app.core.stage_definitions import (
+    PROTECTED_SYSTEM_STAGES_BY_ENTITY,
+    get_stage_protection_metadata,
+)
 from app.db.models import PipelineStage
+from app.schemas.pipeline_semantics import default_stage_semantics
 from app.services import pipeline_service
 
 
@@ -66,20 +72,34 @@ async def test_interview_stages_cannot_be_removed(authed_client, stage_key, acti
 
 @pytest.mark.parametrize(
     "missing_keys",
-    [{"reschedule_needed"}, {"interview_scheduled", "reschedule_needed"}],
+    [
+        {"interview_scheduled"},
+        {"reschedule_needed"},
+        {"interview_scheduled", "reschedule_needed"},
+    ],
 )
+@pytest.mark.parametrize("soft_delete", [False, True])
 def test_existing_pipeline_restores_required_interview_stages(
-    db, test_org, test_user, missing_keys
+    db, test_org, test_user, missing_keys, soft_delete
 ):
     pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id, test_user.id)
     existing_ids = {
         stage.stage_key: stage.id
         for stage in pipeline.stages
-        if stage.stage_key not in missing_keys
+        if soft_delete or stage.stage_key not in missing_keys
     }
     for stage in list(pipeline.stages):
         if stage.stage_key in missing_keys:
-            db.delete(stage)
+            if soft_delete:
+                stage.is_active = False
+                stage.deleted_at = datetime.now(UTC)
+                stage.stage_type = "post_approval"
+                stage.is_intake_stage = False
+                stage.semantics = default_stage_semantics(
+                    "custom_stage", "post_approval", "surrogate"
+                )
+            else:
+                db.delete(stage)
     db.commit()
     db.expire_all()
 
@@ -94,6 +114,15 @@ def test_existing_pipeline_restores_required_interview_stages(
     assert {
         stage.stage_key: stage.id for stage in stages if stage.stage_key in existing_ids
     } == existing_ids
+    for stage in stages:
+        if stage.stage_key in missing_keys:
+            assert stage.is_active is True
+            assert stage.deleted_at is None
+            assert stage.stage_type == "intake"
+            assert stage.is_intake_stage is True
+            assert stage.semantics == default_stage_semantics(
+                stage.stage_key, "intake", "surrogate"
+            )
     version = restored.current_version
     repeated = pipeline_service.get_or_create_default_pipeline(db, test_org.id, test_user.id)
     assert repeated.current_version == version
@@ -102,3 +131,56 @@ def test_existing_pipeline_restores_required_interview_stages(
         .filter(PipelineStage.pipeline_id == pipeline.id, PipelineStage.stage_key.in_(missing_keys))
         .count()
     ) == len(missing_keys)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage_key", ["interview_scheduled", "reschedule_needed"])
+async def test_default_pipeline_read_restores_previously_deleted_interview_stage(
+    authed_client, db, monkeypatch, stage_key
+):
+    response = await authed_client.get("/settings/pipelines/default")
+    assert response.status_code == 200, response.text
+    pipeline = response.json()
+    stage = next(item for item in pipeline["stages"] if item["stage_key"] == stage_key)
+    target = next(item for item in pipeline["stages"] if item["stage_key"] == "contacted")
+
+    # Reproduce removal through the API before interview stages became protected.
+    with monkeypatch.context() as legacy_protection:
+        legacy_protection.delitem(PROTECTED_SYSTEM_STAGES_BY_ENTITY["surrogate"], stage_key)
+        response = await authed_client.request(
+            "DELETE",
+            f"/settings/pipelines/{pipeline['id']}/stages/{stage['id']}",
+            json={
+                "migrate_to_stage_id": target["id"],
+                "expected_version": pipeline["current_version"],
+            },
+        )
+        assert response.status_code == 200, response.text
+
+    saved_stage = db.get(PipelineStage, UUID(stage["id"]))
+    assert saved_stage.is_active is False
+    assert saved_stage.deleted_at is not None
+    deleted_version = saved_stage.pipeline.current_version
+
+    response = await authed_client.get("/settings/pipelines/default")
+    assert response.status_code == 200, response.text
+    restored = response.json()
+    assert restored["current_version"] == deleted_version + 1
+    restored_stage = next(item for item in restored["stages"] if item["stage_key"] == stage_key)
+    assert restored_stage["id"] == stage["id"]
+    assert restored_stage["is_active"] is True
+    assert restored_stage["is_locked"] is True
+    db.refresh(saved_stage)
+    assert saved_stage.deleted_at is None
+
+    repeated = await authed_client.get("/settings/pipelines/default")
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["current_version"] == restored["current_version"]
+    assert (
+        db.query(PipelineStage)
+        .filter(
+            PipelineStage.pipeline_id == UUID(pipeline["id"]),
+            PipelineStage.stage_key == stage_key,
+        )
+        .count()
+    ) == 1
