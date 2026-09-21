@@ -17,6 +17,7 @@ type SurrogateDetailHeaderProps = {
     currentStageSlug?: string | null
     statusLabel: string
     statusColor: string
+    statusBadge?: React.ReactNode
     latestContactOutcome?: LatestContactOutcome | null
     pausedFromLabel?: string | null
     isArchived: boolean
@@ -31,6 +32,7 @@ export function SurrogateDetailHeader({
     currentStageSlug = null,
     statusLabel,
     statusColor,
+    statusBadge,
     latestContactOutcome = null,
     pausedFromLabel,
     isArchived,
@@ -42,14 +44,17 @@ export function SurrogateDetailHeader({
         latestContactOutcome && stageMatchesKey(currentStage, "contacted")
 
     return (
-        <header className="flex min-h-16 shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
-            <div className="flex flex-wrap items-center gap-2">
+        <header className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <Button variant="ghost" size="sm" onClick={onBack}>
                     <ArrowLeftIcon className="mr-2 size-4" />
                     Back
                 </Button>
                 <h1 className="text-xl font-semibold">{recordLabel} #{surrogateNumber}</h1>
-                <Badge style={{ backgroundColor: statusColor, color: readableForeground(statusColor) }}>{statusLabel}</Badge>
+                <div className="flex flex-wrap items-center gap-2">
+                    <Badge style={{ backgroundColor: statusColor, color: readableForeground(statusColor) }}>{statusLabel}</Badge>
+                    {statusBadge}
+                </div>
                 {showContactOutcome && (
                     <OutcomeBadge
                         kind="contact"
@@ -64,7 +69,7 @@ export function SurrogateDetailHeader({
                 )}
                 {isArchived && <Badge variant="secondary">Archived</Badge>}
             </div>
-            <div className="flex items-center gap-2">{children}</div>
+            <div className="ml-auto flex items-center gap-2">{children}</div>
         </header>
     )
 }
