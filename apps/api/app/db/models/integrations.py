@@ -459,6 +459,7 @@ class UserIntegration(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "integration_type"),
+        UniqueConstraint("user_id", "id", name="uq_user_integrations_user_id"),
         Index(
             "idx_user_integrations_google_calendar_watch_lookup",
             "integration_type",
