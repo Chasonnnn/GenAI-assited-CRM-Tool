@@ -123,6 +123,27 @@ def authorize_stage_change(
     return True
 
 
+def _donor_claim_pool(db, org_id, donor):
+    if donor.organization_id != org_id or donor.is_archived or donor.owner_type != "queue":
+        return None
+    return (
+        db.query(Queue)
+        .filter_by(id=donor.owner_id, organization_id=org_id, name="Donor Pool", is_active=True)
+        .first()
+    )
+
+
+def can_claim_donor(db, session, donor):
+    return (
+        permission_policy_service.is_enabled(db, session.org_id)
+        and permission_service.check_permission(
+            db, session.org_id, session.user_id, session.role.value, "assign_donors"
+        )
+        and record_scope_service.can_access_record(db, session, "donor", donor)
+        and _donor_claim_pool(db, session.org_id, donor) is not None
+    )
+
+
 def claim_donor(db, session, donor_id):
     from app.db.enums import AuditEventType
     from app.services import audit_service
@@ -150,13 +171,7 @@ def claim_donor(db, session, donor_id):
         raise PermissionError("Donor assignment permission required")
     if donor.owner_type != "queue":
         raise ValueError("Donor has already been claimed")
-    pool = (
-        db.query(Queue)
-        .filter_by(
-            id=donor.owner_id, organization_id=session.org_id, name="Donor Pool", is_active=True
-        )
-        .first()
-    )
+    pool = _donor_claim_pool(db, session.org_id, donor)
     if pool is None:
         raise ValueError("Donor is outside the approved pool")
     previous_owner = donor.owner_id

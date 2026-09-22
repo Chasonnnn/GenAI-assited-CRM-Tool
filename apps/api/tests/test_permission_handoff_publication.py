@@ -249,6 +249,7 @@ async def test_donor_claim_is_scoped_and_requires_csrf(db, test_org):
     donor.owner_type, donor.owner_id = "queue", pool.id
     db.flush()
     async with authed_client_for_user(db, test_org.id, manager, Role.CASE_MANAGER) as client:
+        assert (await client.get(f"/donors/{donor.id}")).json()["can_claim"] is True
         denied = await client.post(f"/donors/{donor.id}/claim", headers={CSRF_HEADER: ""})
         assert denied.status_code == 403
         missing = await client.post(f"/donors/{uuid4()}/claim")
@@ -256,6 +257,7 @@ async def test_donor_claim_is_scoped_and_requires_csrf(db, test_org):
         result = await client.post(f"/donors/{donor.id}/claim")
         assert result.status_code == 200, result.text
         assert result.json()["owner_id"] == str(manager.id)
+        assert (await client.get(f"/donors/{donor.id}")).json()["can_claim"] is False
         again = await client.post(f"/donors/{donor.id}/claim")
         assert again.status_code == 409
 
@@ -267,6 +269,7 @@ async def test_collaborator_options_and_names_are_scoped_to_accessible_record(db
     from tests.test_record_scopes_v2 import _record
 
     db.add(OrganizationPermissionPolicy(organization_id=test_org.id, version=2))
+    admin = member(db, test_org.id, Role.ADMIN)
     manager = member(db, test_org.id, Role.CASE_MANAGER)
     intake = member(db, test_org.id, Role.INTAKE_SPECIALIST)
     actor = session(test_org.id, manager, Role.CASE_MANAGER)
@@ -277,21 +280,31 @@ async def test_collaborator_options_and_names_are_scoped_to_accessible_record(db
     db.flush()
     outsider = member(db, other_org.id, Role.INTAKE_SPECIALIST)
     other_record = _record(db, session(other_org.id, outsider, Role.INTAKE_SPECIALIST), "donor")
-    async with authed_client_for_user(db, test_org.id, manager, Role.CASE_MANAGER) as client:
-        path = f"/record-scopes/records/donor/{donor.id}"
+    path = f"/record-scopes/records/donor/{donor.id}"
+    async with authed_client_for_user(db, test_org.id, admin, Role.ADMIN) as client:
         options = await client.get(f"{path}/collaborator-options")
         assert options.status_code == 200, options.text
-        assert [row["user_id"] for row in options.json()] == [str(intake.id)]
-        assert (
-            await client.get(f"/record-scopes/records/donor/{hidden.id}/collaborator-options")
-        ).status_code == 403
+        assert {row["user_id"] for row in options.json()} == {
+            str(admin.id),
+            str(manager.id),
+            str(intake.id),
+        }
         assert (
             await client.get(f"/record-scopes/records/donor/{other_record.id}/collaborator-options")
         ).status_code == 404
-        assert (await client.post(f"/donors/{other_record.id}/claim")).status_code == 404
         created = await client.post(f"{path}/collaborators", json={"user_id": str(intake.id)})
         assert created.status_code == 201, created.text
+    async with authed_client_for_user(db, test_org.id, manager, Role.CASE_MANAGER) as client:
+        assert (await client.get(f"{path}/collaborator-options")).status_code == 403
+        assert (
+            await client.get(f"/record-scopes/records/donor/{hidden.id}/collaborators")
+        ).status_code == 403
+        assert (
+            await client.get(f"/record-scopes/records/donor/{other_record.id}/collaborators")
+        ).status_code == 404
+        assert (await client.post(f"/donors/{other_record.id}/claim")).status_code == 404
         rows = await client.get(f"{path}/collaborators")
+        assert rows.status_code == 200
         assert rows.json()[0]["display_name"] == intake.display_name
 
 

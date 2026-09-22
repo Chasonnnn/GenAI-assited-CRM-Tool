@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import (
     get_current_session,
     get_db,
+    require_any_permissions,
     require_csrf_header,
     require_permission,
 )
@@ -31,6 +32,7 @@ from app.schemas.donor_profile import DonorProfileRead, DonorSensitiveInfoRead
 from app.schemas.entity_note import EntityNoteCreate, EntityNoteListItem, EntityNoteRead
 from app.schemas.record_owner import RecordOwnerOptions
 from app.services import (
+    approval_handoff_service,
     audit_service,
     donor_profile_service,
     donor_service,
@@ -192,9 +194,15 @@ def create_donor(
 def get_donor_owner_options(
     db: Annotated[Session, Depends(get_db)],
     session: Annotated[
-        UserSession, Depends(require_permission(POLICIES["donors"].actions["edit"]))
+        UserSession, Depends(require_any_permissions(["edit_donors", "assign_donors"]))
     ],
 ) -> RecordOwnerOptions:
+    if permission_policy_service.is_enabled(db, session.org_id):
+        _require_assign(db, session)
+    elif not permission_service.check_permission(
+        db, session.org_id, session.user_id, session.role.value, "edit_donors"
+    ):
+        raise HTTPException(status_code=403, detail="Missing permission: edit_donors")
     return record_owner_service.list_owner_options(db, session.org_id)
 
 
@@ -219,7 +227,8 @@ def get_donor(
         update={
             "owner_name": record_owner_service.owner_label(
                 db, session.org_id, donor.owner_type, donor.owner_id
-            )
+            ),
+            "can_claim": approval_handoff_service.can_claim_donor(db, session, donor),
         }
     )
 
@@ -295,13 +304,25 @@ def update_donor(
     db: Annotated[Session, Depends(get_db)],
     session: Annotated[
         UserSession,
-        Depends(require_permission(POLICIES["donors"].actions["edit"])),
+        Depends(require_any_permissions(["edit_donors", "assign_donors"])),
     ],
 ) -> DonorRead:
     donor = _get_or_404(db, session, donor_id)
-    if permission_policy_service.is_enabled(db, session.org_id) and any(
-        field in data.model_fields_set and getattr(data, field) != getattr(donor, field)
-        for field in ("owner_type", "owner_id")
+    policy_v2 = permission_policy_service.is_enabled(db, session.org_id)
+    assignment_only = bool(data.model_fields_set) and data.model_fields_set <= {
+        "owner_type",
+        "owner_id",
+    }
+    if not (policy_v2 and assignment_only) and not permission_service.check_permission(
+        db, session.org_id, session.user_id, session.role.value, "edit_donors"
+    ):
+        raise HTTPException(status_code=403, detail="Missing permission: edit_donors")
+    if policy_v2 and (
+        assignment_only
+        or any(
+            field in data.model_fields_set and getattr(data, field) != getattr(donor, field)
+            for field in ("owner_type", "owner_id")
+        )
     ):
         _require_assign(db, session)
     try:

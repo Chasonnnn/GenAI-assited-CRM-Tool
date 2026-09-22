@@ -82,6 +82,7 @@ class DonorRead(BaseModel):
     owner_type: str | None
     owner_id: UUID | None
     owner_name: str | None = None
+    can_claim: bool = False
     stage_id: UUID
     status: str
     stage_key: str
