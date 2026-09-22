@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import uuid
+from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from io import BytesIO
 from typing import Any
@@ -1459,9 +1460,7 @@ def process_form_submission_workflow(
             execution.status = WorkflowExecutionStatus.FAILED.value
             execution.error_message = FORM_SUBMISSION_WORKFLOW_MANUAL_REVIEW_ERROR
         db.commit()
-    returned_incomplete = any(
-        execution.status in incomplete_statuses for execution in executions
-    )
+    returned_incomplete = any(execution.status in incomplete_statuses for execution in executions)
     if returned_incomplete or persisted_incomplete:
         raise RuntimeError("Form submission workflow execution incomplete")
 
@@ -1748,7 +1747,9 @@ def create_shared_submission(
                 idempotency_key=normalized_idempotency_key,
                 published_version_id=published_version.id if published_version else None,
                 form_schema_hash=published_version.form_version_hash if published_version else None,
-                consent_text_hash=published_version.consent_text_hash if published_version else None,
+                consent_text_hash=published_version.consent_text_hash
+                if published_version
+                else None,
                 tracking_policy_hash=(
                     published_version.tracking_policy_hash if published_version else None
                 ),
@@ -2339,11 +2340,20 @@ def submit_lead_capture_embed(
     return submission, _normalize_shared_outcome(submission.match_status)
 
 
+def _persist_submission(db: Session, submission: FormSubmission, *, commit: bool) -> None:
+    if commit:
+        db.commit()
+        db.refresh(submission)
+    else:
+        db.flush()
+
+
 def auto_match_submission(
     db: Session,
     *,
     submission: FormSubmission,
     session=None,
+    commit: bool = True,
 ) -> tuple[FormSubmission, str]:
     """Apply deterministic matching rules for a shared submission."""
     if submission.source_mode != FormLinkMode.SHARED.value:
@@ -2366,8 +2376,7 @@ def auto_match_submission(
         if submission.intake_lead_id and not submission.donor_id:
             return submission, FormSubmissionMatchStatus.LEAD_CREATED.value
         outcome = donor_intake_service.match_submission(db, submission)
-        db.commit()
-        db.refresh(submission)
+        _persist_submission(db, submission, commit=commit)
         return submission, outcome
 
     if submission.surrogate_id:
@@ -2375,8 +2384,7 @@ def auto_match_submission(
             submission.match_status = FormSubmissionMatchStatus.LINKED.value
             submission.match_reason = submission.match_reason or "already_linked"
             submission.matched_at = submission.matched_at or datetime.now(UTC)
-            db.commit()
-            db.refresh(submission)
+            _persist_submission(db, submission, commit=commit)
         return submission, FormSubmissionMatchStatus.LINKED.value
 
     # Keep workflow-driven leads stable; do not rematch after a lead is attached.
@@ -2420,8 +2428,7 @@ def auto_match_submission(
                 FormSubmissionMatchCandidate.organization_id == submission.organization_id,
                 FormSubmissionMatchCandidate.submission_id == submission.id,
             ).delete(synchronize_session=False)
-            db.commit()
-            db.refresh(submission)
+            _persist_submission(db, submission, commit=commit)
             return submission, FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
 
     db.query(FormSubmissionMatchCandidate).filter(
@@ -2441,15 +2448,13 @@ def auto_match_submission(
             submission.match_status = FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
             submission.match_reason = "existing_submission_for_surrogate"
             submission.matched_at = None
-            db.commit()
-            db.refresh(submission)
+            _persist_submission(db, submission, commit=commit)
             return submission, FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
         submission.surrogate_id = matched.id
         submission.match_status = FormSubmissionMatchStatus.LINKED.value
         submission.match_reason = "phone_dob_name_exact"
         submission.matched_at = datetime.now(UTC)
-        db.commit()
-        db.refresh(submission)
+        _persist_submission(db, submission, commit=commit)
         return submission, FormSubmissionMatchStatus.LINKED.value
 
     if len(phone_matches) > 1 or len(email_matches) > 1:
@@ -2469,8 +2474,7 @@ def auto_match_submission(
                     reason=reason,
                 )
             )
-        db.commit()
-        db.refresh(submission)
+        _persist_submission(db, submission, commit=commit)
         return submission, FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
 
     if len(email_matches) == 1:
@@ -2486,23 +2490,20 @@ def auto_match_submission(
             submission.match_status = FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
             submission.match_reason = "existing_submission_for_surrogate"
             submission.matched_at = None
-            db.commit()
-            db.refresh(submission)
+            _persist_submission(db, submission, commit=commit)
             return submission, FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
         submission.surrogate_id = matched.id
         submission.match_status = FormSubmissionMatchStatus.LINKED.value
         submission.match_reason = "email_dob_name_exact"
         submission.matched_at = datetime.now(UTC)
-        db.commit()
-        db.refresh(submission)
+        _persist_submission(db, submission, commit=commit)
         return submission, FormSubmissionMatchStatus.LINKED.value
 
     submission.surrogate_id = None
     submission.match_status = FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
     submission.match_reason = "no_deterministic_match"
     submission.matched_at = None
-    db.commit()
-    db.refresh(submission)
+    _persist_submission(db, submission, commit=commit)
     return submission, FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
 
 
@@ -2515,8 +2516,12 @@ def create_intake_lead_for_submission(
     allow_ambiguous: bool = False,
     auto_promote: bool = False,
     workflow_execution_id: uuid.UUID | None = None,
+    commit: bool = True,
+    after_commit: list[Callable[[], None]] | None = None,
 ) -> tuple[FormSubmission, IntakeLead | None]:
     """Create or attach an intake lead for a shared submission."""
+    if not commit and after_commit is None:
+        raise ValueError("Deferred intake creation requires post-commit callbacks")
     if submission.source_mode != FormLinkMode.SHARED.value:
         return submission, None
     if submission.lead_kind in DONOR_LEAD_KINDS:
@@ -2538,11 +2543,11 @@ def create_intake_lead_for_submission(
             submission.match_reason in donor_intake_service.REVIEW_REQUIRED_REASONS
             and not allow_ambiguous
         ):
-            db.commit()
+            _persist_submission(db, submission, commit=commit)
             return submission, None
     if submission.surrogate_id or submission.donor_id:
         if auto_promote and submission.lead_kind in DONOR_LEAD_KINDS:
-            db.commit()
+            _persist_submission(db, submission, commit=commit)
         return submission, None
 
     if not allow_ambiguous:
@@ -2568,8 +2573,7 @@ def create_intake_lead_for_submission(
             submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
             submission.match_reason = "existing_lead_retained"
             submission.matched_at = None
-            db.commit()
-            db.refresh(submission)
+            _persist_submission(db, submission, commit=commit)
         if lead and auto_promote and submission.lead_kind in DONOR_LEAD_KINDS:
             lead.source_metadata = {
                 **(lead.source_metadata or {}),
@@ -2580,7 +2584,7 @@ def create_intake_lead_for_submission(
             }
             db.flush()
             donor_intake_service.enqueue_promotion(db, submission=submission)
-            db.commit()
+            _persist_submission(db, submission, commit=commit)
         return submission, lead
 
     form = (
@@ -2635,6 +2639,8 @@ def create_intake_lead_for_submission(
         and link.embed_enabled
         and submission.lead_kind == FormLeadKind.SURROGATE.value
     )
+    if auto_promote_website_lead and not commit:
+        raise ValueError("Website promotion must own its transaction")
     lead_source = "website" if auto_promote_website_lead else (source or "shared_intake")
     metadata.setdefault("source", lead_source)
 
@@ -2662,8 +2668,7 @@ def create_intake_lead_for_submission(
     if auto_promote and submission.lead_kind in DONOR_LEAD_KINDS:
         db.flush()
         donor_intake_service.enqueue_promotion(db, submission=submission)
-    db.commit()
-    db.refresh(submission)
+    _persist_submission(db, submission, commit=commit)
     db.refresh(lead)
 
     if auto_promote_website_lead:
@@ -2678,24 +2683,29 @@ def create_intake_lead_for_submission(
         submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
         submission.match_reason = "workflow_website_lead_creation"
         submission.matched_at = None
-        db.commit()
-        db.refresh(submission)
+        _persist_submission(db, submission, commit=commit)
         db.refresh(lead)
         db.refresh(surrogate)
 
-    meta_crm_dataset_service.link_website_lead_event_to_intake_lead(
-        db,
-        organization_id=submission.organization_id,
-        submission_id=submission.id,
-        intake_lead_id=lead.id,
-    )
+    def trigger_created() -> None:
+        meta_crm_dataset_service.link_website_lead_event_to_intake_lead(
+            db,
+            organization_id=submission.organization_id,
+            submission_id=submission.id,
+            intake_lead_id=lead.id,
+        )
 
-    _trigger_intake_lead_created_workflow(
-        db,
-        lead=lead,
-        form_id=form.id,
-        submission_id=submission.id,
-    )
+        _trigger_intake_lead_created_workflow(
+            db,
+            lead=lead,
+            form_id=form.id,
+            submission_id=submission.id,
+        )
+
+    if commit:
+        trigger_created()
+    else:
+        after_commit.append(trigger_created)
     db.refresh(submission)
     return submission, lead
 
@@ -3060,6 +3070,46 @@ def retry_submission_match(
     review_notes: str | None = None,
     session=None,
 ) -> tuple[FormSubmission, str]:
+    """Commit the reset, matching, and lead creation as one retry operation."""
+    after_commit: list[Callable[[], None]] = []
+    try:
+        submission, outcome = _retry_submission_match(
+            db,
+            submission=submission,
+            unlink_surrogate=unlink_surrogate,
+            unlink_intake_lead=unlink_intake_lead,
+            rerun_auto_match=rerun_auto_match,
+            create_intake_lead_if_unmatched=create_intake_lead_if_unmatched,
+            reviewer_id=reviewer_id,
+            review_notes=review_notes,
+            after_commit=after_commit,
+            session=session,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    for callback in after_commit:
+        callback()
+    db.refresh(submission)
+    if after_commit:
+        outcome = _normalize_shared_outcome(submission.match_status)
+    return submission, outcome
+
+
+def _retry_submission_match(
+    db: Session,
+    *,
+    submission: FormSubmission,
+    unlink_surrogate: bool,
+    unlink_intake_lead: bool,
+    rerun_auto_match: bool,
+    create_intake_lead_if_unmatched: bool,
+    reviewer_id: uuid.UUID | None,
+    review_notes: str | None,
+    after_commit: list[Callable[[], None]],
+    session=None,
+) -> tuple[FormSubmission, str]:
     """Reset and optionally reprocess matching for a shared submission."""
     if submission.source_mode != FormLinkMode.SHARED.value:
         raise ValueError("Only shared submissions can be reprocessed")
@@ -3091,12 +3141,13 @@ def retry_submission_match(
     submission.matched_at = None
     if review_notes is not None:
         submission.review_notes = review_notes.strip() or None
-    db.commit()
-    db.refresh(submission)
+    db.flush()
 
     outcome = FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
     if rerun_auto_match:
-        submission, outcome = auto_match_submission(db=db, submission=submission, session=session)
+        submission, outcome = auto_match_submission(
+            db=db, submission=submission, session=session, commit=False
+        )
 
     if (
         create_intake_lead_if_unmatched
@@ -3113,8 +3164,7 @@ def retry_submission_match(
             submission.match_reason = "manual_retry_requires_manual_link"
             if review_notes is not None:
                 submission.review_notes = review_notes.strip() or None
-            db.commit()
-            db.refresh(submission)
+            db.flush()
             outcome = FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
         elif (
             previous_lead
@@ -3130,8 +3180,7 @@ def retry_submission_match(
             db.query(FormSubmissionMatchCandidate).filter(
                 FormSubmissionMatchCandidate.submission_id == submission.id
             ).delete(synchronize_session=False)
-            db.commit()
-            db.refresh(submission)
+            db.flush()
             outcome = FormSubmissionMatchStatus.LEAD_CREATED.value
         else:
             submission, _ = create_intake_lead_for_submission(
@@ -3140,12 +3189,13 @@ def retry_submission_match(
                 user_id=reviewer_id,
                 source="manual_retry_resolution",
                 allow_ambiguous=False,
+                commit=False,
+                after_commit=after_commit,
             )
             submission.match_reason = "manual_retry_lead_creation"
             if review_notes is not None:
                 submission.review_notes = review_notes.strip() or None
-            db.commit()
-            db.refresh(submission)
+            db.flush()
             outcome = _normalize_shared_outcome(submission.match_status)
 
     return submission, outcome
