@@ -1,4 +1,4 @@
-"""Shared SQL record visibility and retained Intake collaboration.
+"""Shared SQL record visibility and explicit record collaboration.
 
 Record rules select the same records for viewing and editing. Action permissions
 are checked separately. Configuration writes and their audit entries are atomic.
@@ -317,7 +317,7 @@ def _routes(db, session, kind, model):
     for addition in additions:
         rule = RecordScopeRule.model_validate(addition, from_attributes=True)
         routes.append((f"individual:{addition.id}", _rule_filter(session, kind, model, rule)))
-    routes.append(("intake_collaborator", _collaborator_filter(session, kind, model)))
+    routes.append(("collaborator", _collaborator_filter(session, kind, model)))
     return routes
 
 
@@ -559,12 +559,16 @@ def remove_scope_addition(db, session, user_id, addition_id):
 
 
 def _collaboration_record(db, session, kind, record_id, *, manage=False):
+    from app.services import permission_policy_service
     from app.services.record_access_service import get_record_with_access
 
     if kind not in {"surrogate", "donor"}:
-        raise ValueError("Intake collaborators are supported for surrogates and donors")
-    if manage and _role(session.role) not in {*PROTECTED_ROLES, Role.CASE_MANAGER.value}:
-        raise PermissionError("Only case managers, admins and developers can manage collaborators")
+        raise ValueError("Collaborators are supported for surrogates and donors")
+    if manage:
+        try:
+            permission_policy_service.require_administrator(db, session.org_id, session.user_id)
+        except ValueError as exc:
+            raise PermissionError(str(exc)) from exc
     return get_record_with_access(db, session, kind, record_id, allow_archived=True)
 
 
@@ -606,8 +610,6 @@ def grant_collaborator(db, session, kind, record_id, user_id):
     _refresh_actor(db, session)
     record = _collaboration_record(db, session, kind, record_id, manage=True)
     member = _member(db, session.org_id, user_id)
-    if member.role != Role.INTAKE_SPECIALIST.value:
-        raise ValueError("Intake collaborators must have the Intake Specialist role")
     row = _grant_collaborator(db, session.org_id, kind, record, member, session.user_id)
     _audit(
         db,
@@ -1235,7 +1237,6 @@ def collaborator_options(db, session, kind, record_id):
             Membership.organization_id == session.org_id,
             Membership.is_active.is_(True),
             User.is_active.is_(True),
-            Membership.role == Role.INTAKE_SPECIALIST.value,
         )
         .order_by(User.display_name, User.id)
     ]

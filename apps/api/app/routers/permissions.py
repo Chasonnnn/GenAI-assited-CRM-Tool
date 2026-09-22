@@ -655,15 +655,14 @@ def get_member(
     capabilities = permission_policy_service.administration_capabilities(
         _role_value(session.role), actor_permissions, version
     )
+    can_manage_collaborations = version >= 2 and capabilities["can_manage_roles"]
     if session.user_id == user.id or (
         membership.role == "developer" and _role_value(session.role) != "developer"
     ):
         capabilities = {key: False for key in capabilities}
+    capabilities["can_manage_collaborations"] = can_manage_collaborations
     capabilities["can_receive_collaboration"] = (
-        capabilities.get("can_add_permissions", False)
-        and membership.is_active
-        and user.is_active
-        and membership.role == Role.INTAKE_SPECIALIST.value
+        can_manage_collaborations and membership.is_active and user.is_active
     )
     return MemberDetail(
         id=membership.id,

@@ -134,7 +134,7 @@ def test_handoff_retention_is_idempotent_and_revocation_keeps_other_grants(db, c
     db.flush()
     _assert_parity(db, context.intake, kind, [record], [record], personal_only=True)
     assert scopes.explain_record_access(db, context.intake, kind, record).sources == [
-        "intake_collaborator"
+        "collaborator"
     ]
     addition = scopes.add_scope_addition(
         db,
@@ -144,7 +144,7 @@ def test_handoff_retention_is_idempotent_and_revocation_keeps_other_grants(db, c
             module=scopes.RECORDS[kind][1], assignment="all", phase="post_approval"
         ),
     )
-    scopes.remove_collaborator(db, context.manager, kind, record.id, context.intake.user_id)
+    scopes.remove_collaborator(db, context.admin, kind, record.id, context.intake.user_id)
     _assert_parity(db, context.intake, kind, [record], [record])
     _assert_parity(db, context.intake, kind, [record], [], personal_only=True)
     scopes.remove_scope_addition(db, context.admin, context.intake.user_id, addition.id)
