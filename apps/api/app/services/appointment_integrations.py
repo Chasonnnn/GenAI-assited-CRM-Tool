@@ -10,6 +10,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core.async_utils import run_async
+from app.core.config import settings
 from app.db.enums import AppointmentStatus, MeetingMode
 from app.db.models import Appointment, AppointmentType
 
@@ -18,6 +19,10 @@ logger = logging.getLogger(__name__)
 
 class CalendarSyncIncompleteError(RuntimeError):
     """Raised when strict reconciliation lacks a complete calendar snapshot."""
+
+
+def _scheduling_v2_enabled() -> bool:
+    return bool(getattr(settings, "SCHEDULING_V2_ENABLED", False))
 
 
 def _run_async[T](coro: Coroutine[object, object, T]) -> T | None:
@@ -169,6 +174,9 @@ def backfill_confirmed_appointments_to_google(
     This retries outbound sync on list/reconciliation paths so transient create-time
     failures do not leave appointments permanently unsynced.
     """
+    if _scheduling_v2_enabled():
+        # V2 delivery owns only explicit destinations and never promotes legacy rows.
+        return 0
     from app.services import calendar_service
 
     if not calendar_service.check_user_has_google_calendar(db, user_id):
@@ -229,6 +237,10 @@ async def _sync_manual_google_events_for_appointments_async(
     default; strict workers receive `CalendarSyncIncompleteError` when the
     source snapshot is incomplete so the job can be retried.
     """
+    if _scheduling_v2_enabled():
+        # V2 stores provider-owned projections and observes exact existing links.
+        # It never fabricates an Appointment from a calendar listing.
+        return 0
     from app.services import calendar_service
 
     now = datetime.now(UTC)
@@ -457,6 +469,7 @@ async def _sync_manual_google_events_for_appointments_async(
             duration_minutes=duration_minutes,
             meeting_mode=MeetingMode.GOOGLE_MEET.value,
             status=AppointmentStatus.CONFIRMED.value,
+            origin="google_import",
             google_event_id=event_id,
             google_calendar_id=calendar_id if calendar_id != "primary" else None,
         )

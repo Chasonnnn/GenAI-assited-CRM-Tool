@@ -8,6 +8,7 @@ from app.core.csrf import CSRF_HEADER
 from app.db.enums import Role
 from app.db.models import (
     Appointment,
+    AppointmentType,
     AuditLog,
     Job,
     Organization,
@@ -114,6 +115,91 @@ async def test_routes_hide_cross_tenant_surrogate(authed_client, db, interview):
     assert (await authed_client.get(path)).status_code == 404
     response = await authed_client.post(path, json=payload(command(db, surrogate, "cancel")))
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_interview_slot_preview_uses_appointment_owner_and_hides_cross_tenant(
+    authed_client, db, interview, monkeypatch
+):
+    from app.services import appointment_service
+
+    surrogate, _ = interview
+    appointment = service.get_latest(db, surrogate.organization_id, surrogate.id)
+    seen = {}
+
+    def available(_db, query, **kwargs):
+        seen["query"] = query
+        seen["exclude"] = kwargs.get("exclude_appointment_id")
+        return [
+            appointment_service.TimeSlot(
+                datetime.now(UTC) + timedelta(days=4),
+                datetime.now(UTC) + timedelta(days=4, minutes=30),
+            )
+        ]
+
+    monkeypatch.setattr(appointment_service, "get_available_slots", available)
+    path = f"/surrogates/{surrogate.id}/interview-appointment/slots?date=2026-09-25"
+    response = await authed_client.get(path)
+    assert response.status_code == 200, response.text
+    assert response.json()["slots"]
+    assert seen["query"].user_id == appointment.user_id
+    assert seen["query"].appointment_type_id == appointment.appointment_type_id
+    assert seen["exclude"] == appointment.id
+
+    other_org = Organization(id=uuid4(), name="Other Slot Org", slug=f"other-{uuid4().hex}")
+    db.add(other_org)
+    db.flush()
+    surrogate.organization_id = other_org.id
+    db.commit()
+    assert (await authed_client.get(path)).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_interview_slot_preview_denies_unmodifiable_surrogate(
+    authed_client, db, interview, monkeypatch
+):
+    from app.routers import surrogates_interview_appointment as interview_router
+
+    surrogate, _ = interview
+    monkeypatch.setattr(interview_router, "can_modify_surrogate", lambda *_args, **_kwargs: False)
+    response = await authed_client.get(
+        f"/surrogates/{surrogate.id}/interview-appointment/slots?date=2026-09-25"
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_initial_stage_interview_preview_does_not_create_appointment_type(
+    authed_client, db, test_org, test_user, monkeypatch
+):
+    from app.services import appointment_service
+
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(full_name="First Interview QA", email=f"{uuid4()}@example.com"),
+    )
+    seen = {}
+
+    def available(_db, query, **kwargs):
+        seen["query"] = query
+        seen["type"] = kwargs.get("appointment_type")
+        return []
+
+    monkeypatch.setattr(appointment_service, "get_available_slots", available)
+    response = await authed_client.get(
+        f"/surrogates/{surrogate.id}/interview-appointment/slots?date=2026-09-25"
+    )
+    assert response.status_code == 200, response.text
+    assert seen["query"].user_id == test_user.id
+    assert seen["type"].slug == "initial-interview"
+    assert (
+        db.query(AppointmentType)
+        .filter_by(organization_id=test_org.id, user_id=test_user.id, slug="initial-interview")
+        .count()
+        == 0
+    )
 
 
 def test_cancel_keep_stage_then_book_again(db, interview):

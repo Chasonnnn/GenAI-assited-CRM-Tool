@@ -199,9 +199,8 @@ async def _post_google_events_watch(
         )
         if response.status_code not in (200, 201):
             logger.warning(
-                "Failed to start Google Calendar watch: status=%s body=%s",
+                "Failed to start Google Calendar watch: status=%s",
                 response.status_code,
-                response.text[:300],
             )
             return None
 
@@ -1176,8 +1175,9 @@ async def create_google_meet_link(
             )
 
             if response.status_code not in [200, 201]:
-                error_text = response.text
-                logger.error(f"Google Calendar API error: {response.status_code} - {error_text}")
+                logger.error(
+                    "Google Calendar event creation failed: status=%s", response.status_code
+                )
                 raise ValueError(f"Failed to create Google Calendar event: {response.status_code}")
 
             data = response.json()
@@ -1193,7 +1193,7 @@ async def create_google_meet_link(
                     break
 
             if not meet_url:
-                logger.warning(f"No Meet link in response for event {data.get('id')}")
+                logger.warning("Google Calendar event response has no Meet link")
                 raise ValueError("Google Meet link was not generated")
 
             return GoogleMeetResult(
@@ -1201,9 +1201,9 @@ async def create_google_meet_link(
                 meet_url=meet_url,
             )
 
-    except httpx.HTTPError as e:
-        logger.exception(f"HTTP error creating Google Meet event: {e}")
-        raise ValueError(f"Failed to create Google Meet: {e}")
+    except httpx.HTTPError:
+        logger.warning("Google Calendar event creation transport failed")
+        raise ValueError("Failed to create Google Meet") from None
 
 
 async def create_appointment_meet_link(

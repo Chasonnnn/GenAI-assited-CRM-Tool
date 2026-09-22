@@ -12,6 +12,7 @@ from app.core.surrogate_access import check_surrogate_access
 from app.schemas.auth import UserSession
 from app.schemas.surrogate import SurrogateStatusChange, SurrogateStatusChangeResponse
 from app.services import surrogate_service
+from app.services.calendar_binding_service import CalendarAvailabilityUnavailable
 
 from .surrogates_shared import _surrogate_to_read
 
@@ -73,11 +74,16 @@ def change_status(
             reason=data.reason,
             effective_at=data.effective_at,
             interview_scheduled_at=data.interview_scheduled_at,
+            override_availability=data.override_availability,
+            override_reason=data.override_reason,
             on_hold_follow_up_months=data.on_hold_follow_up_months,
             emit_events=True,
         )
     except ValueError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(
+            status_code=503 if isinstance(e, CalendarAvailabilityUnavailable) else 403,
+            detail=str(e),
+        ) from e
 
     if result["status"] == "applied" and is_changing_to_delivered and result["surrogate"]:
         updated_fields = False

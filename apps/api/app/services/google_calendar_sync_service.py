@@ -30,6 +30,119 @@ class GoogleCalendarSyncScheduleCounts(TypedDict):
     watch_duplicates_skipped: int
 
 
+def _scheduling_v2_enabled() -> bool:
+    from app.core.config import settings
+
+    return bool(getattr(settings, "SCHEDULING_V2_ENABLED", False))
+
+
+def _schedule_v2_binding_jobs(
+    db: Session,
+    *,
+    now: datetime,
+) -> GoogleCalendarSyncScheduleCounts:
+    """Schedule only explicit binding targets; never select a user's first org."""
+    from app.db.models import CalendarBinding
+    from app.services import calendar_binding_service
+
+    bindings = (
+        db.query(CalendarBinding)
+        .join(Membership, Membership.user_id == CalendarBinding.user_id)
+        .join(UserIntegration, UserIntegration.id == CalendarBinding.integration_id)
+        .join(Organization, Organization.id == CalendarBinding.organization_id)
+        .filter(
+            CalendarBinding.is_active.is_(True),
+            Membership.organization_id == CalendarBinding.organization_id,
+            Membership.is_active.is_(True),
+            UserIntegration.user_id == CalendarBinding.user_id,
+            UserIntegration.integration_type == "google_calendar",
+            UserIntegration.account_email == CalendarBinding.account_email,
+            Organization.deleted_at.is_(None),
+        )
+        .all()
+    )
+    created = 0
+    duplicates = 0
+    watch_created = 0
+    watch_duplicates = 0
+    for binding in bindings:
+        try:
+            with db.begin_nested():
+                calendar_binding_service.enqueue_binding_sync(
+                    db,
+                    binding_id=binding.id,
+                    org_id=binding.organization_id,
+                    commit=False,
+                    now=now,
+                )
+            created += 1
+        except IntegrityError:
+            duplicates += 1
+        try:
+            with db.begin_nested():
+                calendar_binding_service.enqueue_binding_watch_refresh(
+                    db,
+                    binding_id=binding.id,
+                    org_id=binding.organization_id,
+                    commit=False,
+                    now=now,
+                )
+            watch_created += 1
+        except IntegrityError:
+            watch_duplicates += 1
+
+    # Tasks remain user-scoped legacy behavior; V2 only retires ambiguous calendar routing.
+    task_targets = (
+        db.query(
+            UserIntegration.user_id, Membership.organization_id, UserIntegration.granted_scopes
+        )
+        .join(Membership, Membership.user_id == UserIntegration.user_id)
+        .join(Organization, Organization.id == Membership.organization_id)
+        .filter(
+            UserIntegration.integration_type == "google_calendar",
+            Membership.is_active.is_(True),
+            Organization.deleted_at.is_(None),
+        )
+        .all()
+    )
+    sync_bucket = int(now.timestamp()) // (5 * 60)
+    seen_task_users: set[UUID] = set()
+    task_jobs_created = 0
+    task_duplicates_skipped = 0
+    for user_id, organization_id, granted_scopes in task_targets:
+        if user_id in seen_task_users:
+            continue
+        seen_task_users.add(user_id)
+        if google_tasks_sync_service.scopes_known_to_exclude_google_tasks(granted_scopes):
+            task_duplicates_skipped += 1
+            continue
+        idempotency_key = f"google-tasks-sync:{user_id}:{sync_bucket}"
+        try:
+            with db.begin_nested():
+                job_service.enqueue_job(
+                    db,
+                    org_id=organization_id,
+                    job_type=JobType.GOOGLE_TASKS_SYNC,
+                    payload={"user_id": str(user_id)},
+                    run_at=now + timedelta(seconds=(user_id.int % 120)),
+                    idempotency_key=idempotency_key,
+                    commit=False,
+                )
+            task_jobs_created += 1
+        except IntegrityError:
+            task_duplicates_skipped += 1
+    db.commit()
+    return {
+        "connected_users": len(bindings),
+        "jobs_created": created,
+        "duplicates_skipped": duplicates,
+        "task_jobs_created": task_jobs_created,
+        "task_duplicates_skipped": task_duplicates_skipped,
+        "watch_jobs_created": watch_created,
+        "watch_duplicates_skipped": watch_duplicates,
+    }
+
+
 def schedule_google_calendar_sync_jobs(
     db: Session,
     *,
@@ -37,6 +150,8 @@ def schedule_google_calendar_sync_jobs(
 ) -> GoogleCalendarSyncScheduleCounts:
     """Schedule reconciliation + watch-refresh jobs for connected users."""
     now = now or datetime.now(UTC)
+    if _scheduling_v2_enabled():
+        return _schedule_v2_binding_jobs(db, now=now)
     sync_bucket_seconds = 5 * 60
     sync_bucket = int(now.timestamp()) // sync_bucket_seconds
     watch_bucket_seconds = 60 * 60
@@ -79,9 +194,7 @@ def schedule_google_calendar_sync_jobs(
     candidate_idempotency_keys: set[str] = set()
     for user_id, _org_id, granted_scopes in targets:
         candidate_idempotency_keys.add(f"google-calendar-sync:{user_id}:{sync_bucket}")
-        candidate_idempotency_keys.add(
-            f"google-calendar-watch-refresh:{user_id}:{watch_bucket}"
-        )
+        candidate_idempotency_keys.add(f"google-calendar-watch-refresh:{user_id}:{watch_bucket}")
         if not google_tasks_sync_service.scopes_known_to_exclude_google_tasks(granted_scopes):
             candidate_idempotency_keys.add(f"google-tasks-sync:{user_id}:{sync_bucket}")
     existing_idempotency_keys: set[str] = set()
@@ -210,6 +323,49 @@ def process_google_calendar_push_notification(
     """
     if not channel_id or not resource_id or not channel_token:
         return {"status": "ignored", "reason": "missing_headers"}
+
+    if _scheduling_v2_enabled():
+        from app.db.models import CalendarBinding
+        from app.services import calendar_binding_service
+
+        bindings = (
+            db.query(CalendarBinding)
+            .join(Membership, Membership.user_id == CalendarBinding.user_id)
+            .join(UserIntegration, UserIntegration.id == CalendarBinding.integration_id)
+            .filter(
+                CalendarBinding.is_active.is_(True),
+                CalendarBinding.channel_id == channel_id,
+                CalendarBinding.resource_id == resource_id,
+                Membership.organization_id == CalendarBinding.organization_id,
+                Membership.is_active.is_(True),
+                UserIntegration.user_id == CalendarBinding.user_id,
+                UserIntegration.integration_type == "google_calendar",
+                UserIntegration.account_email == CalendarBinding.account_email,
+            )
+            .all()
+        )
+        if not bindings:
+            return {"status": "ignored", "reason": "unknown_channel"}
+        accepted = False
+        for binding in bindings:
+            if not calendar_service.verify_watch_channel_token(
+                binding.channel_token_encrypted, channel_token
+            ):
+                continue
+            try:
+                calendar_binding_service.enqueue_binding_sync(
+                    db,
+                    binding_id=binding.id,
+                    org_id=binding.organization_id,
+                    commit=True,
+                )
+                accepted = True
+            except IntegrityError:
+                db.rollback()
+                accepted = True
+        return (
+            {"status": "accepted"} if accepted else {"status": "ignored", "reason": "invalid_token"}
+        )
 
     integration = (
         db.query(UserIntegration)

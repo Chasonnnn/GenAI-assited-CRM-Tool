@@ -4304,5 +4304,48 @@
       "204",
       "422"
     ]
+  },
+  "/surrogates/{surrogate_id}/interview-appointment/slots": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/google-calendar/calendars": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/integrations/google-calendar/bindings": {
+    "GET": [
+      "200"
+    ],
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/google-calendar/bindings/sync": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/appointments/{appointment_id}/complete": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/appointments/{appointment_id}/sync/retry": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/appointments/{appointment_id}/sync/resolve": {
+    "POST": [
+      "200",
+      "422"
+    ]
   }
 }

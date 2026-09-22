@@ -3,13 +3,19 @@
 import hashlib
 import logging
 import secrets
-from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from datetime import UTC, date, datetime, timedelta
+from uuid import UUID, uuid4
 
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
-from app.db.enums import AppointmentStatus, AuditEventType, Role, SurrogateActivityType
+from app.db.enums import (
+    AppointmentEmailType,
+    AppointmentStatus,
+    AuditEventType,
+    Role,
+    SurrogateActivityType,
+)
 from app.db.models import Appointment, AppointmentType, AuditLog, Surrogate, User
 from app.schemas.interview_appointment import SurrogateInterviewAppointmentAction
 
@@ -42,6 +48,68 @@ def get_latest(db: Session, org_id: UUID, surrogate_id: UUID) -> Appointment | N
         )
         .first()
     )
+
+
+def preview_slots(
+    db: Session,
+    *,
+    surrogate: Surrogate,
+    org_id: UUID,
+    actor_user_id: UUID,
+    date_start: date,
+    client_timezone: str | None,
+) -> tuple[str, list]:
+    """Preview the same owner's initial-interview availability without creating a type."""
+    from app.services import appointment_service, surrogate_status_service
+
+    appointment = get_latest(db, org_id, surrogate.id)
+    active = appointment is not None and appointment.status in ACTIVE_STATUSES
+    owner_id = (
+        appointment.user_id
+        if active
+        else surrogate.owner_id
+        if surrogate.owner_type == "user"
+        else actor_user_id
+    )
+    timezone = client_timezone or (
+        appointment.client_timezone
+        if active
+        else surrogate_status_service._get_org_timezone(db, org_id)
+    )
+    appointment_service.validate_timezone_name(timezone, "client timezone")
+    appointment_type = (
+        db.query(AppointmentType)
+        .filter(
+            AppointmentType.organization_id == org_id,
+            AppointmentType.user_id == owner_id,
+            AppointmentType.slug == "initial-interview",
+        )
+        .one_or_none()
+    )
+    transient = appointment_type is None
+    if appointment_type is None:
+        appointment_type = surrogate_status_service._new_interview_appointment_type(
+            org_id=org_id, user_id=owner_id
+        )
+        appointment_type.id = uuid4()
+    query = appointment_service.SlotQuery(
+        user_id=owner_id,
+        org_id=org_id,
+        appointment_type_id=appointment_type.id,
+        date_start=date_start,
+        date_end=date_start,
+        client_timezone=timezone,
+    )
+    slots = appointment_service.get_available_slots(
+        db,
+        query,
+        exclude_appointment_id=appointment.id if active else None,
+        duration_minutes=appointment.duration_minutes if active else None,
+        buffer_before_minutes=appointment.buffer_before_minutes if active else None,
+        buffer_after_minutes=appointment.buffer_after_minutes if active else None,
+        appointment_type=appointment_type if transient else None,
+    )
+    return timezone, slots
 
 
 def _same_time(left: datetime | None, right: datetime | None) -> bool:
@@ -91,14 +159,24 @@ def manage(
     actor_role: Role | str,
     data: SurrogateInterviewAppointmentAction,
 ) -> Surrogate:
+    from app.core.config import settings
     from app.services import (
         activity_service,
+        appointment_command_service,
         appointment_email_service,
         appointment_google_sync_service,
         audit_service,
         pipeline_service,
         surrogate_status_service,
     )
+
+    v2 = settings.SCHEDULING_V2_ENABLED
+    if v2 and data.action == "cancel" and (data.override_availability or data.override_reason):
+        raise InterviewAppointmentError("Availability override applies only to scheduling")
+    if v2 and data.action != "cancel":
+        from app.services import scheduling_v2_service
+
+        scheduling_v2_service._check_override(data.override_availability, data.override_reason)
 
     # Resolve provider identity before taking the surrogate/appointment locks.
     # Token refresh and Google discovery can perform I/O or commit internally.
@@ -119,6 +197,22 @@ def manage(
                 "Only the appointment owner can manage this interview", 403
             )
     request_digest = hashlib.sha256(data.model_dump_json().encode()).hexdigest()
+    request_hash = None
+    if v2:
+        from app.services import scheduling_v2_service
+
+        request_hash = scheduling_v2_service._request_hash(
+            "interview", {"surrogate_id": surrogate_id, "data": data.model_dump(mode="json")}
+        )
+        replay = scheduling_v2_service._replay(
+            db,
+            org_id=org_id,
+            actor_scope=scheduling_v2_service.staff_actor_scope(actor_user_id),
+            request_id=data.request_id,
+            request_hash=request_hash,
+        )
+        if replay:
+            return preview_surrogate
     exact_retry = False
     if preview:
         receipt = (
@@ -139,23 +233,25 @@ def manage(
             and receipt.details.get("surrogate_id") == str(surrogate_id)
             and receipt.details.get("result") == _result_state(preview_surrogate, preview)
         )
-    prepared_link = None
-    preview_google_revision = preview.google_sync_revision if preview else None
-    preview_google_account = preview.google_account_email if preview else None
-    preview_google_calendar = preview.google_calendar_id if preview else None
-    if (
-        preview
-        and not exact_retry
-        and data.action in {"reschedule", "cancel"}
-        and preview.status in ACTIVE_STATUSES
-        and preview.google_event_id
-        and not preview.zoom_meeting_id
-        and not preview.zoom_join_url
-    ):
+    prepared_change = None
+    google_preflight_error = None
+    if preview and not exact_retry and data.action in {"reschedule", "cancel"}:
         try:
-            prepared_link = appointment_google_sync_service.prepare_link(db, preview)
+            prepared_change = appointment_command_service.prepare_change(
+                db,
+                preview,
+                verify_google_link=not v2
+                and bool(
+                    preview.status in ACTIVE_STATUSES
+                    and preview.google_event_id
+                    and not preview.zoom_meeting_id
+                    and not preview.zoom_join_url
+                ),
+            )
         except appointment_google_sync_service.GoogleLinkError as exc:
-            raise InterviewAppointmentError(str(exc), 409) from None
+            # A concurrent identical request may have committed while the
+            # provider check ran. Inspect its locked audit receipt first.
+            google_preflight_error = exc
     surrogate = (
         db.query(Surrogate)
         .filter(Surrogate.id == surrogate_id, Surrogate.organization_id == org_id)
@@ -199,6 +295,34 @@ def manage(
             and receipt.details.get("result") == _result_state(surrogate, appointment)
         ):
             return surrogate
+
+    if google_preflight_error is not None:
+        raise InterviewAppointmentError(str(google_preflight_error), 409) from None
+
+    if appointment and prepared_change and data.action in {"reschedule", "cancel"}:
+        try:
+            appointment_command_service.validate_change(
+                appointment,
+                prepared_change,
+                stale_message=(
+                    "Google appointment changed; refresh and try again"
+                    if prepared_change.google_link
+                    else "Interview appointment changed; refresh and try again"
+                ),
+            )
+        except ValueError as exc:
+            raise InterviewAppointmentError(str(exc), 409) from None
+
+    if v2:
+        if appointment:
+            try:
+                scheduling_v2_service._check_revision(appointment, data.expected_revision)
+            except scheduling_v2_service.SchedulingConflict as exc:
+                raise InterviewAppointmentError(str(exc), 409) from None
+        elif data.expected_revision not in {None, 0}:
+            raise InterviewAppointmentError(
+                "Interview appointment changed; refresh and try again", 409
+            )
 
     if data.action == "schedule" and appointment and appointment.google_event_id:
         if appointment_google_sync_service.status(db, appointment) in {
@@ -265,6 +389,8 @@ def manage(
                 interview_scheduled_at=data.scheduled_start,
                 recorded_at=now,
                 org_timezone_str=surrogate_status_service._get_org_timezone(db, org_id),
+                override_availability=data.override_availability,
+                override_reason=data.override_reason,
             )
         else:
             result = surrogate_status_service.change_status(
@@ -274,6 +400,8 @@ def manage(
                 user_id=actor_user_id,
                 user_role=actor_role,
                 interview_scheduled_at=data.scheduled_start,
+                override_availability=data.override_availability,
+                override_reason=data.override_reason,
                 commit=False,
             )
             after_commit = result.get("after_commit")
@@ -294,17 +422,11 @@ def manage(
             raise InterviewAppointmentError(
                 "This interview is linked to an external meeting and cannot be changed here", 409
             )
-        if appointment.google_event_id and (
-            prepared_link is None
-            or appointment.google_sync_revision != preview_google_revision
-            or appointment.google_account_email != preview_google_account
-            or appointment.google_calendar_id != preview_google_calendar
-            or appointment.google_event_id != prepared_link.event_id
-            or appointment.google_integration_id not in {None, prepared_link.integration_id}
-            or appointment.google_calendar_id not in {None, prepared_link.calendar_id}
-            or not _same_time(appointment.scheduled_start, prepared_link.start)
-            or not _same_time(appointment.scheduled_end, prepared_link.end)
-        ):
+        if prepared_change is None or appointment.id != prepared_change.snapshot.id:
+            raise InterviewAppointmentError(
+                "Interview appointment changed; refresh and try again", 409
+            )
+        if not v2 and appointment.google_event_id and prepared_change.google_link is None:
             raise InterviewAppointmentError(
                 "Google appointment changed; refresh and try again", 409
             )
@@ -315,22 +437,65 @@ def manage(
             if start <= now:
                 raise InterviewAppointmentError("Interview date and time must be in the future")
             end = start + timedelta(minutes=appointment.duration_minutes)
-            _assert_no_conflict(db, appointment, start, end)
-            appointment.scheduled_start = start
-            appointment.scheduled_end = end
-            appointment.reschedule_token = secrets.token_urlsafe(32)
-            appointment.cancel_token = secrets.token_urlsafe(32)
-            appointment.reschedule_token_expires_at = end + timedelta(days=7)
-            appointment.cancel_token_expires_at = end + timedelta(days=7)
+            if v2:
+                scheduling_v2_service._check_slot(
+                    db,
+                    appointment,
+                    start,
+                    override_availability=data.override_availability,
+                )
+            else:
+                _assert_no_conflict(db, appointment, start, end)
+            appointment_command_service.apply_reschedule(
+                db,
+                appointment,
+                prepared_change,
+                new_start=start,
+                new_end=end,
+                make_token=lambda: secrets.token_urlsafe(32),
+                update_pending_expiry=False,
+                pending_expires_at=None,
+                email_reason_type="appointment_reschedule",
+                email_reason_message="Interview appointment changed",
+                email_types=None,
+            )
+            if v2:
+                appointment.revision += 1
+                appointment.availability_override_reason = (
+                    data.override_reason.strip() if data.override_availability else None
+                )
+                scheduling_v2_service._enqueue_change(db, appointment, "reschedule")
+                scheduling_v2_service._queue_notice(
+                    db, appointment, AppointmentEmailType.RESCHEDULED, old_start=prior_start
+                )
+                scheduling_v2_service._queue_reminder(db, appointment)
+                scheduling_v2_service._audit(
+                    db,
+                    appointment,
+                    AuditEventType.APPOINTMENT_RESCHEDULED,
+                    actor_user_id,
+                    override_availability=data.override_availability,
+                )
         else:
-            appointment.status = AppointmentStatus.CANCELLED.value
-            appointment.cancelled_at = now
-            appointment.cancelled_by_client = False
-            appointment.cancellation_reason = "Cancelled from surrogate interview management"
-            appointment.reschedule_token = None
-            appointment.cancel_token = None
-            appointment.reschedule_token_expires_at = None
-            appointment.cancel_token_expires_at = None
+            appointment_command_service.apply_cancel(
+                db,
+                appointment,
+                prepared_change,
+                cancelled_at=now,
+                by_client=False,
+                reason="Cancelled from surrogate interview management",
+                email_reason_type="appointment_cancel",
+                email_reason_message="Interview appointment changed",
+                email_types=None,
+            )
+            if v2:
+                appointment.revision += 1
+                scheduling_v2_service._enqueue_change(db, appointment, "cancel")
+                scheduling_v2_service._queue_notice(db, appointment, AppointmentEmailType.CANCELLED)
+                scheduling_v2_service._staff_notification(db, appointment, "cancelled")
+                scheduling_v2_service._audit(
+                    db, appointment, AuditEventType.APPOINTMENT_CANCELLED, actor_user_id
+                )
 
         if data.move_stage and surrogate.stage_id != target.id:
             result = surrogate_status_service.change_status(
@@ -349,18 +514,6 @@ def manage(
             )
             after_commit = result.get("after_commit")
 
-        appointment_email_service.cancel_queued_appointment_emails(
-            db,
-            appointment,
-            reason_type=f"appointment_{data.action}",
-            reason_message="Interview appointment changed",
-            commit=False,
-        )
-        if prepared_link:
-            appointment_google_sync_service.enqueue(
-                db, appointment, action=data.action, link=prepared_link
-            )
-
     audit_service.log_event(
         db=db,
         org_id=org_id,
@@ -377,8 +530,17 @@ def manage(
             "action": data.action,
             "request_digest": request_digest,
             "result": _result_state(surrogate, appointment),
+            **({"revision": appointment.revision} if v2 else {}),
         },
     )
+    if v2:
+        scheduling_v2_service._save_receipt(
+            db,
+            appointment=appointment,
+            actor_scope=scheduling_v2_service.staff_actor_scope(actor_user_id),
+            request_id=data.request_id,
+            request_hash=request_hash,
+        )
     if data.action != "schedule" or current_key == "interview_scheduled":
         activity_service.log_activity(
             db=db,
@@ -405,7 +567,7 @@ def manage(
     except Exception:
         db.rollback()
         raise
-    if data.action in {"reschedule", "cancel"}:
+    if not v2 and data.action in {"reschedule", "cancel"}:
         from app.services import org_service
 
         try:
@@ -420,7 +582,7 @@ def manage(
             logger.warning("Interview changed but client notification failed")
     if after_commit:
         after_commit()
-    if data.action == "reschedule":
+    if not v2 and data.action == "reschedule":
         appointment_type = db.get(AppointmentType, appointment.appointment_type_id)
         if appointment_type and appointment_type.reminder_hours_before > 0:
             from app.services import org_service

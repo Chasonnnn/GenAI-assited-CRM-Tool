@@ -55,6 +55,7 @@ from app.routers import (
     audit,
     auth,
     booking,
+    calendar_bindings,
     campaigns,
     compliance,
     custom_fields,
@@ -754,6 +755,7 @@ app.include_router(dashboard.router)
 
 # User Integrations (Gmail, Zoom OAuth)
 app.include_router(integrations.router)
+app.include_router(calendar_bindings.router)
 app.include_router(meta_crm_dataset.router)
 app.include_router(mailboxes.router)
 app.include_router(tickets.router)

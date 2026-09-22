@@ -1,11 +1,13 @@
 """Surrogate initial interview appointment routes."""
 
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import get_db, require_csrf_header, require_permission
 from app.core.policies import POLICIES
 from app.core.surrogate_access import can_modify_surrogate, check_surrogate_access
@@ -13,17 +15,21 @@ from app.schemas.auth import UserSession
 from app.schemas.interview_appointment import (
     InterviewAppointmentRead,
     InterviewGoogleSyncCheck,
+    InterviewSlotRead,
+    InterviewSlotsRead,
     InterviewStageRead,
     SurrogateInterviewAppointmentAction,
     SurrogateInterviewAppointmentState,
 )
 from app.services import (
     appointment_google_sync_service,
+    appointment_service,
     permission_service,
     pipeline_service,
     surrogate_interview_appointment_service,
     surrogate_service,
 )
+from app.services.calendar_binding_service import CalendarAvailabilityUnavailable
 
 router = APIRouter()
 
@@ -62,10 +68,19 @@ def _state(db: Session, surrogate, session: UserSession) -> SurrogateInterviewAp
         and pipeline_service.get_stage_semantic_key(stage)
         in {"interview_scheduled", "reschedule_needed"}
     )
-    return SurrogateInterviewAppointmentState(
-        appointment=InterviewAppointmentRead.model_validate(appointment, from_attributes=True)
+    appointment_read = (
+        InterviewAppointmentRead.model_validate(appointment, from_attributes=True)
         if appointment
-        else None,
+        else None
+    )
+    if appointment_read and settings.SCHEDULING_V2_ENABLED:
+        appointment_read.scheduling = appointment_service.scheduling_read(
+            db,
+            appointment,
+            can_edit=modifiable and owner_ok and sensible_stage and not surrogate.is_archived,
+        )
+    return SurrogateInterviewAppointmentState(
+        appointment=appointment_read,
         can_manage=modifiable and owner_ok and sensible_stage and not surrogate.is_archived,
         external_sync_status=appointment_google_sync_service.status(db, appointment),
         scheduled_stage=InterviewStageRead.model_validate(scheduled, from_attributes=True)
@@ -96,6 +111,54 @@ def get_interview_appointment(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     return _state(db, _load(db, session, surrogate_id), session)
+
+
+@router.get(
+    "/{surrogate_id:uuid}/interview-appointment/slots",
+    response_model=InterviewSlotsRead,
+    dependencies=[Depends(require_permission(POLICIES["appointments"].default))],
+)
+def get_interview_slots(
+    surrogate_id: UUID,
+    date_start: Annotated[date, Query(alias="date")],
+    client_timezone: Annotated[str | None, Query()] = None,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["surrogates"].actions["change_status"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> InterviewSlotsRead:
+    surrogate = _load(db, session, surrogate_id)
+    if surrogate.is_archived or not can_modify_surrogate(
+        surrogate, session.user_id, session.role, db=db, org_id=session.org_id
+    ):
+        raise HTTPException(403, "You cannot manage this interview")
+    appointment = surrogate_interview_appointment_service.get_latest(
+        db, session.org_id, surrogate_id
+    )
+    role = session.role.value if hasattr(session.role, "value") else session.role
+    if (
+        appointment
+        and role not in {"admin", "developer"}
+        and appointment.user_id != session.user_id
+    ):
+        raise HTTPException(403, "Only the appointment owner can manage this interview")
+    try:
+        timezone, slots = surrogate_interview_appointment_service.preview_slots(
+            db,
+            surrogate=surrogate,
+            org_id=session.org_id,
+            actor_user_id=session.user_id,
+            date_start=date_start,
+            client_timezone=client_timezone,
+        )
+    except CalendarAvailabilityUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return InterviewSlotsRead(
+        timezone=timezone,
+        slots=[InterviewSlotRead(start=slot.start, end=slot.end) for slot in slots],
+    )
 
 
 @router.post(
