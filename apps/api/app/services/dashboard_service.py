@@ -15,52 +15,27 @@ from app.core.websocket import send_ws_to_org
 from app.db.enums import OwnerType, Role, TaskType
 from app.db.models import (
     Donor,
-    DonorStatusHistory,
-    Pipeline,
     PipelineStage,
     Surrogate,
-    SurrogateActivityLog,
-    SurrogateStatusHistory,
     Task,
     ZoomMeeting,
+)
+from app.services import dashboard_attention_queries as attention_queries
+from app.services.dashboard_attention_queries import (
+    ATTENTION_STUCK_DAYS as ATTENTION_STUCK_DAYS,
+)
+from app.services.dashboard_attention_queries import (
+    attention_stuck_donor_stage_filters as attention_stuck_donor_stage_filters,
+)
+from app.services.dashboard_attention_queries import (
+    attention_stuck_stage_filters as attention_stuck_stage_filters,
 )
 
 logger = logging.getLogger(__name__)
 
-ATTENTION_STUCK_DAYS = 90
-ATTENTION_STUCK_EXCLUDED_STAGE_TYPES = ("post_approval", "paused", "terminal")
-ATTENTION_STUCK_EXCLUDED_STAGE_KEYS = ("on_hold", "lost", "disqualified")
-ATTENTION_DONOR_STUCK_EXCLUDED_STAGE_TYPES = ("paused", "terminal")
-
 
 def _is_admin_role(role: Role | str | None) -> bool:
     return role in (Role.ADMIN, Role.ADMIN.value, Role.DEVELOPER, Role.DEVELOPER.value)
-
-
-def attention_stuck_stage_filters():
-    """Exclude post-approval, paused, terminal, and legacy semantic stage keys."""
-    return (
-        PipelineStage.stage_type.notin_(ATTENTION_STUCK_EXCLUDED_STAGE_TYPES),
-        PipelineStage.stage_key.notin_(ATTENTION_STUCK_EXCLUDED_STAGE_KEYS),
-    )
-
-
-def attention_stuck_donor_stage_filters(org_id: UUID):
-    """Require a same-organization pipeline matching each donor subtype."""
-    return (
-        Pipeline.organization_id == org_id,
-        or_(
-            and_(
-                Donor.donor_type == "egg",
-                Pipeline.entity_type == "egg_donor",
-            ),
-            and_(
-                Donor.donor_type == "sperm",
-                Pipeline.entity_type == "sperm_donor",
-            ),
-        ),
-        PipelineStage.stage_type.notin_(ATTENTION_DONOR_STUCK_EXCLUDED_STAGE_TYPES),
-    )
 
 
 def _should_scope_attention_to_owner(
@@ -291,7 +266,7 @@ def get_attention_items(
     """
     now = datetime.now(UTC)
     today = now.date()
-    from app.services import permission_policy_service, record_scope_service
+    from app.services import permission_policy_service
 
     scoped_v2 = user_role is not None and permission_policy_service.is_enabled(db, org_id)
     scope_session = SimpleNamespace(org_id=org_id, user_id=user_id, role=user_role)
@@ -326,48 +301,16 @@ def get_attention_items(
     # Surrogates in early intake stages (order <= 2) with no contact or updates in X days
     # -------------------------------------------------------------------------
     unreached_cutoff = now - timedelta(days=days_unreached)
-    latest_activity_subquery = (
-        db.query(
-            SurrogateActivityLog.surrogate_id.label("surrogate_id"),
-            func.max(SurrogateActivityLog.created_at).label("last_activity_at"),
-        )
-        .filter(SurrogateActivityLog.organization_id == org_id)
-        .group_by(SurrogateActivityLog.surrogate_id)
-        .subquery()
-    )
-    last_touch_at = func.coalesce(
-        latest_activity_subquery.c.last_activity_at,
-        Surrogate.updated_at,
-        Surrogate.created_at,
+    unreached_query = attention_queries.unreached_surrogates(
+        db,
+        org_id,
+        cutoff=unreached_cutoff,
+        visibility_filters=visibility_filters,
+        owner_filters=owner_filters,
+        pipeline_id=pipeline_id,
     )
 
-    unreached_query = (
-        db.query(Surrogate, PipelineStage.label.label("stage_label"))
-        .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
-        .outerjoin(
-            latest_activity_subquery,
-            latest_activity_subquery.c.surrogate_id == Surrogate.id,
-        )
-        .filter(
-            Surrogate.organization_id == org_id,
-            Surrogate.is_archived.is_(False),
-            PipelineStage.stage_type == "intake",
-            PipelineStage.order <= 2,  # Only first 2 intake stages
-            Surrogate.created_at < unreached_cutoff,
-            last_touch_at < unreached_cutoff,
-            or_(
-                Surrogate.last_contacted_at.is_(None),
-                Surrogate.last_contacted_at < unreached_cutoff,
-            ),
-            *visibility_filters,
-            *owner_filters,
-        )
-    )
-
-    if pipeline_id:
-        unreached_query = unreached_query.filter(PipelineStage.pipeline_id == pipeline_id)
-
-    unreached_results = unreached_query.order_by(Surrogate.created_at.asc()).limit(limit).all()
+    unreached_results = unreached_query.limit(limit).all()
 
     unreached_leads = []
     for surrogate, stage_label in unreached_results:
@@ -390,107 +333,28 @@ def get_attention_items(
     if len(unreached_results) < limit:
         unreached_count = len(unreached_results)
     else:
-        unreached_total = (
-            db.query(func.count(Surrogate.id))
-            .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
-            .outerjoin(
-                latest_activity_subquery,
-                latest_activity_subquery.c.surrogate_id == Surrogate.id,
-            )
-            .filter(
-                Surrogate.organization_id == org_id,
-                Surrogate.is_archived.is_(False),
-                PipelineStage.stage_type == "intake",
-                PipelineStage.order <= 2,
-                Surrogate.created_at < unreached_cutoff,
-                last_touch_at < unreached_cutoff,
-                or_(
-                    Surrogate.last_contacted_at.is_(None),
-                    Surrogate.last_contacted_at < unreached_cutoff,
-                ),
-                *visibility_filters,
-                *owner_filters,
-            )
+        unreached_count = (
+            unreached_query.order_by(None).with_entities(func.count(Surrogate.id)).scalar() or 0
         )
-        if pipeline_id:
-            unreached_total = unreached_total.filter(PipelineStage.pipeline_id == pipeline_id)
-        unreached_count = unreached_total.scalar() or 0
 
     # -------------------------------------------------------------------------
     # 2. Overdue Tasks
     # User's incomplete tasks past due date
     # -------------------------------------------------------------------------
-    from app.services import task_service
-
-    task_filters = [
-        Task.organization_id == org_id,
-        task_service.task_subjects_belong_to_org(org_id),
-        Task.due_date < today,
-        Task.is_completed.is_(False),
-        Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
-    ]
-    if not can_view_donors:
-        task_filters.append(Task.donor_id.is_(None))
-    if effective_owner_id:
-        task_filters.extend(
-            [
-                Task.owner_type == OwnerType.USER.value,
-                Task.owner_id == effective_owner_id,
-            ]
-        )
-    elif owner_only:
-        task_filters.append(Task.id.is_(None))
-
-    if scoped_v2:
-        task_filters.append(
-            record_scope_service.build_linked_visibility_filter(db, scope_session, Task)
-        )
-
-    overdue_tasks_query = db.query(Task)
-    non_admin_visibility = user_role is not None and not _is_admin_role(user_role)
-    if pipeline_id:
-        overdue_tasks_query = overdue_tasks_query.join(
-            Surrogate,
-            and_(
-                Task.surrogate_id == Surrogate.id,
-                Surrogate.organization_id == org_id,
-            ),
-        )
-        task_filters.extend(
-            [
-                Surrogate.is_archived.is_(False),
-                *visibility_filters,
-            ]
-        )
-        overdue_tasks_query = overdue_tasks_query.join(
-            PipelineStage, Surrogate.stage_id == PipelineStage.id
-        )
-        task_filters.append(PipelineStage.pipeline_id == pipeline_id)
-    elif non_admin_visibility:
-        overdue_tasks_query = overdue_tasks_query.outerjoin(
-            Surrogate,
-            and_(
-                Task.surrogate_id == Surrogate.id,
-                Surrogate.organization_id == org_id,
-            ),
-        )
-        task_filters.append(
-            or_(
-                Task.surrogate_id.is_(None),
-                and_(
-                    Surrogate.id.is_not(None),
-                    Surrogate.is_archived.is_(False),
-                    *visibility_filters,
-                ),
-            )
-        )
-
-    overdue_results = (
-        overdue_tasks_query.filter(and_(*task_filters))
-        .order_by(Task.due_date.asc())
-        .limit(limit)
-        .all()
+    overdue_tasks_query = attention_queries.overdue_tasks(
+        db,
+        org_id,
+        today=today,
+        visibility_filters=visibility_filters,
+        effective_owner_id=effective_owner_id,
+        owner_only=owner_only,
+        pipeline_id=pipeline_id,
+        non_admin_visibility=user_role is not None and not _is_admin_role(user_role),
+        can_view_donors=can_view_donors,
+        scope_session=scope_session if scoped_v2 else None,
     )
+
+    overdue_results = overdue_tasks_query.limit(limit).all()
 
     overdue_donor_ids = {task.donor_id for task in overdue_results if task.donor_id}
     overdue_donors = (
@@ -527,76 +391,25 @@ def get_attention_items(
     if len(overdue_results) < limit:
         overdue_count = len(overdue_results)
     else:
-        overdue_count_query = db.query(func.count(Task.id))
-        if pipeline_id:
-            overdue_count_query = overdue_count_query.join(
-                Surrogate,
-                and_(
-                    Task.surrogate_id == Surrogate.id,
-                    Surrogate.organization_id == org_id,
-                ),
-            )
-            overdue_count_query = overdue_count_query.join(
-                PipelineStage, Surrogate.stage_id == PipelineStage.id
-            )
-        elif non_admin_visibility:
-            overdue_count_query = overdue_count_query.outerjoin(
-                Surrogate,
-                and_(
-                    Task.surrogate_id == Surrogate.id,
-                    Surrogate.organization_id == org_id,
-                ),
-            )
-
-        overdue_count = overdue_count_query.filter(and_(*task_filters)).scalar() or 0
+        overdue_count = (
+            overdue_tasks_query.order_by(None).with_entities(func.count(Task.id)).scalar() or 0
+        )
 
     # -------------------------------------------------------------------------
     # 3. Stuck Surrogates
     # Surrogates that haven't moved stages in X days (using status history)
     # -------------------------------------------------------------------------
     stuck_cutoff = now - timedelta(days=days_stuck)
-    latest_stage_change_subquery = (
-        db.query(
-            SurrogateStatusHistory.surrogate_id.label("surrogate_id"),
-            func.max(SurrogateStatusHistory.changed_at).label("last_change_at"),
-        )
-        .filter(
-            SurrogateStatusHistory.organization_id == org_id,
-            SurrogateStatusHistory.to_stage_id.is_not(None),
-        )
-        .group_by(SurrogateStatusHistory.surrogate_id)
-        .subquery()
+    stuck_query = attention_queries.stuck_surrogates(
+        db,
+        org_id,
+        cutoff=stuck_cutoff,
+        visibility_filters=visibility_filters,
+        owner_filters=owner_filters,
+        pipeline_id=pipeline_id,
     )
 
-    last_change_col = func.coalesce(
-        latest_stage_change_subquery.c.last_change_at,
-        Surrogate.created_at,
-    )
-    stuck_query = (
-        db.query(
-            Surrogate,
-            PipelineStage.label.label("stage_label"),
-            last_change_col.label("last_change"),
-        )
-        .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
-        .outerjoin(
-            latest_stage_change_subquery,
-            latest_stage_change_subquery.c.surrogate_id == Surrogate.id,
-        )
-        .filter(
-            Surrogate.organization_id == org_id,
-            Surrogate.is_archived.is_(False),
-            *attention_stuck_stage_filters(),
-            last_change_col < stuck_cutoff,
-            *visibility_filters,
-            *owner_filters,
-        )
-    )
-
-    if pipeline_id:
-        stuck_query = stuck_query.filter(PipelineStage.pipeline_id == pipeline_id)
-
-    stuck_results = stuck_query.order_by(last_change_col.asc()).limit(limit).all()
+    stuck_results = stuck_query.limit(limit).all()
 
     stuck_surrogates = []
     for surrogate, stage_label, last_change in stuck_results:
@@ -614,25 +427,9 @@ def get_attention_items(
     if len(stuck_results) < limit:
         stuck_count = len(stuck_results)
     else:
-        stuck_total_query = (
-            db.query(func.count(Surrogate.id))
-            .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
-            .outerjoin(
-                latest_stage_change_subquery,
-                latest_stage_change_subquery.c.surrogate_id == Surrogate.id,
-            )
-            .filter(
-                Surrogate.organization_id == org_id,
-                Surrogate.is_archived.is_(False),
-                *attention_stuck_stage_filters(),
-                last_change_col < stuck_cutoff,
-                *visibility_filters,
-                *owner_filters,
-            )
+        stuck_count = (
+            stuck_query.order_by(None).with_entities(func.count(Surrogate.id)).scalar() or 0
         )
-        if pipeline_id:
-            stuck_total_query = stuck_total_query.filter(PipelineStage.pipeline_id == pipeline_id)
-        stuck_count = stuck_total_query.scalar() or 0
 
     # -------------------------------------------------------------------------
     # 4. Stuck Donors
@@ -641,62 +438,16 @@ def get_attention_items(
     stuck_donors: list[dict] = []
     stuck_donor_count = 0
     if can_view_donors:
-        donor_owner_filters = []
-        if effective_owner_id:
-            donor_owner_filters = [
-                Donor.owner_type == OwnerType.USER.value,
-                Donor.owner_id == effective_owner_id,
-            ]
-        elif owner_only:
-            donor_owner_filters = [Donor.id.is_(None)]
-
-        latest_donor_stage_change = (
-            db.query(
-                DonorStatusHistory.donor_id.label("donor_id"),
-                func.max(DonorStatusHistory.effective_at).label("last_change_at"),
-            )
-            .filter(
-                DonorStatusHistory.organization_id == org_id,
-                DonorStatusHistory.new_stage_id.is_not(None),
-            )
-            .group_by(DonorStatusHistory.donor_id)
-            .subquery()
+        donor_stuck_query = attention_queries.stuck_donors(
+            db,
+            org_id,
+            cutoff=stuck_cutoff,
+            effective_owner_id=effective_owner_id,
+            owner_only=owner_only,
+            pipeline_id=pipeline_id,
+            scope_session=scope_session if scoped_v2 else None,
         )
-        donor_last_change_col = func.coalesce(
-            latest_donor_stage_change.c.last_change_at,
-            Donor.created_at,
-        )
-        donor_stuck_filters = [
-            Donor.organization_id == org_id,
-            Donor.is_archived.is_(False),
-            *attention_stuck_donor_stage_filters(org_id),
-            donor_last_change_col < stuck_cutoff,
-            *donor_owner_filters,
-        ]
-        if scoped_v2:
-            donor_stuck_filters.append(
-                record_scope_service.build_visibility_filter(db, scope_session, "donor")
-            )
-        if pipeline_id:
-            donor_stuck_filters.append(PipelineStage.pipeline_id == pipeline_id)
-
-        donor_stuck_query = (
-            db.query(
-                Donor,
-                PipelineStage.label.label("stage_label"),
-                donor_last_change_col.label("last_change"),
-            )
-            .join(PipelineStage, Donor.stage_id == PipelineStage.id)
-            .join(Pipeline, PipelineStage.pipeline_id == Pipeline.id)
-            .outerjoin(
-                latest_donor_stage_change,
-                latest_donor_stage_change.c.donor_id == Donor.id,
-            )
-            .filter(*donor_stuck_filters)
-        )
-        stuck_donor_results = (
-            donor_stuck_query.order_by(donor_last_change_col.asc()).limit(limit).all()
-        )
+        stuck_donor_results = donor_stuck_query.limit(limit).all()
         stuck_donors = [
             {
                 "id": str(donor.id),
@@ -710,14 +461,8 @@ def get_attention_items(
         ]
         stuck_donor_counts = {"egg": 0, "sperm": 0}
         count_rows = (
-            db.query(Donor.donor_type, func.count(Donor.id))
-            .join(PipelineStage, Donor.stage_id == PipelineStage.id)
-            .join(Pipeline, PipelineStage.pipeline_id == Pipeline.id)
-            .outerjoin(
-                latest_donor_stage_change,
-                latest_donor_stage_change.c.donor_id == Donor.id,
-            )
-            .filter(*donor_stuck_filters)
+            donor_stuck_query.order_by(None)
+            .with_entities(Donor.donor_type, func.count(Donor.id))
             .group_by(Donor.donor_type)
             .all()
         )
