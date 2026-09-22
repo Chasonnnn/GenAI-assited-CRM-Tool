@@ -66,7 +66,7 @@ export function PermissionWorkspace({ initialRole = "case_manager", initialTab =
         <div className="mx-auto w-full max-w-[1440px] px-5 py-7 sm:px-8 lg:px-10">
             <header className="flex flex-wrap items-center justify-between gap-x-8 gap-y-5">
                 <h1 className="text-3xl font-semibold tracking-tight text-[#45253f] dark:text-foreground">Permissions</h1>
-                <PermissionNavigation current={tab} capabilities={effective.data?.capabilities} showUpgrade={!activePolicy} disabled={dirty} onSelect={setTab} />
+                <PermissionNavigation current={tab} capabilities={effective.data?.capabilities} showUpgrade={effective.data?.policy_version === 1} disabled={dirty} onSelect={setTab} />
             </header>
             {tab === "check" && <div className="py-8"><PermissionAccessChecker /></div>}
             {tab === "upgrade" && <div className="py-8"><PermissionPolicyReview /></div>}
