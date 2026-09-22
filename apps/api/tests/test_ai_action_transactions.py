@@ -854,7 +854,12 @@ async def test_email_worker_requires_bound_approval(db_engine, queued_email, mon
                 organization_id=uuid4() if denial == "foreign_org" else job.organization_id,
                 payload=job.payload,
             )
-            with pytest.raises(ValueError, match="not found in job organization"):
+            error = (
+                "Organization not found"
+                if denial == "foreign_org"
+                else "not found in job organization"
+            )
+            with pytest.raises(ValueError, match=error):
                 await ai_email_service.process_email(db, forged)
         else:
             if denial == "unapproved":

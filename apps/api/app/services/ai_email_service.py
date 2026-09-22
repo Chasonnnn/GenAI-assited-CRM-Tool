@@ -16,6 +16,7 @@ from app.db.models import AIActionApproval, EmailLog, Job, User
 from app.services import (
     activity_service,
     ai_service,
+    ai_settings_service,
     audit_service,
     email_service,
     gmail_service,
@@ -23,6 +24,7 @@ from app.services import (
     membership_service,
     note_service,
     oauth_service,
+    permission_policy_service,
     permission_service,
     surrogate_service,
 )
@@ -202,6 +204,9 @@ def _finish_delivery(db: Session, approval: AIActionApproval, email: EmailLog) -
 async def process_email(db: Session, job: Job) -> None:
     """Job replay is safe: only a committed PENDING snapshot can initiate I/O."""
     org_id = job.organization_id
+    # Serialize activation and authorization before taking the approval row lock.
+    permission_policy_service.lock_configuration(db, org_id)
+    policy_v2 = permission_policy_service.is_enabled(db, org_id)
     approval, _, _ = ai_service.get_approval_with_conversation(
         db,
         UUID(job.payload["approval_id"]),
@@ -241,7 +246,16 @@ async def process_email(db: Session, job: Job) -> None:
         )
         surrogate = surrogate_service.get_surrogate(db, org_id, email.surrogate_id)
         error = None
-        if not {"approve_ai_actions", "edit_surrogates"}.issubset(permissions) or not surrogate:
+        required_permissions = (
+            {"approve_ai_actions", "view_surrogates", "send_email"}
+            if policy_v2
+            else {"approve_ai_actions", "edit_surrogates"}
+        )
+        if (
+            not required_permissions.issubset(permissions)
+            or not surrogate
+            or (policy_v2 and not ai_settings_service.is_org_ai_enabled(db, org_id))
+        ):
             error = "Email not sent: approval access is no longer available."
         else:
             try:
