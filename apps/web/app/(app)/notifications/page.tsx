@@ -20,6 +20,7 @@ import {
     CalendarIcon,
     ChevronDownIcon,
     ChevronUpIcon,
+    Loader2Icon,
 } from "lucide-react"
 import { useNotifications, useMarkRead, useMarkAllRead } from "@/lib/hooks/use-notifications"
 import { useNotificationSocket } from "@/lib/hooks/use-notification-socket"
@@ -181,6 +182,7 @@ export default function NotificationsPage() {
                     </div>
                     {unreadCount > 0 && (
                         <Button variant="outline" onClick={handleMarkAllRead} disabled={markAllRead.isPending}>
+                            {markAllRead.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" aria-hidden="true" />}
                             Mark all read
                         </Button>
                     )}
