@@ -18,7 +18,14 @@ from app.db.models import (
     Job,
     Surrogate,
 )
-from app.services import campaign_service
+from app.services import (
+    campaign_audience,
+    campaign_delivery_service,
+    campaign_execution_service,
+    campaign_run_service,
+    campaign_service,
+    campaign_suppression_service,
+)
 from app.utils.normalization import normalize_email
 
 
@@ -137,7 +144,7 @@ def test_campaign_enqueue_send_now_and_scheduled(monkeypatch, db, test_org, test
         lambda _db, _org_id: ("resend", {}),
     )
 
-    message, run_id, scheduled_at = campaign_service.enqueue_campaign_send(
+    message, run_id, scheduled_at = campaign_run_service.enqueue_campaign_send(
         db,
         org_id=test_org.id,
         campaign_id=campaign_now.id,
@@ -159,7 +166,7 @@ def test_campaign_enqueue_send_now_and_scheduled(monkeypatch, db, test_org, test
     assert queued_job is not None
     assert queued_job.status == JobStatus.PENDING.value
 
-    message, run_id, scheduled_at = campaign_service.enqueue_campaign_send(
+    message, run_id, scheduled_at = campaign_run_service.enqueue_campaign_send(
         db,
         org_id=test_org.id,
         campaign_id=campaign_later.id,
@@ -201,7 +208,7 @@ def test_execute_campaign_run_queues_versioned_immutable_recipient_delivery(
     )
     db.commit()
 
-    campaign_service.execute_campaign_run(
+    campaign_execution_service.execute_campaign_run(
         db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -290,7 +297,7 @@ def test_scheduled_campaign_queues_the_template_selected_at_schedule_time(
             ),
         ),
     )
-    _message, run_id, _scheduled_at = campaign_service.enqueue_campaign_send(
+    _message, run_id, _scheduled_at = campaign_run_service.enqueue_campaign_send(
         db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -319,7 +326,7 @@ def test_scheduled_campaign_queues_the_template_selected_at_schedule_time(
     template.current_version = 8
     db.commit()
 
-    campaign_service.execute_campaign_run(
+    campaign_execution_service.execute_campaign_run(
         db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -372,7 +379,7 @@ def test_campaign_run_rejects_a_snapshot_for_another_template(
         ValueError,
         match="Campaign email template snapshot does not match campaign",
     ):
-        campaign_service.execute_campaign_run(
+        campaign_execution_service.execute_campaign_run(
             db,
             org_id=test_org.id,
             campaign_id=campaign.id,
@@ -411,7 +418,7 @@ def test_campaign_retry_queue_and_cancel(monkeypatch, db, test_org, test_user):
 
     monkeypatch.setattr(Query, "count", _count_should_not_be_called)
 
-    msg, run_id, job_id, failed_count = campaign_service.enqueue_campaign_retry_failed(
+    msg, run_id, job_id, failed_count = campaign_run_service.enqueue_campaign_retry_failed(
         db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -423,7 +430,7 @@ def test_campaign_retry_queue_and_cancel(monkeypatch, db, test_org, test_user):
     assert job_id is not None
     assert failed_count == 1
 
-    msg, _, existing_job_id, _ = campaign_service.enqueue_campaign_retry_failed(
+    msg, _, existing_job_id, _ = campaign_run_service.enqueue_campaign_retry_failed(
         db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -449,7 +456,7 @@ def test_campaign_retry_queue_and_cancel(monkeypatch, db, test_org, test_user):
     engine = db.get_bind()
     sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
     try:
-        cancelled = campaign_service.cancel_campaign(db, test_org.id, campaign.id)
+        cancelled = campaign_run_service.cancel_campaign(db, test_org.id, campaign.id)
     finally:
         sqlalchemy_event.remove(engine, "before_cursor_execute", capture_sql)
     assert cancelled is True
@@ -584,7 +591,7 @@ def test_cancel_campaign_cancels_only_unleased_run_deliveries(
     older_recipient, older_log, older_delivery = queue_recipient(older_run, "older-run@example.com")
     db.commit()
 
-    assert campaign_service.cancel_campaign(db, test_org.id, campaign.id) is True
+    assert campaign_run_service.cancel_campaign(db, test_org.id, campaign.id) is True
     db.flush()
 
     for recipient, email_log, delivery in (
@@ -650,7 +657,7 @@ def test_campaign_recipient_delivery_eligibility_is_tenant_scoped_and_current(
     db.flush()
 
     assert (
-        campaign_service.is_campaign_recipient_delivery_eligible(
+        campaign_delivery_service.is_campaign_recipient_delivery_eligible(
             db,
             test_org.id,
             recipient.id,
@@ -658,7 +665,7 @@ def test_campaign_recipient_delivery_eligibility_is_tenant_scoped_and_current(
         is True
     )
     assert (
-        campaign_service.is_campaign_recipient_delivery_eligible(
+        campaign_delivery_service.is_campaign_recipient_delivery_eligible(
             db,
             uuid4(),
             recipient.id,
@@ -669,7 +676,7 @@ def test_campaign_recipient_delivery_eligibility_is_tenant_scoped_and_current(
     campaign.status = CampaignStatus.CANCELLED.value
     db.flush()
     assert (
-        campaign_service.is_campaign_recipient_delivery_eligible(
+        campaign_delivery_service.is_campaign_recipient_delivery_eligible(
             db,
             test_org.id,
             recipient.id,
@@ -786,7 +793,7 @@ def test_campaign_delivery_success_projection_is_atomic_and_monotonic(
     sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
     sent_at = datetime(2026, 7, 23, 12, 0, tzinfo=UTC)
     try:
-        projected = campaign_service.project_campaign_recipient_delivery(
+        projected = campaign_delivery_service.project_campaign_recipient_delivery(
             db,
             organization_id=test_org.id,
             email_log_id=email_log.id,
@@ -829,7 +836,7 @@ def test_campaign_delivery_success_projection_is_atomic_and_monotonic(
     recipient.status = CampaignRecipientStatus.DELIVERED.value
     db.flush()
     assert (
-        campaign_service.project_campaign_recipient_delivery(
+        campaign_delivery_service.project_campaign_recipient_delivery(
             db,
             organization_id=test_org.id,
             email_log_id=email_log.id,
@@ -885,7 +892,7 @@ def test_campaign_delivery_failure_projection_is_tenant_scoped(
     db.flush()
 
     assert (
-        campaign_service.project_campaign_recipient_delivery(
+        campaign_delivery_service.project_campaign_recipient_delivery(
             db,
             organization_id=uuid4(),
             email_log_id=email_log.id,
@@ -898,7 +905,7 @@ def test_campaign_delivery_failure_projection_is_tenant_scoped(
     assert recipient.status == CampaignRecipientStatus.PENDING.value
 
     assert (
-        campaign_service.project_campaign_recipient_delivery(
+        campaign_delivery_service.project_campaign_recipient_delivery(
             db,
             organization_id=test_org.id,
             email_log_id=email_log.id,
@@ -977,7 +984,7 @@ def test_campaign_delivery_skipped_projection_does_not_regress_delivered_recipie
     db.flush()
 
     assert (
-        campaign_service.project_campaign_recipient_delivery(
+        campaign_delivery_service.project_campaign_recipient_delivery(
             db,
             organization_id=test_org.id,
             email_log_id=suppressed_log.id,
@@ -992,7 +999,7 @@ def test_campaign_delivery_skipped_projection_does_not_regress_delivered_recipie
     assert suppressed_recipient.error is None
 
     assert (
-        campaign_service.project_campaign_recipient_delivery(
+        campaign_delivery_service.project_campaign_recipient_delivery(
             db,
             organization_id=test_org.id,
             email_log_id=delivered_log.id,
@@ -1088,7 +1095,7 @@ def test_concurrent_campaign_delivery_projections_finalize_consistently(db_engin
         try:
             ready.wait(timeout=5)
             assert (
-                campaign_service.project_campaign_recipient_delivery(
+                campaign_delivery_service.project_campaign_recipient_delivery(
                     session,
                     organization_id=organization_id,
                     email_log_id=email_log_id,
@@ -1187,7 +1194,7 @@ def test_recompute_campaign_run_aggregates_finalizes_from_recipient_truth(
     db.flush()
 
     assert (
-        campaign_service.recompute_campaign_run_aggregates(
+        campaign_delivery_service.recompute_campaign_run_aggregates(
             db,
             organization_id=test_org.id,
             run_id=run.id,
@@ -1214,7 +1221,7 @@ def test_recompute_campaign_run_aggregates_finalizes_from_recipient_truth(
     completed_at = run.completed_at
 
     assert (
-        campaign_service.recompute_campaign_run_aggregates(
+        campaign_delivery_service.recompute_campaign_run_aggregates(
             db,
             organization_id=test_org.id,
             run_id=run.id,
@@ -1280,14 +1287,16 @@ def test_execute_campaign_run_with_duplicates_and_suppression(
             return len(self._rows)
 
     monkeypatch.setattr(
-        campaign_service,
-        "_build_recipient_query",
+        campaign_audience,
+        "build_recipient_query",
         lambda session, org_id, recipient_type, filters, **kwargs: _FakeQuery(recipients),
     )
-    monkeypatch.setattr(campaign_service, "_load_existing_recipients", lambda *args, **kwargs: {})
     monkeypatch.setattr(
-        campaign_service,
-        "_load_suppressed_emails",
+        campaign_execution_service, "_load_existing_recipients", lambda *args, **kwargs: {}
+    )
+    monkeypatch.setattr(
+        campaign_suppression_service,
+        "load_suppressed_emails",
         lambda *args, **kwargs: {"suppressed@example.com"},
     )
     monkeypatch.setattr(
@@ -1343,7 +1352,7 @@ def test_execute_campaign_run_with_duplicates_and_suppression(
 
     monkeypatch.setattr("app.services.email_service.send_email", _send_email)
 
-    result = campaign_service.execute_campaign_run(
+    result = campaign_execution_service.execute_campaign_run(
         db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -1377,7 +1386,7 @@ def test_execute_campaign_run_completed_short_circuit(db, test_org, test_user):
     run.total_count = 3
     db.commit()
 
-    result = campaign_service.execute_campaign_run(
+    result = campaign_execution_service.execute_campaign_run(
         db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -1411,7 +1420,7 @@ def test_execute_campaign_run_does_not_revive_concurrently_cancelled_campaign(
     run.completed_at = datetime.now(UTC)
     db.commit()
 
-    result = campaign_service.execute_campaign_run(
+    result = campaign_execution_service.execute_campaign_run(
         db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -1465,7 +1474,9 @@ def test_retry_failed_campaign_run_updates_recipients(
     db.add(failed_recipient)
     db.commit()
 
-    monkeypatch.setattr(campaign_service, "_load_suppressed_emails", lambda *args, **kwargs: set())
+    monkeypatch.setattr(
+        campaign_suppression_service, "load_suppressed_emails", lambda *args, **kwargs: set()
+    )
     monkeypatch.setattr(
         "app.services.org_service.get_org_by_id",
         lambda *_args, **_kwargs: SimpleNamespace(slug="acme"),
@@ -1515,7 +1526,7 @@ def test_retry_failed_campaign_run_updates_recipients(
 
     monkeypatch.setattr("app.services.email_service.send_email", _send_email)
 
-    result = campaign_service.retry_failed_campaign_run(
+    result = campaign_execution_service.retry_failed_campaign_run(
         db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -1570,8 +1581,10 @@ def test_retry_failed_campaign_run_bulk_loads_entities_in_bounded_batches(
     )
     db.commit()
 
-    monkeypatch.setattr(campaign_service, "CAMPAIGN_SEND_BATCH_SIZE", 2)
-    monkeypatch.setattr(campaign_service, "_load_suppressed_emails", lambda *args, **kwargs: set())
+    monkeypatch.setattr(campaign_execution_service, "CAMPAIGN_SEND_BATCH_SIZE", 2)
+    monkeypatch.setattr(
+        campaign_suppression_service, "load_suppressed_emails", lambda *args, **kwargs: set()
+    )
     monkeypatch.setattr(
         "app.services.org_service.get_org_by_id",
         lambda *_args, **_kwargs: SimpleNamespace(slug="acme"),
@@ -1589,7 +1602,7 @@ def test_retry_failed_campaign_run_bulk_loads_entities_in_bounded_batches(
     engine = db.get_bind()
     sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
     try:
-        result = campaign_service.retry_failed_campaign_run(
+        result = campaign_execution_service.retry_failed_campaign_run(
             db,
             org_id=test_org.id,
             campaign_id=campaign.id,
@@ -1661,7 +1674,7 @@ def test_retry_failed_campaign_run_does_not_revive_concurrently_cancelled_campai
     db.add(recipient)
     db.commit()
 
-    result = campaign_service.retry_failed_campaign_run(
+    result = campaign_execution_service.retry_failed_campaign_run(
         db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -1755,7 +1768,7 @@ def test_retry_failed_campaign_recipient_advances_revision_and_keeps_prior_messa
     recipient.email_log_id = prior_log.id
     db.commit()
 
-    result = campaign_service.retry_failed_campaign_run(
+    result = campaign_execution_service.retry_failed_campaign_run(
         db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -1819,11 +1832,11 @@ def test_campaign_run_listing_helpers(db, test_org, test_user):
     db.add(recipient)
     db.commit()
 
-    runs = campaign_service.list_campaign_runs(db, test_org.id, campaign.id)
+    runs = campaign_run_service.list_campaign_runs(db, test_org.id, campaign.id)
     assert len(runs) == 1
-    loaded_run = campaign_service.get_campaign_run(db, test_org.id, run.id)
+    loaded_run = campaign_run_service.get_campaign_run(db, test_org.id, run.id)
     assert loaded_run is not None
-    recipients = campaign_service.list_run_recipients(db, run.id)
+    recipients = campaign_run_service.list_run_recipients(db, run.id)
     assert len(recipients) == 1
-    latest = campaign_service.get_latest_run_for_campaign(db, campaign.id)
+    latest = campaign_run_service.get_latest_run_for_campaign(db, campaign.id)
     assert latest is not None

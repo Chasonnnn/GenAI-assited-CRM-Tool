@@ -15,7 +15,7 @@ from app.core.security import create_session_token
 from app.db.enums import Role
 from app.db.models import Membership, User, UserPermissionOverride
 from app.main import app
-from app.services import session_service
+from app.services import campaign_execution_service, campaign_run_service, session_service
 
 
 @pytest.fixture(autouse=True)
@@ -241,7 +241,7 @@ def test_messaging_campaign_materializes_promotional_outbox_occurrence(
     )
     db.commit()
 
-    _message, run_id, _scheduled_at = campaign_service.enqueue_campaign_send(
+    _message, run_id, _scheduled_at = campaign_run_service.enqueue_campaign_send(
         db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -249,7 +249,7 @@ def test_messaging_campaign_materializes_promotional_outbox_occurrence(
         send_now=True,
     )
     assert run_id is not None
-    campaign_service.execute_campaign_run(
+    campaign_execution_service.execute_campaign_run(
         db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -311,14 +311,14 @@ def test_messaging_campaign_rejects_stale_contact_after_entity_phone_changes(
     )
     db.commit()
 
-    _message, run_id, _scheduled_at = campaign_service.enqueue_campaign_send(
+    _message, run_id, _scheduled_at = campaign_run_service.enqueue_campaign_send(
         db,
         org_id=test_org.id,
         campaign_id=campaign.id,
         user_id=test_user.id,
         send_now=True,
     )
-    campaign_service.execute_campaign_run(
+    campaign_execution_service.execute_campaign_run(
         db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -329,7 +329,10 @@ def test_messaging_campaign_rejects_stale_contact_after_entity_phone_changes(
     recipient = db.query(CampaignRecipient).filter(CampaignRecipient.run_id == run_id).one()
     assert recipient.status == "skipped"
     assert recipient.skip_reason == "consent_unknown"
-    assert db.query(MessageDelivery).filter(MessageDelivery.organization_id == test_org.id).count() == 0
+    assert (
+        db.query(MessageDelivery).filter(MessageDelivery.organization_id == test_org.id).count()
+        == 0
+    )
 
 
 async def test_messaging_campaign_retry_stays_in_durable_outbox(
@@ -599,4 +602,7 @@ def test_send_message_workflow_rejects_stale_contact_after_entity_phone_changes(
         "error": "No consented messaging contact resolved",
         "skipped": True,
     }
-    assert db.query(MessageDelivery).filter(MessageDelivery.organization_id == test_org.id).count() == 0
+    assert (
+        db.query(MessageDelivery).filter(MessageDelivery.organization_id == test_org.id).count()
+        == 0
+    )

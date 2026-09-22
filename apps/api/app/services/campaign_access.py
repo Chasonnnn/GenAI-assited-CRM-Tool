@@ -41,7 +41,7 @@ def get_policy_execution_snapshot(db, org_id) -> list[dict]:
 
 
 def apply_policy_execution_resolutions(db, org_id, actor_user_id, resolutions) -> None:
-    from app.services import campaign_service
+    from app.services import campaign_run_service
 
     for resolution in resolutions:
         item = resolution.model_dump() if hasattr(resolution, "model_dump") else resolution
@@ -49,7 +49,7 @@ def apply_policy_execution_resolutions(db, org_id, actor_user_id, resolutions) -
             continue
         if item.get("action") != "pause":
             raise ValueError("Unknown campaign migration resolution")
-        if not campaign_service.cancel_campaign(db, org_id, item["id"]):
+        if not campaign_run_service.cancel_campaign(db, org_id, item["id"]):
             raise ValueError("Campaign changed; refresh permission preview")
         audit_service.log_event(
             db,
@@ -353,15 +353,16 @@ def apply_audience(
 
 
 def recipient_allowed(db, campaign, run, entity_id):
+    from app.services import campaign_audience
+
     if not enabled(db, campaign.organization_id):
         return True
     if not run_authorized(db, campaign, run):
         return False
-    from app.services import campaign_service
 
-    model = campaign_service._recipient_entity_model(campaign.recipient_type)
+    model = campaign_audience.recipient_entity_model(campaign.recipient_type)
     return (
-        campaign_service._build_recipient_query(
+        campaign_audience.build_recipient_query(
             db,
             campaign.organization_id,
             campaign.recipient_type,
@@ -412,73 +413,3 @@ def validate_template_scope(db, campaign):
         and (campaign.scope != "personal" or template.owner_user_id != campaign.owner_user_id)
     ):
         raise ValueError("Campaign template is outside its ownership scope")
-
-
-def publish_campaign(db, campaign, actor_user_id):
-    from copy import deepcopy
-
-    from app.schemas.campaign import CampaignCreate
-    from app.services import campaign_service, email_template_publication, permission_policy_service
-    from app.services.workflow_execution_authority import active_session
-
-    permission_policy_service.lock_configuration(db, campaign.organization_id)
-    actor = active_session(db, campaign.organization_id, actor_user_id)
-    if (
-        not enabled(db, campaign.organization_id)
-        or actor is None
-        or campaign.scope != "personal"
-        or not can_manage(db, actor, campaign)
-        or not can_create(db, actor, "org")
-    ):
-        raise ValueError("Cannot publish this campaign")
-    with db.begin_nested():
-        template_id = campaign.email_template_id
-        if campaign.channel == "email":
-            validate_template_scope(db, campaign)
-            template_id = email_template_publication.publish_template_to_org(
-                db,
-                org_id=campaign.organization_id,
-                template_id=template_id,
-                actor_user_id=actor_user_id,
-            ).id
-        base_name = campaign.name[:170] + " (Published)"
-        name, counter = base_name, 1
-        while (
-            db.query(Campaign.id)
-            .filter(
-                Campaign.organization_id == campaign.organization_id,
-                Campaign.scope == "org",
-                Campaign.name == name,
-            )
-            .first()
-        ):
-            counter += 1
-            name = f"{base_name} {counter}"
-        published = campaign_service.create_campaign(
-            db,
-            campaign.organization_id,
-            actor_user_id,
-            CampaignCreate(
-                name=name,
-                description=campaign.description,
-                scope="org",
-                channel=campaign.channel,
-                email_template_id=template_id,
-                message_template_version_id=campaign.message_template_version_id,
-                recipient_type=campaign.recipient_type,
-                filter_criteria=deepcopy(campaign.filter_criteria),
-                include_unsubscribed=campaign.include_unsubscribed,
-            ),
-        )
-        proposer_id = campaign.proposed_by_user_id or campaign.owner_user_id
-        from app.db.models import User
-
-        proposer = db.get(User, proposer_id) if proposer_id else None
-        published.proposed_by_user_id = proposer_id
-        published.proposed_by_name = campaign.proposed_by_name or (
-            proposer.display_name if proposer else None
-        )
-        audit(db, published, actor_user_id, "publish")
-        audit(db, campaign, actor_user_id, "publish_source")
-        db.flush()
-    return published

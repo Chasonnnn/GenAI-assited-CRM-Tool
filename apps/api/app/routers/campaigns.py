@@ -29,7 +29,14 @@ from app.schemas.campaign import (
     SuppressionCreate,
     SuppressionResponse,
 )
-from app.services import campaign_access, campaign_service, permission_service
+from app.services import (
+    campaign_access,
+    campaign_audience,
+    campaign_run_service,
+    campaign_service,
+    campaign_suppression_service,
+    permission_service,
+)
 
 csrf_header_dependency = require_csrf_header
 
@@ -310,7 +317,7 @@ def preview_filters(
     # Convert FilterCriteria to dict for service call
     filter_dict = data.filter_criteria.model_dump(exclude_none=True) if data.filter_criteria else {}
 
-    return campaign_service.preview_recipients(
+    return campaign_audience.preview_recipients(
         db,
         org_id=session.org_id,
         recipient_type=data.recipient_type,
@@ -340,7 +347,7 @@ def preview_recipients(
         _require_messaging_operator(session, db)
     _require_donor_recipient_access(db, session, campaign.recipient_type)
 
-    return campaign_service.preview_recipients(
+    return campaign_audience.preview_recipients(
         db,
         org_id=session.org_id,
         recipient_type=campaign.recipient_type,
@@ -386,7 +393,7 @@ def send_campaign(
     )
 
     try:
-        message, run_id, scheduled_at = campaign_service.enqueue_campaign_send(
+        message, run_id, scheduled_at = campaign_run_service.enqueue_campaign_send(
             db,
             org_id=session.org_id,
             campaign_id=campaign_id,
@@ -425,7 +432,7 @@ def cancel_campaign(
         )
     if campaign is not None:
         campaign_access.audit(db, campaign, session.user_id, "cancel")
-    cancelled = campaign_service.cancel_campaign(db, session.org_id, campaign_id)
+    cancelled = campaign_run_service.cancel_campaign(db, session.org_id, campaign_id)
     if not cancelled:
         raise HTTPException(
             status_code=400,
@@ -453,7 +460,7 @@ def list_campaign_runs(
         raise HTTPException(status_code=404, detail="Campaign not found")
     _require_access(db, session, campaign, "view")
     _require_donor_recipient_access(db, session, campaign.recipient_type)
-    return campaign_service.list_campaign_runs(
+    return campaign_run_service.list_campaign_runs(
         db, org_id=session.org_id, campaign_id=campaign_id, limit=limit, viewer_session=session
     )
 
@@ -466,7 +473,7 @@ def get_campaign_run(
     session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get run details with recipients."""
-    run = campaign_service.get_campaign_run(db, session.org_id, run_id)
+    run = campaign_run_service.get_campaign_run(db, session.org_id, run_id)
     if not run or run.campaign_id != campaign_id:
         raise HTTPException(status_code=404, detail="Run not found")
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
@@ -475,7 +482,7 @@ def get_campaign_run(
     _require_access(db, session, campaign, "view")
     _require_donor_recipient_access(db, session, campaign.recipient_type)
 
-    return campaign_service.campaign_run_response(db, run, session)
+    return campaign_run_service.campaign_run_response(db, run, session)
 
 
 @router.post(
@@ -504,7 +511,7 @@ def retry_failed_campaign_run(
         )
     try:
         message, resolved_run_id, job_id, failed_count = (
-            campaign_service.enqueue_campaign_retry_failed(
+            campaign_run_service.enqueue_campaign_retry_failed(
                 db=db,
                 org_id=session.org_id,
                 campaign_id=campaign_id,
@@ -537,7 +544,7 @@ def list_run_recipients(
     session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """List recipients for a campaign run."""
-    run = campaign_service.get_campaign_run(db, session.org_id, run_id)
+    run = campaign_run_service.get_campaign_run(db, session.org_id, run_id)
     if not run or run.campaign_id != campaign_id:
         raise HTTPException(status_code=404, detail="Run not found")
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
@@ -546,7 +553,7 @@ def list_run_recipients(
     _require_access(db, session, campaign, "view")
     _require_donor_recipient_access(db, session, campaign.recipient_type)
 
-    recipients = campaign_service.list_run_recipients(
+    recipients = campaign_run_service.list_run_recipients(
         db=db,
         run_id=run_id,
         status=status,
@@ -576,7 +583,7 @@ def list_suppressions(
         db, session, "manage_org_campaigns"
     ):
         raise HTTPException(status_code=403, detail="Cannot manage organization suppression")
-    items, total = campaign_service.list_suppressions(
+    items, total = campaign_suppression_service.list_suppressions(
         db, org_id=session.org_id, limit=limit, offset=offset
     )
     return [SuppressionResponse.model_validate(s) for s in items]
@@ -598,7 +605,7 @@ def add_suppression(
         db, session, "manage_org_campaigns"
     ):
         raise HTTPException(status_code=403, detail="Cannot manage organization suppression")
-    suppression = campaign_service.add_to_suppression(
+    suppression = campaign_suppression_service.add_to_suppression(
         db, org_id=session.org_id, email=data.email, reason=data.reason
     )
     db.commit()
@@ -617,7 +624,7 @@ def remove_suppression(
         db, session, "manage_org_campaigns"
     ):
         raise HTTPException(status_code=403, detail="Cannot manage organization suppression")
-    removed = campaign_service.remove_from_suppression(db, session.org_id, email)
+    removed = campaign_suppression_service.remove_from_suppression(db, session.org_id, email)
     if not removed:
         raise HTTPException(status_code=404, detail="Email not found in suppression list")
     db.commit()
@@ -645,7 +652,7 @@ def publish_campaign(
     if not campaign_access.can_create(db, session, "org"):
         raise HTTPException(status_code=403, detail="Cannot publish organization campaigns")
     try:
-        published = campaign_access.publish_campaign(db, campaign, session.user_id)
+        published = campaign_service.publish_campaign(db, campaign, session.user_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     db.commit()
@@ -655,11 +662,11 @@ def publish_campaign(
 def _campaign_to_response(db: Session, campaign, session=None) -> CampaignResponse:
     """Convert campaign model to response with stats."""
     # Get latest run stats
-    latest_run = campaign_service.get_latest_run_for_campaign(
+    latest_run = campaign_run_service.get_latest_run_for_campaign(
         db, campaign.id, org_id=campaign.organization_id
     )
     if latest_run is not None:
-        latest_run = campaign_service.campaign_run_response(db, latest_run, session)
+        latest_run = campaign_run_service.campaign_run_response(db, latest_run, session)
 
     return CampaignResponse(
         scope=campaign.scope,

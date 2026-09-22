@@ -181,9 +181,9 @@ def _raise_if_source_ineligible(db: Session, delivery: EmailDelivery) -> None:
     elif email_log.source_type == "campaign_recipient":
         if email_log.source_id is None:
             raise DeliveryConfigurationError("Campaign recipient delivery source is missing")
-        from app.services import campaign_service
+        from app.services import campaign_delivery_service
 
-        if not campaign_service.is_campaign_recipient_delivery_eligible(
+        if not campaign_delivery_service.is_campaign_recipient_delivery_eligible(
             db,
             delivery.organization_id,
             email_log.source_id,

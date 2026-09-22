@@ -75,9 +75,9 @@ def _require_current_lease(
     lease_token: UUID,
     lease_generation: int,
 ) -> MessageDelivery:
-    from app.services import campaign_service
+    from app.services import campaign_delivery_service
 
-    campaign_service.lock_campaign_run_for_message_delivery(
+    campaign_delivery_service.lock_campaign_run_for_message_delivery(
         db, organization_id=organization_id, message_delivery_id=delivery_id
     )
     delivery = db.execute(
@@ -127,9 +127,9 @@ def _project_campaign_delivery(
     provider_message_id: str | None = None,
     error: str | None = None,
 ) -> None:
-    from app.services import campaign_service
+    from app.services import campaign_delivery_service
 
-    campaign_service.project_campaign_message_delivery(
+    campaign_delivery_service.project_campaign_message_delivery(
         db,
         organization_id=delivery.organization_id,
         message_delivery_id=delivery.id,

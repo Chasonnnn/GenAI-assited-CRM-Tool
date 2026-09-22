@@ -21,7 +21,7 @@ from app.db.models import (
     Surrogate,
 )
 from app.db.models.permission_policy import OrganizationPermissionPolicy
-from app.services import campaign_service, pipeline_service
+from app.services import campaign_audience, campaign_run_service, campaign_service, pipeline_service
 from app.services.workflow_execution_authority import active_session
 
 
@@ -162,7 +162,7 @@ async def test_preview_filters_before_sampling_and_counts_only_visible_audience(
     assert unsaved.status_code == 200, unsaved.text
     assert unsaved.json() == response.json()
     # The execution query still contains the complete organization audience.
-    execution = campaign_service._build_recipient_query(
+    execution = campaign_audience.build_recipient_query(
         db, a.org.id, a.recipient_type, {}, campaign=a.campaign
     )
     assert execution.count() == 3
@@ -254,7 +254,7 @@ def test_run_statistics_batch_query_and_recipient_tenant_boundary(db, audience):
     connection = db.connection()
     event.listen(connection, "before_cursor_execute", record_query)
     try:
-        counts = campaign_service.viewer_run_statistics(
+        counts = campaign_run_service.viewer_run_statistics(
             db, a.org.id, [a.run.id, second_run.id], viewer
         )
     finally:
@@ -263,14 +263,16 @@ def test_run_statistics_batch_query_and_recipient_tenant_boundary(db, audience):
     assert counts[a.run.id]["total_count"] == 2
     assert counts[second_run.id]["total_count"] == 1
     assert counts[a.run.id]["delivered_count"] == 0
-    rows = campaign_service.list_run_recipients(
+    rows = campaign_run_service.list_run_recipients(
         db, a.run.id, org_id=a.org.id, viewer_session=viewer
     )
     assert {row.entity_id for row in rows} == {record.id for record in a.records[:2]}
     a.member.is_active = False
     db.flush()
     assert (
-        campaign_service.list_run_recipients(db, a.run.id, org_id=a.org.id, viewer_session=viewer)
+        campaign_run_service.list_run_recipients(
+            db, a.run.id, org_id=a.org.id, viewer_session=viewer
+        )
         == []
     )
-    assert campaign_service.viewer_run_statistics(db, a.org.id, [a.run.id], viewer) == {}
+    assert campaign_run_service.viewer_run_statistics(db, a.org.id, [a.run.id], viewer) == {}

@@ -20,7 +20,13 @@ from app.db.models import (
 from app.db.models.permission_policy import OrganizationPermissionPolicy
 from app.db.models.record_access import RecordCollaborator, RoleRecordScope
 from app.schemas.campaign import CampaignCreate
-from app.services import campaign_access, campaign_service
+from app.services import (
+    campaign_access,
+    campaign_audience,
+    campaign_delivery_service,
+    campaign_run_service,
+    campaign_service,
+)
 from app.services.workflow_execution_authority import active_session
 
 
@@ -100,7 +106,7 @@ def staff(db, org):
 
 
 def enqueue(db, campaign, user):
-    _, run_id, _ = campaign_service.enqueue_campaign_send(
+    _, run_id, _ = campaign_run_service.enqueue_campaign_send(
         db, campaign.organization_id, campaign.id, user.id
     )
     db.flush()
@@ -151,7 +157,7 @@ def test_saved_and_unsaved_personal_preview_only_assigned_or_collaborator(setup,
     org, admin, template, record = setup
     owner, membership = staff(db, org)
     campaign = create(db, org, owner, template)
-    empty = campaign_service.preview_recipients(db, org.id, "case", {}, campaign=campaign)
+    empty = campaign_audience.preview_recipients(db, org.id, "case", {}, campaign=campaign)
     assert empty.total_count == 0
     link = RecordCollaborator(
         organization_id=org.id,
@@ -162,8 +168,8 @@ def test_saved_and_unsaved_personal_preview_only_assigned_or_collaborator(setup,
     )
     db.add(link)
     db.flush()
-    saved = campaign_service.preview_recipients(db, org.id, "case", {}, campaign=campaign)
-    unsaved = campaign_service.preview_recipients(
+    saved = campaign_audience.preview_recipients(db, org.id, "case", {}, campaign=campaign)
+    unsaved = campaign_audience.preview_recipients(
         db, org.id, "case", {}, scope="personal", owner_user_id=owner.id
     )
     assert saved.total_count == unsaved.total_count == 1
@@ -178,7 +184,7 @@ def test_org_send_survives_original_actor_departure(setup, db):
     db.query(Membership).filter_by(organization_id=org.id, user_id=actor.id).one().is_active = False
     db.flush()
     assert campaign_access.run_authorized(db, campaign, run)
-    assert campaign_service.is_campaign_recipient_delivery_eligible(db, org.id, row.id)
+    assert campaign_delivery_service.is_campaign_recipient_delivery_eligible(db, org.id, row.id)
 
 
 def test_personal_delivery_stops_on_owner_deactivation_and_counts_skip(setup, db):
@@ -188,7 +194,7 @@ def test_personal_delivery_stops_on_owner_deactivation_and_counts_skip(setup, db
     row = recipient(db, run, record)
     db.query(Membership).filter_by(organization_id=org.id, user_id=owner.id).one().is_active = False
     db.flush()
-    assert not campaign_service.is_campaign_recipient_delivery_eligible(db, org.id, row.id)
+    assert not campaign_delivery_service.is_campaign_recipient_delivery_eligible(db, org.id, row.id)
     assert row.status == "skipped" and row.skip_reason == "permission_revoked"
     assert run.skipped_count == 1
 
@@ -198,10 +204,10 @@ def test_personal_delivery_rechecks_assignment_after_materialization(setup, db):
     campaign = create(db, org, owner, template)
     run = enqueue(db, campaign, owner)
     row = recipient(db, run, record)
-    assert campaign_service.is_campaign_recipient_delivery_eligible(db, org.id, row.id)
+    assert campaign_delivery_service.is_campaign_recipient_delivery_eligible(db, org.id, row.id)
     record.owner_id = uuid4()
     db.flush()
-    assert not campaign_service.is_campaign_recipient_delivery_eligible(db, org.id, row.id)
+    assert not campaign_delivery_service.is_campaign_recipient_delivery_eligible(db, org.id, row.id)
     assert row.status == "skipped"
 
 
@@ -212,7 +218,7 @@ def test_campaign_snapshot_cannot_cross_organizations(setup, db):
     row = recipient(db, run, record)
     run.authority_snapshot = {**run.authority_snapshot, "organization_id": str(uuid4())}
     db.flush()
-    assert not campaign_service.is_campaign_recipient_delivery_eligible(db, org.id, row.id)
+    assert not campaign_delivery_service.is_campaign_recipient_delivery_eligible(db, org.id, row.id)
 
 
 def test_publish_campaign_copies_personal_template_and_retains_credit(setup, db):
@@ -220,7 +226,7 @@ def test_publish_campaign_copies_personal_template_and_retains_credit(setup, db)
     template.scope, template.owner_user_id = "personal", owner.id
     db.flush()
     campaign = create(db, org, owner, template)
-    published = campaign_access.publish_campaign(db, campaign, owner.id)
+    published = campaign_service.publish_campaign(db, campaign, owner.id)
     copied_template = db.get(EmailTemplate, published.email_template_id)
     assert published.id != campaign.id and published.scope == "org"
     assert published.owner_user_id is None and published.status == "draft"
@@ -243,7 +249,7 @@ def test_publish_failure_rolls_back_template_copy(setup, db, monkeypatch):
         lambda *_a, **_kw: (_ for _ in ()).throw(ValueError("Publication failed")),
     )
     with pytest.raises(ValueError, match="Publication failed"):
-        campaign_access.publish_campaign(db, campaign, owner.id)
+        campaign_service.publish_campaign(db, campaign, owner.id)
     assert db.query(EmailTemplate).filter_by(organization_id=org.id).count() == before
 
 

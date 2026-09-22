@@ -5,6 +5,8 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 
+from app.services import campaign_suppression_service
+
 
 def _configure_org_resend(db, test_org, test_user) -> None:
     from app.services import resend_settings_service
@@ -456,7 +458,7 @@ async def test_send_email_suppressed_returns_error(
     """Suppressed recipients should be skipped before provider selection."""
     from app.db.enums import SurrogateSource
     from app.schemas.surrogate import SurrogateCreate
-    from app.services import campaign_service, email_service, surrogate_service
+    from app.services import email_service, surrogate_service
 
     case_data = SurrogateCreate(
         full_name="Suppressed Case",
@@ -474,7 +476,7 @@ async def test_send_email_suppressed_returns_error(
         body="<p>Welcome {{full_name}}!</p>",
     )
 
-    campaign_service.add_to_suppression(
+    campaign_suppression_service.add_to_suppression(
         db,
         org_id=test_org.id,
         email="suppressed@example.com",

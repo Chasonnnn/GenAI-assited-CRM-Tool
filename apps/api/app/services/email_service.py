@@ -837,9 +837,9 @@ def is_email_suppressed(
     email_norm = normalize_email(recipient_email) or ""
     if not email_norm:
         return False
-    from app.services import campaign_service
+    from app.services import campaign_suppression_service
 
-    return campaign_service.is_email_suppressed(
+    return campaign_suppression_service.is_email_suppressed(
         db, org_id, email_norm, ignore_opt_out=ignore_opt_out
     )
 
