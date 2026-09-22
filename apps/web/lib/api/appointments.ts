@@ -141,6 +141,7 @@ export interface Appointment {
     intended_parent_name: string | null;
     created_at: string;
     updated_at: string;
+    scheduling?: AppointmentScheduling;
 }
 
 export interface AppointmentListItem {
@@ -169,6 +170,40 @@ export interface AppointmentListItem {
     intended_parent_id: string | null;
     intended_parent_name: string | null;
     created_at: string;
+    scheduling?: AppointmentScheduling;
+}
+
+export type GoogleSyncState = 'pending' | 'completed' | 'failed' | 'conflict' | 'unlinked' | null;
+
+export interface AppointmentSchedulingCapabilities {
+    can_reschedule: boolean;
+    can_cancel: boolean;
+    can_retry_google_sync: boolean;
+    can_resolve_google_conflict: boolean;
+}
+
+export interface AppointmentGoogleSync {
+    state: GoogleSyncState;
+    linked: boolean;
+    error_code: string | null;
+    conflict: Record<string, unknown> | null;
+}
+
+export interface AppointmentScheduling {
+    revision: number;
+    capabilities: AppointmentSchedulingCapabilities;
+    google_sync: AppointmentGoogleSync;
+}
+
+export type SchedulingMutationOptions = {
+    expectedRevision?: number | undefined;
+    requestId?: string | undefined;
+    overrideAvailability?: boolean | undefined;
+    overrideReason?: string | undefined;
+}
+
+export function createSchedulingRequestId() {
+    return globalThis.crypto?.randomUUID?.() ?? `scheduling-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 export interface AppointmentListResponse {
@@ -212,6 +247,10 @@ export interface BookingCreate {
     client_notes?: string;
     idempotency_key?: string;
     meeting_mode?: MeetingMode;
+    expected_revision?: number;
+    request_id?: string;
+    override_availability?: boolean;
+    override_reason?: string | null;
 }
 
 export interface PublicAppointmentView {
@@ -231,6 +270,8 @@ export interface PublicAppointmentView {
     cancellation_reason?: string | null;
     zoom_join_url: string | null;
     google_meet_url: string | null;
+    scheduling?: AppointmentScheduling;
+    manage_actions?: { can_reschedule: boolean; can_cancel: boolean };
 }
 
 // =============================================================================
@@ -312,8 +353,14 @@ export function getAppointment(appointmentId: string): Promise<Appointment> {
     return api.get<Appointment>(`/appointments/${appointmentId}`);
 }
 
-export function approveAppointment(appointmentId: string): Promise<Appointment> {
-    return api.post<Appointment>(`/appointments/${appointmentId}/approve`);
+export function approveAppointment(
+    appointmentId: string,
+    options: SchedulingMutationOptions = {},
+): Promise<Appointment> {
+    return api.post<Appointment>(`/appointments/${appointmentId}/approve`, {
+        expected_revision: options.expectedRevision,
+        request_id: options.requestId,
+    });
 }
 
 export function getRescheduleSlots(
@@ -332,18 +379,53 @@ export function getRescheduleSlots(
 
 export function rescheduleAppointment(
     appointmentId: string,
-    scheduledStart: string
+    scheduledStart: string,
+    options: SchedulingMutationOptions = {},
 ): Promise<Appointment> {
     return api.post<Appointment>(`/appointments/${appointmentId}/reschedule`, {
         scheduled_start: scheduledStart,
+        expected_revision: options.expectedRevision,
+        request_id: options.requestId,
+        override_availability: options.overrideAvailability,
+        override_reason: options.overrideReason,
     });
 }
 
 export function cancelAppointment(
     appointmentId: string,
-    reason?: string
+    reason?: string,
+    options: SchedulingMutationOptions = {},
 ): Promise<Appointment> {
-    return api.post<Appointment>(`/appointments/${appointmentId}/cancel`, { reason });
+    return api.post<Appointment>(`/appointments/${appointmentId}/cancel`, {
+        reason,
+        expected_revision: options.expectedRevision,
+        request_id: options.requestId,
+    });
+}
+
+export function retryAppointmentGoogleSync(
+    appointmentId: string,
+    options: Required<Pick<SchedulingMutationOptions, 'expectedRevision' | 'requestId'>>,
+): Promise<Appointment> {
+    return api.post<Appointment>(`/appointments/${appointmentId}/sync/retry`, {
+        expected_revision: options.expectedRevision,
+        request_id: options.requestId,
+    });
+}
+
+export function resolveAppointmentGoogleConflict(
+    appointmentId: string,
+    options: Required<Pick<SchedulingMutationOptions, 'expectedRevision' | 'requestId'>> & {
+        expectedEtag: string;
+        resolution: 'crm' | 'google';
+    },
+): Promise<Appointment> {
+    return api.post<Appointment>(`/appointments/${appointmentId}/sync/resolve`, {
+        expected_revision: options.expectedRevision,
+        expected_etag: options.expectedEtag,
+        resolution: options.resolution,
+        request_id: options.requestId,
+    });
 }
 
 export interface AppointmentLinkUpdate {
@@ -356,9 +438,14 @@ export interface AppointmentLinkUpdate {
 
 export function updateAppointmentLink(
     appointmentId: string,
-    data: AppointmentLinkUpdate
+    data: AppointmentLinkUpdate & Pick<SchedulingMutationOptions, 'expectedRevision' | 'requestId'>
 ): Promise<Appointment> {
-    return api.patch<Appointment>(`/appointments/${appointmentId}/link`, data);
+    const { expectedRevision, requestId, ...links } = data;
+    return api.patch<Appointment>(`/appointments/${appointmentId}/link`, {
+        ...links,
+        expected_revision: expectedRevision,
+        request_id: requestId,
+    });
 }
 
 // =============================================================================
@@ -447,13 +534,14 @@ export function getRescheduleSlotsByToken(
 export function rescheduleByToken(
     orgId: string,
     token: string,
-    scheduledStart: string
+    scheduledStart: string,
+    options: Pick<SchedulingMutationOptions, 'expectedRevision' | 'requestId'> = {},
 ): Promise<PublicAppointmentView> {
     return publicRequest<PublicAppointmentView>(
         `/book/self-service/${orgId}/reschedule/${token}`,
         {
         method: 'POST',
-        body: JSON.stringify({ scheduled_start: scheduledStart }),
+        body: JSON.stringify({ scheduled_start: scheduledStart, expected_revision: options.expectedRevision, request_id: options.requestId }),
         }
     );
 }
@@ -470,13 +558,14 @@ export function getAppointmentForManage(
 export function rescheduleByManageToken(
     orgId: string,
     token: string,
-    scheduledStart: string
+    scheduledStart: string,
+    options: Pick<SchedulingMutationOptions, 'expectedRevision' | 'requestId'> = {},
 ): Promise<PublicAppointmentView> {
     return publicRequest<PublicAppointmentView>(
         `/book/self-service/${orgId}/manage/${token}/reschedule`,
         {
             method: 'POST',
-            body: JSON.stringify({ scheduled_start: scheduledStart }),
+            body: JSON.stringify({ scheduled_start: scheduledStart, expected_revision: options.expectedRevision, request_id: options.requestId }),
         }
     );
 }
@@ -493,13 +582,14 @@ export function getAppointmentForCancel(
 export function cancelByToken(
     orgId: string,
     token: string,
-    reason?: string
+    reason?: string,
+    options: Pick<SchedulingMutationOptions, 'expectedRevision' | 'requestId'> = {},
 ): Promise<PublicAppointmentView> {
     return publicRequest<PublicAppointmentView>(
         `/book/self-service/${orgId}/cancel/${token}`,
         {
             method: 'POST',
-            body: JSON.stringify({ reason }),
+            body: JSON.stringify({ reason, expected_revision: options.expectedRevision, request_id: options.requestId }),
         }
     );
 }
@@ -507,13 +597,14 @@ export function cancelByToken(
 export function cancelByManageToken(
     orgId: string,
     token: string,
-    reason?: string
+    reason?: string,
+    options: Pick<SchedulingMutationOptions, 'expectedRevision' | 'requestId'> = {},
 ): Promise<PublicAppointmentView> {
     return publicRequest<PublicAppointmentView>(
         `/book/self-service/${orgId}/manage/${token}/cancel`,
         {
             method: 'POST',
-            body: JSON.stringify({ reason }),
+            body: JSON.stringify({ reason, expected_revision: options.expectedRevision, request_id: options.requestId }),
         }
     );
 }

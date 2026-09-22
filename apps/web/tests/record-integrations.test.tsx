@@ -4,16 +4,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { RecordAppointmentsCard } from "@/components/records/RecordAppointmentsCard"
 import { RecordCorrespondenceCard } from "@/components/records/RecordCorrespondenceCard"
 
-const mocks = vi.hoisted(() => ({ appointments: vi.fn(), get: vi.fn(), put: vi.fn(), remove: vi.fn(), tickets: vi.fn(), refetch: vi.fn(), types: vi.fn(), create: vi.fn() }))
+const mocks = vi.hoisted(() => ({ appointments: vi.fn(), get: vi.fn(), put: vi.fn(), remove: vi.fn(), tickets: vi.fn(), refetch: vi.fn(), types: vi.fn(), slots: vi.fn(), create: vi.fn() }))
 vi.mock("@/lib/hooks/use-appointments", () => ({
     appointmentKeys: { all: ["appointments"] },
     useAppointments: (params: unknown, options: unknown) => mocks.appointments(params, options),
     useAppointmentTypes: () => mocks.types(),
-    useBookingPreviewSlots: () => ({ data: { slots: [{ start: "2026-09-12T14:00:00Z", end: "2026-09-12T14:30:00Z" }] }, isLoading: false, isError: false }),
+    useBookingPreviewSlots: (...args: unknown[]) => mocks.slots(...args),
 }))
 vi.mock("@/components/appointments/AppointmentsList", () => ({ AppointmentDetailDialog: ({ appointmentId, open }: { appointmentId: string | null; open: boolean }) => open ? <div role="dialog">Manage {appointmentId}</div> : null }))
 vi.mock("@/lib/api", () => ({ default: { get: (...args: unknown[]) => mocks.get(...args), put: (...args: unknown[]) => mocks.put(...args), delete: (...args: unknown[]) => mocks.remove(...args) } }))
-vi.mock("@/lib/api/appointments", () => ({ createStaffAppointment: (...args: unknown[]) => mocks.create(...args) }))
+vi.mock("@/lib/api/appointments", () => ({ createStaffAppointment: (...args: unknown[]) => mocks.create(...args), createSchedulingRequestId: () => "request-1" }))
 vi.mock("@/lib/api/tickets", () => ({ getTickets: (...args: unknown[]) => mocks.tickets(...args) }))
 vi.mock("@/components/app-link", () => ({ default: ({ children, href, ...props }: React.ComponentProps<"a">) => <a href={href} {...props}>{children}</a> }))
 
@@ -26,6 +26,7 @@ beforeEach(() => {
     vi.clearAllMocks()
     mocks.appointments.mockReturnValue({ data: { items: [], pages: 0 }, isLoading: false, isError: false, refetch: mocks.refetch })
     mocks.types.mockReturnValue({ data: [], isLoading: false, isError: false })
+    mocks.slots.mockReturnValue({ data: { slots: [{ start: "2026-09-12T14:00:00Z", end: "2026-09-12T14:30:00Z" }] }, isLoading: false, isError: false, refetch: mocks.refetch })
     mocks.create.mockResolvedValue({ id: "new-appointment" })
     mocks.get.mockResolvedValue({ items: [], total: 0 })
     mocks.put.mockResolvedValue(undefined)
@@ -70,17 +71,47 @@ describe("Light record appointments", () => {
         fireEvent.click(screen.getByRole("combobox", { name: "Appointment Type" }))
         fireEvent.mouseMove(await screen.findByRole("option", { name: "Consultation" }))
         fireEvent.click(await screen.findByRole("option", { name: "Consultation" }))
+        fireEvent.click(screen.getByText("Match and attempt"))
         fireEvent.click(screen.getByRole("combobox", { name: "Match Case" }))
         fireEvent.mouseMove(await screen.findByRole("option", { name: "M10001 · Avery" }))
         fireEvent.click(await screen.findByRole("option", { name: "M10001 · Avery" }))
         fireEvent.click(await screen.findByRole("combobox", { name: "Attempt" }))
         fireEvent.mouseMove(await screen.findByRole("option", { name: "Attempt 1 · Retrieval · Planned" }))
         fireEvent.click(await screen.findByRole("option", { name: "Attempt 1 · Retrieval · Planned" }))
-        fireEvent.change(screen.getByLabelText(/Date ·/), { target: { value: "2026-09-12" } })
-        expect(screen.getByLabelText(/Date ·/)).toBeValid()
-        fireEvent.click(screen.getByRole("button", { name: /[0-9]+:[0-9]+ [AP]M/ }))
+        fireEvent.click(screen.getByRole("button", { name: /September 12/i }))
+        fireEvent.click(screen.getByRole("button", { name: /10:00 AM/i }))
         fireEvent.click(screen.getAllByRole("button", { name: "Schedule" }).at(-1)!)
         await waitFor(() => expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ donor_id: "donor-1", match_id: "match-1", attempt_id: "attempt-1", client_email: "qa@example.com" }), expect.anything()))
+    })
+    it("schedules a manual time with a reason when no slots are available", async () => {
+        vi.useFakeTimers({ toFake: ["Date"] })
+        vi.setSystemTime(new Date("2026-09-10T12:00:00Z"))
+        mocks.types.mockReturnValue({ data: [{ id: "type-1", name: "Consultation" }], isLoading: false, isError: false })
+        mocks.slots.mockReturnValue({ data: { slots: [] }, isLoading: false, isError: false, refetch: mocks.refetch })
+        mount(<RecordAppointmentsCard record={record} canView canCreate archived={false} />)
+        fireEvent.click(screen.getByRole("button", { name: "Schedule" }))
+        fireEvent.click(screen.getByRole("combobox", { name: "Appointment Type" }))
+        fireEvent.mouseMove(await screen.findByRole("option", { name: "Consultation" }))
+        fireEvent.click(await screen.findByRole("option", { name: "Consultation" }))
+        fireEvent.click(screen.getByRole("button", { name: "Choose a time outside availability" }))
+        fireEvent.change(screen.getByLabelText(/Date and time/i), { target: { value: "2026-09-12T10:15" } })
+        fireEvent.change(screen.getByLabelText(/Reason.*required/i), { target: { value: "Client requested this time" } })
+        fireEvent.click(screen.getAllByRole("button", { name: "Schedule" }).at(-1)!)
+        await waitFor(() => expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({
+            scheduled_start: new Date("2026-09-12T10:15").toISOString(),
+            override_availability: true,
+            override_reason: "Client requested this time",
+        }), expect.anything()))
+    })
+    it("keeps sequentially typed phone digits in the record scheduling form", async () => {
+        mocks.types.mockReturnValue({ data: [{ id: "type-1", name: "Consultation" }], isLoading: false, isError: false })
+        mount(<RecordAppointmentsCard record={{ ...record, phone: null }} canView canCreate archived={false} />)
+        fireEvent.click(screen.getByRole("button", { name: "Schedule" }))
+        const phone = screen.getByRole("textbox", { name: "Phone" }) as HTMLInputElement
+        for (const digit of "6075550100") {
+            fireEvent.input(phone, { target: { value: `${phone.value}${digit}` } })
+        }
+        expect(phone).toHaveValue("6075550100")
     })
     it("does not load appointments without permission", () => {
         mount(<RecordAppointmentsCard record={record} canView={false} canCreate={false} archived={false} />)

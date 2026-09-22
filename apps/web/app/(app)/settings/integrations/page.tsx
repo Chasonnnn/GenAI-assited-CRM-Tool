@@ -53,6 +53,7 @@ import {
     MessageSquareTextIcon,
 } from "lucide-react"
 import { useIntegrationHealth } from "@/lib/hooks/use-ops"
+import { GoogleCalendarBindingSettings } from "@/components/appointments/GoogleCalendarBindingSettings"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { usePipelines } from "@/lib/hooks/use-pipelines"
@@ -6702,7 +6703,9 @@ export default function IntegrationsPage() {
     const zoomIntegration = userIntegrations?.find(i => i.integration_type === 'zoom')
     const gmailIntegration = userIntegrations?.find(i => i.integration_type === 'gmail')
     const googleCalendarIntegration = userIntegrations?.find(i => i.integration_type === 'google_calendar')
-    const googleLastSyncAt = googleCalendarStatus?.last_sync_at ?? googleCalendarIntegration?.last_sync_at ?? null
+    const googleLastSyncAt = googleCalendarStatus === undefined
+        ? googleCalendarIntegration?.last_sync_at ?? null
+        : googleCalendarStatus.last_sync_at
     const googleLastSyncLabel = googleLastSyncAt
         ? `${formatRelativeTime(googleLastSyncAt)}`
         : "Not synced yet"
@@ -7039,6 +7042,8 @@ function PersonalIntegrationsSection({
     onSyncGoogleCalendar: () => void
     onDisconnect: (integrationType: string) => void
 }) {
+    const [googleCalendarDialogOpen, setGoogleCalendarDialogOpen] = useState(false)
+
     return (
         <div>
             <h2 className="mb-4 text-lg font-semibold">Personal Integrations</h2>
@@ -7089,42 +7094,39 @@ function PersonalIntegrationsSection({
                     isDisconnectPending={pendingState.disconnect}
                     onConnect={onConnectGoogleCalendar}
                     onDisconnect={() => onDisconnect("google_calendar")}
+                    hideDisconnect
                 >
-                    <div className="rounded-md border border-border/60 bg-muted/40 px-3 py-2">
-                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                            Last Sync
-                        </p>
-                        <p className="text-xs font-medium">{googleLastSyncLabel}</p>
-                        {googleLastSyncAbsoluteLabel ? (
-                            <p className="text-[11px] text-muted-foreground">
-                                {googleLastSyncAbsoluteLabel}
-                            </p>
-                        ) : null}
-                    </div>
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        className="w-full"
-                        onClick={onSyncGoogleCalendar}
-                        disabled={pendingState.googleCalendarSync}
-                    >
-                        {pendingState.googleCalendarSync ? (
-                            <Loader2Icon
-                                className="mr-2 size-3 animate-spin motion-reduce:animate-none"
-                                aria-hidden="true"
-                            />
-                        ) : (
-                            <RefreshCwIcon className="mr-2 size-3" aria-hidden="true" />
-                        )}
-                        Sync now
-                    </Button>
-                    {googleCalendarStatus && !googleCalendarStatus.tasks_accessible ? (
-                        <p className="text-xs text-amber-700">
-                            Google Tasks sync is not accessible ({googleCalendarStatus.tasks_error ?? "unknown"}).
-                        </p>
-                    ) : null}
+                    <Button className="w-full" variant="outline" onClick={() => setGoogleCalendarDialogOpen(true)}>Manage</Button>
                 </PersonalIntegrationCard>
             </div>
+            <Dialog open={googleCalendarDialogOpen && Boolean(googleCalendarIntegration?.connected)} onOpenChange={setGoogleCalendarDialogOpen}>
+                <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden rounded-2xl sm:max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Google Calendar</DialogTitle>
+                    </DialogHeader>
+                    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+                        <p className="text-xs text-muted-foreground" title={googleLastSyncAbsoluteLabel ?? undefined}>
+                            Last sync: {googleLastSyncLabel}
+                        </p>
+                        {googleCalendarStatus && !googleCalendarStatus.tasks_accessible ? (
+                            <p className="text-xs text-amber-700">
+                                Google Tasks sync is not accessible ({googleCalendarStatus.tasks_error ?? "unknown"}).
+                            </p>
+                        ) : null}
+                        {googleCalendarDialogOpen ? <GoogleCalendarBindingSettings
+                            enabled={Boolean(googleCalendarIntegration?.connected)}
+                            onLegacySync={onSyncGoogleCalendar}
+                            legacySyncPending={pendingState.googleCalendarSync}
+                        /> : null}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => onDisconnect("google_calendar")} disabled={pendingState.disconnect}>
+                            <UnlinkIcon className="mr-2 size-3" aria-hidden="true" />
+                            Disconnect
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
@@ -7141,6 +7143,8 @@ function PersonalIntegrationCard({
     isDisconnectPending,
     onConnect,
     onDisconnect,
+    className,
+    hideDisconnect = false,
     children,
 }: {
     Icon: IconComponent
@@ -7154,10 +7158,12 @@ function PersonalIntegrationCard({
     isDisconnectPending: boolean
     onConnect: () => void
     onDisconnect: () => void
+    className?: string
+    hideDisconnect?: boolean
     children?: ReactNode
 }) {
     return (
-        <Card>
+        <Card className={`flex h-full flex-col ${className ?? ""}`}>
             <CardHeader className="pb-3">
                 <div className="flex items-center gap-3">
                     <div className={`flex size-10 items-center justify-center rounded-lg ${iconContainerClassName}`}>
@@ -7169,9 +7175,9 @@ function PersonalIntegrationCard({
                     </div>
                 </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-1 flex-col">
                 {integration ? (
-                    <div className="space-y-3">
+                    <div className="flex flex-1 flex-col gap-3">
                         <div className="flex items-center gap-2">
                             <Badge variant="default" className="bg-green-600">
                                 <CheckCircleIcon className="mr-1 size-3" aria-hidden="true" />
@@ -7179,20 +7185,20 @@ function PersonalIntegrationCard({
                             </Badge>
                         </div>
                         <p className="text-xs text-muted-foreground">{integration.account_email}</p>
-                        {children}
-                        <Button
+                        {children ? <div className="mt-auto">{children}</div> : null}
+                        {!hideDisconnect ? <Button
                             variant="outline"
                             size="sm"
-                            className="w-full"
+                            className={`w-full${children ? "" : " mt-auto"}`}
                             onClick={onDisconnect}
                             disabled={isDisconnectPending}
                         >
                             <UnlinkIcon className="mr-2 size-3" aria-hidden="true" />
                             Disconnect
-                        </Button>
+                        </Button> : null}
                     </div>
                 ) : (
-                    <Button className="w-full" onClick={onConnect} disabled={isConnectPending}>
+                    <Button className="mt-auto w-full" onClick={onConnect} disabled={isConnectPending}>
                         {isConnectPending ? (
                             <Loader2Icon
                                 className="mr-2 size-4 animate-spin motion-reduce:animate-none"

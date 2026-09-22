@@ -150,6 +150,8 @@ interface SurrogateDetailActionsContextValue {
         reason?: string
         effective_at?: string
         interview_scheduled_at?: string
+        override_availability?: boolean
+        override_reason?: string
         on_hold_follow_up_months?: 1 | 3 | 6 | null
         delivery_baby_gender?: string | null
         delivery_baby_weight?: string | null
@@ -614,6 +616,8 @@ function useSurrogateDetailActionsValue({
         reason?: string
         effective_at?: string
         interview_scheduled_at?: string
+        override_availability?: boolean
+        override_reason?: string
         on_hold_follow_up_months?: 1 | 3 | 6 | null
         delivery_baby_gender?: string | null
         delivery_baby_weight?: string | null
@@ -628,6 +632,8 @@ function useSurrogateDetailActionsValue({
             reason?: string
             effective_at?: string
             interview_scheduled_at?: string
+            override_availability?: boolean
+            override_reason?: string
             on_hold_follow_up_months?: 1 | 3 | 6 | null
             delivery_baby_gender?: string | null
             delivery_baby_weight?: string | null
@@ -635,6 +641,10 @@ function useSurrogateDetailActionsValue({
         if (data.reason) payload.reason = data.reason
         if (data.effective_at) payload.effective_at = data.effective_at
         if (data.interview_scheduled_at) payload.interview_scheduled_at = data.interview_scheduled_at
+        if (data.override_availability && data.override_reason) {
+            payload.override_availability = true
+            payload.override_reason = data.override_reason
+        }
         if (data.on_hold_follow_up_months !== undefined) {
             payload.on_hold_follow_up_months = data.on_hold_follow_up_months
         }

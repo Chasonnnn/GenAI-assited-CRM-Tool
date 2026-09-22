@@ -195,7 +195,7 @@ describe("UnifiedCalendar drag-to-reschedule", () => {
         fireEvent.drop(dropTarget as HTMLElement, { dataTransfer })
 
         expect(mockMutate).not.toHaveBeenCalled()
-        expect(screen.getByText("Available Times")).toBeInTheDocument()
+        expect(screen.getByRole("group", { name: "Available times" })).toBeInTheDocument()
     })
 
     it("renders calendar appointments as native draggable buttons", () => {

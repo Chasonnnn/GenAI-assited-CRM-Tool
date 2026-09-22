@@ -18,12 +18,17 @@ import {
     getZoomStatus,
     getZoomMeetings,
     syncGoogleCalendarNow,
+    getGoogleCalendarDiscovery,
+    getGoogleCalendarBindings,
+    saveGoogleCalendarBindings,
+    syncGoogleCalendarBindings,
     disconnectIntegration,
     createZoomMeeting,
     sendZoomInvite,
     type CreateMeetingRequest,
     type ZoomMeetingRead,
     type SendZoomInviteRequest,
+    type GoogleCalendarBindingInput,
 } from '@/lib/api/integrations'
 
 // ============================================================================
@@ -34,6 +39,8 @@ const integrationKeys = {
     all: ['user-integrations'] as const,
     list: () => [...integrationKeys.all, 'list'] as const,
     googleCalendarStatus: () => [...integrationKeys.all, 'google-calendar-status'] as const,
+    googleCalendarDiscovery: () => [...integrationKeys.all, 'google-calendar-discovery'] as const,
+    googleCalendarBindings: () => [...integrationKeys.all, 'google-calendar-bindings'] as const,
     zoomStatus: () => [...integrationKeys.all, 'zoom-status'] as const,
     zoomMeetingsList: () => [...integrationKeys.all, 'zoom-meetings'] as const,
     zoomMeetings: (params?: { limit?: number }) => [...integrationKeys.all, 'zoom-meetings', params] as const,
@@ -164,6 +171,46 @@ export function useGoogleCalendarStatus(enabled = true) {
     })
 }
 
+export function useGoogleCalendarDiscovery(enabled = true) {
+    return useQuery({
+        queryKey: integrationKeys.googleCalendarDiscovery(),
+        queryFn: getGoogleCalendarDiscovery,
+        enabled,
+        retry: false,
+    })
+}
+
+export function useGoogleCalendarBindings(enabled = true) {
+    return useQuery({
+        queryKey: integrationKeys.googleCalendarBindings(),
+        queryFn: getGoogleCalendarBindings,
+        enabled,
+        retry: false,
+    })
+}
+
+export function useSaveGoogleCalendarBindings() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (items: GoogleCalendarBindingInput[]) => saveGoogleCalendarBindings(items),
+        onSuccess: (result) => {
+            queryClient.setQueryData(integrationKeys.googleCalendarBindings(), result)
+            void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
+        },
+    })
+}
+
+export function useSyncGoogleCalendarBindings() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: syncGoogleCalendarBindings,
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: integrationKeys.googleCalendarBindings() })
+            void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
+        },
+    })
+}
+
 /**
  * Trigger an immediate Google Calendar/Tasks reconciliation.
  */
@@ -177,6 +224,15 @@ export function useSyncGoogleCalendarNow() {
             void queryClient.invalidateQueries({ queryKey: integrationKeys.googleCalendarStatus() })
             void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
             void queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
+
+            if (result.calendars_queued > 0) {
+                if (result.warnings?.length) {
+                    toast.warning('Calendar sync queued with warnings.')
+                    return
+                }
+                toast.info('Calendar sync queued.')
+                return
+            }
 
             if (result.warnings?.length) {
                 toast.warning('Google sync completed with warnings.')

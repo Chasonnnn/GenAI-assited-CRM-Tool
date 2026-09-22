@@ -16,6 +16,7 @@
 import { useReducer, useState, useSyncExternalStore } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { SchedulingSlotList } from "@/components/appointments/SchedulingTimePicker"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -55,10 +56,12 @@ import type {
     PublicAppointmentView,
     MeetingMode,
 } from "@/lib/api/appointments"
-import { format, addDays, parseISO } from "date-fns"
+import { createSchedulingRequestId } from "@/lib/api/appointments"
+import { ApiError } from "@/lib/api"
+import { formatSchedulingDate, formatSchedulingTime, schedulingDateKey } from "@/lib/scheduling-time"
+import { format, addDays } from "date-fns"
 import { toast } from "@/components/ui/toast"
 import {
-    formatDateKeyInTimeZone,
     formatPlainDateKey,
     getTodayDateKeyInTimeZone,
     isPastDateKey,
@@ -124,12 +127,6 @@ function getMeetingModeIcon(mode?: MeetingMode | null) {
     return MEETING_MODES[mode ?? "zoom"]?.icon || VideoIcon
 }
 
-function getMeetingModeSummary(modes: MeetingMode[]) {
-    if (modes.length === 0) return "Appointment"
-    if (modes.length === 1) return getMeetingModeLabel(modes[0])
-    return modes.map((mode) => getMeetingModeLabel(mode)).join(" + ")
-}
-
 function getMeetingModes(type: AppointmentType | null | undefined): MeetingMode[] {
     if (!type) return []
     if (type.meeting_modes && type.meeting_modes.length > 0) {
@@ -149,7 +146,7 @@ type BookingSelectionState = {
 type BookingSelectionAction =
     | { type: "selectType"; typeId: string; meetingModes: MeetingMode[] }
     | { type: "selectMeetingMode"; mode: MeetingMode }
-    | { type: "selectDate"; date: Date }
+    | { type: "selectDate"; date: Date | null }
     | { type: "selectSlot"; slot: TimeSlot }
     | { type: "showForm" }
     | { type: "hideForm" }
@@ -200,27 +197,6 @@ type BookingCalendarDay = {
     hasSlots: boolean
 }
 
-function useBookingDateTimeFormatters(timezone: string) {
-    const timeFormatter = Intl.DateTimeFormat("en-US", {
-        timeZone: timezone,
-        hour: "numeric",
-        minute: "2-digit",
-    })
-
-    const dateFormatter = Intl.DateTimeFormat("en-US", {
-        timeZone: timezone,
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-    })
-
-    return {
-        formatTimeInZone: (date: Date) => timeFormatter.format(date),
-        formatDateInZone: (date: Date) => dateFormatter.format(date),
-    }
-}
-
 function buildCalendarDays(
     viewMonth: Date,
     availableDates: Set<string>,
@@ -267,9 +243,13 @@ function getTimezoneOptions(timezone: string) {
     return [...TIMEZONE_OPTIONS, { value: timezone, label: timezone }]
 }
 
-function getInitialBookingDateRange() {
-    const start = format(new Date(), "yyyy-MM-dd")
-    const end = format(addDays(new Date(), 30), "yyyy-MM-dd")
+function getTimezoneLabel(timezone: string) {
+    return getTimezoneOptions(timezone).find((option) => option.value === timezone)?.label ?? timezone
+}
+
+function getInitialBookingDateRange(timezone: string) {
+    const start = getTodayDateKeyInTimeZone(timezone)
+    const end = format(addDays(new Date(`${start}T12:00:00`), 30), "yyyy-MM-dd")
     return { start, end }
 }
 
@@ -302,7 +282,7 @@ function getEffectiveBookingTimezone(
 function getAvailableDates(slots: TimeSlot[] | undefined, timezone: string) {
     const dates = new Set<string>()
     slots?.forEach((slot) => {
-        dates.add(formatDateKeyInTimeZone(parseISO(slot.start), timezone))
+        dates.add(schedulingDateKey(slot.start, timezone))
     })
     return dates
 }
@@ -311,7 +291,7 @@ function getSlotsForDate(selectedDate: Date | null, slots: TimeSlot[] | undefine
     if (!selectedDate || !slots) return []
     const dateStr = formatPlainDateKey(selectedDate)
     return slots.filter((slot) =>
-        formatDateKeyInTimeZone(parseISO(slot.start), timezone) === dateStr
+        schedulingDateKey(slot.start, timezone) === dateStr
     )
 }
 
@@ -328,6 +308,26 @@ function buildIdempotencyKey(email: string, scheduledStart: string, appointmentT
     const raw = `${email}-${scheduledStart}-${appointmentTypeId}`
     if (raw.length <= 64) return raw
     return `bk_${hashIdempotencyKey(raw)}`
+}
+
+type BookingSubmissionError = { message: string; field?: "client_email" }
+
+function getBookingSubmissionError(error: unknown): BookingSubmissionError {
+    if (error instanceof ApiError) {
+        if (error.status === 422 && /email/i.test(error.message)) {
+            return { message: "Enter a valid email address.", field: "client_email" }
+        }
+        if (error.status === 422 || error.status === 400) {
+            return { message: "Check your details and try again." }
+        }
+        if (error.status === 409) {
+            return { message: "This time is no longer available. Choose another time." }
+        }
+        if (error.status === 429) {
+            return { message: "Too many attempts. Please try again later." }
+        }
+    }
+    return { message: "Booking could not be completed. Please try again." }
 }
 
 // =============================================================================
@@ -380,14 +380,12 @@ function AppointmentTypeSelector({
     onSelect: (id: string) => void
 }) {
     return (
-        <div className="space-y-3">
-            <Label className="text-base font-medium">Select Appointment Type</Label>
-            <div className="grid gap-3">
+        <div className="space-y-2">
+            <Label className="font-medium">Appointment type</Label>
+            <div className="grid gap-2 sm:grid-cols-2">
                 {types.map((type) => {
                     const modes = getMeetingModes(type)
                     const primaryMode = modes[0] || type.meeting_mode
-                    const ModeIcon = getMeetingModeIcon(primaryMode)
-                    const modeSummary = getMeetingModeSummary(modes)
                     const isSelected = selectedId === type.id
 
                     return (
@@ -396,41 +394,19 @@ function AppointmentTypeSelector({
                             variant="outline"
                             onClick={() => onSelect(type.id)}
                             aria-label={type.name}
-                            className={`flex items-center gap-4 p-4 h-auto rounded-xl text-left justify-start ${isSelected
+                            aria-pressed={isSelected}
+                            className={`flex items-center gap-3 p-3 h-auto min-w-0 rounded-lg text-left justify-start ${isSelected
                                 ? "border-primary bg-primary/5 ring-2 ring-primary/20"
                                 : "hover:border-primary/50 hover:bg-muted/50"
                                 }`}
                         >
-                            <div className={`p-3 rounded-lg ${isSelected ? "bg-primary/20" : "bg-muted"}`}>
-                                <ModeIcon className={`size-5 ${isSelected ? "text-primary" : "text-muted-foreground"}`} />
-                            </div>
-                            <div className="flex-1">
+                            <div className="min-w-0 flex-1">
                                 <h3 className="font-medium">{type.name}</h3>
                                 <p className="text-sm text-muted-foreground">
-                                    {type.duration_minutes} min • {modes.length > 1 ? "Multiple formats" : modeSummary}
+                                    {type.duration_minutes} min · {modes.length > 1 ? "Choose format" : getMeetingModeLabel(primaryMode)}
                                 </p>
-                                {modes.length > 1 && (
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        Formats: {modeSummary}
-                                    </p>
-                                )}
-                                {type.description && (
-                                    <p className="text-sm text-muted-foreground mt-1">{type.description}</p>
-                                )}
-                                {modes.length === 1 && primaryMode === "in_person" && type.meeting_location && (
-                                    <p className="text-sm text-muted-foreground mt-1">
-                                        Location: {type.meeting_location}
-                                    </p>
-                                )}
-                                {modes.length === 1 && primaryMode === "phone" && type.dial_in_number && (
-                                    <p className="text-sm text-muted-foreground mt-1">
-                                        Dial-in: {type.dial_in_number}
-                                    </p>
-                                )}
-                                {type.auto_approve && (
-                                    <Badge variant="secondary" className="mt-2">Instant confirmation</Badge>
-                                )}
                             </div>
+                            {type.auto_approve && <Badge variant="secondary" className="shrink-0">Confirmed</Badge>}
                         </Button>
                     )
                 })}
@@ -447,19 +423,15 @@ function MeetingModeSelector({
     meetingModes,
     selectedMode,
     onSelect,
-    meetingLocation,
-    dialInNumber,
 }: {
     meetingModes: MeetingMode[]
     selectedMode: MeetingMode | null
     onSelect: (mode: MeetingMode) => void
-    meetingLocation: string | null
-    dialInNumber: string | null
 }) {
     return (
-        <div className="space-y-3">
-            <Label className="text-base font-medium">Select Appointment Format</Label>
-            <div className="grid gap-3">
+        <div className="space-y-2">
+            <Label className="font-medium">Select Appointment Format</Label>
+            <div className="flex flex-wrap gap-2">
                 {meetingModes.map((mode) => {
                     const modeLabel = getMeetingModeLabel(mode)
                     const ModeIcon = getMeetingModeIcon(mode)
@@ -469,32 +441,14 @@ function MeetingModeSelector({
                             key={mode}
                             variant="outline"
                             onClick={() => onSelect(mode)}
-                            className={`flex items-center gap-4 p-4 h-auto rounded-xl text-left justify-start ${isSelected
+                            aria-pressed={isSelected}
+                            className={`flex items-center gap-2 px-3 py-2 h-auto rounded-lg text-left justify-start ${isSelected
                                 ? "border-primary bg-primary/5 ring-2 ring-primary/20"
                                 : "hover:border-primary/50 hover:bg-muted/50"
                                 }`}
                         >
-                            <div className={`p-3 rounded-lg ${isSelected ? "bg-primary/20" : "bg-muted"}`}>
-                                <ModeIcon className={`size-5 ${isSelected ? "text-primary" : "text-muted-foreground"}`} />
-                            </div>
-                            <div className="flex-1">
-                                <h3 className="font-medium">{modeLabel}</h3>
-                                {mode === "in_person" && meetingLocation && (
-                                    <p className="text-sm text-muted-foreground mt-1">
-                                        Location: {meetingLocation}
-                                    </p>
-                                )}
-                                {mode === "phone" && dialInNumber && (
-                                    <p className="text-sm text-muted-foreground mt-1">
-                                        Dial-in: {dialInNumber}
-                                    </p>
-                                )}
-                                {(mode === "zoom" || mode === "google_meet") && (
-                                    <p className="text-sm text-muted-foreground mt-1">
-                                        Video link will be included after confirmation.
-                                    </p>
-                                )}
-                            </div>
+                            <ModeIcon className="size-4" aria-hidden="true" />
+                            {modeLabel}
                         </Button>
                     )
                 })}
@@ -518,7 +472,7 @@ function CalendarView({
     availableDates: Set<string>
     timezone: string
 }) {
-    const [viewMonth, setViewMonth] = useState(new Date())
+    const [viewMonth, setViewMonth] = useState(() => new Date(`${getTodayDateKeyInTimeZone(timezone)}T12:00:00`))
 
     const days = buildCalendarDays(viewMonth, availableDates, timezone)
 
@@ -566,6 +520,7 @@ function CalendarView({
                                     size="sm"
                                     onClick={() => day.hasSlots && onSelect(day.date!)}
                                     disabled={!day.hasSlots}
+                                    aria-pressed={Boolean(isSelected)}
                                     className={`h-10 text-sm font-medium ${isSelected
                                         ? "bg-primary text-primary-foreground hover:bg-primary/90"
                                         : day.isToday
@@ -587,70 +542,6 @@ function CalendarView({
 }
 
 // =============================================================================
-// Time Slot Selector
-// =============================================================================
-
-function TimeSlotSelector({
-    slots,
-    selectedSlot,
-    onSelect,
-    isLoading,
-    timezone,
-}: {
-    slots: TimeSlot[]
-    selectedSlot: TimeSlot | null
-    onSelect: (slot: TimeSlot) => void
-    isLoading: boolean
-    timezone: string
-}) {
-    const { formatTimeInZone } = useBookingDateTimeFormatters(timezone)
-
-    if (isLoading) {
-        return (
-            <div className="py-8 flex items-center justify-center">
-                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-            </div>
-        )
-    }
-
-    if (slots.length === 0) {
-        return (
-            <div className="py-8 text-center text-muted-foreground">
-                <ClockIcon className="size-8 mx-auto mb-2 opacity-50" />
-                <p>No available times for this date</p>
-            </div>
-        )
-    }
-
-    return (
-        <div className="space-y-3">
-            <Label className="text-base font-medium">Select a Time</Label>
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-64 overflow-y-auto">
-                {slots.map((slot) => {
-                    const time = formatTimeInZone(parseISO(slot.start))
-                    const isSelected = selectedSlot?.start === slot.start
-
-                    return (
-                        <Button
-                            key={slot.start}
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onSelect(slot)}
-                            className={`py-2 px-3 h-auto text-sm font-medium ${isSelected
-                                ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
-                                : "hover:border-primary/50 hover:bg-muted/50"
-                                }`}
-                        >
-                            {time}
-                        </Button>
-                    )
-                })}
-            </div>
-        </div>
-    )
-}
-
-// =============================================================================
 // Booking Form
 // =============================================================================
 
@@ -662,6 +553,8 @@ function BookingForm({
     onSubmit,
     onBack,
     isSubmitting,
+    submissionError,
+    onEdit,
 }: {
     appointmentType: AppointmentType
     meetingMode: MeetingMode
@@ -670,6 +563,8 @@ function BookingForm({
     onSubmit: (data: Omit<BookingCreate, "appointment_type_id" | "scheduled_start" | "client_timezone">) => void
     onBack: () => void
     isSubmitting: boolean
+    submissionError: BookingSubmissionError | null
+    onEdit: () => void
 }) {
     const [formData, setFormData] = useState({
         client_name: "",
@@ -707,7 +602,7 @@ function BookingForm({
     const ModeIcon = mode?.icon || VideoIcon
     const isInPerson = meetingMode === "in_person"
     const isPhone = meetingMode === "phone"
-    const { formatDateInZone, formatTimeInZone } = useBookingDateTimeFormatters(timezone)
+    const emailError = errors.client_email || (submissionError?.field === "client_email" ? submissionError.message : null)
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -719,11 +614,11 @@ function BookingForm({
                             <h3 className="font-medium">{appointmentType.name}</h3>
                             <p className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
                                 <CalendarIcon className="size-4" />
-                                {formatDateInZone(parseISO(selectedSlot.start))}
+                                {formatSchedulingDate(selectedSlot.start, timezone)}
                             </p>
                             <p className="text-sm text-muted-foreground flex items-center gap-2">
                                 <ClockIcon className="size-4" />
-                                {formatTimeInZone(parseISO(selectedSlot.start))} ({appointmentType.duration_minutes} min)
+                                {formatSchedulingTime(selectedSlot.start, timezone)} · {getTimezoneLabel(timezone)} · {appointmentType.duration_minutes} min
                             </p>
                             <p className="text-sm text-muted-foreground flex items-center gap-2">
                                 <ModeIcon className="size-4" />
@@ -742,7 +637,7 @@ function BookingForm({
                                 </p>
                             )}
                         </div>
-                        <Button variant="ghost" size="sm" onClick={onBack}>
+                        <Button type="button" variant="ghost" size="sm" onClick={onBack} disabled={isSubmitting}>
                             Change
                         </Button>
                     </div>
@@ -751,13 +646,13 @@ function BookingForm({
 
             {/* Form Fields */}
             <div className="space-y-4">
+                <h2 className="text-lg font-semibold">Your details</h2>
                 <div className="space-y-2">
-                    <Label htmlFor="name">Full Name *</Label>
+                    <Label htmlFor="name">Full name *</Label>
                     <Input
                         id="name"
                         value={formData.client_name}
-                        onChange={(e) => setFormData((current) => ({ ...current, client_name: e.target.value }))}
-                        placeholder="Your full name"
+                        onValueChange={(value) => { setFormData((current) => ({ ...current, client_name: value })); onEdit() }}
                         className={errors.client_name ? "border-destructive" : ""}
                     />
                     {errors.client_name && (
@@ -771,23 +666,24 @@ function BookingForm({
                         id="email"
                         type="email"
                         value={formData.client_email}
-                        onChange={(e) => setFormData((current) => ({ ...current, client_email: e.target.value }))}
+                        onValueChange={(value) => { setFormData((current) => ({ ...current, client_email: value })); onEdit() }}
                         placeholder="your@email.com"
-                        className={errors.client_email ? "border-destructive" : ""}
+                        aria-invalid={Boolean(emailError)}
+                        aria-describedby={emailError ? "email-error" : undefined}
+                        className={emailError ? "border-destructive" : ""}
                     />
-                    {errors.client_email && (
-                        <p className="text-sm text-destructive">{errors.client_email}</p>
+                    {emailError && (
+                        <p id="email-error" role="alert" className="text-sm text-destructive">{emailError}</p>
                     )}
                 </div>
 
                 <div className="space-y-2">
-                    <Label htmlFor="phone">Phone Number *</Label>
+                    <Label htmlFor="phone">Phone number *</Label>
                     <Input
                         id="phone"
                         type="tel"
                         value={formData.client_phone}
-                        onChange={(e) => setFormData((current) => ({ ...current, client_phone: e.target.value }))}
-                        placeholder="(555) 123-4567"
+                        onValueChange={(value) => { setFormData((current) => ({ ...current, client_phone: value })); onEdit() }}
                         className={errors.client_phone ? "border-destructive" : ""}
                     />
                     {errors.client_phone && (
@@ -796,27 +692,25 @@ function BookingForm({
                 </div>
 
                 <div className="space-y-2">
-                    <Label htmlFor="notes">Additional Notes (optional)</Label>
+                    <Label htmlFor="notes">Note (optional)</Label>
                     <Textarea
                         id="notes"
                         value={formData.client_notes}
-                        onChange={(e) => setFormData((current) => ({ ...current, client_notes: e.target.value }))}
-                        placeholder="Any additional information you'd like to share..."
-                        rows={3}
+                        onChange={(e) => { const value = e.currentTarget.value; setFormData((current) => ({ ...current, client_notes: value })); onEdit() }}
+                        rows={2}
                     />
                 </div>
             </div>
+
+            {submissionError && submissionError.field !== "client_email" ? (
+                <p role="alert" className="text-sm text-destructive">{submissionError.message}</p>
+            ) : null}
 
             <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
                 {isSubmitting && <Loader2Icon className="size-4 mr-2 animate-spin" />}
                 {appointmentType.auto_approve ? "Confirm Appointment" : "Request Appointment"}
             </Button>
 
-            <p className="text-xs text-center text-muted-foreground">
-                {appointmentType.auto_approve
-                    ? "This appointment will be confirmed immediately and emailed to you."
-                    : "Your appointment request will be sent for review. You'll receive a confirmation email once approved."}
-            </p>
         </form>
     )
 }
@@ -849,9 +743,7 @@ function generateICSFile(
     const descriptionLines = [
         `Appointment format: ${meetingModeLabel}`,
         `Duration: ${appointmentType.duration_minutes} minutes`,
-        status === "confirmed"
-            ? "Status: Confirmed"
-            : "Status: Pending approval. You will receive a confirmation email once approved.",
+        status === "confirmed" ? "Status: Confirmed" : "Status: Pending approval",
     ]
     if (options?.meetingLocation) descriptionLines.push(`Location: ${options.meetingLocation}`)
     if (options?.dialInNumber) descriptionLines.push(`Dial-in: ${options.dialInNumber}`)
@@ -904,10 +796,9 @@ function ConfirmationView({
     const joinUrl = confirmation?.zoom_join_url || confirmation?.google_meet_url || null
     const showLocation = effectiveMeetingMode === "in_person" && meetingLocation
     const showDialIn = effectiveMeetingMode === "phone" && dialInNumber
-    const { formatDateInZone, formatTimeInZone } = useBookingDateTimeFormatters(timezone)
 
     const handleDownloadICS = () => {
-        const ics = generateICSFile(appointmentType, selectedSlot.start, timezone, staffName, effectiveMeetingMode, {
+        const ics = generateICSFile(appointmentType, confirmation?.scheduled_start ?? selectedSlot.start, timezone, staffName, effectiveMeetingMode, {
             ...(confirmation?.status ? { status: confirmation.status } : {}),
             meetingLocation,
             dialInNumber,
@@ -917,7 +808,7 @@ function ConfirmationView({
         const url = URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.href = url
-        link.download = `appointment-${format(parseISO(selectedSlot.start), 'yyyy-MM-dd')}.ics`
+        link.download = `appointment-${schedulingDateKey(confirmation?.scheduled_start ?? selectedSlot.start, timezone)}.ics`
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
@@ -936,11 +827,6 @@ function ConfirmationView({
             <h2 className="text-2xl font-semibold mb-2">
                 {isConfirmed ? "Appointment Confirmed!" : "Request Submitted!"}
             </h2>
-            <p className="text-muted-foreground mb-6">
-                {isConfirmed
-                    ? "Your appointment is confirmed. We look forward to meeting with you."
-                    : "Your appointment request has been submitted successfully."}
-            </p>
 
             {/* Appointment Summary Card */}
             <div className="bg-muted/50 rounded-lg p-4 mb-6 text-left">
@@ -951,9 +837,9 @@ function ConfirmationView({
                     <div className="flex items-center gap-3">
                         <CalendarIcon className="size-5 text-muted-foreground flex-shrink-0" />
                         <div>
-                            <p className="font-medium">{formatDateInZone(parseISO(selectedSlot.start))}</p>
+                            <p className="font-medium">{formatSchedulingDate(confirmation?.scheduled_start ?? selectedSlot.start, timezone)}</p>
                             <p className="text-sm text-muted-foreground">
-                                {formatTimeInZone(parseISO(selectedSlot.start))} ({timezone.split('/')[1]?.replace('_', ' ') || timezone})
+                                {formatSchedulingTime(confirmation?.scheduled_start ?? selectedSlot.start, timezone)} · {getTimezoneLabel(timezone)}
                             </p>
                         </div>
                     </div>
@@ -1006,45 +892,6 @@ function ConfirmationView({
                 Add to Calendar
             </Button>
 
-            {/* What's Next Section */}
-            <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4 text-left">
-                <h3 className="font-medium text-blue-700 dark:text-blue-400 mb-2">What&apos;s Next?</h3>
-                {isConfirmed ? (
-                    <ol className="text-sm text-muted-foreground space-y-2">
-                        <li className="flex gap-2">
-                            <span className="font-medium text-blue-600 dark:text-blue-400">1.</span>
-                            <span>Check your email for the confirmation details</span>
-                        </li>
-                        <li className="flex gap-2">
-                            <span className="font-medium text-blue-600 dark:text-blue-400">2.</span>
-                            <span>Add the appointment to your calendar</span>
-                        </li>
-                        <li className="flex gap-2">
-                            <span className="font-medium text-blue-600 dark:text-blue-400">3.</span>
-                            <span>Need changes? You can reschedule or cancel anytime</span>
-                        </li>
-                    </ol>
-                ) : (
-                    <ol className="text-sm text-muted-foreground space-y-2">
-                        <li className="flex gap-2">
-                            <span className="font-medium text-blue-600 dark:text-blue-400">1.</span>
-                            <span>Our team will review your request</span>
-                        </li>
-                        <li className="flex gap-2">
-                            <span className="font-medium text-blue-600 dark:text-blue-400">2.</span>
-                            <span>You&apos;ll receive an email confirmation once approved</span>
-                        </li>
-                        <li className="flex gap-2">
-                            <span className="font-medium text-blue-600 dark:text-blue-400">3.</span>
-                            <span>Appointment details will be included in the confirmation</span>
-                        </li>
-                    </ol>
-                )}
-            </div>
-
-            <p className="text-xs text-muted-foreground mt-6">
-                You can safely close this page now.
-            </p>
         </div>
     )
 }
@@ -1094,6 +941,7 @@ export function PublicBookingPage({
         showForm,
     } = bookingSelection
     const [confirmation, setConfirmation] = useState<PublicAppointmentView | null>(null)
+    const [bookingError, setBookingError] = useState<BookingSubmissionError | null>(null)
     const detectedTimezone = useSyncExternalStore(
         subscribeTimezoneSnapshot,
         getInitialClientTimezone,
@@ -1114,7 +962,7 @@ export function PublicBookingPage({
     )
 
     const timezoneOptions = getTimezoneOptions(timezone)
-    const [dateRange] = useState(getInitialBookingDateRange)
+    const dateRange = getInitialBookingDateRange(timezone)
 
     const publicSlotsQuery = useAvailableSlots(
         publicSlug,
@@ -1135,6 +983,8 @@ export function PublicBookingPage({
     const isLoadingSlots = isPreview
         ? previewSlotsQuery.isLoading
         : publicSlotsQuery.isLoading
+    const slotsError = isPreview ? previewSlotsQuery.isError : publicSlotsQuery.isError
+    const retrySlots = isPreview ? previewSlotsQuery.refetch : publicSlotsQuery.refetch
 
     const createBookingMutation = useCreateBooking()
 
@@ -1146,10 +996,11 @@ export function PublicBookingPage({
 
     const availableDates = getAvailableDates(slotsData?.slots, timezone)
     const slotsForDate = getSlotsForDate(selectedDate, slotsData?.slots, timezone)
+    const validSelectedSlot = selectedSlot && !isLoadingSlots && !slotsError && slotsForDate.some((slot) => slot.start === selectedSlot.start)
 
     // Handlers
     const handleSubmit = (formData: Omit<BookingCreate, "appointment_type_id" | "scheduled_start" | "client_timezone">) => {
-        if (!selectedTypeId || !selectedSlot) return
+        if (!selectedTypeId || !selectedSlot || !validSelectedSlot) return
         const effectiveMeetingMode =
             selectedMeetingMode ?? (selectedTypeModes.length === 1 ? selectedTypeModes[0] : null)
         if (!effectiveMeetingMode) {
@@ -1167,6 +1018,7 @@ export function PublicBookingPage({
                 selectedSlot.start,
                 selectedTypeId
             ),
+            request_id: createSchedulingRequestId(),
             meeting_mode: effectiveMeetingMode,
         }
 
@@ -1177,12 +1029,15 @@ export function PublicBookingPage({
             return
         }
 
+        setBookingError(null)
         createBookingMutation.mutate(
             { publicSlug, data },
             {
                 onSuccess: (response) => {
+                    setBookingError(null)
                     setConfirmation(response)
                 },
+                onError: (error) => setBookingError(getBookingSubmissionError(error)),
             }
         )
     }
@@ -1243,7 +1098,7 @@ export function PublicBookingPage({
 
     return (
         <div className="min-h-screen bg-background py-12">
-            <div className="max-w-xl mx-auto px-4">
+            <div className="max-w-4xl mx-auto px-4">
                 <Card>
                     <CardHeader>
                         <StaffCard
@@ -1257,9 +1112,9 @@ export function PublicBookingPage({
                         <div className="flex items-center gap-2 text-sm">
                             <GlobeIcon className="size-4 text-muted-foreground" />
                             <span className="text-muted-foreground">Timezone:</span>
-                            <Select value={timezone} onValueChange={(v) => v && setTimezoneOverride(v)}>
-                                <SelectTrigger className="w-auto h-8 text-sm">
-                                    <SelectValue />
+                            <Select value={timezone} disabled={createBookingMutation.isPending} onValueChange={(v) => { if (v) { setTimezoneOverride(v); dispatchBookingSelection({ type: "selectDate", date: null }) } }}>
+                                <SelectTrigger className="w-auto h-8 text-sm" aria-label="Timezone">
+                                    <SelectValue>{(value: string | null) => value ? getTimezoneLabel(value) : "Timezone"}</SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
                                     {timezoneOptions.map((opt) => (
@@ -1278,7 +1133,7 @@ export function PublicBookingPage({
                         )}
 
                         {/* Booking Form */}
-                        {showForm && selectedType && selectedSlot ? (
+                        {showForm && selectedType && selectedSlot && validSelectedSlot ? (
                             <BookingForm
                                 appointmentType={selectedType}
                                 meetingMode={
@@ -1289,8 +1144,10 @@ export function PublicBookingPage({
                                 selectedSlot={selectedSlot}
                                 timezone={timezone}
                                 onSubmit={handleSubmit}
-                                onBack={() => dispatchBookingSelection({ type: "hideForm" })}
+                                onBack={() => { setBookingError(null); dispatchBookingSelection({ type: "hideForm" }) }}
                                 isSubmitting={isPreview ? false : createBookingMutation.isPending}
+                                submissionError={bookingError}
+                                onEdit={() => setBookingError(null)}
                             />
                         ) : (
                             <>
@@ -1319,14 +1176,27 @@ export function PublicBookingPage({
                                                 mode,
                                             })
                                         }
-                                        meetingLocation={selectedType.meeting_location}
-                                        dialInNumber={selectedType.dial_in_number}
                                     />
                                 )}
 
+                                {selectedTypeId && meetingModeReady && isLoadingSlots && (
+                                    <p role="status" className="text-sm text-muted-foreground">Loading available times…</p>
+                                )}
+                                {selectedTypeId && meetingModeReady && slotsError && (
+                                    <div className="flex flex-wrap items-center gap-3" role="alert">
+                                        <span className="text-sm text-destructive">Calendar availability is unavailable.</span>
+                                        <Button type="button" size="sm" variant="outline" onClick={() => void retrySlots()}>Retry availability</Button>
+                                    </div>
+                                )}
+                                {selectedTypeId && meetingModeReady && !isLoadingSlots && !slotsError && availableDates.size === 0 && (
+                                    <p className="text-sm text-muted-foreground">No available times in this date range.</p>
+                                )}
+
+                                <div className="grid gap-5 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
                                 {/* Calendar */}
                                 {selectedTypeId && meetingModeReady && (
                                     <CalendarView
+                                        key={timezone}
                                         selectedDate={selectedDate}
                                         onSelect={(date) =>
                                             dispatchBookingSelection({ type: "selectDate", date })
@@ -1337,20 +1207,25 @@ export function PublicBookingPage({
                                 )}
 
                                 {/* Time Slots */}
-                                {selectedDate && meetingModeReady && (
-                                    <TimeSlotSelector
+                                {selectedTypeId && meetingModeReady && (
+                                    <div className="space-y-2">
+                                    <Label className="font-medium">Select a time</Label>
+                                    {selectedDate ? <SchedulingSlotList
                                         slots={slotsForDate}
-                                        selectedSlot={selectedSlot}
-                                        onSelect={(slot) =>
-                                            dispatchBookingSelection({ type: "selectSlot", slot })
-                                        }
-                                        isLoading={isLoadingSlots}
                                         timezone={timezone}
-                                    />
+                                        selectedStart={selectedSlot?.start ?? null}
+                                        onSelectStart={(start) => { const slot = slotsForDate.find((item) => item.start === start); if (slot) dispatchBookingSelection({ type: "selectSlot", slot }) }}
+                                        loading={isLoadingSlots}
+                                        error={slotsError ? "Calendar availability is unavailable." : null}
+                                        onRetry={() => void retrySlots()}
+                                        disabled={isLoadingSlots}
+                                    /> : <p className="py-4 text-sm text-muted-foreground">Choose a date.</p>}
+                                    </div>
                                 )}
+                                </div>
 
                                 {/* Contact Details Button */}
-                                {selectedSlot && meetingModeReady && (
+                                {selectedSlot && meetingModeReady && validSelectedSlot && (
                                     <Button
                                         className="w-full"
                                         size="lg"
