@@ -25,7 +25,7 @@ from app.db.models import (
     UserWorkflowPreference,
     WorkflowExecution,
 )
-from app.services import workflow_service
+from app.services import workflow_communication_actions, workflow_record_actions, workflow_service
 from app.services.workflow_engine_adapters import DefaultWorkflowDomainAdapter
 from app.services.workflow_engine_core import (
     FORM_SUBMISSION_ACTION_SNAPSHOT_KEY,
@@ -701,9 +701,7 @@ def test_paused_form_submission_rejects_malformed_action_snapshot(
 
     db.refresh(execution)
     assert execution.status == WorkflowExecutionStatus.FAILED.value
-    assert execution.error_message == (
-        "Workflow action snapshot unavailable for safe continuation"
-    )
+    assert execution.error_message == ("Workflow action snapshot unavailable for safe continuation")
     assert executed_actions == []
 
 
@@ -809,8 +807,8 @@ def test_default_adapter_execute_action_guardrails_and_error_path(monkeypatch):
         lambda **kwargs: alerts.append(kwargs),
     )
     monkeypatch.setattr(
-        adapter,
-        "_action_send_email",
+        workflow_communication_actions,
+        "send_email",
         lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
     )
     result = adapter.execute_action(
@@ -826,8 +824,7 @@ def test_default_adapter_execute_action_guardrails_and_error_path(monkeypatch):
     assert alerts
 
 
-def test_default_adapter_action_helpers(monkeypatch):
-    adapter = DefaultWorkflowDomainAdapter()
+def test_action_family_helpers(monkeypatch):
     org_id = uuid4()
     template_id = uuid4()
     template = SimpleNamespace(
@@ -861,8 +858,8 @@ def test_default_adapter_action_helpers(monkeypatch):
         lambda **kwargs: queued.append(kwargs) or SimpleNamespace(id=uuid4()),
     )
     monkeypatch.setattr(
-        adapter,
-        "_resolve_email_variables",
+        workflow_communication_actions,
+        "resolve_email_variables",
         lambda _db, _surrogate: {"full_name": "Case Owner"},
     )
     monkeypatch.setattr(
@@ -884,7 +881,7 @@ def test_default_adapter_action_helpers(monkeypatch):
         owner_id=None,
         created_by_user_id=None,
     )
-    send_result = adapter._action_send_email(
+    send_result = workflow_communication_actions.send_email(
         db=fake_db,
         action={
             "action_type": "send_email",
@@ -906,7 +903,7 @@ def test_default_adapter_action_helpers(monkeypatch):
         owner_id=None,
         created_by_user_id=None,
     )
-    send_result = adapter._action_send_email(
+    send_result = workflow_communication_actions.send_email(
         db=SimpleNamespace(),
         action={"action_type": "send_email", "template_id": uuid4(), "recipients": "surrogate"},
         entity=no_email,
@@ -919,7 +916,7 @@ def test_default_adapter_action_helpers(monkeypatch):
         "app.services.notification_service.create_notification",
         lambda **kwargs: notifications.append(kwargs) or SimpleNamespace(id=uuid4()),
     )
-    notify_result = adapter._action_send_notification(
+    notify_result = workflow_communication_actions.send_notification(
         db=SimpleNamespace(query=lambda *_args, **_kwargs: None),
         action={"action_type": "send_notification", "title": "Reminder", "recipients": "owner"},
         entity=SimpleNamespace(
@@ -934,7 +931,7 @@ def test_default_adapter_action_helpers(monkeypatch):
     assert notify_result["recipients_count"] == 1
     assert len(notifications) == 1
 
-    bad_field = adapter._action_update_field(
+    bad_field = workflow_record_actions.update_field(
         db=SimpleNamespace(),
         action={"action_type": "update_field", "field": "not_allowed", "value": "x"},
         entity=SimpleNamespace(),
@@ -944,7 +941,7 @@ def test_default_adapter_action_helpers(monkeypatch):
     )
     assert bad_field["success"] is False
 
-    no_author_note = adapter._action_add_note(
+    no_author_note = workflow_record_actions.add_note(
         db=SimpleNamespace(),
         action={"action_type": "add_note", "content": "Hello"},
         entity=SimpleNamespace(
