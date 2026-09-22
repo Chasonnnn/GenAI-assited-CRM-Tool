@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import Link from "@/components/app-link"
 import { Check, ChevronDown, Eye, Heart, Lock, Settings2, UsersRound, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -17,15 +16,16 @@ import { PermissionAccessChecker } from "./permission-access-checker"
 import { PermissionPolicyReview } from "./permission-policy-review"
 import { groupRolePermissions, PERMISSION_TOPICS, permissionPreviewLabel } from "./permission-catalog"
 import { PermissionIncludedFeatures } from "./permission-included-features"
+import { PermissionNavigation, type PermissionTab } from "./permission-navigation"
 
 const RECORD_MODULES: Partial<Record<PermissionTopic, RecordModule>> = { Surrogates: "surrogates", Donors: "donors", "Intended Parents": "intended_parents" }
 const TOPIC_ICONS = { Surrogates: UsersRound, Donors: Heart, "Intended Parents": UsersRound, Operations: Zap, Administration: Settings2 }
 
-export function PermissionWorkspace({ initialRole = "case_manager" }: { initialRole?: string }) {
+export function PermissionWorkspace({ initialRole = "case_manager", initialTab = "roles" }: { initialRole?: string; initialTab?: PermissionTab }) {
     const [role, setRole] = useState(initialRole)
     const [topic, setTopic] = useState<PermissionTopic>("Surrogates")
     const [operation, setOperation] = useState("")
-    const [tab, setTab] = useState("roles")
+    const [tab, setTab] = useState<PermissionTab>(initialTab)
     const [changes, setChanges] = useState<Record<string, boolean>>({})
     const [scopeChanges, setScopeChanges] = useState<Partial<Record<RecordModule, RecordScopeRule>>>({})
     const [reviewOpen, setReviewOpen] = useState(false)
@@ -66,11 +66,7 @@ export function PermissionWorkspace({ initialRole = "case_manager" }: { initialR
         <div className="mx-auto w-full max-w-[1440px] px-5 py-7 sm:px-8 lg:px-10">
             <header className="flex flex-wrap items-center justify-between gap-x-8 gap-y-5">
                 <h1 className="text-3xl font-semibold tracking-tight text-[#45253f] dark:text-foreground">Permissions</h1>
-                <nav aria-label="Permission settings" className="flex max-w-full gap-6 overflow-x-auto text-sm">
-                    {[{ key: "roles", label: "Roles" }, ...(effective.data?.capabilities?.can_manage_members ? [{ key: "people", label: "People" }] : []), ...(effective.data?.capabilities?.can_manage_roles ? [{ key: "check", label: "Check access" }] : []), ...(!activePolicy && effective.data?.capabilities?.can_activate_policy ? [{ key: "upgrade", label: "Review upgrade" }] : [])].map((item) => item.key === "people" ?
-                        <Link key={item.key} href="/settings/team" aria-disabled={dirty} onClick={(event) => { if (dirty) event.preventDefault() }} className={cn("shrink-0 py-3", dirty && "pointer-events-none text-muted-foreground")}>{item.label}</Link> :
-                        <Button key={item.key} variant="ghost" type="button" disabled={dirty && tab !== item.key} onClick={() => setTab(item.key)} aria-current={tab === item.key ? "page" : undefined} className={cn("h-auto shrink-0 rounded-none border-b-2 px-0 py-3 font-medium hover:bg-transparent hover:text-primary disabled:opacity-40 dark:hover:bg-transparent", tab === item.key ? "border-primary text-primary" : "border-transparent text-muted-foreground")}>{item.label}</Button>)}
-                </nav>
+                <PermissionNavigation current={tab} capabilities={effective.data?.capabilities} showUpgrade={!activePolicy} disabled={dirty} onSelect={setTab} />
             </header>
             {tab === "check" && <div className="py-8"><PermissionAccessChecker /></div>}
             {tab === "upgrade" && <div className="py-8"><PermissionPolicyReview /></div>}

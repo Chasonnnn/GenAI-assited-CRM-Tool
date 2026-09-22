@@ -113,4 +113,20 @@ describe("member permission administration", () => {
         expect(screen.getByRole("dialog")).not.toHaveTextContent("Use AI Assistant")
     })
 
+    it("manages collaborations independently of protected role editing", async () => {
+        vi.mocked(api.getMember).mockResolvedValue({ ...member, user_id: "admin-user", role: "admin", capabilities: { can_manage_members: false, can_add_permissions: false, can_manage_collaborations: true, can_receive_collaboration: true } })
+        render(<PermissionMemberDetail memberId="member-1" />)
+        expect(await screen.findByRole("button", { name: "Add record" })).toBeEnabled()
+        expect(screen.queryByRole("button", { name: "Add permission" })).not.toBeInTheDocument()
+    })
+
+    it("keeps inactive collaborations removable but cannot add new ones", async () => {
+        vi.mocked(api.getMember).mockResolvedValue({ ...member, is_active: false, capabilities: { can_manage_members: false, can_add_permissions: false, can_manage_collaborations: true, can_receive_collaboration: false } })
+        vi.mocked(scopes.removeCollaborator).mockResolvedValue(undefined)
+        render(<PermissionMemberDetail memberId="member-1" />)
+        fireEvent.click(await screen.findByRole("button", { name: "Remove surrogate collaboration" }))
+        await waitFor(() => expect(scopes.removeCollaborator).toHaveBeenCalledWith("surrogate", "surrogate-1", "user-1"))
+        expect(screen.queryByRole("button", { name: "Add record" })).not.toBeInTheDocument()
+    })
+
 })

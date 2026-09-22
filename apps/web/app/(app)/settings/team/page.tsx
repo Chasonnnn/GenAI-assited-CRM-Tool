@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/select"
 import {
     Loader2, UserPlus, Mail, RotateCcw, X,
-    Users, Shield, Settings2, UserCog
+    Users, Settings2, UserCog
 } from "lucide-react"
 import { useInvites, useCreateInvite, useResendInvite, useRevokeInvite } from "@/lib/hooks/use-invites"
 import { useEffectivePermissions, useMembers, useRemoveMember } from "@/lib/hooks/use-permissions"
@@ -44,7 +44,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { formatRelativeTime } from "@/lib/formatters"
 
 import { PermissionBulkRoleReview } from "@/components/permissions/permission-bulk-role-review"
-import { PermissionError, ROLE_LABELS } from "@/components/permissions/permission-controls"
+import { ChoiceField, PermissionError, ROLE_LABELS } from "@/components/permissions/permission-controls"
+import { PermissionNavigation } from "@/components/permissions/permission-navigation"
 
 const ROLE_COLORS: Record<string, string> = {
     intake_specialist: "bg-blue-100 text-blue-800",
@@ -151,6 +152,12 @@ function MembersTab({ includeInactive, v2, canManage, canAssignDeveloper }: { in
     // Selection state for bulk operations
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [showBulkDialog, setShowBulkDialog] = useState(false)
+    const [search, setSearch] = useState("")
+    const [roleFilter, setRoleFilter] = useState("all")
+    const visibleMembers = (members ?? []).filter((member) =>
+        (roleFilter === "all" || member.role === roleFilter) &&
+        `${member.display_name ?? ""} ${member.email}`.toLowerCase().includes(search.trim().toLowerCase())
+    )
 
     const handleRemove = async (memberId: string, email: string) => {
         if (!confirm(`Remove ${email} from the organization? This cannot be undone.`)) return
@@ -181,7 +188,7 @@ function MembersTab({ includeInactive, v2, canManage, canAssignDeveloper }: { in
         if (!members) return
         const selectableIds: string[] = []
 
-        for (const member of members) {
+        for (const member of visibleMembers) {
             if (member.user_id === user?.user_id || (member.role === "developer" && !canAssignDeveloper) || !canManage) continue
             selectableIds.push(member.id)
         }
@@ -211,11 +218,15 @@ function MembersTab({ includeInactive, v2, canManage, canAssignDeveloper }: { in
         )
     }
 
-    const selectableMembers = members.filter(m => canManage && m.user_id !== user?.user_id && (m.role !== "developer" || canAssignDeveloper))
-    const allSelected = selectableMembers.length > 0 && selectedIds.size === selectableMembers.length
+    const selectableMembers = visibleMembers.filter(m => canManage && m.user_id !== user?.user_id && (m.role !== "developer" || canAssignDeveloper))
+    const allSelected = selectableMembers.length > 0 && selectableMembers.every((member) => selectedIds.has(member.id))
 
     return (
         <div>
+            <div className="mb-5 grid items-end gap-4 sm:grid-cols-[minmax(0,1fr)_200px]">
+                <div className="space-y-2"><Label htmlFor="people-search">Search people</Label><Input id="people-search" value={search} onChange={(event) => { setSearch(event.target.value); setSelectedIds(new Set()) }} /></div>
+                <ChoiceField label="Filter by role" value={roleFilter} options={{ all: "All roles", ...ROLE_LABELS }} onChange={(value) => { setRoleFilter(value); setSelectedIds(new Set()) }} />
+            </div>
             {/* Bulk Actions Bar */}
             {selectedIds.size > 0 && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
@@ -263,7 +274,7 @@ function MembersTab({ includeInactive, v2, canManage, canAssignDeveloper }: { in
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {members.map((member) => {
+                    {visibleMembers.map((member) => {
                         const isSelectable = canManage && member.user_id !== user?.user_id && (member.role !== "developer" || canAssignDeveloper)
                         const isSelected = selectedIds.has(member.id)
 
@@ -322,6 +333,7 @@ function MembersTab({ includeInactive, v2, canManage, canAssignDeveloper }: { in
                             </TableRow>
                         )
                     })}
+                {visibleMembers.length === 0 && <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">No matching people.</TableCell></TableRow>}
                 </TableBody>
             </Table>
         </div>
@@ -446,17 +458,15 @@ export default function TeamSettingsPage() {
     const memberCount = members?.length || 0
 
     return (
-        <div className="flex flex-1 flex-col gap-6 p-6 max-w-5xl mx-auto">
+        <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-6 sm:p-8">
+            <header className="flex flex-wrap items-center justify-between gap-5"><h1 className="text-3xl font-semibold tracking-tight">Permissions</h1><PermissionNavigation current="people" capabilities={effective.data?.capabilities} /></header>
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold">Team Management</h1>
+                    <h2 className="text-2xl font-semibold">People</h2>
                 </div>
 
                 <div className="flex gap-2">
-                    <Button render={<Link href="/settings/team/roles" />} variant="outline">
-                        <Shield className="size-4 mr-2" aria-hidden="true" />
-                        Role Permissions
-                    </Button>
+
                     {canManage && <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
                         <DialogTrigger render={
                             <Button>

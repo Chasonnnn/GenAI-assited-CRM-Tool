@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { stageHasCapability, stageUsesPauseBehavior } from "@/lib/surrogate-stage-context"
 import { toast } from "@/components/ui/toast"
+import { RecordCollaboratorsDialog } from "@/components/permissions/record-collaborators-dialog"
 import { exportSurrogatePacketPdf } from "@/lib/api/surrogates"
 import {
     useSurrogateDetailActions,
@@ -64,6 +65,7 @@ export function HeaderActions() {
         isReleasePending,
     } = useSurrogateDetailActions()
     const [isExporting, setIsExporting] = React.useState(false)
+    const [collaboratorsOpen, setCollaboratorsOpen] = React.useState(false)
 
     if (!surrogate) return null
 
@@ -83,6 +85,7 @@ export function HeaderActions() {
             ? workflowStageOrder <= contactedStage.order
             : isIntakeStage
     const isV2 = effectivePermissions?.policy_version === 2
+    const canManageCollaborators = isV2 && !!effectivePermissions.capabilities?.can_manage_roles
     const canEdit = !isV2 || (effectivePermissions.permissions.includes("edit_surrogates") && !surrogate.is_archived)
     const canArchive = !isV2 || effectivePermissions.permissions.includes("archive_surrogates")
     const canSendEmail = !isV2 || effectivePermissions.permissions.includes("send_email")
@@ -228,6 +231,7 @@ export function HeaderActions() {
                             Edit
                         </DropdownMenuItem>
                     )}
+                    {canManageCollaborators && <DropdownMenuItem onClick={() => setCollaboratorsOpen(true)}>Collaborators</DropdownMenuItem>}
                     <DropdownMenuItem onClick={handleExport} disabled={isExporting}>
                         {isExporting ? "Exporting" : "Export"}
                     </DropdownMenuItem>
@@ -292,6 +296,7 @@ export function HeaderActions() {
                     ))}
                 </DropdownMenuContent>
             </DropdownMenu>
+            {collaboratorsOpen && <RecordCollaboratorsDialog kind="surrogate" recordId={surrogate.id} open={collaboratorsOpen} onOpenChange={setCollaboratorsOpen} canManage={canManageCollaborators} />}
         </>
     )
 }

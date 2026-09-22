@@ -12,6 +12,7 @@ const mockUseDonorNotes = vi.fn()
 const mockCreateDonorNote = vi.fn()
 const mockDeleteDonorNote = vi.fn()
 const mockUpdateDonor = vi.fn()
+const mockClaimDonor = vi.fn()
 const mockUpdateDonorStatus = vi.fn()
 const mockArchiveDonor = vi.fn()
 const mockRestoreDonor = vi.fn()
@@ -73,6 +74,7 @@ vi.mock("@/components/ui/avatar", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-donors", () => ({
+    useClaimDonor: () => ({ mutateAsync: mockClaimDonor, isPending: false }),
     useDonorProfile: () => mockUseDonorProfile(),
     useRevealDonorSensitiveInfo: () => ({ mutateAsync: mockRevealDonor, isPending: false, reset: vi.fn() }),
     useDonorOwnerOptions: () => ({ data: { users: [], queues: [] }, isLoading: false, isError: false }),
@@ -99,7 +101,6 @@ vi.mock("@/lib/hooks/use-donors", () => ({
         isError: false,
         refetch: vi.fn(),
     }),
-    useClaimDonor: () => ({mutateAsync: vi.fn(), isPending: false}),
     useUpdateDonor: () => ({ mutateAsync: mockUpdateDonor, isPending: false }),
     useUpdateDonorStatus: () => ({ mutateAsync: mockUpdateDonorStatus, isPending: false }),
     useArchiveDonor: () => ({ mutateAsync: mockArchiveDonor, isPending: false }),
@@ -195,6 +196,7 @@ describe("DonorDetailPage", () => {
         mockDeleteDonorNote.mockReset().mockResolvedValue(undefined)
         mockUpdateDonor.mockReset()
         mockUpdateDonor.mockResolvedValue({})
+        mockClaimDonor.mockReset().mockResolvedValue({})
         mockUpdateDonorStatus.mockReset()
         mockUpdateDonorStatus.mockResolvedValue({
             status: "applied",
@@ -320,6 +322,20 @@ describe("DonorDetailPage", () => {
         expect(screen.queryByRole("heading", { name: "Owner" })).not.toBeInTheDocument()
         expect(screen.queryByText("Intake collaborators")).not.toBeInTheDocument()
         expect(screen.queryByRole("combobox", { name: "Intake specialist" })).not.toBeInTheDocument()
+    })
+
+    it("offers claim from Actions only when the server allows it without Edit", async () => {
+        const current = mockUseDonor()
+        mockUseDonor.mockReturnValue({ ...current, data: { ...current.data, can_claim: true } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, role: "case_manager", permissions: ["view_donors", "assign_donors"] } })
+        mockClaimDonor.mockResolvedValue({})
+        render(<DonorDetailPage />)
+        fireEvent.click(screen.getByRole("button", { name: "Actions for Maya Thompson" }))
+        const claimItem = await screen.findByRole("menuitem", { name: "Claim donor" })
+        fireEvent.mouseMove(claimItem)
+        fireEvent.click(claimItem)
+        await waitFor(() => expect(mockClaimDonor).toHaveBeenCalledWith("donor-1"))
+        expect(screen.queryByRole("menuitem", { name: "Edit", exact: true })).not.toBeInTheDocument()
     })
 
     it("uses the compact entity header and action hierarchy shared by other detail pages", async () => {
