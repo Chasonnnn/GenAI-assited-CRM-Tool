@@ -18,7 +18,7 @@ Each staff member has one supplied role. Agencies cannot create custom roles or 
 
 Individual additions can grant actions or explicitly widen record scope. They cannot deny permissions inherited from the role. Removing an addition restores the baseline without overriding another valid source of access.
 
-Only Admin and Dev can change role baselines or individual action/scope additions. Case Managers may manage the agreed per-record Intake collaborators; that does not let them change someone's role or module permissions.
+Only Admin and Dev can change role baselines or individual action/scope additions. Only Admin and Dev manage explicit record collaborators. Any active staff member can receive a collaboration; the grant adds record scope without granting an action permission.
 
 Changing a person's role requires an Admin to review their additions and collaborator access and choose what carries over.
 
@@ -28,7 +28,7 @@ Record scope is configured separately for each module. It defines the same recor
 
 A Case Manager with Edit can therefore edit information on every post-approval record they can view, including records owned by another Case Manager.
 
-Within a configured scope rule, assignment and phase/stage restrictions combine with AND. Separate grants, including an individual scope addition or Intake collaboration, add access to their explicitly covered records.
+Within a configured scope rule, assignment and phase/stage restrictions combine with AND. Separate grants, including an individual scope addition or explicit record collaboration, add access to their explicitly covered records.
 
 The Intake default resolves the handoff requirement through two routes:
 
@@ -62,7 +62,7 @@ At approval handoff:
 2. The Intake owner at handoff becomes an Intake collaborator.
 3. That collaborator can continue viewing and updating normal information.
 4. Other collaborators can be added explicitly; prior ownership alone does not grant access.
-5. A Case Manager or Admin can remove collaborator access. There is no automatic time or later-stage expiry.
+5. An Admin or Dev can remove collaborator access. There is no automatic time or later-stage expiry.
 
 Removing collaboration ends that access route on the next action. Access through another valid route, such as current assignment or an individual addition, is evaluated independently.
 
@@ -78,7 +78,7 @@ AI Assistant is included for every active member when enabled by the organizatio
 |---|---|---|
 | Ownership | One staff member | The agency |
 | Visibility and management | Private from peers; Admin management is audited | Governed by module permissions |
-| Workflow/campaign reach | Owner's currently assigned or Intake-collaborator records, within permitted actions | Authorized organization configuration |
+| Workflow/campaign reach | Owner's currently assigned or collaborator records, within permitted actions | Authorized organization configuration |
 | Creator leaves or loses permissions | Unauthorized personal actions stop | Enabled/scheduled work continues under agency authority |
 | Reuse after departure | Admin can publish an organization copy | Organization keeps managing its own copy |
 
@@ -116,7 +116,7 @@ New manual template email jobs use explicit manual authority. They recheck the s
 | Bob claims that donor | Bob becomes owner; Alice's collaborator access continues |
 | Carol is another Case Manager | Carol can see the approved donor for matching and edit information if she has Edit |
 | Alice opens a joint document with an IP she cannot access | Access is denied until she has the required access to both parties |
-| Bob removes Alice as collaborator | Alice loses that route on her next action; her personal work skips the donor unless another eligible ownership/collaboration route remains |
+| An Admin removes Alice as collaborator | Alice loses that route on her next action; her personal work skips the donor unless another eligible ownership/collaboration route remains |
 | Alice leaves after contributing an organization workflow | Her personal work stops; the organization workflow continues and still credits Alice |
 | Someone manages workflows but lacks applicant-approval authority | They cannot activate an organization workflow that approves applicants |
 | Alice changes roles | The Admin reviews her additions and collaborator links before choosing what carries over |
@@ -146,7 +146,7 @@ Unlinked form intake submissions belong to Intake, Admin, and Dev. Linked submis
 
 ## Administration UI
 
-The production role editor follows the September 12 direction with five primary topics: Surrogates, Donors, Intended Parents, Operations, and Administration. This does not establish acceptance of every mockup. Operations groups workflows, templates, campaigns, and supporting tools. Record actions use short labels within sections; record scope remains separate. Personal tools and AI availability appear in the access preview, without redundant role toggles. The legacy post-approval surrogate permission is absent from the version 2 catalog because phase scope replaces it. Existing team/member pages show inherited authority, individual additions, and record collaborations rather than reproducing the unified People concept. Role changes require explicit carryover choices. Check access explains record visibility without implying permission to edit or send.
+The production role editor follows the September 12 direction with five primary topics: Surrogates, Donors, Intended Parents, Operations, and Administration. This does not establish acceptance of every mockup. Operations groups workflows, templates, campaigns, and supporting tools. Record actions use short labels within sections; record scope remains separate. Personal tools and AI availability appear in the access preview, without redundant role toggles. The legacy post-approval surrogate permission is absent from the version 2 catalog because phase scope replaces it. The selected People design keeps the existing Team list and separate member pages. Shared Roles, People, and Check access navigation connects them. Record Actions and member pages manage the same explicit collaboration grant. Overviews do not contain collaborator cards. Team search and role filters retain the existing invitation and bulk-role controls. Role changes require explicit carryover choices. Check access explains record visibility without implying permission to edit or send.
 
 The migration screen resolves legacy individual revokes, historical handoffs, old pool grants, and existing workflow/campaign execution. Activation validates the reviewed fingerprint again; a stale or incomplete review cannot activate the policy.
 

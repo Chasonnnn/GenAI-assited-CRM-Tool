@@ -1,5 +1,45 @@
 # Permission upgrade verification
 
+## September 22 completion
+
+The selected Team/member navigation and the permission-related module refactors are implemented in the isolated completion worktree for draft PR #691. The current draft is stacked on #690 and incorporates main through `a451fefc`. Application validation ends at `93131b86`; subsequent changes in this delivery record are documentation only. This section supersedes the unfinished-work descriptions in older dated entries below. Release, real-organization activation, and eventual v1 retirement remain separate steps.
+
+### Implemented changes
+
+- Workflow dispatch delegates record, task, intake, and communication actions to separate modules. Required approval-task creation fails closed during initial and resumed execution.
+- Campaign definition CRUD, audience queries, content snapshots, run scheduling/retry, execution materialization, delivery, and suppression have explicit service owners. Existing consent, authority, locking, and delivery checks remain in those paths.
+- Form matching retries now commit or roll back reset, matching, lead creation, and audit together. Automatic donor matching honors current record scope.
+- Dashboard attention rows and counts share authorized query builders. Donor drill-downs ignore deleted history stages consistently with dashboard counts.
+- AI-approved email delivery serializes with activation and checks current v2 action permissions, record scope, membership, and organization AI availability before provider admission.
+- Admin/Dev can manage explicit collaboration for any active staff member from record Actions or the member page. The grant adds record scope only. Donor Assign and Claim are independent from Edit.
+- Roles, People, and Check access share navigation. People retains the existing Team list and separate member pages, with search and readable role filters. Defaults remain in preview; record overview collaborator cards and donor header photo controls remain absent.
+
+### Validation
+
+| Check | Result |
+|---|---|
+| Complete API suite | 3,999 passed in the repository disposable-database runner, including migration and outbox tests |
+| Final frontend checks | TypeScript, ESLint, 286 files / 1,758 tests passed |
+| Python checks | Ruff passed across application and tests |
+| Production web build | Passed with the task's local QA API endpoint |
+| Migration history | Single additive head `20260922_1600_permission_heads`; upgrade regressions cover both prior heads and preserve existing policy versions |
+| React Doctor | No errors; nine performance suggestions in existing role/member loops. No numeric score requested and no source uploaded |
+| Setup portability | All four setup cases pass on macOS with an isolated `dpkg` test double; Linux setup behavior is unchanged |
+
+The API command was `PATH=<task-pg-wrappers>:$PATH TEST_DATABASE_PORT=5558 apps/api/run_tests.sh`. Each invocation created, migrated, and dropped a unique local database in the task-owned PostgreSQL 18.1 container. Frontend validation used the repository-pinned runtime and `pnpm run check`; the production build used `pnpm run build`.
+
+### Browser and activation evidence
+
+Real Chromium journeys used the production frontend and real authenticated API sessions against synthetic data. Intake approved a surrogate, egg donor, and sperm donor; a Case Manager claimed each through the UI. Authenticated reads verified persisted ownership and retained Intake access. A different organization's Admin received 404 for each record. Removing collaboration through record Actions caused 403 on Intake's next request for all three types; the denied donor page exposed neither the record name nor edit controls.
+
+An Admin added an Operations user from the donor Actions dialog, saw the same grant on that member's page, and removed it there. The record endpoint then returned an empty collaboration list. People search/empty results, member navigation, protected Admin controls, reviewed role save/reload/restore, and the visibility-only access checker passed. The role-details error/retry journey exposed a migration-tab display bug; its regression and fix keep upgrade navigation tied to the organization's policy version. The rebuilt standalone frontend passed the final error/retry recheck; the upgraded organization no longer displays Review upgrade during the error. Unit tests cover loading, inactive recipients, mutation errors, and independent collaboration capabilities.
+
+Inspected [desktop Roles](verification/permissions-2026-09-22/roles-desktop.png), [mobile Roles](verification/permissions-2026-09-22/roles-mobile.png), [dark Roles](verification/permissions-2026-09-22/roles-dark.png), [People search](verification/permissions-2026-09-22/people-filtered.png), [collaborators](verification/permissions-2026-09-22/record-collaborators.png), and [access checker](verification/permissions-2026-09-22/access-checker.png) screenshots show readable controls and no page-level horizontal overflow at 390 px. Role buttons scroll within their own row.
+
+The isolated activation rehearsal preserved three historical approved records across two synthetic organizations. Three unresolved handoffs, one individual revoke, and two existing execution items blocked activation. A membership change invalidated an earlier review. The revised review activated Alpha only, retained three verified Intake collaborators, disabled its organization workflow, and canceled its scheduled campaign; Beta stayed on v1. This rehearsal used current-schema synthetic history, not a production data copy, paused workflow execution, or running campaign run. Upgrade and execution-path tests cover those separate boundaries.
+
+Sanitized results are retained in [results.json](verification/permissions-2026-09-22/results.json). Provider delivery was mocked in tests; no real messages, production migration, release, or real-organization activation occurred. Current GitHub checks must be evaluated at the published head; older green checks do not validate this completion.
+
 ## September 20 continuation
 
 Draft #690 now incorporates fetched main through #716 and #717 at [the platform integration](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/29ee3fae1876eaaccfe01cf23d82bb00f2a800c3). Draft #691 incorporates that branch, reconciles the new interview-appointment lifecycle with v2 authorization, enables CI for its stacked PR base, and extracts three intake workflow actions without changing behavior. The final application source for the checks below is [the intake extraction](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dd738446083881806fc247e2aab937c17278d565); subsequent workplan edits contain no application changes.

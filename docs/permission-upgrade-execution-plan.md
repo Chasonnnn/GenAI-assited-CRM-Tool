@@ -1,6 +1,6 @@
 # Permission upgrade execution plan
 
-Status: permission version 2 foundations and focused authority/scope extractions are implemented in draft PR #691. The permission upgrade is not complete: combined-branch validation, frontend acceptance, and broader module refactors are distinct work. Production organizations remain on version 1 until reviewed activation. The selected role editor is the September 12 module-first mockup, option 1; a selected mockup is not implementation evidence.
+Status: permission version 2 foundations, the selected Team/member navigation, workflow and campaign service splits, atomic form retries, and shared dashboard attention datasets are implemented for draft PR #691. Release acceptance and organization activation remain separate gates. Production organizations remain on version 1 until reviewed activation. The selected role editor is the September 12 module-first mockup, option 1; a selected mockup is not implementation evidence.
 
 ## Implemented foundations
 
@@ -15,24 +15,24 @@ Status: permission version 2 foundations and focused authority/scope extractions
 
 Detailed checks and local delivery status are in [permission-upgrade-verification.md](permission-upgrade-verification.md).
 
-## Active workplan — September 20
+## Active workplan — September 22
 
-Publish this plan with the existing work in draft PR #691, stacked on draft platform PR #690, then resume implementation. Keep changes in small logical commits and push verified increments to these drafts. This authorizes neither merge/deployment nor production migrations, provider sends, or organization activation.
+Keep this work in draft PR #691, stacked on draft platform PR #690. Keep changes in small logical commits and push verified increments to these drafts. This authorizes neither merge/deployment nor production migrations, provider sends, or organization activation.
 
-The September 20 refresh incorporates fetched main through #716 and #717, including OPS template CLI and interview-appointment management. Platform and permission migration histories have additive join revisions. Verification for this refresh is recorded separately from the September 19 results.
+The September 22 refresh incorporates current main in the isolated permission completion worktree. The additive `20260922_1600_permission_heads` revision joins the permission and Google appointment migration histories. Verification for this completion is recorded separately from earlier snapshots.
 
 | Order | Work | Completion evidence / boundary |
 |---|---|---|
-| 1 | Refresh platform and permission branches against latest main | Completed for the September 20 fetched-main snapshot. Main fixes, removed collaborator/photo controls, generated contracts, and both migration branches are preserved. See the current verification record |
-| 2 | Review and finish permission frontend | People currently links to the existing Team page. Show proposed navigation/layout changes before implementation. Review donor Owner and member collaboration controls; keep Check access visibility-only unless a broader action checker is agreed. Exercise additions/removals, individual/bulk role changes, inactive members, publication, and revocation with representative loading/error/responsive/keyboard states |
-| 3 | Refactor workflow action execution | In progress: the three intake actions now live in `workflow_intake_actions`; 117 baseline tests passed before extraction and 245 workflow/intake tests afterward. Record changes, task creation, and communication actions remain in the adapter. Preserve snapshots, approval, idempotency, retry/resume, and delivery admission |
-| 4 | Refactor campaign lifecycle | Separate definition/publication, audience selection, run lifecycle, and retries only where responsibilities remain combined. Preserve consent, suppression, authorization, immutable content, recipient counts, and locking |
-| 5 | Consolidate intake matching/retry transactions | Ordinary approve/reject already have service-owned transactions. Focus on matching/reset/retry and nested helpers that commit before the use case finishes; prove rollback and safe repeated execution |
-| 6 | Consolidate reporting datasets | Reuse the same authorized dataset across counts, charts, drill-downs, and exports. Preserve request-only v2 caching; restoring cross-request caching is a separate optimization requiring complete scope invalidation |
-| 7 | Validate the exact combined version | Full affected API/frontend suites, production builds, fresh/existing-database migrations, denied/cross-org/revoked-access tests, and surrogate/egg-donor/sperm-donor browser handoffs; repeat isolated activation rehearsal after relevant changes |
-| 8 | Release and real-organization activation | Separately authorized after frontend acceptance and final verification. Review actual organization access/execution changes; synthetic rehearsal is not real-organization approval |
+| 1 | Recover safety fixes and refresh the permission branch | Required approval-task failures stop execution; form retry failures roll back the full retry. Current main is merged into the permission worktree with an additive migration join |
+| 2 | Review and finish permission frontend | Selected existing Team list plus separate member pages; shared navigation, search/filtering, and Admin/Dev-managed record collaborators in Actions and member settings |
+| 3 | Refactor workflow action execution | Intake, record, task, and communication actions have separate modules. Shared dispatch, approval, retry/resume, and delivery admission remain centralized |
+| 4 | Refactor campaign lifecycle | Audience, content, run lifecycle, execution, delivery, and suppression have named owners; definition CRUD stays in the existing service |
+| 5 | Consolidate intake matching/retry transactions | One service-owned retry transaction covers reset, matching, lead creation, and audit; failure and scope regressions pass |
+| 6 | Consolidate reporting datasets | Dashboard attention rows/counts share authorized queries; donor drill-down parity is covered. Cross-request v2 caching remains a separate optimization |
+| 7 | Validate the exact combined version | Full API/frontend suites and production build pass. Current browser and activation evidence is recorded in the verification document |
+| 8 | Release and real-organization activation | Separately authorized after acceptance and final CI. Review actual organization access/execution changes before activation |
 
-Backend work that preserves behavior can proceed while frontend decisions remain open. Do not add new UI, change permission defaults, or claim that mockup selection approves every implemented control. Refactoring and behavior changes must be separate commits with their own tests. Meta/Twilio configuration, onboarding, and broader redesign are outside this workplan.
+The selected frontend direction preserves the existing Team and member-page structure. Do not add new UI, change permission defaults, or claim that mockup selection approves every implemented control. Refactoring and behavior changes must be separate commits with their own tests. Meta/Twilio configuration, onboarding, and broader redesign are outside this workplan.
 
 The CI PR-base filter now includes `codex/platform-upgrades`, with a regression test. Push and release triggers are unchanged. Inspect actual remote check results after publication; local validation or an absent check is not a passing GitHub run. The final accepted combined version must receive CI before merge without triggering deployment workflows.
 
@@ -61,11 +61,11 @@ Schema downgrade rejects active version 2 policies and personal campaigns that t
 
 ## Remaining platform sequence
 
-The active workplan above governs this continuation. Follow the concrete boundaries in the [module refactor sequence](permission-module-refactor-plan.md#next-refactor-sequence); the permission-specific helpers do not complete the surrounding extractions. The longer-term platform items below are context, not additional scope authorized by resuming the permission work. Review the live frontend before declaring UI acceptance.
+The active workplan above governs this continuation. The implemented service boundaries and remaining rollout work are recorded in the [module refactor sequence](permission-module-refactor-plan.md#next-refactor-sequence). The longer-term platform items below are context, not additional scope authorized by resuming the permission work. Review the live frontend before declaring UI acceptance.
 
 | Order | Work | Start condition |
 |---|---|---|
-| 1 | Live frontend acceptance | Compare Roles and existing team/member controls with the selected concepts; settle the People navigation; check reviewed changes and personal/organization authority controls |
+| 1 | Live frontend acceptance | Compare Roles and existing team/member controls with the selected concepts; verify the selected People navigation; check reviewed changes and personal/organization authority controls |
 | 2 | Release review and first organization activation | Exact combined version validated; isolated activation rehearsal complete; explicit release and organization activation authorization |
 | 3 | Remaining donor journeys and provider verification | Shared record and execution contracts stable; synthetic integration tests pass |
 | 4 | Workflow and form-builder UX simplification | Editing, publication, validation, and execution authority remain behind existing service interfaces |

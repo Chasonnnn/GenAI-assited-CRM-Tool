@@ -1,6 +1,6 @@
 # Module refactors for the permission upgrade
 
-Status: permission-v2 foundations and shared record filters are implemented in draft PR #691 behind organization activation. Broader modularization is unfinished: remaining workflow actions, campaign lifecycle, intake matching/retry transactions, and reporting datasets remain in the sequence below. Existing organizations remain on v1 until their access and execution reviews are resolved. Integrated verification is recorded in `permission-upgrade-verification.md`. No deployment, production migration, or provider testing has occurred.
+Status: permission-v2 foundations and shared record filters are implemented in draft PR #691 behind organization activation. The September 22 completion separates workflow action execution and campaign lifecycle responsibilities, makes intake retries atomic, and shares dashboard attention datasets. These changes remain in the draft pending release review. Existing organizations remain on v1 until their access and execution reviews are resolved. Integrated verification is recorded in `permission-upgrade-verification.md`. No deployment, production migration, or provider testing has occurred.
 
 ## Implemented boundaries
 
@@ -12,10 +12,14 @@ Status: permission-v2 foundations and shared record filters are implemented in d
 | Workflow definitions | `services/workflow_definition_rules.py` | Trigger validation and action ordering independently of CRUD, execution, and authorization |
 | Workflow authority | `services/workflow_access.py`, `services/workflow_execution_authority.py` | Human management, personal subject eligibility, organization execution snapshots, action authorization, retry/resume, and delivery admission |
 | Workflow intake actions | `services/workflow_intake_actions.py` | Promotion, matching, and lead-creation action arguments/results; dispatcher guards and execution identity remain unchanged, with transactions still in `form_intake_service` |
+| Workflow action execution | `services/workflow_record_actions.py`, `services/workflow_task_actions.py`, `services/workflow_communication_actions.py` | Record changes, task creation, and queued communications; the adapter retains dispatch and shared authority checks |
+| Campaign lifecycle | `services/campaign_audience.py`, `services/campaign_content.py`, `services/campaign_run_service.py`, `services/campaign_execution_service.py`, `services/campaign_delivery_service.py`, `services/campaign_suppression_service.py` | Audience queries, immutable content, run state/retry, recipient materialization, delivery admission, and suppression; definition CRUD remains in `campaign_service` |
 | Campaign authority | `services/campaign_access.py`, existing campaign audience and run services | View/Edit/Send, personal versus organization ownership, viewer-scoped preview/recipient/count queries, durable execution audience, send authorization, recipient rechecks, and publication |
 | Template authorization/publication | `services/email_template_access.py`, `services/email_template_publication.py` | Shared edit decisions and independent organization copies; proposal credit is separate from execution authority |
 | Submission review | `services/form_submission_access.py` | Submission actions, unlinked Intake/Admin/Dev queue, linked record scope, form picker, and intake-lead access; builder authority remains in `manage_forms` |
 | Application metadata | `services/form_application_access.py` | Record-scoped published form metadata and active link selection without builder access; explicit email-send permission before sending |
+| Intake retry | `services/form_intake_service.py` | Matching reset, rematch, lead creation, and audit share one commit or rollback; nested helpers defer transaction completion |
+| Dashboard attention dataset | `services/dashboard_attention_queries.py` | Scoped overdue tasks, surrogate/donor attention, and matching counts use the same queries; null history stages cannot change donor drill-down counts |
 | Reporting | `services/analytics_access_service.py` and existing analytics services | Request-scoped authorized ORM dataset, including aliases; v2 request-only result reuse until cross-request scope invalidation has a reliable revision |
 | Permission client | `lib/api/permissions.ts`, `lib/api/record-scopes.ts`, corresponding query hooks and permission components | Server capabilities, record rules, access explanations, reviewed changes, and cache invalidation; rendered validation remains part of the integration gate |
 
@@ -64,7 +68,7 @@ Publication creates independent organization-owned work with proposal credit. Or
 
 ### 1. Rehearse production activation
 
-The September 19 isolated synthetic-history rehearsal passed on the combined application code. It does not replace live frontend acceptance or a real organization's reviewed activation; see the verification record for data coverage and boundaries.
+The September 22 isolated synthetic-history rehearsal passed on the completion code. It does not replace live frontend acceptance or a real organization's reviewed activation; see the verification record for data coverage and boundaries.
 
 - Rehearse the exact committed version against an isolated production-shaped copy and inspect organization-specific access and execution changes.
 - Activate only a reviewed organization after explicit release authorization; validate its operational journeys before broadening rollout.
@@ -72,27 +76,27 @@ The September 19 isolated synthetic-history rehearsal passed on the combined app
 
 ### 2. Split workflow execution by concrete use case
 
-Keep `workflow_definition_rules` as the definition validator and `workflow_execution_authority` as the authority boundary. The core already delegates action execution to `DefaultWorkflowDomainAdapter.execute_action`, and scheduled candidate selection already lives in `workflow_triggers.trigger_scheduled_workflows`. The September 20 slice extracted intake routing into `workflow_intake_actions` without changing its behavior. Record changes, task creation, and communications remain in the adapter. Preserve the existing scheduling boundary rather than repeating an extraction that is already implemented.
+Keep `workflow_definition_rules` as the definition validator and `workflow_execution_authority` as the authority boundary. The core already delegates action execution to `DefaultWorkflowDomainAdapter.execute_action`, and scheduled candidate selection already lives in `workflow_triggers.trigger_scheduled_workflows`. The September 20 slice extracted intake routing into `workflow_intake_actions` without changing its behavior. The September 22 slice extracts record changes, task creation, and communications into their respective action modules. The adapter retains shared dispatch and permission guards. A required approval-task failure now stops both initial and resumed execution before later actions run. Preserve the existing scheduling boundary rather than repeating an extraction that is already implemented.
 
-The intake extraction preserves result keys, creator attribution, strict auto-promotion flags, execution binding, matching outcomes, and existing transaction ownership. Seven dispatcher contract cases were added before the move; 117 baseline tests passed before extraction and 245 workflow/intake tests passed afterward. The separate matching/retry transaction problem below is not fixed by moving these actions.
+The intake extraction preserves result keys, creator attribution, strict auto-promotion flags, execution binding, matching outcomes, and existing transaction ownership. Seven dispatcher contract cases were added before the move; 117 baseline tests passed before extraction and 245 workflow/intake tests passed afterward. Matching/retry transactions were repaired separately, preserving the behavior-only extraction boundary.
 
 Preserve immutable action snapshots, scheduling timestamps, idempotency keys, approval results, and retry/resume behavior. Each extraction requires an existing caller and behavioral tests. Keep one coordinator for engine/adaptor/worker changes so dispatch and final delivery cannot drift apart.
 
 ### 3. Split campaign lifecycle around the existing audience query
 
-Keep `campaign_access` responsible for authority. Separate campaign definition CRUD, publication, audience preview/materialization, run state, and retry dispatch where the current service combines them. Continue extending the existing recipient-query implementation.
+`campaign_access` retains authority. The September 22 split keeps definition CRUD in `campaign_service` and moves audience queries, content snapshots, scheduling/cancellation/retries, execution materialization, delivery, and suppression into named services. Routers, workers, unsubscribe, webhook, and messaging callers use those owners directly.
 
 Preview, materialized recipients, retry selection, and delivery admission must agree. Consent, suppression, immutable launch content, skipped counts, and delivery locking stay with their current owners. Campaign definition/UI work can run alongside workflow refactoring after the shared action and delivery contracts are stable.
 
 ### 4. Separate form definition, intake routing, and review transactions
 
-Keep builder definition/publication separate from `view_form_submissions` and `review_form_submissions`. Ordinary approval/rejection already use service-owned transactions in `form_submission_service`; do not redo that boundary. Focus on `form_intake_service.retry_submission_match`, which commits its reset before rematching and can commit again through nested helpers. Make matching, audit, and transaction completion a coherent use case, with failure/rollback and repeated-execution tests before changing commit ownership.
+Keep builder definition/publication separate from `view_form_submissions` and `review_form_submissions`. Ordinary approval/rejection already use service-owned transactions in `form_submission_service`; do not redo that boundary. `form_intake_service.retry_submission_match` now owns the entire retry transaction. Reset, rematching, lead creation, and audit roll back together on failure. Nested matching helpers defer their commit to that use case. Regression tests cover failure at each boundary, repeated execution, donor scope denial, and durable dispatch compatibility.
 
 Retain the explicit unlinked queue and shared linked-record access. Public intake, draft tokens, published-schema snapshots, file scanning, and duplicate detection remain independent boundaries. UI simplification follows this split; it does not require a new form engine.
 
 ### 5. Consolidate reporting datasets and invalidation
 
-Keep metric calculation in existing analytics modules and supply the same authorized dataset to counts, charts, drill-downs, and exports. Group related metrics around an explicit dataset/query context as duplication appears.
+Keep metric calculation in existing analytics modules and supply the same authorized dataset to counts, charts, drill-downs, and exports. The September 22 `dashboard_attention_queries` extraction shares the overdue and stuck-record datasets between rows and counts. The donor drill-down now ignores deleted history stages consistently with the dashboard. Broader chart or report redesign remains separate work.
 
 The current request-only v2 cache deliberately avoids stale grants. Restoring cross-request caching is a separate optimization, not a missing permission feature or a prerequisite for this refactor. Before restoring it, define a scope revision covering role rules, individual additions, collaborators, membership changes, and record ownership/stage/archive changes. Test revocation on the next request. Agency-wide reporting requires explicit authority; ordinary report access uses the person's record scope.
 
