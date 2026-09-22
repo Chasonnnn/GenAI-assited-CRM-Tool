@@ -971,6 +971,20 @@ class WorkflowEngineCore:
                         logger.info(f"Workflow {workflow.id} paused again at action {actual_idx}")
                         return
 
+                    action_results.append(
+                        {
+                            "success": False,
+                            "action_type": next_action.get("action_type"),
+                            "error": "Failed to create approval task",
+                            "skipped": True,
+                        }
+                    )
+                    execution.actions_executed = action_results
+                    execution.status = WorkflowExecutionStatus.FAILED.value
+                    execution.error_message = "Failed to create approval task"
+                    db.commit()
+                    return
+
                 # Execute non-approval action
                 result = self._execute_authorized_action(
                     workflow=workflow,
