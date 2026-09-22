@@ -481,7 +481,10 @@ def list_donors(
                 DonorStatusHistory.donor_id.label("donor_id"),
                 func.max(DonorStatusHistory.effective_at).label("last_change_at"),
             )
-            .filter(DonorStatusHistory.organization_id == org_id)
+            .filter(
+                DonorStatusHistory.organization_id == org_id,
+                DonorStatusHistory.new_stage_id.is_not(None),
+            )
             .group_by(DonorStatusHistory.donor_id)
             .subquery()
         )

@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 
 from app.core.encryption import hash_email
-from app.db.models import Donor, Organization, Surrogate, Task
+from app.db.models import Donor, DonorStatusHistory, Organization, Surrogate, Task
 from app.schemas.record_scope import RecordScopeAdditionCreate
 from app.services import (
     dashboard_service,
@@ -78,6 +78,27 @@ def _drilldown(db, session, kind):
     )
     assert len(records) == total
     return {record.id for record in records}
+
+
+@pytest.mark.parametrize("kind", ["egg", "sperm"])
+def test_deleted_stage_history_does_not_hide_stuck_donor_drilldown(db, context, kind):
+    record = _stale_record(db, context.intake, kind, suffix=1)
+    now = datetime.now(UTC)
+    db.add(
+        DonorStatusHistory(
+            donor_id=record.id,
+            organization_id=context.org.id,
+            old_stage_id=record.stage_id,
+            new_stage_id=None,
+            new_status="removed_stage",
+            new_label_snapshot="Removed stage",
+            effective_at=now,
+            recorded_at=now,
+        )
+    )
+    db.flush()
+    assert _attention(db, context.intake)["stuck_donor_count"] == 1
+    assert _drilldown(db, context.intake, kind) == {record.id}
 
 
 @pytest.mark.parametrize("kind", ["surrogate", "egg", "sperm"])
