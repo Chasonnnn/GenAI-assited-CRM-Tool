@@ -239,6 +239,7 @@ export interface FormSubmissionRead {
     review_notes?: string | null
     answers: JsonObject
     schema_snapshot?: FormSchema | null
+    mapping_snapshot?: FormFieldMappingItem[] | null
     source_mode: FormLinkMode
     intake_link_id?: string | null
     intake_lead_id?: string | null
@@ -796,6 +797,7 @@ export function submitSharedPublicForm(
     challengeToken?: string | null,
     messagingConsent?: { operational?: boolean; promotional?: boolean },
     publishedVersionId?: string | null,
+    idempotencyKey?: string,
 ): Promise<FormSubmissionSharedResponse> {
     const formData = new FormData()
     formData.append('answers', JSON.stringify(answers))
@@ -805,6 +807,9 @@ export function submitSharedPublicForm(
     }
     if (publishedVersionId) {
         formData.append('published_version_id', publishedVersionId)
+    }
+    if (idempotencyKey) {
+        formData.append('idempotency_key', idempotencyKey)
     }
     formData.append('sms_operational', String(messagingConsent?.operational === true))
     formData.append('sms_promotional', String(messagingConsent?.promotional === true))

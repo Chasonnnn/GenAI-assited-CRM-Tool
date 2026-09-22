@@ -299,28 +299,3 @@ def mark_token_error(db: Session, connection_id: UUID, error: Exception) -> Erro
         conn.updated_at = now
         db.commit()
     return category
-
-
-def get_connection_health_status(connection: MetaOAuthConnection) -> str:
-    """
-    Get human-readable health status for a connection.
-
-    Args:
-        connection: OAuth connection to check
-
-    Returns:
-        Status string: "healthy", "needs_reauth", "rate_limited", "error"
-    """
-    if not connection.last_error:
-        return "healthy"
-
-    if connection.last_error_code == ErrorCategory.AUTH.value:
-        return "needs_reauth"
-
-    if connection.last_error_code == ErrorCategory.RATE_LIMIT.value:
-        return "rate_limited"
-
-    if connection.last_error_code == ErrorCategory.PERMISSION.value:
-        return "permission_error"
-
-    return "error"

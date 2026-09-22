@@ -13,6 +13,7 @@ from urllib.parse import urlparse, urlunparse
 
 from fastapi import UploadFile
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError, PendingRollbackError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -26,7 +27,10 @@ from app.db.enums import (
     FormSubmissionMatchStatus,
     FormSubmissionStatus,
     IntakeLeadStatus,
+    JobStatus,
+    JobType,
     TrackingMode,
+    WorkflowExecutionStatus,
 )
 from app.db.enums.workflows import WorkflowTriggerType
 from app.db.models import (
@@ -42,16 +46,19 @@ from app.db.models import (
     FormSubmissionFile,
     FormSubmissionMatchCandidate,
     IntakeLead,
+    Job,
     LeadAttribution,
     PublishedIntakeVersion,
     Surrogate,
     TrackingEventLog,
+    WorkflowExecution,
 )
 from app.schemas.donor import DonorCreate
 from app.services import (
     embed_policy_service,
     form_service,
     form_submission_service,
+    job_service,
     meta_capi,
     meta_crm_dataset_service,
     surrogate_input_normalization_service,
@@ -95,6 +102,10 @@ META_TRACKING_MODES = {
     TrackingMode.PRIVACY_SAFE_LEAD.value,
     TrackingMode.ENHANCED_MATCH_LEAD.value,
 }
+FORM_SUBMISSION_WORKFLOW_JOB_KEY_PREFIX = "form_submission_workflow"
+FORM_SUBMISSION_WORKFLOW_MANUAL_REVIEW_ERROR = (
+    "Workflow is no longer eligible for automatic recovery; manual review required"
+)
 
 
 def get_messaging_consent_options(
@@ -1364,28 +1375,150 @@ def _trigger_form_submitted_workflow(
     db: Session,
     *,
     submission: FormSubmission,
-) -> None:
-    try:
-        from app.services import workflow_triggers
+) -> list[WorkflowExecution]:
+    from app.services import workflow_triggers
 
-        workflow_triggers.trigger_form_submitted(
-            db=db,
+    return workflow_triggers.trigger_form_submitted(
+        db=db,
+        org_id=submission.organization_id,
+        form_id=submission.form_id,
+        submission_id=submission.id,
+        submitted_at=submission.submitted_at,
+        surrogate_id=submission.surrogate_id,
+        source_mode=submission.source_mode,
+        entity_owner_id=_resolve_surrogate_owner_user_id(
+            db,
             org_id=submission.organization_id,
-            form_id=submission.form_id,
-            submission_id=submission.id,
-            submitted_at=submission.submitted_at,
             surrogate_id=submission.surrogate_id,
-            source_mode=submission.source_mode,
-            entity_owner_id=_resolve_surrogate_owner_user_id(
-                db,
-                org_id=submission.organization_id,
-                surrogate_id=submission.surrogate_id,
-            ),
+        ),
+    )
+
+
+def _form_submission_workflow_job_key(submission_id: uuid.UUID) -> str:
+    return f"{FORM_SUBMISSION_WORKFLOW_JOB_KEY_PREFIX}:{submission_id}"
+
+
+def _enqueue_form_submission_workflow_job(
+    db: Session,
+    *,
+    submission: FormSubmission,
+) -> Job:
+    return job_service.enqueue_job(
+        db=db,
+        org_id=submission.organization_id,
+        job_type=JobType.FORM_SUBMISSION_WORKFLOW,
+        payload={"submission_id": str(submission.id)},
+        idempotency_key=_form_submission_workflow_job_key(submission.id),
+        commit=False,
+    )
+
+
+def process_form_submission_workflow(
+    db: Session,
+    *,
+    org_id: uuid.UUID,
+    submission_id: uuid.UUID,
+) -> None:
+    """Route one tenant-scoped submission and reject incomplete executions."""
+    submission = (
+        db.query(FormSubmission)
+        .filter(
+            FormSubmission.organization_id == org_id,
+            FormSubmission.id == submission_id,
+            FormSubmission.source_mode == FormLinkMode.SHARED.value,
+        )
+        .first()
+    )
+    if submission is None:
+        raise ValueError("Form submission not found")
+
+    executions = _trigger_form_submitted_workflow(db, submission=submission)
+    incomplete_statuses = {
+        WorkflowExecutionStatus.FAILED.value,
+        WorkflowExecutionStatus.PARTIAL.value,
+        WorkflowExecutionStatus.RUNNING.value,
+    }
+    persisted_incomplete = (
+        db.query(WorkflowExecution)
+        .filter(
+            WorkflowExecution.organization_id == org_id,
+            WorkflowExecution.entity_type == "form_submission",
+            WorkflowExecution.entity_id == submission_id,
+            WorkflowExecution.status.in_(incomplete_statuses),
+        )
+        .all()
+    )
+    returned_execution_ids = {execution.id for execution in executions}
+    undiscovered_incomplete = [
+        execution
+        for execution in persisted_incomplete
+        if execution.id not in returned_execution_ids
+    ]
+    if undiscovered_incomplete:
+        for execution in undiscovered_incomplete:
+            execution.status = WorkflowExecutionStatus.FAILED.value
+            execution.error_message = FORM_SUBMISSION_WORKFLOW_MANUAL_REVIEW_ERROR
+        db.commit()
+    returned_incomplete = any(
+        execution.status in incomplete_statuses for execution in executions
+    )
+    if returned_incomplete or persisted_incomplete:
+        raise RuntimeError("Form submission workflow execution incomplete")
+
+
+def _attempt_form_submission_workflow_job(
+    db: Session,
+    *,
+    submission: FormSubmission,
+) -> None:
+    """Claim and synchronously attempt the durable job for response parity."""
+    job = job_service.get_job_by_idempotency_key(
+        db,
+        org_id=submission.organization_id,
+        idempotency_key=_form_submission_workflow_job_key(submission.id),
+    )
+    if job is None or job.status != JobStatus.PENDING.value:
+        return
+    claimed_job = job_service.claim_job_for_dispatch(db, job.id)
+    if claimed_job is None or claimed_job.claim_token is None:
+        return
+    claimed_job_id = claimed_job.id
+    claim_token = claimed_job.claim_token
+
+    try:
+        process_form_submission_workflow(
+            db,
+            org_id=submission.organization_id,
+            submission_id=submission.id,
         )
     except Exception:
-        logger.debug(
-            "trigger_form_submitted_failed",
-            exc_info=True,
+        try:
+            job_service.fail_claimed_job(
+                db,
+                job_id=claimed_job_id,
+                claim_token=claim_token,
+                error="Form submission workflow processing failed",
+            )
+        except PendingRollbackError:
+            db.rollback()
+            job_service.fail_claimed_job(
+                db,
+                job_id=claimed_job_id,
+                claim_token=claim_token,
+                error="Form submission workflow processing failed",
+            )
+        logger.warning(
+            "Form submission workflow deferred after failed synchronous attempt "
+            "job_id=%s submission_id=%s organization_id=%s",
+            claimed_job_id,
+            submission.id,
+            submission.organization_id,
+        )
+    else:
+        job_service.complete_claimed_job(
+            db,
+            job_id=claimed_job_id,
+            claim_token=claim_token,
         )
 
 
@@ -1511,6 +1644,7 @@ def _create_shared_submission(
         )
 
     link.submissions_count = (link.submissions_count or 0) + 1
+    _enqueue_form_submission_workflow_job(db, submission=submission)
     return submission
 
 
@@ -1539,6 +1673,8 @@ def create_shared_submission(
         raise ValueError("Challenge verification failed")
 
     normalized_idempotency_key = (idempotency_key or "").strip()[:128] or None
+    intake_organization_id = link.organization_id
+    intake_link_id = link.id
     if normalized_idempotency_key:
         existing = _get_idempotent_embed_submission(
             db,
@@ -1594,30 +1730,42 @@ def create_shared_submission(
         else _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
     )
     _raise_if_duplicate_applicant_submission(db, link=link, identity=identity)
-    submission = _create_shared_submission(
-        db,
-        form=form,
-        link=link,
-        answers=answers,
-        identity=identity,
-        files=files or [],
-        file_field_keys=file_field_keys,
-        surrogate_id=None,
-        intake_lead_id=None,
-        match_status=FormSubmissionMatchStatus.WORKFLOW_PENDING.value,
-        match_reason="workflow_pending",
-        matched_at=None,
-        idempotency_key=normalized_idempotency_key,
-        published_version_id=published_version.id if published_version else None,
-        form_schema_hash=published_version.form_version_hash if published_version else None,
-        consent_text_hash=published_version.consent_text_hash if published_version else None,
-        tracking_policy_hash=(
-            published_version.tracking_policy_hash if published_version else None
-        ),
-        lead_kind=selected_lead_kind,
-        schema_snapshot=selected_schema_snapshot,
-        mapping_snapshot=selected_mapping_snapshot,
-    )
+    try:
+        with db.begin_nested():
+            submission = _create_shared_submission(
+                db,
+                form=form,
+                link=link,
+                answers=answers,
+                identity=identity,
+                files=files or [],
+                file_field_keys=file_field_keys,
+                surrogate_id=None,
+                intake_lead_id=None,
+                match_status=FormSubmissionMatchStatus.WORKFLOW_PENDING.value,
+                match_reason="workflow_pending",
+                matched_at=None,
+                idempotency_key=normalized_idempotency_key,
+                published_version_id=published_version.id if published_version else None,
+                form_schema_hash=published_version.form_version_hash if published_version else None,
+                consent_text_hash=published_version.consent_text_hash if published_version else None,
+                tracking_policy_hash=(
+                    published_version.tracking_policy_hash if published_version else None
+                ),
+                lead_kind=selected_lead_kind,
+                schema_snapshot=selected_schema_snapshot,
+                mapping_snapshot=selected_mapping_snapshot,
+            )
+    except IntegrityError:
+        existing = _get_idempotent_submission(
+            db,
+            organization_id=intake_organization_id,
+            intake_link_id=intake_link_id,
+            idempotency_key=normalized_idempotency_key or "",
+        )
+        if existing:
+            return existing, _normalize_shared_outcome(existing.match_status)
+        raise
     metadata = source_metadata or {}
     client_ip = str(metadata.get("client_ip") or "").strip() or None
     user_agent = str(metadata.get("user_agent") or "").strip() or None
@@ -1648,9 +1796,20 @@ def create_shared_submission(
         form_id=form.id,
         identity=identity,
     )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        existing = _recover_idempotent_submission_after_integrity_error(
+            db,
+            organization_id=intake_organization_id,
+            intake_link_id=intake_link_id,
+            idempotency_key=normalized_idempotency_key,
+        )
+        if existing:
+            return existing, _normalize_shared_outcome(existing.match_status)
+        raise
     db.refresh(submission)
-    _trigger_form_submitted_workflow(db, submission=submission)
+    _attempt_form_submission_workflow_job(db, submission=submission)
     db.refresh(submission)
     return submission, _normalize_shared_outcome(submission.match_status)
 
@@ -1693,14 +1852,47 @@ def _get_idempotent_embed_submission(
     link: FormIntakeLink,
     idempotency_key: str,
 ) -> FormSubmission | None:
+    return _get_idempotent_submission(
+        db,
+        organization_id=link.organization_id,
+        intake_link_id=link.id,
+        idempotency_key=idempotency_key,
+    )
+
+
+def _get_idempotent_submission(
+    db: Session,
+    *,
+    organization_id: uuid.UUID,
+    intake_link_id: uuid.UUID,
+    idempotency_key: str,
+) -> FormSubmission | None:
     return (
         db.query(FormSubmission)
         .filter(
-            FormSubmission.organization_id == link.organization_id,
-            FormSubmission.intake_link_id == link.id,
+            FormSubmission.organization_id == organization_id,
+            FormSubmission.intake_link_id == intake_link_id,
             FormSubmission.idempotency_key == idempotency_key,
         )
         .first()
+    )
+
+
+def _recover_idempotent_submission_after_integrity_error(
+    db: Session,
+    *,
+    organization_id: uuid.UUID,
+    intake_link_id: uuid.UUID,
+    idempotency_key: str | None,
+) -> FormSubmission | None:
+    db.rollback()
+    if not idempotency_key:
+        return None
+    return _get_idempotent_submission(
+        db,
+        organization_id=organization_id,
+        intake_link_id=intake_link_id,
+        idempotency_key=idempotency_key,
     )
 
 
@@ -1995,6 +2187,8 @@ def submit_lead_capture_embed(
     if form.purpose != FormPurpose.LEAD_CAPTURE.value:
         raise ValueError("Embed lead capture requires a lead_capture form")
 
+    intake_organization_id = link.organization_id
+    intake_link_id = link.id
     existing = _get_idempotent_embed_submission(
         db,
         link=link,
@@ -2041,25 +2235,37 @@ def submit_lead_capture_embed(
         {**(session.attribution_snapshot_json or {}), **(attribution or {})}
     )
 
-    submission = _create_shared_submission(
-        db,
-        form=form,
-        link=link,
-        answers=answers,
-        identity=identity,
-        files=[],
-        file_field_keys=None,
-        surrogate_id=None,
-        intake_lead_id=None,
-        match_status=FormSubmissionMatchStatus.WORKFLOW_PENDING.value,
-        match_reason="workflow_pending",
-        matched_at=None,
-        published_version_id=version.id,
-        idempotency_key=idempotency_key,
-        form_schema_hash=version.form_version_hash,
-        consent_text_hash=version.consent_text_hash,
-        tracking_policy_hash=version.tracking_policy_hash,
-    )
+    try:
+        with db.begin_nested():
+            submission = _create_shared_submission(
+                db,
+                form=form,
+                link=link,
+                answers=answers,
+                identity=identity,
+                files=[],
+                file_field_keys=None,
+                surrogate_id=None,
+                intake_lead_id=None,
+                match_status=FormSubmissionMatchStatus.WORKFLOW_PENDING.value,
+                match_reason="workflow_pending",
+                matched_at=None,
+                published_version_id=version.id,
+                idempotency_key=idempotency_key,
+                form_schema_hash=version.form_version_hash,
+                consent_text_hash=version.consent_text_hash,
+                tracking_policy_hash=version.tracking_policy_hash,
+            )
+    except IntegrityError:
+        existing = _get_idempotent_submission(
+            db,
+            organization_id=intake_organization_id,
+            intake_link_id=intake_link_id,
+            idempotency_key=idempotency_key,
+        )
+        if existing:
+            return existing, _normalize_shared_outcome(existing.match_status)
+        raise
     _create_lead_attribution(
         db,
         link=link,
@@ -2104,7 +2310,18 @@ def submit_lead_capture_embed(
             identity=identity,
             attribution=sanitized_attribution,
         )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        existing = _recover_idempotent_submission_after_integrity_error(
+            db,
+            organization_id=intake_organization_id,
+            intake_link_id=intake_link_id,
+            idempotency_key=idempotency_key,
+        )
+        if existing:
+            return existing, _normalize_shared_outcome(existing.match_status)
+        raise
     db.refresh(submission)
     if link.tracking_mode == TrackingMode.INTERNAL_ONLY.value:
         meta_crm_dataset_service.enqueue_website_lead_event(
@@ -2117,7 +2334,7 @@ def submit_lead_capture_embed(
             phone=identity.get("phone"),
         )
         db.refresh(submission)
-    _trigger_form_submitted_workflow(db, submission=submission)
+    _attempt_form_submission_workflow_job(db, submission=submission)
     db.refresh(submission)
     return submission, _normalize_shared_outcome(submission.match_status)
 

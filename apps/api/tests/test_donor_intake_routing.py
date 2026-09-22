@@ -332,9 +332,12 @@ async def test_published_form_workflow_routes_both_donor_types(
         test_org.id,
         test_user.id,
         WorkflowCreate(
-            **{**_workflow_template(), "trigger_config": {"form_id": form_id}},
-            subject_type="form_submission",
-            is_enabled=True,
+            **{
+                **_workflow_template(),
+                "subject_type": "form_submission",
+                "trigger_config": {"form_id": form_id},
+                "is_enabled": True,
+            }
         ),
     )
     version = (await authed_client.get(f"/forms/public/intake/{slug}")).json()[

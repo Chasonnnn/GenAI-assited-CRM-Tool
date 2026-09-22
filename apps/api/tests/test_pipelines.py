@@ -4,7 +4,6 @@ import uuid
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from datetime import UTC, datetime
-from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -1194,19 +1193,6 @@ def test_create_stage_clamps_custom_stage_order_between_protected_anchors(db, te
     assert active_stage_keys[0] == "new_unread"
     assert active_stage_keys[-1] == "disqualified"
     assert active_stage_keys[1] == stage.stage_key
-
-
-def test_pipeline_service_count_paths_use_direct_aggregate_queries():
-    source = Path("app/services/pipeline_service.py").read_text()
-    create_stage_source = source[
-        source.index("def create_stage(") : source.index("def update_stage(")
-    ]
-    apply_draft_source = source[
-        source.index("def apply_pipeline_draft(") : source.index("def sync_surrogate_labels(")
-    ]
-
-    assert ".count()" not in create_stage_source
-    assert ".count()" not in apply_draft_source
 
 
 def test_apply_pipeline_draft_counts_removed_stage_entities_with_direct_count(

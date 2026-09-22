@@ -30,6 +30,7 @@ from app.jobs.handlers import (
     workflows,
     zapier,
 )
+from app.services import ai_email_service
 
 JobHandler = Callable[[object, object], Awaitable[None]]
 
@@ -51,10 +52,12 @@ JOB_HANDLERS: Mapping[str, JobHandler] = {
     JobType.STORAGE_DELETE.value: storage.process_storage_delete,
     JobType.CAMPAIGN_SEND.value: campaigns.process_campaign_send,
     JobType.AI_CHAT.value: ai.process_ai_chat,
+    JobType.AI_SEND_EMAIL.value: ai_email_service.process_email,
     JobType.CONTACT_REMINDER_CHECK.value: contact_reminders.process_contact_reminder_check,
     JobType.INTERVIEW_TRANSCRIPTION.value: interviews.process_interview_transcription,
     JobType.ATTACHMENT_SCAN.value: attachments.process_attachment_scan,
     JobType.FORM_SUBMISSION_FILE_SCAN.value: form_submissions.process_form_submission_file_scan,
+    JobType.FORM_SUBMISSION_WORKFLOW.value: form_submissions.process_form_submission_workflow,
     JobType.DONOR_INTAKE_PROMOTE.value: form_submissions.process_donor_intake_promote,
     JobType.MESSAGE_MEDIA_SCAN.value: message_media.process_message_media_scan,
     JobType.WORKFLOW_APPROVAL_EXPIRY.value: workflows.process_workflow_approval_expiry,
@@ -65,6 +68,7 @@ JOB_HANDLERS: Mapping[str, JobHandler] = {
     JobType.ORG_DELETE.value: orgs.process_org_delete,
     JobType.ZAPIER_STAGE_EVENT.value: zapier.process_zapier_stage_event,
     JobType.GOOGLE_CALENDAR_SYNC.value: appointments.process_google_calendar_sync,
+    JobType.APPOINTMENT_GOOGLE_SYNC.value: appointments.process_appointment_google_sync,
     JobType.GOOGLE_TASKS_SYNC.value: appointments.process_google_tasks_sync,
     JobType.GOOGLE_TASK_CREATION_RECONCILE.value: (
         appointments.process_google_task_creation_reconcile

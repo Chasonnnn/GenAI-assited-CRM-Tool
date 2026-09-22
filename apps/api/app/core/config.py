@@ -110,9 +110,11 @@ class Settings(BaseSettings):
     # SecretStr: the URL carries the DB password; keep it out of repr/model_dump/
     # Sentry. Read via settings.DATABASE_URL.get_secret_value().
     DATABASE_URL: SecretStr
-    DB_POOL_SIZE: int = 5
-    DB_MAX_OVERFLOW: int = 10
-    DB_POOL_TIMEOUT: int = 30
+    # Each API process owns a pool; budget together with Cloud Run scaling.
+    DB_POOL_SIZE: int = Field(default=2, ge=1)
+    DB_MAX_OVERFLOW: int = Field(default=0, ge=0)
+    DB_POOL_TIMEOUT: int = Field(default=5, ge=1)
+    DB_CONNECT_TIMEOUT: int = Field(default=5, ge=1)
     DB_POOL_RECYCLE: int = -1
     DB_POOL_PRE_PING: bool = True
     DB_MIGRATION_CHECK: bool = True

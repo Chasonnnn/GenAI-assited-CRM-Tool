@@ -250,6 +250,14 @@ PROTECTED_SYSTEM_STAGES_BY_ENTITY = {
             system_role="intake_entry",
             lock_reason="This is a protected system stage used by platform workflows.",
         ),
+        "interview_scheduled": ProtectedSystemStageDefinition(
+            system_role="interview_scheduled",
+            lock_reason="This is a protected system stage used by platform workflows.",
+        ),
+        "reschedule_needed": ProtectedSystemStageDefinition(
+            system_role="reschedule_needed",
+            lock_reason="This is a protected system stage used by platform workflows.",
+        ),
         "approved": ProtectedSystemStageDefinition(
             system_role="approval_gate",
             lock_reason="This is a protected system stage used by platform workflows.",

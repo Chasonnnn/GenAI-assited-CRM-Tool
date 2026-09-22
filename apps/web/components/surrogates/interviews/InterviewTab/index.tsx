@@ -18,7 +18,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Loader2Icon, FileTextIcon, PlusIcon, ChevronLeftIcon } from "lucide-react"
-import { InterviewWithComments } from "../InterviewWithComments"
+import { InterviewWithComments } from "../InterviewComments"
 import { InterviewTabProvider, useInterviewTab } from "./context"
 import { List } from "./List"
 import { ListItem } from "./ListItem"

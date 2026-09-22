@@ -1,7 +1,7 @@
 "use client"
 
 import { TabsContent } from "@/components/ui/tabs"
-import { SurrogateProfileCard } from "@/components/surrogates/SurrogateProfileCard"
+import { ProfileCard } from "@/components/surrogates/profile/ProfileCard"
 import { useSurrogateDetailData } from "@/components/surrogates/detail/SurrogateDetailLayout/context"
 
 export default function SurrogateProfilePage() {
@@ -13,7 +13,7 @@ export default function SurrogateProfilePage() {
 
     return (
         <TabsContent value="profile" className="space-y-4">
-            <SurrogateProfileCard surrogateId={surrogateId} readOnly={canEditSurrogate === false} />
+            <ProfileCard surrogateId={surrogateId} readOnly={canEditSurrogate === false} />
         </TabsContent>
     )
 }

@@ -118,6 +118,11 @@ export function useConversation(
             : aiApi.getConversation(entityType!, entityId!),
         enabled: options?.enabled ?? true,
         staleTime: 30 * 1000, // 30 seconds
+        refetchInterval: (query) => query.state.data?.messages.some((message) =>
+            message.action_approvals?.some((approval) =>
+                approval.action_type === 'send_email' && approval.status === 'approved'
+            )
+        ) ? 2000 : false,
     });
 }
 

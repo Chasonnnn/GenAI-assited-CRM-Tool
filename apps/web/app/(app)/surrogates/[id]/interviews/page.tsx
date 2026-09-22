@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation"
 import { TabsContent } from "@/components/ui/tabs"
-import { SurrogateInterviewTab } from "@/components/surrogates/interviews/SurrogateInterviewTab"
+import { SurrogateInterviewTab } from "@/components/surrogates/interviews/InterviewTab"
 import { useSurrogateDetailData } from "@/components/surrogates/detail/SurrogateDetailLayout/context"
 
 export default function SurrogateInterviewsPage() {

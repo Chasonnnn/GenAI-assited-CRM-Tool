@@ -683,7 +683,7 @@ async def test_donor_regression_approval_retry_applies_once(
         authed_client,
         test_user.id,
     )
-    from app.services import donor_service, notification_facade
+    from app.services import donor_service, notification_service
 
     workflow_calls: list[UUID] = []
     monkeypatch.setattr(
@@ -696,7 +696,7 @@ async def test_donor_regression_approval_retry_applies_once(
         raise RuntimeError("sensitive donor notification failure")
 
     monkeypatch.setattr(
-        notification_facade,
+        notification_service,
         "notify_donor_status_change_request_resolved",
         fail_resolved_notification,
     )
@@ -1106,13 +1106,13 @@ async def test_pending_donor_request_survives_sanitized_notification_failure(
     }
     db.commit()
 
-    from app.services import notification_facade
+    from app.services import notification_service
 
     def fail_pending_notification(*args, **kwargs):
         raise RuntimeError("sensitive donor pending notification failure")
 
     monkeypatch.setattr(
-        notification_facade,
+        notification_service,
         "notify_donor_status_change_request_pending",
         fail_pending_notification,
     )

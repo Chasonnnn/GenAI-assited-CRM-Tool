@@ -1282,9 +1282,9 @@ def create_booking(
         return appointment
 
     # Notify staff about new appointment request
-    from app.services import notification_facade
+    from app.services import notification_service
 
-    notification_facade.notify_appointment_requested(
+    notification_service.notify_appointment_requested(
         db=db,
         org_id=org_id,
         staff_user_id=user_id,
@@ -1413,9 +1413,9 @@ def approve_booking(
         )
 
     # Notify staff about confirmed appointment
-    from app.services import notification_facade
+    from app.services import notification_service
 
-    notification_facade.notify_appointment_confirmed(
+    notification_service.notify_appointment_confirmed(
         db=db,
         org_id=appointment.organization_id,
         staff_user_id=appointment.user_id,
@@ -1497,6 +1497,27 @@ def reschedule_booking(
     if not any(slot.start == new_start for slot in slots):
         raise ValueError("Selected time is no longer available")
 
+    google_link = None
+    if appointment.google_event_id and not appointment.zoom_meeting_id:
+        from app.services import appointment_google_sync_service
+
+        expected_revision = appointment.google_sync_revision
+        expected_account = appointment.google_account_email
+        expected_calendar = appointment.google_calendar_id
+        google_link = appointment_google_sync_service.prepare_link(db, appointment)
+        db.refresh(appointment, with_for_update=True)
+        if (
+            appointment.status
+            not in {AppointmentStatus.PENDING.value, AppointmentStatus.CONFIRMED.value}
+            or appointment.google_sync_revision != expected_revision
+            or appointment.google_account_email != expected_account
+            or appointment.google_calendar_id != expected_calendar
+            or appointment.google_event_id != google_link.event_id
+            or appointment.scheduled_start != google_link.start
+            or appointment.scheduled_end != google_link.end
+        ):
+            raise ValueError("Appointment changed; refresh and try again")
+
     appointment.scheduled_start = new_start
     appointment.scheduled_end = new_end
     if appointment.status == AppointmentStatus.PENDING.value:
@@ -1569,11 +1590,19 @@ def reschedule_booking(
     _audit_record_appointment(
         db, appointment, AuditEventType.APPOINTMENT_RESCHEDULED, actor_user_id
     )
+    if google_link:
+        appointment_google_sync_service.enqueue(
+            db, appointment, action="reschedule", link=google_link
+        )
     db.commit()
     db.refresh(appointment)
 
     # Sync to Google Calendar (best-effort, after commit)
-    if appointment.google_event_id and meeting_mode != MeetingMode.GOOGLE_MEET.value:
+    if (
+        appointment.google_event_id
+        and meeting_mode != MeetingMode.GOOGLE_MEET.value
+        and not google_link
+    ):
         updated_event_id = appointment_integrations.sync_to_google_calendar(
             db,
             appointment,
@@ -1584,7 +1613,11 @@ def reschedule_booking(
             appointment.google_event_id = None
             db.commit()
             db.refresh(appointment)
-    elif meeting_mode == MeetingMode.GOOGLE_MEET.value and appointment.google_event_id:
+    elif (
+        meeting_mode == MeetingMode.GOOGLE_MEET.value
+        and appointment.google_event_id
+        and not google_link
+    ):
         # Update Google Meet event time
         appointment_integrations.update_google_meet_event(
             db,
@@ -1653,6 +1686,27 @@ def cancel_booking(
             db.commit()
             raise ValueError("Appointment request has expired")
 
+    google_link = None
+    if appointment.google_event_id and not appointment.zoom_meeting_id:
+        from app.services import appointment_google_sync_service
+
+        expected_revision = appointment.google_sync_revision
+        expected_account = appointment.google_account_email
+        expected_calendar = appointment.google_calendar_id
+        google_link = appointment_google_sync_service.prepare_link(db, appointment)
+        db.refresh(appointment, with_for_update=True)
+        if (
+            appointment.status
+            not in {AppointmentStatus.PENDING.value, AppointmentStatus.CONFIRMED.value}
+            or appointment.google_sync_revision != expected_revision
+            or appointment.google_account_email != expected_account
+            or appointment.google_calendar_id != expected_calendar
+            or appointment.google_event_id != google_link.event_id
+            or appointment.scheduled_start != google_link.start
+            or appointment.scheduled_end != google_link.end
+        ):
+            raise ValueError("Appointment changed; refresh and try again")
+
     appointment.status = AppointmentStatus.CANCELLED.value
     appointment.cancelled_at = datetime.now(UTC)
     appointment.cancelled_by_client = by_client
@@ -1677,6 +1731,8 @@ def cancel_booking(
         ),
         commit=False,
     )
+    if google_link:
+        appointment_google_sync_service.enqueue(db, appointment, action="cancel", link=google_link)
     _audit_record_appointment(db, appointment, AuditEventType.APPOINTMENT_CANCELLED, actor_user_id)
     db.commit()
     db.refresh(appointment)
@@ -1686,21 +1742,21 @@ def cancel_booking(
         appointment_integrations.delete_zoom_meeting(db, appointment)
 
     # Delete from Google Calendar (best-effort, after commit)
-    if appointment.google_event_id:
+    if appointment.google_event_id and not google_link:
         appointment_integrations.sync_to_google_calendar(db, appointment, "delete")
         appointment.google_event_id = None
         db.commit()
         db.refresh(appointment)
 
     # Notify staff about cancelled appointment
-    from app.services import notification_facade
+    from app.services import notification_service
 
     appt_type = (
         db.query(AppointmentType)
         .filter(AppointmentType.id == appointment.appointment_type_id)
         .first()
     )
-    notification_facade.notify_appointment_cancelled(
+    notification_service.notify_appointment_cancelled(
         db=db,
         org_id=appointment.organization_id,
         staff_user_id=appointment.user_id,

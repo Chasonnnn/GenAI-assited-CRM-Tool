@@ -103,12 +103,12 @@ def test_delegated_reviewer_approves_visible_correction_in_one_transaction(
 
     commit = Mock(side_effect=commit_record_change)
     monkeypatch.setattr(db, "commit", commit)
-    from app.services import notification_facade, surrogate_events
+    from app.services import notification_service, surrogate_events
 
     event = Mock(side_effect=lambda **kwargs: calls.append("status_event"))
     monkeypatch.setattr(surrogate_events, "handle_status_changed", event)
     monkeypatch.setattr(
-        notification_facade, "notify_status_change_request_resolved", lambda **kwargs: None
+        notification_service, "notify_status_change_request_resolved", lambda **kwargs: None
     )
     result = status_change_request_service.approve_request(
         db, request.id, context.org.id, context.manager.user_id, Role.CASE_MANAGER
@@ -202,7 +202,7 @@ def test_match_cancellation_rechecks_applicant_approval_boundary(
 ):
     from app.db.models import Match
     from app.schemas.record_scope import RecordScopeAdditionCreate
-    from app.services import notification_facade, record_scope_service, surrogate_events
+    from app.services import notification_service, record_scope_service, surrogate_events
 
     record_scope_service.add_scope_addition(
         db,
@@ -247,7 +247,7 @@ def test_match_cancellation_rechecks_applicant_approval_boundary(
     db.flush()
     previous_stage_id = record.stage_id
     monkeypatch.setattr(surrogate_events, "handle_status_changed", Mock())
-    monkeypatch.setattr(notification_facade, "notify_match_cancel_request_resolved", Mock())
+    monkeypatch.setattr(notification_service, "notify_match_cancel_request_resolved", Mock())
 
     if can_approve_applicant:
         result = status_change_request_service.approve_request(

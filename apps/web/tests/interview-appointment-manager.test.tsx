@@ -1,15 +1,17 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { InterviewAppointmentManager, localDateTimeToIso } from "@/components/surrogates/InterviewAppointmentManager"
 import type { InterviewAppointmentState } from "@/lib/api/interview-appointment"
 
 const mutateAsync = vi.fn()
+const retryGoogleSync = vi.fn()
 const refetch = vi.fn()
 const useInterviewAppointment = vi.fn()
 
 vi.mock("@/lib/hooks/use-interview-appointment", () => ({
     useInterviewAppointment: (...args: unknown[]) => useInterviewAppointment(...args),
     useManageInterviewAppointment: () => ({ mutateAsync, isPending: false }),
+    useRetryInterviewAppointmentGoogleSync: () => ({ mutateAsync: retryGoogleSync, isPending: false }),
 }))
 
 const scheduledStage = { id: "interview-scheduled", label: "Interview Scheduled", color: "#0f766e" }
@@ -35,6 +37,7 @@ function activeState(overrides: Partial<InterviewAppointmentState> = {}): Interv
         can_manage: true,
         scheduled_stage: scheduledStage,
         reschedule_stage: rescheduleStage,
+        external_sync_status: null,
         ...overrides,
     }
 }
@@ -49,8 +52,22 @@ describe("InterviewAppointmentManager", () => {
         vi.useFakeTimers({ shouldAdvanceTime: true })
         vi.setSystemTime(new Date("2026-09-19T09:00:00.000Z"))
         mutateAsync.mockReset().mockResolvedValue({})
+        retryGoogleSync.mockReset().mockResolvedValue({})
         refetch.mockReset()
         useInterviewAppointment.mockReset()
+    })
+
+    it("groups Reschedule, Cancel appointment, and Done in the same action row", async () => {
+        renderManager(activeState())
+        fireEvent.click(screen.getByRole("button", { name: "Manage" }))
+        const dialog = await screen.findByRole("dialog", { name: "Manage appointment" })
+        const footer = dialog.querySelector('[data-slot="dialog-footer"]')
+        expect(footer).not.toBeNull()
+        expect(within(footer as HTMLElement).getAllByRole("button").map((button) => button.textContent)).toEqual([
+            "Reschedule", "Cancel appointment", "Done",
+        ])
+        fireEvent.click(within(footer as HTMLElement).getByRole("button", { name: "Done" }))
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
     })
 
     it("cancels with an explicit move to Reschedule Needed choice", async () => {
@@ -151,6 +168,31 @@ describe("InterviewAppointmentManager", () => {
         expect(screen.getByRole("button", { name: "Manage" })).toBeDisabled()
     })
 
+    it("keeps the inline trigger disabled while appointment data loads", () => {
+        useInterviewAppointment.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch })
+        render(<InterviewAppointmentManager surrogateId="surrogate-1" stageId={scheduledStage.id} triggerOnly />)
+
+        expect(screen.getByRole("button", { name: "Loading interview appointment" })).toBeDisabled()
+        expect(screen.queryByText("Loading appointment")).not.toBeInTheDocument()
+    })
+
+    it("offers a compact retry action when the inline appointment query fails", () => {
+        useInterviewAppointment.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
+        render(<InterviewAppointmentManager surrogateId="surrogate-1" stageId={scheduledStage.id} triggerOnly />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Retry appointment" }))
+        expect(refetch).toHaveBeenCalledOnce()
+        expect(screen.queryByText("Appointment unavailable")).not.toBeInTheDocument()
+    })
+
+    it("preserves read-only access in the inline trigger", () => {
+        useInterviewAppointment.mockReturnValue({ data: activeState({ can_manage: false }), isLoading: false, isError: false, refetch })
+        render(<InterviewAppointmentManager surrogateId="surrogate-1" stageId={scheduledStage.id} triggerOnly />)
+
+        expect(screen.getByRole("button", { name: "Manage" })).toBeDisabled()
+        expect(screen.queryByText("Interview appointment")).not.toBeInTheDocument()
+    })
+
     it("offers retry when loading the appointment fails", () => {
         useInterviewAppointment.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
         render(<InterviewAppointmentManager surrogateId="surrogate-1" stageId={scheduledStage.id} />)
@@ -168,5 +210,78 @@ describe("InterviewAppointmentManager", () => {
 
         expect(await screen.findByRole("alert")).toHaveTextContent("Appointment was changed by another user.")
         expect(screen.getByRole("dialog")).toBeInTheDocument()
+    })
+
+    it("keeps the cancellation result visible when Google delivery fails and retries without a stage action", async () => {
+        retryGoogleSync.mockResolvedValueOnce(activeState({
+            appointment: { ...appointment, status: "cancelled" },
+            external_sync_status: "pending",
+        }))
+        const rendered = renderManager(activeState({
+            appointment: { ...appointment, status: "cancelled" },
+            external_sync_status: "failed",
+        }))
+        fireEvent.click(screen.getByRole("button", { name: "Manage" }))
+
+        expect(await screen.findByText("Interview saved, but Google Calendar could not be updated. Retry the update.")).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Retry Google update" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Retry Google update" }))
+
+        await waitFor(() => expect(retryGoogleSync).toHaveBeenCalledWith(appointment.id))
+        expect(mutateAsync).not.toHaveBeenCalled()
+        useInterviewAppointment.mockReturnValue({
+            data: activeState({ appointment: { ...appointment, status: "cancelled" }, external_sync_status: "pending" }),
+            isLoading: false,
+            isError: false,
+            refetch,
+        })
+        rendered.rerender(<InterviewAppointmentManager surrogateId="surrogate-1" stageId={scheduledStage.id} />)
+        expect(screen.getByText("Interview saved. Updating Google Calendar…")).toBeInTheDocument()
+    })
+
+    it("keeps the dialog open while pending delivery becomes completed", async () => {
+        const rendered = renderManager(activeState({ external_sync_status: "pending" }))
+        fireEvent.click(screen.getByRole("button", { name: "Manage" }))
+        expect(await screen.findByText("Interview saved. Updating Google Calendar…")).toBeInTheDocument()
+        useInterviewAppointment.mockReturnValue({
+            data: activeState({ external_sync_status: "completed" }),
+            isLoading: false,
+            isError: false,
+            refetch,
+        })
+        rendered.rerender(<InterviewAppointmentManager surrogateId="surrogate-1" stageId={scheduledStage.id} />)
+        expect(screen.getByRole("dialog")).toBeInTheDocument()
+        expect(screen.getByText("Google Calendar is up to date.")).toBeInTheDocument()
+    })
+
+    it("keeps a Google conflict read-only", async () => {
+        renderManager(activeState({ external_sync_status: "conflict" }))
+        fireEvent.click(screen.getByRole("button", { name: "Manage" }))
+        expect(await screen.findByText("Google Calendar changed. This appointment needs manual review before further CRM changes.")).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Reschedule" })).toBeDisabled()
+        expect(screen.getByRole("button", { name: "Cancel appointment" })).toBeDisabled()
+        expect(screen.queryByRole("button", { name: "Retry Google update" })).not.toBeInTheDocument()
+        expect(mutateAsync).not.toHaveBeenCalled()
+    })
+
+    it("blocks new scheduling until a pending Google update resolves", async () => {
+        renderManager(activeState({
+            appointment: { ...appointment, status: "cancelled" },
+            external_sync_status: "pending",
+        }), rescheduleStage.id)
+        fireEvent.click(screen.getByRole("button", { name: "Manage" }))
+
+        expect(await screen.findByText("Interview saved. Updating Google Calendar…")).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Schedule appointment" })).toBeDisabled()
+    })
+
+    it("blocks lifecycle actions while delivery failed but keeps the failed-only retry enabled", async () => {
+        renderManager(activeState({ external_sync_status: "failed" }))
+        fireEvent.click(screen.getByRole("button", { name: "Manage" }))
+
+        expect(await screen.findByRole("alert")).toHaveTextContent("Interview saved, but Google Calendar could not be updated.")
+        expect(screen.getByRole("button", { name: "Reschedule" })).toBeDisabled()
+        expect(screen.getByRole("button", { name: "Cancel appointment" })).toBeDisabled()
+        expect(screen.getByRole("button", { name: "Retry Google update" })).toBeEnabled()
     })
 })

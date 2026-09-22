@@ -5,10 +5,11 @@ from copy import deepcopy
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import and_, case, func, or_, select
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import String, and_, any_, bindparam, case, func, or_, select
+from sqlalchemy.dialects.postgresql import ARRAY, insert
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.encryption import hash_email
 from app.core.stage_definitions import (
     EGG_DONOR_PIPELINE_ENTITY,
     INTENDED_PARENT_PIPELINE_ENTITY,
@@ -1149,34 +1150,41 @@ def preview_recipients(
 
     if viewer_filter is not None:
         query = query.filter(viewer_filter)
+    entity_model = _recipient_entity_model(recipient_type)
 
-    # Get suppressed emails for this org (handle SA 2.0 Row objects)
-    suppression_query = db.query(EmailSuppression.email, EmailSuppression.reason).filter(
+    # Entity emails are encrypted at rest, so suppression matching happens on
+    # the indexed email_hash column. Load and hash the org's suppression list,
+    # then pass it as one PostgreSQL array bind so large lists do not exceed the
+    # driver's bind-parameter limit. Counts still cover the whole filtered
+    # audience without materializing every recipient.
+    suppression_query = db.query(EmailSuppression.email).filter(
         EmailSuppression.organization_id == org_id
     )
     if ignore_opt_out:
         suppression_query = suppression_query.filter(EmailSuppression.reason != "opt_out")
-    suppression_rows = suppression_query.all()
-    suppressed = {row[0].lower() for row in suppression_rows if row[0]}
+    suppressed_hashes = list({hash_email(email) for (email,) in suppression_query if email})
 
-    if viewer_filter is not None:
-        from app.core.encryption import hash_email
-
-        model = _recipient_entity_model(recipient_type)
-        total_count = query.order_by(None).count()
-        eligible_query = (
-            query.filter(model.email_hash.notin_([hash_email(email) for email in suppressed]))
-            if suppressed
-            else query
+    suppressed_hashes_param = bindparam(
+        "suppressed_email_hashes",
+        value=suppressed_hashes,
+        type_=ARRAY(String(64)),
+    )
+    suppressed_condition = entity_model.email_hash == any_(suppressed_hashes_param)
+    total_count, suppressed_count = (
+        query.order_by(None)
+        .with_entities(
+            func.count(),
+            func.coalesce(func.sum(case((suppressed_condition, 1), else_=0)), 0),
         )
-        entities, eligible_count = paginate_query_by_offset(eligible_query, offset=0, limit=limit)
-    else:
-        entities, total_count = paginate_query_by_offset(query, offset=0, limit=limit)
-        eligible_count = None
+        .one()
+    )
+    eligible_count = max(total_count - suppressed_count, 0)
+
+    sample_entities = query.filter(~suppressed_condition).limit(limit).all()
 
     stage_labels: dict[UUID, str] = {}
     if recipient_type in RECIPIENT_PIPELINE_ENTITY_TYPES:
-        stage_ids = {entity.stage_id for entity in entities if entity.stage_id}
+        stage_ids = {entity.stage_id for entity in sample_entities if entity.stage_id}
         if stage_ids:
             stage_rows = (
                 db.query(PipelineStage.id, PipelineStage.label)
@@ -1185,29 +1193,22 @@ def preview_recipients(
             )
             stage_labels = {stage_id: label for stage_id, label in stage_rows}
 
-    recipients = []
-    for entity in entities:
-        email = entity.email.lower() if entity.email else ""
-        if email in suppressed:
-            continue  # Skip suppressed
-
-        recipients.append(
-            RecipientPreview(
-                entity_type=recipient_type,
-                entity_id=entity.id,
-                email=entity.email,
-                name=entity.full_name,
-                stage=stage_labels.get(entity.stage_id),
-            )
+    recipients = [
+        RecipientPreview(
+            entity_type=recipient_type,
+            entity_id=entity.id,
+            email=entity.email,
+            name=entity.full_name,
+            stage=stage_labels.get(entity.stage_id),
         )
+        for entity in sample_entities
+    ]
 
     return CampaignPreviewResponse(
         total_count=total_count,
-        eligible_count=eligible_count if eligible_count is not None else len(recipients),
-        suppressed_count=max(
-            total_count - (eligible_count if eligible_count is not None else len(recipients)), 0
-        ),
-        sample_recipients=recipients[:limit],
+        eligible_count=eligible_count,
+        suppressed_count=suppressed_count,
+        sample_recipients=recipients,
     )
 
 

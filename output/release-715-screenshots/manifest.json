@@ -1,0 +1,287 @@
+{
+  "version": "Release 0.91.66 candidate",
+  "demo_data_label": "Synthetic data · current local QA",
+  "gutter_width": 320,
+  "items": [
+    {
+      "id": "01-interview-scheduled",
+      "rawpath": "raw/01-interview-scheduled.png",
+      "title": "Interview scheduled",
+      "caption": "The Activity timeline shows Interview Scheduled, the latest appointment details, and its Manage action.",
+      "callouts": [
+        {
+          "label": "Interview Scheduled",
+          "body": "The Activity timeline shows the current Interview Scheduled stage.",
+          "rect": [53, 267, 613, 36],
+          "marker_point": [683, 285]
+        },
+        {
+          "label": "Appointment details",
+          "body": "The latest scheduled interview includes its date, time, and status.",
+          "rect": [87, 344, 486, 52],
+          "marker_point": [103, 328]
+        },
+        {
+          "label": "Manage appointment",
+          "body": "Open this scheduled interview's appointment dialog.",
+          "rect": [593, 388, 72, 29],
+          "marker_point": [577, 403]
+        }
+      ]
+    },
+    {
+      "id": "02-manage-appointment",
+      "rawpath": "raw/02-manage-appointment.png",
+      "title": "Manage an appointment",
+      "caption": "The appointment dialog shows the current appointment and keeps Reschedule, Cancel appointment, and Done in one action row.",
+      "callouts": [
+        {
+          "label": "Current appointment",
+          "body": "Status, date, and time remain visible while choosing the next action.",
+          "rect": [155, 350, 286, 31],
+          "marker_point": [139, 366]
+        },
+        {
+          "label": "Appointment actions",
+          "body": "Reschedule, Cancel appointment, and Done share one row.",
+          "rect": [155, 397, 402, 41],
+          "marker_point": [139, 418]
+        }
+      ]
+    },
+    {
+      "id": "03-cancel-stage-choice",
+      "rawpath": "raw/03-cancel-stage-choice.png",
+      "title": "Choose the stage after cancellation",
+      "caption": "Cancellation defaults to Move to Reschedule Needed and also allows the current stage to be kept.",
+      "callouts": [
+        {
+          "label": "Default stage change",
+          "body": "Move to Reschedule Needed is selected by default.",
+          "rect": [155, 314, 402, 47],
+          "marker_point": [139, 338]
+        },
+        {
+          "label": "Keep current stage",
+          "body": "Operators can cancel the appointment without changing the pipeline stage.",
+          "rect": [155, 368, 402, 47],
+          "marker_point": [139, 392]
+        },
+        {
+          "label": "Explicit confirmation",
+          "body": "The dialog states the stage result before cancellation is confirmed.",
+          "rect": [155, 426, 402, 86],
+          "marker_point": [139, 469]
+        }
+      ]
+    },
+    {
+      "id": "04-reschedule-needed",
+      "rawpath": "raw/04-reschedule-needed.png",
+      "title": "Cancelled appointment and reschedule state",
+      "caption": "The Activity timeline shows the cancelled interview, Manage on the latest scheduled interview, and the Reschedule Needed stage.",
+      "callouts": [
+        {
+          "label": "Cancelled interview",
+          "body": "The Activity timeline records the cancelled appointment.",
+          "rect": [73, 405, 592, 50],
+          "marker_point": [57, 430]
+        },
+        {
+          "label": "Manage appointment",
+          "body": "Manage remains with the latest scheduled interview.",
+          "rect": [593, 317, 72, 30],
+          "marker_point": [577, 332]
+        },
+        {
+          "label": "Reschedule Needed stage",
+          "body": "The Activity timeline shows the updated Reschedule Needed stage.",
+          "rect": [53, 454, 613, 36],
+          "marker_point": [683, 472]
+        }
+      ]
+    },
+    {
+      "id": "05-donor-form-review",
+      "rawpath": "raw/05-donor-form-review.png",
+      "title": "Egg donor application review",
+      "caption": "The review step shows the attached profile photo and explains when uploaded files are saved.",
+      "callouts": [
+        {
+          "label": "Review and submit",
+          "body": "The applicant reaches the final review step before submission.",
+          "rect": [559, 94, 207, 43],
+          "marker_point": [575, 78]
+        },
+        {
+          "label": "Upload status",
+          "body": "The page explains that file uploads are saved when the application is submitted.",
+          "rect": [285, 209, 680, 63],
+          "marker_point": [301, 193]
+        },
+        {
+          "label": "Profile photo attached",
+          "body": "The application summary lists one profile photo file for review.",
+          "rect": [300, 657, 653, 34],
+          "marker_point": [284, 674]
+        }
+      ]
+    },
+    {
+      "id": "06-donor-pipelines",
+      "rawpath": "raw/06-donor-pipelines.png",
+      "title": "Egg and sperm donor lists",
+      "caption": "The donor list separates Egg Donors and Sperm Donors; the active Egg Donors view shows two demo records.",
+      "callouts": [
+        {
+          "label": "Separate donor tabs",
+          "body": "Egg Donors and Sperm Donors have distinct list views.",
+          "rect": [25, 153, 223, 39],
+          "marker_point": [41, 137]
+        },
+        {
+          "label": "Egg donor records",
+          "body": "The active Egg Donors view displays donor numbers and contact fields.",
+          "rect": [24, 431, 679, 153],
+          "marker_point": [40, 415]
+        }
+      ]
+    },
+    {
+      "id": "07-donor-stage-reporting",
+      "rawpath": "raw/07-donor-stage-reporting.png",
+      "title": "Donor stage reporting",
+      "caption": "Stage reporting is configured for donor events with a local test webhook and separate Egg donor and Sperm donor mapping views.",
+      "callouts": [
+        {
+          "label": "Donor stage events",
+          "body": "Donor stage events are enabled while surrogate stage events remain off.",
+          "rect": [56, 231, 583, 46],
+          "marker_point": [72, 215]
+        },
+        {
+          "label": "Local test webhook",
+          "body": "The outbound destination is a loopback URL used for local testing.",
+          "rect": [56, 322, 584, 36],
+          "marker_point": [40, 340]
+        },
+        {
+          "label": "Optional hashed PII",
+          "body": "Hashed email and phone fields are enabled for this configuration.",
+          "rect": [56, 480, 584, 62],
+          "marker_point": [72, 464]
+        },
+        {
+          "label": "Donor mapping views",
+          "body": "Egg donors and Sperm donors have separate mapping tabs.",
+          "rect": [56, 585, 320, 42],
+          "marker_point": [40, 606]
+        }
+      ]
+    },
+    {
+      "id": "08-zapier-delivery",
+      "rawpath": "raw/08-zapier-delivery.png",
+      "title": "Outbound delivery QA example",
+      "caption": "QA example: the Activity view records a qualified Egg donor Application Submitted event delivered to the configured local receiver; this is not a real Zapier delivery.",
+      "callouts": [
+        {
+          "label": "Qualified donor event",
+          "body": "Egg donor, Default, and Application Submitted identify the mapped event.",
+          "rect": [56, 268, 584, 59],
+          "marker_point": [40, 297]
+        },
+        {
+          "label": "Delivered locally",
+          "body": "The status confirms delivery to the configured local receiver.",
+          "rect": [548, 281, 79, 30],
+          "marker_point": [642, 296]
+        },
+        {
+          "label": "Unmapped event skipped",
+          "body": "An event without a mapping is marked Skipped.",
+          "rect": [56, 329, 584, 59],
+          "marker_point": [40, 358]
+        }
+      ]
+    },
+    {
+      "id": "09-website-donor-created",
+      "rawpath": "raw/09-website-donor-created.png",
+      "title": "Website donor record",
+      "caption": "The created donor record shows a profile photo, Source Website, and a New stage for the demo applicant.",
+      "callouts": [
+        {
+          "label": "Created donor record",
+          "body": "The donor number and New stage are visible in the record header.",
+          "rect": [103, 80, 201, 30],
+          "marker_point": [119, 64]
+        },
+        {
+          "label": "Profile photo",
+          "body": "The donor photo appears beside the stage action.",
+          "rect": [476, 74, 44, 44],
+          "marker_point": [492, 58]
+        },
+        {
+          "label": "Website source",
+          "body": "Contact Information records the donor source as Website.",
+          "rect": [30, 391, 625, 38],
+          "marker_point": [15, 410]
+        }
+      ]
+    },
+    {
+      "id": "11-zapier-donor-routes",
+      "rawpath": "raw/11-zapier-donor-routes.png",
+      "title": "Egg and sperm donor form routes",
+      "caption": "Form routing shows separate QA routes that create Sperm donor and Egg donor records; both routes are mapped and remain editable.",
+      "callouts": [
+        {
+          "label": "Configuration tabs",
+          "body": "Incoming leads, Form routing, Stage reporting, and Activity remain available in one configuration dialog.",
+          "rect": [42, 80, 423, 39],
+          "marker_point": [340, 62]
+        },
+        {
+          "label": "Distinct donor records",
+          "body": "The two routes create Sperm donor and Egg donor records respectively.",
+          "rect": [314, 280, 112, 123],
+          "marker_point": [298, 341]
+        },
+        {
+          "label": "Mapped routes",
+          "body": "Both QA routes show Mapped status.",
+          "rect": [431, 280, 75, 123],
+          "marker_point": [415, 341]
+        },
+        {
+          "label": "Editable routes",
+          "body": "Each configured route keeps its Edit route action.",
+          "rect": [533, 280, 96, 123],
+          "marker_point": [517, 341]
+        }
+      ]
+    },
+    {
+      "id": "12-stage-transition",
+      "rawpath": "raw/12-stage-transition.png",
+      "title": "Preview a stage transition",
+      "caption": "The schedule dialog previews Reschedule Needed → Interview Scheduled and confirms the appointment and stage update together.",
+      "callouts": [
+        {
+          "label": "Stage transition preview",
+          "body": "Review Reschedule Needed → Interview Scheduled before saving.",
+          "rect": [155, 376, 402, 48],
+          "marker_point": [139, 400]
+        },
+        {
+          "label": "Schedule and update stage",
+          "body": "Confirm the appointment and stage change together.",
+          "rect": [356, 482, 201, 38],
+          "marker_point": [572, 501]
+        }
+      ]
+    }
+  ]
+}

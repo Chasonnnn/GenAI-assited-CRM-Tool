@@ -274,24 +274,6 @@ def can_duplicate(
     return True
 
 
-def get_editable_scope(db: Session, session: UserSession) -> str:
-    """
-    Get the scope that user can create workflows in by default.
-
-    Used for UI to determine which scope option to show first.
-
-    Args:
-        db: Database session
-        session: User session
-
-    Returns:
-        'org' if user has manage_automation, else 'personal'
-    """
-    if can_create(db, session, "org"):
-        return "org"
-    return "personal"
-
-
 def has_manage_permission(db: Session, session: UserSession) -> bool:
     """
     Check if user has manage_automation permission.

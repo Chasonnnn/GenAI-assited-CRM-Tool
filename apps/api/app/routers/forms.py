@@ -258,6 +258,7 @@ def _submission_read(
         review_notes=submission.review_notes,
         answers=submission.answers_json,
         schema_snapshot=submission.schema_snapshot,
+        mapping_snapshot=submission.mapping_snapshot,
         source_mode=submission.source_mode,
         intake_link_id=submission.intake_link_id,
         intake_lead_id=submission.intake_lead_id,

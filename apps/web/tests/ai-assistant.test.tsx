@@ -48,7 +48,7 @@ describe('AIAssistantPage', () => {
             })
         })
 
-        mockApproveAction.mockResolvedValue({ success: true })
+        mockApproveAction.mockResolvedValue({ success: true, status: 'executed' })
         mockStreamMessage.mockClear()
         mockApproveAction.mockClear()
         mockRejectAction.mockClear()
@@ -75,7 +75,7 @@ describe('AIAssistantPage', () => {
         fireEvent.click(screen.getByRole('button', { name: /approve/i }))
         expect(mockApproveAction).toHaveBeenCalledWith('a1')
 
-        expect(await screen.findByText('approved')).toBeInTheDocument()
+        expect(await screen.findByText('Done')).toBeInTheDocument()
     })
 
     it('blocks sending and approval when organization AI is disabled after a proposal', async () => {

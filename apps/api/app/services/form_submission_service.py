@@ -313,6 +313,22 @@ def get_submission_file(
     )
 
 
+def get_submission_file_by_storage_key(
+    db: Session,
+    org_id: uuid.UUID,
+    storage_key: str,
+) -> FormSubmissionFile | None:
+    return (
+        db.query(FormSubmissionFile)
+        .filter(
+            FormSubmissionFile.organization_id == org_id,
+            FormSubmissionFile.storage_key == storage_key,
+            FormSubmissionFile.deleted_at.is_(None),
+        )
+        .first()
+    )
+
+
 def add_submission_file(
     db: Session,
     org_id: uuid.UUID,

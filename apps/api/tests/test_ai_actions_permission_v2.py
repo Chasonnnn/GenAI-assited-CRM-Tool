@@ -250,11 +250,11 @@ def test_approval_event_preserves_v2_case_manager_owner_and_v1_pool_behavior(
     record.status_label = stages["approved"].label
     db.flush()
     monkeypatch.setattr(
-        "app.services.notification_facade.notify_surrogate_status_changed", lambda **kwargs: None
+        "app.services.notification_service.notify_surrogate_status_changed", lambda **kwargs: None
     )
     ready_notifications = []
     monkeypatch.setattr(
-        "app.services.notification_facade.notify_surrogate_ready_for_claim",
+        "app.services.notification_service.notify_surrogate_ready_for_claim",
         lambda **kwargs: ready_notifications.append(kwargs["surrogate"].id),
     )
     monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *args, **kwargs: None)

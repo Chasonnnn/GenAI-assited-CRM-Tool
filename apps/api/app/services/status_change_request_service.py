@@ -457,10 +457,10 @@ def approve_request(
             new_stage=target_stage,
         )
 
-    from app.services import notification_facade
+    from app.services import notification_service
 
     if request.entity_type == "surrogate":
-        notification_facade.notify_status_change_request_resolved(
+        notification_service.notify_status_change_request_resolved(
             db=db,
             request=request,
             surrogate=surrogate,
@@ -468,7 +468,7 @@ def approve_request(
             resolver_name=resolver_name,
         )
     elif request.entity_type == "intended_parent":
-        notification_facade.notify_ip_status_change_request_resolved(
+        notification_service.notify_ip_status_change_request_resolved(
             db=db,
             request=request,
             intended_parent=intended_parent,
@@ -484,7 +484,7 @@ def approve_request(
             resolver_name=resolver_name,
         )
     elif request.entity_type == "match":
-        notification_facade.notify_match_cancel_request_resolved(
+        notification_service.notify_match_cancel_request_resolved(
             db=db,
             request=request,
             match=match,
@@ -589,9 +589,9 @@ def reject_request(
             .first()
         )
         if surrogate:
-            from app.services import notification_facade
+            from app.services import notification_service
 
-            notification_facade.notify_status_change_request_resolved(
+            notification_service.notify_status_change_request_resolved(
                 db=db,
                 request=request,
                 surrogate=surrogate,
@@ -609,9 +609,9 @@ def reject_request(
             .first()
         )
         if intended_parent:
-            from app.services import notification_facade
+            from app.services import notification_service
 
-            notification_facade.notify_ip_status_change_request_resolved(
+            notification_service.notify_ip_status_change_request_resolved(
                 db=db,
                 request=request,
                 intended_parent=intended_parent,
@@ -649,9 +649,9 @@ def reject_request(
             .first()
         )
         if match:
-            from app.services import notification_facade
+            from app.services import notification_service
 
-            notification_facade.notify_match_cancel_request_resolved(
+            notification_service.notify_match_cancel_request_resolved(
                 db=db,
                 request=request,
                 match=match,

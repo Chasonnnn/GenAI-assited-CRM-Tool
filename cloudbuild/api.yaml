@@ -123,6 +123,7 @@ steps:
         gcloud run jobs update "$_MIGRATE_JOB" \
           --image "$${api_image_ref}" \
           --command python \
+          --update-env-vars "DB_POOL_SIZE=$_DB_POOL_SIZE,DB_MAX_OVERFLOW=$_DB_MAX_OVERFLOW" \
           --args="-m,app.db.release_migration,--check-only,--allow-match-expansion=$_MATCH_EXPANSION_ROLLOUT" \
           --region "$_REGION" \
           --quiet
@@ -132,10 +133,14 @@ steps:
     args:
       - -ceu
       - |
-        gcloud beta run jobs execute "$_MIGRATE_JOB" \
-          --region "$_REGION" \
-          --wait \
-          --quiet
+        # Ordinary migrations already preflight under the migration lock.
+        # Expansion needs a separate check before changing service readiness.
+        if [[ "$_MATCH_EXPANSION_ROLLOUT" == "true" ]]; then
+          gcloud beta run jobs execute "$_MIGRATE_JOB" \
+            --region "$_REGION" \
+            --wait \
+            --quiet
+        fi
   # Old binaries cannot recognize the expanded Alembic head. Keep their normal
   # DB health checks while temporarily disabling exact-head checks. New data
   # remains fenced until an operator verifies cutover and activates it.
@@ -173,6 +178,7 @@ steps:
         read -r worker_image_ref < /workspace/release-worker-image-ref
         gcloud run jobs update "$_ATTACHMENT_SCAN_JOB" \
           --image "$${worker_image_ref}" \
+          --update-env-vars "DB_POOL_SIZE=$_DB_POOL_SIZE,DB_MAX_OVERFLOW=$_DB_MAX_OVERFLOW" \
           --region "$_REGION" \
           --quiet
   # Preserve operator-managed configuration while repairing the worker's
@@ -184,12 +190,15 @@ steps:
       - |
         read -r worker_image_ref < /workspace/release-worker-image-ref
         worker_env="GCP_SERVICE_NAME=$_WORKER_SERVICE,DB_MIGRATION_CHECK=true,DB_AUTO_MIGRATE=false"
+        worker_env="$${worker_env},DB_POOL_SIZE=$_DB_POOL_SIZE,DB_MAX_OVERFLOW=$_DB_MAX_OVERFLOW"
         if [[ "$_MATCH_EXPANSION_ROLLOUT" == "true" ]]; then
           worker_env="$${worker_env},MATCH_CASE_EXPANSION_ENABLED=false"
         fi
         gcloud run services update "$_WORKER_SERVICE" \
           --image "$${worker_image_ref}" \
           --update-env-vars "$${worker_env}" \
+          --max "$_WORKER_MAX_INSTANCES" \
+          --max-instances "$_WORKER_MAX_INSTANCES" \
           --region "$_REGION" \
           --quiet
   - name: gcr.io/cloud-builders/gcloud
@@ -198,13 +207,15 @@ steps:
       - -ceu
       - |
         read -r api_image_ref < /workspace/release-api-image-ref
-        rollout_env=(--update-env-vars "DB_MIGRATION_CHECK=true,DB_AUTO_MIGRATE=false")
+        api_env="DB_MIGRATION_CHECK=true,DB_AUTO_MIGRATE=false,DB_POOL_SIZE=$_DB_POOL_SIZE,DB_MAX_OVERFLOW=$_DB_MAX_OVERFLOW"
         if [[ "$_MATCH_EXPANSION_ROLLOUT" == "true" ]]; then
-          rollout_env=(--update-env-vars "DB_MIGRATION_CHECK=true,DB_AUTO_MIGRATE=false,MATCH_CASE_EXPANSION_ENABLED=false")
+          api_env="$${api_env},MATCH_CASE_EXPANSION_ENABLED=false"
         fi
         gcloud run services update "$_API_SERVICE" \
           --image "$${api_image_ref}" \
-          "$${rollout_env[@]}" \
+          --update-env-vars "$${api_env}" \
+          --max "$_API_MAX_INSTANCES" \
+          --max-instances "$_API_MAX_INSTANCES" \
           --region "$_REGION" \
           --quiet
   - name: gcr.io/cloud-builders/gcloud
@@ -215,6 +226,7 @@ steps:
         read -r worker_image_ref < /workspace/release-worker-image-ref
         gcloud run jobs update "$_CLAMAV_UPDATE_JOB" \
           --image "$${worker_image_ref}" \
+          --update-env-vars "DB_POOL_SIZE=$_DB_POOL_SIZE,DB_MAX_OVERFLOW=$_DB_MAX_OVERFLOW" \
           --region "$_REGION" \
           --quiet
 images:
@@ -230,6 +242,10 @@ substitutions:
   _REGION: "us-central1"
   _API_SERVICE: "crm-api"
   _WORKER_SERVICE: "crm-worker"
+  _API_MAX_INSTANCES: "2"
+  _WORKER_MAX_INSTANCES: "3"
+  _DB_POOL_SIZE: "2"
+  _DB_MAX_OVERFLOW: "0"
   _MIGRATE_JOB: "crm-migrate"
   _CACHE_BUST: "0"
   _IMAGE_API: "us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/api:latest"

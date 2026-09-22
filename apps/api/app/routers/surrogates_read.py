@@ -24,7 +24,7 @@ from app.schemas.surrogate import (
 )
 from app.schemas.task import TaskListItem
 from app.services import (
-    analytics_service,
+    analytics_shared,
     intelligent_suggestions_service,
     org_service,
     permission_policy_service,
@@ -102,7 +102,7 @@ def get_surrogate_stats(
     """Get aggregated surrogate statistics for dashboard with period comparisons."""
     _require_owner_filter_access(session, db, owner_id)
 
-    start, end = analytics_service.parse_date_range(
+    start, end = analytics_shared.parse_date_range(
         from_date,
         to_date,
         inclusive_date_end=True,
@@ -163,7 +163,7 @@ def list_unassigned_queue(
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
 
     return SurrogateListResponse(
-        items=[_surrogate_to_list_item(s, db) for s in surrogates],
+        items=[_surrogate_to_list_item(s) for s in surrogates],
         total=total,
         page=page,
         per_page=per_page,
@@ -285,7 +285,7 @@ def list_surrogates(
 
     return SurrogateListResponse(
         items=[
-            _surrogate_to_list_item(s, db, last_activity_at=getattr(s, "last_activity_at", None))
+            _surrogate_to_list_item(s, last_activity_at=getattr(s, "last_activity_at", None))
             for s in surrogates
         ],
         total=total,
@@ -406,7 +406,7 @@ def list_claim_queue(
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
 
     return SurrogateListResponse(
-        items=[_surrogate_to_list_item(s, db) for s in surrogates],
+        items=[_surrogate_to_list_item(s) for s in surrogates],
         total=total,
         page=page,
         per_page=per_page,

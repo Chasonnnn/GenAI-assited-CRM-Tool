@@ -5,7 +5,14 @@ import Link from "@/components/app-link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -122,6 +129,7 @@ import type {
     MetaCrmDatasetEventMappingItem,
 } from "@/lib/api/meta-crm-dataset"
 import type {
+    ZapierDonorEventMappingItem,
     ZapierEventMappingItem,
     ZapierFieldPasteResponse,
     ZapierOutboundEvent,
@@ -177,6 +185,24 @@ const ZAPIER_BUCKET_OPTIONS: Array<{ value: ZapierStageBucket; label: string }> 
     { value: "lost", label: "Lost" },
     { value: "not_qualified", label: "Not Qualified" },
 ]
+
+const ZAPIER_EVENT_OPTIONS: Array<{ value: ZapierDonorEventMappingItem["event_name"]; label: string }> = [
+    { value: "Lead", label: "Lead" },
+    { value: "Qualified", label: "Qualified" },
+    { value: "Converted", label: "Converted" },
+    { value: "Lost", label: "Lost" },
+    { value: "Not Qualified", label: "Not Qualified" },
+]
+
+const ZAPIER_FORM_ROUTE_HEADERS = [
+    { label: "Form", className: undefined },
+    { label: "Creates", className: undefined },
+    { label: "Status", className: undefined },
+    { label: "Action", className: "text-right" },
+]
+
+const DONOR_TYPES = ["egg", "sperm"] as const
+type ZapierDonorType = (typeof DONOR_TYPES)[number]
 
 const UNTRACKED_BUCKET_VALUE = "__none__"
 
@@ -312,6 +338,92 @@ function getBucketSelectLabel(value: string | null | undefined): string {
     return getSelectOptionLabel(ZAPIER_BUCKET_OPTIONS, value)
 }
 
+function getDonorTypeLabel(donorType: ZapierDonorType): string {
+    return donorType === "egg" ? "Egg donor" : "Sperm donor"
+}
+
+function getLeadKindLabel(leadKind: ZapierMetaFormOption["lead_kind"]): string {
+    if (leadKind === "egg_donor") return "Egg donor"
+    if (leadKind === "sperm_donor") return "Sperm donor"
+    return "Surrogate"
+}
+
+function getDonorEventLabel(value: string | null | undefined): string {
+    return getSelectOptionLabel(ZAPIER_EVENT_OPTIONS, value)
+}
+
+function getDefaultDonorEventName(stage: Pipeline["stages"][number]): ZapierDonorEventMappingItem["event_name"] {
+    const bucket = getStageSemantics(stage).integration_bucket
+    if (bucket === "qualified") return "Qualified"
+    if (bucket === "converted") return "Converted"
+    if (bucket === "lost") return "Lost"
+    if (bucket === "not_qualified") return "Not Qualified"
+    return "Lead"
+}
+
+function buildDonorEventMapping(
+    savedMapping: ZapierDonorEventMappingItem[] | null | undefined,
+    pipelinesByType: Record<ZapierDonorType, Pipeline[] | null | undefined>,
+): ZapierDonorEventMappingItem[] {
+    const savedByStage = new Map(
+        (savedMapping ?? []).map((item) => [
+            `${item.donor_type}:${item.pipeline_id}:${item.stage_id}`,
+            item,
+        ]),
+    )
+    const result: ZapierDonorEventMappingItem[] = []
+
+    for (const donorType of DONOR_TYPES) {
+        for (const pipeline of pipelinesByType[donorType] ?? []) {
+            for (const stage of pipeline.stages ?? []) {
+                if (stage.is_active === false) continue
+                const key = `${donorType}:${pipeline.id}:${stage.id}`
+                result.push(savedByStage.get(key) ?? {
+                    donor_type: donorType,
+                    pipeline_id: pipeline.id,
+                    stage_id: stage.id,
+                    event_name: getDefaultDonorEventName(stage),
+                    enabled: false,
+                })
+            }
+        }
+    }
+
+    return result
+}
+
+function hasUnresolvedDonorMappings(
+    savedMapping: ZapierDonorEventMappingItem[] | null | undefined,
+    pipelinesByType: Record<ZapierDonorType, Pipeline[] | null | undefined>,
+): boolean {
+    const validKeys = new Set(
+        buildDonorEventMapping([], pipelinesByType).map(
+            (item) => `${item.donor_type}:${item.pipeline_id}:${item.stage_id}`,
+        ),
+    )
+    return (savedMapping ?? []).some(
+        (item) => !validKeys.has(`${item.donor_type}:${item.pipeline_id}:${item.stage_id}`),
+    )
+}
+
+function getDonorEventStageLabel(
+    event: ZapierOutboundEvent,
+    pipelinesByType: Record<ZapierDonorType, Pipeline[] | null | undefined>,
+): string | null {
+    if (!event.donor_type) return null
+    const donorType = event.donor_type
+    const pipeline = pipelinesByType[donorType]?.find((item) => item.id === event.pipeline_id)
+    const stage = pipeline?.stages.find((item) => item.id === event.stage_id)
+    const donorLabel = getDonorTypeLabel(donorType)
+    if (pipeline && stage) return `${donorLabel} · ${pipeline.name} · ${stage.label}`
+    if (event.stage_label) {
+        return pipeline
+            ? `${donorLabel} · ${pipeline.name} · ${event.stage_label}`
+            : `${donorLabel} · ${event.stage_label}`
+    }
+    return `${donorLabel} stage unavailable`
+}
+
 function getWebhookSelectLabel(
     webhooks:
         | Array<{
@@ -326,6 +438,16 @@ function getWebhookSelectLabel(
     const webhook = webhooks?.find((item) => item.webhook_id === value)
     if (!webhook) return ""
     return webhook.label || `Webhook ${webhook.webhook_id.slice(0, 8)}`
+}
+
+function getZapierFormSelectLabel(
+    forms: ZapierMetaFormOption[],
+    value: string | null | undefined,
+): string {
+    if (!value) return ""
+    const form = forms.find((item) => item.form_external_id === value)
+    if (!form) return ""
+    return `${form.form_name || "Unnamed Zapier form"} · ${getLeadKindLabel(form.lead_kind)}`
 }
 
 function getEligibleSenderLabel(
@@ -389,6 +511,130 @@ function getZapierMappingHealth(
     }
 }
 
+type ZapierMappingHealthPresentation = {
+    label: "Mapping Healthy" | "Mapping Needs Review" | "Mapping unavailable" | "Reporting disabled"
+    variant: "default" | "secondary"
+    detail: string
+}
+
+type ZapierMappingSettings = {
+    outbound_enabled?: boolean | null
+    event_mapping?: ZapierEventMappingItem[] | null
+    donor_outbound_enabled?: boolean | null
+    donor_event_mapping?: ZapierDonorEventMappingItem[] | null
+}
+
+function getZapierMappingHealthPresentation({
+    surrogateEnabled,
+    surrogateMapping,
+    recommendedBucketByStage,
+    donorSettingsAvailable,
+    donorEnabled,
+    donorMapping,
+    donorPipelinesByType,
+    donorPipelinesLoading,
+    donorPipelinesError,
+}: {
+    surrogateEnabled: boolean
+    surrogateMapping: ZapierEventMappingItem[] | null | undefined
+    recommendedBucketByStage: Record<string, ZapierStageBucket>
+    donorSettingsAvailable: boolean
+    donorEnabled: boolean
+    donorMapping: ZapierDonorEventMappingItem[] | null | undefined
+    donorPipelinesByType: Record<ZapierDonorType, Pipeline[] | null | undefined>
+    donorPipelinesLoading: boolean
+    donorPipelinesError: boolean
+}): ZapierMappingHealthPresentation {
+    const surrogateHealth = getZapierMappingHealth(
+        surrogateMapping,
+        recommendedBucketByStage,
+    )
+    const donorApplicable = donorSettingsAvailable && donorEnabled
+    const donorUnavailable = donorApplicable && (donorPipelinesLoading || donorPipelinesError)
+    const donorNeedsReview = donorApplicable
+        && !donorUnavailable
+        && (
+            hasUnresolvedDonorMappings(donorMapping, donorPipelinesByType)
+            || !(donorMapping ?? []).some((item) => item.enabled)
+        )
+    const pathDetails: string[] = []
+
+    if (surrogateEnabled) {
+        pathDetails.push(
+            `Surrogate mapping: ${surrogateHealth.matched}/${surrogateHealth.total} recommended stages`,
+        )
+    }
+    if (donorApplicable) {
+        pathDetails.push(
+            donorUnavailable
+                ? "Donor mapping unavailable"
+                : donorNeedsReview
+                    ? "Donor mapping needs review"
+                    : "Donor mapping configured",
+        )
+    }
+
+    if ((surrogateEnabled && !surrogateHealth.isHealthy) || donorNeedsReview) {
+        return {
+            label: "Mapping Needs Review",
+            variant: "secondary",
+            detail: pathDetails.join(" · "),
+        }
+    }
+    if (donorUnavailable) {
+        return {
+            label: "Mapping unavailable",
+            variant: "secondary",
+            detail: pathDetails.join(" · "),
+        }
+    }
+    if (surrogateEnabled || donorApplicable) {
+        return {
+            label: "Mapping Healthy",
+            variant: "default",
+            detail: pathDetails.join(" · "),
+        }
+    }
+    return {
+        label: "Reporting disabled",
+        variant: "secondary",
+        detail: "Enable stage reporting to evaluate mapping",
+    }
+}
+
+function useZapierMappingPresentation(
+    settings: ZapierMappingSettings | null | undefined,
+    surrogatePipelines: Pipeline[] | null | undefined,
+    enabled: boolean,
+): ZapierMappingHealthPresentation {
+    const eggDonorPipelinesQuery = usePipelines("egg_donor", enabled)
+    const spermDonorPipelinesQuery = usePipelines("sperm_donor", enabled)
+    const donorState = getZapierDonorSettingsState({
+        settings,
+        eggPipelines: eggDonorPipelinesQuery.data,
+        spermPipelines: spermDonorPipelinesQuery.data,
+        eggLoading: eggDonorPipelinesQuery.isLoading,
+        spermLoading: spermDonorPipelinesQuery.isLoading,
+        eggError: eggDonorPipelinesQuery.isError,
+        spermError: spermDonorPipelinesQuery.isError,
+    })
+
+    return getZapierMappingHealthPresentation({
+        surrogateEnabled: Boolean(settings?.outbound_enabled),
+        surrogateMapping: mergeEventMappingWithPipelineStages(
+            settings?.event_mapping,
+            surrogatePipelines,
+        ),
+        recommendedBucketByStage: buildRecommendedBucketByStage(surrogatePipelines),
+        donorSettingsAvailable: donorState.settingsAvailable,
+        donorEnabled: Boolean(settings?.donor_outbound_enabled),
+        donorMapping: settings?.donor_event_mapping,
+        donorPipelinesByType: donorState.pipelinesByType,
+        donorPipelinesLoading: donorState.pipelinesLoading,
+        donorPipelinesError: donorState.pipelinesError,
+    })
+}
+
 const ZAPIER_OUTBOUND_STATUS_BADGE: Record<
     ZapierOutboundEvent["status"],
     { label: string; variant: "default" | "secondary" | "destructive" }
@@ -413,6 +659,14 @@ function formatZapierSource(source: string): string {
 function formatZapierReason(reason: string | null | undefined): string {
     if (!reason) return "—"
     return reason.replace(/_/g, " ")
+}
+
+function formatZapierAttribution(event: ZapierOutboundEvent): string {
+    if (event.attribution_source === "website") return "Attribution: Website form"
+    if (event.attribution_source === "meta") {
+        return `Meta lead: ${event.lead_id || "Unavailable"}`
+    }
+    return `Lead: ${event.lead_id || "—"}`
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -584,8 +838,11 @@ type ZapierWebhookDraftState = {
 type ZapierOutboundFormState = {
     outboundUrl: string
     outboundEnabled: boolean
+    donorOutboundEnabled: boolean
     sendHashedPii: boolean
     eventMapping: ZapierEventMappingItem[]
+    donorEventMapping: ZapierDonorEventMappingItem[]
+    removeUnavailableDonorMappings: boolean
     selectedOutboundStage: string
 }
 
@@ -690,6 +947,15 @@ function createZapierWebhookDraftState(
     }
 }
 
+function getActiveZapierWebhookDraft(
+    draft: ZapierWebhookDraftState,
+    webhookKey: string,
+    webhooks: ZapierInboundWebhookDraftSource[] | null | undefined,
+): ZapierWebhookDraftState {
+    if (draft.webhookKey === webhookKey) return draft
+    return createZapierWebhookDraftState(webhookKey, webhooks, draft.webhookSecrets)
+}
+
 function getActiveFieldPasteWebhookId(
     requestedWebhookId: string,
     webhooks: ZapierInboundWebhookDraftSource[] | null | undefined,
@@ -725,10 +991,13 @@ function createZapierOutboundDraftKey(
             outbound_enabled?: boolean | null
             send_hashed_pii?: boolean | null
             event_mapping?: ZapierEventMappingItem[] | null
+            donor_outbound_enabled?: boolean | null
+            donor_event_mapping?: ZapierDonorEventMappingItem[] | null
         }
         | null
         | undefined,
     pipelines: Pipeline[] | null | undefined,
+    donorPipelinesByType: Record<ZapierDonorType, Pipeline[] | null | undefined>,
 ) {
     const defaultPipeline = pipelines?.find((pipeline) => pipeline.is_default) ?? pipelines?.[0]
     const stageKey = (defaultPipeline?.stages ?? [])
@@ -740,7 +1009,16 @@ function createZapierOutboundDraftKey(
         settings?.outbound_enabled ? "1" : "0",
         settings?.send_hashed_pii ? "1" : "0",
         JSON.stringify(settings?.event_mapping ?? []),
+        settings?.donor_outbound_enabled ? "1" : "0",
+        JSON.stringify(settings?.donor_event_mapping ?? []),
         stageKey,
+        ...DONOR_TYPES.map((donorType) =>
+            (donorPipelinesByType[donorType] ?? [])
+                .flatMap((pipeline) => pipeline.stages.map((stage) => (
+                    `${donorType}:${pipeline.id}:${stage.id}:${stage.is_active === false ? "0" : "1"}`
+                )))
+                .join("|"),
+        ),
     ].join("\u0000")
 }
 
@@ -752,10 +1030,13 @@ function createZapierOutboundDraftState(
             outbound_enabled?: boolean | null
             send_hashed_pii?: boolean | null
             event_mapping?: ZapierEventMappingItem[] | null
+            donor_outbound_enabled?: boolean | null
+            donor_event_mapping?: ZapierDonorEventMappingItem[] | null
         }
         | null
         | undefined,
     pipelines: Pipeline[] | null | undefined,
+    donorPipelinesByType: Record<ZapierDonorType, Pipeline[] | null | undefined>,
     currentStage: string = "",
 ): ZapierOutboundDraftState {
     const eventMapping = mergeEventMappingWithPipelineStages(
@@ -772,10 +1053,82 @@ function createZapierOutboundDraftState(
         form: {
             outboundUrl: settings?.outbound_webhook_url || "",
             outboundEnabled: Boolean(settings?.outbound_enabled),
+            donorOutboundEnabled: Boolean(settings?.donor_outbound_enabled),
             sendHashedPii: Boolean(settings?.send_hashed_pii),
             eventMapping,
+            donorEventMapping: buildDonorEventMapping(
+                settings?.donor_event_mapping,
+                donorPipelinesByType,
+            ),
+            removeUnavailableDonorMappings: false,
             selectedOutboundStage,
         },
+    }
+}
+
+function getActiveZapierOutboundDraft(
+    draft: ZapierOutboundDraftState,
+    outboundKey: string,
+    settings: Parameters<typeof createZapierOutboundDraftState>[1],
+    pipelines: Pipeline[] | null | undefined,
+    donorPipelinesByType: Record<ZapierDonorType, Pipeline[] | null | undefined>,
+): ZapierOutboundDraftState {
+    if (draft.outboundKey === outboundKey) return draft
+    return createZapierOutboundDraftState(
+        outboundKey,
+        settings,
+        pipelines,
+        donorPipelinesByType,
+        draft.form.selectedOutboundStage,
+    )
+}
+
+function getZapierDonorSettingsState({
+    settings,
+    eggPipelines,
+    spermPipelines,
+    eggLoading,
+    spermLoading,
+    eggError,
+    spermError,
+}: {
+    settings:
+        | {
+            donor_outbound_enabled?: boolean | null
+            donor_event_mapping?: ZapierDonorEventMappingItem[] | null
+        }
+        | null
+        | undefined
+    eggPipelines: Pipeline[] | null | undefined
+    spermPipelines: Pipeline[] | null | undefined
+    eggLoading: boolean
+    spermLoading: boolean
+    eggError: boolean
+    spermError: boolean
+}) {
+    const pipelinesByType: Record<ZapierDonorType, Pipeline[] | null | undefined> = {
+        egg: eggPipelines,
+        sperm: spermPipelines,
+    }
+    const pipelinesLoading = eggLoading || spermLoading
+    const pipelinesError = eggError || spermError
+    const settingsAvailable = Boolean(
+        settings
+        && Object.prototype.hasOwnProperty.call(settings, "donor_outbound_enabled")
+        && Object.prototype.hasOwnProperty.call(settings, "donor_event_mapping"),
+    )
+    const mappingsUnresolved = settingsAvailable
+        && !pipelinesLoading
+        && !pipelinesError
+        && hasUnresolvedDonorMappings(settings?.donor_event_mapping, pipelinesByType)
+
+    return {
+        canSave: settingsAvailable && !pipelinesLoading && !pipelinesError && !mappingsUnresolved,
+        mappingsUnresolved,
+        pipelinesByType,
+        pipelinesError,
+        pipelinesLoading,
+        settingsAvailable,
     }
 }
 
@@ -2973,9 +3326,23 @@ function EmailSaveButton({
     )
 }
 
-function ZapierMonitoringSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
-    const { data: summary, isLoading: summaryLoading } = useZapierOutboundEventsSummary()
-    const { data: events, isLoading: eventsLoading } = useZapierOutboundEvents({ limit: 20 })
+function ZapierMonitoringSection({
+    variant = "page",
+    donorPipelinesByType,
+}: {
+    variant?: "page" | "dialog"
+    donorPipelinesByType: Record<ZapierDonorType, Pipeline[] | null | undefined>
+}) {
+    const {
+        data: summary,
+        isLoading: summaryLoading,
+        isError: summaryError,
+    } = useZapierOutboundEventsSummary()
+    const {
+        data: events,
+        isLoading: eventsLoading,
+        isError: eventsError,
+    } = useZapierOutboundEvents({ limit: 20 })
     const retryOutboundEvent = useRetryZapierOutboundEvent()
     const isDialog = variant === "dialog"
 
@@ -2993,6 +3360,16 @@ function ZapierMonitoringSection({ variant = "page" }: { variant?: "page" | "dia
             <div className="flex items-center justify-center py-8">
                 <Loader2Icon className="size-6 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" />
             </div>
+        )
+    }
+
+    if (summaryError || eventsError) {
+        return (
+            <Alert variant="destructive">
+                <AlertTriangleIcon className="size-4" aria-hidden="true" />
+                <AlertTitle>Activity unavailable</AlertTitle>
+                <AlertDescription>Zapier delivery activity could not be loaded.</AlertDescription>
+            </Alert>
         )
     }
 
@@ -3089,7 +3466,12 @@ function ZapierMonitoringSection({ variant = "page" }: { variant?: "page" | "dia
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {events.items.map((event) => (
+                                {events.items.map((event) => {
+                                    const donorStageLabel = getDonorEventStageLabel(
+                                        event,
+                                        donorPipelinesByType,
+                                    )
+                                    return (
                                     <TableRow key={event.id}>
                                         <TableCell className="text-xs text-muted-foreground">
                                             {formatRelativeTime(event.created_at)}
@@ -3100,7 +3482,7 @@ function ZapierMonitoringSection({ variant = "page" }: { variant?: "page" | "dia
                                         <TableCell>
                                             <div className="font-medium">{event.event_name || "Unmapped event"}</div>
                                             <div className="text-xs text-muted-foreground">
-                                                {event.stage_label || event.stage_key || "No stage"}
+                                                {donorStageLabel || event.stage_label || event.stage_key || "No stage"}
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -3110,7 +3492,7 @@ function ZapierMonitoringSection({ variant = "page" }: { variant?: "page" | "dia
                                         </TableCell>
                                         <TableCell className="max-w-xs">
                                             <div className="space-y-1 text-xs text-muted-foreground">
-                                                <p>Lead: {event.lead_id || "—"}</p>
+                                                <p>{formatZapierAttribution(event)}</p>
                                                 <p>
                                                     {event.last_error
                                                         || (event.reason ? formatZapierReason(event.reason) : "No issues recorded")}
@@ -3129,7 +3511,8 @@ function ZapierMonitoringSection({ variant = "page" }: { variant?: "page" | "dia
                                             </Button>
                                         </TableCell>
                                     </TableRow>
-                                ))}
+                                    )
+                                })}
                             </TableBody>
                         </Table>
                     )}
@@ -3150,7 +3533,10 @@ type ZapierInboundWebhookView = {
 type ZapierMetaFormOption = {
     id: string
     form_name?: string | null
-    form_external_id?: string | null
+    form_external_id: string
+    lead_kind?: "surrogate" | "egg_donor" | "sperm_donor"
+    mapping_status?: string
+    is_active?: boolean
 }
 
 type UpdateZapierWebhookDraft = (
@@ -3162,30 +3548,7 @@ type UpdateZapierOutboundForm = <K extends keyof ZapierOutboundFormState>(
     value: ZapierOutboundFormState[K],
 ) => void
 
-function ZapierDetectedFormsAlert({
-    formCount,
-    mappingHref,
-}: {
-    formCount: number
-    mappingHref: string
-}) {
-    return (
-        <Alert>
-            <AlertTitle>Zapier form detected</AlertTitle>
-            <AlertDescription>
-                We detected {formCount} Zapier form
-                {formCount === 1 ? "" : "s"}. Map fields so inbound Zapier leads can
-                convert automatically.{" "}
-                <Link href={mappingHref} className="text-primary underline">
-                    Manage mapping
-                </Link>
-            </AlertDescription>
-        </Alert>
-    )
-}
-
 function ZapierInboundWebhooksCard({
-    isDialog,
     inboundWebhooks,
     webhookSecrets,
     labelDrafts,
@@ -3201,7 +3564,6 @@ function ZapierInboundWebhooksCard({
     onDeleteInbound,
     children,
 }: {
-    isDialog: boolean
     inboundWebhooks: ZapierInboundWebhookView[]
     webhookSecrets: Record<string, string>
     labelDrafts: Record<string, string>
@@ -3215,32 +3577,18 @@ function ZapierInboundWebhooksCard({
     onToggleInbound: (webhookId: string, enabled: boolean) => Promise<void>
     onRotateInbound: (webhookId: string) => Promise<void>
     onDeleteInbound: (webhookId: string) => Promise<void>
-    children: ReactNode
+    children?: ReactNode
 }) {
     return (
         <Card>
-            <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                    <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 dark:bg-primary/20">
-                        <LinkIcon className="size-5 text-primary" aria-hidden="true" />
-                    </div>
-                    <div>
-                        <CardTitle className="text-base">Lead Intake Webhook</CardTitle>
-                        <CardDescription className="text-xs">
-                            Send a POST request with lead data when a new lead arrives.
-                        </CardDescription>
-                    </div>
-                </div>
-            </CardHeader>
-
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 pt-6">
                 <div className="space-y-4">
                     <div
-                        className={`flex flex-col gap-3 ${isDialog ? "" : "md:flex-row md:items-center md:justify-between"}`}
+                        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
                         data-testid="zapier-inbound-header"
                     >
                         <div>
-                            <Label>Inbound Webhooks</Label>
+                            <Label>Webhooks</Label>
                             <p className="text-xs text-muted-foreground">
                                 Create a webhook per Zapier flow or lead source.
                             </p>
@@ -3267,7 +3615,7 @@ function ZapierInboundWebhooksCard({
                     {!inboundWebhooks.length ? (
                         <p className="text-xs text-muted-foreground">No inbound webhooks configured yet.</p>
                     ) : (
-                        <div className="space-y-4">
+                        <div className="grid gap-4 lg:grid-cols-2">
                             {inboundWebhooks.map((webhook) => (
                                 <ZapierInboundWebhookItem
                                     key={webhook.webhook_id}
@@ -3275,7 +3623,6 @@ function ZapierInboundWebhooksCard({
                                     labelValue={labelDrafts[webhook.webhook_id] ?? ""}
                                     secret={webhookSecrets[webhook.webhook_id]}
                                     canDelete={inboundWebhooks.length > 1}
-                                    isDialog={isDialog}
                                     rotatePending={rotatePending}
                                     rotatingWebhookId={rotatingWebhookId}
                                     deletingWebhookId={deletingWebhookId}
@@ -3290,7 +3637,7 @@ function ZapierInboundWebhooksCard({
                     )}
                 </div>
 
-                {children}
+                {children ? <div className="border-t pt-4">{children}</div> : null}
             </CardContent>
         </Card>
     )
@@ -3301,7 +3648,6 @@ function ZapierInboundWebhookItem({
     labelValue,
     secret,
     canDelete,
-    isDialog,
     rotatePending,
     rotatingWebhookId,
     deletingWebhookId,
@@ -3315,7 +3661,6 @@ function ZapierInboundWebhookItem({
     labelValue: string
     secret: string | undefined
     canDelete: boolean
-    isDialog: boolean
     rotatePending: boolean
     rotatingWebhookId: string | null
     deletingWebhookId: string | null
@@ -3330,7 +3675,7 @@ function ZapierInboundWebhookItem({
 
     return (
         <div className="space-y-3 rounded-md border p-4">
-            <div className={`flex flex-col gap-3 ${isDialog ? "" : "md:flex-row md:items-start md:justify-between"}`}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex-1 space-y-2">
                     <Label>Label</Label>
                     <Input
@@ -3516,7 +3861,7 @@ function ZapierFieldPasteCard({
     onClear: () => void
 }) {
     return (
-        <div className="space-y-4 border-t pt-4">
+        <div className="space-y-4">
             <div className="space-y-2">
                 <Label>Paste Zapier Field List</Label>
                 <p className="text-xs text-muted-foreground">
@@ -3608,23 +3953,29 @@ function ZapierTestLeadControls({
     onSendTestLead: () => void
 }) {
     return (
-        <div className="space-y-3 border-t pt-4">
+        <div className="space-y-3">
             <div className="space-y-2">
-                <Label>Test Lead</Label>
-                <Input
-                    placeholder="Zapier Form ID (optional if only one active Zapier form exists)"
+                <Label>Form</Label>
+                <Select
                     value={activeTestFormId}
-                    onChange={(event) => onTestFormIdChange(event.target.value)}
-                    name="zapier-test-form-id"
-                    autoComplete="off"
-                />
-                <p className="text-xs text-muted-foreground">
-                    Sends a dummy lead through the same inbound mapping pipeline as Zapier leads.
-                </p>
-                {zapierForms.length === 1 ? (
-                    <p className="text-xs text-muted-foreground">
-                        Defaulting to {zapierForms[0]?.form_name || zapierForms[0]?.form_external_id}.
-                    </p>
+                    onValueChange={(value) => onTestFormIdChange(value ?? "")}
+                    disabled={!zapierForms.length}
+                >
+                    <SelectTrigger aria-label="Incoming test form" className="w-full">
+                        <SelectValue placeholder="Select a Zapier form">
+                            {(value: string | null) => getZapierFormSelectLabel(zapierForms, value)}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        {zapierForms.map((form) => (
+                            <SelectItem key={form.id} value={form.form_external_id}>
+                                {form.form_name || "Unnamed Zapier form"} · {getLeadKindLabel(form.lead_kind)}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                {!zapierForms.length ? (
+                    <p className="text-sm text-muted-foreground">No active Zapier forms available.</p>
                 ) : null}
                 <p className="text-xs text-muted-foreground">
                     Mapping for Zapier leads is managed in Meta Lead Forms.{" "}
@@ -3636,7 +3987,7 @@ function ZapierTestLeadControls({
             <Button
                 variant="outline"
                 onClick={onSendTestLead}
-                disabled={sendPending}
+                disabled={sendPending || !activeTestFormId}
             >
                 {sendPending ? (
                     <>
@@ -3654,79 +4005,181 @@ function ZapierTestLeadControls({
     )
 }
 
+function ZapierFormRouting({
+    forms,
+    metaFormsLoading,
+    mappingHref,
+    fieldPasteContent,
+}: {
+    forms: ZapierMetaFormOption[]
+    metaFormsLoading: boolean
+    mappingHref: string
+    fieldPasteContent: ReactNode
+}) {
+    return (
+        <div className="space-y-4">
+            {metaFormsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                    <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                </div>
+            ) : !forms.length ? (
+                <Alert>
+                    <AlertTitle>No Zapier form routes</AlertTitle>
+                    <AlertDescription>
+                        Extract fields from a Zapier sample to create the first route.
+                    </AlertDescription>
+                </Alert>
+            ) : (
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Form routes</CardTitle>
+                    </CardHeader>
+                    <CardContent className="overflow-x-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    {ZAPIER_FORM_ROUTE_HEADERS.map((header) => (
+                                        <TableHead key={header.label} className={header.className}>
+                                            {header.label}
+                                        </TableHead>
+                                    ))}
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {forms.map((form) => (
+                                    <TableRow key={form.id}>
+                                        <TableCell>
+                                            <div className="font-medium">
+                                                {form.form_name || "Unnamed Zapier form"}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground">
+                                                {form.form_external_id || "Form ID unavailable"}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>{getLeadKindLabel(form.lead_kind)}</TableCell>
+                                        <TableCell>
+                                            <Badge variant={form.mapping_status === "mapped" ? "default" : "secondary"}>
+                                                {form.mapping_status === "mapped" ? "Mapped" : "Needs mapping"}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                render={<Link href={`/settings/integrations/meta/forms/${form.id}`} />}
+                                            >
+                                                Edit route
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+            )}
+
+            <Card>
+                <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between gap-3">
+                        <CardTitle className="text-base">Add or refresh a route</CardTitle>
+                        {forms.length ? (
+                            <Button variant="outline" size="sm" render={<Link href={mappingHref} />}>
+                                Open form mappings
+                            </Button>
+                        ) : null}
+                    </div>
+                </CardHeader>
+                <CardContent>{fieldPasteContent}</CardContent>
+            </Card>
+        </div>
+    )
+}
+
 function ZapierOutboundSettingsCard({
-    isDialog,
     outboundForm,
     outboundSecret,
     outboundSecretConfigured,
-    outboundTestLeadId,
-    savePending,
-    testPending,
+    donorSettingsAvailable,
+    donorPipelinesByType,
+    donorPipelinesLoading,
+    donorPipelinesError,
+    donorMappingsUnresolved,
     recommendedBucketByStage,
     getStageKeyLabel,
     onOutboundFormChange,
     onOutboundSecretChange,
-    onOutboundTestLeadIdChange,
-    onSaveOutbound,
-    onSendOutboundTest,
     onApplyRecommendedMapping,
 }: {
-    isDialog: boolean
     outboundForm: ZapierOutboundFormState
     outboundSecret: string
     outboundSecretConfigured: boolean
-    outboundTestLeadId: string
-    savePending: boolean
-    testPending: boolean
+    donorSettingsAvailable: boolean
+    donorPipelinesByType: Record<ZapierDonorType, Pipeline[] | null | undefined>
+    donorPipelinesLoading: boolean
+    donorPipelinesError: boolean
+    donorMappingsUnresolved: boolean
     recommendedBucketByStage: Record<string, ZapierStageBucket>
     getStageKeyLabel: (stageKey: string) => string
     onOutboundFormChange: UpdateZapierOutboundForm
     onOutboundSecretChange: (value: string) => void
-    onOutboundTestLeadIdChange: (value: string) => void
-    onSaveOutbound: () => void
-    onSendOutboundTest: () => void
     onApplyRecommendedMapping: () => void
 }) {
+    const donorControlsUnavailable =
+        !donorSettingsAvailable
+        || donorPipelinesLoading
+        || donorPipelinesError
+    const hasDonorPipelines = DONOR_TYPES.some((donorType) => donorPipelinesByType[donorType]?.length)
+    const donorMappingNeedsRepair = donorMappingsUnresolved && !outboundForm.removeUnavailableDonorMappings
+
     return (
-        <div className="space-y-4 border-t pt-4">
-            <div className="flex items-center justify-between">
-                <div>
-                    <p className="text-sm font-medium">Outbound Stage Events</p>
+        <div className="space-y-6">
+            <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex items-center justify-between rounded-md border p-3">
+                    <Label>Surrogate stage events</Label>
+                    <Switch
+                        checked={outboundForm.outboundEnabled}
+                        onCheckedChange={(checked) => onOutboundFormChange("outboundEnabled", checked)}
+                        aria-label="Enable surrogate stage events"
+                    />
+                </div>
+                <div className="flex items-center justify-between rounded-md border p-3">
+                    <Label>Donor stage events</Label>
+                    <Switch
+                        checked={outboundForm.donorOutboundEnabled}
+                        onCheckedChange={(checked) => onOutboundFormChange("donorOutboundEnabled", checked)}
+                        disabled={donorControlsUnavailable || ((!hasDonorPipelines || donorMappingNeedsRepair) && !outboundForm.donorOutboundEnabled)}
+                        aria-label="Enable donor stage events"
+                    />
+                </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+                <div className="space-y-2">
+                    <Label>Outbound Webhook URL</Label>
+                    <Input
+                        value={outboundForm.outboundUrl}
+                        onChange={(event) => onOutboundFormChange("outboundUrl", event.target.value)}
+                        placeholder="https://hooks.zapier.com/hooks/catch/…"
+                        name="zapier-outbound-url"
+                        autoComplete="off"
+                    />
+                </div>
+
+                <div className="space-y-2">
+                    <Label>Webhook Secret (optional)</Label>
+                    <Input
+                        type="password"
+                        value={outboundSecret}
+                        onChange={(event) => onOutboundSecretChange(event.target.value)}
+                        placeholder={outboundSecretConfigured ? "•••••••• (set)" : "Enter secret"}
+                        name="zapier-outbound-secret"
+                        autoComplete="off"
+                    />
                     <p className="text-xs text-muted-foreground">
-                        Send surrogate stage changes to Zapier for Meta Conversions.
+                        Sent as the X-Webhook-Token header.
                     </p>
                 </div>
-                <Switch
-                    checked={outboundForm.outboundEnabled}
-                    onCheckedChange={(checked) => onOutboundFormChange("outboundEnabled", checked)}
-                    aria-label="Enable outbound stage events"
-                />
-            </div>
-
-            <div className="space-y-2">
-                <Label>Outbound Webhook URL</Label>
-                <Input
-                    value={outboundForm.outboundUrl}
-                    onChange={(event) => onOutboundFormChange("outboundUrl", event.target.value)}
-                    placeholder="https://hooks.zapier.com/hooks/catch/…"
-                    name="zapier-outbound-url"
-                    autoComplete="off"
-                />
-            </div>
-
-            <div className="space-y-2">
-                <Label>Webhook Secret (optional)</Label>
-                <Input
-                    type="password"
-                    value={outboundSecret}
-                    onChange={(event) => onOutboundSecretChange(event.target.value)}
-                    placeholder={outboundSecretConfigured ? "•••••••• (set)" : "Enter secret"}
-                    name="zapier-outbound-secret"
-                    autoComplete="off"
-                />
-                <p className="text-xs text-muted-foreground">
-                    If provided, we send it as X-Webhook-Token header.
-                </p>
             </div>
 
             <div className="flex items-center justify-between rounded-md border p-3">
@@ -3743,41 +4196,58 @@ function ZapierOutboundSettingsCard({
                 />
             </div>
 
-            <ZapierStageMappingRows
-                eventMapping={outboundForm.eventMapping}
-                isDialog={isDialog}
-                recommendedBucketByStage={recommendedBucketByStage}
-                getStageKeyLabel={getStageKeyLabel}
-                onOutboundFormChange={onOutboundFormChange}
-                onApplyRecommendedMapping={onApplyRecommendedMapping}
-            />
-
-            <ZapierOutboundTestControls
-                isDialog={isDialog}
-                outboundForm={outboundForm}
-                outboundTestLeadId={outboundTestLeadId}
-                savePending={savePending}
-                testPending={testPending}
-                getStageKeyLabel={getStageKeyLabel}
-                onOutboundFormChange={onOutboundFormChange}
-                onOutboundTestLeadIdChange={onOutboundTestLeadIdChange}
-                onSaveOutbound={onSaveOutbound}
-                onSendOutboundTest={onSendOutboundTest}
-            />
+            <Tabs defaultValue="surrogates" className="gap-3 border-t pt-5">
+                <div className="overflow-x-auto pb-1">
+                    <TabsList
+                        variant="line"
+                        aria-label="Stage mapping record type"
+                        className="min-w-max"
+                    >
+                        <TabsTrigger value="surrogates">Surrogates</TabsTrigger>
+                        <TabsTrigger value="egg-donors">Egg donors</TabsTrigger>
+                        <TabsTrigger value="sperm-donors">Sperm donors</TabsTrigger>
+                    </TabsList>
+                </div>
+                <TabsContent value="surrogates" keepMounted>
+                    <ZapierStageMappingRows
+                        eventMapping={outboundForm.eventMapping}
+                        recommendedBucketByStage={recommendedBucketByStage}
+                        getStageKeyLabel={getStageKeyLabel}
+                        onOutboundFormChange={onOutboundFormChange}
+                        onApplyRecommendedMapping={onApplyRecommendedMapping}
+                    />
+                </TabsContent>
+                {DONOR_TYPES.map((donorType) => (
+                    <TabsContent
+                        key={donorType}
+                        value={`${donorType}-donors`}
+                        keepMounted
+                    >
+                        <ZapierDonorStageMappingRows
+                            donorType={donorType}
+                            outboundForm={outboundForm}
+                            settingsAvailable={donorSettingsAvailable}
+                            pipelinesByType={donorPipelinesByType}
+                            pipelinesLoading={donorPipelinesLoading}
+                            pipelinesError={donorPipelinesError}
+                            mappingsUnresolved={donorMappingsUnresolved && !outboundForm.removeUnavailableDonorMappings}
+                            onOutboundFormChange={onOutboundFormChange}
+                        />
+                    </TabsContent>
+                ))}
+            </Tabs>
         </div>
     )
 }
 
 function ZapierStageMappingRows({
     eventMapping,
-    isDialog,
     recommendedBucketByStage,
     getStageKeyLabel,
     onOutboundFormChange,
     onApplyRecommendedMapping,
 }: {
     eventMapping: ZapierEventMappingItem[]
-    isDialog: boolean
     recommendedBucketByStage: Record<string, ZapierStageBucket>
     getStageKeyLabel: (stageKey: string) => string
     onOutboundFormChange: UpdateZapierOutboundForm
@@ -3785,12 +4255,13 @@ function ZapierStageMappingRows({
 }) {
     return (
         <div className="space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <Label>Stage → Event Mapping</Label>
                 <Button
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="w-full sm:w-auto"
                     onClick={onApplyRecommendedMapping}
                 >
                     Apply Recommended Mapping
@@ -3806,7 +4277,6 @@ function ZapierStageMappingRows({
                         item={item}
                         index={index}
                         eventMapping={eventMapping}
-                        isDialog={isDialog}
                         recommendedBucketByStage={recommendedBucketByStage}
                         getStageKeyLabel={getStageKeyLabel}
                         onOutboundFormChange={onOutboundFormChange}
@@ -3821,7 +4291,6 @@ function ZapierStageMappingRow({
     item,
     index,
     eventMapping,
-    isDialog,
     recommendedBucketByStage,
     getStageKeyLabel,
     onOutboundFormChange,
@@ -3829,7 +4298,6 @@ function ZapierStageMappingRow({
     item: ZapierEventMappingItem
     index: number
     eventMapping: ZapierEventMappingItem[]
-    isDialog: boolean
     recommendedBucketByStage: Record<string, ZapierStageBucket>
     getStageKeyLabel: (stageKey: string) => string
     onOutboundFormChange: UpdateZapierOutboundForm
@@ -3843,8 +4311,8 @@ function ZapierStageMappingRow({
     }
 
     return (
-        <div className={`flex flex-col gap-2 rounded-md border p-3 ${isDialog ? "" : "md:flex-row md:items-center"}`}>
-            <div className="w-32 text-sm font-medium">
+        <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-center">
+            <div className="text-sm font-medium">
                 {getStageKeyLabel(item.stage_key)}
             </div>
             <Select
@@ -3868,7 +4336,7 @@ function ZapierStageMappingRow({
                     }
                 }}
             >
-                <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-44"}>
+                <SelectTrigger className="w-full">
                     <SelectValue placeholder="Bucket">
                         {(value: string | null) => getBucketSelectLabel(value)}
                     </SelectValue>
@@ -3907,41 +4375,275 @@ function ZapierStageMappingRow({
     )
 }
 
+type ZapierDonorStageMappingRowsProps = {
+    donorType: ZapierDonorType
+    outboundForm: ZapierOutboundFormState
+    settingsAvailable: boolean
+    pipelinesByType: Record<ZapierDonorType, Pipeline[] | null | undefined>
+    pipelinesLoading: boolean
+    pipelinesError: boolean
+    mappingsUnresolved: boolean
+    onOutboundFormChange: UpdateZapierOutboundForm
+}
+
+type ZapierDonorMappingAvailability =
+    | "unavailable"
+    | "loading"
+    | "error"
+    | "unresolved"
+    | "empty"
+    | "ready"
+
+function getZapierDonorMappingAvailability({
+    settingsAvailable,
+    pipelinesLoading,
+    pipelinesError,
+    mappingsUnresolved,
+    pipelineCount,
+}: Pick<
+    ZapierDonorStageMappingRowsProps,
+    "settingsAvailable" | "pipelinesLoading" | "pipelinesError" | "mappingsUnresolved"
+> & { pipelineCount: number }): ZapierDonorMappingAvailability {
+    if (!settingsAvailable) return "unavailable"
+    if (pipelinesLoading) return "loading"
+    if (pipelinesError) return "error"
+    if (mappingsUnresolved) return "unresolved"
+    if (!pipelineCount) return "empty"
+    return "ready"
+}
+
+function ZapierDonorMappingAvailabilityMessage({
+    availability,
+    donorType,
+    onRemoveUnavailableMappings,
+}: {
+    availability: Exclude<ZapierDonorMappingAvailability, "ready">
+    donorType: ZapierDonorType
+    onRemoveUnavailableMappings?: () => void
+}) {
+    switch (availability) {
+        case "unavailable":
+            return (
+                <Alert>
+                    <AlertTitle>Donor reporting unavailable</AlertTitle>
+                    <AlertDescription>
+                        Donor reporting controls are unavailable. Existing settings will be preserved.
+                    </AlertDescription>
+                </Alert>
+            )
+        case "loading":
+            return (
+                <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
+                    <Loader2Icon className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                    Loading donor pipelines…
+                </div>
+            )
+        case "error":
+            return (
+                <Alert variant="destructive">
+                    <AlertTriangleIcon className="size-4" aria-hidden="true" />
+                    <AlertTitle>Donor pipelines unavailable</AlertTitle>
+                    <AlertDescription>
+                        Donor reporting settings are read-only until pipeline access is restored.
+                    </AlertDescription>
+                </Alert>
+            )
+        case "unresolved":
+            return (
+                <Alert variant="destructive">
+                    <AlertTriangleIcon className="size-4" aria-hidden="true" />
+                    <AlertTitle>Saved donor mapping needs review</AlertTitle>
+                    <AlertDescription>
+                        Remove unavailable stages before saving mappings, or turn off donor stage events. Live mappings will be preserved.
+                    </AlertDescription>
+                    <Button variant="outline" size="sm" onClick={onRemoveUnavailableMappings}>
+                        Remove unavailable mappings
+                    </Button>
+                </Alert>
+            )
+        case "empty":
+            return (
+                <Alert>
+                    <AlertTitle>No {getDonorTypeLabel(donorType).toLowerCase()} pipeline available</AlertTitle>
+                    <AlertDescription>
+                        Configure this donor pipeline before mapping stage events.
+                    </AlertDescription>
+                </Alert>
+            )
+    }
+}
+
+function updateZapierDonorMappingItem(
+    mapping: ZapierDonorEventMappingItem[],
+    target: ZapierDonorEventMappingItem,
+    updater: (item: ZapierDonorEventMappingItem) => ZapierDonorEventMappingItem,
+): ZapierDonorEventMappingItem[] {
+    return mapping.map((item) =>
+        item.donor_type === target.donor_type
+        && item.pipeline_id === target.pipeline_id
+        && item.stage_id === target.stage_id
+            ? updater(item)
+            : item,
+    )
+}
+
+function ZapierDonorPipelineMapping({
+    donorType,
+    pipeline,
+    mapping,
+    onUpdateItem,
+}: {
+    donorType: ZapierDonorType
+    pipeline: Pipeline
+    mapping: ZapierDonorEventMappingItem[]
+    onUpdateItem: (
+        target: ZapierDonorEventMappingItem,
+        updater: (item: ZapierDonorEventMappingItem) => ZapierDonorEventMappingItem,
+    ) => void
+}) {
+    return (
+        <div className="overflow-hidden rounded-md border">
+            <div className="border-b bg-muted/40 px-3 py-2 text-sm font-medium">
+                {pipeline.name}
+            </div>
+            <div className="divide-y">
+                {pipeline.stages.filter((stage) => stage.is_active !== false).map((stage) => {
+                    const item = mapping.find((candidate) =>
+                        candidate.donor_type === donorType
+                        && candidate.pipeline_id === pipeline.id
+                        && candidate.stage_id === stage.id,
+                    )
+                    return item ? (
+                        <div
+                            key={stage.id}
+                            className="grid gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-center"
+                        >
+                            <span className="text-sm font-medium">{stage.label}</span>
+                            <Select
+                                value={item.event_name}
+                                onValueChange={(value) => {
+                                    const eventName = ZAPIER_EVENT_OPTIONS.find(
+                                        (option) => option.value === value,
+                                    )?.value
+                                    if (!eventName) return
+                                    onUpdateItem(item, (current) => ({
+                                        ...current,
+                                        event_name: eventName,
+                                    }))
+                                }}
+                            >
+                                <SelectTrigger aria-label={`Zapier event for ${getDonorTypeLabel(donorType)} ${stage.label}`}>
+                                    <SelectValue>
+                                        {(value: string | null) => getDonorEventLabel(value)}
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {ZAPIER_EVENT_OPTIONS.map((option) => (
+                                        <SelectItem key={option.value} value={option.value}>
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <div className="flex items-center gap-2 sm:justify-end">
+                                <Switch
+                                    checked={item.enabled}
+                                    onCheckedChange={(checked) => onUpdateItem(
+                                        item,
+                                        (current) => ({ ...current, enabled: checked }),
+                                    )}
+                                    aria-label={`Enable ${getDonorTypeLabel(donorType)} ${pipeline.name} ${stage.label}`}
+                                />
+                                <span className="text-xs text-muted-foreground">Enabled</span>
+                            </div>
+                        </div>
+                    ) : null
+                })}
+            </div>
+        </div>
+    )
+}
+
+function ZapierDonorStageMappingRows({
+    donorType,
+    outboundForm,
+    settingsAvailable,
+    pipelinesByType,
+    pipelinesLoading,
+    pipelinesError,
+    mappingsUnresolved,
+    onOutboundFormChange,
+}: ZapierDonorStageMappingRowsProps) {
+    const pipelines = pipelinesByType[donorType] ?? []
+    const availability = getZapierDonorMappingAvailability({
+        settingsAvailable,
+        pipelinesLoading,
+        pipelinesError,
+        mappingsUnresolved,
+        pipelineCount: pipelines.length,
+    })
+
+    if (availability !== "ready") {
+        return (
+            <ZapierDonorMappingAvailabilityMessage
+                availability={availability}
+                donorType={donorType}
+                onRemoveUnavailableMappings={() => {
+                    onOutboundFormChange("removeUnavailableDonorMappings", true)
+                    if (!outboundForm.donorEventMapping.some((item) => item.enabled)) {
+                        onOutboundFormChange("donorOutboundEnabled", false)
+                    }
+                }}
+            />
+        )
+    }
+
+    const updateItem = (
+        target: ZapierDonorEventMappingItem,
+        updater: (item: ZapierDonorEventMappingItem) => ZapierDonorEventMappingItem,
+    ) => {
+        onOutboundFormChange(
+            "donorEventMapping",
+            updateZapierDonorMappingItem(outboundForm.donorEventMapping, target, updater),
+        )
+    }
+
+    return (
+        <div className="space-y-3">
+            {pipelines.map((pipeline) => (
+                <ZapierDonorPipelineMapping
+                    key={pipeline.id}
+                    donorType={donorType}
+                    pipeline={pipeline}
+                    mapping={outboundForm.donorEventMapping}
+                    onUpdateItem={updateItem}
+                />
+            ))}
+        </div>
+    )
+}
+
 function ZapierOutboundTestControls({
     isDialog,
     outboundForm,
     outboundTestLeadId,
-    savePending,
     testPending,
     getStageKeyLabel,
     onOutboundFormChange,
     onOutboundTestLeadIdChange,
-    onSaveOutbound,
     onSendOutboundTest,
 }: {
     isDialog: boolean
     outboundForm: ZapierOutboundFormState
     outboundTestLeadId: string
-    savePending: boolean
     testPending: boolean
     getStageKeyLabel: (stageKey: string) => string
     onOutboundFormChange: UpdateZapierOutboundForm
     onOutboundTestLeadIdChange: (value: string) => void
-    onSaveOutbound: () => void
     onSendOutboundTest: () => void
 }) {
     return (
         <div className={`flex flex-col gap-2 ${isDialog ? "" : "md:flex-row md:items-center"}`}>
-            <Button onClick={onSaveOutbound} disabled={savePending}>
-                {savePending ? (
-                    <>
-                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                        Saving…
-                    </>
-                ) : (
-                    "Save Outbound Settings"
-                )}
-            </Button>
             <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 flex-col gap-2"}>
                 <div className={isDialog ? "space-y-2" : "flex flex-col gap-2 md:max-w-sm"}>
                     <Label htmlFor="zapier-outbound-test-lead-id">Meta Lead ID (optional)</Label>
@@ -4000,11 +4702,35 @@ function ZapierOutboundTestControls({
 }
 
 function useZapierWebhookController(variant: "page" | "dialog") {
-    const { data: pipelines } = usePipelines()
+    const { user } = useAuth()
+    const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
+    const permissions = effectivePermissions?.permissions ?? []
+    const canEditDonorSettings = user?.role === "developer"
+        || (permissions.includes("view_donors") && permissions.includes("edit_donors"))
+    const { data: pipelines } = usePipelines("surrogate")
+    const eggDonorPipelinesQuery = usePipelines("egg_donor")
+    const spermDonorPipelinesQuery = usePipelines("sperm_donor")
     const recommendedBucketByStage = buildRecommendedBucketByStage(pipelines)
     const stageLabelByKey = buildStageLabelByKey(pipelines)
     const getStageKeyLabel = (stageKey: string) => stageLabelByKey[stageKey] ?? "Unknown stage"
-    const { data: settings, isLoading } = useZapierSettings()
+    const { data: settings, isLoading, isError } = useZapierSettings()
+    const donorSettingsState = getZapierDonorSettingsState({
+        settings: canEditDonorSettings ? settings : undefined,
+        eggPipelines: eggDonorPipelinesQuery.data,
+        spermPipelines: spermDonorPipelinesQuery.data,
+        eggLoading: eggDonorPipelinesQuery.isLoading,
+        spermLoading: spermDonorPipelinesQuery.isLoading,
+        eggError: eggDonorPipelinesQuery.isError,
+        spermError: spermDonorPipelinesQuery.isError,
+    })
+    const {
+        canSave: canSaveDonorSettings,
+        mappingsUnresolved: donorMappingsUnresolved,
+        pipelinesByType: donorPipelinesByType,
+        pipelinesError: donorPipelinesError,
+        pipelinesLoading: donorPipelinesLoading,
+        settingsAvailable: donorSettingsAvailable,
+    } = donorSettingsState
     const { data: metaForms = [], isLoading: metaFormsLoading } = useMetaForms()
     const createInboundWebhook = useCreateZapierInboundWebhook()
     const rotateInboundWebhook = useRotateZapierInboundWebhook()
@@ -4027,34 +4753,46 @@ function useZapierWebhookController(variant: "page" | "dialog") {
     const [webhookDraft, setWebhookDraft] = useState<ZapierWebhookDraftState>(() =>
         createZapierWebhookDraftState(activeWebhookKey, inboundWebhooks)
     )
-    const activeWebhookDraft = webhookDraft.webhookKey === activeWebhookKey
-        ? webhookDraft
-        : createZapierWebhookDraftState(activeWebhookKey, inboundWebhooks, webhookDraft.webhookSecrets)
+    const activeWebhookDraft = getActiveZapierWebhookDraft(
+        webhookDraft,
+        activeWebhookKey,
+        inboundWebhooks,
+    )
     const { labelDrafts, webhookSecrets } = activeWebhookDraft
     const activeFieldPasteWebhookId = getActiveFieldPasteWebhookId(fieldPasteWebhookId, inboundWebhooks)
     const singleZapierFormId = getSingleZapierFormId(metaForms)
     const activeTestFormId = testFormId.trim() || singleZapierFormId
-    const activeOutboundKey = createZapierOutboundDraftKey(settings, pipelines)
-    const [outboundDraft, setOutboundDraft] = useState<ZapierOutboundDraftState>(() =>
-        createZapierOutboundDraftState(activeOutboundKey, settings, pipelines)
+    const activeOutboundKey = createZapierOutboundDraftKey(
+        settings,
+        pipelines,
+        donorPipelinesByType,
     )
-    const activeOutboundDraft = outboundDraft.outboundKey === activeOutboundKey
-        ? outboundDraft
-        : createZapierOutboundDraftState(
+    const [outboundDraft, setOutboundDraft] = useState<ZapierOutboundDraftState>(() =>
+        createZapierOutboundDraftState(
             activeOutboundKey,
             settings,
             pipelines,
-            outboundDraft.form.selectedOutboundStage,
+            donorPipelinesByType,
         )
+    )
+    const activeOutboundDraft = getActiveZapierOutboundDraft(
+        outboundDraft,
+        activeOutboundKey,
+        settings,
+        pipelines,
+        donorPipelinesByType,
+    )
     const outboundForm = activeOutboundDraft.form
 
     const updateWebhookDraft = (
         updater: (draft: ZapierWebhookDraftState) => ZapierWebhookDraftState,
     ) => {
         setWebhookDraft((current) => {
-            const activeDraft = current.webhookKey === activeWebhookKey
-                ? current
-                : createZapierWebhookDraftState(activeWebhookKey, inboundWebhooks, current.webhookSecrets)
+            const activeDraft = getActiveZapierWebhookDraft(
+                current,
+                activeWebhookKey,
+                inboundWebhooks,
+            )
             return updater(activeDraft)
         })
     }
@@ -4064,14 +4802,13 @@ function useZapierWebhookController(variant: "page" | "dialog") {
         value: ZapierOutboundFormState[K],
     ) => {
         setOutboundDraft((current) => {
-            const activeDraft = current.outboundKey === activeOutboundKey
-                ? current
-                : createZapierOutboundDraftState(
-                    activeOutboundKey,
-                    settings,
-                    pipelines,
-                    current.form.selectedOutboundStage,
-                )
+            const activeDraft = getActiveZapierOutboundDraft(
+                current,
+                activeOutboundKey,
+                settings,
+                pipelines,
+                donorPipelinesByType,
+            )
 
             return {
                 outboundKey: activeOutboundKey,
@@ -4223,11 +4960,30 @@ function useZapierWebhookController(variant: "page" | "dialog") {
                 outbound_enabled: boolean
                 send_hashed_pii: boolean
                 event_mapping: ZapierEventMappingItem[]
+                donor_outbound_enabled?: boolean
+                donor_event_mapping?: ZapierDonorEventMappingItem[]
             } = {
                 outbound_webhook_url: outboundForm.outboundUrl.trim() || null,
                 outbound_enabled: outboundForm.outboundEnabled,
                 send_hashed_pii: outboundForm.sendHashedPii,
                 event_mapping: outboundForm.eventMapping,
+            }
+            if (canSaveDonorSettings || (
+                donorSettingsAvailable
+                && !donorPipelinesLoading
+                && !donorPipelinesError
+                && outboundForm.removeUnavailableDonorMappings
+            )) {
+                payload.donor_outbound_enabled = outboundForm.donorOutboundEnabled
+                payload.donor_event_mapping = outboundForm.donorEventMapping
+            } else if (
+                donorSettingsAvailable
+                && !donorPipelinesLoading
+                && !donorPipelinesError
+                && settings?.donor_outbound_enabled
+                && !outboundForm.donorOutboundEnabled
+            ) {
+                payload.donor_outbound_enabled = false
             }
             const secret = outboundSecret.trim()
             if (secret) {
@@ -4235,9 +4991,9 @@ function useZapierWebhookController(variant: "page" | "dialog") {
             }
             await updateOutbound.mutateAsync(payload)
             setOutboundSecret('')
-            toast.success("Outbound webhook settings saved")
-        } catch {
-            toast.error("Failed to save outbound settings")
+            toast.success("Zapier configuration saved")
+        } catch (error) {
+            toast.error(getErrorMessage(error, "Failed to save Zapier configuration"))
         }
     }
 
@@ -4296,6 +5052,11 @@ function useZapierWebhookController(variant: "page" | "dialog") {
         containerClass,
         createInboundPending: createInboundWebhook.isPending,
         deletingWebhookId,
+        donorMappingsUnresolved,
+        donorPipelinesByType,
+        donorPipelinesError,
+        donorPipelinesLoading,
+        donorSettingsAvailable,
         fieldPaste,
         fieldPasteResult,
         getStageKeyLabel,
@@ -4311,6 +5072,7 @@ function useZapierWebhookController(variant: "page" | "dialog") {
         handleToggleInbound,
         inboundWebhooks,
         isDialog,
+        isError,
         isLoading,
         labelDrafts,
         mappingHref,
@@ -4340,47 +5102,113 @@ function useZapierWebhookController(variant: "page" | "dialog") {
     }
 }
 
-function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
+function IntegrationConfigurationWorkspace({
+    header,
+    children,
+    footer,
+}: {
+    header: ReactNode
+    children: ReactNode
+    footer: ReactNode
+}) {
+    return (
+        <div className="flex min-h-0 flex-1 flex-col">
+            <div className="shrink-0 border-b px-4 pt-5 pb-4 sm:px-6">{header}</div>
+            {children}
+            <div className="shrink-0 border-t bg-background px-4 py-3 sm:px-6">{footer}</div>
+        </div>
+    )
+}
+
+function ZapierWebhookSection({
+    statusLabel,
+    statusVariant,
+    StatusIcon,
+    mappingBadgeLabel,
+    mappingBadgeVariant,
+    onClose,
+}: {
+    statusLabel: string
+    statusVariant: BadgeVariant
+    StatusIcon: IconComponent
+    mappingBadgeLabel: string
+    mappingBadgeVariant: BadgeVariant
+    onClose: () => void
+}) {
+    const variant = "dialog" as const
     const controller = useZapierWebhookController(variant)
 
-    if (controller.isLoading) {
-        return (
-            <div className={controller.containerClass}>
-                {controller.showHeading && (
-                    <h2 className="mb-4 text-lg font-semibold">Zapier Webhook</h2>
-                )}
-                <div className="flex items-center justify-center py-8">
-                    <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
-                </div>
-            </div>
-        )
-    }
-
     return (
-        <div className={controller.containerClass}>
-            {controller.showHeading && (
-                <>
-                    <h2 className="mb-4 text-lg font-semibold">Zapier Webhook</h2>
-                    <p className="mb-4 text-sm text-muted-foreground">
-                        Use this webhook to push leads from Zapier into Surrogacy Force.
-                    </p>
-                </>
+        <IntegrationConfigurationWorkspace
+            header={(
+                <DialogHeader className="pr-10">
+                    <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between sm:gap-4">
+                        <div className="space-y-1">
+                            <DialogTitle>Zapier Configuration</DialogTitle>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant={statusVariant} className="flex items-center gap-1">
+                                <StatusIcon className="size-3" aria-hidden="true" />
+                                {statusLabel}
+                            </Badge>
+                            <Badge
+                                data-testid="zapier-mapping-health-dialog-badge"
+                                variant={mappingBadgeVariant}
+                            >
+                                {mappingBadgeLabel}
+                            </Badge>
+                        </div>
+                    </div>
+                </DialogHeader>
             )}
-            <Tabs defaultValue="configuration" className="space-y-4">
-                <TabsList variant="line">
-                    <TabsTrigger value="configuration">Configuration</TabsTrigger>
-                    <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
-                </TabsList>
-                <TabsContent value="configuration" className="space-y-4">
-                    {!controller.metaFormsLoading && controller.zapierForms.length > 0 ? (
-                        <ZapierDetectedFormsAlert
-                            formCount={controller.zapierForms.length}
-                            mappingHref={controller.mappingHref}
-                        />
-                    ) : null}
-
+            footer={(
+                <DialogFooter className="flex-row justify-end">
+                    <Button variant="outline" onClick={onClose}>Cancel</Button>
+                    <Button
+                        onClick={() => {
+                            void controller.handleSaveOutbound()
+                        }}
+                        disabled={controller.updateOutboundPending || controller.isLoading || controller.isError}
+                    >
+                        {controller.updateOutboundPending ? (
+                            <>
+                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                Saving…
+                            </>
+                        ) : (
+                            "Save configuration"
+                        )}
+                    </Button>
+                </DialogFooter>
+            )}
+        >
+            <Tabs defaultValue="incoming" className="min-h-0 flex-1 gap-0">
+                <div className="shrink-0 overflow-x-auto border-b px-4 sm:px-6">
+                    <TabsList variant="line" aria-label="Zapier configuration sections">
+                        <TabsTrigger value="incoming">Incoming leads</TabsTrigger>
+                        <TabsTrigger value="routing">Form routing</TabsTrigger>
+                        <TabsTrigger value="reporting">Stage reporting</TabsTrigger>
+                        <TabsTrigger value="activity">Activity</TabsTrigger>
+                    </TabsList>
+                </div>
+                <div
+                    className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 sm:px-6"
+                    data-testid="zapier-dialog-body"
+                >
+                    {controller.isLoading ? (
+                        <div className="flex items-center justify-center py-12">
+                            <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                        </div>
+                    ) : controller.isError ? (
+                        <Alert variant="destructive">
+                            <AlertTriangleIcon className="size-4" aria-hidden="true" />
+                            <AlertTitle>Zapier settings unavailable</AlertTitle>
+                            <AlertDescription>Configuration could not be loaded.</AlertDescription>
+                        </Alert>
+                    ) : (
+                        <>
+                <TabsContent value="incoming" keepMounted className="space-y-4">
                     <ZapierInboundWebhooksCard
-                        isDialog={controller.isDialog}
                         inboundWebhooks={controller.inboundWebhooks}
                         webhookSecrets={controller.webhookSecrets}
                         labelDrafts={controller.labelDrafts}
@@ -4396,7 +5224,15 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                         onToggleInbound={controller.handleToggleInbound}
                         onRotateInbound={controller.handleRotateInbound}
                         onDeleteInbound={controller.handleDeleteInbound}
-                    >
+                    />
+                </TabsContent>
+
+                <TabsContent value="routing" keepMounted className="space-y-4">
+                    <ZapierFormRouting
+                        forms={controller.zapierForms}
+                        metaFormsLoading={controller.metaFormsLoading}
+                        mappingHref={controller.mappingHref}
+                        fieldPasteContent={(
                         <ZapierFieldPasteCard
                             isDialog={controller.isDialog}
                             inboundWebhooks={controller.inboundWebhooks}
@@ -4411,6 +5247,42 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                             }}
                             onClear={controller.handleFieldPasteClear}
                         />
+                        )}
+                    />
+                </TabsContent>
+
+                <TabsContent value="reporting" keepMounted>
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-base">Stage reporting</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <ZapierOutboundSettingsCard
+                                outboundForm={controller.outboundForm}
+                                outboundSecret={controller.outboundSecret}
+                                outboundSecretConfigured={controller.outboundSecretConfigured}
+                                donorSettingsAvailable={controller.donorSettingsAvailable}
+                                donorPipelinesByType={controller.donorPipelinesByType}
+                                donorPipelinesLoading={controller.donorPipelinesLoading}
+                                donorPipelinesError={controller.donorPipelinesError}
+                                donorMappingsUnresolved={controller.donorMappingsUnresolved}
+                                recommendedBucketByStage={controller.recommendedBucketByStage}
+                                getStageKeyLabel={controller.getStageKeyLabel}
+                                onOutboundFormChange={controller.updateOutboundForm}
+                                onOutboundSecretChange={controller.setOutboundSecret}
+                                onApplyRecommendedMapping={controller.applyRecommendedBucketMapping}
+                            />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="activity" keepMounted className="space-y-4">
+                    <div className="grid gap-4 lg:grid-cols-2">
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-base">Incoming lead test</CardTitle>
+                            </CardHeader>
+                            <CardContent>
                         <ZapierTestLeadControls
                             activeTestFormId={controller.activeTestFormId}
                             zapierForms={controller.zapierForms}
@@ -4420,34 +5292,38 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                 void controller.handleTestLead()
                             }}
                         />
-                        <ZapierOutboundSettingsCard
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-base">Surrogate event test</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                        <ZapierOutboundTestControls
                             isDialog={controller.isDialog}
                             outboundForm={controller.outboundForm}
-                            outboundSecret={controller.outboundSecret}
-                            outboundSecretConfigured={controller.outboundSecretConfigured}
                             outboundTestLeadId={controller.outboundTestLeadId}
-                            savePending={controller.updateOutboundPending}
                             testPending={controller.sendOutboundTestPending}
-                            recommendedBucketByStage={controller.recommendedBucketByStage}
                             getStageKeyLabel={controller.getStageKeyLabel}
                             onOutboundFormChange={controller.updateOutboundForm}
-                            onOutboundSecretChange={controller.setOutboundSecret}
                             onOutboundTestLeadIdChange={controller.setOutboundTestLeadId}
-                            onSaveOutbound={() => {
-                                void controller.handleSaveOutbound()
-                            }}
                             onSendOutboundTest={() => {
                                 void controller.handleOutboundTest()
                             }}
-                            onApplyRecommendedMapping={controller.applyRecommendedBucketMapping}
                         />
-                    </ZapierInboundWebhooksCard>
+                            </CardContent>
+                        </Card>
+                    </div>
+                    <ZapierMonitoringSection
+                        variant={controller.variant}
+                        donorPipelinesByType={controller.donorPipelinesByType}
+                    />
                 </TabsContent>
-                <TabsContent value="monitoring" keepMounted>
-                    <ZapierMonitoringSection variant={controller.variant} />
-                </TabsContent>
+                        </>
+                    )}
+                </div>
             </Tabs>
-        </div>
+        </IntegrationConfigurationWorkspace>
     )
 }
 
@@ -5859,19 +6735,26 @@ export default function IntegrationsPage() {
         ? "Twilio delivery enabled for configured routes"
         : "Configure SMS + MMS routes and consent controls"
     const inboundWebhooks = zapierSettings?.inbound_webhooks ?? []
-    const zapierConfigured = inboundWebhooks.some((hook) => hook.secret_configured) || Boolean(zapierSettings?.secret_configured)
-    const zapierActive = inboundWebhooks.some((hook) => hook.is_active) || Boolean(zapierSettings?.is_active)
-    const recommendedBucketByStage = buildRecommendedBucketByStage(pipelines)
-    const mergedZapierEventMapping = mergeEventMappingWithPipelineStages(zapierSettings?.event_mapping, pipelines)
-    const zapierMappingHealth = getZapierMappingHealth(
-        mergedZapierEventMapping,
-        recommendedBucketByStage,
+    const zapierInboundConfigured =
+        inboundWebhooks.some((hook) => hook.secret_configured)
+        || Boolean(zapierSettings?.secret_configured)
+    const zapierReportingConfigured = Boolean(
+        zapierSettings?.outbound_webhook_url || zapierSettings?.outbound_secret_configured,
     )
-    const zapierMappingBadgeLabel = zapierMappingHealth.isHealthy
-        ? "Mapping Healthy"
-        : "Mapping Needs Review"
-    const zapierMappingBadgeVariant = zapierMappingHealth.isHealthy ? "default" : "secondary"
-    const zapierMappingDetail = `${zapierMappingHealth.matched}/${zapierMappingHealth.total} recommended stages`
+    const zapierConfigured = zapierInboundConfigured || zapierReportingConfigured
+    const zapierActive =
+        inboundWebhooks.some((hook) => hook.is_active)
+        || Boolean(zapierSettings?.is_active)
+        || Boolean(zapierSettings?.outbound_enabled)
+        || Boolean(zapierSettings?.donor_outbound_enabled)
+    const zapierMappingPresentation = useZapierMappingPresentation(
+        zapierSettings,
+        pipelines,
+        organizationIntegrationsEnabled,
+    )
+    const zapierMappingBadgeLabel = zapierMappingPresentation.label
+    const zapierMappingBadgeVariant = zapierMappingPresentation.variant
+    const zapierMappingDetail = zapierMappingPresentation.detail
     const zapierStatusLabel = zapierConfigured
         ? (zapierActive ? "Active" : "Configured")
         : "Not configured"
@@ -5882,9 +6765,13 @@ export default function IntegrationsPage() {
     const inboundSummary = inboundWebhooks.length
         ? `${inboundWebhooks.length} inbound webhook${inboundWebhooks.length === 1 ? "" : "s"}`
         : "Inbound webhook ready"
-    const zapierDetail = zapierConfigured
-        ? (zapierSettings?.outbound_enabled ? `${inboundSummary} + outbound enabled` : inboundSummary)
-        : "Configure webhook secret"
+    const zapierDetail = [
+        inboundSummary,
+        `Surrogate reporting ${zapierSettings?.outbound_enabled ? "enabled" : "disabled"}`,
+        Object.prototype.hasOwnProperty.call(zapierSettings ?? {}, "donor_outbound_enabled")
+            ? `Donor reporting ${zapierSettings?.donor_outbound_enabled ? "enabled" : "disabled"}`
+            : "Donor reporting unavailable",
+    ].join(" · ")
     // Meta Lead Ads status
     const metaConnectionsCount = metaConnections.length
     const metaFormsCount = metaForms.length
@@ -6030,6 +6917,14 @@ export default function IntegrationsPage() {
                             metaAdAccounts={metaAdAccounts}
                             inboundWebhooksCount={inboundWebhooks.length}
                             zapierOutboundEnabled={Boolean(zapierSettings?.outbound_enabled)}
+                            zapierDonorOutboundEnabled={
+                                Object.prototype.hasOwnProperty.call(
+                                    zapierSettings ?? {},
+                                    "donor_outbound_enabled",
+                                )
+                                    ? Boolean(zapierSettings?.donor_outbound_enabled)
+                                    : null
+                            }
                         />
 
                         <IntegrationsHelpCard />
@@ -6660,7 +7555,7 @@ function IntegrationConfigurationDialogs({
                     onAiDialogOpenChange(open)
                 }}
             >
-                <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
+                <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden sm:max-w-4xl">
                     <DialogHeader>
                         <div className="flex items-start justify-between gap-4">
                             <div className="space-y-1">
@@ -6686,7 +7581,7 @@ function IntegrationConfigurationDialogs({
                     onEmailDialogOpenChange(open)
                 }}
             >
-                <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
+                <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden sm:max-w-4xl">
                     <DialogHeader className="pr-10">
                         <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between sm:gap-4">
                             <div className="space-y-1">
@@ -6712,35 +7607,17 @@ function IntegrationConfigurationDialogs({
                     onZapierDialogOpenChange(open)
                 }}
             >
-                <DialogContent className="flex h-[85vh] w-[95vw] max-w-4xl flex-col gap-0 overflow-hidden p-0">
-                    <DialogHeader className="shrink-0 px-6 pt-6 pb-4">
-                        <div className="flex items-start justify-between gap-4">
-                            <div className="space-y-1">
-                                <DialogTitle>Zapier Configuration</DialogTitle>
-                                <DialogDescription>
-                                    Manage inbound lead webhooks and outbound stage event delivery.
-                                </DialogDescription>
-                            </div>
-                            <div className="mt-1 flex items-center gap-2">
-                                <Badge variant={zapierStatusVariant} className="flex items-center gap-1">
-                                    <ZapierStatusIcon className="size-3" aria-hidden="true" />
-                                    {zapierStatusLabel}
-                                </Badge>
-                                <Badge
-                                    data-testid="zapier-mapping-health-dialog-badge"
-                                    variant={zapierMappingBadgeVariant}
-                                >
-                                    {zapierMappingBadgeLabel}
-                                </Badge>
-                            </div>
-                        </div>
-                    </DialogHeader>
-                    <div
-                        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 pb-6"
-                        data-testid="zapier-dialog-body"
-                    >
-                        {zapierDialogOpen ? <ZapierWebhookSection variant="dialog" /> : null}
-                    </div>
+                <DialogContent className="flex h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-[1240px] flex-col gap-0 overflow-hidden p-0 sm:h-[calc(100vh-3rem)] sm:max-h-[880px] sm:max-w-[1240px]">
+                    {zapierDialogOpen ? (
+                        <ZapierWebhookSection
+                            statusLabel={zapierStatusLabel}
+                            statusVariant={zapierStatusVariant}
+                            StatusIcon={ZapierStatusIcon}
+                            mappingBadgeLabel={zapierMappingBadgeLabel}
+                            mappingBadgeVariant={zapierMappingBadgeVariant}
+                            onClose={() => onZapierDialogOpenChange(false)}
+                        />
+                    ) : null}
                 </DialogContent>
             </Dialog>
 
@@ -6751,7 +7628,7 @@ function IntegrationConfigurationDialogs({
                     onMetaDialogOpenChange(open)
                 }}
             >
-                <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
+                <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden sm:max-w-4xl">
                     <DialogHeader>
                         <div className="flex items-start justify-between gap-4">
                             <div className="space-y-1">
@@ -6782,6 +7659,7 @@ function SystemIntegrationsSection({
     metaAdAccounts,
     inboundWebhooksCount,
     zapierOutboundEnabled,
+    zapierDonorOutboundEnabled,
 }: {
     isLoading: boolean
     healthData: IntegrationHealth[]
@@ -6791,6 +7669,7 @@ function SystemIntegrationsSection({
     metaAdAccounts: MetaAdAccount[]
     inboundWebhooksCount: number
     zapierOutboundEnabled: boolean
+    zapierDonorOutboundEnabled: boolean | null
 }) {
     return (
         <>
@@ -6830,6 +7709,7 @@ function SystemIntegrationsSection({
                             metaAdAccounts={metaAdAccounts}
                             inboundWebhooksCount={inboundWebhooksCount}
                             zapierOutboundEnabled={zapierOutboundEnabled}
+                            zapierDonorOutboundEnabled={zapierDonorOutboundEnabled}
                         />
                     ))}
                 </div>
@@ -6846,6 +7726,7 @@ function SystemIntegrationCard({
     metaAdAccounts,
     inboundWebhooksCount,
     zapierOutboundEnabled,
+    zapierDonorOutboundEnabled,
 }: {
     integration: IntegrationHealth
     canManageOrganizationIntegrations: boolean
@@ -6854,6 +7735,7 @@ function SystemIntegrationCard({
     metaAdAccounts: MetaAdAccount[]
     inboundWebhooksCount: number
     zapierOutboundEnabled: boolean
+    zapierDonorOutboundEnabled: boolean | null
 }) {
     const typeConfig = integrationTypeConfig[integration.integration_type] || {
         icon: ServerIcon,
@@ -6873,6 +7755,7 @@ function SystemIntegrationCard({
         metaAdAccounts,
         inboundWebhooksCount,
         zapierOutboundEnabled,
+        zapierDonorOutboundEnabled,
     })
 
     return (
@@ -7021,6 +7904,7 @@ function getSystemIntegrationMetricsLabel({
     metaAdAccounts,
     inboundWebhooksCount,
     zapierOutboundEnabled,
+    zapierDonorOutboundEnabled,
 }: {
     integrationType: string
     metaFormsCount: number
@@ -7028,6 +7912,7 @@ function getSystemIntegrationMetricsLabel({
     metaAdAccounts: MetaAdAccount[]
     inboundWebhooksCount: number
     zapierOutboundEnabled: boolean
+    zapierDonorOutboundEnabled: boolean | null
 }): string | null {
     if (integrationType === "meta_leads") {
         return `${metaFormsCount} form${metaFormsCount === 1 ? "" : "s"} synced · ${metaMappedFormsCount} mapped`
@@ -7037,8 +7922,12 @@ function getSystemIntegrationMetricsLabel({
         return `${capiEnabledCount} ad account${capiEnabledCount === 1 ? "" : "s"} with CAPI enabled`
     }
     if (integrationType === "zapier") {
-        const outboundStatus = zapierOutboundEnabled ? "enabled" : "disabled"
-        return `${inboundWebhooksCount} inbound webhook${inboundWebhooksCount === 1 ? "" : "s"} · Outbound ${outboundStatus}`
+        const donorStatus = zapierDonorOutboundEnabled === null
+            ? "unavailable"
+            : zapierDonorOutboundEnabled
+                ? "enabled"
+                : "disabled"
+        return `${inboundWebhooksCount} inbound webhook${inboundWebhooksCount === 1 ? "" : "s"} · Surrogate reporting ${zapierOutboundEnabled ? "enabled" : "disabled"} · Donor reporting ${donorStatus}`
     }
     return null
 }

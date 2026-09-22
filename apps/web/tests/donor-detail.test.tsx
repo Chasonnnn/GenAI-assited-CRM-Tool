@@ -317,7 +317,7 @@ describe("DonorDetailPage", () => {
         } })
         render(<DonorDetailPage />)
 
-        expect(screen.getByRole("heading", { name: "Owner" })).toBeInTheDocument()
+        expect(screen.queryByRole("heading", { name: "Owner" })).not.toBeInTheDocument()
         expect(screen.queryByText("Intake collaborators")).not.toBeInTheDocument()
         expect(screen.queryByRole("combobox", { name: "Intake specialist" })).not.toBeInTheDocument()
     })
@@ -340,10 +340,10 @@ describe("DonorDetailPage", () => {
         render(<DonorDetailPage />)
         expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual(["Overview", "Notes", "Tasks", "History"])
         const overview = screen.getByRole("tabpanel", { name: "Overview" })
-        for (const title of ["Contact Information", "Demographics", "Personal Information", "Medical & Insurance", "Activity", "Eligibility Checklist", "Owner"]) {
+        for (const title of ["Contact Information", "Demographics", "Personal Information", "Medical & Insurance", "Activity", "Eligibility Checklist"]) {
             expect(within(overview).getByText(title)).toBeInTheDocument()
         }
-        for (const title of ["Appointments", "Propose Match", "Documents"]) {
+        for (const title of ["Owner", "Appointments", "Propose Match", "Documents"]) {
             expect(within(overview).queryByText(title)).not.toBeInTheDocument()
         }
         expect(screen.getByText("Maya Thompson")).toBeInTheDocument()
@@ -757,9 +757,24 @@ describe("DonorDetailPage", () => {
         render(<DonorDetailPage />)
         fireEvent.click(screen.getByRole("button", { name: "Actions for Maya Thompson" }))
         expect(await screen.findByRole("menuitem", { name: "Edit" })).toBeInTheDocument()
+        expect(screen.getByRole("menuitem", { name: "Assign" })).toBeInTheDocument()
         expect(screen.queryByRole("menuitem", { name: "Archive" })).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Change Stage" })).not.toBeInTheDocument()
         expect(screen.queryByRole("heading", { name: "Tasks" })).not.toBeInTheDocument()
+    })
+
+    it.each(["read-only", "archived"])("hides assignment for %s donors", async (state) => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["view_donors", "archive_donors", ...(state === "archived" ? ["edit_donors"] : [])] },
+        })
+        if (state === "archived") {
+            const query = mockUseDonor("donor-1")
+            mockUseDonor.mockReturnValue({ ...query, data: { ...query.data, is_archived: true } })
+        }
+        render(<DonorDetailPage />)
+        fireEvent.click(screen.getByRole("button", { name: "Actions for Maya Thompson" }))
+        expect(await screen.findByRole("menuitem", { name: state === "archived" ? "Restore" : "Archive" })).toBeInTheDocument()
+        expect(screen.queryByRole("menuitem", { name: "Assign" })).not.toBeInTheDocument()
     })
 
     it("keeps donor attachment mutations behind edit permission", () => {

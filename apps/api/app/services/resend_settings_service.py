@@ -200,22 +200,6 @@ def update_resend_settings(
     return s
 
 
-def clear_default_sender(
-    db: Session,
-    organization_id: uuid.UUID,
-    user_id: uuid.UUID,
-) -> ResendSettings:
-    """Clear the default sender (used when clearing Gmail sender selection)."""
-    s = get_or_create_resend_settings(db, organization_id, user_id)
-    s.default_sender_user_id = None
-    s.current_version += 1
-    s.updated_at = datetime.now(UTC)
-
-    db.commit()
-    db.refresh(s)
-    return s
-
-
 def rotate_webhook_id(
     db: Session,
     organization_id: uuid.UUID,

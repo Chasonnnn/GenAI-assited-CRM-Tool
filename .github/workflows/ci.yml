@@ -47,7 +47,7 @@ concurrency:
 jobs:
   backend-tests:
     name: Backend Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     
     services:
       postgres:
@@ -134,7 +134,7 @@ jobs:
 
   backend-fastapi-gates:
     name: Backend FastAPI Gates
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     steps:
       - uses: actions/checkout@v6
@@ -171,7 +171,7 @@ jobs:
 
   ticketing-launch-gate:
     name: Ticketing Launch Gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     services:
       postgres:
@@ -229,7 +229,7 @@ jobs:
 
   frontend-build:
     name: Frontend Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     
     steps:
       - uses: actions/checkout@v6
@@ -268,7 +268,7 @@ jobs:
 
   frontend-test-shards:
     name: Frontend Test Shard ${{ matrix.shard }}/2
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: true
       matrix:
@@ -301,7 +301,7 @@ jobs:
     name: Frontend Tests
     if: always()
     needs: [frontend-build, frontend-test-shards]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Verify frontend gates
         env:
@@ -313,7 +313,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     
     steps:
       - uses: actions/checkout@v6
@@ -322,10 +322,18 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.14.6'
-      
-      - name: Check Python syntax
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: '0.12.0'
+          cache-suffix: ${{ github.job }}
+
+      - name: Run Ruff
         working-directory: apps/api
-        run: python -m py_compile app/main.py
+        run: |
+          uv sync --frozen --extra test
+          uv run ruff check .
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -339,15 +347,15 @@ jobs:
           corepack enable
           corepack prepare pnpm@11.18.0 --activate
       
-      - name: TypeScript check
+      - name: Run ESLint
         working-directory: apps/web
         run: |
           pnpm install --frozen-lockfile
-          pnpm run typecheck
+          pnpm run lint
 
   terraform-fmt:
     name: Terraform Format
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     steps:
       - uses: actions/checkout@v6
@@ -380,7 +388,7 @@ jobs:
 
   security-scans:
     name: Security Scans
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     services:
       postgres:
@@ -509,7 +517,7 @@ jobs:
 
   production-artifact-builds:
     name: Production Artifact / ${{ matrix.name }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     strategy:
       fail-fast: true
@@ -532,7 +540,7 @@ jobs:
     name: Production Artifacts
     if: always()
     needs: production-artifact-builds
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Verify production image builds
         env:

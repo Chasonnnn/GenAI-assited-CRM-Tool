@@ -9,6 +9,12 @@ from uuid import UUID
 logger = logging.getLogger(__name__)
 
 
+async def process_appointment_google_sync(db, job) -> None:
+    from app.services import appointment_google_sync_service
+
+    await appointment_google_sync_service.process_job(db, job)
+
+
 async def process_google_calendar_sync(db, job) -> None:
     """
     Reconcile Google Calendar events for a single user into CRM appointments.

@@ -22,7 +22,7 @@ import {
     FileTextIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { InterviewWithComments } from "../InterviewWithComments"
+import { InterviewWithComments } from "../InterviewComments"
 import { useInterviewTab } from "./context"
 import { AttachmentsDialog } from "./AttachmentsDialog"
 import type { InterviewType } from "@/lib/api/interviews"

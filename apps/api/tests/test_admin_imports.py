@@ -407,6 +407,7 @@ class TestAdminImports:
                     "description": "Workflow template",
                     "icon": "template",
                     "category": "general",
+                    "subject_type": "surrogate",
                     "trigger_type": "status_changed",
                     "trigger_config": {"from": ["new_unread"]},
                     "conditions": [],
@@ -578,6 +579,7 @@ class TestAdminImports:
         assert workflow_template.organization_id == test_org.id
         assert workflow_template.created_by_user_id == test_user.id
         assert workflow_template.trigger_type == "status_changed"
+        assert workflow_template.subject_type == "surrogate"
 
         retention_policy = (
             db.query(DataRetentionPolicy)

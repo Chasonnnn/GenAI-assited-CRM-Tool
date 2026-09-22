@@ -9,7 +9,7 @@ from sqlalchemy.orm import aliased
 from app.db.models import AnalyticsSnapshot, Donor, Surrogate, UserRecordScopeAddition
 from app.schemas.record_scope import RecordScopeAdditionCreate
 from app.services import analytics_access_service as access
-from app.services import analytics_service, record_scope_service
+from app.services import analytics_meta_service, analytics_surrogate_service, record_scope_service
 from tests.test_record_scopes_v2 import _member, _record
 from tests.test_record_scopes_v2 import context as context
 
@@ -36,9 +36,9 @@ def test_cached_reports_follow_viewer_and_revocation(db, context):
         with access.authorized_dataset(db, session):
             for _ in range(2):
                 assert (
-                    analytics_service.get_cached_analytics_summary(db, context.org.id, start, end)[
-                        "total_surrogates"
-                    ]
+                    analytics_surrogate_service.get_cached_analytics_summary(
+                        db, context.org.id, start, end
+                    )["total_surrogates"]
                     == expected
                 )
     assert db.query(AnalyticsSnapshot).filter_by(organization_id=context.org.id).count() == 0
@@ -50,18 +50,18 @@ def test_cached_reports_follow_viewer_and_revocation(db, context):
     )
     with access.authorized_dataset(db, context.intake):
         assert (
-            analytics_service.get_cached_analytics_summary(db, context.org.id, start, end)[
-                "total_surrogates"
-            ]
+            analytics_surrogate_service.get_cached_analytics_summary(
+                db, context.org.id, start, end
+            )["total_surrogates"]
             == 3
         )
     db.query(UserRecordScopeAddition).filter_by(id=addition.id).delete()
     db.flush()
     with access.authorized_dataset(db, context.intake):
         assert (
-            analytics_service.get_cached_analytics_summary(db, context.org.id, start, end)[
-                "total_surrogates"
-            ]
+            analytics_surrogate_service.get_cached_analytics_summary(
+                db, context.org.id, start, end
+            )["total_surrogates"]
             == 1
         )
 
@@ -179,7 +179,7 @@ async def test_report_pdf_keeps_viewer_scope_and_omits_organization_spend(db, co
     spend = AsyncMock(
         side_effect=AssertionError("restricted report must not load organization spend")
     )
-    monkeypatch.setattr(analytics_service, "get_meta_spend_summary", spend)
+    monkeypatch.setattr(analytics_meta_service, "get_meta_spend_summary", spend)
     monkeypatch.setattr(pdf_export_service, "_generate_analytics_html", capture_html)
     monkeypatch.setattr(
         pdf_export_service, "_render_html_to_pdf", AsyncMock(return_value=b"%PDF-synthetic")

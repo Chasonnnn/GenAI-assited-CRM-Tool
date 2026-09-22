@@ -257,24 +257,30 @@ describe("AppSidebar permission visibility", () => {
         expect(screen.getByText("Reports")).toBeInTheDocument()
     })
 
-    it("hides Donors (beta) from non-developers even with donor permission", async () => {
+    it("shows Donors (beta) for non-developers with donor permission", async () => {
         mockUseEffectivePermissions.mockReturnValue({
-            data: { permissions: ["view_intended_parents"] },
+            data: { permissions: ["view_intended_parents", "view_donors"] },
         })
 
-        const view = render(
+        render(
             <AppSidebar>
                 <div>content</div>
             </AppSidebar>
         )
 
         await screen.findByRole("link", { name: "Intended Parents" })
-        expect(screen.queryByRole("link", { name: "Donors (beta)" })).not.toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Donors (beta)" })).toHaveAttribute(
+            "href",
+            "/donors",
+        )
+    })
 
+    it("hides Donors (beta) from non-developers without donor permission", async () => {
         mockUseEffectivePermissions.mockReturnValue({
-            data: { permissions: ["view_intended_parents", "view_donors"] },
+            data: { permissions: ["view_intended_parents"] },
         })
-        view.rerender(
+
+        render(
             <AppSidebar>
                 <div>content</div>
             </AppSidebar>

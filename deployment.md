@@ -135,6 +135,44 @@ gcloud run deploy crm-api \
   --set-secrets "JWT_SECRET=JWT_SECRET:latest,DEV_SECRET=DEV_SECRET:latest,INTERNAL_SECRET=INTERNAL_SECRET:latest,FERNET_KEY=FERNET_KEY:latest,DATA_ENCRYPTION_KEY=DATA_ENCRYPTION_KEY:latest,PII_HASH_KEY=PII_HASH_KEY:latest,META_ENCRYPTION_KEY=META_ENCRYPTION_KEY:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,ZOOM_CLIENT_ID=ZOOM_CLIENT_ID:latest,ZOOM_CLIENT_SECRET=ZOOM_CLIENT_SECRET:latest,GMAIL_CLIENT_ID=GMAIL_CLIENT_ID:latest,GMAIL_CLIENT_SECRET=GMAIL_CLIENT_SECRET:latest,REDIS_URL=REDIS_URL:latest"
 ```
 CI note: `cloudbuild/api.yaml` runs the migrate job and waits for completion before updating the API service.
+Routine releases run one migration execution, including its schema preflight under
+the migration lock. Match-expansion rollouts retain an additional check-only
+execution before opening the compatibility window.
+
+### Database connection budget
+
+The default API image runs two processes per instance. Each process keeps at most
+two request connections, with no overflow, plus one independent metrics connection.
+Cloud Build caps the API at two instances and the worker at three, at both service
+and revision level. Terraform uses the same pool and revision limits; the web
+instance limit is separate because it does not connect to PostgreSQL.
+
+| Consumer | Maximum connections per revision |
+| --- | ---: |
+| API: 2 instances × 2 processes × (2 request + 1 metrics) | 12 |
+| Worker: 3 instances × 2 connections | 6 |
+| Total | 18 |
+
+Two overlapping revisions can consume 36 connections, leaving 14 for jobs,
+administration and PostgreSQL reserved connections under the documented
+[`db-g1-small` default of 50](https://docs.cloud.google.com/sql/docs/postgres/flags).
+This is a capacity estimate: Cloud Run can briefly exceed scaling limits, and
+concurrent job executions also consume connections. Verify `SHOW max_connections`
+and active connections before raising process counts, pools, overflow or scaling.
+Keep the defaults in `cloudbuild/api.yaml`, Terraform variables and application
+settings aligned. Existing Terraform deployments must set `api_max_instances`
+separately from the web's `run_max_instances`.
+
+Pool acquisition and new database connections time out after five seconds;
+metrics connections retain their separate short timeouts. Saturated pools wait
+for a returned connection instead of opening overflow connections. Peak requests
+may wait longer with these limits. No automatic transaction retry is added.
+
+After an approved release, verify the live scaling limits and pool environment,
+confirm older revisions have drained, and repeat the connection-exhaustion log
+query. Existing revisions retain their original pools until they stop. Check
+request latency and pool-timeout errors under representative traffic before
+claiming the capacity issue is resolved in production.
 
 ## 10) Migrations (Cloud Run Job)
 ```bash

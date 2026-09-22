@@ -59,6 +59,41 @@ function activity(
 }
 
 describe("EntityActivityTimeline", () => {
+    it("resets expanded stages when the current stage changes", () => {
+        const nextStage = { ...stage, id: "stage-2", label: "Review", order: 2 }
+        const stageHistory = [history, {
+            ...history, id: "history-2", from_stage_id: stage.id, to_stage_id: nextStage.id,
+            to_label_snapshot: "Review", changed_at: "2026-08-31T12:00:00Z",
+            effective_at: "2026-08-31T12:00:00Z",
+        }]
+        const activities = [activity("note_added", { preview: "Screening note" }), {
+            ...activity("note_added", { preview: "Review note" }),
+            id: "next-note", created_at: "2026-09-01T12:00:00Z",
+        }]
+        const props = { stages: [stage, nextStage], stageHistory, activities }
+        const { rerender } = render(<EntityActivityTimeline {...props} currentStageId={stage.id} />)
+        expect(screen.getByText("Screening note")).toBeInTheDocument()
+        expect(screen.queryByText("Review note")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByText("Review").closest("button")!)
+        expect(screen.getByText("Review note")).toBeInTheDocument()
+
+        rerender(<EntityActivityTimeline {...props} currentStageId={nextStage.id} />)
+        expect(screen.getByText("Review note")).toBeInTheDocument()
+        expect(screen.queryByText("Screening note")).not.toBeInTheDocument()
+    })
+
+    it("collapses stage details when the current stage is missing", () => {
+        render(<EntityActivityTimeline
+            currentStageId="missing-stage"
+            stages={[stage]}
+            stageHistory={[history]}
+            activities={[activity("note_added", { preview: "Hidden note" })]}
+        />)
+        expect(screen.getByText("Screening")).toBeInTheDocument()
+        expect(screen.queryByText("Hidden note")).not.toBeInTheDocument()
+        expect(screen.queryByText("Application reviewed")).not.toBeInTheDocument()
+    })
+
     it("uses entity pipeline semantics rather than surrogate stage-name defaults", () => {
         render(<EntityActivityTimeline currentStageId={stage.id} stages={[
             stage,

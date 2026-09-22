@@ -17,6 +17,7 @@ from app.db.models import (
     PipelineStage,
     Surrogate,
     Task,
+    WorkflowExecution,
 )
 from app.schemas.workflow import is_supported_simple_cron
 from app.services import workflow_execution_authority
@@ -310,61 +311,6 @@ def trigger_surrogate_assigned(
     )
 
 
-def trigger_surrogate_updated(
-    db: Session,
-    surrogate: Surrogate,
-    changed_fields: list[str],
-    old_values: dict,
-    new_values: dict,
-) -> None:
-    """Trigger workflows when specific surrogate fields change."""
-    if not changed_fields:
-        return
-
-    engine.trigger(
-        db=db,
-        trigger_type=WorkflowTriggerType.SURROGATE_UPDATED,
-        entity_type="surrogate",
-        entity_id=surrogate.id,
-        event_data={
-            "surrogate_id": str(surrogate.id),
-            "changed_fields": changed_fields,
-            "old_values": old_values,
-            "new_values": new_values,
-        },
-        org_id=surrogate.organization_id,
-        source=WorkflowEventSource.USER,
-        entity_owner_id=_get_entity_owner_id(surrogate),
-    )
-
-
-def trigger_form_started(
-    db: Session,
-    surrogate: Surrogate,
-    form_id: UUID,
-    draft_id: UUID,
-    started_at: datetime | None,
-    updated_at: datetime | None,
-) -> None:
-    """Trigger workflows when an applicant starts a form draft."""
-    engine.trigger(
-        db=db,
-        trigger_type=WorkflowTriggerType.FORM_STARTED,
-        entity_type="surrogate",
-        entity_id=surrogate.id,
-        event_data={
-            "surrogate_id": str(surrogate.id),
-            "form_id": str(form_id),
-            "draft_id": str(draft_id),
-            "started_at": started_at.isoformat() if started_at else None,
-            "updated_at": updated_at.isoformat() if updated_at else None,
-        },
-        org_id=surrogate.organization_id,
-        source=WorkflowEventSource.SYSTEM,
-        entity_owner_id=_get_entity_owner_id(surrogate),
-    )
-
-
 def trigger_form_submitted(
     db: Session,
     *,
@@ -375,7 +321,7 @@ def trigger_form_submitted(
     surrogate_id: UUID | None = None,
     source_mode: str | None = None,
     entity_owner_id: UUID | None = None,
-) -> None:
+) -> list[WorkflowExecution]:
     """Trigger workflows when an applicant submits a form."""
     submission = (
         db.query(FormSubmission)
@@ -385,7 +331,7 @@ def trigger_form_submitted(
         )
         .first()
     )
-    engine.trigger(
+    return engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.FORM_SUBMITTED,
         entity_type="form_submission",
@@ -401,6 +347,8 @@ def trigger_form_submitted(
         org_id=org_id,
         source=WorkflowEventSource.SYSTEM,
         entity_owner_id=entity_owner_id,
+        recover_incomplete=True,
+        include_existing=True,
     )
 
 
@@ -1084,37 +1032,6 @@ def trigger_appointment_scheduled(db: Session, appointment: Appointment) -> None
             else None,
             "appointment_type": appointment.appointment_type.name
             if appointment.appointment_type
-            else None,
-            "status": appointment.status,
-        },
-        org_id=appointment.organization_id,
-        source=WorkflowEventSource.USER,
-        entity_owner_id=entity_owner_id,
-    )
-
-
-def trigger_appointment_completed(db: Session, appointment: Appointment) -> None:
-    """Trigger workflows when an appointment is marked as completed."""
-    entity_owner_id = _get_owner_id_for_surrogate_id(
-        db, appointment.organization_id, appointment.surrogate_id
-    )
-    engine.trigger(
-        db=db,
-        trigger_type=WorkflowTriggerType.APPOINTMENT_COMPLETED,
-        entity_type="appointment",
-        entity_id=appointment.id,
-        event_data={
-            "appointment_id": str(appointment.id),
-            "surrogate_id": str(appointment.surrogate_id) if appointment.surrogate_id else None,
-            "intended_parent_id": str(appointment.intended_parent_id)
-            if appointment.intended_parent_id
-            else None,
-            "user_id": str(appointment.user_id),
-            "scheduled_start": appointment.scheduled_start.isoformat()
-            if appointment.scheduled_start
-            else None,
-            "scheduled_end": appointment.scheduled_end.isoformat()
-            if appointment.scheduled_end
             else None,
             "status": appointment.status,
         },

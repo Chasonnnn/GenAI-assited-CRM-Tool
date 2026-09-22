@@ -2,6 +2,111 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.70](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.69...surrogacy-crm-platform-v0.91.70) (2026-09-21)
+
+
+### Bug Fixes
+
+* allow managing unlinked video interviews ([bd0b82f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bd0b82f6b94705d3434bb73b9a8fb0c5dc86694f))
+* allow managing unlinked video interviews ([e912850](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e91285065cfa84d2fd0dbe4577ca2edc8533bcb9))
+
+## [0.91.69](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.68...surrogacy-crm-platform-v0.91.69) (2026-09-21)
+
+
+### Bug Fixes
+
+* isolate WebSocket database worker capacity ([8e5e45e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8e5e45e11a774c9c5495d773388fd5a73a2f54e3))
+* move WebSocket database checks off the event loop ([893b285](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/893b2857bf4c5c34ef995cb906014ac53f5f8204))
+* preserve CORS responses without blocking on error alerts ([6ae9946](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6ae994651006f5ce089e21f05553e42bad317b60))
+* prevent WebSocket pool waits from stalling API requests ([1dcc9a3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1dcc9a35dda8fc30672bc15d9e9e0ea73800bf52))
+
+## [0.91.68](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.67...surrogacy-crm-platform-v0.91.68) (2026-09-21)
+
+
+### Features
+
+* add durable Google appointment delivery ([2c65d4a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2c65d4aef3795e28bae5375bc728525a12ecf08a))
+
+
+### Bug Fixes
+
+* show Google appointment delivery and retry states ([8a97961](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8a979616398391c5dbee53dae802764c9707862c))
+* synchronize Google-linked interview changes ([135b301](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/135b3010da687d1bdaa7d2389be6284a3306d304))
+* synchronize Google-linked interview reschedules and cancellations ([fb228d1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fb228d153241ee1ecdb53592a986f7f30cef4f4b))
+
+## [0.91.67](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.66...surrogacy-crm-platform-v0.91.67) (2026-09-21)
+
+
+### Bug Fixes
+
+* align surrogate detail tabs and appointment controls ([340b461](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/340b461e107507461066821393e1ae2999d09c27))
+* align surrogate detail tabs and appointment controls ([4f4105f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4f4105f0c87805092d1e03d15a41c6ffe9ef4e74))
+* bound database pools and Cloud Run connection budget ([57bcfdd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/57bcfddf4d69dab55c7f16d539d8eb242dac4ff1))
+* harden CRM runtime reliability and streamline releases ([9790d74](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9790d74c10872b451b9310199fcee5f82193d744))
+* preserve protobuf parser arguments in error reporting ([c7679be](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c7679be79361598a193e8ad40f875b0eb7ad4b04))
+* protect required interview pipeline stages ([b447048](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b4470487aaec658f02c4a7abf829ef3cb708c140))
+* restore soft-deleted required pipeline stages ([b28f036](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b28f036f7e8fea437adc72d577dbaa2c664d4a53))
+
+
+### Maintenance
+
+* pin GitHub Actions runners to Ubuntu 26.04 ([c1def14](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c1def148dbb459d364e814e1cf26560f81537bed))
+* remove saved QA and prototype output artifacts ([a0bef7d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a0bef7deac3b49f2310e49413cf9803f3f2d92db))
+
+## [0.91.66](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.65...surrogacy-crm-platform-v0.91.66) (2026-09-21)
+
+
+### Features
+
+* add browser-authenticated OPS template CLI ([c6095f2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c6095f2dafacae4470a3b88952f91e82316c0c6d))
+* add browser-authenticated OPS template CLI ([db3eaab](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/db3eaab5404416db5f918c1b7d7697a755ccb107))
+* add donor compatibility, reliable intake, and stage reporting ([faeda8c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/faeda8c5a46e6c31121553b5c3aaeda60ca29991))
+* add isolated donor stage reporting through Zapier ([b573da0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b573da0a613263863eaaadba14b592088a32e579))
+* add tabbed integration workspace and donor controls ([31be594](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/31be59402e2246d28dee870af909669618368327))
+* carry explicit subject_type through workflow templates ([98fcd4e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/98fcd4eb1b64609b2544a99677206c5f5d4b0460))
+* carry subject_type through platform template publish and org config export/import ([8be75be](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8be75be17bd3cd7b59bf7b92287ae01894efde00))
+* manage interview appointments with reschedule stage ([bf2da38](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bf2da38e886db104c7ed21323ff007427f4c34c5))
+* manage interview appointments with reschedule stage ([f27d4d3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f27d4d3298bb886b01f999d50f266db52b3b25a0))
+
+
+### Bug Fixes
+
+* allow safe repair of stale donor reporting mappings ([7db7ced](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7db7ced12585e3e0a4d525951b33504b770ad67a))
+* avoid campaign suppression parameter limits ([7c667b5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7c667b5504dab0a0a90152dd0778b6e5e0981d5e))
+* avoid racing API bytecode during ZAP CI setup ([b2e2f27](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b2e2f27a20f0701ec460cb5f802bf4b4da1c068b))
+* batch scoped lookups and improve filter accessibility ([7bfc8f4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7bfc8f4b2660a6c39cae30ef9bc3058bce36eede))
+* commit website Meta jobs with monitor records ([519864b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/519864b3b91175384a13a1a34135892150fc84ae))
+* edit and preserve donor workflow template subjects ([1134da3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1134da34ffb45d4b7b5e0edb1eab4c35bac84337))
+* enforce donor access for Zapier reporting ([a29f722](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a29f722d52c03640d9d8ea3f759082b0f99fb261))
+* enforce donor template and integration access ([70c69cb](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/70c69cb65c6af18e4da700edae2ee63fbda022d5))
+* expose donor navigation through effective permissions ([5248eff](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5248eff7451fee232f7980faf4d76208eae8d4df))
+* initialize required table rows and validate OPS origins ([20fd47c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/20fd47ce55c19b88c759e797f4e7e9a45e807437))
+* keep interview management with the latest schedule ([be2459e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/be2459e07141458e44e8707c9e537016ecabaced))
+* make AI approvals atomic and persist reviewed Gmail sends ([39e4b95](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/39e4b954131358ce9f2a24f888ce5920e7c0db61))
+* make donor form workflow dispatch recoverable ([2b8bdc4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2b8bdc414a00bf5c634fbc7dd223c67bcb29d7f4))
+* make donor Meta source mapping unambiguous ([8ef6433](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8ef6433ee2eead093caf6e4170df5086c9fbb052))
+* notify interview changes and handle completed retries ([63b58f5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/63b58f5c2d5f8ef43d601cbfa99501e31e970310))
+* preserve mapped answers in form submission summaries ([fea6dbf](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fea6dbfd231015c31129628286b49f96793e5c72))
+* preserve workflow sweep organization identifiers ([f5b9047](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f5b9047e667b4e80f45e579814e76f5ad040773a))
+* preserve workflow template drafts across migration ([fdd2ec9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fdd2ec9f67a2e0d3eec54dc8fe8f128b1a9a283b))
+* refresh interview appointments after stage changes ([8dbf9aa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8dbf9aa8ddae72ecc4e496da7fa388d6a7a0cbfc))
+* report full-audience eligible counts in email campaign preview ([de0fedd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/de0feddfae5e014a5894db83fefe5f19b4914f79))
+* resolve donor form QA issues and refine interview controls ([ca417c3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ca417c30bbd130b5c66bb46b92ad177d5688e016))
+* retain donor_id in Zapier test-lead response ([0eff554](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0eff554f8ca40a81d278571cb58fdcb6bdcc77b0))
+* satisfy OPS CLI API contract and architecture gates ([5f73090](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5f730901b939192a2a5a89d42641d474d429900d))
+* serve authorized form submission files from local storage ([e7f45a0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e7f45a0faad073600cf49be8f4438552d7a7e647))
+* unblock orb setup CI checks ([0732161](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0732161039d642f6bf115b5a3aeb123e2e0100d3))
+* upgrade stale mise before orb toolchain setup ([315e957](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/315e957fc487ee6c7e4b27e81433945e2d23c964))
+* validate and preserve platform workflow subjects ([bbab4fb](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bbab4fb05998e8a83f18a13aa87a87521cdf81ee))
+* validated batching and accessibility follow-ups ([a357436](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a3574363801cba06391121e688f1e6e2eb174509))
+
+
+### Maintenance
+
+* prepare cached toolchains and dependencies for Amp orbs ([1215b8e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1215b8eb75ac060a87cb2c6a26edfddd4c6797b3))
+* prepare cached toolchains and dependencies for orbs ([c4a5ba0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c4a5ba08cbc6c5c02d82271f4e9e349a020572fb))
+* run required CI for orb lifecycle changes ([34b6575](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/34b65750d70edffa6e21a41d6a6ca39869ab6cf0))
+
 ## [0.91.65](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.64...surrogacy-crm-platform-v0.91.65) (2026-09-14)
 
 

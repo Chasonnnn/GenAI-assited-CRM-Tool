@@ -162,7 +162,7 @@ def get_dashboard_donors_by_status(
     from app.services import (
         analytics_access_service,
         analytics_donor_service,
-        analytics_service,
+        analytics_shared,
         permission_policy_service,
     )
 
@@ -176,7 +176,7 @@ def get_dashboard_donors_by_status(
 
     start = end = None
     if from_date or to_date:
-        start, end = analytics_service.parse_date_range(
+        start, end = analytics_shared.parse_date_range(
             from_date,
             to_date,
             inclusive_date_end=True,

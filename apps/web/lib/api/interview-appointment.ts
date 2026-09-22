@@ -12,11 +12,20 @@ export type InterviewAppointment = {
 
 export type AppointmentStage = { id: string; label: string; color: string }
 
+export type InterviewAppointmentExternalSyncStatus =
+    | "pending"
+    | "completed"
+    | "failed"
+    | "conflict"
+    | "unlinked"
+    | null
+
 export type InterviewAppointmentState = {
     appointment: InterviewAppointment | null
     can_manage: boolean
     scheduled_stage: AppointmentStage | null
     reschedule_stage: AppointmentStage | null
+    external_sync_status: InterviewAppointmentExternalSyncStatus
 }
 
 export type ManageInterviewAppointmentPayload = {
@@ -33,3 +42,11 @@ export const getInterviewAppointment = (surrogateId: string) =>
 
 export const manageInterviewAppointment = (surrogateId: string, payload: ManageInterviewAppointmentPayload) =>
     api.post<InterviewAppointmentState>(`/surrogates/${surrogateId}/interview-appointment`, payload)
+
+export const retryInterviewAppointmentGoogleSync = (
+    surrogateId: string,
+    expectedAppointmentId: string,
+) => api.post<InterviewAppointmentState>(
+    `/surrogates/${surrogateId}/interview-appointment/sync/retry`,
+    { expected_appointment_id: expectedAppointmentId },
+)

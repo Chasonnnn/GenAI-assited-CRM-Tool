@@ -380,27 +380,6 @@ def seed_role_defaults(db: Session, org_id: uuid.UUID) -> int:
     return count
 
 
-def backfill_new_permissions(db: Session) -> int:
-    """
-    Backfill new permissions to all orgs.
-
-    For each org, ensures role_permissions rows exist for all
-    permissions in ROLE_DEFAULTS. Run on deploy or as nightly job.
-
-    Returns total rows created.
-    """
-    from app.db.models import Organization
-
-    orgs = db.query(Organization).all()
-    total = 0
-
-    for org in orgs:
-        total += seed_role_defaults(db, org.id)
-
-    db.commit()
-    return total
-
-
 # =============================================================================
 # Member Management
 # =============================================================================

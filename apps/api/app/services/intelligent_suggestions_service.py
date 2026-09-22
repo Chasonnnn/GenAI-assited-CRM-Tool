@@ -28,7 +28,7 @@ from app.db.models import (
 )
 from app.services import (
     dashboard_service,
-    notification_facade,
+    notification_service,
     pipeline_semantics_service,
     pipeline_service,
 )
@@ -1028,7 +1028,7 @@ def process_daily_digest_for_org(
     created = 0
     for user_id, role in memberships:
         users_checked += 1
-        if not notification_facade.should_notify(
+        if not notification_service.should_notify(
             db, user_id, org_id, "intelligent_suggestion_digest"
         ):
             continue
@@ -1043,7 +1043,7 @@ def process_daily_digest_for_org(
         if total <= 0:
             continue
 
-        notification = notification_facade.create_notification(
+        notification = notification_service.create_notification(
             db=db,
             org_id=org_id,
             user_id=user_id,

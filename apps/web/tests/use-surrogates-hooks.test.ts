@@ -52,7 +52,7 @@ describe("surrogate mutation hooks", () => {
         })
     })
 
-    it("invalidates surrogate activity and task lists after a stage change", () => {
+    it("invalidates appointment, activity, and task caches after an applied stage change", () => {
         useChangeSurrogateStatus()
 
         capturedOptions?.onSuccess?.(
@@ -77,6 +77,9 @@ describe("surrogate mutation hooks", () => {
             queryKey: surrogateKeys.activity("surrogate-1"),
         })
         expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: surrogateKeys.interviewAppointment("surrogate-1"),
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
             queryKey: ["tasks", "list"],
         })
     })
@@ -94,6 +97,25 @@ describe("surrogate mutation hooks", () => {
         useApplySurrogateMassEditStage()
         capturedOptions?.onSuccess?.({}, {})
         expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['record-collaborators', 'surrogate'] })
+    })
+
+    it("keeps appointment state unchanged for a pending stage approval", () => {
+        useChangeSurrogateStatus()
+
+        capturedOptions?.onSuccess?.(
+            {
+                status: "pending_approval",
+                request_id: "request-1",
+            },
+            {
+                surrogateId: "surrogate-1",
+                data: { stage_id: "stage-interview" },
+            }
+        )
+
+        expect(invalidateQueries).not.toHaveBeenCalledWith({
+            queryKey: surrogateKeys.interviewAppointment("surrogate-1"),
+        })
     })
 
     it("invalidates surrogate lists after logging a contact attempt", () => {

@@ -525,10 +525,12 @@ async def test_google_calendar_disconnect_rechecks_recovery_created_in_another_o
     db.flush()
     db.add(integration)
     db.commit()
-    assert not google_tasks_cleanup_service.has_unresolved_google_task_work_for_user_in_organizations(
-        db,
-        org_ids=None,
-        user_id=test_auth.user.id,
+    assert (
+        not google_tasks_cleanup_service.has_unresolved_google_task_work_for_user_in_organizations(
+            db,
+            org_ids=None,
+            user_id=test_auth.user.id,
+        )
     )
     fence_calls = 0
     fence_observations: list[bool] = []
@@ -968,9 +970,9 @@ async def test_staff_reschedule_endpoint_accepts_valid_available_slot(
     monkeypatch,
 ):
     from app.db.enums import AppointmentStatus, MeetingMode
-    from app.db.models import Appointment, AppointmentType, AvailabilityRule
+    from app.db.models import Appointment, AppointmentType, AvailabilityRule, UserIntegration
     from app.routers import appointments as appointments_router
-    from app.services import appointment_integrations
+    from app.services import appointment_google_sync_service, appointment_integrations
 
     timezone_name = "America/Los_Angeles"
 
@@ -1021,7 +1023,28 @@ async def test_staff_reschedule_endpoint_accepts_valid_available_slot(
         google_event_id="google_evt_reschedule",
     )
     db.add(appointment)
+    integration = UserIntegration(
+        user_id=test_auth.user.id,
+        integration_type="google_calendar",
+        access_token_encrypted="test-token",
+        account_email="owner@example.com",
+    )
+    db.add(integration)
     db.commit()
+
+    monkeypatch.setattr(
+        appointment_google_sync_service,
+        "prepare_link",
+        lambda _db, _appointment: appointment_google_sync_service.PreparedGoogleLink(
+            integration_id=integration.id,
+            account_email="owner@example.com",
+            calendar_id="owner@example.com",
+            event_id=appointment.google_event_id,
+            etag='"etag-1"',
+            start=appointment.scheduled_start,
+            end=appointment.scheduled_end,
+        ),
+    )
 
     def fake_update_google_meet_event(db, appointment, new_start, new_end):
         del db, appointment, new_start, new_end

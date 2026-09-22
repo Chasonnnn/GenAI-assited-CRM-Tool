@@ -150,6 +150,9 @@ async def send_email(
     html: bool = False,
     headers: dict[str, str] | None = None,
     attachments: list[dict[str, object]] | None = None,
+    *,
+    max_attempts: int = GMAIL_MAX_ATTEMPTS,
+    expected_sender: str | None = None,
 ) -> JsonObject:
     """Send an email via Gmail API.
 
@@ -176,6 +179,14 @@ async def send_email(
     # Get sender email
     integration = oauth_service.get_user_integration(db, uuid.UUID(user_id), "gmail")
     sender_email = integration.account_email if integration else "me"
+    if expected_sender is not None and (
+        not sender_email or sender_email.casefold() != expected_sender.casefold()
+    ):
+        return {
+            "success": False,
+            "error": "Gmail account changed after approval. Review a new draft before sending.",
+            "provider_error_reason": "sender_changed",
+        }
 
     try:
         # Build email message
@@ -238,7 +249,7 @@ async def send_email(
 
             response = await request_with_retries(
                 request_fn,
-                max_attempts=GMAIL_MAX_ATTEMPTS,
+                max_attempts=max_attempts,
                 base_delay=GMAIL_RETRY_BASE_DELAY,
                 max_delay=GMAIL_RETRY_MAX_DELAY,
             )
@@ -257,10 +268,17 @@ async def send_email(
                 "error": f"Gmail API error: {response.status_code}",
                 "provider_status_code": response.status_code,
                 "provider_error_reason": "retryable_status",
+                "delivery_unknown": response.status_code >= 500,
             }
 
         response.raise_for_status()
         data = response.json()
+        if not isinstance(data, dict) or not data.get("id"):
+            return {
+                "success": False,
+                "error": "Gmail delivery could not be confirmed",
+                "delivery_unknown": True,
+            }
 
         return {
             "success": True,
@@ -268,12 +286,13 @@ async def send_email(
             "thread_id": data.get("threadId"),
             "provider_status_code": response.status_code,
         }
-    except httpx.RequestError as e:
-        logger.error("Gmail API request failed: %s", e)
+    except httpx.RequestError:
+        logger.error("Gmail API request failed")
         return {
             "success": False,
             "error": "Gmail API request failed",
             "provider_error_reason": "request_error",
+            "delivery_unknown": True,
         }
     except httpx.HTTPStatusError as e:
         logger.error("Gmail API error: status=%s", e.response.status_code)
@@ -282,10 +301,16 @@ async def send_email(
             "error": _format_gmail_api_error(e.response),
             "provider_status_code": e.response.status_code,
             "provider_error_reason": _extract_gmail_error_reason(e.response),
+            "delivery_unknown": e.response.status_code >= 500,
         }
-    except Exception as e:
-        logger.exception("Gmail send error")
-        return {"success": False, "error": str(e), "provider_error_reason": "unexpected_error"}
+    except Exception:
+        logger.error("Gmail send outcome could not be confirmed")
+        return {
+            "success": False,
+            "error": "Gmail delivery could not be confirmed",
+            "provider_error_reason": "unexpected_error",
+            "delivery_unknown": True,
+        }
 
 
 async def send_email_logged(

@@ -8,7 +8,6 @@ import logging
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from contextlib import nullcontext
 from datetime import UTC, date, datetime
 
 from sqlalchemy.orm import Session
@@ -186,7 +185,7 @@ class AddNoteExecutor(ActionExecutor):
         content = payload.get("content") or payload.get("body") or payload.get("text")
 
         # Create note (EntityNote uses entity_type, entity_id, content)
-        from app.services import note_service, workflow_triggers
+        from app.services import note_service
 
         surrogate = _get_surrogate_for_action(db, entity_id, org_id)
         if not surrogate:
@@ -212,7 +211,6 @@ class AddNoteExecutor(ActionExecutor):
         surrogate.last_contact_method = "note"
 
         db.flush()
-        workflow_triggers.trigger_note_added(db, note)
 
         return {
             "action": "add_note",
@@ -409,151 +407,6 @@ class UpdateStatusExecutor(ActionExecutor):
         }
 
 
-class SendEmailExecutor(ActionExecutor):
-    """Draft/send email (requires Gmail integration)."""
-
-    action_type = "send_email"
-
-    def validate(
-        self,
-        payload: JsonObject,
-        db: Session,
-        user_id: uuid.UUID,
-        org_id: uuid.UUID,
-    ) -> tuple[bool, str | None]:
-        to = payload.get("to")
-        subject = payload.get("subject")
-        body = payload.get("body")
-        idempotency_key = payload.get("idempotency_key")
-
-        if not to:
-            return False, "Recipient email is required"
-        if not subject:
-            return False, "Email subject is required"
-        if not body:
-            return False, "Email body is required"
-        if idempotency_key is not None and not isinstance(idempotency_key, str):
-            return False, "idempotency_key must be a string"
-
-        # Check if user has Gmail integration
-        from app.db.models import UserIntegration
-
-        integration = (
-            db.query(UserIntegration)
-            .filter(
-                UserIntegration.user_id == user_id,
-                UserIntegration.integration_type == "gmail",
-            )
-            .first()
-        )
-
-        if not integration or not integration.access_token_encrypted:
-            return (
-                False,
-                "Gmail not connected. Please connect your Gmail account in settings.",
-            )
-
-        return True, None
-
-    def execute(
-        self,
-        payload: JsonObject,
-        db: Session,
-        user_id: uuid.UUID,
-        org_id: uuid.UUID,
-        entity_id: uuid.UUID,
-    ) -> JsonObject:
-        """Execute email send via Gmail API."""
-        from app.core.async_utils import run_async
-        from app.services import gmail_service
-
-        to = payload.get("to")
-        subject = payload.get("subject")
-        body = payload.get("body")
-        raw_idempotency_key = payload.get("idempotency_key")
-        idempotency_key = raw_idempotency_key if isinstance(raw_idempotency_key, str) else None
-
-        surrogate = _get_surrogate_for_action(db, entity_id, org_id)
-        if not surrogate:
-            return {
-                "action": "send_email",
-                "success": False,
-                "error": "Surrogate not found",
-            }
-
-        # Try to send via Gmail API
-        result = run_async(
-            gmail_service.send_email_logged(
-                db=db,
-                org_id=org_id,
-                user_id=str(user_id),
-                to=to,
-                subject=subject,
-                body=body,
-                html=False,
-                template_id=None,
-                surrogate_id=entity_id,
-                idempotency_key=idempotency_key,
-            )
-        )
-
-        # Always log email as note (whether sent or not)
-        status_text = (
-            "✓ Sent"
-            if result.get("success")
-            else f"⚠ Failed: {result.get('error', 'Unknown error')}"
-        )
-        email_content = f"""📧 **Email {status_text}** (via AI Assistant)
-
-**To:** {to}
-**Subject:** {subject}
-
----
-
-{body}
-"""
-        from app.services import note_service, workflow_triggers
-
-        note = note_service.create_note(
-            db=db,
-            entity_type="surrogate",
-            entity_id=entity_id,
-            org_id=org_id,
-            author_id=user_id,
-            content=email_content,
-            commit=False,
-            emit_events=False,
-        )
-
-        # Update surrogate last_contacted
-        surrogate.last_contacted_at = datetime.now(UTC)
-        surrogate.last_contact_method = "email"
-
-        db.flush()
-        workflow_triggers.trigger_note_added(db, note)
-
-        if result.get("success"):
-            return {
-                "action": "send_email",
-                "to": to,
-                "subject": subject,
-                "note_id": str(note.id),
-                "gmail_message_id": result.get("message_id"),
-                "email_log_id": result.get("email_log_id"),
-                "success": True,
-            }
-        else:
-            return {
-                "action": "send_email",
-                "to": to,
-                "subject": subject,
-                "note_id": str(note.id),
-                "email_log_id": result.get("email_log_id"),
-                "success": False,
-                "error": result.get("error", "Gmail send failed"),
-            }
-
-
 # ============================================================================
 # Permission Mapping for Actions
 # ============================================================================
@@ -575,7 +428,6 @@ EXECUTORS: dict[str, ActionExecutor] = {
     "add_note": AddNoteExecutor(),
     "create_task": CreateTaskExecutor(),
     "update_status": UpdateStatusExecutor(),
-    "send_email": SendEmailExecutor(),
 }
 
 
@@ -653,6 +505,16 @@ def execute_action(
                 "error_code": "permission_denied",
             }
 
+    # Email approval admits durable work; it must not perform provider I/O here.
+    if approval.action_type == "send_email":
+        from app.services import ai_email_service
+
+        result = ai_email_service.queue_email(db, approval, user_id, org_id, entity_id)
+        approval.status = "approved" if result["success"] else "failed"
+        approval.error_message = result.get("error")
+        approval.executed_at = None if result["success"] else datetime.now(UTC)
+        return result
+
     # 3. Get executor
     executor = get_executor(approval.action_type)
     if not executor:
@@ -666,8 +528,6 @@ def execute_action(
         }
 
     payload = dict(approval.action_payload or {})
-    if approval.action_type == "send_email":
-        payload.setdefault("idempotency_key", f"ai:{approval.id}")
 
     # 4. Validate
     is_valid, error = executor.validate(payload, db, user_id, org_id)
@@ -677,27 +537,26 @@ def execute_action(
         approval.executed_at = datetime.now(UTC)
         return {"success": False, "error": error, "error_code": "invalid_payload"}
 
-    # 5. Execute
-    try:
-        with db.begin_nested() if policy_v2 else nullcontext():
-            if policy_v2 and isinstance(executor, UpdateStatusExecutor):
+    # Unexpected errors propagate so the approval service can roll back.
+    if policy_v2 and isinstance(executor, UpdateStatusExecutor):
+        callback_count = len(after_commit) if after_commit is not None else 0
+        try:
+            with db.begin_nested():
                 result = executor.execute(
                     payload, db, user_id, org_id, entity_id, after_commit=after_commit
                 )
-            else:
-                result = executor.execute(payload, db, user_id, org_id, entity_id)
-        approval.status = "executed" if result.get("success") else "failed"
-        approval.executed_at = datetime.now(UTC)
-        if not result.get("success"):
-            approval.error_message = result.get("error")
-            if "error_code" not in result:
-                result["error_code"] = "execution_failed"
+        except ValueError as exc:
+            if after_commit is not None:
+                del after_commit[callback_count:]
+            result = {"success": False, "error": str(exc), "error_code": "execution_failed"}
+    else:
+        result = executor.execute(payload, db, user_id, org_id, entity_id)
+    approval.status = "executed" if result.get("success") else "failed"
+    approval.executed_at = datetime.now(UTC)
+    if not result.get("success"):
+        approval.error_message = result.get("error")
+        if "error_code" not in result:
+            result["error_code"] = "execution_failed"
 
-        # Note: Audit logging happens in the router (ai.py) after commit
-        return result
-    except Exception as e:
-        logger.exception(f"Action execution failed: {e}")
-        approval.status = "failed"
-        approval.error_message = str(e)
-        approval.executed_at = datetime.now(UTC)
-        return {"success": False, "error": str(e), "error_code": "execution_failed"}
+    db.flush()
+    return result

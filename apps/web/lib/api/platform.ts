@@ -642,6 +642,7 @@ interface PlatformWorkflowTemplateDraft {
     description?: string | null
     icon?: string
     category?: string
+    subject_type?: string | null
     trigger_type: string
     trigger_config?: JsonObject
     conditions?: Condition[]
@@ -673,6 +674,7 @@ export interface PlatformWorkflowTemplateUpdate {
     description?: string | null
     icon?: string
     category?: string
+    subject_type?: string | null
     trigger_type?: string
     trigger_config?: JsonObject
     conditions?: Condition[]

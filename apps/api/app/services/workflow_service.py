@@ -115,6 +115,43 @@ DONOR_TRIGGER_TYPES = {
     WorkflowTriggerType.NOTE_ADDED,
     WorkflowTriggerType.DOCUMENT_UPLOADED,
 }
+INTAKE_CONTEXT_KEYS = {
+    WorkflowTriggerType.FORM_SUBMITTED.value: "lead_kind",
+    WorkflowTriggerType.INTAKE_LEAD_CREATED.value: "lead_type",
+}
+
+
+def resolve_unbound_workflow_subject_type(
+    *,
+    subject_type: str | None,
+    trigger_type: WorkflowTriggerType | str,
+    trigger_config: dict[str, object] | None,
+) -> str | None:
+    """Resolve donor sensitivity without tenant data, protecting unresolved intake bindings."""
+    if subject_type is None:
+        trigger_value = (
+            trigger_type.value if isinstance(trigger_type, WorkflowTriggerType) else trigger_type
+        )
+        subject_type = LEGACY_TRIGGER_SUBJECT_TYPES.get(trigger_value, "surrogate")
+    if subject_type in DONOR_SUBJECT_TYPES:
+        return subject_type
+
+    trigger_value = (
+        trigger_type.value if isinstance(trigger_type, WorkflowTriggerType) else trigger_type
+    )
+    context_key = INTAKE_CONTEXT_KEYS.get(trigger_value)
+    if context_key is None:
+        return subject_type
+
+    config = trigger_config or {}
+    configured_kind = config.get(context_key)
+    if configured_kind in DONOR_SUBJECT_TYPES:
+        return str(configured_kind)
+    if config.get("form_id") or config.get("form_name"):
+        return DONOR_PERMISSION_CONTEXT
+    if configured_kind == "surrogate":
+        return subject_type
+    return DONOR_PERMISSION_CONTEXT
 
 
 def resolve_effective_workflow_subject_type(
@@ -132,10 +169,7 @@ def resolve_effective_workflow_subject_type(
     trigger_value = (
         trigger_type.value if isinstance(trigger_type, WorkflowTriggerType) else trigger_type
     )
-    context_key = {
-        WorkflowTriggerType.FORM_SUBMITTED.value: "lead_kind",
-        WorkflowTriggerType.INTAKE_LEAD_CREATED.value: "lead_type",
-    }.get(trigger_value)
+    context_key = INTAKE_CONTEXT_KEYS.get(trigger_value)
     if context_key is None:
         return subject_type
 
@@ -346,6 +380,39 @@ def _validate_subject_conditions(subject_type: str, conditions: list[dict]) -> N
     )
     if invalid:
         raise ValueError(f"Condition fields do not support {subject_type}: {', '.join(invalid)}")
+
+
+def _validate_action_subject_compatibility(
+    action: dict,
+    *,
+    subject_type: str = "surrogate",
+    effective_subject_type: str | None = None,
+) -> None:
+    """Validate subject compatibility without resolving tenant-owned action bindings."""
+    action_type = action.get("action_type")
+    is_donor_subject = subject_type in DONOR_SUBJECT_TYPES
+    is_donor_context = (
+        effective_subject_type in {*DONOR_SUBJECT_TYPES, DONOR_PERMISSION_CONTEXT}
+        if effective_subject_type is not None
+        else is_donor_subject
+    )
+    donor_action_types = {
+        "send_email",
+        "create_task",
+        "assign_donor",
+        "send_notification",
+        "update_field",
+        "add_note",
+    }
+    if is_donor_subject and action_type not in donor_action_types:
+        raise ValueError(f"Action {action_type} does not support donor workflows")
+    if not is_donor_subject and action_type == "assign_donor":
+        raise ValueError("assign_donor requires a donor workflow subject")
+    if is_donor_context and action_type == "send_message":
+        raise ValueError("Action send_message does not support donor workflows")
+    if is_donor_context and action_type == "send_email":
+        if action.get("requires_approval") is not True:
+            raise ValueError("Donor email actions require review approval")
 
 
 def _resolve_stage_ref(
@@ -2225,28 +2292,11 @@ def _validate_action_config(
     """Validate action config and referenced entities exist in org."""
     action_type = action.get("action_type")
     is_donor_subject = subject_type in DONOR_SUBJECT_TYPES
-    is_donor_context = (
-        effective_subject_type in {*DONOR_SUBJECT_TYPES, DONOR_PERMISSION_CONTEXT}
-        if effective_subject_type is not None
-        else is_donor_subject
+    _validate_action_subject_compatibility(
+        action,
+        subject_type=subject_type,
+        effective_subject_type=effective_subject_type,
     )
-    donor_action_types = {
-        "send_email",
-        "create_task",
-        "assign_donor",
-        "send_notification",
-        "update_field",
-        "add_note",
-    }
-    if is_donor_subject and action_type not in donor_action_types:
-        raise ValueError(f"Action {action_type} does not support donor workflows")
-    if not is_donor_subject and action_type == "assign_donor":
-        raise ValueError("assign_donor requires a donor workflow subject")
-    if is_donor_context and action_type == "send_message":
-        raise ValueError("Action send_message does not support donor workflows")
-    if is_donor_context and action_type == "send_email":
-        if action.get("requires_approval") is not True:
-            raise ValueError("Donor email actions require review approval")
 
     if action_type == "update_status":
         stage_id = action.get("stage_id")

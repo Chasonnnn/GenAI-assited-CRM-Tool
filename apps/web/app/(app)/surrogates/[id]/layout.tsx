@@ -1,10 +1,10 @@
 import type { ReactNode } from "react"
-import { SurrogateDetailLayoutClient } from "@/components/surrogates/detail/SurrogateDetailLayoutClient"
+import { SurrogateDetailLayout } from "@/components/surrogates/detail/SurrogateDetailLayout"
 
 type SurrogateDetailLayoutProps = {
     children: ReactNode
 }
 
-export default function SurrogateDetailLayout({ children }: SurrogateDetailLayoutProps) {
-    return <SurrogateDetailLayoutClient>{children}</SurrogateDetailLayoutClient>
+export default function SurrogateLayout({ children }: SurrogateDetailLayoutProps) {
+    return <SurrogateDetailLayout>{children}</SurrogateDetailLayout>
 }

@@ -267,6 +267,7 @@ def recover_stale_worker_claims(
 
     candidates = list(db.execute(query).scalars())
     result_counts = {"requeued": 0, "quarantined": 0}
+    email_notes = []
     for job in candidates:
         claim_token = job.claim_token
         claimed_at = job.claimed_at
@@ -313,9 +314,19 @@ def recover_stale_worker_claims(
         )
         if (updated.rowcount or 0) == 1:
             result_counts[action] += 1
+            if not retry_safe and job.job_type == JobType.AI_SEND_EMAIL.value:
+                from app.services import ai_email_service
+
+                note_id = ai_email_service.finish_failed_job(db, job)
+                if note_id:
+                    email_notes.append((note_id, job.organization_id))
 
     db.commit()
     db.expire_all()
+    for note_id, org_id in email_notes:
+        from app.services import note_service
+
+        note_service.dispatch_note_added(db, note_id=note_id, org_id=org_id)
     return result_counts
 
 
@@ -520,8 +531,17 @@ def mark_job_failed(db: Session, job: Job, error: str) -> Job:
             )
     job.claim_token = None
     job.claimed_at = None
+    note_id = None
+    if job.status == JobStatus.FAILED.value and job.job_type == JobType.AI_SEND_EMAIL.value:
+        from app.services import ai_email_service
+
+        note_id = ai_email_service.finish_failed_job(db, job)
     db.commit()
     db.refresh(job)
+    if note_id:
+        from app.services import note_service
+
+        note_service.dispatch_note_added(db, note_id=note_id, org_id=job.organization_id)
     return job
 
 
@@ -567,8 +587,17 @@ def fail_claimed_job(
             )
     job.claim_token = None
     job.claimed_at = None
+    note_id = None
+    if job.status == JobStatus.FAILED.value and job.job_type == JobType.AI_SEND_EMAIL.value:
+        from app.services import ai_email_service
+
+        note_id = ai_email_service.finish_failed_job(db, job)
     db.commit()
     db.refresh(job)
+    if note_id:
+        from app.services import note_service
+
+        note_service.dispatch_note_added(db, note_id=note_id, org_id=job.organization_id)
     return job
 
 

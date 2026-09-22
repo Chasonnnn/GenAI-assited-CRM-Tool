@@ -5,7 +5,6 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import event
 
 from app.db.enums import AlertSeverity, AlertStatus, AlertType
 from app.db.models import Organization, SystemAlert
@@ -86,7 +85,16 @@ def test_list_alerts_returns_exact_total_on_full_page(db, test_org):
     assert total == 3
 
 
-def test_count_alerts_uses_direct_count_and_preserves_filters(db, test_org):
+@pytest.mark.parametrize(
+    "status,severity,expected",
+    [
+        (None, None, {"open-error", "resolved-error", "open-warning"}),
+        (AlertStatus.OPEN, None, {"open-error", "open-warning"}),
+        (None, AlertSeverity.ERROR, {"open-error", "resolved-error"}),
+        (AlertStatus.OPEN, AlertSeverity.ERROR, {"open-error"}),
+    ],
+)
+def test_list_alerts_preserves_filters_and_tenant_scope(db, test_org, status, severity, expected):
     other_org = Organization(
         id=uuid.uuid4(),
         name="Other Alert Org",
@@ -94,79 +102,29 @@ def test_count_alerts_uses_direct_count_and_preserves_filters(db, test_org):
     )
     db.add(other_org)
     now = datetime.now(UTC)
-    db.add_all(
-        [
+    for org_id, key, alert_status, alert_severity in [
+        (test_org.id, "open-error", AlertStatus.OPEN, AlertSeverity.ERROR),
+        (test_org.id, "resolved-error", AlertStatus.RESOLVED, AlertSeverity.ERROR),
+        (test_org.id, "open-warning", AlertStatus.OPEN, AlertSeverity.WARN),
+        (other_org.id, "other-org-error", AlertStatus.OPEN, AlertSeverity.ERROR),
+    ]:
+        db.add(
             SystemAlert(
-                organization_id=test_org.id,
-                dedupe_key="open-error",
+                organization_id=org_id,
+                dedupe_key=key,
                 alert_type=AlertType.API_ERROR.value,
-                severity=AlertSeverity.ERROR.value,
-                status=AlertStatus.OPEN.value,
-                title="Open error",
+                severity=alert_severity.value,
+                status=alert_status.value,
+                title=key,
                 first_seen_at=now,
                 last_seen_at=now,
-            ),
-            SystemAlert(
-                organization_id=test_org.id,
-                dedupe_key="resolved-error",
-                alert_type=AlertType.API_ERROR.value,
-                severity=AlertSeverity.ERROR.value,
-                status=AlertStatus.RESOLVED.value,
-                title="Resolved error",
-                first_seen_at=now,
-                last_seen_at=now,
-            ),
-            SystemAlert(
-                organization_id=test_org.id,
-                dedupe_key="open-warning",
-                alert_type=AlertType.API_ERROR.value,
-                severity=AlertSeverity.WARN.value,
-                status=AlertStatus.OPEN.value,
-                title="Open warning",
-                first_seen_at=now,
-                last_seen_at=now,
-            ),
-            SystemAlert(
-                organization_id=other_org.id,
-                dedupe_key="other-org-error",
-                alert_type=AlertType.API_ERROR.value,
-                severity=AlertSeverity.ERROR.value,
-                status=AlertStatus.OPEN.value,
-                title="Other org error",
-                first_seen_at=now,
-                last_seen_at=now,
-            ),
-        ]
-    )
+            )
+        )
     db.flush()
 
-    statements: list[str] = []
-
-    def capture_count_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
-        normalized = " ".join(statement.lower().split())
-        if "system_alerts" in normalized and "count" in normalized:
-            statements.append(normalized)
-
-    bind = db.get_bind()
-    event.listen(bind, "before_cursor_execute", capture_count_sql)
-    try:
-        assert alert_service.count_alerts(db, test_org.id) == 3
-        assert alert_service.count_alerts(db, test_org.id, status=AlertStatus.OPEN) == 2
-        assert alert_service.count_alerts(db, test_org.id, severity=AlertSeverity.ERROR) == 2
-        assert (
-            alert_service.count_alerts(
-                db,
-                test_org.id,
-                status=AlertStatus.OPEN,
-                severity=AlertSeverity.ERROR,
-            )
-            == 1
-        )
-    finally:
-        event.remove(bind, "before_cursor_execute", capture_count_sql)
-
-    assert statements
-    assert all("from (select" not in statement for statement in statements)
+    items, total = alert_service.list_alerts(db, test_org.id, status=status, severity=severity)
+    assert {item.dedupe_key for item in items} == expected
+    assert total == len(expected)
 
 
 def test_create_or_update_alert_snooze_reopen_semantics(db, test_org):
@@ -229,10 +187,8 @@ def test_create_or_update_alert_concurrent_dedupe_upsert(db_engine):
     if db_engine.dialect.name != "postgresql":
         pytest.skip("Concurrent upsert semantics require PostgreSQL")
 
-    setup_conn = db_engine.connect()
-    setup_session = SessionLocal(bind=setup_conn)
-    cleanup_conn = db_engine.connect()
-    cleanup_session = SessionLocal(bind=cleanup_conn)
+    setup_session = SessionLocal()
+    cleanup_session = SessionLocal()
 
     org_id = None
     try:
@@ -244,12 +200,13 @@ def test_create_or_update_alert_concurrent_dedupe_upsert(db_engine):
         setup_session.add(org)
         setup_session.commit()
         org_id = org.id
+        setup_session.close()
 
         workers = 6
 
         def _write_alert() -> None:
             alert = alert_service.record_alert_isolated(
-                org_id=org.id,
+                org_id=org_id,
                 alert_type=AlertType.WORKER_JOB_FAILED,
                 severity=AlertSeverity.ERROR,
                 title="Concurrent failure",
@@ -265,7 +222,7 @@ def test_create_or_update_alert_concurrent_dedupe_upsert(db_engine):
         alerts = (
             cleanup_session.query(SystemAlert)
             .filter(
-                SystemAlert.organization_id == org.id,
+                SystemAlert.organization_id == org_id,
                 SystemAlert.alert_type == AlertType.WORKER_JOB_FAILED.value,
                 SystemAlert.integration_key == "worker",
                 SystemAlert.title == "Concurrent failure",
@@ -282,6 +239,4 @@ def test_create_or_update_alert_concurrent_dedupe_upsert(db_engine):
             cleanup_session.query(Organization).filter(Organization.id == org_id).delete()
             cleanup_session.commit()
         cleanup_session.close()
-        cleanup_conn.close()
         setup_session.close()
-        setup_conn.close()

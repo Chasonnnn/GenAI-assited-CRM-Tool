@@ -40,7 +40,7 @@ from app.db.models import (
     WorkflowExecution,
 )
 from app.schemas.workflow import ALLOWED_UPDATE_FIELDS, DONOR_ALLOWED_UPDATE_FIELDS
-from app.services import job_service, notification_facade, workflow_intake_actions
+from app.services import job_service, notification_service, workflow_intake_actions
 from app.services.workflow_action_preview import build_action_preview, render_action_payload
 from app.utils.business_hours import calculate_approval_due_date
 
@@ -329,7 +329,7 @@ class DefaultWorkflowDomainAdapter:
             logger.info(f"Created approval task {task.id} for execution {execution.id}")
 
             # Send notification to owner (respects user settings)
-            notification_facade.notify_workflow_approval_requested(
+            notification_service.notify_workflow_approval_requested(
                 db=db,
                 task_id=task.id,
                 task_title=task.title,
@@ -1211,7 +1211,7 @@ class DefaultWorkflowDomainAdapter:
         # Create notifications
         created_count = 0
         for user_id in user_ids:
-            notification = notification_facade.create_notification(
+            notification = notification_service.create_notification(
                 db=db,
                 org_id=target.organization_id,
                 user_id=user_id,

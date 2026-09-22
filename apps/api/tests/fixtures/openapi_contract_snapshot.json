@@ -4012,6 +4012,12 @@
       "422"
     ]
   },
+  "/surrogates/{surrogate_id}/interview-appointment/sync/retry": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/surrogates/{surrogate_id}/interviews": {
     "GET": [
       "200",

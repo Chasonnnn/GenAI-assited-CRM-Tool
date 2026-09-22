@@ -162,6 +162,32 @@ describe("MetaFormMappingPage", () => {
         })
     })
 
+    it("flags a stored donor mapping targeting an unsupported field as repair-required", () => {
+        const baseline = mockUseMetaFormMapping()
+        mockUseMetaFormMapping.mockReturnValue({
+            ...baseline,
+            data: {
+                ...baseline.data,
+                form: { ...baseline.data.form, lead_kind: "egg_donor" },
+                available_fields: ["full_name", "email", "phone", "state", "education"],
+                unsupported_mapped_fields: ["source"],
+            },
+        })
+
+        render(<MetaFormMappingPage />)
+
+        expect(screen.getByText(/mapping repair required/i)).toBeInTheDocument()
+        expect(
+            screen.getByText(/donor records converted from meta always use the meta source/i)
+        ).toBeInTheDocument()
+    })
+
+    it("does not show the mapping repair alert without unsupported fields", () => {
+        render(<MetaFormMappingPage />)
+
+        expect(screen.queryByText(/mapping repair required/i)).not.toBeInTheDocument()
+    })
+
     it("renders unconverted lead details when failures exist", () => {
         render(<MetaFormMappingPage />)
 

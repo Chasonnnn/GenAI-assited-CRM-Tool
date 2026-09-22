@@ -75,6 +75,7 @@ class WorkflowConditionOperator(str, Enum):
 class WorkflowExecutionStatus(str, Enum):
     """Execution result status."""
 
+    RUNNING = "running"
     SUCCESS = "success"
     PARTIAL = "partial"  # some actions succeeded
     FAILED = "failed"

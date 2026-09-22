@@ -212,7 +212,7 @@ def dispatch_status_request_pending_notification(
     current_stage_label: str,
     requester_name: str,
 ) -> None:
-    from app.services import notification_facade
+    from app.services import notification_service
 
     request_id = status_request.id
 
@@ -229,7 +229,7 @@ def dispatch_status_request_pending_notification(
         )
         if notification_request is None:
             raise DonorValidationError("Donor status request unavailable for notification")
-        notification_facade.notify_donor_status_change_request_pending(
+        notification_service.notify_donor_status_change_request_pending(
             db=notification_db,
             request=notification_request,
             donor=notification_donor,
@@ -257,7 +257,7 @@ def dispatch_status_request_resolved_notification(
     resolver_name: str,
     reason: str | None = None,
 ) -> None:
-    from app.services import notification_facade
+    from app.services import notification_service
 
     request_id = status_request.id
 
@@ -274,7 +274,7 @@ def dispatch_status_request_resolved_notification(
         )
         if notification_request is None:
             raise DonorValidationError("Donor status request unavailable for notification")
-        notification_facade.notify_donor_status_change_request_resolved(
+        notification_service.notify_donor_status_change_request_resolved(
             db=notification_db,
             request=notification_request,
             donor=notification_donor,
@@ -1176,6 +1176,14 @@ def apply_status_change(
                 "request_id": str(request_id) if request_id else None,
             },
             request=request,
+        )
+        from app.services import zapier_outbound_service
+
+        zapier_outbound_service.enqueue_donor_stage_event(
+            db,
+            donor=donor,
+            history=history,
+            new_stage=new_stage,
         )
         if commit:
             db.commit()

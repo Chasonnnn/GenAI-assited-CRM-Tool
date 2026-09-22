@@ -37,7 +37,27 @@ META_SYSTEM_COLUMNS: list[tuple[str, str]] = [
 ]
 AUTO_SAFE_SCHEMA_KEYS = {"lead_id"}
 TEST_LEAD_PATTERN = re.compile(r"test lead:|dummy data", re.IGNORECASE)
-DONOR_META_MAPPING_FIELDS = ["full_name", "email", "phone", "state", "education", "source"]
+# Donor conversions always set source to the canonical "Meta"
+# (meta_lead_service). "source" is intentionally not mappable for donor
+# forms: a stored mapping would never be applied and only mislead admins.
+DONOR_META_MAPPING_FIELDS = ["full_name", "email", "phone", "state", "education"]
+DONOR_LEAD_KINDS = {"egg_donor", "sperm_donor"}
+
+
+def donor_unsupported_mapped_fields(form: MetaForm) -> list[str]:
+    """Stored donor mapping targets that are no longer supported (repair-required)."""
+    if form.lead_kind not in DONOR_LEAD_KINDS:
+        return []
+    allowed = set(DONOR_META_MAPPING_FIELDS)
+    return sorted(
+        {
+            str(rule["surrogate_field"])
+            for rule in (form.mapping_rules or [])
+            if rule.get("action") == "map"
+            and rule.get("surrogate_field")
+            and rule["surrogate_field"] not in allowed
+        }
+    )
 
 
 def _schema_keys(field_schema: list[dict[str, object]] | None) -> set[str]:
@@ -589,6 +609,7 @@ def build_mapping_preview(
         "has_live_leads": has_live_leads,
         "available_fields": available_fields,
         "ai_available": ai_available,
+        "unsupported_mapped_fields": donor_unsupported_mapped_fields(form),
     }
 
 

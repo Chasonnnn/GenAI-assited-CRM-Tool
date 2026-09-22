@@ -34,16 +34,19 @@ class JobType(str, Enum):
     STORAGE_DELETE = "storage_delete"
     CAMPAIGN_SEND = "campaign_send"  # Bulk email campaign execution
     AI_CHAT = "ai_chat"
+    AI_SEND_EMAIL = "ai_send_email"
     CONTACT_REMINDER_CHECK = "contact_reminder_check"  # Daily contact follow-up check
     INTERVIEW_TRANSCRIPTION = "interview_transcription"
     ATTACHMENT_SCAN = "attachment_scan"
     FORM_SUBMISSION_FILE_SCAN = "form_submission_file_scan"
+    FORM_SUBMISSION_WORKFLOW = "form_submission_workflow"
     DONOR_INTAKE_PROMOTE = "donor_intake_promote"
     MESSAGE_MEDIA_SCAN = "message_media_scan"
     WORKFLOW_APPROVAL_EXPIRY = "workflow_approval_expiry"  # Sweep for expired approvals
     WORKFLOW_RESUME = "workflow_resume"  # Resume workflow after approval resolution
     ORG_DELETE = "org_delete"  # Hard delete org after grace period
     GOOGLE_CALENDAR_SYNC = "google_calendar_sync"  # Two-way Google calendar reconciliation
+    APPOINTMENT_GOOGLE_SYNC = "appointment_google_sync"
     GOOGLE_TASKS_SYNC = "google_tasks_sync"  # Two-way Google Tasks reconciliation
     GOOGLE_TASK_CREATION_RECONCILE = (
         "google_task_creation_reconcile"  # Recover an uncertain donor-task POST

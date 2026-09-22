@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import logging
 from uuid import UUID
-
-logger = logging.getLogger(__name__)
 
 
 async def process_export_generation(db, job) -> None:
@@ -22,7 +19,11 @@ async def process_export_generation(db, job) -> None:
 
 async def process_admin_export(db, job) -> None:
     """Process admin export job."""
-    from app.services import admin_export_service, analytics_service
+    from app.services import (
+        admin_export_service,
+        analytics_meta_service,
+        analytics_shared,
+    )
 
     payload = dict(job.payload or {})
     export_type = payload.get("export_type")
@@ -55,8 +56,8 @@ async def process_admin_export(db, job) -> None:
         to_date = payload.get("to_date")
         ad_id = payload.get("ad_id")
 
-        start, end = analytics_service.parse_date_range(from_date, to_date)
-        meta_spend = await analytics_service.get_meta_spend_summary(
+        start, end = analytics_shared.parse_date_range(from_date, to_date)
+        meta_spend = await analytics_meta_service.get_meta_spend_summary(
             db=db,
             organization_id=job.organization_id,
             start=start,
@@ -96,13 +97,3 @@ async def process_admin_export(db, job) -> None:
     # Store response data
     job.payload = payload
     db.commit()
-
-    # Emit analytics export event (no-op if absent)
-    try:
-        analytics_service.track_admin_export(
-            db=db,
-            org_id=job.organization_id,
-            export_type=export_type,
-        )
-    except Exception:
-        logger.warning("Failed to track admin export")

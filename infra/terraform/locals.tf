@@ -56,6 +56,8 @@ locals {
     GCP_PROJECT_ID                      = var.project_id
     DB_MIGRATION_CHECK                  = tostring(var.db_migration_check)
     DB_AUTO_MIGRATE                     = tostring(var.db_auto_migrate)
+    DB_POOL_SIZE                        = tostring(var.db_pool_size)
+    DB_MAX_OVERFLOW                     = tostring(var.db_max_overflow)
   }, local.optional_env)
 
   api_env = merge(local.common_env, {

@@ -27,7 +27,11 @@ from app.db.models import (
 )
 from app.services import workflow_service
 from app.services.workflow_engine_adapters import DefaultWorkflowDomainAdapter
-from app.services.workflow_engine_core import MAX_DEPTH, WorkflowEngineCore
+from app.services.workflow_engine_core import (
+    FORM_SUBMISSION_ACTION_SNAPSHOT_KEY,
+    MAX_DEPTH,
+    WorkflowEngineCore,
+)
 
 
 class _DummyAdapter:
@@ -570,6 +574,139 @@ def test_workflow_engine_continue_execution_denied_and_expired_paths(db, test_or
     assert execution.status == WorkflowExecutionStatus.EXPIRED.value
 
 
+@pytest.mark.parametrize(
+    ("remaining_actions", "expected_sources"),
+    [
+        ([], ["approved"]),
+        ([{"action_type": "create_intake_lead", "source": "remaining"}], ["approved", "remaining"]),
+    ],
+    ids=["final-action", "remaining-action"],
+)
+def test_legacy_paused_form_submission_continues_without_action_snapshot(
+    db,
+    test_org,
+    test_user,
+    remaining_actions,
+    expected_sources,
+):
+    adapter = _DummyAdapter()
+    engine = WorkflowEngineCore(adapter=adapter)
+    approved_action = {
+        "action_type": "auto_match_submission",
+        "requires_approval": True,
+        "source": "approved",
+    }
+    workflow = _create_workflow(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        name=f"Legacy paused form {uuid4().hex[:6]}",
+        trigger_type=WorkflowTriggerType.FORM_SUBMITTED,
+    )
+    workflow.actions = [approved_action, *remaining_actions]
+    execution = WorkflowExecution(
+        id=uuid4(),
+        organization_id=test_org.id,
+        workflow_id=workflow.id,
+        event_id=uuid4(),
+        depth=0,
+        event_source=WorkflowEventSource.SYSTEM.value,
+        entity_type="form_submission",
+        entity_id=uuid4(),
+        trigger_event={"form_id": str(uuid4())},
+        dedupe_key=None,
+        matched_conditions=True,
+        actions_executed=[],
+        status=WorkflowExecutionStatus.PAUSED.value,
+        paused_at_action_index=0,
+        paused_task_id=None,
+    )
+    db.add(execution)
+    db.commit()
+
+    adapter.get_entity = lambda *_args, **_kwargs: SimpleNamespace(id=execution.entity_id)  # type: ignore[method-assign]
+    executed_sources: list[str] = []
+
+    def execute_action(**kwargs):
+        executed_sources.append(kwargs["action"]["source"])
+        return {"success": True, "action_type": kwargs["action"]["action_type"]}
+
+    adapter.execute_action = execute_action  # type: ignore[method-assign]
+    approved_task = SimpleNamespace(
+        id=uuid4(),
+        status=TaskStatus.COMPLETED.value,
+        workflow_action_payload=approved_action,
+        workflow_action_type="auto_match_submission",
+        workflow_triggered_by_user_id=test_user.id,
+    )
+
+    engine.continue_execution(db, execution.id, approved_task, "approve")
+
+    db.refresh(execution)
+    assert execution.status == WorkflowExecutionStatus.SUCCESS.value
+    assert executed_sources == expected_sources
+
+
+def test_paused_form_submission_rejects_malformed_action_snapshot(
+    db,
+    test_org,
+    test_user,
+):
+    adapter = _DummyAdapter()
+    engine = WorkflowEngineCore(adapter=adapter)
+    approved_action = {
+        "action_type": "auto_match_submission",
+        "requires_approval": True,
+    }
+    workflow = _create_workflow(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        name=f"Malformed paused form {uuid4().hex[:6]}",
+        trigger_type=WorkflowTriggerType.FORM_SUBMITTED,
+    )
+    workflow.actions = [approved_action]
+    execution = WorkflowExecution(
+        id=uuid4(),
+        organization_id=test_org.id,
+        workflow_id=workflow.id,
+        event_id=uuid4(),
+        depth=0,
+        event_source=WorkflowEventSource.SYSTEM.value,
+        entity_type="form_submission",
+        entity_id=uuid4(),
+        trigger_event={FORM_SUBMISSION_ACTION_SNAPSHOT_KEY: "invalid"},
+        dedupe_key=None,
+        matched_conditions=True,
+        actions_executed=[],
+        status=WorkflowExecutionStatus.PAUSED.value,
+        paused_at_action_index=0,
+        paused_task_id=None,
+    )
+    db.add(execution)
+    db.commit()
+
+    adapter.get_entity = lambda *_args, **_kwargs: SimpleNamespace(id=execution.entity_id)  # type: ignore[method-assign]
+    executed_actions: list[dict] = []
+    adapter.execute_action = lambda **kwargs: executed_actions.append(kwargs["action"])  # type: ignore[method-assign,assignment]
+    approved_task = SimpleNamespace(
+        id=uuid4(),
+        status=TaskStatus.COMPLETED.value,
+        workflow_action_payload=approved_action,
+        workflow_action_type="auto_match_submission",
+        workflow_triggered_by_user_id=test_user.id,
+    )
+
+    engine.continue_execution(db, execution.id, approved_task, "approve")
+
+    db.refresh(execution)
+    assert execution.status == WorkflowExecutionStatus.FAILED.value
+    assert execution.error_message == (
+        "Workflow action snapshot unavailable for safe continuation"
+    )
+    assert executed_actions == []
+
+
 def test_workflow_engine_resolve_approval_context_fallbacks(db, test_org, test_user):
     adapter = _DummyAdapter()
     engine = WorkflowEngineCore(adapter=adapter)
@@ -779,7 +916,7 @@ def test_default_adapter_action_helpers(monkeypatch):
 
     notifications: list[dict] = []
     monkeypatch.setattr(
-        "app.services.notification_facade.create_notification",
+        "app.services.notification_service.create_notification",
         lambda **kwargs: notifications.append(kwargs) or SimpleNamespace(id=uuid4()),
     )
     notify_result = adapter._action_send_notification(

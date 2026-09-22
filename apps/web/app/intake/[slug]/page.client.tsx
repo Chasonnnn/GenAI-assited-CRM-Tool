@@ -312,6 +312,33 @@ function createDraftSessionId(): string {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
 }
 
+type SubmissionAttempt = { scope: string; key: string }
+
+function getSubmissionAttempt(scope: string, current: SubmissionAttempt | null): SubmissionAttempt {
+    if (current?.scope === scope) return current
+    let savedKey: string | null = null
+    try {
+        savedKey = window.sessionStorage.getItem(scope)
+    } catch {
+        // Keep retries stable in memory when browser storage is unavailable.
+    }
+    const attempt = { scope, key: savedKey || createDraftSessionId() }
+    try {
+        window.sessionStorage.setItem(scope, attempt.key)
+    } catch {
+        // Storage restrictions must not block submission.
+    }
+    return attempt
+}
+
+function clearSubmissionAttempt(scope: string): void {
+    try {
+        window.sessionStorage.removeItem(scope)
+    } catch {
+        // The server has already accepted this attempt.
+    }
+}
+
 function createDraftSessionState(slug: string): DraftSessionState {
     if (!slug || typeof window === "undefined") {
         return { slug, id: null, exists: false }
@@ -873,6 +900,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
     const [currentStep, setCurrentStep] = React.useState(1)
     const [fileUploads, setFileUploads] = React.useState<FileUploads>({})
     const [isSubmitting, setIsSubmitting] = React.useState(false)
+    const submissionAttemptRef = React.useRef<SubmissionAttempt | null>(null)
     const [isSubmitted, setIsSubmitted] = React.useState(false)
     const [submissionOutcome, setSubmissionOutcome] = React.useState<FormSubmissionSharedResponse["outcome"] | null>(null)
     const [datePickerOpen, setDatePickerOpen] = React.useState<Record<string, boolean>>({})
@@ -1160,6 +1188,9 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
 
         setIsSubmitting(true)
         const submit = async () => {
+            const attemptScope = `intake-submit:${token}:${formConfig?.published_version_id ?? ""}`
+            const attempt = getSubmissionAttempt(attemptScope, submissionAttemptRef.current)
+            submissionAttemptRef.current = attempt
             const fileEntries = Object.entries(fileUploads).flatMap(([fieldKey, items]) =>
                 items.map((file) => ({ fieldKey, file })),
             )
@@ -1181,7 +1212,10 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                     ? { operational: smsOperational, promotional: smsPromotional }
                     : undefined,
                 formConfig?.published_version_id,
+                attempt.key,
             )
+            clearSubmissionAttempt(attemptScope)
+            submissionAttemptRef.current = null
             if (draftSessionId) {
                 window.localStorage.removeItem(`intake-draft-session:${token}`)
             }

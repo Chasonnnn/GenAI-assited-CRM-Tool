@@ -10,6 +10,8 @@ from app.db.enums import Role, WorkflowEventSource
 from app.db.models import (
     AutomationWorkflow,
     EmailTemplate,
+    Form,
+    FormSubmission,
     Membership,
     Organization,
     RolePermission,
@@ -22,7 +24,10 @@ from app.db.models.record_access import RecordCollaborator, RoleRecordScope
 from app.services import workflow_access, workflow_service
 from app.services import workflow_execution_authority as authority
 from app.services.workflow_engine_adapters import DefaultWorkflowDomainAdapter
-from app.services.workflow_engine_core import WorkflowEngineCore
+from app.services.workflow_engine_core import (
+    FORM_SUBMISSION_ACTION_SNAPSHOT_KEY,
+    WorkflowEngineCore,
+)
 
 
 @pytest.fixture
@@ -188,6 +193,86 @@ def test_personal_execution_rechecks_owner_membership(setup, db):
     assert adapter.calls == []
     assert result.actions_executed[0]["skipped"]
     assert "no longer has action permission" in result.actions_executed[0]["error"]
+
+
+@pytest.mark.parametrize(
+    "scope,change,error",
+    [
+        ("personal", "owner_inactive", "no longer has action permission"),
+        ("org", "missing_permission", "lacks authorization"),
+        ("org", "foreign_snapshot", "authority is invalid"),
+        ("org", "owner_inactive", None),
+    ],
+)
+def test_incomplete_form_recovery_rechecks_execution_authority(setup, db, scope, change, error):
+    org, owner, _ = setup
+    form = Form(organization_id=org.id, name="Recovery form")
+    db.add(form)
+    db.flush()
+    submission = FormSubmission(organization_id=org.id, form_id=form.id, answers_json={})
+    db.add(submission)
+    db.flush()
+    action = {"action_type": "auto_match_submission"}
+    item = workflow(db, org, owner, scope=scope, actions=[action, action])
+    item.subject_type = "form_submission"
+    item.trigger_type = "form_submitted"
+    item.trigger_config = {"lead_kind": "surrogate"}
+    authority.authorize_configuration(db, item, owner.id)
+    snapshot = authority.execution_snapshot(db, item)
+    if change == "missing_permission":
+        snapshot["permissions"] = []
+    elif change == "foreign_snapshot":
+        snapshot["organization_id"] = str(uuid4())
+    else:
+        db.query(Membership).filter_by(
+            organization_id=org.id, user_id=owner.id
+        ).one().is_active = False
+
+    adapter = RecordingAdapter()
+    engine = WorkflowEngineCore(adapter)
+    completed_result = {"success": True, "action_type": "auto_match_submission"}
+    execution = WorkflowExecution(
+        organization_id=org.id,
+        workflow_id=item.id,
+        event_id=uuid4(),
+        event_source="system",
+        entity_type="form_submission",
+        entity_id=submission.id,
+        subject_type="form_submission",
+        subject_id=submission.id,
+        trigger_event={FORM_SUBMISSION_ACTION_SNAPSHOT_KEY: [action, action]},
+        dedupe_key=engine._get_dedupe_key(item, submission.id),
+        actions_executed=[completed_result],
+        status="running",
+        authority_snapshot=snapshot,
+    )
+    db.add(execution)
+    db.flush()
+
+    recovered = engine.execute_workflow(
+        db,
+        item,
+        "form_submission",
+        submission.id,
+        {},
+        subject_type="form_submission",
+        subject_id=submission.id,
+        recover_incomplete=True,
+    )
+
+    assert recovered.id == execution.id
+    assert recovered.actions_executed[0] == completed_result
+    if error:
+        assert adapter.calls == []
+        assert recovered.status == "partial"
+        assert recovered.actions_executed[1]["skipped"] is True
+        assert error in recovered.actions_executed[1]["error"]
+    else:
+        assert recovered.status == "success"
+        assert len(adapter.calls) == 1
+        assert adapter.calls[0]["workflow_action_index"] == 1
+        assert adapter.calls[0]["workflow_execution_id"] == execution.id
+        assert adapter.calls[0]["execution_permissions"] == frozenset(snapshot["permissions"])
 
 
 def test_personal_execution_accepts_collaborator_then_stops_after_removal(setup, db):

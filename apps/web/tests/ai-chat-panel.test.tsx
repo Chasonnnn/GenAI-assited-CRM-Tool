@@ -554,6 +554,28 @@ describe('AIChatPanel', () => {
         expect(requestAnimationFrame).not.toHaveBeenCalled()
     })
 
+    it.each([
+        ['approved', 'Queued', null],
+        ['executed', 'Sent', null],
+        ['failed', 'Failed', 'This action could not be completed.'],
+        ['delivery_unknown', 'Delivery unconfirmed', 'Check Gmail Sent before creating another email.'],
+    ])('renders persisted email state %s without offering another send', (status, label, error) => {
+        mockUseConversation.mockReturnValue({
+            data: { messages: [{
+                id: 'email-state', role: 'assistant', content: 'Reviewed draft',
+                proposed_actions: [{ approval_id: 'a1', action_type: 'send_email', status: 'pending',
+                    action_data: { to: 'synthetic@example.test', subject: 'Follow-up', body: 'Hello' } }],
+                action_approvals: [{ action_index: 0, status }],
+            }] },
+            isLoading: false,
+        })
+        render(<AIChatPanel entityType="surrogate" entityId="sur-1" />)
+        expect(screen.getByText(label!)).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Approve and send' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Review draft' })).not.toBeInTheDocument()
+        if (error) expect(screen.getByRole('alert')).toHaveTextContent(error)
+    })
+
     it("loads the schedule parser on demand for surrogate conversations", async () => {
         render(
             <AIChatPanel

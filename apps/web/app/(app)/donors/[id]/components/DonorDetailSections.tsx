@@ -18,7 +18,6 @@ import { DonorDocumentsSection } from "@/components/donors/DonorDocumentsSection
 import { DonorNotesSection } from "@/components/donors/DonorNotesSection"
 import { DonorTasksSection } from "@/components/donors/DonorTasksSection"
 import { DonorOverviewTab } from "@/components/donors/DonorOverviewTab"
-import { DonorOwnershipSection } from "@/components/donors/DonorOwnershipSection"
 import { SurrogateDetailHeader } from "@/components/surrogates/detail/SurrogateDetailHeader"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import type { EntityActivity } from "@/lib/api/activity"
@@ -94,7 +93,7 @@ export function DonorDetailSections({
         const query = params.toString()
         window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`)
     }
-    const activityPanel = <><EntityActivityTimeline
+    const activityPanel = <EntityActivityTimeline
         currentStageId={donor.stage_id}
         stages={stages}
         stageHistory={normalizeDonorHistory(history)}
@@ -107,12 +106,6 @@ export function DonorDetailSections({
         historyHref={`/donors/${donor.id}?tab=history&return_to=${encodeURIComponent(returnTo)}`}
         onViewHistory={() => changeTab("history")}
     />
-        <DonorOwnershipSection
-            donor={donor}
-            canEdit={canEdit && (!policyV2 || hasPermission("assign_donors"))}
-            canClaim={policyV2 && hasPermission("assign_donors")}
-        />
-    </>
     return <div className="flex flex-1 flex-col">
         <SurrogateDetailHeader
             recordLabel="Donor"

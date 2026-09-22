@@ -70,7 +70,7 @@ def handle_status_changed(
     """Dispatch surrogate status change side effects."""
     from app.db.enums import AlertType
     from app.services import (
-        notification_facade,
+        notification_service,
         permission_policy_service,
         pipeline_service,
         queue_service,
@@ -85,7 +85,7 @@ def handle_status_changed(
 
     if not pipeline_service.stage_matches_key(new_stage, "application_submitted"):
         try:
-            notification_facade.notify_surrogate_status_changed(
+            notification_service.notify_surrogate_status_changed(
                 db=db,
                 surrogate=surrogate,
                 from_status=old_label,
@@ -139,7 +139,7 @@ def handle_status_changed(
                     and surrogate.owner_id == pool_queue.id
                 )
             ):
-                notification_facade.notify_surrogate_ready_for_claim(db=db, surrogate=surrogate)
+                notification_service.notify_surrogate_ready_for_claim(db=db, surrogate=surrogate)
         except Exception:
             logger.debug("surrogate_ready_for_claim_notify_failed", exc_info=True)
 

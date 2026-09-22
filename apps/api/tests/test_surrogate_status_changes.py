@@ -393,13 +393,13 @@ async def test_surrogate_status_change_still_applies_when_notification_side_effe
     surrogate_row.owner_id = owner.id
     db.commit()
 
-    from app.services import notification_facade, workflow_triggers
+    from app.services import notification_service, workflow_triggers
 
     def raise_notification_error(*_args, **_kwargs):
         raise RuntimeError("notification dispatch failed")
 
     monkeypatch.setattr(
-        notification_facade,
+        notification_service,
         "notify_surrogate_status_changed",
         raise_notification_error,
     )

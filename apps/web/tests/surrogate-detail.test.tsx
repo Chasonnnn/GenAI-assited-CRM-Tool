@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
-import { SurrogateDetailLayoutClient } from '@/components/surrogates/detail/SurrogateDetailLayoutClient'
+import { SurrogateDetailLayout as SurrogateDetailLayoutClient } from '@/components/surrogates/detail/SurrogateDetailLayout'
 import { SurrogateOverviewTab } from '@/components/surrogates/detail/tabs/SurrogateOverviewTab'
 import { SurrogateDetailHeader } from '@/components/surrogates/detail/SurrogateDetailHeader'
 import { SurrogateDetailLayoutProvider, useSurrogateDetailData } from '@/components/surrogates/detail/SurrogateDetailLayout/context'
@@ -46,8 +46,8 @@ vi.mock('@/components/rich-text-editor', () => ({
     RichTextEditor: () => <div data-testid="rich-text-editor" />,
 }))
 
-vi.mock('@/components/surrogates/SurrogateProfileCard', () => ({
-    SurrogateProfileCard: ({ surrogateId }: { surrogateId: string }) => <div>Profile card for {surrogateId}</div>,
+vi.mock('@/components/surrogates/profile/ProfileCard', () => ({
+    ProfileCard: ({ surrogateId }: { surrogateId: string }) => <div>Profile card for {surrogateId}</div>,
 }))
 
 vi.mock('@/components/surrogates/journey/SurrogateJourneyTab', () => ({
@@ -248,7 +248,8 @@ const defaultPipelineStages = [
 ]
 let mockPipelineStages = [...defaultPipelineStages]
 
-vi.mock('@/lib/hooks/use-surrogates', () => ({
+vi.mock('@/lib/hooks/use-surrogates', async (importOriginal) => ({
+    surrogateKeys: (await importOriginal<typeof import('@/lib/hooks/use-surrogates')>()).surrogateKeys,
     useSurrogate: (id: string) => mockUseSurrogate(id),
     useSurrogateActivity: (id: string) => mockUseSurrogateActivity(id),
     useSurrogateHistory: (id: string) => mockUseSurrogateHistory(id),

@@ -24,17 +24,3 @@ def get_draft_by_surrogate_form(
         )
         .first()
     )
-
-
-def delete_draft(
-    db: Session,
-    org_id: uuid.UUID,
-    form_id: uuid.UUID,
-    surrogate_id: uuid.UUID,
-) -> bool:
-    draft = get_draft_by_surrogate_form(db, org_id, form_id, surrogate_id)
-    if not draft:
-        return False
-    db.delete(draft)
-    db.commit()
-    return True

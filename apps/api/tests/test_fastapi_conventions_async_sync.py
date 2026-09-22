@@ -1,4 +1,4 @@
-"""Guardrails for async route handlers that run sync DB code."""
+"""Flag async DB routes with no await; this does not prove DB work is offloaded."""
 
 from __future__ import annotations
 

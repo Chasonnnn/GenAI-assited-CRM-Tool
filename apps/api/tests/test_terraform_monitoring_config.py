@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -99,6 +102,45 @@ def test_api_and_worker_use_distinct_error_reporting_service_names() -> None:
     assert re.search(r"GCP_SERVICE_NAME\s*=\s*var\.api_service_name", api_env_block)
     assert re.search(r"GCP_SERVICE_NAME\s*=\s*var\.worker_job_name", worker_env_block)
     assert "setup_gcp_monitoring(settings.GCP_SERVICE_NAME)" in worker_content
+
+
+def test_database_pool_and_scaling_defaults_leave_rollout_headroom() -> None:
+    from app.core.config import Settings
+
+    build = yaml.safe_load(_read("cloudbuild/api.yaml"))["substitutions"]
+    variables = _read("infra/terraform/variables.tf")
+    dockerfile = _read("apps/api/Dockerfile")
+    command = json.loads(re.search(r"^CMD (.+)$", dockerfile, re.MULTILINE).group(1))
+    processes = int(command[command.index("--workers") + 1])
+    config = Settings(
+        _env_file=None, ENV="test", DATABASE_URL="postgresql+psycopg://localhost/test"
+    )
+
+    for variable, substitution in (
+        ("api_max_instances", "_API_MAX_INSTANCES"),
+        ("worker_max_instances", "_WORKER_MAX_INSTANCES"),
+        ("db_pool_size", "_DB_POOL_SIZE"),
+        ("db_max_overflow", "_DB_MAX_OVERFLOW"),
+    ):
+        block = variables.split(f'variable "{variable}" {{', 1)[1].split('variable "', 1)[0]
+        default = int(re.search(r"default\s*=\s*(\d+)", block).group(1))
+        assert default == int(build[substitution])
+        assert f"tostring(var.{variable})" in _read("infra/terraform/cloudbuild.tf")
+
+    assert config.DB_POOL_SIZE == int(build["_DB_POOL_SIZE"])
+    assert config.DB_MAX_OVERFLOW == int(build["_DB_MAX_OVERFLOW"])
+    per_process = config.DB_POOL_SIZE + config.DB_MAX_OVERFLOW
+    api_connections = int(build["_API_MAX_INSTANCES"]) * processes * (per_process + 1)
+    worker_connections = int(build["_WORKER_MAX_INSTANCES"]) * per_process
+    # Two revisions may overlap. Reserve connections for jobs and administration
+    # under the documented 50-connection default of db-g1-small.
+    assert 2 * (api_connections + worker_connections) + 10 <= 50
+    api = _slice_block(
+        _read("infra/terraform/cloudrun.tf"),
+        'resource "google_cloud_run_v2_service" "api" {',
+        'resource "google_cloud_run_v2_service" "web" {',
+    )
+    assert "max_instance_count = var.api_max_instances" in api
 
 
 def test_unsubscribe_request_urls_are_excluded_from_cloud_log_storage() -> None:

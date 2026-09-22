@@ -1584,7 +1584,7 @@ def test_donor_task_context_notifications_and_google_metadata(db, test_org, test
 
     captured = {}
     monkeypatch.setattr(
-        "app.services.notification_facade.notify_task_assigned",
+        "app.services.notification_service.notify_task_assigned",
         lambda **kwargs: captured.update(kwargs),
     )
     task_events.notify_task_assigned(

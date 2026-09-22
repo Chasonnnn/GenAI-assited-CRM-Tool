@@ -1,5 +1,6 @@
 """Attachment endpoints for file uploads and downloads."""
 
+import os
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -20,6 +21,7 @@ from app.schemas.auth import UserSession
 from app.services import (
     activity_service,
     attachment_service,
+    form_submission_service,
     match_service,
     match_work_service,
     record_access_service,
@@ -718,30 +720,64 @@ def download_local_attachment(
         org_id=session.org_id,
         storage_key=storage_key,
     )
-    if not attachment:
-        raise HTTPException(status_code=404, detail="Attachment not found")
-    if attachment.scan_status in ("infected", "error"):
+    submission = None
+    file_record = attachment
+    if file_record is None:
+        file_record = form_submission_service.get_submission_file_by_storage_key(
+            db,
+            session.org_id,
+            storage_key,
+        )
+        if file_record is None:
+            raise HTTPException(status_code=404, detail="Attachment not found")
+        submission = form_submission_service.get_submission(
+            db,
+            session.org_id,
+            file_record.submission_id,
+        )
+        if submission is None:
+            raise HTTPException(status_code=404, detail="Attachment not found")
+
+        # Keep the same exact subject and donor-permission checks as the
+        # endpoint that issues this local download URL.
+        from app.routers.forms import _check_submission_subject_access
+
+        _check_submission_subject_access(db, submission, session)
+
+    if file_record.scan_status in ("infected", "error"):
         detail = (
-            "File is infected" if attachment.scan_status == "infected" else "File failed virus scan"
+            "File is infected"
+            if file_record.scan_status == "infected"
+            else "File failed virus scan"
         )
         raise HTTPException(status_code=403, detail=detail)
-    if settings.ATTACHMENT_SCAN_ENABLED and attachment.scan_status != "clean":
-        attachment_service.dispatch_attachment_scan_if_needed(
-            db=db,
-            org_id=session.org_id,
-            attachment_id=attachment.id,
-        )
+    if settings.ATTACHMENT_SCAN_ENABLED and file_record.scan_status != "clean":
+        if submission is not None:
+            form_submission_service.dispatch_submission_file_scan_if_needed(
+                db=db,
+                org_id=session.org_id,
+                submission_file_id=file_record.id,
+            )
+        else:
+            attachment_service.dispatch_attachment_scan_if_needed(
+                db=db,
+                org_id=session.org_id,
+                attachment_id=file_record.id,
+            )
         raise HTTPException(status_code=409, detail="File is still being scanned")
+    if submission is not None and file_record.quarantined:
+        raise HTTPException(status_code=403, detail="File is quarantined")
 
     # Authorize the actual attachment subject, in addition to the route permission.
-    if attachment.match_id:
-        match_service.get_match_with_access(db, session, attachment.match_id)
-    if attachment.surrogate_id:
-        _get_surrogate_with_access(db, attachment.surrogate_id, session)
-    elif attachment.intended_parent_id:
-        _get_ip_with_access(db, attachment.intended_parent_id, session)
-    elif attachment.donor_id:
-        _get_donor_with_access(db, attachment.donor_id, session)
+    if attachment is not None:
+        if attachment.match_id:
+            match_service.get_match_with_access(db, session, attachment.match_id)
+        if attachment.surrogate_id:
+            _get_surrogate_with_access(db, attachment.surrogate_id, session)
+        elif attachment.intended_parent_id:
+            _get_ip_with_access(db, attachment.intended_parent_id, session)
+        elif attachment.donor_id:
+            _get_donor_with_access(db, attachment.donor_id, session)
 
     from app.services import audit_service
 
@@ -749,14 +785,23 @@ def download_local_attachment(
         db=db,
         org_id=session.org_id,
         user_id=session.user_id,
-        target_type="attachment",
-        target_id=attachment.id,
+        target_type="form_submission_file" if submission is not None else "attachment",
+        target_id=file_record.id,
         details={
-            "surrogate_id": str(attachment.surrogate_id) if attachment.surrogate_id else None,
-            "intended_parent_id": str(attachment.intended_parent_id)
-            if attachment.intended_parent_id
+            "surrogate_id": str(submission.surrogate_id)
+            if submission is not None and submission.surrogate_id
+            else str(attachment.surrogate_id)
+            if attachment is not None and attachment.surrogate_id
             else None,
-            "donor_id": str(attachment.donor_id) if attachment.donor_id else None,
+            "intended_parent_id": str(attachment.intended_parent_id)
+            if attachment is not None and attachment.intended_parent_id
+            else None,
+            "donor_id": str(submission.donor_id)
+            if submission is not None and submission.donor_id
+            else str(attachment.donor_id)
+            if attachment is not None and attachment.donor_id
+            else None,
+            "submission_id": str(submission.id) if submission is not None else None,
             "storage": "local",
         },
     )
@@ -766,8 +811,10 @@ def download_local_attachment(
         file_path = resolve_local_storage_path(storage_key)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail="Attachment not found") from exc
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="Attachment not found")
     return FileResponse(
         file_path,
-        media_type=attachment.content_type,
-        filename=attachment.filename,
+        media_type=file_record.content_type,
+        filename=file_record.filename,
     )

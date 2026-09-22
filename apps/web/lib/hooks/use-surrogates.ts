@@ -21,6 +21,7 @@ export const surrogateKeys = {
     details: () => [...surrogateKeys.all, 'detail'] as const,
     detail: (id: string) => [...surrogateKeys.details(), id] as const,
     activity: (id: string) => [...surrogateKeys.detail(id), 'activity'] as const,
+    interviewAppointment: (id: string) => [...surrogateKeys.all, 'interview-appointment', id] as const,
     templateVariables: (id: string) => [...surrogateKeys.detail(id), 'template-variables'] as const,
     history: (id: string) => [...surrogateKeys.detail(id), 'history'] as const,
     massEditOptions: () => [...surrogateKeys.all, 'mass-edit-options'] as const,
@@ -215,8 +216,11 @@ export function useChangeSurrogateStatus() {
             surrogatesApi.changeSurrogateStatus(surrogateId, data),
         onSuccess: (response, { surrogateId }) => {
             // If change was applied immediately, update the cache
-            if (response.status === 'applied' && response.surrogate) {
-                queryClient.setQueryData(surrogateKeys.detail(response.surrogate.id), response.surrogate);
+            if (response.status === 'applied') {
+                if (response.surrogate) {
+                    queryClient.setQueryData(surrogateKeys.detail(response.surrogate.id), response.surrogate);
+                }
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.interviewAppointment(surrogateId) });
             }
             invalidateSurrogateScopeCaches(queryClient, [surrogateId]);
             // Invalidate related queries

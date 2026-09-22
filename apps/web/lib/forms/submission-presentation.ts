@@ -1,7 +1,14 @@
-import type { FormSubmissionRead } from "@/lib/api/forms"
+import type { FormFieldMappingItem, FormSubmissionRead } from "@/lib/api/forms"
 
-export function readAnswerValue(submission: FormSubmissionRead, keys: string[]) {
-    for (const key of keys) {
+export function readAnswerValue(
+    submission: FormSubmissionRead,
+    keys: string[],
+    mappings: FormFieldMappingItem[] = [],
+) {
+    const mappedKeys = mappings
+        .filter((mapping) => keys.includes(mapping.surrogate_field))
+        .map((mapping) => mapping.field_key)
+    for (const key of [...new Set([...mappedKeys, ...keys])]) {
         const rawValue = submission.answers?.[key]
         if (typeof rawValue === "string" && rawValue.trim()) {
             return rawValue.trim()

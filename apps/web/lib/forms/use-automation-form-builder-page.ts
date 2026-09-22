@@ -1129,7 +1129,12 @@ export function useAutomationFormBuilderPage() {
             promoteIntakeLeadPending: promoteIntakeLeadMutation.isPending,
             manualSurrogateId: state.manualSurrogateId,
             resolveReviewNotes: state.resolveReviewNotes,
-            readAnswerValue,
+            readAnswerValue: (submission: FormSubmissionRead, keys: string[]) =>
+                readAnswerValue(
+                    submission,
+                    keys,
+                    submission.mapping_snapshot ?? mappingData ?? [],
+                ),
             formatSubmissionDateTime,
             submissionOutcomeLabel,
             submissionOutcomeBadgeClass,

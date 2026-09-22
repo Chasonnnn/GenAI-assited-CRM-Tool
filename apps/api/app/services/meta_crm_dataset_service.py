@@ -13,8 +13,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.stage_definitions import LABEL_OVERRIDES
-from app.db.enums import JobType, SurrogateSource
-from app.db.models import MetaLead, Surrogate
+from app.db.enums import FormLeadKind, JobType, SurrogateSource
+from app.db.models import (
+    FormSubmission,
+    MetaCrmDatasetEvent,
+    MetaCrmDatasetSettings,
+    MetaLead,
+    Surrogate,
+)
 from app.services import (
     job_service,
     meta_capi,
@@ -32,10 +38,22 @@ HTTPX_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 MAX_META_LEAD_AGE = timedelta(days=90)
 FBC_CANDIDATE_KEYS = ("fbc", "meta_fbc", "click_id", "meta_click_id")
 DEFAULT_WEBSITE_EVENT_SOURCE_URL = "https://ewi-surrogacy.com"
+DONOR_FORM_LEAD_KINDS = frozenset({FormLeadKind.EGG_DONOR.value, FormLeadKind.SPERM_DONOR.value})
+WEBSITE_SUBMISSION_EVENT_SOURCES = frozenset({"form_embed"})
+ALLOWED_ACTION_SOURCES = frozenset({"system_generated", "website"})
 
 
 def _now_utc() -> datetime:
     return datetime.now(UTC)
+
+
+def _skip_job_delivery(db: Session, *, job, reason: str) -> None:
+    meta_crm_dataset_monitor_service.mark_job_skipped(
+        db=db,
+        job_id=job.id,
+        org_id=job.organization_id,
+        reason=reason,
+    )
 
 
 def _coerce_utc(value: datetime | None) -> datetime | None:
@@ -310,6 +328,34 @@ def enqueue_website_lead_event(
     event_time = effective_at or _now_utc()
     event_id = f"sf_lead_{submission_id}"
 
+    submission = (
+        db.query(FormSubmission)
+        .filter(
+            FormSubmission.id == submission_id,
+            FormSubmission.organization_id == organization_id,
+        )
+        .first()
+    )
+    if submission is None:
+        return {
+            "queued": False,
+            "reason": "submission_not_found",
+            "event_name": "Lead",
+            "event_id": None,
+            "lead_id": None,
+        }
+    if submission.lead_kind in DONOR_FORM_LEAD_KINDS:
+        return _skip_website_lead_event(
+            db,
+            org_id=organization_id,
+            source=source,
+            reason="donor_submission",
+            event_id=event_id,
+            submission_id=submission_id,
+            intake_lead_id=intake_lead_id,
+            lead_id=lead_id,
+        )
+
     settings_row = meta_crm_dataset_settings_service.get_settings(db, organization_id)
     if not settings_row or not settings_row.enabled:
         return _skip_website_lead_event(
@@ -393,12 +439,13 @@ def enqueue_website_lead_event(
         ) | {"idempotency_key": idempotency_key}
 
     try:
-        job = job_service.schedule_job(
+        job = job_service.enqueue_job(
             db=db,
             org_id=organization_id,
             job_type=JobType.META_CRM_DATASET_EVENT,
             payload=job_payload,
             idempotency_key=idempotency_key,
+            commit=False,
         )
         meta_crm_dataset_monitor_service.record_queued_event(
             db=db,
@@ -414,7 +461,9 @@ def enqueue_website_lead_event(
             stage_slug="form_submitted",
             stage_label="Form Submitted",
             surrogate_id=None,
+            commit=False,
         )
+        db.commit()
         return {
             "queued": True,
             "reason": None,
@@ -771,25 +820,100 @@ async def process_job(db: Session, job) -> None:
     dataset_id = str(payload.get("dataset_id") or "").strip()
     body = payload.get("body")
     settings_id = payload.get("settings_id")
+    organization_id = job.organization_id
+    if organization_id is None:
+        _skip_job_delivery(db, job=job, reason="missing_organization_scope")
+        return
     if not dataset_id or not isinstance(body, dict):
-        raise Exception("Missing dataset_id or body in job payload")
+        _skip_job_delivery(db, job=job, reason="invalid_job_payload")
+        return
+
+    monitor_event = (
+        db.query(MetaCrmDatasetEvent)
+        .filter(
+            MetaCrmDatasetEvent.job_id == job.id,
+            MetaCrmDatasetEvent.organization_id == organization_id,
+        )
+        .first()
+    )
+
+    event_data = body.get("data")
+    if not (
+        isinstance(event_data, list)
+        and bool(event_data)
+        and isinstance(event_data[0], dict)
+        and event_data[0].get("action_source") in ALLOWED_ACTION_SOURCES
+    ):
+        _skip_job_delivery(db, job=job, reason="invalid_event")
+        return
+    is_website_event = event_data[0]["action_source"] == "website"
+    if is_website_event:
+        if (
+            monitor_event is None
+            or monitor_event.source not in WEBSITE_SUBMISSION_EVENT_SOURCES
+            or monitor_event.form_submission_id is None
+        ):
+            _skip_job_delivery(db, job=job, reason="invalid_website_event")
+            return
+        submission = (
+            db.query(FormSubmission)
+            .filter(
+                FormSubmission.id == monitor_event.form_submission_id,
+                FormSubmission.organization_id == organization_id,
+            )
+            .first()
+        )
+        if submission is None:
+            _skip_job_delivery(db, job=job, reason="submission_not_found")
+            return
+        if submission.lead_kind in DONOR_FORM_LEAD_KINDS:
+            _skip_job_delivery(db, job=job, reason="donor_submission")
+            return
 
     settings_row = None
     if settings_id:
-        settings_row = meta_crm_dataset_settings_service.get_settings_by_id(db, settings_id)
-    if settings_row is None and job.organization_id:
-        settings_row = meta_crm_dataset_settings_service.get_settings(db, job.organization_id)
+        try:
+            parsed_settings_id = UUID(str(settings_id))
+        except ValueError:
+            _skip_job_delivery(db, job=job, reason="invalid_settings_reference")
+            return
+        settings_row = (
+            db.query(MetaCrmDatasetSettings)
+            .filter(
+                MetaCrmDatasetSettings.id == parsed_settings_id,
+                MetaCrmDatasetSettings.organization_id == organization_id,
+            )
+            .first()
+        )
+        if settings_row is None:
+            _skip_job_delivery(db, job=job, reason="settings_not_found")
+            return
+    else:
+        settings_row = meta_crm_dataset_settings_service.get_settings(db, organization_id)
     if settings_row is None:
-        raise Exception("Meta CRM dataset settings not found")
+        _skip_job_delivery(db, job=job, reason="settings_not_found")
+        return
+    if not settings_row.enabled:
+        _skip_job_delivery(db, job=job, reason="disabled")
+        return
+
+    current_dataset_id = (settings_row.dataset_id or "").strip()
+    if not current_dataset_id:
+        _skip_job_delivery(db, job=job, reason="missing_dataset_id")
+        return
+    if current_dataset_id != dataset_id:
+        _skip_job_delivery(db, job=job, reason="destination_changed")
+        return
 
     access_token = meta_crm_dataset_settings_service.decrypt_access_token(
         settings_row.access_token_encrypted
     )
     if not access_token:
-        raise Exception("Meta CRM dataset access token is not configured")
+        _skip_job_delivery(db, job=job, reason="missing_access_token")
+        return
 
     url = (
-        f"{META_GRAPH_BASE_URL}/{settings.META_API_VERSION}/{dataset_id}/events"
+        f"{META_GRAPH_BASE_URL}/{settings.META_API_VERSION}/{current_dataset_id}/events"
         f"?access_token={quote(access_token, safe='')}"
     )
     async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:

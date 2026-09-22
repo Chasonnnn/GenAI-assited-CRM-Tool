@@ -11,6 +11,7 @@ import { useMountEffect } from "@/lib/hooks/use-mount-effect"
 import { useStreamChatMessage, useAIAvailability, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
 import { useAuth } from "@/lib/auth-context"
 import { AssistantRichText } from "@/components/ai/AssistantRichText"
+import { getActionStatusLabel } from "@/lib/api/ai"
 
 interface Message {
     id: string
@@ -644,7 +645,7 @@ function useAIAssistantChat() {
     const handleApprove = async (approvalId: string | null) => {
         if (!approvalId || !aiSettings?.is_enabled) return
         try {
-            await approveAction.mutateAsync(approvalId)
+            const result = await approveAction.mutateAsync(approvalId)
             // Update the action status in messages
             setMessages(prev => {
                 const next = prev.map(msg => {
@@ -652,7 +653,7 @@ function useAIAssistantChat() {
                     return {
                         ...msg,
                         proposed_actions: msg.proposed_actions.map(action =>
-                            action.approval_id === approvalId ? { ...action, status: 'approved' } : action
+                            action.approval_id === approvalId ? { ...action, status: result.status } : action
                         ),
                     }
                 })
@@ -1091,8 +1092,8 @@ function ProposedActionList({
                                 </Button>
                             </div>
                         ) : (
-                            <Badge variant={action.status === "approved" ? "default" : "secondary"}>
-                                {action.status}
+                            <Badge variant={action.status === "executed" ? "default" : "secondary"}>
+                                {getActionStatusLabel(action.status, action.action_type)}
                             </Badge>
                         )}
                     </div>
