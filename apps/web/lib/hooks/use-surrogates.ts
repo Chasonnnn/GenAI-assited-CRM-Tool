@@ -200,6 +200,7 @@ export function useChangeSurrogateStatus() {
                     queryClient.setQueryData(surrogateKeys.detail(response.surrogate.id), response.surrogate);
                 }
                 void queryClient.invalidateQueries({ queryKey: surrogateKeys.interviewAppointment(surrogateId) });
+                void queryClient.invalidateQueries({ queryKey: ['notes', 'list', surrogateId] });
             }
             // Invalidate related queries
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
@@ -412,6 +413,7 @@ export function useApplySurrogateMassEditStage() {
     return useMutation({
         mutationFn: surrogatesApi.applySurrogateMassEditStage,
         onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: ['notes', 'list'] });
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.all });
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
             void queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });

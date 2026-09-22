@@ -5,6 +5,7 @@ import logging
 import secrets
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
+from html import escape
 from typing import NotRequired, TypedDict
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -16,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.db.enums import (
     AppointmentStatus,
     ContactStatus,
+    EntityType,
     MeetingMode,
     OwnerType,
     Role,
@@ -754,6 +756,26 @@ def apply_status_change(
         approved_at=approved_at,
     )
     db.add(history)
+    reason_note = None
+    if reason and user_id:
+        from app.services import note_service
+
+        reason_html = escape(reason).replace("\n", "<br>")
+        try:
+            reason_note = note_service.create_note(
+                db=db,
+                org_id=surrogate.organization_id,
+                entity_type=EntityType.SURROGATE,
+                entity_id=surrogate.id,
+                author_id=user_id,
+                content=f"<p><strong>Stage changed to {escape(new_stage.label)}</strong></p><p>{reason_html}</p>",
+                commit=False,
+                emit_events=False,
+            )
+        except Exception:
+            if commit:
+                db.rollback()
+            raise
     if scheduled_interview:
         from app.services import activity_service
 
@@ -775,6 +797,12 @@ def apply_status_change(
         scheduled_activity.created_at = max(datetime.now(UTC), effective_at)
 
     def after_commit() -> None:
+        if reason_note is not None and trigger_workflows:
+            from app.services import note_service
+
+            note_service.dispatch_note_added(
+                db, note_id=reason_note.id, org_id=surrogate.organization_id
+            )
         if deleted_follow_up_task is not None:
             from app.services import task_service
 

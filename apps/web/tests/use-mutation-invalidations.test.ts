@@ -60,7 +60,8 @@ import {
     useSubmitImport,
 } from '@/lib/hooks/use-import'
 import { useCreateBulkTasks } from '@/lib/hooks/use-schedule-parser'
-import { surrogateKeys } from '@/lib/hooks/use-surrogates'
+import { surrogateKeys, useChangeSurrogateStatus, useApplySurrogateMassEditStage } from '@/lib/hooks/use-surrogates'
+import { useApproveStatusChangeRequest } from '@/lib/hooks/use-status-change-requests'
 import {
     donorKeys,
     useCreateDonorNote,
@@ -112,6 +113,20 @@ describe('mutation invalidation contracts', () => {
             } as unknown as ReturnType<typeof useMutation>
         })
     })
+
+    it('refreshes notes after an applied stage change', () => {
+        useChangeSurrogateStatus()
+        capturedOptions?.onSuccess?.({ status: 'applied' }, { surrogateId: 's1' })
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['notes', 'list', 's1'] })
+    })
+
+    it.each([useApplySurrogateMassEditStage, useApproveStatusChangeRequest])(
+        'refreshes notes after mass changes or approval', (hook) => {
+            hook()
+            capturedOptions?.onSuccess?.({}, {})
+            expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['notes', 'list'] })
+        }
+    )
 
     it('refreshes public booking slots and appointment lists after a new booking', () => {
         useCreateBooking()
