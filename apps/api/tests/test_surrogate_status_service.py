@@ -8,6 +8,7 @@ from app.db.enums import OwnerType, Role, TaskType
 from app.db.models import (
     Appointment,
     AppointmentType,
+    EntityNote,
     StatusChangeRequest,
     SurrogateActivityLog,
     SurrogateStatusHistory,
@@ -452,3 +453,23 @@ def test_leaving_on_hold_uses_paused_from_stage_for_regression_logic(db, test_or
     assert surrogate.stage_id == approved_stage.id
     assert surrogate.paused_from_stage_id is None
     assert surrogate.on_hold_follow_up_task_id is None
+
+
+@pytest.mark.parametrize("stage_key", ["on_hold", "cold_leads", "lost", "disqualified"])
+@pytest.mark.parametrize("reason", [None, "", "  \n\t "])
+def test_reason_required_stages_reject_blank_reason(db, test_org, test_user, stage_key, reason):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id)
+    original_stage_id = surrogate.stage_id
+    stage = _get_stage(db, test_org.id, stage_key)
+    stage.slug = f"renamed_{stage_key}"
+    stage.semantics = {**(stage.semantics or {}), "requires_reason_on_enter": False}
+    db.commit()
+
+    with pytest.raises(ValueError, match="Reason required"):
+        surrogate_status_service.change_status(
+            db, surrogate, stage.id, test_user.id, Role.DEVELOPER, reason=reason
+        )
+
+    assert surrogate.stage_id == original_stage_id
+    assert db.query(EntityNote).filter_by(entity_id=surrogate.id).count() == 0
+    assert db.query(SurrogateStatusHistory).filter_by(surrogate_id=surrogate.id).count() == 0

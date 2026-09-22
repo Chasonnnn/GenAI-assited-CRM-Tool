@@ -370,8 +370,12 @@ def change_status(
     ):
         raise ValueError("Follow-up timing is only allowed when moving to On-Hold")
 
-    if pipeline_service.stage_matches_key(new_stage, "on_hold") and not reason:
-        raise ValueError("Reason required when moving to On-Hold")
+    reason = reason.strip() if reason else None
+    if (
+        pipeline_semantics_service.get_stage_semantics(new_stage).requires_reason_on_enter
+        and not reason
+    ):
+        raise ValueError(f"Reason required when moving to {new_stage.label}")
 
     normalized_interview_scheduled_at = _normalize_interview_scheduled_at(
         interview_scheduled_at,

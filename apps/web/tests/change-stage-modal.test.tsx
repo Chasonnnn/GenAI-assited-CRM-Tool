@@ -105,6 +105,29 @@ describe("ChangeStageModal", () => {
         })
     })
 
+    it.each(["cold_leads", "lost", "disqualified"])("requires a reason for %s", async (stageKey) => {
+        const onSubmit = vi.fn().mockResolvedValue({ status: "applied" })
+        render(
+            <ChangeStageModal open onOpenChange={vi.fn()}
+                stages={[...stages, { id: stageKey, stage_key: stageKey, slug: "renamed",
+                    label: "Selected outcome", color: "#ef4444", order: 30,
+                    stage_type: "terminal", is_active: true }]}
+                currentStageId="stage_new_unread" currentStageLabel="New Unread"
+                onSubmit={onSubmit} />
+        )
+        fireEvent.click(screen.getByRole("button", { name: "Selected outcome" }))
+        const save = screen.getByRole("button", { name: "Save Change" })
+        expect(save).toBeDisabled()
+        expect(screen.queryByText("Follow-up reminder")).not.toBeInTheDocument()
+        fireEvent.change(screen.getByLabelText(/reason/i), { target: { value: "   " } })
+        expect(save).toBeDisabled()
+        fireEvent.change(screen.getByLabelText(/reason/i), { target: { value: "  No longer eligible  " } })
+        fireEvent.click(save)
+        await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
+            stage_id: stageKey, reason: "No longer eligible",
+        }))
+    })
+
     it("treats the paused-from stage as a resume instead of a regression", () => {
         render(
             <ChangeStageModal
