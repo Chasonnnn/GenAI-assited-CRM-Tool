@@ -2375,7 +2375,7 @@ def auto_match_submission(
         )
         if submission.intake_lead_id and not submission.donor_id:
             return submission, FormSubmissionMatchStatus.LEAD_CREATED.value
-        outcome = donor_intake_service.match_submission(db, submission)
+        outcome = donor_intake_service.match_submission(db, submission, session=session)
         _persist_submission(db, submission, commit=commit)
         return submission, outcome
 

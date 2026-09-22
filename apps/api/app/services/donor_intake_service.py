@@ -15,7 +15,7 @@ EXISTING_SUBMISSION_REASON = "existing_submission_for_donor"
 REVIEW_REQUIRED_REASONS = {CONFLICT_REASON, EXISTING_SUBMISSION_REASON}
 
 
-def match_submission(db: Session, submission: FormSubmission) -> str:
+def match_submission(db: Session, submission: FormSubmission, *, session=None) -> str:
     """Caller owns the submission lock and transaction; never overwrite donor details."""
     from app.services import audit_service, form_intake_service
 
@@ -42,6 +42,18 @@ def match_submission(db: Session, submission: FormSubmission) -> str:
         .populate_existing()
         .all()
     )
+    if session is not None:
+        from app.services import permission_policy_service, record_scope_service
+
+        if permission_policy_service.is_enabled(db, session.org_id) and any(
+            not record_scope_service.can_access_record(db, session, "donor", candidate)
+            for candidate in candidates
+        ):
+            submission.match_status = "ambiguous_review"
+            submission.match_reason = "manual_review_required"
+            submission.matched_at = None
+            return submission.match_status
+
     matched = candidates[0] if len(candidates) == 1 else None
     expected_type = submission.lead_kind.removesuffix("_donor")
     if matched and (
