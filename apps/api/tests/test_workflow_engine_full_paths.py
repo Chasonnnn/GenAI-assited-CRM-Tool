@@ -701,10 +701,101 @@ def test_paused_form_submission_rejects_malformed_action_snapshot(
 
     db.refresh(execution)
     assert execution.status == WorkflowExecutionStatus.FAILED.value
-    assert execution.error_message == (
-        "Workflow action snapshot unavailable for safe continuation"
-    )
+    assert execution.error_message == ("Workflow action snapshot unavailable for safe continuation")
     assert executed_actions == []
+
+
+@pytest.mark.parametrize("subject_type", ["surrogate", "egg_donor", "sperm_donor"])
+def test_resume_stops_when_next_required_approval_task_cannot_be_created(
+    db, test_org, test_user, subject_type
+):
+    adapter = _DummyAdapter()
+    engine = WorkflowEngineCore(adapter)
+    workflow = _create_workflow(
+        db, org_id=test_org.id, user_id=test_user.id, name="Missing second approval"
+    )
+    approved_action = {"action_type": "add_note", "content": "Reviewed first action"}
+    next_action = {
+        "action_type": "add_note",
+        "content": "Needs another review",
+        "requires_approval": True,
+    }
+    workflow.subject_type = subject_type
+    workflow.actions = [
+        approved_action,
+        next_action,
+        {"action_type": "add_note", "content": "Later action"},
+    ]
+    entity = SimpleNamespace(
+        id=uuid4(),
+        organization_id=test_org.id,
+        owner_type=OwnerType.USER.value,
+        owner_id=test_user.id,
+    )
+    entity_type = "surrogate" if subject_type == "surrogate" else "donor"
+    execution = WorkflowExecution(
+        organization_id=test_org.id,
+        workflow_id=workflow.id,
+        event_id=uuid4(),
+        event_source=WorkflowEventSource.USER.value,
+        entity_type=entity_type,
+        entity_id=entity.id,
+        subject_type=subject_type,
+        subject_id=entity.id,
+        trigger_event={},
+        matched_conditions=True,
+        actions_executed=[],
+        status=WorkflowExecutionStatus.PAUSED.value,
+        paused_at_action_index=0,
+    )
+    db.add(execution)
+    db.commit()
+    adapter.get_entity = lambda *_args: entity
+    adapter.get_related_surrogate = lambda *_args: entity if subject_type == "surrogate" else None
+
+    def resolve_donor_subject(_db, org_id, donor_type, donor_id):
+        assert (org_id, donor_type, donor_id) == (test_org.id, subject_type, entity.id)
+        return entity
+
+    adapter.resolve_donor_subject = resolve_donor_subject
+    executed = []
+    approval_attempts = []
+    adapter.execute_action = lambda **kwargs: executed.append(kwargs["action"]) or {"success": True}
+    adapter.create_approval_task = lambda **kwargs: approval_attempts.append(kwargs) or None
+    task = SimpleNamespace(
+        id=None,
+        organization_id=test_org.id,
+        workflow_execution_id=execution.id,
+        status=TaskStatus.COMPLETED.value,
+        workflow_action_payload=approved_action,
+        workflow_triggered_by_user_id=test_user.id,
+    )
+
+    engine.continue_execution(db, execution.id, task, "approve")
+    db.refresh(execution)
+    db.refresh(workflow)
+
+    assert len(approval_attempts) == 1
+    assert approval_attempts[0]["action_index"] == 1
+    assert approval_attempts[0]["owner"].id == test_user.id
+    assert executed == [approved_action]
+    assert execution.status == WorkflowExecutionStatus.FAILED.value
+    assert execution.error_message == "Failed to create approval task"
+    assert execution.actions_executed[-1] == {
+        "success": False,
+        "action_type": "add_note",
+        "error": "Failed to create approval task",
+        "skipped": True,
+    }
+    assert execution.paused_task_id is None
+    assert execution.paused_at_action_index is None
+    assert workflow.run_count == 0
+
+    engine.continue_execution(db, execution.id, task, "approve")
+    db.refresh(execution)
+    assert execution.status == WorkflowExecutionStatus.FAILED.value
+    assert executed == [approved_action]
+    assert len(approval_attempts) == 1
 
 
 def test_workflow_engine_resolve_approval_context_fallbacks(db, test_org, test_user):

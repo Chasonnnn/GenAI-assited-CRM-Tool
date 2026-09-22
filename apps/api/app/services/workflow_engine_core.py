@@ -467,9 +467,7 @@ class WorkflowEngineCore:
         execution_event = dict(event_data)
         durable_form_submission = workflow.trigger_type == WorkflowTriggerType.FORM_SUBMITTED.value
         if durable_form_submission:
-            execution_event[FORM_SUBMISSION_ACTION_SNAPSHOT_KEY] = copy.deepcopy(
-                workflow.actions
-            )
+            execution_event[FORM_SUBMISSION_ACTION_SNAPSHOT_KEY] = copy.deepcopy(workflow.actions)
 
         # Create execution record first (needed for approval task FK)
         execution = WorkflowExecution(
@@ -623,9 +621,7 @@ class WorkflowEngineCore:
         if entity is None or getattr(entity, "organization_id", None) != workflow.organization_id:
             raise ValueError("Workflow execution entity is unavailable")
 
-        actions_snapshot = (execution.trigger_event or {}).get(
-            FORM_SUBMISSION_ACTION_SNAPSHOT_KEY
-        )
+        actions_snapshot = (execution.trigger_event or {}).get(FORM_SUBMISSION_ACTION_SNAPSHOT_KEY)
         if not isinstance(actions_snapshot, list) or not all(
             isinstance(action, dict) for action in actions_snapshot
         ):
@@ -797,9 +793,7 @@ class WorkflowEngineCore:
                     db.commit()
                     return
                 if FORM_SUBMISSION_ACTION_SNAPSHOT_KEY in execution_event:
-                    actions_snapshot = execution_event[
-                        FORM_SUBMISSION_ACTION_SNAPSHOT_KEY
-                    ]
+                    actions_snapshot = execution_event[FORM_SUBMISSION_ACTION_SNAPSHOT_KEY]
                     if not isinstance(actions_snapshot, list) or not all(
                         isinstance(action, dict) for action in actions_snapshot
                     ):
@@ -900,6 +894,20 @@ class WorkflowEngineCore:
                         db.commit()
                         logger.info(f"Workflow {workflow.id} paused again at action {actual_idx}")
                         return
+
+                    action_results.append(
+                        {
+                            "success": False,
+                            "action_type": next_action.get("action_type"),
+                            "error": "Failed to create approval task",
+                            "skipped": True,
+                        }
+                    )
+                    execution.actions_executed = action_results
+                    execution.status = WorkflowExecutionStatus.FAILED.value
+                    execution.error_message = "Failed to create approval task"
+                    db.commit()
+                    return
 
                 # Execute non-approval action
                 result = self.adapter.execute_action(
@@ -1134,7 +1142,9 @@ class WorkflowEngineCore:
         db: Session,
         dedupe_key: str,
     ) -> WorkflowExecution | None:
-        return db.query(WorkflowExecution).filter(WorkflowExecution.dedupe_key == dedupe_key).first()
+        return (
+            db.query(WorkflowExecution).filter(WorkflowExecution.dedupe_key == dedupe_key).first()
+        )
 
     def _check_rate_limits(
         self,
