@@ -83,11 +83,17 @@ async def _create_intended_parent(authed_client):
 
 
 async def _set_stage(
-    authed_client, surrogate_id: str, stage_id: UUID, effective_at: str | None = None
+    authed_client,
+    surrogate_id: str,
+    stage_id: UUID,
+    effective_at: str | None = None,
+    reason: str | None = None,
 ):
     payload: dict[str, str] = {"stage_id": str(stage_id)}
     if effective_at:
         payload["effective_at"] = effective_at
+    if reason is not None:
+        payload["reason"] = reason
     response = await authed_client.patch(f"/surrogates/{surrogate_id}/status", json=payload)
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "applied"
@@ -155,7 +161,13 @@ async def test_journey_terminal_state_has_banner_and_no_current(authed_client, d
     lost_stage = _get_stage(db, test_auth.org.id, "lost")
     today = _org_today(test_auth.org.timezone)
 
-    await _set_stage(authed_client, surrogate["id"], lost_stage.id, effective_at=today)
+    await _set_stage(
+        authed_client,
+        surrogate["id"],
+        lost_stage.id,
+        effective_at=today,
+        reason="No longer pursuing surrogacy",
+    )
 
     response = await authed_client.get(f"/journey/surrogates/{surrogate['id']}")
     assert response.status_code == 200, response.text
@@ -178,7 +190,13 @@ async def test_journey_terminal_state_uses_stage_key_when_terminal_slug_is_renam
     db.commit()
     today = _org_today(test_auth.org.timezone)
 
-    await _set_stage(authed_client, surrogate["id"], lost_stage.id, effective_at=today)
+    await _set_stage(
+        authed_client,
+        surrogate["id"],
+        lost_stage.id,
+        effective_at=today,
+        reason="No longer pursuing surrogacy",
+    )
 
     response = await authed_client.get(f"/journey/surrogates/{surrogate['id']}")
     assert response.status_code == 200, response.text
