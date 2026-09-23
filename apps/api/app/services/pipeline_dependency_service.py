@@ -221,7 +221,7 @@ def build_pipeline_dependency_graph(
         stages = pipeline_service.resolve_stages_bulk(db, pipeline.organization_id, pipeline.id, stage_slugs)
 
         for rule, stage in zip(rules, stages):
-            normalized = stage.stage_key if stage else _normalize_stage_key(rule.stage_slug)
+            normalized = stage.stage_key if stage else pipeline_service.normalize_stage_ref(rule.stage_slug)
             if normalized in stage_map:
                 stage_map[normalized]["intelligent_suggestion_rules"].append(
                     {
