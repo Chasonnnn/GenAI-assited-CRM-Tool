@@ -286,10 +286,8 @@ def list_intelligent_suggestion_rules(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     rules = intelligent_suggestions_service.list_rules(db, session.org_id)
-    return [
-        IntelligentSuggestionRuleRead(**intelligent_suggestions_service.serialize_rule(db, rule))
-        for rule in rules
-    ]
+    serialized_rules = intelligent_suggestions_service.serialize_rules(db, session.org_id, rules)
+    return [IntelligentSuggestionRuleRead(**rule) for rule in serialized_rules]
 
 
 @router.post(

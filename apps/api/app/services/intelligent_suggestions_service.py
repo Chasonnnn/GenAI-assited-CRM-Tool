@@ -316,25 +316,36 @@ def _resolve_stage_for_org(
     return pipeline_service.resolve_stage(db, pipeline.id, stage_ref)
 
 
+def serialize_rules(db: Session, org_id: UUID, rules: list[OrgIntelligentSuggestionRule]) -> list[dict]:
+    if not rules:
+        return []
+
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
+    stage_slugs = [rule.stage_slug for rule in rules]
+    stages = pipeline_service.resolve_stages_bulk(db, org_id, pipeline.id, stage_slugs)
+
+    serialized_rules = []
+    for rule, stage in zip(rules, stages):
+        serialized_rules.append({
+            "id": str(rule.id),
+            "organization_id": str(rule.organization_id),
+            "template_key": rule.template_key,
+            "name": rule.name,
+            "rule_kind": rule.rule_kind,
+            "stage_slug": rule.stage_slug,
+            "stage_key": stage.stage_key if stage else pipeline_service.normalize_stage_ref(rule.stage_slug),
+            "stage_label": stage.label if stage else None,
+            "business_days": rule.business_days,
+            "enabled": rule.enabled,
+            "sort_order": rule.sort_order,
+            "created_at": rule.created_at,
+            "updated_at": rule.updated_at,
+        })
+    return serialized_rules
+
+
 def serialize_rule(db: Session, rule: OrgIntelligentSuggestionRule) -> dict:
-    stage = _resolve_stage_for_org(db, rule.organization_id, rule.stage_slug)
-    return {
-        "id": str(rule.id),
-        "organization_id": str(rule.organization_id),
-        "template_key": rule.template_key,
-        "name": rule.name,
-        "rule_kind": rule.rule_kind,
-        "stage_slug": rule.stage_slug,
-        "stage_key": stage.stage_key
-        if stage
-        else pipeline_service.normalize_stage_ref(rule.stage_slug),
-        "stage_label": stage.label if stage else None,
-        "business_days": rule.business_days,
-        "enabled": rule.enabled,
-        "sort_order": rule.sort_order,
-        "created_at": rule.created_at,
-        "updated_at": rule.updated_at,
-    }
+    return serialize_rules(db, rule.organization_id, [rule])[0]
 
 
 def _stage_slug_exists_for_org(db: Session, org_id: UUID, stage_slug: str) -> bool:
@@ -897,16 +908,15 @@ def get_intelligent_summary(
             counts[FILTER_INTELLIGENT_STUCK_PREAPPROVAL] += len(rule_ids)
 
     total = len({sid for ids in results.values() for sid in ids})
-    rule_summaries = []
-    for rule in rules:
-        serialized = serialize_rule(db, rule)
+
+    serialized_rules = serialize_rules(db, org_id, rules)
+    for serialized, rule in zip(serialized_rules, rules):
         serialized["match_count"] = len(results.get(rule.id, set()))
-        rule_summaries.append(serialized)
 
     return {
         "total": total,
         "counts": counts,
-        "rules": rule_summaries,
+        "rules": serialized_rules,
     }
 
 
