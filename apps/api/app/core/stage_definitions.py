@@ -8,6 +8,7 @@ from typing import Literal
 from app.utils.presentation import humanize_identifier
 
 SURROGATE_PIPELINE_ENTITY = "surrogate"
+SURROGATE_REASON_REQUIRED_STAGE_KEYS = frozenset({"on_hold", "cold_leads", "lost", "disqualified"})
 INTENDED_PARENT_PIPELINE_ENTITY = "intended_parent"
 EGG_DONOR_PIPELINE_ENTITY = "egg_donor"
 SPERM_DONOR_PIPELINE_ENTITY = "sperm_donor"
