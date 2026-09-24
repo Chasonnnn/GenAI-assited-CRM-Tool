@@ -79,7 +79,7 @@ describe("Light record appointments", () => {
         fireEvent.mouseMove(await screen.findByRole("option", { name: "Attempt 1 · Retrieval · Planned" }))
         fireEvent.click(await screen.findByRole("option", { name: "Attempt 1 · Retrieval · Planned" }))
         fireEvent.click(screen.getByRole("button", { name: /September 12/i }))
-        fireEvent.click(screen.getByRole("button", { name: /10:00 AM/i }))
+        fireEvent.click(await screen.findByRole("button", { name: /10:00 AM/i }))
         fireEvent.click(screen.getAllByRole("button", { name: "Schedule" }).at(-1)!)
         await waitFor(() => expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ donor_id: "donor-1", match_id: "match-1", attempt_id: "attempt-1", client_email: "qa@example.com" }), expect.anything()))
     })
