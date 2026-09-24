@@ -30,6 +30,7 @@ from app.db.models import (
     User,
 )
 from app.services import alert_service, duo_admin_service, job_service, mfa_service, session_service
+from app.services.match_service import OPEN_STATUSES
 from app.utils.normalization import escape_like_string
 from app.utils.pagination import paginate_query_by_offset
 from app.utils.presentation import humanize_identifier
@@ -286,7 +287,7 @@ def get_organization_detail(db: Session, org_id: UUID) -> dict | None:
         db.query(func.count(Match.id))
         .filter(
             Match.organization_id == org.id,
-            Match.status.in_(["pending", "active"]),
+            Match.status.in_(OPEN_STATUSES),
         )
         .scalar()
         or 0
@@ -1440,9 +1441,7 @@ async def send_system_email_campaign(
         org.id: org
         for org in db.query(Organization).filter(Organization.id.in_(organization_ids)).all()
     }
-    requested_user_ids = {
-        user_id for target in targets for user_id in target["user_ids"]
-    }
+    requested_user_ids = {user_id for target in targets for user_id in target["user_ids"]}
     recipient_rows_by_org: dict[UUID, list[tuple[User, Membership]]] = {}
     if organization_ids and requested_user_ids:
         for user, membership in (
@@ -1473,11 +1472,7 @@ async def send_system_email_campaign(
             continue
 
         requested_ids = set(user_ids)
-        rows = [
-            row
-            for row in recipient_rows_by_org.get(org_id, [])
-            if row[0].id in requested_ids
-        ]
+        rows = [row for row in recipient_rows_by_org.get(org_id, []) if row[0].id in requested_ids]
         found_ids = {row[0].id for row in rows}
         missing_ids = [str(uid) for uid in user_ids if uid not in found_ids]
         if missing_ids:
