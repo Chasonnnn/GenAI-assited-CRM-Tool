@@ -26,7 +26,7 @@ from app.db.models import (
 )
 from app.schemas.task import TaskCreate
 from app.services import import_detection_service, queue_service, task_service
-from app.utils.normalization import normalize_email
+from app.utils.normalization import escape_like_string, normalize_email
 from app.utils.pagination import paginate_query_by_offset
 
 META_SYSTEM_COLUMNS: list[tuple[str, str]] = [
@@ -692,13 +692,14 @@ def ensure_mapping_review_task(
     """Create a task for admins to review mapping if one doesn't exist."""
     title = f"Review Meta form mapping: {form.form_name}"
     marker = f"Form ID: {form.id}"
+    escaped_marker = escape_like_string(marker)
     open_task = (
         db.query(Task)
         .filter(
             Task.organization_id == form.organization_id,
             Task.is_completed.is_(False),
             Task.title == title,
-            Task.description.ilike(f"%{marker}%"),
+            Task.description.ilike(f"%{escaped_marker}%", escape="\\"),
         )
         .first()
     )
