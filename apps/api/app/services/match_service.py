@@ -544,18 +544,9 @@ def accept_match(
 ) -> Match:
     """Accept a match and apply related side effects."""
     match = lock_match(db, match, org_id)
-    from app.core.match_rollout import require_match_expansion
+    if match.donor_id:
+        from app.core.match_rollout import require_match_expansion
 
-    if match.donor_id or (
-        db.query(Match.id)
-        .filter(
-            Match.organization_id == org_id,
-            Match.intended_parent_id == match.intended_parent_id,
-            Match.id != match.id,
-            Match.status.in_(COMMITTED_STATUSES),
-        )
-        .first()
-    ):
         require_match_expansion()
     if match.status not in [MatchStatus.PROPOSED.value, MatchStatus.REVIEWING.value]:
         raise ValueError(f"Cannot accept match with status: {match.status}")

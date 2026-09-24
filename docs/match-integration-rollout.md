@@ -33,7 +33,7 @@ No deployment, production database inspection, external message delivery, or pro
 
 ## Explicit expansion release
 
-`MATCH_CASE_EXPANSION_ENABLED` defaults to `false`. Normal first-time surrogate proposals, acceptance, rejection, cancellation, and reads remain available. Donor cases, repeated pairs, parallel IP commitments, attempts, completion, and new case-scoped work require activation. Test fixtures enable the flag explicitly.
+`MATCH_CASE_EXPANSION_ENABLED` defaults to `false`. Normal first-time surrogate proposals, acceptance (including an IP with another accepted surrogate match), rejection, cancellation, and reads remain available. Donor cases, repeated pairs, attempts, completion, and new case-scoped work require activation. Test fixtures enable the flag explicitly.
 
 `cloudbuild/api.yaml` uses `python -m app.db.release_migration` for preflight and migration. An ordinary release refuses to cross the match expansion boundary. Known starting revisions are `20260830_0100`, `20260905_1400_match_cases`, and `20260905_1500_match_work`; older or unknown baselines require their own reviewed migration plan. Existing commitment conflicts abort with a count and no automatic record changes. The migration itself repeats the check under a write-blocking lock.
 
