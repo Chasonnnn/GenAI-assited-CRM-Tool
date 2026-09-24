@@ -39,7 +39,7 @@ def dispatch(db: Session, event: TransitionEvent) -> list[str]:
             run()
             db.commit()
         except Exception as exc:
-            db.rollback()
+            _rollback(db, match_id, name)
             failed.append(name)
             logger.error(
                 "match_effect_failed",
@@ -52,6 +52,21 @@ def dispatch(db: Session, event: TransitionEvent) -> list[str]:
             )
             _record_failure(db, org_id, match_id, event, name, exc)
     return failed
+
+
+def _rollback(db: Session, match_id: UUID, name: str) -> None:
+    """Roll back after a failed effect; a failed rollback is logged, never raised."""
+    try:
+        db.rollback()
+    except Exception as exc:
+        logger.error(
+            "match_effect_rollback_failed",
+            extra={
+                "match_id": str(match_id),
+                "effect": name,
+                "error_class": type(exc).__name__,
+            },
+        )
 
 
 def _record_failure(
@@ -76,7 +91,7 @@ def _record_failure(
         )
         db.commit()
     except Exception as record_exc:
-        db.rollback()
+        _rollback(db, match_id, name)
         logger.error(
             "match_effect_failure_record_failed",
             extra={

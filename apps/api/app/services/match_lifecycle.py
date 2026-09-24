@@ -7,8 +7,11 @@ isolation through ``match_effects``.
 
 Lock order: status-change request (locked by the approvals service before it
 calls the engine), then the match row (plus, on surrogate accept, the
-surrogate's other open proposals in id order), then the surrogate or donor row,
-then the intended parent row. Each row is locked once.
+surrogate's other open proposals in id order) FOR UPDATE, then the surrogate
+or donor row, then the intended parent row FOR NO KEY UPDATE. Each row is
+locked once. Party locks do not conflict with the FOR KEY SHARE locks that
+activity inserts take, so history written for another match's parties does not
+wait on them.
 """
 
 from collections.abc import Callable
@@ -25,7 +28,6 @@ from app.core.config import settings
 from app.db.enums import AuditEventType, MatchStatus, SurrogateActivityType
 from app.db.models import Match, MatchAttempt, StatusChangeRequest
 from app.services import match_effects, match_participants, match_queries
-from app.services.match_access import MatchAction
 
 PROPOSED = MatchStatus.PROPOSED.value
 REVIEWING = MatchStatus.REVIEWING.value
@@ -53,7 +55,6 @@ class Transition:
     action: str
     sources: tuple[str, ...]
     target: str
-    access: MatchAction | None
     # Refusal when the match is outside ``sources``. None resolves the request
     # without changing the match (approvals queue reject and withdraw).
     source_error: str | None
@@ -67,7 +68,6 @@ TRANSITIONS: dict[str, Transition] = {
             "accept",
             (PROPOSED, REVIEWING),
             ACCEPTED,
-            "accept",
             "Cannot accept match with status: {status}",
             "match_accepted",
         ),
@@ -75,7 +75,6 @@ TRANSITIONS: dict[str, Transition] = {
             "reject",
             (PROPOSED, REVIEWING),
             REJECTED,
-            "reject",
             "Cannot reject match with status: {status}",
             "match_rejected",
         ),
@@ -83,7 +82,6 @@ TRANSITIONS: dict[str, Transition] = {
             "cancel",
             (PROPOSED, REVIEWING),
             CANCELLED,
-            "cancel",
             "Cannot cancel match with status: {status}",
             "match_cancelled",
         ),
@@ -91,7 +89,6 @@ TRANSITIONS: dict[str, Transition] = {
             "request_cancel",
             (ACCEPTED,),
             CANCEL_PENDING,
-            "request_cancel",
             "Only accepted matches can be cancelled",
             "match_cancel_requested",
         ),
@@ -99,7 +96,6 @@ TRANSITIONS: dict[str, Transition] = {
             "complete",
             (ACCEPTED,),
             COMPLETED,
-            "complete",
             "Only accepted matches can be completed",
             "match_completed",
         ),
@@ -109,7 +105,6 @@ TRANSITIONS: dict[str, Transition] = {
             "approve_cancel",
             (CANCEL_PENDING,),
             CANCELLED,
-            None,
             "Match is no longer pending cancellation",
             "match_cancelled",
         ),
@@ -118,14 +113,12 @@ TRANSITIONS: dict[str, Transition] = {
             (CANCEL_PENDING,),
             ACCEPTED,
             None,
-            None,
             "match_cancel_request_rejected",
         ),
         Transition(
             "withdraw_cancel",
             (CANCEL_PENDING,),
             ACCEPTED,
-            None,
             None,
             "match_cancel_request_withdrawn",
         ),
@@ -344,8 +337,15 @@ def propose(
     proposed_by_user_id: UUID,
     donor_id: UUID | None = None,
     notes: str | None = None,
+    dispatch_effects: bool = True,
 ) -> Match:
-    """Create a proposed match. Parties may be at any stage."""
+    """Create a proposed match. Parties may be at any stage.
+
+    ``dispatch_effects=False`` commits the match and its history but skips
+    after-commit effects such as workflow triggers. Its only caller is
+    ``scripts/seed_mock_data.py``, so seeding a dev database does not run org
+    workflows.
+    """
     from app.services import note_service
 
     if not match_queries.get_intended_parent(db, intended_parent_id, org_id):
@@ -400,6 +400,8 @@ def propose(
         db.rollback()
         raise TransitionError("An open match already exists for these participants", 409)
     db.refresh(match)
+    if not dispatch_effects:
+        return match
     match_effects.dispatch(
         db,
         match_effects.TransitionEvent(
@@ -444,12 +446,16 @@ def transition(
     notes: str | None = None,
     outcome: str | None = None,
     before_commit: Callable[[], None] | None = None,
+    dispatch_effects: bool = True,
 ) -> Match:
     """Apply one row of TRANSITIONS atomically, then dispatch its effects.
 
     ``request`` is the status-change request for approvals-queue actions; the
     caller locks it before calling. ``before_commit`` lets that caller resolve
     the request in the same transaction after the engine checks pass.
+    ``dispatch_effects=False`` commits the transition and its history but skips
+    after-commit effects. Its only caller is ``scripts/seed_mock_data.py``, so
+    seeding a dev database does not run org workflows.
     """
     spec = TRANSITIONS[action]
     if action == "complete":
@@ -492,9 +498,10 @@ def transition(
             raise TransitionError(CONCURRENT_ACCEPT_DETAIL, 409)
         raise
     db.refresh(locked)
-    match_effects.dispatch(
-        db, match_effects.TransitionEvent(action, locked, actor_user_id, effects)
-    )
+    if dispatch_effects:
+        match_effects.dispatch(
+            db, match_effects.TransitionEvent(action, locked, actor_user_id, effects)
+        )
     return locked
 
 

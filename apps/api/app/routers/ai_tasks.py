@@ -69,7 +69,7 @@ def create_bulk_tasks(
         entity_type = "intended_parent"
         entity_id = body.intended_parent_id
     elif body.match_id:
-        match = match_access.load(db, session, body.match_id, "view", allow_archived=True)
+        match = match_access.load(db, session, body.match_id, "view")
         entity_type = "match"
         entity_id = body.match_id
 

@@ -26,11 +26,16 @@ class Party:
         raise NotImplementedError
 
     def lock(self, db: Session, match: Match) -> None:
-        """Take the row lock once, in the engine's fixed party order."""
+        """Take the row lock once, in the engine's fixed party order.
+
+        FOR NO KEY UPDATE serializes transitions on the party but does not block the
+        FOR KEY SHARE that activity inserts take on their foreign keys, so writing
+        history for another match's party cannot deadlock against this lock.
+        """
         model = self.model
         db.query(model).filter(
             model.id == self.party_id(match), model.organization_id == match.organization_id
-        ).populate_existing().with_for_update().one()
+        ).populate_existing().with_for_update(key_share=True).one()
 
     def check_accept(self, db: Session, match: Match) -> None:
         """Raise ValueError when this party blocks accepting the match."""

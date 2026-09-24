@@ -331,18 +331,6 @@ def get_match_stats(
     return sum(counts.values()), counts
 
 
-def list_pending_matches_for_surrogate(
-    db: Session, surrogate_id: UUID, exclude_match_id: UUID | None = None
-) -> list[Match]:
-    """List proposed/reviewing matches for a surrogate, excluding one."""
-    query = db.query(Match).filter(
-        Match.surrogate_id == surrogate_id, Match.status.in_(PENDING_STATUSES)
-    )
-    if exclude_match_id:
-        query = query.filter(Match.id != exclude_match_id)
-    return query.all()
-
-
 # =============================================================================
 # Response assembly
 # =============================================================================

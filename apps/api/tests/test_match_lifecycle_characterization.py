@@ -169,14 +169,17 @@ def _diff(before: dict[str, Counter], after: dict[str, Counter]) -> dict[str, di
     return {key: dict(after[key] - before[key]) for key in before}
 
 
+_ROW_LOCK = re.compile(r"FOR (NO KEY )?UPDATE")
+
+
 @contextmanager
 def _locked_tables(db):
-    """Record the table of every SELECT ... FOR UPDATE, in execution order."""
+    """Record the table of every SELECT ... FOR [NO KEY] UPDATE, in execution order."""
     locked: list[str] = []
     connection = db.connection()
 
     def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
-        if "FOR UPDATE" in statement:
+        if _ROW_LOCK.search(statement):
             match = re.search(r"\bFROM\s+(\w+)", statement)
             locked.append(match.group(1) if match else statement)
 
@@ -666,7 +669,7 @@ async def test_accept_with_competing_proposals_locks_each_row_once_in_engine_ord
     connection = db.connection()
 
     def record(conn, cursor, statement, parameters, context, executemany):
-        if "FOR UPDATE" in statement:
+        if _ROW_LOCK.search(statement):
             statements.append(statement)
 
     event.listen(connection, "before_cursor_execute", record)
@@ -681,6 +684,8 @@ async def test_accept_with_competing_proposals_locks_each_row_once_in_engine_ord
         "intended_parents",
     ]
     assert "ORDER BY matches.id" in statements[0]
+    assert statements[0].rstrip().endswith("FOR UPDATE")
+    assert all(sql.rstrip().endswith("FOR NO KEY UPDATE") for sql in statements[1:])
     for other in competing:
         assert _match_row(db, other["id"]).status == "cancelled"
 
@@ -2060,6 +2065,33 @@ async def test_ai_parse_schedule_requires_view_matches(authed_client, db, test_a
     assert response.json()["detail"] == "Missing permission: view_matches"
     assert missing.status_code == 404
     assert missing.json()["detail"] == "Match not found"
+
+
+@pytest.mark.asyncio
+async def test_ai_parse_schedule_stream_requires_view_matches(authed_client, db, test_auth):
+    ip = await _create_intended_parent(authed_client)
+    created = await _case(authed_client, ip, surrogate=await _create_surrogate(authed_client))
+
+    async with _client_for(db, test_auth.org.id, revoke=("view_matches",)) as (_user, client):
+        response = await client.post(
+            "/ai/parse-schedule/stream",
+            json={"text": "Consult tomorrow", "match_id": created["id"]},
+        )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Missing permission: view_matches"
+
+
+@pytest.mark.asyncio
+async def test_ai_parse_schedule_stream_returns_404_for_foreign_match(authed_client, db):
+    match = await _foreign_accepted_match(db)
+
+    response = await authed_client.post(
+        "/ai/parse-schedule/stream", json={"text": "Consult tomorrow", "match_id": match["id"]}
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Match not found"
 
 
 @pytest.mark.asyncio

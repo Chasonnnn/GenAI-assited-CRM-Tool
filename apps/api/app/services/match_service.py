@@ -3,6 +3,10 @@
 Status changes live in ``match_lifecycle``; access in ``match_access``; reads in
 ``match_queries``; attempts in ``match_attempts``; calendar events in
 ``match_event_service``. Application code imports those modules directly.
+
+Temporary: this module exists only because unchanged tests (test_match_cases,
+test_match_lifecycle_characterization, test_record_scopes_v2) import these names.
+Remove it in plan step 5, when those tests change to import the modules above.
 """
 
 from uuid import UUID

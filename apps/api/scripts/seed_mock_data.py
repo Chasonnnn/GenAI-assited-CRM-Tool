@@ -1124,14 +1124,19 @@ def create_matches(
             if existing:
                 continue
 
-            match = match_lifecycle.propose(
-                db=db,
-                org_id=org_id,
-                surrogate_id=surrogate.id,
-                intended_parent_id=intended_parent.id,
-                proposed_by_user_id=proposer.id,
-                notes=f"Seed {target_status} scenario",
-            )
+            try:
+                match = match_lifecycle.propose(
+                    db=db,
+                    org_id=org_id,
+                    surrogate_id=surrogate.id,
+                    intended_parent_id=intended_parent.id,
+                    proposed_by_user_id=proposer.id,
+                    notes=f"Seed {target_status} scenario",
+                    dispatch_effects=False,
+                )
+            except match_lifecycle.TransitionError:
+                # propose refuses this pair (accepted surrogate, open match, or missing parent); pick another.
+                continue
 
             if target_status == MatchStatus.PROPOSED.value:
                 created_matches.append(match)
@@ -1157,10 +1162,13 @@ def create_matches(
                         actor_user_id=decider.id,
                         actor_role=Role.DEVELOPER.value,
                         notes="Seed accepted match",
+                        dispatch_effects=False,
                     )
                 except ValueError:
                     try:
-                        match_lifecycle.transition(db, match, "cancel", actor_user_id=decider.id)
+                        match_lifecycle.transition(
+                            db, match, "cancel", actor_user_id=decider.id, dispatch_effects=False
+                        )
                     except Exception:
                         pass
                     continue
@@ -1177,13 +1185,16 @@ def create_matches(
                     actor_user_id=decider.id,
                     reason="Seed rejection for test coverage",
                     notes="Seed rejected scenario",
+                    dispatch_effects=False,
                 )
                 created_matches.append(match)
                 created = True
                 break
 
             if target_status == MatchStatus.CANCELLED.value:
-                match = match_lifecycle.transition(db, match, "cancel", actor_user_id=decider.id)
+                match = match_lifecycle.transition(
+                    db, match, "cancel", actor_user_id=decider.id, dispatch_effects=False
+                )
                 created_matches.append(match)
                 created = True
                 break
