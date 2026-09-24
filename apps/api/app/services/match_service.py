@@ -1005,7 +1005,11 @@ def delete_match_event(db: Session, event: MatchEvent) -> None:
     db.commit()
 
 
-OPEN_STATUSES = ("proposed", "reviewing", "accepted", "cancel_pending")
+OPEN_STATUSES = tuple(
+    status.value
+    for status in MatchStatus
+    if status not in {MatchStatus.REJECTED, MatchStatus.CANCELLED, MatchStatus.COMPLETED}
+)
 COMMITTED_STATUSES = ("accepted", "cancel_pending")
 
 
