@@ -1,6 +1,6 @@
 "use client"
 
-import { useReducer, useState } from "react"
+import { useState } from "react"
 import { format, startOfDay, isBefore } from "date-fns"
 import {
     AlertCircleIcon,
@@ -25,6 +25,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { SchedulingTimePicker } from "@/components/appointments/SchedulingTimePicker"
+import { useInterviewSlots } from "@/lib/hooks/use-interview-appointment"
+import { localDateTimeToIso, schedulingDateKey } from "@/lib/scheduling-time"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
     stageHasCapability,
@@ -35,26 +38,7 @@ import {
 import { cn } from "@/lib/utils"
 import type { PipelineStage } from "@/lib/api/pipelines"
 
-type InterviewMeridiem = "AM" | "PM"
 type FollowUpMonths = "none" | "1" | "3" | "6"
-
-type InterviewState = {
-    date: Date | undefined
-    datePickerOpen: boolean
-    hourInput: string
-    minuteInput: string
-    meridiem: InterviewMeridiem
-}
-
-type InterviewAction =
-    | { type: "reset" }
-    | { type: "setDate"; date: Date | undefined }
-    | { type: "setDatePickerOpen"; open: boolean }
-    | { type: "setHourInput"; value: string }
-    | { type: "setMinuteInput"; value: string }
-    | { type: "normalizeHour" }
-    | { type: "normalizeMinute" }
-    | { type: "toggleMeridiem" }
 
 const FOLLOW_UP_OPTIONS: Array<{
     value: FollowUpMonths
@@ -83,82 +67,6 @@ const FOLLOW_UP_OPTIONS: Array<{
     },
 ]
 
-function normalizeInterviewTime(
-    hourInput: string,
-    minuteInput: string,
-    meridiem: InterviewMeridiem,
-): string | null {
-    const hourText = hourInput.trim()
-    const minuteText = minuteInput.trim()
-    if (!/^\d{1,2}$/.test(hourText) || !/^\d{1,2}$/.test(minuteText)) return null
-
-    let hour = Number(hourText)
-    const minute = Number(minuteText)
-    if (hour < 1 || hour > 12 || minute < 0 || minute > 59) return null
-
-    if (meridiem === "PM" && hour !== 12) hour += 12
-    if (meridiem === "AM" && hour === 12) hour = 0
-
-    return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
-}
-
-function firstDigitGroup(value: string): string {
-    return value.match(/\d+/)?.[0] ?? ""
-}
-
-function interviewStateReducer(state: InterviewState, action: InterviewAction): InterviewState {
-    if (action.type === "reset") {
-        return {
-            date: undefined,
-            datePickerOpen: false,
-            hourInput: "",
-            minuteInput: "",
-            meridiem: "PM",
-        }
-    }
-
-    if (action.type === "setDate") {
-        return { ...state, date: action.date }
-    }
-
-    if (action.type === "setDatePickerOpen") {
-        return { ...state, datePickerOpen: action.open }
-    }
-
-    if (action.type === "setHourInput") {
-        const digitGroups = action.value.match(/\d+/g) ?? []
-        return {
-            ...state,
-            hourInput: (digitGroups[0] ?? "").slice(0, 2),
-            minuteInput: digitGroups.length > 1
-                ? (digitGroups[1] ?? "").slice(0, 2)
-                : state.minuteInput,
-        }
-    }
-
-    if (action.type === "setMinuteInput") {
-        return { ...state, minuteInput: firstDigitGroup(action.value).slice(0, 2) }
-    }
-
-    if (action.type === "normalizeHour") {
-        const hour = Number(state.hourInput)
-        if (state.hourInput && hour >= 1 && hour <= 12) {
-            return { ...state, hourInput: hour.toString() }
-        }
-        return state
-    }
-
-    if (action.type === "normalizeMinute") {
-        const minute = Number(state.minuteInput)
-        if (state.minuteInput && minute >= 0 && minute <= 59) {
-            return { ...state, minuteInput: minute.toString().padStart(2, "0") }
-        }
-        return state
-    }
-
-    return { ...state, meridiem: state.meridiem === "AM" ? "PM" : "AM" }
-}
-
 interface ChangeStageModalProps {
     open: boolean
     onOpenChange: (open: boolean) => void
@@ -172,6 +80,8 @@ interface ChangeStageModalProps {
         reason?: string
         effective_at?: string // ISO datetime
         interview_scheduled_at?: string
+        override_availability?: boolean
+        override_reason?: string
         on_hold_follow_up_months?: 1 | 3 | 6 | null
         delivery_baby_gender?: string | null
         delivery_baby_weight?: string | null
@@ -183,6 +93,7 @@ interface ChangeStageModalProps {
     onHoldFollowUpAssigneeLabel?: string | null
     canSelfApproveRegression?: boolean
     appointmentManager?: React.ReactNode
+    surrogateId?: string
 }
 
 function StageSelectionList({
@@ -376,143 +287,6 @@ function OnHoldFollowUpSection({
     )
 }
 
-function InterviewAppointmentSection({
-    interviewDate,
-    interviewDatePickerOpen,
-    interviewDateDefaultMonth,
-    calendarStartOfToday,
-    interviewHourInput,
-    interviewMinuteInput,
-    interviewMeridiem,
-    interviewTimeInvalid,
-    onInterviewDateChange,
-    onInterviewDatePickerOpenChange,
-    onInterviewHourInputChange,
-    onInterviewMinuteInputChange,
-    onInterviewHourInputBlur,
-    onInterviewMinuteInputBlur,
-    onInterviewMeridiemToggle,
-}: {
-    interviewDate: Date | undefined
-    interviewDatePickerOpen: boolean
-    interviewDateDefaultMonth: Date
-    calendarStartOfToday: Date | undefined
-    interviewHourInput: string
-    interviewMinuteInput: string
-    interviewMeridiem: InterviewMeridiem
-    interviewTimeInvalid: boolean
-    onInterviewDateChange: (date: Date | undefined) => void
-    onInterviewDatePickerOpenChange: (open: boolean) => void
-    onInterviewHourInputChange: (value: string) => void
-    onInterviewMinuteInputChange: (value: string) => void
-    onInterviewHourInputBlur: () => void
-    onInterviewMinuteInputBlur: () => void
-    onInterviewMeridiemToggle: () => void
-}) {
-    return (
-        <section aria-label="Interview appointment" className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-                <div className="text-sm font-medium text-foreground">
-                    Interview appointment
-                </div>
-                <p className="text-xs text-muted-foreground">
-                    Select the date and time for the interview appointment.
-                </p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                    <Label>
-                        Interview date <span className="text-destructive">*</span>
-                    </Label>
-                    <Popover open={interviewDatePickerOpen} onOpenChange={onInterviewDatePickerOpenChange}>
-                        <PopoverTrigger
-                            className={cn(
-                                "inline-flex h-9 w-full items-center justify-start gap-2 rounded-md border border-input bg-input/30 px-3 py-2 text-sm font-normal transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                !interviewDate && "text-muted-foreground",
-                            )}
-                        >
-                            <CalendarIcon className="size-4" />
-                            {interviewDate ? format(interviewDate, "PPP") : "Select date"}
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                                mode="single"
-                                selected={interviewDate}
-                                onSelect={(date) => {
-                                    onInterviewDateChange(date)
-                                    onInterviewDatePickerOpenChange(false)
-                                }}
-                                {...(calendarStartOfToday ? { disabled: (date: Date) => date < calendarStartOfToday } : {})}
-                                defaultMonth={interviewDateDefaultMonth}
-                            />
-                        </PopoverContent>
-                    </Popover>
-                </div>
-                <div className="space-y-2">
-                    <Label>
-                        Interview time <span className="text-destructive">*</span>
-                    </Label>
-                    <div className="grid grid-cols-[4.5rem_4.5rem_3.5rem] items-end gap-2">
-                        <div className="relative">
-                            <Input
-                                id="interview-hour"
-                                value={interviewHourInput}
-                                onChange={(event) => onInterviewHourInputChange(event.target.value)}
-                                onBlur={onInterviewHourInputBlur}
-                                inputMode="numeric"
-                                pattern="[0-9]*"
-                                className="text-center text-base"
-                                aria-label="Interview hour"
-                                aria-invalid={interviewTimeInvalid}
-                            />
-                            {!interviewHourInput ? (
-                                <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-base text-muted-foreground">
-                                    1
-                                </span>
-                            ) : null}
-                        </div>
-                        <div className="relative">
-                            <Input
-                                id="interview-minute"
-                                value={interviewMinuteInput}
-                                onChange={(event) => onInterviewMinuteInputChange(event.target.value)}
-                                onBlur={onInterviewMinuteInputBlur}
-                                inputMode="numeric"
-                                pattern="[0-9]*"
-                                className="text-center text-base"
-                                aria-label="Interview minute"
-                                aria-invalid={interviewTimeInvalid}
-                            />
-                            {!interviewMinuteInput ? (
-                                <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-base text-muted-foreground">
-                                    15
-                                </span>
-                            ) : null}
-                        </div>
-                        <div>
-                            <Button
-                                type="button"
-                                onClick={onInterviewMeridiemToggle}
-                                aria-label={`Switch interview time to ${interviewMeridiem === "AM" ? "PM" : "AM"}`}
-                                variant="outline"
-                                size="sm"
-                                className="h-9 w-full px-0 text-sm font-medium"
-                            >
-                                {interviewMeridiem}
-                            </Button>
-                        </div>
-                    </div>
-                    {interviewTimeInvalid ? (
-                        <p className="text-xs text-destructive">
-                            Enter an hour from 1-12 and minutes from 00-59.
-                        </p>
-                    ) : null}
-                </div>
-            </div>
-        </section>
-    )
-}
-
 function DeliveryDetailsSection({
     deliveryBabyGender,
     deliveryBabyWeight,
@@ -695,6 +469,7 @@ function ChangeStageModalContent({
     onHoldFollowUpAssigneeLabel = null,
     canSelfApproveRegression = false,
     appointmentManager,
+    surrogateId,
 }: ChangeStageModalProps) {
     const [selectedStageId, setSelectedStageId] = useState<string | null>(null)
     const [effectiveNow, setEffectiveNow] = useState(true)
@@ -705,22 +480,15 @@ function ChangeStageModalContent({
     const [deliveryBabyGender, setDeliveryBabyGender] = useState(initialDeliveryBabyGender ?? "")
     const [deliveryBabyWeight, setDeliveryBabyWeight] = useState(initialDeliveryBabyWeight ?? "")
     const [onHoldFollowUpMonths, setOnHoldFollowUpMonths] = useState<FollowUpMonths>("none")
-    const [interviewState, dispatchInterviewState] = useReducer(interviewStateReducer, {
-        date: undefined,
-        datePickerOpen: false,
-        hourInput: "",
-        minuteInput: "",
-        meridiem: "PM",
-    })
+    const [overrideAvailability, setOverrideAvailability] = useState(false)
+    const [overrideReason, setOverrideReason] = useState("")
+    const [interviewDate, setInterviewDate] = useState("")
+    const [interviewSelectedStart, setInterviewSelectedStart] = useState<string | null>(null)
+    const [interviewCustomTime, setInterviewCustomTime] = useState("")
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
     const [calendarToday] = useState(() => new Date())
     const calendarStartOfToday = startOfDay(calendarToday)
     const selectedDateDefaultMonth = selectedDate ?? calendarToday
-    const interviewDate = interviewState.date
-    const interviewDatePickerOpen = interviewState.datePickerOpen
-    const interviewHourInput = interviewState.hourInput
-    const interviewMinuteInput = interviewState.minuteInput
-    const interviewMeridiem = interviewState.meridiem
-    const interviewDateDefaultMonth = interviewDate ?? calendarToday
 
     const currentStage = stages.find(s => s.id === currentStageId)
     const comparisonStage =
@@ -731,11 +499,9 @@ function ChangeStageModalContent({
     const isOnHoldStage = stageUsesPauseBehavior(selectedStage)
     const isInterviewScheduledStage = stageMatchesKey(selectedStage, "interview_scheduled")
     const showDeliveryFields = deliveryFieldsEnabled && isDeliveredStage
-    const interviewTime = normalizeInterviewTime(interviewHourInput, interviewMinuteInput, interviewMeridiem)
-    const interviewTimeStarted = interviewHourInput.trim().length > 0 || interviewMinuteInput.trim().length > 0
-    const interviewTimeInvalid = isInterviewScheduledStage && interviewTimeStarted && !interviewTime
-    const interviewDateTime = isInterviewScheduledStage && interviewDate && interviewTime
-        ? `${format(interviewDate, "yyyy-MM-dd")}T${interviewTime}:00`
+    const interviewSlots = useInterviewSlots(surrogateId ?? "", interviewDate, timezone, isInterviewScheduledStage && Boolean(surrogateId))
+    const interviewDateTime = isInterviewScheduledStage
+        ? overrideAvailability ? localDateTimeToIso(interviewCustomTime) : interviewSelectedStart
         : null
 
     const isResumeSelection = (() => {
@@ -778,6 +544,7 @@ function ChangeStageModalContent({
         selectedStageId !== currentStageId &&
         (effectiveNow || Boolean(selectedDate)) &&
         (!isInterviewScheduledStage || Boolean(interviewDateTime)) &&
+        (!overrideAvailability || Boolean(overrideReason.trim())) &&
         (!reasonRequired || reason.trim().length > 0)
 
     const buildEffectiveAt = (): string | undefined => {
@@ -801,6 +568,8 @@ function ChangeStageModalContent({
             reason?: string
             effective_at?: string
             interview_scheduled_at?: string
+            override_availability?: boolean
+            override_reason?: string
             on_hold_follow_up_months?: 1 | 3 | 6 | null
             delivery_baby_gender?: string | null
             delivery_baby_weight?: string | null
@@ -811,6 +580,10 @@ function ChangeStageModalContent({
         if (trimmedReason) payload.reason = trimmedReason
         if (effective_at) payload.effective_at = effective_at
         if (interviewDateTime) payload.interview_scheduled_at = interviewDateTime
+        if (overrideAvailability) {
+            payload.override_availability = true
+            payload.override_reason = overrideReason.trim()
+        }
         if (isOnHoldStage && onHoldFollowUpMonths !== "none") {
             payload.on_hold_follow_up_months = Number(onHoldFollowUpMonths) as 1 | 3 | 6
         }
@@ -831,29 +604,15 @@ function ChangeStageModalContent({
     }
 
     const label = entityLabel ?? "Stage"
-    const resetInterviewFields = () => {
-        dispatchInterviewState({ type: "reset" })
-    }
     const handleStageSelect = (stage: PipelineStage) => {
         setSelectedStageId(stage.id)
         if (stageMatchesKey(stage, "interview_scheduled")) {
-            resetInterviewFields()
+            setInterviewDate(schedulingDateKey(new Date(), timezone))
+            setInterviewSelectedStart(null)
+            setInterviewCustomTime("")
+            setOverrideAvailability(false)
+            setOverrideReason("")
         }
-    }
-    const updateInterviewHourInput = (value: string) => {
-        dispatchInterviewState({ type: "setHourInput", value })
-    }
-    const updateInterviewMinuteInput = (value: string) => {
-        dispatchInterviewState({ type: "setMinuteInput", value })
-    }
-    const normalizeInterviewHourInput = () => {
-        dispatchInterviewState({ type: "normalizeHour" })
-    }
-    const normalizeInterviewMinuteInput = () => {
-        dispatchInterviewState({ type: "normalizeMinute" })
-    }
-    const toggleInterviewMeridiem = () => {
-        dispatchInterviewState({ type: "toggleMeridiem" })
     }
 
     const submitButtonText = isResumeSelection
@@ -873,7 +632,10 @@ function ChangeStageModalContent({
         <Dialog open={open} onOpenChange={handleClose}>
             <DialogContent
                 data-testid="change-stage-dialog"
-                className="flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-lg md:max-w-xl"
+                className={cn(
+                    "flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0",
+                    isInterviewScheduledStage ? "sm:max-w-2xl" : "sm:max-w-lg md:max-w-xl",
+                )}
             >
                 <DialogHeader className="shrink-0 border-b p-5 pr-14">
                     <DialogTitle>Change {label}</DialogTitle>
@@ -913,25 +675,23 @@ function ChangeStageModalContent({
                             onSelectedMonthsChange={setOnHoldFollowUpMonths}
                         />
                     ) : null}
-                    {isInterviewScheduledStage ? (
-                        <InterviewAppointmentSection
-                            interviewDate={interviewDate}
-                            interviewDatePickerOpen={interviewDatePickerOpen}
-                            interviewDateDefaultMonth={interviewDateDefaultMonth}
-                            calendarStartOfToday={calendarStartOfToday}
-                            interviewHourInput={interviewHourInput}
-                            interviewMinuteInput={interviewMinuteInput}
-                            interviewMeridiem={interviewMeridiem}
-                            interviewTimeInvalid={interviewTimeInvalid}
-                            onInterviewDateChange={(date) => dispatchInterviewState({ type: "setDate", date })}
-                            onInterviewDatePickerOpenChange={(open) => dispatchInterviewState({ type: "setDatePickerOpen", open })}
-                            onInterviewHourInputChange={updateInterviewHourInput}
-                            onInterviewMinuteInputChange={updateInterviewMinuteInput}
-                            onInterviewHourInputBlur={normalizeInterviewHourInput}
-                            onInterviewMinuteInputBlur={normalizeInterviewMinuteInput}
-                            onInterviewMeridiemToggle={toggleInterviewMeridiem}
+                    {isInterviewScheduledStage ? <section aria-label="Interview appointment" className="space-y-3">
+                        <div className="text-sm font-medium">Interview appointment</div>
+                        <SchedulingTimePicker
+                            idPrefix="stage-interview"
+                            date={interviewDate}
+                            onDateChange={(next) => { setInterviewDate(next); setInterviewSelectedStart(null) }}
+                            timezone={timezone}
+                            slots={interviewSlots.data?.slots}
+                            selectedStart={interviewSelectedStart}
+                            onSelectStart={setInterviewSelectedStart}
+                            loading={interviewSlots.isLoading || interviewSlots.isFetching}
+                            error={interviewSlots.isError ? "Available times could not be loaded." : undefined}
+                            onRetry={() => void interviewSlots.refetch()}
+                            minDate={schedulingDateKey(calendarToday, timezone)}
+                            override={{ enabled: overrideAvailability, onEnabledChange: setOverrideAvailability, dateTime: interviewCustomTime, onDateTimeChange: setInterviewCustomTime, reason: overrideReason, onReasonChange: setOverrideReason }}
                         />
-                    ) : null}
+                    </section> : null}
                     {showDeliveryFields ? (
                         <DeliveryDetailsSection
                             deliveryBabyGender={deliveryBabyGender}

@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from app.core.config import settings
 from app.db.enums import AppointmentStatus, MeetingMode
 from app.db.models import (
     Appointment,
@@ -588,6 +589,7 @@ async def test_reschedule_slots_use_appointment_duration(
     assert duration == 60
 
 
+@pytest.mark.parametrize("scheduling_v2_enabled", [False, True])
 @pytest.mark.asyncio
 async def test_manage_endpoint_returns_public_appointment_view(
     client,
@@ -595,8 +597,11 @@ async def test_manage_endpoint_returns_public_appointment_view(
     test_org,
     test_user,
     appointment_type,
+    monkeypatch,
+    scheduling_v2_enabled,
 ):
     """Manage endpoint should return appointment details for a valid token."""
+    monkeypatch.setattr(settings, "SCHEDULING_V2_ENABLED", scheduling_v2_enabled)
     local_start = datetime.combine(
         _next_weekday(0), time(10, 0), tzinfo=ZoneInfo("America/New_York")
     )
@@ -631,6 +636,35 @@ async def test_manage_endpoint_returns_public_appointment_view(
     data = response.json()
     assert data["id"] == str(appt.id)
     assert data["client_email"] == "manage@example.com"
+    assert data["manage_actions"]["can_cancel"] is False
+    assert data["manage_actions"]["can_reschedule"] is (
+        data["scheduling"]["capabilities"]["can_reschedule"]
+        if scheduling_v2_enabled
+        else True
+    )
+    cancel_response = await client.get(
+        f"/book/self-service/{test_org.id}/manage/{appt.cancel_token}"
+    )
+    assert cancel_response.status_code == 200
+    cancel_data = cancel_response.json()
+    assert cancel_data["manage_actions"]["can_reschedule"] is False
+    assert cancel_data["manage_actions"]["can_cancel"] is (
+        cancel_data["scheduling"]["capabilities"]["can_cancel"]
+        if scheduling_v2_enabled
+        else True
+    )
+    from app.routers.booking import _appointment_to_public_read
+
+    assert _appointment_to_public_read(appt, db)["manage_actions"] == {
+        "can_reschedule": False,
+        "can_cancel": False,
+    }
+    appt.status = AppointmentStatus.CANCELLED.value
+    db.flush()
+    assert _appointment_to_public_read(appt, db, appt.cancel_token)["manage_actions"] == {
+        "can_reschedule": False,
+        "can_cancel": False,
+    }
 
 
 @pytest.mark.asyncio
@@ -732,13 +766,52 @@ async def test_manage_cancel_by_token(
     db.flush()
 
     response = await client.post(
-        f"/book/self-service/{test_org.id}/manage/{appt.reschedule_token}/cancel",
+        f"/book/self-service/{test_org.id}/manage/{appt.cancel_token}/cancel",
         json={"reason": "Need to cancel"},
     )
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["status"] == AppointmentStatus.CANCELLED.value
     assert data["cancellation_reason"] == "Need to cancel"
+
+
+@pytest.mark.parametrize("scheduling_v2_enabled", [False, True])
+@pytest.mark.asyncio
+async def test_manage_mutations_reject_opposite_purpose_token(
+    client, db, test_org, test_user, appointment_type, monkeypatch, scheduling_v2_enabled,
+):
+    monkeypatch.setattr(settings, "SCHEDULING_V2_ENABLED", scheduling_v2_enabled)
+    scheduled_start = datetime.combine(
+        _next_weekday(0), time(10, 0), tzinfo=ZoneInfo("America/New_York")
+    ).astimezone(UTC)
+    appt = Appointment(
+        id=uuid4(), organization_id=test_org.id, user_id=test_user.id,
+        appointment_type_id=appointment_type.id, client_name="Manage Purpose",
+        client_email="purpose@example.com", client_phone="555-000-0100",
+        client_timezone="America/New_York", scheduled_start=scheduled_start,
+        scheduled_end=scheduled_start + timedelta(minutes=30), duration_minutes=30,
+        buffer_before_minutes=0, buffer_after_minutes=0,
+        meeting_mode=appointment_type.meeting_mode, status=AppointmentStatus.CONFIRMED.value,
+        reschedule_token=f"reschedule-{uuid4().hex}",
+        cancel_token=f"cancel-{uuid4().hex}",
+        reschedule_token_expires_at=scheduled_start + timedelta(days=30),
+        cancel_token_expires_at=scheduled_start + timedelta(days=30),
+    )
+    db.add(appt)
+    db.flush()
+
+    wrong_reschedule = await client.post(
+        f"/book/self-service/{test_org.id}/manage/{appt.cancel_token}/reschedule",
+        json={"scheduled_start": (scheduled_start + timedelta(days=1)).isoformat()},
+    )
+    wrong_cancel = await client.post(
+        f"/book/self-service/{test_org.id}/manage/{appt.reschedule_token}/cancel",
+        json={"reason": "Wrong link"},
+    )
+    assert wrong_reschedule.status_code == 403
+    assert wrong_cancel.status_code == 403
+    db.refresh(appt)
+    assert appt.status == AppointmentStatus.CONFIRMED.value
 
 
 @pytest.mark.asyncio

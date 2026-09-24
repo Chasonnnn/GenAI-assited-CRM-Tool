@@ -2,6 +2,7 @@
 
 import { use, useState, useSyncExternalStore } from "react"
 import { useQuery } from "@tanstack/react-query"
+import { ApiError } from "@/lib/api"
 import {
     addMonths,
     eachDayOfInterval,
@@ -9,7 +10,6 @@ import {
     format,
     getDate,
     getDay,
-    isBefore,
     isSameDay,
     parseISO,
     startOfDay,
@@ -27,7 +27,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import {
     Select,
@@ -37,7 +37,10 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { SchedulingSlotList } from "@/components/appointments/SchedulingTimePicker"
+import { formatSchedulingDate, formatSchedulingTime, schedulingDateKey } from "@/lib/scheduling-time"
 import type { PublicAppointmentView, TimeSlot } from "@/lib/api/appointments"
+import { createSchedulingRequestId } from "@/lib/api/appointments"
 import {
     cancelByManageToken,
     getAppointmentForManage,
@@ -146,11 +149,13 @@ function ManageErrorState({
     message,
     centered = true,
     mutedIcon = false,
+    onRetry,
 }: {
     title: string
     message: string
     centered?: boolean
     mutedIcon?: boolean
+    onRetry?: () => void
 }) {
     const content = (
         <Card className={centered ? "max-w-md" : undefined}>
@@ -160,6 +165,7 @@ function ManageErrorState({
                 />
                 <h2 className="text-xl font-semibold mb-2">{title}</h2>
                 <p className="text-muted-foreground">{message}</p>
+                {onRetry ? <Button type="button" variant="outline" className="mt-4" onClick={onRetry}>Retry</Button> : null}
             </CardContent>
         </Card>
     )
@@ -179,12 +185,8 @@ function ManageErrorState({
     )
 }
 
-function ManageSuccessState({ status }: { status: "rescheduled" | "cancelled" }) {
+function ManageSuccessState({ status, appointment, timezone }: { status: "rescheduled" | "cancelled"; appointment: PublicAppointmentView | null; timezone: string }) {
     const title = status === "rescheduled" ? "Appointment Rescheduled" : "Appointment Cancelled"
-    const message =
-        status === "rescheduled"
-            ? "Your appointment has been updated. You will receive a confirmation email shortly."
-            : "Your appointment has been cancelled. You will receive a confirmation email shortly."
 
     return (
         <div className="min-h-screen bg-background py-12">
@@ -195,7 +197,9 @@ function ManageSuccessState({ status }: { status: "rescheduled" | "cancelled" })
                             <CheckCircleIcon className="size-8 text-green-600" />
                         </div>
                         <h2 className="text-2xl font-semibold mb-2">{title}</h2>
-                        <p className="text-muted-foreground">{message}</p>
+                        {status === "rescheduled" && appointment ? (
+                            <p className="text-muted-foreground">{formatSchedulingDate(appointment.scheduled_start, timezone)} · {formatSchedulingTime(appointment.scheduled_start, timezone)} · {getTimezoneLabel(timezone)}</p>
+                        ) : null}
                     </CardContent>
                 </Card>
             </div>
@@ -203,7 +207,7 @@ function ManageSuccessState({ status }: { status: "rescheduled" | "cancelled" })
     )
 }
 
-function AppointmentSummary({ appointment }: { appointment: PublicAppointmentView | null }) {
+function AppointmentSummary({ appointment, timezone }: { appointment: PublicAppointmentView | null; timezone: string }) {
     if (!appointment) return null
 
     return (
@@ -214,12 +218,11 @@ function AppointmentSummary({ appointment }: { appointment: PublicAppointmentVie
             ) : null}
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <CalendarIcon className="size-4" />
-                {format(parseISO(appointment.scheduled_start), "EEEE, MMMM d, yyyy")}
+                {formatSchedulingDate(appointment.scheduled_start, timezone)}
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <ClockIcon className="size-4" />
-                {format(parseISO(appointment.scheduled_start), "h:mm a")} (
-                {appointment.duration_minutes} min)
+                {formatSchedulingTime(appointment.scheduled_start, timezone)} · {getTimezoneLabel(timezone)} · {appointment.duration_minutes} min
             </div>
         </div>
     )
@@ -228,28 +231,32 @@ function AppointmentSummary({ appointment }: { appointment: PublicAppointmentVie
 function AppointmentActionToggle({
     action,
     onActionChange,
+    canReschedule,
+    canCancel,
 }: {
-    action: ManageAction
+    action: ManageAction | null
     onActionChange: (action: ManageAction) => void
+    canReschedule: boolean
+    canCancel: boolean
 }) {
     return (
         <div className="inline-flex rounded-lg border border-border p-1">
-            <Button
+            {canReschedule ? <Button
                 type="button"
                 variant={action === "reschedule" ? "default" : "ghost"}
                 onClick={() => onActionChange("reschedule")}
                 className="h-8 px-4"
             >
                 Reschedule
-            </Button>
-            <Button
+            </Button> : null}
+            {canCancel ? <Button
                 type="button"
                 variant={action === "cancel" ? "default" : "ghost"}
                 onClick={() => onActionChange("cancel")}
                 className="h-8 px-4"
             >
                 Cancel
-            </Button>
+            </Button> : null}
         </div>
     )
 }
@@ -264,9 +271,11 @@ function ReschedulePanel({
     selectedDate,
     onDateSelect,
     isLoadingSlots,
+    slotsError,
     slots,
     selectedSlot,
     onSlotSelect,
+    onRetrySlots,
     isSubmitting,
     onConfirm,
 }: {
@@ -279,9 +288,11 @@ function ReschedulePanel({
     selectedDate: Date | null
     onDateSelect: (date: Date) => void
     isLoadingSlots: boolean
+    slotsError: boolean
     slots: TimeSlot[]
     selectedSlot: TimeSlot | null
     onSlotSelect: (slot: TimeSlot) => void
+    onRetrySlots: () => void
     isSubmitting: boolean
     onConfirm: () => void
 }) {
@@ -296,7 +307,7 @@ function ReschedulePanel({
                         if (value) onTimezoneChange(value)
                     }}
                 >
-                    <SelectTrigger className="w-auto h-8 text-sm">
+                    <SelectTrigger className="w-auto h-8 text-sm" aria-label="Timezone">
                         <SelectValue>
                             {(value: string | null) => getTimezoneLabel(value, timezoneOptions)}
                         </SelectValue>
@@ -312,7 +323,8 @@ function ReschedulePanel({
             </div>
 
             <div className="space-y-3">
-                <p className="font-medium">Select New Date</p>
+                <p className="font-medium">Select a date</p>
+                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                 <ManageCalendarGrid
                     viewMonth={viewMonth}
                     calendarDays={calendarDays}
@@ -320,21 +332,26 @@ function ReschedulePanel({
                     onViewMonthChange={onViewMonthChange}
                     onDateSelect={onDateSelect}
                 />
+                <div className="space-y-2">
+                    <p className="font-medium">Select a time</p>
+                    {selectedDate ? <SchedulingSlotList
+                        slots={slots}
+                        timezone={timezone}
+                        selectedStart={selectedSlot?.start ?? null}
+                        onSelectStart={(start) => { const slot = slots.find((item) => item.start === start); if (slot) onSlotSelect(slot) }}
+                        loading={isLoadingSlots}
+                        error={slotsError ? "Calendar availability is unavailable." : null}
+                        onRetry={onRetrySlots}
+                    /> : <p className="py-4 text-sm text-muted-foreground">Choose a date.</p>}
+                </div>
+                </div>
             </div>
-
-            <ManageSlotsGrid
-                selectedDate={selectedDate}
-                isLoadingSlots={isLoadingSlots}
-                slots={slots}
-                selectedSlot={selectedSlot}
-                onSlotSelect={onSlotSelect}
-            />
 
             <Button
                 type="button"
                 className="w-full"
                 size="lg"
-                disabled={!selectedSlot || isSubmitting}
+                disabled={!selectedSlot || isLoadingSlots || slotsError || isSubmitting}
                 onClick={onConfirm}
             >
                 {isSubmitting ? <Loader2Icon className="size-4 mr-2 animate-spin" /> : null}
@@ -365,6 +382,7 @@ function ManageCalendarGrid({
                         type="button"
                         variant="ghost"
                         size="sm"
+                        aria-label="Previous month"
                         disabled={!viewMonth}
                         onClick={() => {
                             if (viewMonth) onViewMonthChange(addMonths(viewMonth, -1))
@@ -379,6 +397,7 @@ function ManageCalendarGrid({
                         type="button"
                         variant="ghost"
                         size="sm"
+                        aria-label="Next month"
                         disabled={!viewMonth}
                         onClick={() => {
                             if (viewMonth) onViewMonthChange(addMonths(viewMonth, 1))
@@ -414,6 +433,7 @@ function ManageCalendarGrid({
                                     }
                                 }}
                                 disabled={!day.isAvailable}
+                                aria-pressed={isSelected}
                                 className={`h-10 text-sm font-medium ${
                                     isSelected
                                         ? "bg-primary text-primary-foreground hover:bg-primary/90"
@@ -431,60 +451,6 @@ function ManageCalendarGrid({
                 </div>
             </CardContent>
         </Card>
-    )
-}
-
-function ManageSlotsGrid({
-    selectedDate,
-    isLoadingSlots,
-    slots,
-    selectedSlot,
-    onSlotSelect,
-}: {
-    selectedDate: Date | null
-    isLoadingSlots: boolean
-    slots: TimeSlot[]
-    selectedSlot: TimeSlot | null
-    onSlotSelect: (slot: TimeSlot) => void
-}) {
-    if (!selectedDate) return null
-
-    return (
-        <div className="space-y-3">
-            <p className="font-medium">Select New Time</p>
-            {isLoadingSlots ? (
-                <div className="py-8 flex items-center justify-center">
-                    <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                </div>
-            ) : slots.length === 0 ? (
-                <p className="text-muted-foreground text-center py-4">
-                    No available times for this date
-                </p>
-            ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-64 overflow-y-auto">
-                    {slots.map((slot) => {
-                        const timeLabel = format(parseISO(slot.start), "h:mm a")
-                        const isSelected = selectedSlot?.start === slot.start
-                        return (
-                            <Button
-                                key={slot.start}
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => onSlotSelect(slot)}
-                                className={`py-2 px-3 h-auto text-sm font-medium ${
-                                    isSelected
-                                        ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
-                                        : "hover:border-primary/50"
-                                }`}
-                            >
-                                {timeLabel}
-                            </Button>
-                        )
-                    })}
-                </div>
-            )}
-        </div>
     )
 }
 
@@ -586,13 +552,11 @@ function ManageAppointmentSession({
     const today = useSyncExternalStore(subscribeTodaySnapshot, getTodaySnapshot, getServerTodaySnapshot)
     const [selectedDate, setSelectedDate] = useState<Date | null>(null)
     const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
-    const [slots, setSlots] = useState<TimeSlot[]>([])
-    const [isLoadingSlots, setIsLoadingSlots] = useState(false)
-
     const [reason, setReason] = useState("")
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [submissionError, setSubmissionError] = useState<string | null>(null)
     const [successState, setSuccessState] = useState<"rescheduled" | "cancelled" | null>(null)
+    const [updatedAppointment, setUpdatedAppointment] = useState<PublicAppointmentView | null>(null)
     const appointment = hasManageLink ? appointmentQuery.data ?? null : null
     const isLoading = hasManageLink ? appointmentQuery.isLoading : false
     const queryError = hasManageLink
@@ -602,8 +566,18 @@ function ManageAppointmentSession({
                 ? "Appointment not found"
                 : null
         : INVALID_MANAGE_LINK_MESSAGE
+    const invalidTokenError = appointmentQuery.error instanceof ApiError
+        ? [400, 401, 403, 404, 410, 422].includes(appointmentQuery.error.status)
+        : appointmentQuery.error instanceof Error && /not found|invalid|expired/i.test(appointmentQuery.error.message)
+    const canRetryAppointmentLoad = hasManageLink && appointmentQuery.isError && !invalidTokenError
     const error = submissionError ?? queryError
     const appointmentTimezone = appointment?.client_timezone ?? null
+    const canReschedule = appointment?.manage_actions?.can_reschedule ?? appointment?.scheduling?.capabilities.can_reschedule ?? true
+    const canCancel = appointment?.manage_actions?.can_cancel ?? appointment?.scheduling?.capabilities.can_cancel ?? true
+    const selectedAction: ManageAction | null = !canReschedule && !canCancel
+        ? null
+        : action === "reschedule" && !canReschedule ? "cancel"
+        : action === "cancel" && !canCancel ? "reschedule" : action
     const timezone = timezoneOverride ?? appointmentTimezone ?? detectedTimezone
 
     const timezoneOptions = TIMEZONE_OPTIONS.some((opt) => opt.value === timezone)
@@ -611,14 +585,28 @@ function ManageAppointmentSession({
         : [...TIMEZONE_OPTIONS, { value: timezone, label: timezone }]
 
     const appointmentMonth = appointment?.scheduled_start
-        ? startOfMonth(parseISO(appointment.scheduled_start))
+        ? startOfMonth(parseISO(schedulingDateKey(appointment.scheduled_start, timezone)))
         : null
     const viewMonth = viewMonthOverride ?? appointmentMonth
+    const selectedDateKey = selectedDate ? format(selectedDate, "yyyy-MM-dd") : null
+    const slotsQuery = useQuery({
+        queryKey: ["public", "manage-slots", orgId ?? null, token ?? null, selectedDateKey, timezone],
+        queryFn: () => getRescheduleSlotsByToken(orgId!, token!, selectedDateKey!, selectedDateKey!, timezone),
+        enabled: Boolean(hasManageLink && selectedAction === "reschedule" && selectedDateKey),
+        retry: false,
+    })
+    const slots = (slotsQuery.data?.slots ?? []).filter(
+        (slot) => schedulingDateKey(slot.start, timezone) === selectedDateKey,
+    )
+    const isLoadingSlots = Boolean(selectedDateKey && slotsQuery.isLoading)
+    const slotsError = Boolean(selectedDateKey && slotsQuery.isError)
+    const validSelectedSlot = selectedSlot && !isLoadingSlots && !slotsError && slots.some((slot) => slot.start === selectedSlot.start)
 
     const calendarDays: CalendarDay[] = []
     if (viewMonth && today) {
         const monthStart = startOfMonth(viewMonth)
         const startDay = getDay(monthStart)
+        const todayKey = schedulingDateKey(new Date(), timezone)
         for (let i = 0; i < startDay; i++) {
             calendarDays.push({
                 key: `empty-${format(monthStart, "yyyy-MM")}-${i + 1}`,
@@ -629,50 +617,30 @@ function ManageAppointmentSession({
         }
 
         for (const date of eachDayOfInterval({ start: monthStart, end: endOfMonth(viewMonth) })) {
-            const weekday = getDay(date)
-            const isWeekday = weekday >= 1 && weekday <= 5
+            const dateKey = format(date, "yyyy-MM-dd")
             calendarDays.push({
                 key: `date-${format(date, "yyyy-MM-dd")}`,
                 date,
-                isToday: isSameDay(date, today),
-                isAvailable: isWeekday && !isBefore(date, today),
+                isToday: dateKey === todayKey,
+                isAvailable: dateKey >= todayKey,
             })
         }
     }
 
-    const loadSlotsForDate = async (date: Date) => {
+    const selectDate = (date: Date) => {
         setSelectedDate(date)
         setSelectedSlot(null)
-        setIsLoadingSlots(true)
-
-        if (!orgId || !token) {
-            setSlots([])
-            setIsLoadingSlots(false)
-            return
-        }
-
-        try {
-            const dateString = format(date, "yyyy-MM-dd")
-            const response = await getRescheduleSlotsByToken(
-                orgId,
-                token,
-                dateString,
-                dateString,
-                timezone
-            )
-            setSlots(response.slots)
-        } catch {
-            setSlots([])
-        }
-        setIsLoadingSlots(false)
     }
 
     const handleReschedule = async () => {
-        if (!selectedSlot || !orgId || !token) return
+        if (!validSelectedSlot || !selectedSlot || !orgId || !token) return
         setIsSubmitting(true)
         setSubmissionError(null)
         try {
-            await rescheduleByManageToken(orgId, token, selectedSlot.start)
+            const updated = await rescheduleByManageToken(orgId, token, selectedSlot.start, {
+                ...(appointment?.scheduling ? { expectedRevision: appointment.scheduling.revision, requestId: createSchedulingRequestId() } : {}),
+            })
+            setUpdatedAppointment(updated)
             setSuccessState("rescheduled")
         } catch (err: unknown) {
             setSubmissionError(
@@ -687,7 +655,9 @@ function ManageAppointmentSession({
         setIsSubmitting(true)
         setSubmissionError(null)
         try {
-            await cancelByManageToken(orgId, token, reason || undefined)
+            await cancelByManageToken(orgId, token, reason || undefined, {
+                ...(appointment?.scheduling ? { expectedRevision: appointment.scheduling.revision, requestId: createSchedulingRequestId() } : {}),
+            })
             setSuccessState("cancelled")
         } catch (err: unknown) {
             setSubmissionError(
@@ -705,13 +675,14 @@ function ManageAppointmentSession({
         return (
             <ManageErrorState
                 title="Unable to Manage Appointment"
-                message={error}
+                message={canRetryAppointmentLoad ? "Unable to load this appointment. Please try again." : error}
+                {...(canRetryAppointmentLoad ? { onRetry: () => { void appointmentQuery.refetch() } } : {})}
             />
         )
     }
 
     if (successState) {
-        return <ManageSuccessState status={successState} />
+        return <ManageSuccessState status={successState} appointment={updatedAppointment} timezone={timezone} />
     }
 
     if (appointment?.status === "cancelled") {
@@ -729,42 +700,39 @@ function ManageAppointmentSession({
         <div className="min-h-screen bg-background py-12">
             <div className="max-w-2xl mx-auto px-4 space-y-6">
                 <Card>
-                    <CardHeader>
-                        <CardTitle>Manage Appointment</CardTitle>
-                        <CardDescription>
-                            Reschedule to a new time or cancel this appointment.
-                        </CardDescription>
-                    </CardHeader>
+                    <CardHeader><CardTitle>Manage Appointment</CardTitle></CardHeader>
                     <CardContent className="space-y-4">
-                        <AppointmentSummary appointment={appointment} />
+                        <AppointmentSummary appointment={appointment} timezone={timezone} />
 
-                        <AppointmentActionToggle action={action} onActionChange={setAction} />
+                        <AppointmentActionToggle action={selectedAction} onActionChange={setAction} canReschedule={canReschedule} canCancel={canCancel} />
 
-                        {action === "reschedule" ? (
+                        {selectedAction === "reschedule" && canReschedule ? (
                             <ReschedulePanel
                                 timezone={timezone}
                                 timezoneOptions={timezoneOptions}
-                                onTimezoneChange={setTimezoneOverride}
+                                onTimezoneChange={(value) => { setTimezoneOverride(value); setSelectedDate(null); setSelectedSlot(null); setViewMonthOverride(null) }}
                                 viewMonth={viewMonth}
                                 onViewMonthChange={setViewMonthOverride}
                                 calendarDays={calendarDays}
                                 selectedDate={selectedDate}
-                                onDateSelect={(date) => void loadSlotsForDate(date)}
+                                onDateSelect={selectDate}
                                 isLoadingSlots={isLoadingSlots}
+                                slotsError={slotsError}
                                 slots={slots}
                                 selectedSlot={selectedSlot}
                                 onSlotSelect={setSelectedSlot}
+                                onRetrySlots={() => void slotsQuery.refetch()}
                                 isSubmitting={isSubmitting}
                                 onConfirm={() => void handleReschedule()}
                             />
-                        ) : (
+                        ) : selectedAction === "cancel" && canCancel ? (
                             <CancelPanel
                                 reason={reason}
                                 onReasonChange={setReason}
                                 isSubmitting={isSubmitting}
                                 onCancel={() => void handleCancel()}
                             />
-                        )}
+                        ) : <p role="alert" className="text-sm text-destructive">This appointment can no longer be changed.</p>}
 
                         {error ? (
                             <p className="text-sm text-destructive text-center">{error}</p>

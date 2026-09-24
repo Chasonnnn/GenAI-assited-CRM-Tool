@@ -4,7 +4,7 @@ from datetime import date, datetime, time
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 # =============================================================================
 # Appointment Types
@@ -151,6 +151,8 @@ class BookingLinkRead(BaseModel):
 class AppointmentCreate(BaseModel):
     """Schema for creating an appointment (public booking)."""
 
+    model_config = ConfigDict(extra="forbid")
+
     appointment_type_id: UUID
     client_name: str = Field(min_length=1, max_length=255)
     client_email: EmailStr
@@ -160,18 +162,64 @@ class AppointmentCreate(BaseModel):
     client_notes: str | None = Field(None, max_length=2000)
     idempotency_key: str | None = Field(None, max_length=255)
     meeting_mode: MeetingModeLiteral | None = None
+    expected_revision: int | None = Field(None, ge=0)
+    request_id: str | None = Field(None, min_length=1, max_length=255)
 
 
 class AppointmentReschedule(BaseModel):
     """Schema for rescheduling an appointment."""
 
+    model_config = ConfigDict(extra="forbid")
+
     scheduled_start: datetime
+    expected_revision: int | None = Field(None, ge=0)
+    request_id: str | None = Field(None, min_length=1, max_length=255)
+    override_availability: bool = False
+    override_reason: str | None = Field(None, max_length=255)
 
 
 class AppointmentCancel(BaseModel):
     """Schema for cancelling an appointment."""
 
+    model_config = ConfigDict(extra="forbid")
+
     reason: str | None = Field(None, max_length=1000)
+    expected_revision: int | None = Field(None, ge=0)
+    request_id: str | None = Field(None, min_length=1, max_length=255)
+
+
+class AppointmentMutation(BaseModel):
+    expected_revision: int | None = Field(None, ge=0)
+    request_id: str | None = Field(None, min_length=1, max_length=255)
+
+
+class AppointmentComplete(AppointmentMutation):
+    status: Literal["completed", "no_show"]
+
+
+class AppointmentSyncResolve(AppointmentMutation):
+    expected_etag: str
+    resolution: Literal["crm", "google"]
+
+
+class AppointmentCapabilities(BaseModel):
+    can_reschedule: bool
+    can_cancel: bool
+    can_retry_google_sync: bool
+    can_resolve_google_conflict: bool
+
+
+class AppointmentGoogleSyncRead(BaseModel):
+    state: Literal["pending", "completed", "failed", "conflict", "unlinked"] | None
+    linked: bool
+    error_code: str | None
+    conflict: dict | None
+
+
+class AppointmentSchedulingRead(BaseModel):
+    revision: int
+    capabilities: AppointmentCapabilities
+    google_sync: AppointmentGoogleSyncRead
 
 
 class AppointmentRead(BaseModel):
@@ -216,6 +264,7 @@ class AppointmentRead(BaseModel):
     intended_parent_name: str | None = None
     created_at: datetime
     updated_at: datetime
+    scheduling: AppointmentSchedulingRead | None = None
 
 
 class AppointmentListItem(BaseModel):
@@ -246,6 +295,7 @@ class AppointmentListItem(BaseModel):
     intended_parent_id: UUID | None = None
     intended_parent_name: str | None = None
     created_at: datetime
+    scheduling: AppointmentSchedulingRead | None = None
 
 
 class AppointmentListResponse(BaseModel):
@@ -269,6 +319,8 @@ class StaffAppointmentCreate(AppointmentCreate):
     surrogate_id: UUID | None = None
     match_id: UUID | None = None
     attempt_id: UUID | None = None
+    override_availability: bool = False
+    override_reason: str | None = Field(None, max_length=255)
 
 
 class AppointmentLinkUpdate(BaseModel):
@@ -280,6 +332,8 @@ class AppointmentLinkUpdate(BaseModel):
 
     surrogate_id: UUID | None = None
     intended_parent_id: UUID | None = None
+    expected_revision: int | None = Field(None, ge=0)
+    request_id: str | None = Field(None, min_length=1, max_length=255)
 
 
 # =============================================================================

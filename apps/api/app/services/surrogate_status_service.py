@@ -147,6 +147,24 @@ def _normalize_interview_scheduled_at(
     return scheduled_at.astimezone(UTC)
 
 
+def _new_interview_appointment_type(*, org_id: UUID, user_id: UUID) -> AppointmentType:
+    return AppointmentType(
+        organization_id=org_id,
+        user_id=user_id,
+        name="Initial Interview",
+        slug="initial-interview",
+        description="Interview scheduled from a surrogate stage change.",
+        duration_minutes=30,
+        buffer_before_minutes=0,
+        buffer_after_minutes=5,
+        meeting_mode=MeetingMode.PHONE.value,
+        meeting_modes=[MeetingMode.PHONE.value],
+        auto_approve=True,
+        reminder_hours_before=24,
+        is_active=True,
+    )
+
+
 def _get_or_create_interview_appointment_type(
     db: Session,
     *,
@@ -165,21 +183,7 @@ def _get_or_create_interview_appointment_type(
     if appointment_type:
         return appointment_type
 
-    appointment_type = AppointmentType(
-        organization_id=org_id,
-        user_id=user_id,
-        name="Initial Interview",
-        slug="initial-interview",
-        description="Interview scheduled from a surrogate stage change.",
-        duration_minutes=30,
-        buffer_before_minutes=0,
-        buffer_after_minutes=5,
-        meeting_mode=MeetingMode.PHONE.value,
-        meeting_modes=[MeetingMode.PHONE.value],
-        auto_approve=True,
-        reminder_hours_before=24,
-        is_active=True,
-    )
+    appointment_type = _new_interview_appointment_type(org_id=org_id, user_id=user_id)
     db.add(appointment_type)
     db.flush()
     return appointment_type
@@ -193,6 +197,8 @@ def _schedule_interview_appointment(
     interview_scheduled_at: datetime | None,
     recorded_at: datetime,
     org_timezone_str: str,
+    override_availability: bool = False,
+    override_reason: str | None = None,
 ) -> Appointment | None:
     scheduled_start = _normalize_interview_scheduled_at(interview_scheduled_at, org_timezone_str)
     if scheduled_start is None:
@@ -226,6 +232,25 @@ def _schedule_interview_appointment(
         .order_by(Appointment.scheduled_start.desc())
         .first()
     )
+
+    from app.core.config import settings
+
+    if settings.SCHEDULING_V2_ENABLED:
+        from app.services import scheduling_v2_service
+
+        return scheduling_v2_service.record_stage_booking(
+            db,
+            surrogate=surrogate,
+            appointment=appointment,
+            appointment_type=appointment_type,
+            owner_id=appointment_owner_id,
+            actor_user_id=actor_user_id,
+            scheduled_start=scheduled_start,
+            recorded_at=recorded_at,
+            client_timezone=org_timezone_str,
+            override_availability=override_availability,
+            override_reason=override_reason,
+        )
 
     if appointment is None:
         appointment = Appointment(
@@ -322,6 +347,8 @@ def change_status(
     commit: bool = True,
     execution_permissions: frozenset[str] | None = None,
     schedule_interview_appointment: bool = True,
+    override_availability: bool = False,
+    override_reason: str | None = None,
 ) -> StatusChangeResult:
     """
     Change surrogate stage and record history with backdating support.
@@ -365,6 +392,10 @@ def change_status(
         raise ValueError("Invalid or inactive stage")
     if new_stage.pipeline_id != surrogate_pipeline_id:
         raise ValueError("Stage does not belong to surrogate pipeline")
+    if (override_availability or override_reason) and not pipeline_service.stage_matches_key(
+        new_stage, "interview_scheduled"
+    ):
+        raise ValueError("Availability override applies only to interview scheduling")
 
     if old_stage_id == new_stage.id:
         raise ValueError("Target stage is same as current stage")
@@ -523,6 +554,8 @@ def change_status(
                 interview_scheduled_at=normalized_interview_scheduled_at
                 if schedule_interview_appointment
                 else None,
+                override_availability=override_availability,
+                override_reason=override_reason,
                 trigger_workflows=trigger_workflows,
                 commit=commit,
             )
@@ -562,6 +595,8 @@ def change_status(
                 interview_scheduled_at=normalized_interview_scheduled_at
                 if schedule_interview_appointment
                 else None,
+                override_availability=override_availability,
+                override_reason=override_reason,
                 trigger_workflows=trigger_workflows,
                 commit=commit,
             )
@@ -662,6 +697,8 @@ def change_status(
         interview_scheduled_at=normalized_interview_scheduled_at
         if schedule_interview_appointment
         else None,
+        override_availability=override_availability,
+        override_reason=override_reason,
         trigger_workflows=trigger_workflows,
         commit=commit,
     )
@@ -693,6 +730,8 @@ def apply_status_change(
     paused_from_stage: PipelineStage | None = None,
     on_hold_follow_up_months: int | None = None,
     interview_scheduled_at: datetime | None = None,
+    override_availability: bool = False,
+    override_reason: str | None = None,
     trigger_workflows: bool = True,
     commit: bool = True,
 ) -> StatusChangeResult:
@@ -745,6 +784,8 @@ def apply_status_change(
             interview_scheduled_at=interview_scheduled_at,
             recorded_at=recorded_at,
             org_timezone_str=resolved_org_timezone,
+            override_availability=override_availability,
+            override_reason=override_reason,
         )
 
     # Update contact status if reached or leaving intake stage

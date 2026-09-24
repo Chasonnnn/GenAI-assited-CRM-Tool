@@ -194,6 +194,8 @@ export interface SurrogateStatusChange {
     reason?: string | null;
     effective_at?: string | null;
     interview_scheduled_at?: string | null;
+    override_availability?: boolean;
+    override_reason?: string | null;
     on_hold_follow_up_months?: 1 | 3 | 6 | null;
     delivery_baby_gender?: string | null;
     delivery_baby_weight?: string | null;

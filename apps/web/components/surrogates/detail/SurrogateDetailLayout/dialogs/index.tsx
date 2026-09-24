@@ -75,6 +75,7 @@ export function Dialogs() {
 
             <ChangeStageModal
                 open={activeDialog.type === "change_stage" && (!isV2 || canChangeStage)}
+                surrogateId={surrogate.id}
                 onOpenChange={(open) => !open && closeDialog()}
                 stages={visibleStageOptions}
                 currentStageId={surrogate.stage_id}

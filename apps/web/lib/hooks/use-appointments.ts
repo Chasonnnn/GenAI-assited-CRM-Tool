@@ -162,6 +162,10 @@ export function useAppointments(
         queryKey: appointmentKeys.list(params),
         queryFn: () => appointmentsApi.getAppointments(params),
         enabled: options?.enabled ?? true,
+        refetchInterval: (query) =>
+            query.state.data?.items.some((item) => item.scheduling?.google_sync.state === 'pending')
+                ? 2_000
+                : false,
     });
 }
 
@@ -170,6 +174,8 @@ export function useAppointment(appointmentId: string) {
         queryKey: appointmentKeys.detail(appointmentId),
         queryFn: () => appointmentsApi.getAppointment(appointmentId),
         enabled: !!appointmentId,
+        refetchInterval: (query) =>
+            query.state.data?.scheduling?.google_sync.state === 'pending' ? 2_000 : false,
     });
 }
 
@@ -202,7 +208,15 @@ export function useApproveAppointment() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: appointmentsApi.approveAppointment,
+        mutationFn: ({
+            appointmentId,
+            expectedRevision,
+            requestId,
+        }: {
+            appointmentId: string;
+            expectedRevision?: number;
+            requestId?: string;
+        }) => appointmentsApi.approveAppointment(appointmentId, { expectedRevision, requestId }),
         onSuccess: (updatedAppt) => {
             queryClient.setQueryData(appointmentKeys.detail(updatedAppt.id), updatedAppt);
             void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
@@ -217,10 +231,23 @@ export function useRescheduleAppointment() {
         mutationFn: ({
             appointmentId,
             scheduledStart,
+            expectedRevision,
+            requestId,
+            overrideAvailability,
+            overrideReason,
         }: {
             appointmentId: string;
             scheduledStart: string;
-        }) => appointmentsApi.rescheduleAppointment(appointmentId, scheduledStart),
+            expectedRevision?: number;
+            requestId?: string;
+            overrideAvailability?: boolean;
+            overrideReason?: string;
+        }) => appointmentsApi.rescheduleAppointment(appointmentId, scheduledStart, {
+            expectedRevision,
+            requestId,
+            overrideAvailability,
+            overrideReason,
+        }),
         onSuccess: (updatedAppt) => {
             queryClient.setQueryData(appointmentKeys.detail(updatedAppt.id), updatedAppt);
             void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
@@ -242,15 +269,57 @@ export function useCancelAppointment() {
         mutationFn: ({
             appointmentId,
             reason,
+            expectedRevision,
+            requestId,
         }: {
             appointmentId: string;
             reason?: string;
-        }) => appointmentsApi.cancelAppointment(appointmentId, reason),
+            expectedRevision?: number;
+            requestId?: string;
+        }) => appointmentsApi.cancelAppointment(appointmentId, reason, { expectedRevision, requestId }),
         onSuccess: (updatedAppt) => {
             queryClient.setQueryData(appointmentKeys.detail(updatedAppt.id), updatedAppt);
             void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
         },
     });
+}
+
+function updateScheduledAppointmentCache(
+    queryClient: ReturnType<typeof useQueryClient>,
+    updatedAppointment: appointmentsApi.Appointment,
+) {
+    queryClient.setQueryData(appointmentKeys.detail(updatedAppointment.id), updatedAppointment)
+    void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
+    void queryClient.invalidateQueries({ queryKey: appointmentKeys.details() })
+}
+
+export function useRetryAppointmentGoogleSync() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ appointmentId, expectedRevision, requestId }: {
+            appointmentId: string; expectedRevision: number; requestId: string;
+        }) => appointmentsApi.retryAppointmentGoogleSync(appointmentId, { expectedRevision, requestId }),
+        onSuccess: (updatedAppointment) => updateScheduledAppointmentCache(queryClient, updatedAppointment),
+    })
+}
+
+export function useResolveAppointmentGoogleConflict() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ appointmentId, expectedRevision, expectedEtag, resolution, requestId }: {
+            appointmentId: string;
+            expectedRevision: number;
+            expectedEtag: string;
+            resolution: 'crm' | 'google';
+            requestId: string;
+        }) => appointmentsApi.resolveAppointmentGoogleConflict(appointmentId, {
+            expectedRevision,
+            expectedEtag,
+            resolution,
+            requestId,
+        }),
+        onSuccess: (updatedAppointment) => updateScheduledAppointmentCache(queryClient, updatedAppointment),
+    })
 }
 
 export function useUpdateAppointmentLink() {

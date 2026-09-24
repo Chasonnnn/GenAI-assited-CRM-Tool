@@ -398,6 +398,10 @@ vi.mock('@/components/ui/dialog', () => ({
 vi.mock('@/lib/hooks/use-user-integrations', () => ({
     useUserIntegrations: (enabled?: boolean) => mockUseUserIntegrations(enabled),
     useGoogleCalendarStatus: (enabled?: boolean) => mockUseGoogleCalendarStatus(enabled),
+    useGoogleCalendarBindings: () => ({ data: { enabled: false, items: [] }, isLoading: false, isError: false }),
+    useGoogleCalendarDiscovery: () => ({ data: { items: [] }, isLoading: false, isError: false }),
+    useSaveGoogleCalendarBindings: () => ({ mutate: vi.fn(), isPending: false }),
+    useSyncGoogleCalendarBindings: () => ({ mutate: vi.fn(), isPending: false }),
     useConnectZoom: () => ({ mutate: mockConnectZoom, isPending: false }),
     useConnectGmail: () => ({ mutate: mockConnectGmail, isPending: false }),
     useConnectGoogleCalendar: () => ({ mutate: mockConnectGoogleCalendar, isPending: false }),
@@ -2438,7 +2442,7 @@ describe('IntegrationsPage', () => {
         expect(mockRetryMetaCrmDatasetEvent).toHaveBeenCalledWith({ eventId: 'meta-event-1' })
     })
 
-    it('shows last sync and triggers sync now for connected Google Calendar', () => {
+    it('shows last sync and keeps one sync action for connected Google Calendar', () => {
         const lastSyncAt = '2026-02-21T02:30:00Z'
         mockUseUserIntegrations.mockReturnValue({
             data: [
@@ -2470,10 +2474,46 @@ describe('IntegrationsPage', () => {
 
         const googleCard = screen.getByText('Google Calendar + Meeting').closest('[data-slot="card"]')
         expect(googleCard).not.toBeNull()
-        expect(within(googleCard as HTMLElement).getByText(/last sync/i)).toBeInTheDocument()
+        expect((googleCard as HTMLElement).className).not.toContain('col-span')
+        expect(within(googleCard as HTMLElement).queryByText(/last sync/i)).not.toBeInTheDocument()
+        fireEvent.click(within(googleCard as HTMLElement).getByRole('button', { name: 'Manage' }))
+        const dialog = screen.getByRole('dialog')
+        expect(within(dialog).getByText(/last sync/i)).toBeInTheDocument()
 
-        fireEvent.click(within(googleCard as HTMLElement).getByRole('button', { name: /sync now/i }))
+        expect(within(dialog).getAllByRole('button', { name: /^sync$/i })).toHaveLength(1)
+        fireEvent.click(within(dialog).getByRole('button', { name: /^sync$/i }))
         expect(mockSyncGoogleCalendarNow).toHaveBeenCalled()
+    })
+
+    it('keeps a loaded null Google status timestamp as not synced yet', () => {
+        mockUseUserIntegrations.mockReturnValue({
+            data: [{
+                integration_type: 'google_calendar',
+                connected: true,
+                account_email: 'calendaruser@test.com',
+                expires_at: null,
+                last_sync_at: '2026-02-21T02:30:00Z',
+            }],
+            isLoading: false,
+        })
+        mockUseGoogleCalendarStatus.mockReturnValue({
+            data: {
+                connected: true,
+                account_email: 'calendaruser@test.com',
+                expires_at: null,
+                tasks_accessible: true,
+                tasks_error: null,
+                last_sync_at: null,
+            },
+            isLoading: false,
+        })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'Personal' }))
+
+        const googleCard = screen.getByText('Google Calendar + Meeting').closest('[data-slot="card"]')
+        fireEvent.click(within(googleCard as HTMLElement).getByRole('button', { name: 'Manage' }))
+        expect(within(screen.getByRole('dialog')).getByText('Last sync: Not synced yet')).toBeInTheDocument()
     })
 
     it('keeps personal integrations accessible and hides organization integrations without manage_integrations', () => {

@@ -14,6 +14,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import (
     get_current_session,
     get_db,
@@ -23,10 +24,13 @@ from app.core.deps import (
 from app.core.policies import POLICIES
 from app.schemas.appointment import (
     AppointmentCancel,
+    AppointmentComplete,
     AppointmentLinkUpdate,
     AppointmentListResponse,
+    AppointmentMutation,
     AppointmentRead,
     AppointmentReschedule,
+    AppointmentSyncResolve,
     AppointmentTypeCreate,
     AppointmentTypeRead,
     AppointmentTypeUpdate,
@@ -48,8 +52,10 @@ from app.services import (
     audit_service,
     media_service,
     org_service,
+    scheduling_v2_service,
     user_service,
 )
+from app.services.calendar_binding_service import CalendarAvailabilityUnavailable
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
 router = APIRouter(
@@ -124,6 +130,22 @@ def _link_to_read(link, base_url: str = "") -> BookingLinkRead:
     )
 
 
+def _scheduling(db: Session, appt, session: UserSession, *, can_edit: bool):
+    if not settings.SCHEDULING_V2_ENABLED:
+        return None
+    return appointment_service.scheduling_read(db, appt, can_edit=can_edit)
+
+
+def _read_appointment(
+    db: Session, appt, session: UserSession, *, can_edit: bool
+) -> AppointmentRead:
+    return appointment_service.to_appointment_read(
+        appt,
+        appointment_service.get_appointment_context(db, [appt]),
+        scheduling=_scheduling(db, appt, session, can_edit=can_edit),
+    )
+
+
 # =============================================================================
 # Appointment Types
 # =============================================================================
@@ -157,6 +179,12 @@ def create_appointment_type(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Create a new appointment type."""
+    meeting_mode = data.meeting_mode
+    if settings.SCHEDULING_V2_ENABLED:
+        if "meeting_mode" not in data.model_fields_set:
+            meeting_mode = "phone"
+        if meeting_mode == "zoom" or "zoom" in (data.meeting_modes or []):
+            raise HTTPException(status_code=400, detail="Zoom scheduling is unavailable")
     try:
         appt_type = appointment_service.create_appointment_type(
             db=db,
@@ -167,7 +195,7 @@ def create_appointment_type(
             duration_minutes=data.duration_minutes,
             buffer_before_minutes=data.buffer_before_minutes,
             buffer_after_minutes=data.buffer_after_minutes,
-            meeting_mode=data.meeting_mode,
+            meeting_mode=meeting_mode,
             meeting_modes=data.meeting_modes,
             meeting_location=data.meeting_location,
             dial_in_number=data.dial_in_number,
@@ -198,6 +226,11 @@ def update_appointment_type(
     # Verify ownership
     if appt_type.user_id != session.user_id:
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    if settings.SCHEDULING_V2_ENABLED and (
+        data.meeting_mode == "zoom" or "zoom" in (data.meeting_modes or [])
+    ):
+        raise HTTPException(status_code=400, detail="Zoom scheduling is unavailable")
 
     appt_type = appointment_service.update_appointment_type(
         db=db,
@@ -474,7 +507,10 @@ def get_booking_preview_slots(
         client_timezone=client_timezone,
     )
 
-    slots = appointment_service.get_available_slots(db, query)
+    try:
+        slots = appointment_service.get_available_slots(db, query)
+    except CalendarAvailabilityUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     return AvailableSlotsResponse(
         slots=[TimeSlotRead(start=s.start, end=s.end) for s in slots],
@@ -521,12 +557,13 @@ def create_staff_appointment(
             user_id=session.user_id,
             **data.model_dump(exclude=set(links)),
             record_links=links,
+            actor_user_id=session.user_id,
         )
+    except scheduling_v2_service.SchedulingConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return appointment_service.to_appointment_read(
-        appt, appointment_service.get_appointment_context(db, [appt])
-    )
+    return _read_appointment(db, appt, session, can_edit=True)
 
 
 @router.get("", response_model=AppointmentListResponse)
@@ -602,7 +639,19 @@ def list_appointments(
     )
     db.commit()
     return AppointmentListResponse(
-        items=[appointment_service.to_appointment_list_item(a, context) for a in appointments],
+        items=[
+            appointment_service.to_appointment_list_item(
+                a,
+                context,
+                scheduling=_scheduling(
+                    db,
+                    a,
+                    session,
+                    can_edit=a.user_id == session.user_id or session.role in ["admin", "developer"],
+                ),
+            )
+            for a in appointments
+        ],
         total=total,
         page=page,
         per_page=per_page,
@@ -638,7 +687,11 @@ def get_appointment(
         details={"surrogate_id": str(appt.surrogate_id) if appt.surrogate_id else None},
     )
     db.commit()
-    return appointment_service.to_appointment_read(appt, context)
+    return appointment_service.to_appointment_read(
+        appt,
+        context,
+        scheduling=_scheduling(db, appt, session, can_edit=True),
+    )
 
 
 @router.patch(
@@ -660,12 +713,20 @@ def update_appointment_link(
         raise HTTPException(status_code=403, detail="Not authorized")
     links = _appointment_links(appt)
     appointment_service.validate_record_links(db, session, links, action="edit")
-    links.update(data.model_dump(exclude_unset=True))
+    links.update(data.model_dump(exclude_unset=True, exclude={"expected_revision", "request_id"}))
     appointment_service.validate_record_links(db, session, links, action="edit")
-    appointment_service.update_record_links(db, appt, links, session.user_id)
-    return appointment_service.to_appointment_read(
-        appt, appointment_service.get_appointment_context(db, [appt])
-    )
+    try:
+        appointment_service.update_record_links(
+            db,
+            appt,
+            links,
+            session.user_id,
+            expected_revision=data.expected_revision,
+            request_id=data.request_id,
+        )
+    except scheduling_v2_service.SchedulingConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _read_appointment(db, appt, session, can_edit=True)
 
 
 @router.post(
@@ -675,6 +736,7 @@ def update_appointment_link(
 )
 def approve_appointment(
     appointment_id: UUID,
+    data: AppointmentMutation | None = None,
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
@@ -692,17 +754,23 @@ def approve_appointment(
             db=db,
             appointment=appt,
             approved_by_user_id=session.user_id,
+            expected_revision=data.expected_revision if data else None,
+            request_id=data.request_id if data else None,
         )
 
-        # Send confirmation email to client
-        org = org_service.get_org_by_id(db, appt.organization_id)
-        base_url = org_service.get_org_portal_base_url(org)
-        appointment_email_service.send_confirmed(db, appt, base_url)
+        if not settings.SCHEDULING_V2_ENABLED:
+            org = org_service.get_org_by_id(db, appt.organization_id)
+            base_url = org_service.get_org_portal_base_url(org)
+            appointment_email_service.send_confirmed(db, appt, base_url)
 
-        context = appointment_service.get_appointment_context(db, [appt])
-        return appointment_service.to_appointment_read(appt, context)
+        return _read_appointment(db, appt, session, can_edit=True)
+    except scheduling_v2_service.SchedulingConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(
+            status_code=503 if isinstance(e, CalendarAvailabilityUnavailable) else 400,
+            detail=str(e),
+        ) from e
 
 
 @router.get("/{appointment_id}/reschedule/slots", response_model=AvailableSlotsResponse)
@@ -734,7 +802,10 @@ def get_reschedule_slots(
             client_timezone=client_timezone,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(
+            status_code=503 if isinstance(e, CalendarAvailabilityUnavailable) else 400,
+            detail=str(e),
+        ) from e
 
     return AvailableSlotsResponse(
         slots=[TimeSlotRead(start=s.start, end=s.end) for s in slots],
@@ -770,15 +841,20 @@ def reschedule_appointment(
             new_start=data.scheduled_start,
             by_client=False,
             actor_user_id=session.user_id,
+            expected_revision=data.expected_revision,
+            request_id=data.request_id,
+            override_availability=data.override_availability,
+            override_reason=data.override_reason,
         )
 
-        # Send reschedule notification email
-        org = org_service.get_org_by_id(db, appt.organization_id)
-        base_url = org_service.get_org_portal_base_url(org)
-        appointment_email_service.send_rescheduled(db, appt, old_start, base_url)
+        if not settings.SCHEDULING_V2_ENABLED:
+            org = org_service.get_org_by_id(db, appt.organization_id)
+            base_url = org_service.get_org_portal_base_url(org)
+            appointment_email_service.send_rescheduled(db, appt, old_start, base_url)
 
-        context = appointment_service.get_appointment_context(db, [appt])
-        return appointment_service.to_appointment_read(appt, context)
+        return _read_appointment(db, appt, session, can_edit=True)
+    except scheduling_v2_service.SchedulingConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -810,14 +886,187 @@ def cancel_appointment(
             reason=data.reason,
             by_client=False,
             actor_user_id=session.user_id,
+            expected_revision=data.expected_revision,
+            request_id=data.request_id,
         )
 
-        # Send cancellation notification email
-        org = org_service.get_org_by_id(db, appt.organization_id)
-        base_url = org_service.get_org_portal_base_url(org)
-        appointment_email_service.send_cancelled(db, appt, base_url)
+        if not settings.SCHEDULING_V2_ENABLED:
+            org = org_service.get_org_by_id(db, appt.organization_id)
+            base_url = org_service.get_org_portal_base_url(org)
+            appointment_email_service.send_cancelled(db, appt, base_url)
 
-        context = appointment_service.get_appointment_context(db, [appt])
-        return appointment_service.to_appointment_read(appt, context)
+        return _read_appointment(db, appt, session, can_edit=True)
+    except scheduling_v2_service.SchedulingConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+def _editable_appointment(db: Session, session: UserSession, appointment_id: UUID):
+    appointment = appointment_service.get_appointment(db, appointment_id, session.org_id)
+    if appointment is None:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    if appointment.user_id != session.user_id and session.role not in ["admin", "developer"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    appointment_service.validate_existing_appointment_access(
+        db, session, appointment, action="edit"
+    )
+    return appointment
+
+
+@router.post(
+    "/{appointment_id}/complete",
+    response_model=AppointmentRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def complete_appointment(
+    appointment_id: UUID,
+    data: AppointmentComplete,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    if not settings.SCHEDULING_V2_ENABLED:
+        raise HTTPException(status_code=404, detail="Scheduling action unavailable")
+    appointment = _editable_appointment(db, session, appointment_id)
+    try:
+        appointment = scheduling_v2_service.complete_booking(
+            db,
+            appointment,
+            status=data.status,
+            actor_user_id=session.user_id,
+            expected_revision=data.expected_revision,
+            request_id=data.request_id,
+        )
+    except scheduling_v2_service.SchedulingConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _read_appointment(db, appointment, session, can_edit=True)
+
+
+@router.post(
+    "/{appointment_id}/sync/retry",
+    response_model=AppointmentRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def retry_appointment_google_sync(
+    appointment_id: UUID,
+    data: AppointmentMutation,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    if not settings.SCHEDULING_V2_ENABLED:
+        raise HTTPException(status_code=404, detail="Scheduling action unavailable")
+    appointment = _editable_appointment(db, session, appointment_id)
+    actor_scope = scheduling_v2_service.staff_actor_scope(session.user_id)
+    request_hash = scheduling_v2_service._request_hash(
+        "google_retry",
+        {"appointment_id": appointment_id, "expected_revision": data.expected_revision},
+    )
+    try:
+        replay = scheduling_v2_service._replay(
+            db,
+            org_id=session.org_id,
+            actor_scope=actor_scope,
+            request_id=data.request_id,
+            request_hash=request_hash,
+        )
+    except scheduling_v2_service.SchedulingConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if replay:
+        return _read_appointment(db, replay, session, can_edit=True)
+    if data.expected_revision is not None and data.expected_revision != appointment.revision:
+        raise HTTPException(status_code=409, detail="Appointment changed; refresh and try again")
+    from app.services import appointment_google_sync_service
+
+    try:
+        appointment_google_sync_service.retry(db, appointment, commit=False)
+        scheduling_v2_service._save_receipt(
+            db,
+            appointment=appointment,
+            actor_scope=actor_scope,
+            request_id=data.request_id,
+            request_hash=request_hash,
+        )
+        db.commit()
+    except appointment_google_sync_service.GoogleLinkError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    db.refresh(appointment)
+    return _read_appointment(db, appointment, session, can_edit=True)
+
+
+@router.post(
+    "/{appointment_id}/sync/resolve",
+    response_model=AppointmentRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def resolve_appointment_google_conflict(
+    appointment_id: UUID,
+    data: AppointmentSyncResolve,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    if not settings.SCHEDULING_V2_ENABLED:
+        raise HTTPException(status_code=404, detail="Scheduling action unavailable")
+    appointment = _editable_appointment(db, session, appointment_id)
+    if data.expected_revision is None:
+        raise HTTPException(status_code=400, detail="Expected revision is required")
+    actor_scope = scheduling_v2_service.staff_actor_scope(session.user_id)
+    request_hash = scheduling_v2_service._request_hash(
+        "google_resolve",
+        {
+            "appointment_id": appointment_id,
+            "expected_revision": data.expected_revision,
+            "expected_etag": data.expected_etag,
+            "resolution": data.resolution,
+        },
+    )
+    try:
+        replay = scheduling_v2_service._replay(
+            db,
+            org_id=session.org_id,
+            actor_scope=actor_scope,
+            request_id=data.request_id,
+            request_hash=request_hash,
+        )
+    except scheduling_v2_service.SchedulingConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if replay:
+        return _read_appointment(db, replay, session, can_edit=True)
+    from app.services import appointment_google_sync_service
+
+    try:
+        appointment_google_sync_service.resolve_conflict(
+            db,
+            appointment,
+            resolution=data.resolution,
+            expected_revision=data.expected_revision,
+            expected_etag=data.expected_etag,
+            actor_user_id=session.user_id,
+            commit=False,
+        )
+        scheduling_v2_service._save_receipt(
+            db,
+            appointment=appointment,
+            actor_scope=actor_scope,
+            request_id=data.request_id,
+            request_hash=request_hash,
+        )
+        db.commit()
+    except (appointment_google_sync_service.GoogleLinkError, ValueError) as exc:
+        db.rollback()
+        try:
+            replay = scheduling_v2_service._replay(
+                db,
+                org_id=session.org_id,
+                actor_scope=actor_scope,
+                request_id=data.request_id,
+                request_hash=request_hash,
+            )
+        except scheduling_v2_service.SchedulingConflict as replay_exc:
+            raise HTTPException(status_code=409, detail=str(replay_exc)) from replay_exc
+        if replay:
+            return _read_appointment(db, replay, session, can_edit=True)
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    db.refresh(appointment)
+    return _read_appointment(db, appointment, session, can_edit=True)

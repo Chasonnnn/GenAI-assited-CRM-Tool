@@ -1,10 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
+const toastMocks = vi.hoisted(() => ({
+    error: vi.fn(),
+    info: vi.fn(),
+    message: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+}))
+
 vi.mock("@tanstack/react-query", async (importOriginal) => {
     const actual = await importOriginal<typeof import("@tanstack/react-query")>()
     return { ...actual, useMutation: vi.fn(), useQueryClient: vi.fn() }
 })
+
+vi.mock('@/components/ui/toast', () => ({ toast: toastMocks }))
 
 
 import {
@@ -97,6 +107,7 @@ describe('mutation invalidation contracts', () => {
         invalidateQueries.mockReset()
         removeQueries.mockReset()
         setQueryData.mockReset()
+        Object.values(toastMocks).forEach((mock) => mock.mockReset())
 
         vi.mocked(useQueryClient).mockReturnValue({
             invalidateQueries,
@@ -540,6 +551,7 @@ describe('mutation invalidation contracts', () => {
                 outbound_backfilled: 0,
                 appointment_changes: 1,
                 task_changes: 2,
+                calendars_queued: 0,
                 last_sync_at: '2026-05-10T06:00:00.000Z',
                 warnings: [],
             },
@@ -552,6 +564,26 @@ describe('mutation invalidation contracts', () => {
         expect(invalidateQueries).toHaveBeenCalledWith({
             queryKey: taskKeys.lists(),
         })
+    })
+
+    it('reports queued Google calendar work without claiming it completed', () => {
+        useSyncGoogleCalendarNow()
+
+        capturedOptions?.onSuccess?.(
+            {
+                connected: true,
+                outbound_backfilled: 0,
+                appointment_changes: 0,
+                task_changes: 0,
+                calendars_queued: 2,
+                last_sync_at: null,
+                warnings: [],
+            },
+            {}
+        )
+
+        expect(toastMocks.info).toHaveBeenCalledWith('Calendar sync queued.')
+        expect(toastMocks.success).not.toHaveBeenCalled()
     })
 
     it('refreshes task lists and linked surrogate activity once after batch task creation', () => {

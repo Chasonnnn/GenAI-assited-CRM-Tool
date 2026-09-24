@@ -26,7 +26,6 @@ import {
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
 import {
     CheckIcon,
     XIcon,
@@ -49,6 +48,10 @@ import {
     useCancelAppointment,
 } from "@/lib/hooks/use-appointments"
 import type { Appointment, AppointmentListItem, TimeSlot } from "@/lib/api/appointments"
+import { createSchedulingRequestId } from "@/lib/api/appointments"
+import { SchedulingSyncBadge, SchedulingSyncState, schedulingCanCancel, schedulingCanReschedule } from "@/components/appointments/SchedulingSyncState"
+import { SchedulingTimePicker } from "@/components/appointments/SchedulingTimePicker"
+import { formatSchedulingDate, formatSchedulingTime, localDateTimeToIso, schedulingDateKey, schedulingTimezoneLabel } from "@/lib/scheduling-time"
 import { format, parseISO } from "date-fns"
 
 // Status badge colors
@@ -77,7 +80,10 @@ type AppointmentDetailDialogState = {
     showRescheduleForm: boolean
     rescheduleDate: string
     selectedSlotStart: string | null
+    overrideStart: string
     rescheduleError: string | null
+    overrideAvailability: boolean
+    overrideReason: string
 }
 
 type AppointmentDetailDialogAction =
@@ -88,7 +94,10 @@ type AppointmentDetailDialogAction =
     | { type: "close-reschedule-form" }
     | { type: "set-reschedule-date"; value: string }
     | { type: "select-reschedule-slot"; value: string }
+    | { type: "set-override-start"; value: string }
     | { type: "set-reschedule-error"; value: string | null }
+    | { type: "set-override-availability"; value: boolean }
+    | { type: "set-override-reason"; value: string }
 
 const appointmentDetailDialogInitialState: AppointmentDetailDialogState = {
     cancelReason: "",
@@ -96,7 +105,10 @@ const appointmentDetailDialogInitialState: AppointmentDetailDialogState = {
     showRescheduleForm: false,
     rescheduleDate: "",
     selectedSlotStart: null,
+    overrideStart: "",
     rescheduleError: null,
+    overrideAvailability: false,
+    overrideReason: "",
 }
 
 function appointmentDetailDialogReducer(
@@ -117,6 +129,7 @@ function appointmentDetailDialogReducer(
                 showRescheduleForm: true,
                 rescheduleDate: action.rescheduleDate,
                 selectedSlotStart: null,
+                overrideStart: "",
                 rescheduleError: null,
             }
         case "close-reschedule-form":
@@ -130,8 +143,14 @@ function appointmentDetailDialogReducer(
             }
         case "select-reschedule-slot":
             return { ...state, selectedSlotStart: action.value, rescheduleError: null }
+        case "set-override-start":
+            return { ...state, overrideStart: action.value, rescheduleError: null }
         case "set-reschedule-error":
             return { ...state, rescheduleError: action.value }
+        case "set-override-availability":
+            return { ...state, overrideAvailability: action.value }
+        case "set-override-reason":
+            return { ...state, overrideReason: action.value }
     }
 }
 
@@ -177,6 +196,7 @@ function AppointmentCard({
                             <Badge className={STATUS_STYLES[appointment.status as keyof typeof STATUS_STYLES]}>
                                 {getAppointmentStatusLabel(appointment.status)}
                             </Badge>
+                            <SchedulingSyncBadge scheduling={appointment.scheduling} />
                         </span>
                         <span className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
                             <span className="flex items-center gap-1">
@@ -325,7 +345,7 @@ function LoadedAppointmentDetailDialog({
                 startInRescheduleMode && RESCHEDULABLE_STATUSES.has(appointment.status),
             rescheduleDate:
                 initialRescheduleDate ||
-                format(parseISO(appointment.scheduled_start), "yyyy-MM-dd"),
+                schedulingDateKey(appointment.scheduled_start, appointment.client_timezone),
         })
     )
 
@@ -334,20 +354,26 @@ function LoadedAppointmentDetailDialog({
         dialogState.rescheduleDate,
         dialogState.rescheduleDate,
         appointment?.client_timezone,
-        dialogState.showRescheduleForm && !!dialogState.rescheduleDate,
+        dialogState.showRescheduleForm && !!dialogState.rescheduleDate && !dialogState.overrideAvailability,
     )
 
     const handleApprove = () => {
-        approveMutation.mutate(appointmentId, {
+        approveMutation.mutate({
+            appointmentId,
+            ...(appointment.scheduling ? { expectedRevision: appointment.scheduling.revision, requestId: createSchedulingRequestId() } : {}),
+        }, {
             onSuccess: () => onOpenChange(false),
         })
     }
 
     const handleReschedule = () => {
-        if (!dialogState.selectedSlotStart) {
+        const scheduledStart = dialogState.overrideAvailability
+            ? localDateTimeToIso(dialogState.overrideStart)
+            : dialogState.selectedSlotStart
+        if (!scheduledStart) {
             dispatchDialogState({
                 type: "set-reschedule-error",
-                value: "Please choose an available time slot.",
+                value: dialogState.overrideAvailability ? "Choose a valid override date and time." : "Please choose an available time slot.",
             })
             return
         }
@@ -356,7 +382,10 @@ function LoadedAppointmentDetailDialog({
         rescheduleMutation.mutate(
             {
                 appointmentId,
-                scheduledStart: dialogState.selectedSlotStart,
+                scheduledStart,
+                ...(appointment.scheduling ? { expectedRevision: appointment.scheduling.revision, requestId: createSchedulingRequestId() } : {}),
+                overrideAvailability: dialogState.overrideAvailability,
+                ...(dialogState.overrideReason.trim() ? { overrideReason: dialogState.overrideReason.trim() } : {}),
             },
             {
                 onSuccess: () => onOpenChange(false),
@@ -375,27 +404,31 @@ function LoadedAppointmentDetailDialog({
         const payload = {
             appointmentId,
             ...(dialogState.cancelReason.trim() ? { reason: dialogState.cancelReason.trim() } : {}),
+            ...(appointment.scheduling ? { expectedRevision: appointment.scheduling.revision, requestId: createSchedulingRequestId() } : {}),
         }
         cancelMutation.mutate(payload, { onSuccess: () => onOpenChange(false) })
     }
 
     const isReschedulable = RESCHEDULABLE_STATUSES.has(appointment.status)
+    const actionMode = dialogState.showRescheduleForm ? "reschedule" : dialogState.showCancelForm ? "cancel" : null
+    const hasDetailActions = appointment.status === "pending" || appointment.status === "confirmed"
+    const syncNeedsAttention = ["failed", "unlinked", "conflict"].includes(appointment.scheduling?.google_sync.state ?? "")
 
     return (
         <Dialog open onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-lg">
-                <DialogHeader>
-                    <DialogTitle>Appointment Details</DialogTitle>
-                    <DialogDescription>
-                        {appointment.appointment_type_name || "Appointment"} with {appointment.client_name}
-                    </DialogDescription>
+            <DialogContent className={`flex w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] flex-col overflow-hidden rounded-2xl p-0 gap-0 ${actionMode === "reschedule" ? "sm:max-w-2xl" : "sm:max-w-lg"}`}>
+                <DialogHeader className="shrink-0 border-b py-4 pl-5 pr-12">
+                    <DialogTitle>{actionMode === "reschedule" ? "Reschedule appointment" : actionMode === "cancel" ? "Cancel appointment?" : appointment.appointment_type_name || "Appointment"}</DialogTitle>
+                    <DialogDescription>{actionMode ? appointment.appointment_type_name || "Appointment" : appointment.client_name}</DialogDescription>
+                    {!actionMode && <AppointmentStatusSummary appointment={appointment} />}
                 </DialogHeader>
 
-                <div className="space-y-6 py-4">
-                    <AppointmentStatusSummary appointment={appointment} />
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+                    {actionMode ? <AppointmentActionSummary appointment={appointment} /> : <>
+                    {syncNeedsAttention ? <SchedulingSyncState appointment={appointment} /> : null}
                     <AppointmentTimeSummary appointment={appointment} />
                     <AppointmentFormatSummary appointment={appointment} />
-                    <AppointmentClientInfo appointment={appointment} />
+                    <AppointmentClientInfo appointment={appointment} /></>}
                     {dialogState.showCancelForm && (
                         <AppointmentCancelForm
                             cancelReason={dialogState.cancelReason}
@@ -407,54 +440,62 @@ function LoadedAppointmentDetailDialog({
                     {dialogState.showRescheduleForm && (
                         <AppointmentRescheduleForm
                             rescheduleDate={dialogState.rescheduleDate}
+                            timezone={appointment.client_timezone}
                             selectedSlotStart={dialogState.selectedSlotStart}
                             rescheduleError={dialogState.rescheduleError}
                             slots={slotsQuery.data?.slots}
                             slotsLoading={slotsQuery.isLoading}
                             slotsError={slotsQuery.isError}
+                            onRetrySlots={() => void slotsQuery.refetch()}
                             onRescheduleDateChange={(value) =>
                                 dispatchDialogState({ type: "set-reschedule-date", value })
                             }
                             onSlotSelect={(value) =>
                                 dispatchDialogState({ type: "select-reschedule-slot", value })
                             }
+                            overrideAvailability={dialogState.overrideAvailability}
+                            overrideReason={dialogState.overrideReason}
+                            overrideStart={dialogState.overrideStart}
+                            onOverrideAvailabilityChange={(value) => dispatchDialogState({ type: "set-override-availability", value })}
+                            onOverrideReasonChange={(value) => dispatchDialogState({ type: "set-override-reason", value })}
+                            onOverrideStartChange={(value) => dispatchDialogState({ type: "set-override-start", value })}
                         />
                     )}
                 </div>
 
-                <AppointmentDetailActions
+                {hasDetailActions ? <div className="shrink-0 border-t px-5 py-4"><AppointmentDetailActions
                     appointment={appointment}
-                    isReschedulable={isReschedulable}
-                    showCancelForm={dialogState.showCancelForm}
-                    showRescheduleForm={dialogState.showRescheduleForm}
-                    selectedSlotStart={dialogState.selectedSlotStart}
-                    approvePending={approveMutation.isPending}
-                    cancelPending={cancelMutation.isPending}
-                    reschedulePending={rescheduleMutation.isPending}
-                    onApprove={handleApprove}
-                    onCancel={handleCancel}
-                    onReschedule={handleReschedule}
-                    onCloseCancel={() => dispatchDialogState({ type: "close-cancel-form" })}
-                    onCloseReschedule={() => dispatchDialogState({ type: "close-reschedule-form" })}
-                    onOpenCancel={() => dispatchDialogState({ type: "open-cancel-form" })}
-                    onOpenReschedule={() =>
-                        dispatchDialogState({
-                            type: "open-reschedule-form",
-                            rescheduleDate: format(parseISO(appointment.scheduled_start), "yyyy-MM-dd"),
-                        })
-                    }
-                />
+                    state={{
+                        isReschedulable,
+                        forms: { cancel: dialogState.showCancelForm, reschedule: dialogState.showRescheduleForm, selectedSlotStart: dialogState.overrideAvailability ? localDateTimeToIso(dialogState.overrideStart) : dialogState.selectedSlotStart, overrideReady: !dialogState.overrideAvailability || Boolean(dialogState.overrideReason.trim()) },
+                        capabilities: { reschedule: schedulingCanReschedule(appointment.scheduling), cancel: schedulingCanCancel(appointment.scheduling) },
+                        pending: { approve: approveMutation.isPending, cancel: cancelMutation.isPending, reschedule: rescheduleMutation.isPending },
+                    }}
+                    handlers={{
+                        approve: handleApprove,
+                        cancel: handleCancel,
+                        reschedule: handleReschedule,
+                        closeCancel: () => dispatchDialogState({ type: "close-cancel-form" }),
+                        closeReschedule: () => dispatchDialogState({ type: "close-reschedule-form" }),
+                        openCancel: () => dispatchDialogState({ type: "open-cancel-form" }),
+                        openReschedule: () => dispatchDialogState({ type: "open-reschedule-form", rescheduleDate: schedulingDateKey(appointment.scheduled_start, appointment.client_timezone) }),
+                    }}
+                /></div> : null}
             </DialogContent>
         </Dialog>
     )
 }
 
 function AppointmentStatusSummary({ appointment }: { appointment: Appointment }) {
+    const syncState = appointment.scheduling?.google_sync.state
     return (
-        <div className="flex items-center gap-2">
-            <Badge className={`${STATUS_STYLES[appointment.status]} text-sm px-3 py-1`}>
+        <div role="status" className="flex flex-wrap items-center gap-2">
+            <Badge className={STATUS_STYLES[appointment.status]}>
                 {getAppointmentStatusLabel(appointment.status)}
             </Badge>
+            {(syncState === "pending" || syncState === "completed") && (
+                <SchedulingSyncBadge scheduling={appointment.scheduling} />
+            )}
             {appointment.status === "pending" && appointment.pending_expires_at && (
                 <span className="text-sm text-muted-foreground">
                     Expires {format(parseISO(appointment.pending_expires_at), "h:mm a")}
@@ -464,18 +505,27 @@ function AppointmentStatusSummary({ appointment }: { appointment: Appointment })
     )
 }
 
+function AppointmentActionSummary({ appointment }: { appointment: Appointment }) {
+    return <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+        <p className="font-medium">{appointment.client_name}</p>
+        <p className="text-muted-foreground">
+            {formatSchedulingDate(appointment.scheduled_start, appointment.client_timezone)} · {formatSchedulingTime(appointment.scheduled_start, appointment.client_timezone)} · {appointment.duration_minutes} min · {schedulingTimezoneLabel(appointment.client_timezone)}
+        </p>
+    </div>
+}
+
 function AppointmentTimeSummary({ appointment }: { appointment: Appointment }) {
     return (
         <div className="flex items-start gap-3">
             <CalendarIcon className="size-5 text-muted-foreground mt-0.5" />
             <div>
                 <p className="font-medium">
-                    {format(parseISO(appointment.scheduled_start), "EEEE, MMMM d, yyyy")}
+                    {formatSchedulingDate(appointment.scheduled_start, appointment.client_timezone)}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                    {format(parseISO(appointment.scheduled_start), "h:mm a")} –{" "}
-                    {format(parseISO(appointment.scheduled_end), "h:mm a")}
-                    <span className="ml-2">({appointment.duration_minutes} min)</span>
+                    {formatSchedulingTime(appointment.scheduled_start, appointment.client_timezone)} –{" "}
+                    {formatSchedulingTime(appointment.scheduled_end, appointment.client_timezone)}
+                    <span className="ml-2">{schedulingTimezoneLabel(appointment.client_timezone)} · {appointment.duration_minutes} min</span>
                 </p>
             </div>
         </div>
@@ -529,10 +579,8 @@ function AppointmentFormatSummary({ appointment }: { appointment: Appointment })
 
 function AppointmentClientInfo({ appointment }: { appointment: Appointment }) {
     return (
-        <div className="border-t border-border pt-4">
-            <h4 className="text-sm font-medium text-muted-foreground mb-3">Client Information</h4>
+        <div className="border-t border-border pt-3">
             <div className="space-y-2">
-                <p className="font-medium">{appointment.client_name}</p>
                 <p className="text-sm flex items-center gap-2">
                     <MailIcon className="size-4 text-muted-foreground" />
                     <a href={`mailto:${appointment.client_email}`} className="text-primary hover:underline">
@@ -565,12 +613,12 @@ function AppointmentCancelForm({
 }) {
     return (
         <div className="border-t border-border pt-4">
-            <Label className="mb-2">Cancellation Reason (optional)</Label>
+            <Label className="mb-2" htmlFor="cancellation-reason">Reason (optional)</Label>
             <Textarea
+                id="cancellation-reason"
                 value={cancelReason}
                 onChange={(event) => onCancelReasonChange(event.target.value)}
-                placeholder="Enter reason for cancellation…"
-                rows={3}
+                rows={2}
             />
         </div>
     )
@@ -578,75 +626,54 @@ function AppointmentCancelForm({
 
 function AppointmentRescheduleForm({
     rescheduleDate,
+    timezone,
     selectedSlotStart,
     rescheduleError,
     slots,
     slotsLoading,
     slotsError,
+    onRetrySlots,
     onRescheduleDateChange,
     onSlotSelect,
+    overrideAvailability,
+    overrideReason,
+    overrideStart,
+    onOverrideAvailabilityChange,
+    onOverrideReasonChange,
+    onOverrideStartChange,
 }: {
     rescheduleDate: string
+    timezone: string
     selectedSlotStart: string | null
     rescheduleError: string | null
     slots: TimeSlot[] | undefined
     slotsLoading: boolean
     slotsError: boolean
+    onRetrySlots: () => void
     onRescheduleDateChange: (value: string) => void
     onSlotSelect: (value: string) => void
+    overrideAvailability: boolean
+    overrideReason: string
+    overrideStart: string
+    onOverrideAvailabilityChange: (value: boolean) => void
+    onOverrideReasonChange: (value: string) => void
+    onOverrideStartChange: (value: string) => void
 }) {
     return (
         <div className="border-t border-border pt-4 space-y-4">
-            <div className="space-y-2">
-                <Label htmlFor="reschedule-date">New Date</Label>
-                <Input
-                    id="reschedule-date"
-                    type="date"
-                    value={rescheduleDate}
-                    onChange={(event) => onRescheduleDateChange(event.target.value)}
-                />
-            </div>
-
-            <div className="space-y-2">
-                <Label>Available Times</Label>
-                {slotsLoading ? (
-                    <div className="py-2 flex items-center gap-2 text-sm text-muted-foreground">
-                        <Loader2Icon className="size-4 animate-spin" />
-                        Loading available slots…
-                    </div>
-                ) : slots?.length ? (
-                    <div className="grid grid-cols-3 gap-2 max-h-44 overflow-y-auto">
-                        {slots.map((slot) => {
-                            const selected = selectedSlotStart === slot.start
-                            return (
-                                <Button
-                                    key={slot.start}
-                                    variant={selected ? "default" : "outline"}
-                                    size="sm"
-                                    aria-label={`Reschedule slot ${slot.start}`}
-                                    onClick={() => onSlotSelect(slot.start)}
-                                    className="h-auto py-2"
-                                >
-                                    {format(parseISO(slot.start), "h:mm a")}
-                                </Button>
-                            )
-                        })}
-                    </div>
-                ) : (
-                    <p className="text-sm text-muted-foreground">
-                        No available times for this date.
-                    </p>
-                )}
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-                Times shown in your local timezone.
-            </p>
-            {slotsError && (
-                <p className="text-sm text-destructive">
-                    Failed to load availability. Try a different date.
-                </p>
-            )}
+            <SchedulingTimePicker
+                idPrefix="reschedule"
+                date={rescheduleDate}
+                onDateChange={onRescheduleDateChange}
+                timezone={overrideAvailability ? Intl.DateTimeFormat().resolvedOptions().timeZone : timezone}
+                slots={slots}
+                selectedStart={selectedSlotStart}
+                onSelectStart={onSlotSelect}
+                loading={slotsLoading}
+                error={slotsError ? "Calendar availability could not be loaded." : null}
+                onRetry={onRetrySlots}
+                override={{ enabled: overrideAvailability, onEnabledChange: onOverrideAvailabilityChange, dateTime: overrideStart, onDateTimeChange: onOverrideStartChange, reason: overrideReason, onReasonChange: onOverrideReasonChange }}
+            />
             {rescheduleError && (
                 <p role="alert" className="text-sm text-destructive">
                     {rescheduleError}
@@ -656,106 +683,78 @@ function AppointmentRescheduleForm({
     )
 }
 
-function AppointmentDetailActions({
-    appointment,
-    isReschedulable,
-    showCancelForm,
-    showRescheduleForm,
-    selectedSlotStart,
-    approvePending,
-    cancelPending,
-    reschedulePending,
-    onApprove,
-    onCancel,
-    onReschedule,
-    onCloseCancel,
-    onCloseReschedule,
-    onOpenCancel,
-    onOpenReschedule,
-}: {
+function AppointmentDetailActions({ appointment, state, handlers }: {
     appointment: Appointment
-    isReschedulable: boolean
-    showCancelForm: boolean
-    showRescheduleForm: boolean
-    selectedSlotStart: string | null
-    approvePending: boolean
-    cancelPending: boolean
-    reschedulePending: boolean
-    onApprove: () => void
-    onCancel: () => void
-    onReschedule: () => void
-    onCloseCancel: () => void
-    onCloseReschedule: () => void
-    onOpenCancel: () => void
-    onOpenReschedule: () => void
+    state: { isReschedulable: boolean; forms: { cancel: boolean; reschedule: boolean; selectedSlotStart: string | null; overrideReady: boolean }; capabilities: { reschedule: boolean; cancel: boolean }; pending: { approve: boolean; cancel: boolean; reschedule: boolean } }
+    handlers: { approve: () => void; cancel: () => void; reschedule: () => void; closeCancel: () => void; closeReschedule: () => void; openCancel: () => void; openReschedule: () => void }
 }) {
     if (appointment.status !== "pending" && appointment.status !== "confirmed") {
         return null
     }
 
     return (
-        <div className="flex flex-wrap justify-end gap-2 pt-4 border-t border-border">
-            {showRescheduleForm ? (
+        <div className="flex flex-wrap justify-end gap-2">
+            {state.forms.reschedule ? (
                 <>
                     <Button
                         variant="outline"
-                        onClick={onCloseReschedule}
-                        disabled={reschedulePending}
+                        onClick={handlers.closeReschedule}
+                        disabled={state.pending.reschedule}
                     >
                         Back
                     </Button>
                     <Button
-                        onClick={onReschedule}
-                        disabled={reschedulePending || !selectedSlotStart}
+                        onClick={handlers.reschedule}
+                        disabled={state.pending.reschedule || !state.forms.selectedSlotStart || !state.forms.overrideReady || !state.capabilities.reschedule}
                     >
-                        {reschedulePending && (
+                        {state.pending.reschedule && (
                             <Loader2Icon className="size-4 mr-2 animate-spin" />
                         )}
-                        Confirm Reschedule
+                        Save new time
                     </Button>
                 </>
-            ) : showCancelForm ? (
+            ) : state.forms.cancel ? (
                 <>
                     <Button
                         variant="outline"
-                        onClick={onCloseCancel}
-                        disabled={cancelPending}
+                        onClick={handlers.closeCancel}
+                        disabled={state.pending.cancel}
                     >
                         Back
                     </Button>
                     <Button
                         variant="destructive"
-                        onClick={onCancel}
-                        disabled={cancelPending}
+                        onClick={handlers.cancel}
+                        disabled={state.pending.cancel || !state.capabilities.cancel}
                     >
-                        {cancelPending && <Loader2Icon className="size-4 mr-2 animate-spin" />}
-                        Confirm Cancel
+                        {state.pending.cancel && <Loader2Icon className="size-4 mr-2 animate-spin" />}
+                        Cancel appointment
                     </Button>
                 </>
             ) : (
                 <>
-                    {isReschedulable && (
+                    {state.isReschedulable && state.capabilities.reschedule && (
                         <Button
                             variant="outline"
-                            onClick={onOpenReschedule}
+                            onClick={handlers.openReschedule}
                         >
                             Reschedule Appointment
                         </Button>
                     )}
-                    <Button
+                    {state.capabilities.cancel ? <Button
                         variant="outline"
-                        onClick={onOpenCancel}
+                        onClick={handlers.openCancel}
                         className="text-destructive"
                     >
                         {appointment.status === "pending" ? "Decline" : "Cancel Appointment"}
-                    </Button>
+                    </Button> : null}
                     {appointment.status === "pending" && (
                         <Button
-                            onClick={onApprove}
-                            disabled={approvePending}
+                            onClick={handlers.approve}
+                            disabled={state.pending.approve}
                             className="bg-green-600 hover:bg-green-700"
                         >
-                            {approvePending && <Loader2Icon className="size-4 mr-2 animate-spin" />}
+                            {state.pending.approve && <Loader2Icon className="size-4 mr-2 animate-spin" />}
                             Approve
                         </Button>
                     )}
@@ -830,7 +829,7 @@ function AppointmentsTabContent({
         <>
             <div className="space-y-3">
                 {data.items.map((appt) => {
-                    const isApproving = approveMutation.isPending && approveMutation.variables === appt.id
+                    const isApproving = approveMutation.isPending && approveMutation.variables?.appointmentId === appt.id
                     const isCancelling =
                         cancelMutation.isPending &&
                         cancelMutation.variables?.appointmentId === appt.id
@@ -838,7 +837,10 @@ function AppointmentsTabContent({
                         <>
                             <Button
                                 size="sm"
-                                onClick={() => approveMutation.mutate(appt.id)}
+                                onClick={() => approveMutation.mutate({
+                                    appointmentId: appt.id,
+                                    ...(appt.scheduling ? { expectedRevision: appt.scheduling.revision, requestId: createSchedulingRequestId() } : {}),
+                                })}
                                 disabled={isApproving}
                                 className="bg-green-600 hover:bg-green-700"
                             >
@@ -852,8 +854,11 @@ function AppointmentsTabContent({
                             <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => cancelMutation.mutate({ appointmentId: appt.id })}
-                                disabled={isCancelling}
+                                onClick={() => cancelMutation.mutate({
+                                    appointmentId: appt.id,
+                                    ...(appt.scheduling ? { expectedRevision: appt.scheduling.revision, requestId: createSchedulingRequestId() } : {}),
+                                })}
+                                disabled={isCancelling || !schedulingCanCancel(appt.scheduling)}
                                 className="text-destructive border-destructive/30 hover:bg-destructive/10"
                             >
                                 {isCancelling ? (

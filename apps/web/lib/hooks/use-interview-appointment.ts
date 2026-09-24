@@ -5,6 +5,17 @@ import { appointmentKeys } from "@/lib/hooks/use-appointments"
 
 export const interviewAppointmentKeys = {
     detail: surrogateKeys.interviewAppointment,
+    slots: (surrogateId: string, date: string, timezone: string) => ["interview-slots", surrogateId, date, timezone] as const,
+}
+
+export function useInterviewSlots(surrogateId: string, date: string, timezone: string, enabled = true) {
+    return useQuery({
+        queryKey: interviewAppointmentKeys.slots(surrogateId, date, timezone),
+        queryFn: () => appointmentApi.getInterviewSlots(surrogateId, date, timezone),
+        enabled: enabled && Boolean(surrogateId && date && timezone),
+        retry: false,
+        staleTime: 15_000,
+    })
 }
 
 export function useInterviewAppointment(surrogateId: string) {
@@ -13,7 +24,11 @@ export function useInterviewAppointment(surrogateId: string) {
         queryFn: () => appointmentApi.getInterviewAppointment(surrogateId),
         enabled: Boolean(surrogateId),
         retry: false,
-        refetchInterval: (query) => query.state.data?.external_sync_status === "pending" ? 2_000 : 30_000,
+        refetchInterval: (query) =>
+            (query.state.data?.appointment?.scheduling?.google_sync.state
+                ?? query.state.data?.external_sync_status) === "pending"
+                ? 2_000
+                : 30_000,
     })
 }
 
@@ -28,6 +43,7 @@ export function useManageInterviewAppointment(surrogateId: string) {
                 surrogateKeys.detail(surrogateId), surrogateKeys.activity(surrogateId),
                 surrogateKeys.history(surrogateId), surrogateKeys.lists(), ["interviews", surrogateId],
                 appointmentKeys.all,
+                ["interview-slots", surrogateId],
             ]) void queryClient.invalidateQueries({ queryKey: key })
         },
         onError: () => {

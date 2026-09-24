@@ -513,7 +513,8 @@ class GoogleCalendarSyncResponse(BaseModel):
     outbound_backfilled: int
     appointment_changes: int
     task_changes: int
-    last_sync_at: str
+    calendars_queued: int = 0
+    last_sync_at: str | None = None
     warnings: list[str] = []
 
 
@@ -534,6 +535,16 @@ def google_calendar_connection_status(
             session.user_id,
         )
 
+    last_sync_at = integration.updated_at if integration and integration.updated_at else None
+    if integration and getattr(settings, "SCHEDULING_V2_ENABLED", False):
+        from app.services import calendar_binding_service
+
+        last_sync_at = calendar_binding_service.get_active_bindings_last_sync_at(
+            db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+        )
+
     return GoogleCalendarStatusResponse(
         connected=integration is not None,
         account_email=integration.account_email if integration else None,
@@ -542,9 +553,7 @@ def google_calendar_connection_status(
         else None,
         tasks_accessible=tasks_accessible,
         tasks_error=tasks_error,
-        last_sync_at=integration.updated_at.isoformat()
-        if integration and integration.updated_at
-        else None,
+        last_sync_at=last_sync_at.isoformat() if last_sync_at else None,
     )
 
 
@@ -567,6 +576,60 @@ async def sync_google_calendar_now(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Google Calendar not connected.",
+        )
+
+    if getattr(settings, "SCHEDULING_V2_ENABLED", False):
+        from app.services import calendar_binding_service, google_tasks_sync_service
+
+        warnings: list[str] = []
+        queued = 0
+        try:
+            for binding in calendar_binding_service.list_bindings(
+                db, org_id=session.org_id, user_id=session.user_id
+            ):
+                if binding.is_active:
+                    calendar_binding_service.enqueue_binding_sync(
+                        db,
+                        binding_id=binding.id,
+                        org_id=session.org_id,
+                        commit=False,
+                    )
+                    queued += 1
+            if not queued:
+                warnings.append("no_calendar_bindings")
+            db.commit()
+        except Exception:
+            db.rollback()
+            warnings.append("calendar_reconciliation_queue_failed")
+            logger.exception(
+                "Google Calendar v2 sync queue failed user=%s org=%s",
+                session.user_id,
+                session.org_id,
+            )
+
+        try:
+            task_changes = await google_tasks_sync_service.sync_google_tasks_for_user_async(
+                db=db,
+                user_id=session.user_id,
+                org_id=session.org_id,
+            )
+        except Exception:
+            task_changes = 0
+            warnings.append("task_reconciliation_failed")
+
+        last_sync_at = calendar_binding_service.get_active_bindings_last_sync_at(
+            db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+        )
+        return GoogleCalendarSyncResponse(
+            connected=True,
+            outbound_backfilled=0,
+            appointment_changes=0,
+            task_changes=task_changes,
+            calendars_queued=queued,
+            last_sync_at=last_sync_at.isoformat() if last_sync_at else None,
+            warnings=warnings,
         )
 
     from app.services import (
@@ -779,6 +842,7 @@ class GoogleCalendarEventRead(BaseModel):
     """A Google Calendar event for display."""
 
     id: str
+    calendar_id: str | None = None
     summary: str
     start: str  # ISO datetime
     end: str  # ISO datetime
@@ -853,6 +917,34 @@ async def get_google_calendar_events(
     time_min = dt.combine(start_date.date(), tm.min, tzinfo=client_tz)
     time_max = dt.combine(end_date.date(), tm(23, 59, 59, 999999), tzinfo=client_tz)
 
+    if getattr(settings, "SCHEDULING_V2_ENABLED", False):
+        from app.services import calendar_binding_service
+
+        connected, projections = calendar_binding_service.list_visible_projection_events(
+            db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            start=time_min,
+            end=time_max,
+        )
+        return GoogleCalendarEventsResponse(
+            connected=connected,
+            events=[
+                GoogleCalendarEventRead(
+                    id=event["id"],
+                    calendar_id=event["calendar_id"],
+                    summary=event["summary"],
+                    start=event["start"].isoformat(),
+                    end=event["end"].isoformat(),
+                    html_link=event["html_link"],
+                    is_all_day=event["is_all_day"],
+                    source="google",
+                )
+                for event in projections
+            ],
+            complete=True,
+        )
+
     # Fetch events across visible calendars - returns empty list if not connected
     result = await calendar_service.get_user_calendar_events_across_calendars(
         db=db,
@@ -863,6 +955,7 @@ async def get_google_calendar_events(
     events = [
         GoogleCalendarEventRead(
             id=e["id"],
+            calendar_id=None,
             summary=e["summary"],
             start=e["start"].isoformat(),
             end=e["end"].isoformat(),

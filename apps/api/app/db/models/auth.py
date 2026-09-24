@@ -209,7 +209,10 @@ class Membership(Base):
     """
 
     __tablename__ = "memberships"
-    __table_args__ = (Index("idx_memberships_org_id", "organization_id"),)
+    __table_args__ = (
+        UniqueConstraint("organization_id", "user_id", name="uq_memberships_org_user"),
+        Index("idx_memberships_org_id", "organization_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")

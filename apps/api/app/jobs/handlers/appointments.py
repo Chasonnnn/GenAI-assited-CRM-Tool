@@ -9,10 +9,23 @@ from uuid import UUID
 logger = logging.getLogger(__name__)
 
 
-async def process_appointment_google_sync(db, job) -> None:
+async def process_appointment_expiry(db, job) -> None:
+    from app.core.config import settings
+    from app.services import scheduling_v2_service
+
+    if settings.SCHEDULING_V2_ENABLED:
+        scheduling_v2_service.expire_booking(
+            db,
+            appointment_id=UUID(str((job.payload or {})["appointment_id"])),
+            org_id=job.organization_id,
+            revision=int((job.payload or {})["revision"]),
+        )
+
+
+async def process_appointment_google_sync(db, job) -> bool | None:
     from app.services import appointment_google_sync_service
 
-    await appointment_google_sync_service.process_job(db, job)
+    return await appointment_google_sync_service.process_job(db, job)
 
 
 async def process_google_calendar_sync(db, job) -> None:
@@ -24,9 +37,18 @@ async def process_google_calendar_sync(db, job) -> None:
       - date_start (optional): ISO date YYYY-MM-DD
       - date_end (optional): ISO date YYYY-MM-DD
     """
-    from app.services import appointment_integrations
+    from app.core.config import settings
+    from app.services import appointment_integrations, calendar_binding_service
 
     payload = job.payload or {}
+    if settings.SCHEDULING_V2_ENABLED:
+        if not payload.get("binding_id"):
+            # Legacy user-scoped jobs cannot select a tenant/calendar in v2.
+            return
+        await calendar_binding_service.sync_binding(
+            db, binding_id=UUID(str(payload["binding_id"])), org_id=job.organization_id
+        )
+        return
     user_id_raw = payload.get("user_id")
     if not user_id_raw:
         raise ValueError("Missing user_id in google_calendar_sync payload")
@@ -75,9 +97,17 @@ async def process_google_calendar_watch_refresh(db, job) -> None:
     Payload:
       - user_id (required): target user UUID
     """
-    from app.services import calendar_service
+    from app.core.config import settings
+    from app.services import calendar_service, google_calendar_watch_service
 
     payload = job.payload or {}
+    if settings.SCHEDULING_V2_ENABLED:
+        if not payload.get("binding_id"):
+            return
+        await google_calendar_watch_service.ensure_binding_watch(
+            db, binding_id=UUID(str(payload["binding_id"])), org_id=job.organization_id
+        )
+        return
     user_id_raw = payload.get("user_id")
     if not user_id_raw:
         raise ValueError("Missing user_id in google_calendar_watch_refresh payload")

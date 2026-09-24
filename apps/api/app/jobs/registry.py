@@ -32,7 +32,7 @@ from app.jobs.handlers import (
 )
 from app.services import ai_email_service
 
-JobHandler = Callable[[object, object], Awaitable[None]]
+JobHandler = Callable[[object, object], Awaitable[bool | None]]
 
 JOB_HANDLERS: Mapping[str, JobHandler] = {
     JobType.SEND_EMAIL.value: email.process_send_email,
@@ -69,6 +69,7 @@ JOB_HANDLERS: Mapping[str, JobHandler] = {
     JobType.ZAPIER_STAGE_EVENT.value: zapier.process_zapier_stage_event,
     JobType.GOOGLE_CALENDAR_SYNC.value: appointments.process_google_calendar_sync,
     JobType.APPOINTMENT_GOOGLE_SYNC.value: appointments.process_appointment_google_sync,
+    JobType.APPOINTMENT_EXPIRE.value: appointments.process_appointment_expiry,
     JobType.GOOGLE_TASKS_SYNC.value: appointments.process_google_tasks_sync,
     JobType.GOOGLE_TASK_CREATION_RECONCILE.value: (
         appointments.process_google_task_creation_reconcile

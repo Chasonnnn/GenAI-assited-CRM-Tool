@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.deps import get_db
 from app.core.rate_limit import limiter
+from app.db.enums import AppointmentStatus
 from app.schemas.appointment import (
     AppointmentCancel,
     AppointmentCreate,
@@ -33,8 +34,10 @@ from app.services import (
     appointment_service,
     media_service,
     org_service,
+    scheduling_v2_service,
     user_service,
 )
+from app.services.calendar_binding_service import CalendarAvailabilityUnavailable
 
 router = APIRouter(prefix="/book", tags=["booking"])
 PUBLIC_FORM_LIMIT = f"{settings.RATE_LIMIT_PUBLIC_FORMS}/minute"
@@ -68,7 +71,7 @@ def _type_to_read(appt_type) -> AppointmentTypeRead:
     )
 
 
-def _appointment_to_public_read(appt, db: Session) -> dict:
+def _appointment_to_public_read(appt, db: Session, token: str | None = None) -> dict:
     """Convert Appointment to public-safe read format."""
     appt_type_name = None
     if appt.appointment_type:
@@ -77,24 +80,48 @@ def _appointment_to_public_read(appt, db: Session) -> dict:
     user = user_service.get_user_by_id(db, appt.user_id)
     staff_name = user.display_name if user else None
 
-    return {
+    replay = getattr(appt, "_scheduling_replay_result", None) or {}
+    result = {
         "id": str(appt.id),
         "appointment_type_name": appt_type_name,
         "staff_name": staff_name,
         "client_name": appt.client_name,
         "client_email": appt.client_email,
-        "scheduled_start": appt.scheduled_start.isoformat(),
-        "scheduled_end": appt.scheduled_end.isoformat(),
+        "scheduled_start": replay.get("scheduled_start", appt.scheduled_start.isoformat()),
+        "scheduled_end": replay.get("scheduled_end", appt.scheduled_end.isoformat()),
         "duration_minutes": appt.duration_minutes,
         "meeting_mode": appt.meeting_mode,
         "meeting_location": appt.meeting_location,
         "dial_in_number": appt.dial_in_number,
-        "status": appt.status,
+        "status": replay.get("status", appt.status),
         "client_timezone": appt.client_timezone,
         "cancellation_reason": appt.cancellation_reason,
         "zoom_join_url": appt.zoom_join_url if appt.status == "confirmed" else None,
         "google_meet_url": appt.google_meet_url if appt.status == "confirmed" else None,
     }
+    active = result["status"] in {
+        AppointmentStatus.PENDING.value,
+        AppointmentStatus.CONFIRMED.value,
+    }
+    can_reschedule = bool(active and token and token == appt.reschedule_token)
+    can_cancel = bool(active and token and token == appt.cancel_token)
+    if settings.SCHEDULING_V2_ENABLED:
+        scheduling = appointment_service.scheduling_read(
+            db,
+            appt,
+            can_edit=can_reschedule or can_cancel,
+            public=True,
+        ).model_dump(mode="json")
+        scheduling["capabilities"]["can_reschedule"] &= can_reschedule
+        scheduling["capabilities"]["can_cancel"] &= can_cancel
+        result["scheduling"] = scheduling
+        can_reschedule = scheduling["capabilities"]["can_reschedule"]
+        can_cancel = scheduling["capabilities"]["can_cancel"]
+    result["manage_actions"] = {
+        "can_reschedule": can_reschedule,
+        "can_cancel": can_cancel,
+    }
+    return result
 
 
 def _get_public_org_from_request(request: Request, db: Session):
@@ -238,7 +265,10 @@ def get_available_slots(
         client_timezone=client_timezone,
     )
 
-    slots = appointment_service.get_available_slots(db, query)
+    try:
+        slots = appointment_service.get_available_slots(db, query)
+    except CalendarAvailabilityUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     return AvailableSlotsResponse(
         slots=[TimeSlotRead(start=s.start, end=s.end) for s in slots],
@@ -287,17 +317,22 @@ def create_booking(
             client_notes=data.client_notes,
             idempotency_key=data.idempotency_key,
             meeting_mode=data.meeting_mode,
+            expected_revision=data.expected_revision,
+            request_id=data.request_id,
+            actor_scope=scheduling_v2_service.public_actor_scope(link.public_slug),
         )
 
-        # Send confirmation email to client
-        org = org_service.get_org_by_id(db, link.organization_id)
-        base_url = org_service.get_org_portal_base_url(org)
-        if appt.status == "confirmed":
-            appointment_email_service.send_confirmed(db, appt, base_url)
-        else:
-            appointment_email_service.send_request_received(db, appt, base_url)
+        if not settings.SCHEDULING_V2_ENABLED:
+            org = org_service.get_org_by_id(db, link.organization_id)
+            base_url = org_service.get_org_portal_base_url(org)
+            if appt.status == "confirmed":
+                appointment_email_service.send_confirmed(db, appt, base_url)
+            else:
+                appointment_email_service.send_request_received(db, appt, base_url)
 
         return _appointment_to_public_read(appt, db)
+    except scheduling_v2_service.SchedulingConflict as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -320,7 +355,7 @@ def get_appointment_for_manage(
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
-    return _appointment_to_public_read(appt, db)
+    return _appointment_to_public_read(appt, db, token)
 
 
 @router.post("/self-service/{org_id}/manage/{token}/reschedule")
@@ -333,12 +368,35 @@ def reschedule_by_manage_token(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> object:
     """Reschedule from the unified self-service manage flow."""
+    if settings.SCHEDULING_V2_ENABLED and (data.override_availability or data.override_reason):
+        raise HTTPException(status_code=400, detail="Public booking cannot override availability")
+    try:
+        replay = (
+            scheduling_v2_service.replay_public_change(
+                db,
+                org_id=org_id,
+                token=token,
+                request_id=data.request_id,
+                action="reschedule",
+                new_start=data.scheduled_start,
+            )
+            if settings.SCHEDULING_V2_ENABLED
+            else None
+        )
+    except scheduling_v2_service.SchedulingConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if replay:
+        return _appointment_to_public_read(replay, db, token)
     appt = appointment_service.get_appointment_by_manage_token(db, org_id, token)
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
     if not appt.reschedule_token:
         raise HTTPException(status_code=400, detail="Reschedule link is unavailable")
+    if token != appt.reschedule_token:
+        raise HTTPException(status_code=403, detail="Reschedule link is unavailable")
+    if settings.SCHEDULING_V2_ENABLED and (data.override_availability or data.override_reason):
+        raise HTTPException(status_code=400, detail="Public booking cannot override availability")
 
     try:
         old_start = appt.scheduled_start
@@ -348,13 +406,18 @@ def reschedule_by_manage_token(
             new_start=data.scheduled_start,
             by_client=True,
             token=appt.reschedule_token,
+            expected_revision=data.expected_revision,
+            request_id=data.request_id,
         )
 
-        org = org_service.get_org_by_id(db, appt.organization_id)
-        base_url = org_service.get_org_portal_base_url(org)
-        appointment_email_service.send_rescheduled(db, appt, old_start, base_url)
+        if not settings.SCHEDULING_V2_ENABLED:
+            org = org_service.get_org_by_id(db, appt.organization_id)
+            base_url = org_service.get_org_portal_base_url(org)
+            appointment_email_service.send_rescheduled(db, appt, old_start, base_url)
 
-        return _appointment_to_public_read(appt, db)
+        return _appointment_to_public_read(appt, db, token)
+    except scheduling_v2_service.SchedulingConflict as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -369,12 +432,31 @@ def cancel_by_manage_token(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> object:
     """Cancel from the unified self-service manage flow."""
+    try:
+        replay = (
+            scheduling_v2_service.replay_public_change(
+                db,
+                org_id=org_id,
+                token=token,
+                request_id=data.request_id,
+                action="cancel",
+                reason=data.reason,
+            )
+            if settings.SCHEDULING_V2_ENABLED
+            else None
+        )
+    except scheduling_v2_service.SchedulingConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if replay:
+        return _appointment_to_public_read(replay, db, token)
     appt = appointment_service.get_appointment_by_manage_token(db, org_id, token)
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
     if not appt.cancel_token:
         raise HTTPException(status_code=400, detail="Cancel link is unavailable")
+    if token != appt.cancel_token:
+        raise HTTPException(status_code=403, detail="Cancel link is unavailable")
 
     try:
         appt = appointment_service.cancel_booking(
@@ -383,13 +465,18 @@ def cancel_by_manage_token(
             reason=data.reason,
             by_client=True,
             token=appt.cancel_token,
+            expected_revision=data.expected_revision,
+            request_id=data.request_id,
         )
 
-        org = org_service.get_org_by_id(db, appt.organization_id)
-        base_url = org_service.get_org_portal_base_url(org)
-        appointment_email_service.send_cancelled(db, appt, base_url)
+        if not settings.SCHEDULING_V2_ENABLED:
+            org = org_service.get_org_by_id(db, appt.organization_id)
+            base_url = org_service.get_org_portal_base_url(org)
+            appointment_email_service.send_cancelled(db, appt, base_url)
 
-        return _appointment_to_public_read(appt, db)
+        return _appointment_to_public_read(appt, db, token)
+    except scheduling_v2_service.SchedulingConflict as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -407,7 +494,7 @@ def get_appointment_for_reschedule(
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
-    return _appointment_to_public_read(appt, db)
+    return _appointment_to_public_read(appt, db, token)
 
 
 @router.get("/self-service/{org_id}/reschedule/{token}/slots")
@@ -461,14 +548,17 @@ def get_reschedule_slots(
         client_timezone=tz,
     )
 
-    slots = appointment_service.get_available_slots(
-        db,
-        query,
-        exclude_appointment_id=appt.id,  # Exclude this appointment from conflict check
-        duration_minutes=appt.duration_minutes,
-        buffer_before_minutes=appt.buffer_before_minutes,
-        buffer_after_minutes=appt.buffer_after_minutes,
-    )
+    try:
+        slots = appointment_service.get_available_slots(
+            db,
+            query,
+            exclude_appointment_id=appt.id,  # Exclude this appointment from conflict check
+            duration_minutes=appt.duration_minutes,
+            buffer_before_minutes=appt.buffer_before_minutes,
+            buffer_after_minutes=appt.buffer_after_minutes,
+        )
+    except CalendarAvailabilityUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     # Get appointment type for response
     appt_type = appointment_service.get_appointment_type(
@@ -491,9 +581,30 @@ def reschedule_by_token(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> object:
     """Reschedule an appointment using self-service token."""
+    if settings.SCHEDULING_V2_ENABLED and (data.override_availability or data.override_reason):
+        raise HTTPException(status_code=400, detail="Public booking cannot override availability")
+    try:
+        replay = (
+            scheduling_v2_service.replay_public_change(
+                db,
+                org_id=org_id,
+                token=token,
+                request_id=data.request_id,
+                action="reschedule",
+                new_start=data.scheduled_start,
+            )
+            if settings.SCHEDULING_V2_ENABLED
+            else None
+        )
+    except scheduling_v2_service.SchedulingConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if replay:
+        return _appointment_to_public_read(replay, db, token)
     appt = appointment_service.get_appointment_by_token(db, org_id, token, "reschedule")
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
+    if settings.SCHEDULING_V2_ENABLED and (data.override_availability or data.override_reason):
+        raise HTTPException(status_code=400, detail="Public booking cannot override availability")
 
     try:
         old_start = appt.scheduled_start  # Save for email
@@ -503,14 +614,18 @@ def reschedule_by_token(
             new_start=data.scheduled_start,
             by_client=True,
             token=token,
+            expected_revision=data.expected_revision,
+            request_id=data.request_id,
         )
 
-        # Send reschedule notification email
-        org = org_service.get_org_by_id(db, appt.organization_id)
-        base_url = org_service.get_org_portal_base_url(org)
-        appointment_email_service.send_rescheduled(db, appt, old_start, base_url)
+        if not settings.SCHEDULING_V2_ENABLED:
+            org = org_service.get_org_by_id(db, appt.organization_id)
+            base_url = org_service.get_org_portal_base_url(org)
+            appointment_email_service.send_rescheduled(db, appt, old_start, base_url)
 
-        return _appointment_to_public_read(appt, db)
+        return _appointment_to_public_read(appt, db, token)
+    except scheduling_v2_service.SchedulingConflict as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -528,7 +643,7 @@ def get_appointment_for_cancel(
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
-    return _appointment_to_public_read(appt, db)
+    return _appointment_to_public_read(appt, db, token)
 
 
 @router.post("/self-service/{org_id}/cancel/{token}")
@@ -541,6 +656,23 @@ def cancel_by_token(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> object:
     """Cancel an appointment using self-service token."""
+    try:
+        replay = (
+            scheduling_v2_service.replay_public_change(
+                db,
+                org_id=org_id,
+                token=token,
+                request_id=data.request_id,
+                action="cancel",
+                reason=data.reason,
+            )
+            if settings.SCHEDULING_V2_ENABLED
+            else None
+        )
+    except scheduling_v2_service.SchedulingConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if replay:
+        return _appointment_to_public_read(replay, db, token)
     appt = appointment_service.get_appointment_by_token(db, org_id, token, "cancel")
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
@@ -552,13 +684,17 @@ def cancel_by_token(
             reason=data.reason,
             by_client=True,
             token=token,
+            expected_revision=data.expected_revision,
+            request_id=data.request_id,
         )
 
-        # Send cancellation notification email
-        org = org_service.get_org_by_id(db, appt.organization_id)
-        base_url = org_service.get_org_portal_base_url(org)
-        appointment_email_service.send_cancelled(db, appt, base_url)
+        if not settings.SCHEDULING_V2_ENABLED:
+            org = org_service.get_org_by_id(db, appt.organization_id)
+            base_url = org_service.get_org_portal_base_url(org)
+            appointment_email_service.send_cancelled(db, appt, base_url)
 
-        return _appointment_to_public_read(appt, db)
+        return _appointment_to_public_read(appt, db, token)
+    except scheduling_v2_service.SchedulingConflict as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

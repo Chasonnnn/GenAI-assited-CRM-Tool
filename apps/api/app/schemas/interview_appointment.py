@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, model_validator
 
+from app.schemas.appointment import AppointmentSchedulingRead
+
 
 class InterviewAppointmentRead(BaseModel):
     id: UUID
@@ -15,6 +17,7 @@ class InterviewAppointmentRead(BaseModel):
     status: str
     meeting_started_at: datetime | None
     meeting_ended_at: datetime | None
+    scheduling: AppointmentSchedulingRead | None = None
 
 
 class InterviewStageRead(BaseModel):
@@ -33,6 +36,16 @@ class SurrogateInterviewAppointmentState(BaseModel):
     reschedule_stage: InterviewStageRead | None
 
 
+class InterviewSlotRead(BaseModel):
+    start: datetime
+    end: datetime
+
+
+class InterviewSlotsRead(BaseModel):
+    timezone: str
+    slots: list[InterviewSlotRead]
+
+
 class InterviewGoogleSyncCheck(BaseModel):
     expected_appointment_id: UUID
 
@@ -44,6 +57,10 @@ class SurrogateInterviewAppointmentAction(BaseModel):
     expected_stage_id: UUID
     expected_appointment_id: UUID | None
     expected_scheduled_start: datetime | None
+    expected_revision: int | None = None
+    request_id: str | None = None
+    override_availability: bool = False
+    override_reason: str | None = None
 
     @model_validator(mode="after")
     def validate_action(self):

@@ -47,6 +47,7 @@ class JobType(str, Enum):
     ORG_DELETE = "org_delete"  # Hard delete org after grace period
     GOOGLE_CALENDAR_SYNC = "google_calendar_sync"  # Two-way Google calendar reconciliation
     APPOINTMENT_GOOGLE_SYNC = "appointment_google_sync"
+    APPOINTMENT_EXPIRE = "appointment_expire"
     GOOGLE_TASKS_SYNC = "google_tasks_sync"  # Two-way Google Tasks reconciliation
     GOOGLE_TASK_CREATION_RECONCILE = (
         "google_task_creation_reconcile"  # Recover an uncertain donor-task POST
