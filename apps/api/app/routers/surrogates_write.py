@@ -519,6 +519,7 @@ def bulk_change_surrogates_stage(
     target_semantics = pipeline_semantics_service.get_stage_semantics(target_stage)
     if (
         target_semantics.pause_behavior != "none"
+        or target_semantics.requires_reason_on_enter
         or target_semantics.capabilities.requires_delivery_details
     ):
         raise HTTPException(

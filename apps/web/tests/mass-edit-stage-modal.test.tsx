@@ -235,12 +235,17 @@ describe("MassEditStageModal", () => {
         fireEvent.click(screen.getByRole("button", { name: "Preview Matches" }))
         await waitFor(() => expect(mockPreviewMutateAsync).toHaveBeenCalledTimes(1))
 
+        expect(screen.getByRole("button", { name: "Apply Stage Change" })).toBeDisabled()
+        fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: "No longer eligible" } })
+        fireEvent.click(screen.getByRole("button", { name: "Preview Matches" }))
+        await waitFor(() => expect(screen.getByRole("button", { name: "Apply Stage Change" })).toBeEnabled())
         fireEvent.click(screen.getByRole("button", { name: "Apply Stage Change" }))
         await waitFor(() => expect(mockApplyStageMutateAsync).toHaveBeenCalledTimes(1))
 
         expect(mockApplyStageMutateAsync).toHaveBeenCalledWith(
             expect.objectContaining({
                 stage_id: "stage-disqualified",
+                reason: "No longer eligible",
                 expected_total: 1,
             })
         )

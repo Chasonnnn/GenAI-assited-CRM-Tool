@@ -944,7 +944,7 @@ export const DEFAULT_STAGE_SEMANTICS_BY_KEY: Record<string, StageSemantics> = {
         },
         "integration_bucket": "none",
         "pause_behavior": "none",
-        "requires_reason_on_enter": false,
+        "requires_reason_on_enter": true,
         "suggestion_profile_key": null,
         "terminal_outcome": "none"
     },
@@ -992,7 +992,7 @@ export const DEFAULT_STAGE_SEMANTICS_BY_KEY: Record<string, StageSemantics> = {
         },
         "integration_bucket": "not_qualified",
         "pause_behavior": "none",
-        "requires_reason_on_enter": false,
+        "requires_reason_on_enter": true,
         "suggestion_profile_key": null,
         "terminal_outcome": "disqualified"
     },
@@ -1072,7 +1072,7 @@ export const DEFAULT_STAGE_SEMANTICS_BY_KEY: Record<string, StageSemantics> = {
         },
         "integration_bucket": "lost",
         "pause_behavior": "none",
-        "requires_reason_on_enter": false,
+        "requires_reason_on_enter": true,
         "suggestion_profile_key": null,
         "terminal_outcome": "lost"
     },

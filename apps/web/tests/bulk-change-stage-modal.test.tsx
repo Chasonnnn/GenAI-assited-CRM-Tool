@@ -101,10 +101,13 @@ const stages = [
     { id: "s2", slug: "contacted", stage_key: "contacted", label: "Contacted", color: "#0ea5e9", order: 2, stage_type: "intake", is_active: true },
     { id: "s3", slug: "on_hold", stage_key: "on_hold", label: "On Hold", color: "#f59e0b", order: 3, stage_type: "paused", is_active: true },
     { id: "s4", slug: "delivered", stage_key: "delivered", label: "Delivered", color: "#22c55e", order: 4, stage_type: "post_approval", is_active: true },
+    { id: "s5", slug: "cold_leads", stage_key: "cold_leads", label: "Cold Leads", color: "#64748b", order: 5, stage_type: "terminal", is_active: true },
+    { id: "s6", slug: "lost", stage_key: "lost", label: "Lost", color: "#ef4444", order: 6, stage_type: "terminal", is_active: true },
+    { id: "s7", slug: "disqualified", stage_key: "disqualified", label: "Disqualified", color: "#ef4444", order: 7, stage_type: "terminal", is_active: true },
 ] as const
 
 describe("BulkChangeStageModal", () => {
-    it("filters out on-hold and delivery stages from the target stage picker", () => {
+    it("filters out stages requiring additional input from the target stage picker", () => {
         render(
             <BulkChangeStageModal
                 open
@@ -122,6 +125,9 @@ describe("BulkChangeStageModal", () => {
         expect(screen.getByRole("option", { name: "Contacted" })).toBeInTheDocument()
         expect(screen.queryByRole("option", { name: "On Hold" })).not.toBeInTheDocument()
         expect(screen.queryByRole("option", { name: "Delivered" })).not.toBeInTheDocument()
+        for (const name of ["Cold Leads", "Lost", "Disqualified"]) {
+            expect(screen.queryByRole("option", { name })).not.toBeInTheDocument()
+        }
     })
 
     it("submits the selected immediate stage", async () => {

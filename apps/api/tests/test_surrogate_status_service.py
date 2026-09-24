@@ -8,6 +8,7 @@ from app.db.enums import OwnerType, Role, TaskType
 from app.db.models import (
     Appointment,
     AppointmentType,
+    EntityNote,
     StatusChangeRequest,
     SurrogateActivityLog,
     SurrogateStatusHistory,
@@ -104,6 +105,21 @@ def test_status_change_regression_creates_pending_request(db, test_org, test_use
     assert request is not None
     assert request.status == "pending"
     assert request.target_stage_id == new_unread_stage.id
+    assert db.query(EntityNote).filter_by(entity_id=surrogate.id).count() == 0
+
+    from app.services import status_change_request_service
+
+    status_change_request_service.approve_request(
+        db, request.id, test_org.id, test_user.id, Role.DEVELOPER
+    )
+    note = db.query(EntityNote).filter_by(entity_id=surrogate.id).one()
+    assert "Requested correction" in note.content
+    assert note.author_id == test_user.id
+    with pytest.raises(ValueError, match="not pending"):
+        status_change_request_service.approve_request(
+            db, request.id, test_org.id, test_user.id, Role.DEVELOPER
+        )
+    assert db.query(EntityNote).filter_by(entity_id=surrogate.id).count() == 1
 
 
 @pytest.mark.parametrize("role", [Role.ADMIN, Role.DEVELOPER])
@@ -452,3 +468,121 @@ def test_leaving_on_hold_uses_paused_from_stage_for_regression_logic(db, test_or
     assert surrogate.stage_id == approved_stage.id
     assert surrogate.paused_from_stage_id is None
     assert surrogate.on_hold_follow_up_task_id is None
+
+
+@pytest.mark.parametrize("stage_key", ["on_hold", "cold_leads", "lost", "disqualified"])
+@pytest.mark.parametrize("reason", [None, "", "  \n\t "])
+def test_reason_required_stages_reject_blank_reason(db, test_org, test_user, stage_key, reason):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id)
+    original_stage_id = surrogate.stage_id
+    stage = _get_stage(db, test_org.id, stage_key)
+    stage.slug = f"renamed_{stage_key}"
+    stage.semantics = {**(stage.semantics or {}), "requires_reason_on_enter": False}
+    db.commit()
+
+    with pytest.raises(ValueError, match="Reason required"):
+        surrogate_status_service.change_status(
+            db, surrogate, stage.id, test_user.id, Role.DEVELOPER, reason=reason
+        )
+
+    assert surrogate.stage_id == original_stage_id
+    assert db.query(EntityNote).filter_by(entity_id=surrogate.id).count() == 0
+    assert db.query(SurrogateStatusHistory).filter_by(surrogate_id=surrogate.id).count() == 0
+
+
+@pytest.mark.parametrize(
+    "stage_key", ["on_hold", "cold_leads", "lost", "disqualified", "contacted"]
+)
+def test_stage_reason_saved_to_note_and_history_once(db, test_org, test_user, stage_key):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id)
+    stage = _get_stage(db, test_org.id, stage_key)
+    reason = "Needs <review> & follow-up\nNext month"
+    surrogate_status_service.change_status(
+        db,
+        surrogate,
+        stage.id,
+        test_user.id,
+        Role.DEVELOPER,
+        reason=f"  {reason}  ",
+        trigger_workflows=False,
+    )
+
+    note = db.query(EntityNote).filter_by(entity_id=surrogate.id).one()
+    history = db.query(SurrogateStatusHistory).filter_by(surrogate_id=surrogate.id).one()
+    assert note.organization_id == test_org.id
+    assert note.entity_type == "surrogate"
+    assert note.author_id == test_user.id
+    assert f"Stage changed to {stage.label}" in note.content
+    assert "Needs &lt;review&gt; &amp; follow-up<br>Next month" in note.content
+    assert history.reason == reason
+    activity = (
+        db.query(SurrogateActivityLog)
+        .filter_by(surrogate_id=surrogate.id, activity_type="note_added")
+        .one()
+    )
+    assert activity.details["note_id"] == str(note.id)
+
+    with pytest.raises(ValueError, match="same as current"):
+        surrogate_status_service.change_status(
+            db, surrogate, stage.id, test_user.id, Role.DEVELOPER, reason=reason
+        )
+    assert db.query(EntityNote).filter_by(entity_id=surrogate.id).count() == 1
+
+
+def test_stage_note_and_history_roll_back_together(db, test_org, test_user):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id)
+    old_stage_id = surrogate.stage_id
+    stage = _get_stage(db, test_org.id, "lost")
+    db.commit()
+    transaction = db.begin_nested()
+    surrogate_status_service.change_status(
+        db,
+        surrogate,
+        stage.id,
+        test_user.id,
+        Role.DEVELOPER,
+        reason="No longer interested",
+        commit=False,
+    )
+    assert db.query(EntityNote).filter_by(entity_id=surrogate.id).count() == 1
+    transaction.rollback()
+    db.refresh(surrogate)
+    assert surrogate.stage_id == old_stage_id
+    assert db.query(EntityNote).filter_by(entity_id=surrogate.id).count() == 0
+    assert db.query(SurrogateStatusHistory).filter_by(surrogate_id=surrogate.id).count() == 0
+    assert (
+        db.query(SurrogateActivityLog)
+        .filter_by(surrogate_id=surrogate.id, activity_type="note_added")
+        .count()
+        == 0
+    )
+
+
+def test_note_activity_failure_rolls_back_stage_change(db, test_org, test_user, monkeypatch):
+    from app.services import activity_service
+
+    surrogate = _create_surrogate(db, test_org.id, test_user.id)
+    old_stage_id = surrogate.stage_id
+    stage = _get_stage(db, test_org.id, "lost")
+    db.commit()
+
+    def fail_activity(**kwargs):
+        raise ValueError("Note activity unavailable")
+
+    savepoint = db.begin_nested()
+    monkeypatch.setattr(db, "rollback", savepoint.rollback)
+    monkeypatch.setattr(activity_service, "log_note_added", fail_activity)
+    with pytest.raises(ValueError, match="Note activity unavailable"):
+        surrogate_status_service.change_status(
+            db,
+            surrogate,
+            stage.id,
+            test_user.id,
+            Role.DEVELOPER,
+            reason="No longer interested",
+        )
+    db.commit()
+    db.refresh(surrogate)
+    assert surrogate.stage_id == old_stage_id
+    assert db.query(EntityNote).filter_by(entity_id=surrogate.id).count() == 0
+    assert db.query(SurrogateStatusHistory).filter_by(surrogate_id=surrogate.id).count() == 0

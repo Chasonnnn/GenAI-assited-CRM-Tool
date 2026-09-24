@@ -53,6 +53,7 @@ export function useApproveStatusChangeRequest() {
             void queryClient.invalidateQueries({ queryKey: statusChangeRequestKeys.lists() });
             // Also invalidate surrogates since the approval changes the surrogate
             void queryClient.invalidateQueries({ queryKey: ['surrogates'] });
+            void queryClient.invalidateQueries({ queryKey: ['notes', 'list'] });
         },
     });
 }

@@ -471,3 +471,49 @@ async def test_renamed_on_hold_stage_still_creates_pause_metadata_and_follow_up(
     assert surrogate_row.stage_id == on_hold_stage.id
     assert surrogate_row.paused_from_stage_id is not None
     assert surrogate_row.on_hold_follow_up_task_id is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage_key", ["cold_leads", "lost", "disqualified"])
+async def test_terminal_reason_required_and_visible_in_notes_and_history(
+    authed_client, db, test_auth, stage_key
+):
+    surrogate = await _create_surrogate(authed_client)
+    stage = _get_stage(db, test_auth.org.id, stage_key)
+    for reason in [None, "", " \n "]:
+        rejected = await authed_client.patch(
+            f"/surrogates/{surrogate['id']}/status",
+            json={"stage_id": str(stage.id), "reason": reason},
+        )
+        assert rejected.status_code == 403
+        assert "Reason required" in rejected.json()["detail"]
+
+    reason = "No longer proceeding"
+    applied = await authed_client.patch(
+        f"/surrogates/{surrogate['id']}/status",
+        json={"stage_id": str(stage.id), "reason": reason},
+    )
+    assert applied.status_code == 200, applied.text
+    notes = await authed_client.get(f"/surrogates/{surrogate['id']}/notes")
+    assert notes.status_code == 200
+    assert len(notes.json()) == 1
+    assert reason in notes.json()[0]["body"]
+    history = await authed_client.get(f"/surrogates/{surrogate['id']}/history")
+    assert history.status_code == 200
+    assert history.json()[0]["reason"] == reason
+
+    from app.db.models import EntityNote, Organization
+
+    foreign_org = Organization(name="Other Agency", slug=f"other-{uuid.uuid4().hex[:8]}")
+    db.add(foreign_org)
+    db.flush()
+    async with _client_for_role(db, foreign_org.id, Role.DEVELOPER) as (_, foreign_client):
+        for resource in ["notes", "history"]:
+            denied = await foreign_client.get(f"/surrogates/{surrogate['id']}/{resource}")
+            assert denied.status_code in (403, 404)
+        denied = await foreign_client.patch(
+            f"/surrogates/{surrogate['id']}/status",
+            json={"stage_id": str(stage.id), "reason": "Foreign change"},
+        )
+        assert denied.status_code in (403, 404)
+    assert db.query(EntityNote).filter_by(entity_id=UUID(surrogate["id"])).count() == 1
