@@ -29,6 +29,7 @@ describe("donor campaign API contract", () => {
         )
 
         expect(mockPost).toHaveBeenCalledWith("/campaigns/preview-filters?limit=3", {
+            scope: "org",
             channel: "email",
             recipient_type: "egg_donor",
             filter_criteria: { stage_ids: ["egg-stage-1"], states: ["CA"] },
@@ -51,6 +52,7 @@ describe("donor campaign API contract", () => {
         await duplicateCampaign("campaign-1")
 
         expect(mockPost).toHaveBeenCalledWith("/campaigns", {
+            scope: "org",
             name: "Sperm donor follow-up (Copy)",
             description: "Collection reminder",
             channel: "email",

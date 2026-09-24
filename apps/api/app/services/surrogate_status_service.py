@@ -318,6 +318,7 @@ def change_status(
     *,
     emit_events: bool = False,
     commit: bool = True,
+    execution_permissions: frozenset[str] | None = None,
     schedule_interview_appointment: bool = True,
 ) -> StatusChangeResult:
     """
@@ -340,7 +341,7 @@ def change_status(
 
     now = datetime.now(UTC)
     org_tz_str = _get_org_timezone(db, surrogate.organization_id)
-    normalized_effective_at = normalize_effective_at(effective_at, org_tz_str)
+    normalized_effective_at = normalize_effective_at(effective_at, org_tz_str, now=now)
 
     old_stage_id = surrogate.stage_id
     old_label = surrogate.status_label
@@ -421,7 +422,17 @@ def change_status(
     if not role_str:
         raise ValueError("User role is required to change stage")
 
-    if role_str == Role.CASE_MANAGER.value:
+    from app.services import approval_handoff_service
+
+    uses_record_policy = approval_handoff_service.authorize_stage_change(
+        db,
+        record=surrogate,
+        kind="surrogate",
+        target_stage=new_stage,
+        user_id=user_id,
+        execution_permissions=execution_permissions,
+    )
+    if not uses_record_policy and role_str == Role.CASE_MANAGER.value:
         if surrogate.owner_type != OwnerType.USER.value or surrogate.owner_id != user_id:
             raise ValueError("Surrogate must be claimed before changing stage")
 
@@ -442,7 +453,12 @@ def change_status(
         and pipeline_service.stage_matches_key(current_stage, "interview_scheduled")
         and pipeline_service.stage_matches_key(new_stage, "reschedule_needed")
     )
-    if is_resume_from_on_hold or is_interview_rebooking or is_interview_cancellation:
+    if (
+        uses_record_policy
+        or is_resume_from_on_hold
+        or is_interview_rebooking
+        or is_interview_cancellation
+    ):
         pass
     elif not is_regression:
         if not pipeline_semantics_service.can_role_access_stage(
@@ -683,8 +699,11 @@ def apply_status_change(
 
     Called for non-regressions, undo within grace period, and approved regressions.
     """
-    from app.services import pipeline_service
+    from app.services import approval_handoff_service, pipeline_service
 
+    approval_handoff_service.retain_at_approval(
+        db, record=surrogate, kind="surrogate", target_stage=new_stage, actor_user_id=user_id
+    )
     resolved_org_timezone = org_timezone_str or _get_org_timezone(db, surrogate.organization_id)
     deleted_follow_up_task = None
     created_follow_up_task = None

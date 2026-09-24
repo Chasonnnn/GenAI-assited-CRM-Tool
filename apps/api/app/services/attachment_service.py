@@ -791,6 +791,7 @@ def list_attachments(
     donor_id: uuid.UUID | None = None,
     include_quarantined: bool = False,
     content_type_prefix: str | None = None,
+    session=None,
 ) -> list[Attachment]:
     """List attachments for a case, intended parent, or donor (excludes deleted).
 
@@ -802,6 +803,12 @@ def list_attachments(
         Attachment.deleted_at.is_(None),
         Attachment.match_id.is_(None),
     )
+    if session is not None:
+        from app.services import record_scope_service
+
+        query = query.filter(
+            record_scope_service.build_linked_visibility_filter(db, session, Attachment)
+        )
 
     if surrogate_id:
         query = query.filter(Attachment.surrogate_id == surrogate_id)

@@ -92,7 +92,7 @@ def test_surrogate_to_read_uses_loaded_owner_queue(db, test_org, test_user):
         mock_get.assert_not_called()
 
 
-def test_list_surrogates_eager_loads_in_two_statements(db, db_engine, test_org, test_user):
+def test_list_surrogates_eager_loads_with_one_policy_lookup(db, db_engine, test_org, test_user):
     # Make sure we have a default pipeline/stages so create_surrogate is consistent.
     pipeline_service.get_or_create_default_pipeline(db, test_org.id, test_user.id)
 
@@ -147,7 +147,8 @@ def test_list_surrogates_eager_loads_in_two_statements(db, db_engine, test_org, 
                 assert surrogate.owner_queue is not None
                 _ = surrogate.owner_queue.name
 
-    assert counter["n"] == 2, "\n".join(counter["statements"])
+    assert sum("organization_permission_policies" in stmt for stmt in counter["statements"]) == 1
+    assert counter["n"] == 3, "\n".join(counter["statements"])
     assert any("surrogate_activity_log" in stmt for stmt in counter["statements"])
 
 
@@ -176,7 +177,8 @@ async def test_list_surrogates_endpoint_uses_batched_activity_query(
 
     assert response.status_code == 200, response.text
     # Metrics use a separate engine and are excluded from request-pool SQL.
-    assert counter["n"] == 7, "\n".join(counter["statements"])
+    assert sum("organization_permission_policies" in stmt for stmt in counter["statements"]) == 1
+    assert counter["n"] == 8, "\n".join(counter["statements"])
     assert any("surrogate_activity_log" in stmt for stmt in counter["statements"])
 
 

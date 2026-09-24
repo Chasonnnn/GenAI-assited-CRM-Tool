@@ -198,11 +198,12 @@ function ProfileCardContent() {
 
 interface ProfileCardProps {
     surrogateId: string
+    readOnly?: boolean
 }
 
-export function ProfileCard({ surrogateId }: ProfileCardProps) {
+export function ProfileCard({ surrogateId, readOnly = false }: ProfileCardProps) {
     return (
-        <ProfileCardProvider surrogateId={surrogateId}>
+        <ProfileCardProvider surrogateId={surrogateId} readOnly={readOnly}>
             <ProfileCardContent />
         </ProfileCardProvider>
     )

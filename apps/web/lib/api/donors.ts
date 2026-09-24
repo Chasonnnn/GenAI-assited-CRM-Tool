@@ -110,6 +110,10 @@ export function getDonorOwnerOptions(): Promise<DonorOwnerOptions> {
     return api.get<DonorOwnerOptions>("/donors/owner-options")
 }
 
+export async function claimDonor(id: string): Promise<Donor> {
+    return api.post<Donor>(`/donors/${id}/claim`, {})
+}
+
 export async function getDonorProfile(id: string): Promise<DonorProfile> {
     return api.get<DonorProfile>(`/donors/${id}/profile`)
 }

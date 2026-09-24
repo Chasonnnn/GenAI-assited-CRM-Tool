@@ -173,6 +173,22 @@ def test_ci_uses_safe_path_filters_and_cancels_stale_runs() -> None:
     assert "  cancel-in-progress: true" in pull_request_trigger
 
 
+def test_ci_checks_stacked_permission_pr_without_broadening_push_triggers() -> None:
+    branches = dict(
+        re.findall(
+            r"^  (push|pull_request):\n    branches: \[([^\]]+)\]",
+            CI_WORKFLOW.read_text(),
+            re.MULTILINE,
+        )
+    )
+    assert branches["pull_request"].split(", ") == [
+        "main",
+        "develop",
+        "codex/platform-upgrades",
+    ]
+    assert branches["push"].split(", ") == ["main", "develop"]
+
+
 def test_ci_builds_every_production_image_with_deployment_inputs() -> None:
     workflow = CI_WORKFLOW.read_text()
 

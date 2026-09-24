@@ -9,7 +9,7 @@ import { useSurrogateDetailData } from "@/components/surrogates/detail/Surrogate
 export default function SurrogateJourneyPage() {
     const params = useParams<{ id: string }>()
     const id = params.id
-    const { canViewJourney } = useSurrogateDetailData()
+    const { canViewJourney, canEditSurrogate, effectivePermissions } = useSurrogateDetailData()
 
     if (!canViewJourney) {
         return (
@@ -30,7 +30,10 @@ export default function SurrogateJourneyPage() {
 
     return (
         <TabsContent value="journey" className="space-y-4">
-            <SurrogateJourneyTab surrogateId={id} />
+            <SurrogateJourneyTab
+                surrogateId={id}
+                editPermission={effectivePermissions?.policy_version === 2 ? canEditSurrogate : undefined}
+            />
         </TabsContent>
     )
 }

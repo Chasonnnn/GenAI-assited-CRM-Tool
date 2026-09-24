@@ -16,6 +16,7 @@ import type { InterviewAttachmentRead } from "@/lib/api/interviews"
 interface AttachmentsSectionProps {
     attachments: InterviewAttachmentRead[]
     canUpload: boolean
+    canTranscribe?: boolean
     onUploadFiles: (files: FileList | null) => void
     uploadError: string | null
     uploadInputRef: React.RefObject<HTMLInputElement | null>
@@ -27,6 +28,7 @@ interface AttachmentsSectionProps {
 function AttachmentsSection({
     attachments,
     canUpload,
+    canTranscribe: hasTranscriptionPermission = true,
     onUploadFiles,
     uploadError,
     uploadInputRef,
@@ -83,7 +85,7 @@ function AttachmentsSection({
                     {attachments.map((att) => {
                         const status = att.transcription_status || "not_started"
                         const isProcessing = status === "pending" || status === "processing"
-                        const canTranscribe = att.is_audio_video && !isProcessing && status !== "completed"
+                        const canTranscribe = hasTranscriptionPermission && att.is_audio_video && !isProcessing && status !== "completed"
 
                         return (
                             <div
@@ -146,6 +148,7 @@ interface AttachmentsDialogProps {
     onOpenChange: (open: boolean) => void
     attachments: InterviewAttachmentRead[]
     canUpload: boolean
+    canTranscribe?: boolean
     onUploadFiles: (files: FileList | null) => void
     uploadError: string | null
     uploadInputRef: React.RefObject<HTMLInputElement | null>
@@ -159,6 +162,7 @@ export function AttachmentsDialog({
     onOpenChange,
     attachments,
     canUpload,
+    canTranscribe = true,
     onUploadFiles,
     uploadError,
     uploadInputRef,
@@ -182,6 +186,7 @@ export function AttachmentsDialog({
                     <AttachmentsSection
                         attachments={attachments}
                         canUpload={canUpload}
+                        canTranscribe={canTranscribe}
                         onUploadFiles={onUploadFiles}
                         uploadError={uploadError}
                         uploadInputRef={uploadInputRef}

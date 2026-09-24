@@ -304,7 +304,10 @@ def _process_resend_event(
     event_created_at: datetime,
 ) -> None:
     from app.db.enums import CampaignRecipientStatus, EmailStatus
-    from app.services import campaign_service
+    from app.services import (
+        campaign_delivery_service,
+        campaign_suppression_service,
+    )
 
     resend_status = RESEND_DELIVERY_STATUS_BY_EVENT_TYPE.get(event_type or "")
     state_advanced = False
@@ -345,7 +348,7 @@ def _process_resend_event(
         if state_advanced:
             email_log.status = EmailStatus.SKIPPED.value
             email_log.error = _provider_error(data, "suppressed by Resend")
-        campaign_service.add_to_suppression(
+        campaign_suppression_service.add_to_suppression(
             db,
             email_log.organization_id,
             email_log.recipient_email,
@@ -375,7 +378,7 @@ def _process_resend_event(
         _log_surrogate_email_bounced_activity(db, email_log=email_log)
 
         if _is_permanent_bounce(raw_bounce_type):
-            campaign_service.add_to_suppression(
+            campaign_suppression_service.add_to_suppression(
                 db,
                 email_log.organization_id,
                 email_log.recipient_email,
@@ -404,7 +407,7 @@ def _process_resend_event(
         )
 
         # Add to suppression list for complaints
-        campaign_service.add_to_suppression(
+        campaign_suppression_service.add_to_suppression(
             db,
             email_log.organization_id,
             email_log.recipient_email,
@@ -426,7 +429,7 @@ def _process_resend_event(
             if not campaign_recipient.opened_at:
                 campaign_recipient.opened_at = event_created_at
             campaign_recipient.open_count = (campaign_recipient.open_count or 0) + 1
-            campaign_service.recompute_campaign_run_aggregates(
+            campaign_delivery_service.recompute_campaign_run_aggregates(
                 db,
                 organization_id=email_log.organization_id,
                 run_id=campaign_recipient.run_id,
@@ -443,7 +446,7 @@ def _process_resend_event(
             if not campaign_recipient.clicked_at:
                 campaign_recipient.clicked_at = event_created_at
             campaign_recipient.click_count = (campaign_recipient.click_count or 0) + 1
-            campaign_service.recompute_campaign_run_aggregates(
+            campaign_delivery_service.recompute_campaign_run_aggregates(
                 db,
                 organization_id=email_log.organization_id,
                 run_id=campaign_recipient.run_id,
@@ -485,7 +488,7 @@ def _process_resend_event(
                 campaign_recipient.status = CampaignRecipientStatus.FAILED.value
                 campaign_recipient.error = email_log.error
 
-            campaign_service.recompute_campaign_run_aggregates(
+            campaign_delivery_service.recompute_campaign_run_aggregates(
                 db,
                 organization_id=email_log.organization_id,
                 run_id=campaign_recipient.run_id,
@@ -619,9 +622,11 @@ def _process_verified_payload(
     if locked_event is None:
         raise RuntimeError("Resend webhook event projection target is missing")
 
-    from app.services import campaign_service
+    from app.services import (
+        campaign_delivery_service,
+    )
 
-    campaign_service.lock_campaign_run_for_email_log(
+    campaign_delivery_service.lock_campaign_run_for_email_log(
         db,
         organization_id=organization_id,
         email_log_id=email_log_id,

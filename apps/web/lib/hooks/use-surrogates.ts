@@ -38,6 +38,27 @@ export function invalidateSurrogateCrmCaches(queryClient: QueryClient, surrogate
     });
 }
 
+function invalidateSurrogateScopeCaches(queryClient: QueryClient, surrogateIds?: string[]) {
+    for (const surrogateId of surrogateIds ?? [undefined]) {
+        void queryClient.invalidateQueries({
+            queryKey: surrogateId
+                ? ['record-collaborators', 'surrogate', surrogateId]
+                : ['record-collaborators', 'surrogate'],
+        });
+    }
+    for (const queryKey of [
+        ['record-scopes', 'migration-review'],
+        ['analytics'],
+        ['dashboard'],
+        ['appointments', 'list'],
+        surrogateKeys.intelligentSummary(),
+        surrogateKeys.unassignedQueue(),
+        [...surrogateKeys.all, 'created-dates'],
+    ]) {
+        void queryClient.invalidateQueries({ queryKey });
+    }
+}
+
 function invalidateSurrogateMutationCaches(queryClient: QueryClient, surrogateId: string, options: { history?: boolean } = {}) {
     invalidateSurrogateCrmCaches(queryClient, surrogateId);
     if (options.history) {
@@ -202,6 +223,7 @@ export function useChangeSurrogateStatus() {
                 void queryClient.invalidateQueries({ queryKey: surrogateKeys.interviewAppointment(surrogateId) });
                 void queryClient.invalidateQueries({ queryKey: ['notes', 'list', surrogateId] });
             }
+            invalidateSurrogateScopeCaches(queryClient, [surrogateId]);
             // Invalidate related queries
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
@@ -339,6 +361,7 @@ export function useBulkChangeStage() {
     return useMutation({
         mutationFn: surrogatesApi.bulkChangeStage,
         onSuccess: (_result, variables) => {
+            invalidateSurrogateScopeCaches(queryClient, variables.surrogate_ids);
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.all });
             void queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
@@ -413,6 +436,7 @@ export function useApplySurrogateMassEditStage() {
     return useMutation({
         mutationFn: surrogatesApi.applySurrogateMassEditStage,
         onSuccess: () => {
+            invalidateSurrogateScopeCaches(queryClient);
             void queryClient.invalidateQueries({ queryKey: ['notes', 'list'] });
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.all });
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });

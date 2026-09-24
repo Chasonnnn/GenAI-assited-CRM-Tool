@@ -11,6 +11,7 @@ import { TeamPerformanceTable } from "@/components/reports/TeamPerformanceTable"
 import { DonorAnalyticsSection } from "@/components/reports/DonorAnalyticsSection"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { useAuth } from "@/lib/auth-context"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { useAIUsageSummary } from "@/lib/hooks/use-ai"
@@ -335,6 +336,7 @@ type ReportsQuickStatsGridProps = {
     metaPerf: MetaPerformance | undefined
     metaLoading: boolean
     metaError: boolean
+    canViewOrgReports: boolean
     spendTotals: SpendTotals | undefined
     spendLoading: boolean
     spendError: boolean
@@ -348,6 +350,7 @@ function ReportsQuickStatsGrid({
     metaPerf,
     metaLoading,
     metaError,
+    canViewOrgReports,
     spendTotals,
     spendLoading,
     spendError,
@@ -452,7 +455,7 @@ function ReportsQuickStatsGrid({
                 </CardContent>
             </Card>
 
-            <Card className="animate-in fade-in-50 transition-opacity duration-500 delay-400">
+            {canViewOrgReports && <Card className="animate-in fade-in-50 transition-opacity duration-500 delay-400">
                 <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Ad Spend</CardTitle>
                     <DollarSignIcon className="size-4 text-muted-foreground" />
@@ -481,7 +484,7 @@ function ReportsQuickStatsGrid({
                         </>
                     )}
                 </CardContent>
-            </Card>
+            </Card>}
 
             {aiEnabled && (
                 <Card className="animate-in fade-in-50 transition-opacity duration-500 delay-500">
@@ -606,6 +609,8 @@ function ReportsPerformanceSection({
 export default function ReportsPage() {
     const { user } = useAuth()
     const aiEnabled = user?.ai_enabled ?? false
+    const { data: access } = useEffectivePermissions(user?.user_id ?? null)
+    const canViewOrgReports = Boolean(access && ((access.policy_version ?? 1) < 2 || access.capabilities?.can_view_org_reports))
 
     const [dateRange, setDateRange] = useState<DateRangePreset>('all')
     const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
@@ -633,7 +638,7 @@ export default function ReportsPage() {
     const { data: byAssignee, isLoading: byAssigneeLoading, isError: byAssigneeError } = useSurrogatesByAssignee()
     const { data: trend, isLoading: trendLoading, isError: trendError } = useSurrogatesTrend(dateParams)
     const { data: metaPerf, isLoading: metaLoading, isError: metaError } = useMetaPerformance(dateParams)
-    const { data: spendTotals, isLoading: spendLoading, isError: spendError } = useSpendTotals(dateParams)
+    const { data: spendTotals, isLoading: spendLoading, isError: spendError } = useSpendTotals(dateParams, canViewOrgReports)
     const { data: defaultPipeline } = useDefaultPipeline('surrogate')
 
     // New hooks for funnel and map
@@ -769,6 +774,7 @@ export default function ReportsPage() {
                     metaPerf={metaPerf}
                     metaLoading={metaLoading}
                     metaError={metaError}
+                    canViewOrgReports={canViewOrgReports}
                     spendTotals={spendTotals}
                     spendLoading={spendLoading}
                     spendError={spendError}
@@ -817,7 +823,7 @@ export default function ReportsPage() {
 
                 {/* Meta Spend Analytics Dashboard */}
                 <div className="mt-8">
-                    <MetaSpendDashboard dateParams={dateParams} />
+                    {canViewOrgReports && <MetaSpendDashboard dateParams={dateParams} />}
                 </div>
 
                 <ReportsPerformanceSection

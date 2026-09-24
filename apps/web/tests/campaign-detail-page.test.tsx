@@ -12,6 +12,7 @@ import CampaignDetailPage from "../app/(app)/automation/campaigns/[id]/page.clie
 const mockPush = vi.fn()
 const mockUseRunRecipients = vi.fn()
 const mockUpdateCampaign = vi.fn()
+const mockPublishCampaign = vi.fn()
 let mockSearchParams = new URLSearchParams()
 let mockPreviewData: {
     total_count: number
@@ -25,6 +26,9 @@ let mockPreviewData: {
     }>
 } = { total_count: 0, sample_recipients: [] }
 let mockCampaignData = {
+    scope: "org" as "personal" | "org",
+    can_edit: true, can_send: true, can_publish: false,
+    proposed_by_name: null as string | null,
     id: "camp1",
     name: "Test Campaign",
     description: null as string | null,
@@ -93,6 +97,7 @@ vi.mock("@/lib/hooks/use-campaigns", () => ({
     useRunRecipients: (campaignId: string, runId: string, params?: { status?: string; limit?: number }) =>
         mockUseRunRecipients(campaignId, runId, params),
     useDeleteCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    usePublishCampaign: () => ({ mutate: mockPublishCampaign, isPending: false }),
     useDuplicateCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useCancelCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useSendCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -171,6 +176,7 @@ describe("CampaignDetailPage", () => {
         }) as never)
         mockSearchParams = new URLSearchParams()
         mockCampaignData = {
+            scope: "org", can_edit: true, can_send: true, can_publish: false, proposed_by_name: null,
             id: "camp1",
             name: "Test Campaign",
             description: null,
@@ -195,6 +201,7 @@ describe("CampaignDetailPage", () => {
             opened_count: 0,
             clicked_count: 0,
         }
+        mockPublishCampaign.mockReset()
         mockUpdateCampaign.mockReset()
         mockUpdateCampaign.mockResolvedValue({})
         mockUseRunRecipients.mockReturnValue({ data: [] })
@@ -415,4 +422,19 @@ describe("CampaignDetailPage", () => {
             }))
         })
     })
+    it("uses separate edit and send capabilities", () => {
+        mockCampaignData = { ...mockCampaignData, status: "draft", can_edit: false, can_send: false }
+        render(<CampaignDetailPage />)
+        for (const name of ["Edit", "Send Now", "Duplicate", "Delete"]) expect(screen.getByRole("button", { name })).toBeDisabled()
+    })
+
+    it("shows proposer credit in Details and publishes a separate organization campaign", () => {
+        mockCampaignData = { ...mockCampaignData, scope: "personal", can_publish: true, proposed_by_name: "Former teammate" }
+        render(<CampaignDetailPage />)
+        fireEvent.click(screen.getByRole("tab", { name: "Details" }))
+        expect(screen.getByText("Former teammate")).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Publish to organization" }))
+        expect(mockPublishCampaign).toHaveBeenCalledWith("camp1", expect.any(Object))
+    })
+
 })

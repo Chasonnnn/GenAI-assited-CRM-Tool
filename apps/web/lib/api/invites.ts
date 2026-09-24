@@ -4,7 +4,7 @@
 
 import api from '../api'
 
-export type InviteRole = "intake_specialist" | "case_manager" | "admin"
+export type InviteRole = "intake_specialist" | "case_manager" | "operations" | "admin"
 
 export interface Invite {
     id: string

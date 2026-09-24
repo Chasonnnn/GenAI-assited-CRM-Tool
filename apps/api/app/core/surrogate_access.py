@@ -1,5 +1,6 @@
 """Surrogate access control - centralized permission checks for surrogate operations."""
 
+from types import SimpleNamespace
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -83,6 +84,24 @@ def build_surrogate_visibility_filter(
     surrogate_model=Surrogate,
 ) -> ColumnElement[bool]:
     """Build the row-level surrogate visibility filter for list/count queries."""
+    from app.services import permission_policy_service, record_scope_service
+
+    if user_id and permission_policy_service.is_enabled(db, org_id):
+        return record_scope_service.build_visibility_filter(
+            db,
+            SimpleNamespace(org_id=org_id, user_id=user_id, role=user_role),
+            "surrogate",
+            model=surrogate_model,
+        )
+    return _build_legacy_surrogate_visibility_filter(
+        user_role, user_id, surrogate_model=surrogate_model
+    )
+
+
+def _build_legacy_surrogate_visibility_filter(
+    user_role: Role | str | None, user_id: UUID | None, *, surrogate_model=Surrogate
+) -> ColumnElement[bool]:
+    """Version-one scope for runtime fallback and explicit migration comparison."""
     role_str = _role_value(user_role)
     if role_str in (Role.ADMIN.value, Role.DEVELOPER.value):
         return true()
@@ -129,6 +148,24 @@ def check_surrogate_access(
         HTTPException: 403 if access denied
     """
     role_str = _role_value(user_role)
+
+    if db is not None and org_id and user_id:
+        from app.services import permission_policy_service, permission_service, record_scope_service
+
+        if permission_policy_service.is_enabled(db, org_id):
+            if not permission_service.check_permission(
+                db, org_id, user_id, role_str, "view_surrogates"
+            ):
+                raise HTTPException(status_code=403, detail="Missing permission: view_surrogates")
+            if record_scope_service.can_access_record(
+                db,
+                SimpleNamespace(org_id=org_id, user_id=user_id, role=user_role),
+                "surrogate",
+                surrogate,
+                allow_archived=allow_archived,
+            ):
+                return
+            raise HTTPException(status_code=403, detail="You don't have access to this surrogate")
 
     # Developers bypass all checks (immutable super-admin)
     if role_str == Role.DEVELOPER.value:
@@ -197,6 +234,16 @@ def has_surrogate_record_access(
     allow_archived: bool = False,
 ) -> bool:
     """Return whether the user can view this specific surrogate record."""
+    from app.services import permission_policy_service, record_scope_service
+
+    if user_id and permission_policy_service.is_enabled(db, org_id):
+        return record_scope_service.can_access_record(
+            db,
+            SimpleNamespace(org_id=org_id, user_id=user_id, role=user_role),
+            "surrogate",
+            surrogate,
+            allow_archived=allow_archived,
+        )
     role_str = _role_value(user_role)
     if role_str in (Role.ADMIN.value, Role.DEVELOPER.value):
         return True
@@ -290,6 +337,22 @@ def can_modify_surrogate(
     """
     role_str = _role_value(user_role)
     user_uuid = UUID(user_id) if isinstance(user_id, str) else user_id
+
+    if db is not None and org_id:
+        from app.services import permission_policy_service, permission_service, record_scope_service
+
+        if permission_policy_service.is_enabled(db, org_id):
+            permissions = permission_service.get_effective_permissions(
+                db, org_id, user_uuid, role_str
+            )
+            if not {"view_surrogates", "edit_surrogates"}.issubset(permissions):
+                return False
+            return record_scope_service.can_access_record(
+                db,
+                SimpleNamespace(org_id=org_id, user_id=user_uuid, role=user_role),
+                "surrogate",
+                surrogate,
+            )
 
     # Archived surrogates: only admins/developers
     if surrogate.is_archived:

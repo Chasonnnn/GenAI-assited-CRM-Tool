@@ -5,6 +5,8 @@ import { SurrogateTasksCalendar } from "@/components/surrogates/SurrogateTasksCa
 import type { TaskListItem } from "@/lib/types/task"
 
 type SurrogateTasksTabProps = {
+    canCreateTask?: boolean
+    canToggleTask?: (task: TaskListItem) => boolean
     surrogateId: string
     tasks: TaskListItem[]
     isLoading: boolean
@@ -14,6 +16,8 @@ type SurrogateTasksTabProps = {
 }
 
 export function SurrogateTasksTab({
+    canCreateTask = true,
+    canToggleTask = () => true,
     surrogateId,
     tasks,
     isLoading,
@@ -24,6 +28,8 @@ export function SurrogateTasksTab({
     return (
         <TabsContent value="tasks" className="space-y-4">
             <SurrogateTasksCalendar
+                canCreateTask={canCreateTask}
+                canToggleTask={canToggleTask}
                 surrogateId={surrogateId}
                 tasks={tasks}
                 isLoading={isLoading}

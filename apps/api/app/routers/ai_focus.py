@@ -965,7 +965,9 @@ async def analyze_dashboard(
     # Gather dashboard stats
     now = datetime.now(UTC)
 
-    surrogate_stats = surrogate_service.get_surrogate_stats(db, session.org_id)
+    surrogate_stats = surrogate_service.get_surrogate_stats(
+        db, session.org_id, role_filter=session.role, user_id=session.user_id
+    )
     total_surrogates = surrogate_stats["total"]
     status_summary = surrogate_stats["by_status"]
     surrogates_this_week = surrogate_stats["this_week"]
@@ -974,6 +976,7 @@ async def analyze_dashboard(
         db,
         session.org_id,
         now.date(),
+        session=session,
         can_view_donors=task_service.user_can_view_donors(
             db,
             session.org_id,
@@ -1098,7 +1101,9 @@ async def analyze_dashboard_stream(
         )
 
     now = datetime.now(UTC)
-    surrogate_stats = surrogate_service.get_surrogate_stats(db, session.org_id)
+    surrogate_stats = surrogate_service.get_surrogate_stats(
+        db, session.org_id, role_filter=session.role, user_id=session.user_id
+    )
     total_surrogates = surrogate_stats["total"]
     status_summary = surrogate_stats["by_status"]
     surrogates_this_week = surrogate_stats["this_week"]
@@ -1107,6 +1112,7 @@ async def analyze_dashboard_stream(
         db,
         session.org_id,
         now.date(),
+        session=session,
         can_view_donors=task_service.user_can_view_donors(
             db,
             session.org_id,

@@ -22,7 +22,15 @@ from app.db.models import (
     PipelineStage,
 )
 from app.schemas.campaign import CampaignCreate, CampaignRecipientResponse, PreviewFiltersRequest
-from app.services import campaign_service, pipeline_dependency_service, pipeline_service
+from app.services import (
+    campaign_audience,
+    campaign_execution_service,
+    campaign_run_service,
+    campaign_service,
+    campaign_suppression_service,
+    pipeline_dependency_service,
+    pipeline_service,
+)
 from app.utils.normalization import normalize_email, normalize_phone
 
 
@@ -281,7 +289,7 @@ def test_donor_email_preview_filters_subtype_archive_suppression_and_org(
         email="other-egg@example.com",
     )
 
-    preview = campaign_service.preview_recipients(
+    preview = campaign_audience.preview_recipients(
         db,
         test_org.id,
         "egg_donor",
@@ -293,7 +301,7 @@ def test_donor_email_preview_filters_subtype_archive_suppression_and_org(
         (item.entity_type, item.entity_id, item.stage) for item in preview.sample_recipients
     ] == [("egg_donor", egg.id, egg_stage.label)]
 
-    campaign_service.add_to_suppression(
+    campaign_suppression_service.add_to_suppression(
         db,
         test_org.id,
         egg.email,
@@ -301,7 +309,7 @@ def test_donor_email_preview_filters_subtype_archive_suppression_and_org(
         source_type="donor",
         source_id=egg.id,
     )
-    suppressed = campaign_service.preview_recipients(
+    suppressed = campaign_audience.preview_recipients(
         db,
         test_org.id,
         "egg_donor",
@@ -398,14 +406,14 @@ def test_donor_email_campaign_send_is_exact_and_idempotent(
     _configure_resend_provider(db, test_org.id)
     db.commit()
 
-    campaign_service.execute_campaign_run(
+    campaign_execution_service.execute_campaign_run(
         db,
         test_org.id,
         campaign.id,
         run.id,
         actor_user_id=test_user.id,
     )
-    campaign_service.execute_campaign_run(
+    campaign_execution_service.execute_campaign_run(
         db,
         test_org.id,
         campaign.id,
@@ -434,9 +442,10 @@ def test_donor_email_campaign_send_is_exact_and_idempotent(
         "subject": logs[0].subject,
         "body": logs[0].body,
     }
-    assert "donor_launch_snapshot" not in CampaignRecipientResponse.model_validate(
-        recipient
-    ).model_dump()
+    assert (
+        "donor_launch_snapshot"
+        not in CampaignRecipientResponse.model_validate(recipient).model_dump()
+    )
     assert donor.donor_number in logs[0].subject
     assert "Sperm Donor" in logs[0].body
     assert "Bachelor&#x27;s degree" in logs[0].body
@@ -491,7 +500,7 @@ def test_donor_campaign_retry_uses_immutable_launch_identity_and_content(
         raise RuntimeError("provider unavailable")
 
     monkeypatch.setattr(email_service, "send_email", fail_first_attempt)
-    campaign_service.execute_campaign_run(
+    campaign_execution_service.execute_campaign_run(
         db,
         test_org.id,
         campaign.id,
@@ -517,7 +526,7 @@ def test_donor_campaign_retry_uses_immutable_launch_identity_and_content(
     db.commit()
 
     monkeypatch.setattr(email_service, "send_email", real_send_email)
-    result = campaign_service.retry_failed_campaign_run(
+    result = campaign_execution_service.retry_failed_campaign_run(
         db,
         test_org.id,
         campaign.id,
@@ -605,7 +614,7 @@ def test_donor_campaign_retry_links_queue_time_suppression_audit_log(
     real_send_email = email_service.send_email
 
     def suppress_before_queue(**kwargs):
-        campaign_service.add_to_suppression(
+        campaign_suppression_service.add_to_suppression(
             db,
             test_org.id,
             kwargs["recipient_email"],
@@ -616,7 +625,7 @@ def test_donor_campaign_retry_links_queue_time_suppression_audit_log(
         return real_send_email(**kwargs)
 
     monkeypatch.setattr(email_service, "send_email", suppress_before_queue)
-    result = campaign_service.retry_failed_campaign_run(
+    result = campaign_execution_service.retry_failed_campaign_run(
         db,
         test_org.id,
         campaign.id,
@@ -719,7 +728,7 @@ def test_donor_campaign_retry_reloads_only_exact_subtype_and_org(
     _configure_resend_provider(db, test_org.id)
     db.commit()
 
-    result = campaign_service.retry_failed_campaign_run(
+    result = campaign_execution_service.retry_failed_campaign_run(
         db,
         test_org.id,
         campaign.id,
@@ -745,7 +754,7 @@ def test_donor_messaging_campaigns_are_rejected_until_consent_is_donor_linked(
     test_user,
 ):
     with pytest.raises(ValueError, match="Messaging campaigns are not available for donors"):
-        campaign_service.preview_recipients(
+        campaign_audience.preview_recipients(
             db,
             test_org.id,
             "egg_donor",
@@ -798,7 +807,7 @@ def test_donor_messaging_campaigns_are_rejected_until_consent_is_donor_linked(
     db.commit()
 
     with pytest.raises(ValueError, match="Messaging campaigns are not available for donors"):
-        campaign_service.enqueue_campaign_send(
+        campaign_run_service.enqueue_campaign_send(
             db,
             test_org.id,
             legacy_campaign.id,
@@ -807,7 +816,10 @@ def test_donor_messaging_campaigns_are_rejected_until_consent_is_donor_linked(
         )
     assert (
         db.query(CampaignRun)
-        .filter(CampaignRun.organization_id == test_org.id, CampaignRun.campaign_id == legacy_campaign.id)
+        .filter(
+            CampaignRun.organization_id == test_org.id,
+            CampaignRun.campaign_id == legacy_campaign.id,
+        )
         .count()
         == 0
     )

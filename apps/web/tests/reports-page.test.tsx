@@ -3,6 +3,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
 const dynamicState = vi.hoisted(() => ({
+    policyVersion: 1,
+    canViewOrgReports: true,
     calls: [] as Array<{ options?: { ssr?: boolean } }>,
 }))
 
@@ -22,7 +24,7 @@ vi.mock('@/lib/auth-context', () => ({
 
 vi.mock('@/lib/hooks/use-permissions', () => ({
     useEffectivePermissions: () => ({
-        data: { permissions: ['view_reports', 'view_donors'] },
+        data: { permissions: ['view_reports', 'view_donors'], policy_version: dynamicState.policyVersion, capabilities: {can_view_org_reports: dynamicState.canViewOrgReports} },
         isLoading: false,
     }),
 }))
@@ -194,4 +196,17 @@ describe('ReportsPage', () => {
         expect(screen.getByText('Egg Donors Creation Trend')).toBeInTheDocument()
         expect(screen.getAllByText('7').length).toBeGreaterThan(0)
     })
+})
+
+
+it('hides organization ad spend for a scoped report viewer', () => {
+    dynamicState.policyVersion = 2
+    dynamicState.canViewOrgReports = false
+    const view = render(<ReportsPage />)
+    expect(screen.queryByText('Ad Spend')).not.toBeInTheDocument()
+    view.unmount()
+    dynamicState.canViewOrgReports = true
+    render(<ReportsPage />)
+    expect(screen.getByText('Ad Spend')).toBeInTheDocument()
+    dynamicState.policyVersion = 1
 })

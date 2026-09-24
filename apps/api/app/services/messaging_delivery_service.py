@@ -186,9 +186,9 @@ def _apply_status_event(
         if status in {"delivered", "read"}:
             delivery.status = "delivered"
             delivery.completed_at = processed_at
-            from app.services import campaign_service
+            from app.services import campaign_delivery_service
 
-            campaign_service.project_campaign_message_delivery(
+            campaign_delivery_service.project_campaign_message_delivery(
                 db,
                 organization_id=event.organization_id,
                 message_delivery_id=delivery.id,
@@ -202,9 +202,9 @@ def _apply_status_event(
             delivery.completed_at = processed_at
             delivery.last_error_type = f"twilio_{status}"
             delivery.last_error = "Twilio reported a terminal delivery failure"
-            from app.services import campaign_service
+            from app.services import campaign_delivery_service
 
-            campaign_service.project_campaign_message_delivery(
+            campaign_delivery_service.project_campaign_message_delivery(
                 db,
                 organization_id=event.organization_id,
                 message_delivery_id=delivery.id,
@@ -559,6 +559,11 @@ def recheck_before_provider_io(
     lease_generation: int | None = None,
 ) -> ConsentRecheckResult:
     """Atomically recheck local consent immediately before the network boundary."""
+    from app.services import campaign_delivery_service
+
+    campaign_delivery_service.lock_campaign_run_for_message_delivery(
+        db, organization_id=organization_id, message_delivery_id=delivery_id
+    )
     delivery = db.execute(
         select(MessageDelivery)
         .where(
@@ -574,6 +579,24 @@ def recheck_before_provider_io(
     ):
         raise MessagingLeaseLost("Messaging delivery lease is no longer current")
 
+    if delivery.source_type == "workflow_execution":
+        from app.services import workflow_execution_authority
+
+        try:
+            workflow_execution_authority.authorize_message_delivery(db, delivery)
+        except workflow_execution_authority.WorkflowAuthorityError:
+            _cancel_delivery(delivery, "workflow_authority_revoked")
+            db.commit()
+            return ConsentRecheckResult(allowed=False, reason="workflow_authority_revoked")
+    elif delivery.source_type == "campaign_recipient":
+        from app.services import campaign_delivery_service
+
+        if not campaign_delivery_service.is_campaign_recipient_delivery_eligible(
+            db, organization_id, delivery.source_id, message_delivery_id=delivery.id
+        ):
+            _cancel_delivery(delivery, "campaign_authority_revoked")
+            db.commit()
+            return ConsentRecheckResult(allowed=False, reason="campaign_authority_revoked")
     state, suppression = _current_consent(
         db,
         organization_id=organization_id,

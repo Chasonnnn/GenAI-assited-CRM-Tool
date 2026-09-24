@@ -7,6 +7,7 @@ const mockSendFormIntakeLink = vi.fn()
 const mockUseFormIntakeLinks = vi.fn()
 const mockUseSurrogateFormSubmission = vi.fn()
 const mockUseEmailTemplates = vi.fn()
+const mockUseScopedLinks = vi.fn()
 const FIXED_TIMESTAMP = "2026-01-01T00:00:00.000Z"
 
 vi.mock("@/lib/auth-context", () => ({
@@ -21,6 +22,7 @@ vi.mock("@/lib/hooks/use-forms", () => ({
     useSurrogateFormSubmission: (...args: unknown[]) => mockUseSurrogateFormSubmission(...args),
     useSurrogateFormDraftStatus: () => ({ data: null }),
     useFormIntakeLinks: (...args: unknown[]) => mockUseFormIntakeLinks(...args),
+    useSurrogateApplicationIntakeLinks: (...args: unknown[]) => mockUseScopedLinks(...args),
     useSendFormIntakeLink: () => ({ mutateAsync: mockSendFormIntakeLink, isPending: false }),
     useApproveFormSubmission: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useRejectFormSubmission: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -30,7 +32,7 @@ vi.mock("@/lib/hooks/use-forms", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-email-templates", () => ({
-    useEmailTemplates: () => mockUseEmailTemplates(),
+    useEmailTemplates: (...args: unknown[]) => mockUseEmailTemplates(...args),
 }))
 
 vi.mock("@/lib/api/forms", () => ({
@@ -44,6 +46,8 @@ describe("SurrogateApplicationTab", () => {
         mockUseFormIntakeLinks.mockReset()
         mockUseSurrogateFormSubmission.mockReset()
         mockUseEmailTemplates.mockReset()
+        mockUseScopedLinks.mockReset()
+        mockUseScopedLinks.mockReturnValue({ data: [] })
         mockUseEmailTemplates.mockReturnValue({
             data: [
                 { id: "template-1", name: "Application Invite" },
@@ -77,6 +81,34 @@ describe("SurrogateApplicationTab", () => {
             isLoading: false,
             error: null,
         })
+    })
+
+    it("keeps scoped read-only applications readable without review or edit controls", () => {
+        mockUseSurrogateFormSubmission.mockReturnValue({
+            isLoading: false, error: null,
+            data: { id: "submission-readonly", form_id: "form-1", surrogate_id: "surrogate-1", status: "pending_review", submitted_at: FIXED_TIMESTAMP, answers: { full_name: "Applicant QA" }, schema_snapshot: { pages: [{ title: "Contact", fields: [{ key: "full_name", label: "Full name", type: "text" }] }] }, files: [] },
+        })
+        const props = { surrogateId: "surrogate-1", formId: "form-1" }
+        const { rerender } = render(<SurrogateApplicationTab {...props} access={{ scoped: true, canEdit: false, canSend: false }} />)
+        expect(screen.getByText("Applicant QA")).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Export", exact: true })).toBeEnabled()
+        expect(screen.queryByRole("button", { name: "Edit", exact: true })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /Approve & Update/ })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Reject", exact: true })).not.toBeInTheDocument()
+        rerender(<SurrogateApplicationTab {...props} access={{ scoped: true, canEdit: true, canSend: false }} />)
+        fireEvent.click(screen.getByRole("button", { name: "Edit", exact: true }))
+        expect(screen.getByRole("button", { name: /Save Changes/ })).toBeInTheDocument()
+        rerender(<SurrogateApplicationTab {...props} access={{ scoped: true, canEdit: false, canSend: false }} />)
+        expect(screen.queryByRole("button", { name: /Save Changes/ })).not.toBeInTheDocument()
+        expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
+    })
+
+    it("does not query builder links or offer sending to a scoped read-only viewer", () => {
+        render(<SurrogateApplicationTab surrogateId="surrogate-1" formId="form-1" access={{ scoped: true, canEdit: false, canSend: false }} />)
+        expect(screen.getByRole("button", { name: "Send Form Link", exact: true })).toBeDisabled()
+        expect(mockUseFormIntakeLinks).toHaveBeenLastCalledWith(null, true)
+        expect(mockUseScopedLinks).toHaveBeenLastCalledWith(null, "form-1")
+        expect(mockUseEmailTemplates).toHaveBeenLastCalledWith({ activeOnly: true, usageContext: "manual" }, false)
     })
 
     it("uses shared intake link send flow", async () => {

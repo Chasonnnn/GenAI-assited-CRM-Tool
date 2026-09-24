@@ -9,7 +9,13 @@ from app.db.enums import TaskStatus, WorkflowTriggerType
 from app.db.models import EmailLog, EmailTemplate, EntityActivityLog, EntityNote, Job, Task
 from app.schemas.donor import DonorCreate
 from app.schemas.workflow import WorkflowCreate
-from app.services import donor_service, email_service, workflow_service, workflow_triggers
+from app.services import (
+    donor_service,
+    email_service,
+    workflow_communication_actions,
+    workflow_service,
+    workflow_triggers,
+)
 from app.services.workflow_engine import engine
 
 
@@ -139,7 +145,7 @@ def test_workflow_note_sanitizes_and_records_durable_activity_without_recursion(
 
 def test_workflow_and_campaign_donor_template_context_matches(db, owned_donor):
     expected = email_service.build_donor_template_variables(db, owned_donor)
-    actual = engine.adapter._resolve_email_variables(db, owned_donor)
+    actual = workflow_communication_actions.resolve_email_variables(db, owned_donor)
 
     # Unsubscribe tokens are independently minted opaque identities.
     assert actual.pop("unsubscribe_url").startswith("https://")
@@ -170,7 +176,7 @@ def queued_donor_email(db, test_org, test_user, owned_donor, monkeypatch):
         "resolve_workflow_email_provider",
         lambda **kwargs: ("resend", {"from_email": "workflow@example.com"}),
     )
-    queued = engine.adapter._action_send_email(
+    queued = workflow_communication_actions.send_email(
         db,
         {"template_id": str(template.id), "recipients": "donor"},
         owned_donor,

@@ -12,6 +12,12 @@ from sqlalchemy import text
 from sqlalchemy.orm import Query
 
 from app.core.encryption import hash_email
+from app.services import (
+    campaign_audience,
+    campaign_execution_service,
+    campaign_run_service,
+    campaign_suppression_service,
+)
 from app.utils.normalization import normalize_email
 
 # =============================================================================
@@ -154,7 +160,7 @@ def test_campaign_service_update_rejects_past_scheduled_at(db, test_org, test_us
 def test_campaign_preview_filters_intended_parent_status(db, test_org):
     from app.db.enums import IntendedParentStatus
     from app.db.models import IntendedParent
-    from app.services import campaign_service, pipeline_service
+    from app.services import pipeline_service
 
     email_new = normalize_email("ip.new@example.com")
     email_matched = normalize_email("ip.matched@example.com")
@@ -195,7 +201,7 @@ def test_campaign_preview_filters_intended_parent_status(db, test_org):
     db.add_all([ip_new, ip_matched])
     db.flush()
 
-    preview = campaign_service.preview_recipients(
+    preview = campaign_audience.preview_recipients(
         db,
         test_org.id,
         "intended_parent",
@@ -228,7 +234,7 @@ def test_campaign_service_list_skips_count_for_short_first_page(
 
 def test_campaign_preview_skips_count_for_short_first_page(db, test_org, test_user, monkeypatch):
     from app.schemas.surrogate import SurrogateCreate
-    from app.services import campaign_service, surrogate_service
+    from app.services import surrogate_service
 
     surrogate = surrogate_service.create_surrogate(
         db,
@@ -250,7 +256,7 @@ def test_campaign_preview_skips_count_for_short_first_page(db, test_org, test_us
 
     monkeypatch.setattr(Query, "count", _count_should_not_be_called)
 
-    preview = campaign_service.preview_recipients(db, test_org.id, "case", {}, limit=50)
+    preview = campaign_audience.preview_recipients(db, test_org.id, "case", {}, limit=50)
 
     assert preview.total_count == 1
     assert [recipient.entity_id for recipient in preview.sample_recipients] == [surrogate.id]
@@ -260,7 +266,7 @@ def test_campaign_preview_reports_full_audience_counts_beyond_sample_limit(db, t
     """Eligible/suppressed counts must cover the whole audience, not the sampled page."""
     from app.db.models import EmailSuppression
     from app.schemas.surrogate import SurrogateCreate
-    from app.services import campaign_service, surrogate_service
+    from app.services import surrogate_service
 
     suppressed_email = normalize_email(f"preview-suppressed-{uuid4().hex[:8]}@example.com")
     surrogate_ids = set()
@@ -291,7 +297,7 @@ def test_campaign_preview_reports_full_audience_counts_beyond_sample_limit(db, t
     )
     db.flush()
 
-    preview = campaign_service.preview_recipients(db, test_org.id, "case", {}, limit=2)
+    preview = campaign_audience.preview_recipients(db, test_org.id, "case", {}, limit=2)
 
     assert preview.total_count == 5
     assert preview.eligible_count == 4
@@ -310,12 +316,10 @@ def test_campaign_preview_handles_more_than_65535_tenant_suppressions(
 
     from app.db.models import EmailSuppression, Organization
     from app.schemas.surrogate import SurrogateCreate
-    from app.services import campaign_service, surrogate_service
+    from app.services import surrogate_service
 
     suppressed_email = normalize_email(f"preview-scale-suppressed-{uuid4().hex}@example.com")
-    foreign_suppressed_email = normalize_email(
-        f"preview-scale-foreign-{uuid4().hex}@example.com"
-    )
+    foreign_suppressed_email = normalize_email(f"preview-scale-foreign-{uuid4().hex}@example.com")
     suppressed_surrogate = surrogate_service.create_surrogate(
         db,
         test_org.id,
@@ -374,11 +378,9 @@ def test_campaign_preview_handles_more_than_65535_tenant_suppressions(
 
     sqlalchemy_event.listen(db_engine, "before_cursor_execute", capture_suppression_array_bind)
     try:
-        preview = campaign_service.preview_recipients(db, test_org.id, "case", {}, limit=10)
+        preview = campaign_audience.preview_recipients(db, test_org.id, "case", {}, limit=10)
     finally:
-        sqlalchemy_event.remove(
-            db_engine, "before_cursor_execute", capture_suppression_array_bind
-        )
+        sqlalchemy_event.remove(db_engine, "before_cursor_execute", capture_suppression_array_bind)
 
     assert preview.total_count == 2
     assert preview.eligible_count == 1
@@ -402,7 +404,7 @@ def test_campaign_preview_full_counts_for_donor_recipients(db, test_org, test_us
     """Donor previews count the full subtype audience and exclude the other subtype."""
     from app.db.models import EmailSuppression
     from app.schemas.donor import DonorCreate
-    from app.services import campaign_service, donor_service
+    from app.services import donor_service
 
     suppressed_email = normalize_email(f"donor-suppressed-{uuid4().hex[:8]}@example.com")
     egg_donor_ids = set()
@@ -444,7 +446,7 @@ def test_campaign_preview_full_counts_for_donor_recipients(db, test_org, test_us
     )
     db.flush()
 
-    preview = campaign_service.preview_recipients(db, test_org.id, "egg_donor", {}, limit=1)
+    preview = campaign_audience.preview_recipients(db, test_org.id, "egg_donor", {}, limit=1)
 
     assert preview.total_count == 3
     assert preview.eligible_count == 2
@@ -456,7 +458,6 @@ def test_campaign_preview_full_counts_for_donor_recipients(db, test_org, test_us
 
 def test_list_suppressions_skips_count_for_short_first_page(db, test_org, monkeypatch):
     from app.db.models import EmailSuppression
-    from app.services import campaign_service
 
     suppression = EmailSuppression(
         id=uuid4(),
@@ -479,7 +480,9 @@ def test_list_suppressions_skips_count_for_short_first_page(db, test_org, monkey
 
     monkeypatch.setattr(Query, "count", _count_should_not_be_called)
 
-    items, total = campaign_service.list_suppressions(db, test_org.id, limit=50, offset=0)
+    items, total = campaign_suppression_service.list_suppressions(
+        db, test_org.id, limit=50, offset=0
+    )
 
     assert total == 1
     assert [item.id for item in items] == [suppression.id]
@@ -488,10 +491,12 @@ def test_list_suppressions_skips_count_for_short_first_page(db, test_org, monkey
 def test_is_email_suppressed(db, test_org):
     """Test suppression checking function."""
     from app.db.models import EmailSuppression
-    from app.services import campaign_service
 
     # Not suppressed yet
-    assert campaign_service.is_email_suppressed(db, test_org.id, "test@example.com") is False
+    assert (
+        campaign_suppression_service.is_email_suppressed(db, test_org.id, "test@example.com")
+        is False
+    )
 
     # Add suppression
     suppression = EmailSuppression(
@@ -504,14 +509,16 @@ def test_is_email_suppressed(db, test_org):
     db.flush()
 
     # Now suppressed
-    assert campaign_service.is_email_suppressed(db, test_org.id, "test@example.com") is True
+    assert (
+        campaign_suppression_service.is_email_suppressed(db, test_org.id, "test@example.com")
+        is True
+    )
 
 
 def test_add_to_suppression(db, test_org, test_user):
     """Test adding email to suppression list."""
-    from app.services import campaign_service
 
-    result = campaign_service.add_to_suppression(
+    result = campaign_suppression_service.add_to_suppression(
         db, test_org.id, "newsuppressed@example.com", "opt_out", test_user.id
     )
 
@@ -527,8 +534,6 @@ def test_add_to_suppression_uses_one_atomic_precedence_upsert(
     """Concurrent webhook evidence must not race through SELECT then INSERT."""
     from sqlalchemy import event as sqlalchemy_event
 
-    from app.services import campaign_service
-
     statements: list[str] = []
 
     def capture_sql(conn, cursor, statement, parameters, context, executemany):
@@ -538,7 +543,7 @@ def test_add_to_suppression_uses_one_atomic_precedence_upsert(
     engine = db.get_bind()
     sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
     try:
-        suppression = campaign_service.add_to_suppression(
+        suppression = campaign_suppression_service.add_to_suppression(
             db,
             test_org.id,
             "atomic-suppression@example.com",
@@ -566,7 +571,6 @@ def test_concurrent_suppression_upserts_preserve_the_strongest_evidence(db_engin
 
     from app.db.models import EmailSuppression, Organization
     from app.db.session import SessionLocal
-    from app.services import campaign_service
 
     organization_id = uuid4()
     setup = SessionLocal(bind=db_engine)
@@ -589,7 +593,7 @@ def test_concurrent_suppression_upserts_preserve_the_strongest_evidence(db_engin
         session = SessionLocal(bind=db_engine)
         try:
             ready.wait(timeout=5)
-            campaign_service.add_to_suppression(
+            campaign_suppression_service.add_to_suppression(
                 session,
                 organization_id,
                 "race@example.com",
@@ -636,7 +640,6 @@ def test_concurrent_suppression_upserts_preserve_the_strongest_evidence(db_engin
 def test_is_email_suppressed_can_ignore_opt_out(db, test_org):
     """Suppression checks should support ignoring opt-outs when explicitly configured."""
     from app.db.models import EmailSuppression
-    from app.services import campaign_service
 
     db.add(
         EmailSuppression(
@@ -648,11 +651,11 @@ def test_is_email_suppressed_can_ignore_opt_out(db, test_org):
     )
     db.flush()
 
-    assert campaign_service.is_email_suppressed(
+    assert campaign_suppression_service.is_email_suppressed(
         db, test_org.id, "optedout@example.com", ignore_opt_out=False
     )
     assert (
-        campaign_service.is_email_suppressed(
+        campaign_suppression_service.is_email_suppressed(
             db, test_org.id, "optedout@example.com", ignore_opt_out=True
         )
         is False
@@ -668,12 +671,11 @@ def test_campaign_send_job_creation(db, test_org, test_user, test_campaign):
     """Enqueuing campaign send should create a job with correct type."""
     from app.db.enums import JobType
     from app.db.models import Job
-    from app.services import campaign_service
 
     _configure_resend_provider(db, test_org.id)
 
     # Enqueue campaign
-    message, run_id, scheduled_at = campaign_service.enqueue_campaign_send(
+    message, run_id, scheduled_at = campaign_run_service.enqueue_campaign_send(
         db=db,
         org_id=test_org.id,
         campaign_id=test_campaign.id,
@@ -705,7 +707,6 @@ def test_campaign_send_job_scheduled_run_at(db, test_org, test_user, test_campai
 
     from app.db.enums import JobType
     from app.db.models import Job
-    from app.services import campaign_service
 
     _configure_resend_provider(db, test_org.id)
 
@@ -713,7 +714,7 @@ def test_campaign_send_job_scheduled_run_at(db, test_org, test_user, test_campai
     test_campaign.scheduled_at = scheduled_at
     db.flush()
 
-    message, run_id, returned_scheduled = campaign_service.enqueue_campaign_send(
+    message, run_id, returned_scheduled = campaign_run_service.enqueue_campaign_send(
         db=db,
         org_id=test_org.id,
         campaign_id=test_campaign.id,
@@ -744,12 +745,11 @@ def test_campaign_send_requires_scheduled_at_when_send_now_false(
     db, test_org, test_user, test_campaign
 ):
     """send_now=False should require campaign.scheduled_at."""
-    from app.services import campaign_service
 
     _configure_resend_provider(db, test_org.id)
 
     with pytest.raises(ValueError, match="scheduled_at"):
-        campaign_service.enqueue_campaign_send(
+        campaign_run_service.enqueue_campaign_send(
             db=db,
             org_id=test_org.id,
             campaign_id=test_campaign.id,
@@ -760,7 +760,6 @@ def test_campaign_send_requires_scheduled_at_when_send_now_false(
 
 def test_campaign_send_rejects_past_scheduled_at(db, test_org, test_user, test_campaign):
     """send_now=False should reject scheduled_at in the past."""
-    from app.services import campaign_service
 
     _configure_resend_provider(db, test_org.id)
 
@@ -769,7 +768,7 @@ def test_campaign_send_rejects_past_scheduled_at(db, test_org, test_user, test_c
     db.commit()
 
     with pytest.raises(ValueError, match="scheduled_at must be in the future"):
-        campaign_service.enqueue_campaign_send(
+        campaign_run_service.enqueue_campaign_send(
             db,
             org_id=test_org.id,
             campaign_id=test_campaign.id,
@@ -816,7 +815,7 @@ def test_execute_campaign_run_with_no_recipients(db, test_org, test_user, test_t
     db.flush()
 
     # Execute
-    result = campaign_service.execute_campaign_run(
+    result = campaign_execution_service.execute_campaign_run(
         db=db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -838,7 +837,6 @@ def test_execute_campaign_run_queues_correlated_email_delivery(
         EmailDelivery,
         Surrogate,
     )
-    from app.services import campaign_service
 
     recipient_email = normalize_email("campaign-sender@example.com")
     surrogate = Surrogate(
@@ -884,7 +882,7 @@ def test_execute_campaign_run_queues_correlated_email_delivery(
     db.flush()
     _configure_resend_provider(db, test_org.id)
 
-    campaign_service.execute_campaign_run(
+    campaign_execution_service.execute_campaign_run(
         db=db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -919,7 +917,6 @@ def test_execute_campaign_run_skips_opt_out_by_default(
 ):
     """Opt-outs should be excluded from campaign sends by default."""
     from app.db.models import Campaign, CampaignRecipient, CampaignRun, EmailSuppression, Surrogate
-    from app.services import campaign_service
 
     email = normalize_email("optout-default@example.com")
     case = Surrogate(
@@ -974,7 +971,7 @@ def test_execute_campaign_run_skips_opt_out_by_default(
     db.add(run)
     db.flush()
 
-    campaign_service.execute_campaign_run(
+    campaign_execution_service.execute_campaign_run(
         db=db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -1001,7 +998,6 @@ def test_execute_campaign_run_can_include_opt_out_when_configured(
         EmailSuppression,
         Surrogate,
     )
-    from app.services import campaign_service
 
     _configure_resend_provider(db, test_org.id)
     email = normalize_email("optout-include@example.com")
@@ -1058,7 +1054,7 @@ def test_execute_campaign_run_can_include_opt_out_when_configured(
     db.add(run)
     db.flush()
 
-    campaign_service.execute_campaign_run(
+    campaign_execution_service.execute_campaign_run(
         db=db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -1133,7 +1129,7 @@ def test_campaign_run_skips_existing_recipient(
     db.add(existing)
     db.flush()
 
-    result = campaign_service.execute_campaign_run(
+    result = campaign_execution_service.execute_campaign_run(
         db=db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -1206,7 +1202,7 @@ def test_campaign_run_skips_existing_recipient_on_retry(
 
     monkeypatch.setattr(email_service, "send_email", should_not_send)
 
-    result = campaign_service.execute_campaign_run(
+    result = campaign_execution_service.execute_campaign_run(
         db=db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -1447,8 +1443,8 @@ def test_execute_campaign_run_streams_recipients(
     )
 
     monkeypatch.setattr(
-        campaign_service,
-        "_build_recipient_query",
+        campaign_audience,
+        "build_recipient_query",
         lambda *args, **kwargs: FakeQuery([recipient]),
     )
 
@@ -1477,7 +1473,7 @@ def test_execute_campaign_run_streams_recipients(
 
     monkeypatch.setattr(email_service, "send_email", fake_send_email)
 
-    result = campaign_service.execute_campaign_run(
+    result = campaign_execution_service.execute_campaign_run(
         db=db,
         org_id=test_org.id,
         campaign_id=campaign.id,
@@ -1553,8 +1549,8 @@ def test_execute_campaign_run_uses_bulk_suppression(
     )
 
     monkeypatch.setattr(
-        campaign_service,
-        "_build_recipient_query",
+        campaign_audience,
+        "build_recipient_query",
         lambda *args, **kwargs: FakeQuery([recipient]),
     )
 
@@ -1582,9 +1578,9 @@ def test_execute_campaign_run_uses_bulk_suppression(
     def fail_if_called(*args, **kwargs):
         raise AssertionError("Per-recipient suppression check should not be called")
 
-    monkeypatch.setattr(campaign_service, "is_email_suppressed", fail_if_called)
+    monkeypatch.setattr(campaign_suppression_service, "is_email_suppressed", fail_if_called)
 
-    result = campaign_service.execute_campaign_run(
+    result = campaign_execution_service.execute_campaign_run(
         db=db,
         org_id=test_org.id,
         campaign_id=campaign.id,

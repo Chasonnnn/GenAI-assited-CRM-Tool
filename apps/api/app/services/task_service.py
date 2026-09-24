@@ -955,6 +955,17 @@ def list_tasks(
         Task.organization_id == org_id,
         task_subjects_belong_to_org(org_id),
     )
+    from types import SimpleNamespace
+
+    from app.services import permission_policy_service, record_scope_service
+
+    scoped_v2 = user_id is not None and permission_policy_service.is_enabled(db, org_id)
+    if scoped_v2:
+        query = query.filter(
+            record_scope_service.build_linked_visibility_filter(
+                db, SimpleNamespace(org_id=org_id, user_id=user_id, role=user_role), Task
+            )
+        )
 
     if match_id:
         context_filter = Task.match_id == match_id
@@ -990,7 +1001,9 @@ def list_tasks(
 
     # Role-based surrogate access filtering for intake specialists:
     # filter out tasks linked to surrogates they can't access.
-    if user_role == Role.INTAKE_SPECIALIST.value or user_role == Role.INTAKE_SPECIALIST:
+    if not scoped_v2 and (
+        user_role == Role.INTAKE_SPECIALIST.value or user_role == Role.INTAKE_SPECIALIST
+    ):
         if user_id:
             accessible_surrogate_ids = select(Surrogate.id).where(
                 Surrogate.organization_id == org_id,
@@ -1258,6 +1271,7 @@ def count_overdue_tasks(
     today,
     *,
     can_view_donors: bool = True,
+    session: UserSession | None = None,
 ) -> int:
     """Count overdue tasks for dashboard metrics."""
     filters = [
@@ -1267,6 +1281,10 @@ def count_overdue_tasks(
         Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
         Task.due_date < today,
     ]
+    if session is not None:
+        from app.services import record_scope_service
+
+        filters.append(record_scope_service.build_linked_visibility_filter(db, session, Task))
     if not can_view_donors:
         filters.append(Task.donor_id.is_(None))
     return db.scalar(select(func.count(Task.id)).where(*filters)) or 0

@@ -51,6 +51,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Switch } from "@/components/ui/switch"
 import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import type {
     EmailTemplateDraft,
     EmailTemplateDraftScope,
@@ -226,7 +227,19 @@ function useUnsavedChangesWarning(
     }, [isDirty, onInternalNavigation])
 }
 
-export default function OrganizationEmailTemplateStudio({
+export default function OrganizationEmailTemplateStudio(props: OrganizationEmailTemplateStudioProps) {
+    const { user } = useAuth()
+    const access = useEffectivePermissions(user?.user_id ?? null)
+    if (access.isLoading) return <div className="p-6 text-sm text-muted-foreground">Loading template studio…</div>
+    if (access.isError) return <div role="alert" className="space-y-3 p-6"><p>Unable to load permissions.</p><Button variant="outline" onClick={() => { void access.refetch() }}>Retry</Button></div>
+    const permissions = access.data?.permissions ?? []
+    if ((access.data?.policy_version ?? 1) >= 2 && (!permissions.includes("manage_email_templates") || ((props.scope ?? "org") === "org" && !permissions.includes("manage_org_templates")))) {
+        return <div className="p-6"><h1 className="text-xl font-semibold">Template editing unavailable</h1></div>
+    }
+    return <OrganizationEmailTemplateStudioContent {...props} />
+}
+
+function OrganizationEmailTemplateStudioContent({
     templateId,
     scope = "org",
 }: OrganizationEmailTemplateStudioProps) {
@@ -320,6 +333,8 @@ function OrganizationEmailTemplateEditor({
 }: OrganizationEmailTemplateEditorProps) {
     const { push, replace } = useRouter()
     const { user } = useAuth()
+    const { data: access } = useEffectivePermissions(user?.user_id ?? null)
+    const canSendTest = Boolean(access && ((access.policy_version ?? 1) < 2 || access.permissions.includes("send_email")))
     const createDraft = useCreateEmailTemplateDraft()
     const createDraftFromTemplate = useCreateEmailTemplateDraftFromTemplate()
     const updateDraft = useUpdateEmailTemplateDraft()
@@ -765,7 +780,7 @@ function OrganizationEmailTemplateEditor({
                         type="button"
                         variant="outline"
                         onClick={() => setTestOpen(true)}
-                        disabled={!draft || isDirty || requiresRefresh}
+                        disabled={!canSendTest || !draft || isDirty || requiresRefresh}
                     >
                         Send test
                     </Button>
@@ -784,7 +799,7 @@ function OrganizationEmailTemplateEditor({
                     <Button
                         type="button"
                         onClick={() => setPublishOpen(true)}
-                        disabled={!draft || isDirty || requiresRefresh}
+                        disabled={!canSendTest || !draft || isDirty || requiresRefresh}
                     >
                         Publish
                     </Button>
@@ -839,6 +854,15 @@ function OrganizationEmailTemplateEditor({
                 </Alert>
             ) : null}
 
+            {publishedTemplate?.proposed_by_name ? (
+                <details className="rounded-xl border bg-card px-5 py-3">
+                    <summary className="cursor-pointer text-sm font-medium">Details</summary>
+                    <dl className="mt-3 grid gap-1 text-sm">
+                        <dt className="text-muted-foreground">Originally proposed by</dt>
+                        <dd>{publishedTemplate.proposed_by_name}</dd>
+                    </dl>
+                </details>
+            ) : null}
             <Card>
                 <CardContent className="grid gap-4 py-0 sm:grid-cols-3">
                     <div className="flex items-center justify-between gap-3 sm:block">

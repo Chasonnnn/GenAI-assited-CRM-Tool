@@ -8,6 +8,9 @@ import CampaignsPage from "../app/(app)/automation/campaigns/page"
 const mockCreateCampaign = vi.fn()
 const mockPreviewFilters = vi.fn()
 const mockSendCampaign = vi.fn()
+let mockPermissions = { policy_version: 1, permissions: ["manage_email_templates"] }
+vi.mock("@/lib/auth-context", () => ({ useAuth: () => ({ user: { user_id: "user-1" } }) }))
+vi.mock("@/lib/hooks/use-permissions", () => ({ useEffectivePermissions: () => ({ data: mockPermissions }) }))
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ push: vi.fn() }),
@@ -84,6 +87,7 @@ vi.mock("@/lib/hooks/use-campaigns", () => ({
     useSendCampaign: () => ({ mutateAsync: mockSendCampaign, isPending: false }),
     usePreviewFilters: () => ({
         mutate: mockPreviewFilters,
+        reset: vi.fn(),
         data: {
             total_count: 2,
             sample_recipients: [{
@@ -115,6 +119,7 @@ vi.mock("@/lib/api/twilio", () => ({
 
 describe("donor campaign creation", () => {
     beforeEach(() => {
+        mockPermissions = { policy_version: 1, permissions: ["manage_email_templates"] }
         mockCreateCampaign.mockReset().mockResolvedValue({ id: "campaign-new" })
         mockPreviewFilters.mockReset()
         mockSendCampaign.mockReset().mockResolvedValue({})
@@ -195,6 +200,7 @@ describe("donor campaign creation", () => {
         expect(screen.getAllByText("Egg Donors").length).toBeGreaterThan(0)
         fireEvent.click(screen.getByRole("button", { name: "Next" }))
         expect(mockPreviewFilters).toHaveBeenCalledWith({
+            scope: "org",
             channel: "email",
             recipientType: "egg_donor",
             filterCriteria: { stage_ids: ["egg-stage-1"] },
@@ -221,7 +227,7 @@ describe("donor campaign creation", () => {
         render(<CampaignsPage />)
         fireEvent.click(screen.getAllByRole("button", { name: "Create Campaign" })[0]!)
 
-        fireEvent.change(screen.getByRole("combobox"), { target: { value: "messaging" } })
+        fireEvent.change(screen.getByRole("combobox", { name: "Campaign channel" }), { target: { value: "messaging" } })
         fireEvent.change(screen.getByLabelText("Campaign Name *"), {
             target: { value: "Messaging campaign" },
         })
@@ -234,4 +240,25 @@ describe("donor campaign creation", () => {
         expect(screen.queryByRole("option", { name: "Egg Donors" })).not.toBeInTheDocument()
         expect(screen.queryByRole("option", { name: "Sperm Donors" })).not.toBeInTheDocument()
     })
+    it("creates a private draft without attempting a send when only editing is granted", async () => {
+        mockPermissions = { policy_version: 2, permissions: ["view_campaigns", "edit_campaigns", "send_email"] }
+        render(<CampaignsPage />)
+        fireEvent.click(screen.getAllByRole("button", { name: "Create Campaign" })[0]!)
+        expect(screen.getByRole("combobox", { name: "Campaign scope" })).toHaveValue("personal")
+        fireEvent.change(screen.getByLabelText("Campaign Name *"), { target: { value: "Private draft" } })
+        fireEvent.click(screen.getByRole("button", { name: "Next" }))
+        fireEvent.change(screen.getByRole("combobox", { name: "Email template" }), { target: { value: "template-1" } })
+        for (let step = 2; step < 7; step++) fireEvent.click(screen.getByRole("button", { name: "Next" }))
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+        await waitFor(() => expect(mockCreateCampaign).toHaveBeenCalledWith(expect.objectContaining({ name: "Private draft", scope: "personal" })))
+        expect(mockPreviewFilters).toHaveBeenCalledWith(expect.objectContaining({ scope: "personal" }))
+        expect(mockSendCampaign).not.toHaveBeenCalled()
+    })
+
+    it("disables creation when only viewing is granted", () => {
+        mockPermissions = { policy_version: 2, permissions: ["view_campaigns"] }
+        render(<CampaignsPage />)
+        expect(screen.getByRole("button", { name: "Create Campaign" })).toBeDisabled()
+    })
+
 })

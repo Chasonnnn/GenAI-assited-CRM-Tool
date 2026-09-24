@@ -100,6 +100,16 @@ def _prepare_chat_request(
             org_id=session.org_id,
         )
     elif entity_type == "task":
+        from app.services import permission_policy_service, permission_service
+
+        if permission_policy_service.is_enabled(
+            db, session.org_id
+        ) and not permission_service.check_permission(
+            db, session.org_id, session.user_id, session.role.value, P.TASKS_VIEW.value
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Missing permission: view_tasks"
+            )
         task = task_service.get_task(db, entity_id, session.org_id)
         if not task:
             raise HTTPException(
@@ -107,9 +117,8 @@ def _prepare_chat_request(
                 detail="Task not found",
             )
         task_service.check_task_subject_access(db, task, session)
-        if (
-            task.created_by_user_id != session.user_id
-            and task.assigned_to_user_id != session.user_id
+        if task.created_by_user_id != session.user_id and not (
+            task.owner_type == "user" and task.owner_id == session.user_id
         ):
             is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
             if not is_manager:

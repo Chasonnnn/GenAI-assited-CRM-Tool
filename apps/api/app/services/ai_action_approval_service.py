@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, TypedDict
 
@@ -102,9 +104,24 @@ def approve_action_for_session(
     session: UserSession,
 ) -> ActionApprovalResult:
     """Approve and execute an AI action proposal for the current session."""
-    from app.services import ai_service, audit_service, permission_service, surrogate_service
+    from app.services import (
+        ai_service,
+        ai_settings_service,
+        audit_service,
+        permission_policy_service,
+        permission_service,
+        surrogate_service,
+    )
     from app.services.ai_action_executor import execute_action
 
+    if permission_policy_service.is_enabled(db, session.org_id):
+        from app.services.workflow_execution_authority import active_session
+
+        permission_policy_service.lock_configuration(db, session.org_id)
+        actor = active_session(db, session.org_id, session.user_id)
+        if actor is None:
+            raise HTTPException(status_code=403, detail="Active organization membership required")
+        session = actor
     approval, message, conversation = ai_service.get_approval_with_conversation(
         db, approval_id, session.org_id
     )
@@ -116,6 +133,9 @@ def approve_action_for_session(
 
     if not conversation or conversation.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Conversation not found")
+
+    if not ai_settings_service.is_org_ai_enabled(db, session.org_id):
+        raise HTTPException(status_code=403, detail="AI is not enabled for this organization")
 
     is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
     if conversation.user_id != session.user_id and not is_manager:
@@ -139,6 +159,7 @@ def approve_action_for_session(
             detail=f"Action already processed (status: {approval.status})",
         )
 
+    after_commit: list[Callable[[], None]] = []
     try:
         user_permissions = permission_service.get_effective_permissions(
             db, session.org_id, session.user_id, session.role.value
@@ -151,6 +172,7 @@ def approve_action_for_session(
             org_id=session.org_id,
             entity_id=conversation.entity_id,
             user_permissions=user_permissions,
+            after_commit=after_commit,
         )
 
         if approval.status == "executed" and conversation.entity_type == "surrogate":
@@ -212,6 +234,13 @@ def approve_action_for_session(
             db, note_id=uuid.UUID(result["note_id"]), org_id=session.org_id
         )
 
+    for callback in after_commit:
+        try:
+            callback()
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "AI stage side effects failed for approval %s", approval.id
+            )
     return response
 
 

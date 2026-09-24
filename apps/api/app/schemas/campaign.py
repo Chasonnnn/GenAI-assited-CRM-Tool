@@ -41,6 +41,7 @@ class FilterCriteria(BaseModel):
 class CampaignCreate(BaseModel):
     """Create a new campaign."""
 
+    scope: Literal["org", "personal"] = "org"
     name: str = Field(min_length=1, max_length=200)
     description: str | None = None
     channel: CampaignChannel = "email"
@@ -80,6 +81,13 @@ class CampaignUpdate(BaseModel):
 class CampaignResponse(BaseModel):
     """Campaign response."""
 
+    scope: Literal["org", "personal"] = "org"
+    owner_user_id: UUID | None = None
+    proposed_by_user_id: UUID | None = None
+    proposed_by_name: str | None = None
+    can_edit: bool = False
+    can_send: bool = False
+    can_publish: bool = False
     id: UUID
     name: str
     description: str | None
@@ -113,6 +121,13 @@ class CampaignResponse(BaseModel):
 class CampaignListItem(BaseModel):
     """Campaign list item (lightweight)."""
 
+    scope: Literal["org", "personal"] = "org"
+    owner_user_id: UUID | None = None
+    proposed_by_user_id: UUID | None = None
+    proposed_by_name: str | None = None
+    can_edit: bool = False
+    can_send: bool = False
+    can_publish: bool = False
     id: UUID
     name: str
     channel: CampaignChannel
@@ -217,6 +232,8 @@ class CampaignPreviewResponse(BaseModel):
 class PreviewFiltersRequest(BaseModel):
     """Request to preview recipients matching filter criteria."""
 
+    scope: Literal["org", "personal"] = "org"
+    owner_user_id: UUID | None = None
     channel: CampaignChannel = "email"
     recipient_type: CampaignRecipientType
     filter_criteria: FilterCriteria = Field(default_factory=FilterCriteria)

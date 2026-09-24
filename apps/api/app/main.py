@@ -100,6 +100,7 @@ from app.routers import (
     public,
     queues,
     record_correspondence,
+    record_scopes,
     resend,
     search,
     status_change_requests,
@@ -774,6 +775,7 @@ app.include_router(pipelines.router)
 
 # Permission Management (Manager+)
 app.include_router(permissions.router)
+app.include_router(record_scopes.router)
 
 # Matches (Surrogate ↔ Intended Parent pairing)
 app.include_router(matches.router)

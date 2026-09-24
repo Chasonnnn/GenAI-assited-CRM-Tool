@@ -11,6 +11,7 @@ import {
     deleteWorkflow,
     toggleWorkflow,
     duplicateWorkflow,
+    publishWorkflow,
     testWorkflow,
     getWorkflowStats,
     getWorkflowOptions,
@@ -216,4 +217,12 @@ export function useUpdateUserPreference() {
             void queryClient.invalidateQueries({ queryKey: workflowKeys.preferences() })
         },
     })
+}
+
+export function usePublishWorkflow() {
+    const queryClient = useQueryClient()
+    return useMutation({ mutationFn: publishWorkflow, onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: workflowKeys.all })
+        void queryClient.invalidateQueries({ queryKey: ["email-templates"] })
+    } })
 }

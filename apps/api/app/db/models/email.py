@@ -137,6 +137,10 @@ class EmailTemplate(Base):
         nullable=True,
         comment="Source template when copied/shared",
     )
+    proposed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    proposed_by_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # System template fields (idempotent seeding/upgrades)
     is_system_template: Mapped[bool] = mapped_column(

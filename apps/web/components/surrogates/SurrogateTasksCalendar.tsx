@@ -28,6 +28,8 @@ import {
 } from "./use-surrogate-task-view-mode"
 
 interface SurrogateTasksCalendarProps {
+    canCreateTask?: boolean
+    canToggleTask?: (task: TaskListItem) => boolean
     surrogateId: string
     tasks: TaskListItem[]
     isLoading?: boolean
@@ -37,6 +39,8 @@ interface SurrogateTasksCalendarProps {
 }
 
 export function SurrogateTasksCalendar({
+    canCreateTask = true,
+    canToggleTask = () => true,
     surrogateId,
     tasks,
     isLoading = false,
@@ -52,6 +56,7 @@ export function SurrogateTasksCalendar({
     return (
         <div className="space-y-4">
             <SurrogateTasksCalendarHeader
+                canCreateTask={canCreateTask}
                 taskCount={tasks.length}
                 viewMode={viewMode}
                 onAddTask={onAddTask}
@@ -63,9 +68,10 @@ export function SurrogateTasksCalendar({
                     <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                 </Card>
             ) : tasks.length === 0 ? (
-                <SurrogateTasksEmptyState onAddTask={onAddTask} />
+                <SurrogateTasksEmptyState canCreateTask={canCreateTask} onAddTask={onAddTask} />
             ) : viewMode === "list" ? (
                 <SurrogateTasksListView
+                    canToggleTask={canToggleTask}
                     completedTaskCount={completedTaskCount}
                     orphanedCompletedTasks={orphanedCompletedTasks}
                     taskGroups={taskGroups}
