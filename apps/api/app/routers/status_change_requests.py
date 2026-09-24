@@ -245,9 +245,9 @@ def get_request(
     status_change_request_service.require_request_access(db, session, req)
     _require_donor_request_access(db, session, req.entity_type)
     if req.entity_type == "match":
-        from app.services import match_service
+        from app.services import match_access
 
-        match_service.get_match_with_access(db, session, req.entity_id)
+        match_access.load(db, session, req.entity_id)
 
     details = status_change_request_service.get_request_with_details(
         db=db,
@@ -313,9 +313,9 @@ def approve_request(
     status_change_request_service.require_request_access(db, session, req)
     _require_donor_request_access(db, session, req.entity_type)
     if req.entity_type == "match":
-        from app.services import match_service
+        from app.services import match_access
 
-        match_service.get_match_with_access(db, session, req.entity_id)
+        match_access.load(db, session, req.entity_id)
 
     try:
         result = status_change_request_service.approve_request(
@@ -378,9 +378,9 @@ def reject_request(
     status_change_request_service.require_request_access(db, session, req)
     _require_donor_request_access(db, session, req.entity_type)
     if req.entity_type == "match":
-        from app.services import match_service
+        from app.services import match_access
 
-        match_service.get_match_with_access(db, session, req.entity_id)
+        match_access.load(db, session, req.entity_id)
 
     try:
         result = status_change_request_service.reject_request(

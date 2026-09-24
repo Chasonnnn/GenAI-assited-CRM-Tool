@@ -13,6 +13,7 @@ import pytest
 from app.core.config import settings
 from app.db.enums import Role
 from app.db.models import (
+    AuditLog,
     Donor,
     IntendedParent,
     Match,
@@ -73,12 +74,14 @@ def _request_row(db, request_id) -> StatusChangeRequest:
     return db.get(StatusChangeRequest, request_id)
 
 
-NO_MATCH_HISTORY = {
-    "audit": {("api_mutation_fallback", "api_route"): 1},
-    "surrogate_activity": {},
-    "entity_activity": {},
-    "stage_history": {},
-}
+def _restored_history(event: str) -> dict:
+    """Match history for a resolved request that returns the match to accepted."""
+    return {
+        "audit": {(event, "match"): 1},
+        "surrogate_activity": {event: 1},
+        "entity_activity": {("intended_parent", event): 1},
+        "stage_history": {},
+    }
 
 
 # =============================================================================
@@ -119,7 +122,7 @@ async def test_approve_cancellation_cancels_match_and_returns_parties_to_ready(
     )
     assert history.changed_by_user_id == requester.id
     assert history.reason == "Family withdrew"
-    assert locks == ["status_change_requests", "surrogates", "intended_parents", "matches"]
+    assert locks == ["status_change_requests", "matches", "surrogates", "intended_parents"]
     assert _diff(before, _snapshot(db, test_auth.org.id)) == {
         "audit": {("match_cancelled", "match"): 1},
         "surrogate_activity": {"match_cancelled": 1, "note_added": 1},
@@ -155,7 +158,7 @@ async def test_approve_donor_cancellation_leaves_donor_stage_unchanged(
     assert _match_row(db, match["id"]).status == "cancelled"
     assert _stage_slug(db, Donor, match["donor_id"]) == donor_stage
     assert _ip_stage_key(db, match["intended_parent_id"]) == "ready_to_match"
-    assert locks == ["status_change_requests", "intended_parents", "matches"]
+    assert locks == ["status_change_requests", "matches", "donors", "intended_parents"]
     assert _diff(before, _snapshot(db, test_auth.org.id)) == {
         "audit": {("match_cancelled", "match"): 1},
         "surrogate_activity": {},
@@ -322,7 +325,7 @@ async def test_approve_donor_cancellation_dispatches_no_stage_callbacks(
     "failing",
     ["dispatch_note_added", "handle_status_changed", "notify_match_cancel_request_resolved"],
 )
-async def test_failing_approval_effect_raises_after_cancellation_is_committed(
+async def test_failing_approval_effect_returns_success_and_runs_later_effects(
     db_engine, monkeypatch, failing
 ):
     async with _committed_org(db_engine, monkeypatch) as (_org_id, _user_id, client):
@@ -330,15 +333,15 @@ async def test_failing_approval_effect_raises_after_cancellation_is_committed(
         events: list[str] = []
         _spy_ordered_effects(monkeypatch, events, failing=failing)
 
-        with pytest.raises(RuntimeError, match=f"{failing} failed"):
-            await client.post(f"/status-change-requests/{request_id}/approve")
+        response = await client.post(f"/status-change-requests/{request_id}/approve")
 
-        order = [
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "approved"
+        assert events == [
             "dispatch_note_added",
             "handle_status_changed",
             "notify_match_cancel_request_resolved",
         ]
-        assert events == order[: order.index(failing) + 1]
         assert _committed_state(
             db_engine, match["id"], match["surrogate_id"], match["intended_parent_id"]
         ) == {
@@ -429,7 +432,7 @@ async def test_approve_by_non_admin_role_with_approval_permission_returns_400(
 
 
 @pytest.mark.asyncio
-async def test_reject_cancellation_restores_accepted_without_match_history(
+async def test_reject_cancellation_restores_accepted_with_match_history(
     authed_client, db, test_auth, monkeypatch
 ):
     resolved = _Spy(notification_service.notify_match_cancel_request_resolved)
@@ -451,8 +454,20 @@ async def test_reject_cancellation_restores_accepted_without_match_history(
     assert row.closed_at is None
     assert _stage_slug(db, Surrogate, match["surrogate_id"]) == "matched"
     assert _ip_stage_key(db, match["intended_parent_id"]) == "matched"
-    assert locks == ["status_change_requests"]
-    assert _diff(before, _snapshot(db, test_auth.org.id)) == NO_MATCH_HISTORY
+    assert locks == ["status_change_requests", "matches", "surrogates", "intended_parents"]
+    assert _diff(before, _snapshot(db, test_auth.org.id)) == _restored_history(
+        "match_cancel_request_rejected"
+    )
+    audit = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.event_type == "match_cancel_request_rejected",
+            AuditLog.target_id == uuid.UUID(match["id"]),
+        )
+        .one()
+    )
+    assert audit.actor_user_id == test_auth.user.id
+    assert audit.details["status_request_id"] == str(request.id)
     assert len(resolved.calls) == 1
     assert resolved.calls[0][1]["approved"] is False
     assert resolved.calls[0][1]["reason"] == "Not yet"
@@ -484,7 +499,7 @@ async def test_reject_cancellation_without_body_is_allowed(authed_client, db):
 
 
 @pytest.mark.asyncio
-async def test_withdraw_cancellation_restores_accepted_without_match_history(
+async def test_withdraw_cancellation_restores_accepted_with_match_history(
     authed_client, db, test_auth, monkeypatch
 ):
     resolved = _Spy()
@@ -500,8 +515,10 @@ async def test_withdraw_cancellation_restores_accepted_without_match_history(
     assert response.json()["cancelled_by_user_id"] == str(test_auth.user.id)
     assert _match_row(db, match["id"]).status == "accepted"
     assert _stage_slug(db, Surrogate, match["surrogate_id"]) == "matched"
-    assert locks == ["status_change_requests"]
-    assert _diff(before, _snapshot(db, test_auth.org.id)) == NO_MATCH_HISTORY
+    assert locks == ["status_change_requests", "matches", "surrogates", "intended_parents"]
+    assert _diff(before, _snapshot(db, test_auth.org.id)) == _restored_history(
+        "match_cancel_request_withdrawn"
+    )
     assert resolved.calls == []
 
 

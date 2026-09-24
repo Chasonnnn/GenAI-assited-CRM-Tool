@@ -33,7 +33,7 @@ from app.services import (
     donor_service,
     form_intake_service,
     form_submission_service,
-    match_service,
+    match_queries,
     note_service,
     surrogate_service,
     task_service,
@@ -665,7 +665,7 @@ def test_workflow(
         if entity_type == "task":
             entity = task_service.get_task(db, request.entity_id, session.org_id)
         elif entity_type == "match":
-            entity = match_service.get_match(db, request.entity_id, session.org_id)
+            entity = match_queries.get_match(db, request.entity_id, session.org_id)
         elif entity_type == "appointment":
             entity = appointment_service.get_appointment(db, request.entity_id, session.org_id)
         elif entity_type == "note":

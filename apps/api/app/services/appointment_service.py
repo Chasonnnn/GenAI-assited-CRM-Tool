@@ -1961,9 +1961,9 @@ def list_appointments(
     if match_id:
         context_filter = Appointment.match_id == match_id
         if include_record_history and not attempt_id:
-            from app.services import match_service, match_work_service
+            from app.services import match_queries, match_work_service
 
-            match = match_service.get_match(db, match_id, org_id)
+            match = match_queries.get_match(db, match_id, org_id)
             if match is None:
                 raise ValueError("Match not found")
             context_filter = or_(
@@ -2107,9 +2107,9 @@ def update_record_links(
 
 def _validate_new_record_context(db, org_id, links):
     if links.get("donor_id") or links.get("match_id") or links.get("attempt_id"):
-        from app.core.match_rollout import require_match_expansion
+        from app.services import match_lifecycle
 
-        require_match_expansion()
+        match_lifecycle.require_expansion()
     if links.get("match_id"):
         from app.services.match_work_service import validate_context
 

@@ -134,6 +134,9 @@ class AuditEventType(str, Enum):
     MATCH_ACCEPTED = "match_accepted"
     MATCH_REJECTED = "match_rejected"
     MATCH_CANCELLED = "match_cancelled"
+    MATCH_CANCEL_REQUEST_REJECTED = "match_cancel_request_rejected"
+    MATCH_CANCEL_REQUEST_WITHDRAWN = "match_cancel_request_withdrawn"
+    MATCH_EFFECT_FAILED = "match_effect_failed"
 
     # Attachments
     ATTACHMENT_UPLOADED = "attachment_uploaded"

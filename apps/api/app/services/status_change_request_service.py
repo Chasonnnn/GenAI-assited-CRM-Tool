@@ -140,6 +140,41 @@ def _log_entity_request_resolution(
     )
 
 
+def _resolve_match_request(
+    db: Session,
+    request: StatusChangeRequest,
+    org_id: UUID,
+    action: str,
+    *,
+    actor_user_id: UUID,
+    resolve,
+    reason: str | None = None,
+) -> StatusChangeRequest:
+    """Resolve a match cancellation request through the match engine (ADR 0004).
+
+    The caller holds the request lock; the engine locks the match and parties,
+    restores an accepted status when the match is still pending cancellation,
+    and commits the request resolution with it.
+    """
+    from app.services import match_lifecycle, match_queries
+
+    match = match_queries.get_match(db, request.entity_id, org_id)
+    if match is None:
+        resolve()
+        db.commit()
+        return request
+    match_lifecycle.transition(
+        db,
+        match,
+        action,
+        actor_user_id=actor_user_id,
+        request=request,
+        reason=reason,
+        before_commit=resolve,
+    )
+    return request
+
+
 def get_pending_requests(
     db: Session,
     org_id: UUID,
@@ -223,7 +258,8 @@ def approve_request(
     from app.services import (
         donor_service,
         intended_parent_status_service,
-        match_service,
+        match_lifecycle,
+        match_queries,
         pipeline_service,
         surrogate_status_service,
     )
@@ -400,13 +436,13 @@ def approve_request(
             raise ValueError("Donor stage change was not applied")
         donor_stage_event = (changed_donor, old_stage, target_stage)
     elif request.entity_type == "match":
-        match = match_service.get_match(db, request.entity_id, org_id)
+        match = match_queries.get_match(db, request.entity_id, org_id)
         if not match:
             raise ValueError("Match not found")
         if request.target_status != MatchStatus.CANCELLED.value:
             raise ValueError("Target status not found")
         if actor is not None and match.surrogate_id:
-            surrogate = match_service.get_surrogate_with_stage(db, match.surrogate_id, org_id)
+            surrogate = match_queries.get_surrogate_with_stage(db, match.surrogate_id, org_id)
             if not surrogate or not surrogate.stage:
                 raise ValueError("Match participants not found")
             target_stage = pipeline_service.get_stage_by_system_role(
@@ -415,9 +451,22 @@ def approve_request(
             if not target_stage:
                 raise ValueError("Ready to match stage not found")
             _require_applicant_approval(db, actor, surrogate, target_stage)
-        match_stage_event = match_service.apply_approved_cancellation(
-            db, match, request=request, actor_user_id=admin_user_id
+
+        def resolve() -> None:
+            request.status = "approved"
+            request.approved_by_user_id = admin_user_id
+            request.approved_at = now
+
+        # The engine commits the cancellation with the request and runs its effects.
+        match_lifecycle.transition(
+            db,
+            match,
+            "approve_cancel",
+            actor_user_id=admin_user_id,
+            request=request,
+            before_commit=resolve,
         )
+        return request
     else:
         raise ValueError(f"Unknown entity type: {request.entity_type}")
 
@@ -444,9 +493,6 @@ def approve_request(
 
     if surrogate_stage_event:
         surrogate_stage_event()
-
-    if request.entity_type == "match" and match_stage_event:
-        match_stage_event()
 
     if donor_stage_event:
         changed_donor, old_stage, target_stage = donor_stage_event
@@ -480,14 +526,6 @@ def approve_request(
             db,
             donor=donor,
             status_request=request,
-            approved=True,
-            resolver_name=resolver_name,
-        )
-    elif request.entity_type == "match":
-        notification_service.notify_match_cancel_request_resolved(
-            db=db,
-            request=request,
-            match=match,
             approved=True,
             resolver_name=resolver_name,
         )
@@ -545,31 +583,30 @@ def reject_request(
 
     now = datetime.now(UTC)
 
-    request.status = "rejected"
-    request.rejected_by_user_id = admin_user_id
-    request.rejected_at = now
-    _log_entity_request_resolution(
-        db,
-        request=request,
-        org_id=org_id,
-        actor_user_id=admin_user_id,
-        activity_type="status_change_rejected",
-    )
+    def resolve() -> None:
+        request.status = "rejected"
+        request.rejected_by_user_id = admin_user_id
+        request.rejected_at = now
+        _log_entity_request_resolution(
+            db,
+            request=request,
+            org_id=org_id,
+            actor_user_id=admin_user_id,
+            activity_type="status_change_rejected",
+        )
 
     if request.entity_type == "match":
-        match = (
-            db.query(Match)
-            .filter(
-                Match.id == request.entity_id,
-                Match.organization_id == org_id,
-            )
-            .first()
+        return _resolve_match_request(
+            db,
+            request,
+            org_id,
+            "reject_cancel",
+            actor_user_id=admin_user_id,
+            resolve=resolve,
+            reason=reason,
         )
-        if match and match.status == MatchStatus.CANCEL_PENDING.value:
-            match.status = MatchStatus.ACCEPTED.value
-            match.updated_at = now
-            db.add(match)
 
+    resolve()
     try:
         db.commit()
     except Exception:
@@ -639,26 +676,6 @@ def reject_request(
                 resolver_name=resolver_name,
                 reason=reason,
             )
-    elif request.entity_type == "match":
-        match = (
-            db.query(Match)
-            .filter(
-                Match.id == request.entity_id,
-                Match.organization_id == org_id,
-            )
-            .first()
-        )
-        if match:
-            from app.services import notification_service
-
-            notification_service.notify_match_cancel_request_resolved(
-                db=db,
-                request=request,
-                match=match,
-                approved=False,
-                resolver_name=resolver_name,
-                reason=reason,
-            )
 
     return request
 
@@ -705,31 +722,24 @@ def cancel_request(
 
     now = datetime.now(UTC)
 
-    request.status = "cancelled"
-    request.cancelled_by_user_id = user_id
-    request.cancelled_at = now
-    _log_entity_request_resolution(
-        db,
-        request=request,
-        org_id=org_id,
-        actor_user_id=user_id,
-        activity_type="status_change_request_cancelled",
-    )
+    def resolve() -> None:
+        request.status = "cancelled"
+        request.cancelled_by_user_id = user_id
+        request.cancelled_at = now
+        _log_entity_request_resolution(
+            db,
+            request=request,
+            org_id=org_id,
+            actor_user_id=user_id,
+            activity_type="status_change_request_cancelled",
+        )
 
     if request.entity_type == "match":
-        match = (
-            db.query(Match)
-            .filter(
-                Match.id == request.entity_id,
-                Match.organization_id == org_id,
-            )
-            .first()
+        return _resolve_match_request(
+            db, request, org_id, "withdraw_cancel", actor_user_id=user_id, resolve=resolve
         )
-        if match and match.status == MatchStatus.CANCEL_PENDING.value:
-            match.status = MatchStatus.ACCEPTED.value
-            match.updated_at = now
-            db.add(match)
 
+    resolve()
     try:
         db.commit()
     except Exception:

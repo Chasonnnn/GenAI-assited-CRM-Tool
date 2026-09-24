@@ -82,7 +82,7 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 - Journey timeline: UI in `apps/web/components/surrogates/journey/*`; API in `apps/api/app/routers/journey.py`; service in `apps/api/app/services/journey_service.py`
 - Surrogate profile: UI in `apps/web/components/surrogates/profile/ProfileCard/index.tsx`; API in `apps/api/app/routers/profile.py`; service in `apps/api/app/services/profile_service.py`
 - Intended parents: UI in `apps/web/app/(app)/intended-parents/page.tsx`; API in `apps/api/app/routers/intended_parents.py`; services in `apps/api/app/services/ip_service.py`, `apps/api/app/services/intended_parent_status_service.py`
-- Matches: UI in `apps/web/app/(app)/matches/page.tsx` and `apps/web/app/(app)/intended-parents/matches/*`; API in `apps/api/app/routers/matches.py`; service in `apps/api/app/services/match_service.py`
+- Matches: UI in `apps/web/app/(app)/matches/page.tsx` and `apps/web/app/(app)/intended-parents/matches/*`; API in `apps/api/app/routers/matches.py`; services in `apps/api/app/services/match_lifecycle.py` (status engine), `match_participants.py`, `match_access.py`, `match_effects.py`, `match_queries.py`, `match_attempts.py`, `match_event_service.py`
 - Status change requests: UI in `apps/web/components/status-change-requests/*`; API in `apps/api/app/routers/status_change_requests.py`; service in `apps/api/app/services/status_change_request_service.py`
 - Tasks: UI in `apps/web/app/(app)/tasks/page.tsx`, `apps/web/components/tasks/*`; API in `apps/api/app/routers/tasks.py`; services in `apps/api/app/services/task_service.py`, `apps/api/app/services/task_events.py`
 - Interviews: UI in `apps/web/components/surrogates/interviews/*`; API in `apps/api/app/routers/interviews.py`; services in `apps/api/app/services/interview_service.py`, `apps/api/app/services/interview_note_service.py`, `apps/api/app/services/interview_attachment_service.py`
@@ -351,7 +351,7 @@ Services live in `apps/api/app/services/*`. Total: 100+ service files.
 - `surrogate_events.py` - Surrogate event publishing
 - `ip_service.py` - Intended parent management
 - `intended_parent_status_service.py` - IP status transitions
-- `match_service.py` - Match creation, lifecycle
+- `match_lifecycle.py` - Match transition table, locks, history, commit; `match_effects.py` - after-commit effects; `match_access.py` - match permission and record scope; `match_queries.py` - match reads
 - `status_change_request_service.py` - Status change request workflow
 - `task_service.py` - Task CRUD and assignment
 - `task_events.py` - Task event publishing

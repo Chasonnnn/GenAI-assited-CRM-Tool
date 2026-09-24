@@ -13,7 +13,7 @@ from app.core.permissions import PermissionKey as P
 from app.core.surrogate_access import check_surrogate_access
 from app.schemas.ai_tasks import BulkTaskCreateRequest, BulkTaskCreateResponse
 from app.schemas.auth import UserSession
-from app.services import ai_task_service, ip_service, match_service, surrogate_service
+from app.services import ai_task_service, ip_service, match_access, surrogate_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -69,9 +69,7 @@ def create_bulk_tasks(
         entity_type = "intended_parent"
         entity_id = body.intended_parent_id
     elif body.match_id:
-        match = match_service.get_match(db, body.match_id, session.org_id)
-        if not match:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
+        match = match_access.load(db, session, body.match_id, "view", allow_archived=True)
         entity_type = "match"
         entity_id = body.match_id
 

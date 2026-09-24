@@ -49,6 +49,8 @@ class StatusChangeResult(TypedDict):
     request_id: UUID | None
     message: str | None
     after_commit: NotRequired[Callable[[], None]]
+    # The same after-commit work as named steps, for callers that isolate each one.
+    after_commit_effects: NotRequired[list[tuple[str, Callable[[], None]]]]
 
 
 UNDO_GRACE_PERIOD = timedelta(minutes=5)
@@ -815,13 +817,15 @@ def apply_status_change(
         )
         scheduled_activity.created_at = max(datetime.now(UTC), effective_at)
 
-    def after_commit() -> None:
+    def dispatch_reason_note() -> None:
         if reason_note is not None and trigger_workflows:
             from app.services import note_service
 
             note_service.dispatch_note_added(
                 db, note_id=reason_note.id, org_id=surrogate.organization_id
             )
+
+    def sync_follow_up_tasks() -> None:
         if deleted_follow_up_task is not None:
             from app.services import task_service
 
@@ -831,6 +835,7 @@ def apply_status_change(
 
             task_service._sync_task_to_google_best_effort(db, created_follow_up_task)
 
+    def dispatch_status_changed() -> None:
         from app.services import surrogate_events
 
         surrogate_events.handle_status_changed(
@@ -851,6 +856,16 @@ def apply_status_change(
             trigger_workflows=trigger_workflows,
         )
 
+    after_commit_effects = [
+        ("surrogate_note_added", dispatch_reason_note),
+        ("surrogate_follow_up_task_sync", sync_follow_up_tasks),
+        ("surrogate_stage_changed", dispatch_status_changed),
+    ]
+
+    def after_commit() -> None:
+        for _name, run in after_commit_effects:
+            run()
+
     if not commit:
         db.flush()
         return StatusChangeResult(
@@ -859,6 +874,7 @@ def apply_status_change(
             request_id=None,
             message=None,
             after_commit=after_commit,
+            after_commit_effects=after_commit_effects,
         )
     db.commit()
     db.refresh(surrogate)
