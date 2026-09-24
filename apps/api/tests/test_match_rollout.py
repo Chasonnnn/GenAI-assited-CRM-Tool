@@ -65,6 +65,7 @@ async def test_disabled_expansion_allows_parallel_ip_surrogate_commitment(
     second = await _create_surrogate(authed_client)
     await _accept(authed_client, await _case(authed_client, ip, surrogate=first))
     second_case = await _case(authed_client, ip, surrogate=second)
+    assert second_case["status"] == "proposed"
     monkeypatch.setattr(settings, "MATCH_CASE_EXPANSION_ENABLED", False)
     response = await authed_client.put(f"/matches/{second_case['id']}/accept", json={})
     assert response.status_code == 200
