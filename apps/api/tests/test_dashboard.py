@@ -728,8 +728,13 @@ def test_attention_items_skip_count_queries_when_results_are_below_limit(
     )
     db.flush()
 
+    original_scalar = Query.scalar
+
     def _scalar_should_not_be_called(self, *args, **kwargs):
-        raise AssertionError("get_attention_items should not call Query.scalar() below the limit")
+        assert "count(" not in str(self.statement).lower(), (
+            "Attention counts must reuse short results"
+        )
+        return original_scalar(self, *args, **kwargs)
 
     monkeypatch.setattr(Query, "scalar", _scalar_should_not_be_called)
 

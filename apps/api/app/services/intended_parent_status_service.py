@@ -88,7 +88,7 @@ def change_status(
 
     now = datetime.now(UTC)
     org_tz_str = _get_org_timezone(db, ip.organization_id)
-    normalized_effective_at = normalize_effective_at(effective_at, org_tz_str)
+    normalized_effective_at = normalize_effective_at(effective_at, org_tz_str, now=now)
 
     is_backdated = (now - normalized_effective_at).total_seconds() > 1
     is_regression = new_stage.order < current_stage.order

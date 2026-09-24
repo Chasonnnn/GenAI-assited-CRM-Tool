@@ -8,7 +8,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import and_, case, func, or_, text
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.pipeline_stage_colors import resolve_stage_color
@@ -115,28 +115,27 @@ def get_analytics_summary(
 
     avg_time_to_qualification_hours = None
     if qualification_stage:
-        result = db.execute(
-            text(
-                """
-                SELECT AVG(EXTRACT(EPOCH FROM (csh.changed_at - c.created_at)) / 3600) as avg_hours
-                FROM surrogates c
-                JOIN surrogate_status_history csh ON c.id = csh.surrogate_id
-                WHERE c.organization_id = :org_id
-                  AND c.is_archived = false
-                  AND csh.to_stage_id = :qualification_stage_id
-                  AND csh.changed_at >= :start
-                  AND csh.changed_at < :end
-            """
-            ),
-            {
-                "org_id": organization_id,
-                "start": start,
-                "end": end,
-                "qualification_stage_id": qualification_stage.id,
-            },
+        avg_hours = (
+            db.query(
+                func.avg(
+                    func.extract("epoch", SurrogateStatusHistory.changed_at - Surrogate.created_at)
+                    / 3600
+                )
+            )
+            .select_from(Surrogate)
+            .join(SurrogateStatusHistory, Surrogate.id == SurrogateStatusHistory.surrogate_id)
+            .filter(
+                Surrogate.organization_id == organization_id,
+                Surrogate.is_archived.is_(False),
+                SurrogateStatusHistory.to_stage_id == qualification_stage.id,
+                SurrogateStatusHistory.changed_at >= start,
+                SurrogateStatusHistory.changed_at < end,
+            )
+            .scalar()
         )
-        row = result.fetchone()
-        avg_time_to_qualification_hours = float(round(row[0], 1)) if row and row[0] else None
+        avg_time_to_qualification_hours = (
+            float(round(avg_hours, 1)) if avg_hours is not None else None
+        )
 
     return {
         "total_surrogates": total_surrogates,

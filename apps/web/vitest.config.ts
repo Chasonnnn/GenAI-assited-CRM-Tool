@@ -6,6 +6,10 @@ export default defineConfig({
     plugins: [react()],
     test: {
         environment: 'jsdom',
+        // Keep fresh globals per file; the shared location mock is not VM-compatible.
+        pool: 'forks',
+        isolate: true,
+        fsModuleCache: true,
         globals: true,
         alias: {
             '@': path.resolve(__dirname, './'),

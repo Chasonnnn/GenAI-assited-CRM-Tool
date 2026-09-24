@@ -539,7 +539,11 @@ function useEmailTemplatesPageView() {
     const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
     const permissions = effectivePermissions?.permissions || []
     const canUseAI = Boolean(user?.ai_enabled) && permissions.includes("use_ai_assistant")
-    const canManageEmailTemplates = isAdmin || permissions.includes("manage_email_templates")
+    const isNewPolicy = (effectivePermissions?.policy_version ?? 1) >= 2
+    const canCreatePersonal = Boolean(effectivePermissions) && (!isNewPolicy || permissions.includes("manage_email_templates"))
+    const canManageEmailTemplates = isNewPolicy
+        ? permissions.includes("manage_email_templates") && permissions.includes("manage_org_templates")
+        : isAdmin || permissions.includes("manage_email_templates")
 
     const [activeTab, setActiveTab] = useState("personal")
     const [showAllPersonal, setShowAllPersonal] = useState(false)
@@ -1000,7 +1004,7 @@ function useEmailTemplatesPageView() {
 
     const handleLibraryCopy = () => {
         const target = libraryCopyTargetRef.current
-        if (!target || !libraryCopyName.trim()) return
+        if (!canManageEmailTemplates || copyFromLibrary.isPending || !target || !libraryCopyName.trim()) return
         copyFromLibrary.mutate(
             { id: target.id, data: { name: libraryCopyName.trim() } },
             {
@@ -1133,6 +1137,7 @@ function useEmailTemplatesPageView() {
                 activeTab={activeTab}
                 canUseAI={canUseAI}
                 canManageEmailTemplates={canManageEmailTemplates}
+                canCreatePersonal={canCreatePersonal}
                 onCreatePersonal={() => router.push("/automation/email-templates/personal/new" as Route)}
                 onCreateOrganization={() => router.push("/automation/email-templates/org/new")}
             />
@@ -1243,7 +1248,7 @@ function useEmailTemplatesPageView() {
                                             ? "No personal templates found"
                                             : "You don't have any personal templates yet"}
                                     </p>
-                                    {!showAllPersonal && (
+                                    {!showAllPersonal && canCreatePersonal && (
                                         <Button
                                             onClick={() =>
                                                 router.push(
@@ -1263,8 +1268,7 @@ function useEmailTemplatesPageView() {
                                     drafts={personalDrafts}
                                     scope="personal"
                                     canDiscard={(draft) =>
-                                        draft.owner_user_id === user?.user_id ||
-                                        isAdmin
+                                        canCreatePersonal && (draft.owner_user_id === user?.user_id || isAdmin)
                                     }
                                     onDiscard={setDraftToDiscard}
                                     onResume={(draft) =>
@@ -1277,8 +1281,8 @@ function useEmailTemplatesPageView() {
                                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                                         {personalTemplates.map((template) => {
                                             const isOwner = template.owner_user_id === user?.user_id
-                                            const canManagePersonalTemplate = isOwner || isAdmin
-                                            const canSendPersonalTest = isOwner || canManageEmailTemplates
+                                            const canManagePersonalTemplate = template.capabilities?.can_edit ?? (isOwner || isAdmin)
+                                            const canSendPersonalTest = template.capabilities?.can_send_test ?? (isOwner || canManageEmailTemplates)
                                             const actions: TemplateCardActionKind[] = []
                                             if (canSendPersonalTest) {
                                                 actions.push("send_test")
@@ -1291,7 +1295,7 @@ function useEmailTemplatesPageView() {
                                                     actions.push("set_active")
                                                 }
                                             }
-                                            if (isOwner) {
+                                            if (template.capabilities?.can_publish_to_org ?? isOwner) {
                                                 actions.push("share")
                                             }
                                             if (canManagePersonalTemplate && !template.is_system_template) {
@@ -1374,10 +1378,10 @@ function useEmailTemplatesPageView() {
                                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                                         {orgTemplates.map((template) => {
                                             const actions: TemplateCardActionKind[] = []
-                                            if (canManageEmailTemplates) {
+                                            if (template.capabilities?.can_send_test ?? canManageEmailTemplates) {
                                                 actions.push("send_test")
                                             }
-                                            if (canManageEmailTemplates && !template.is_system_template) {
+                                            if ((template.capabilities?.can_edit ?? canManageEmailTemplates) && !template.is_system_template) {
                                                 actions.push("edit")
                                                 if (template.is_active) {
                                                     actions.push("set_inactive")
@@ -1385,11 +1389,11 @@ function useEmailTemplatesPageView() {
                                                     actions.push("set_active")
                                                 }
                                             }
-                                            actions.push("copy")
-                                            if (canManageEmailTemplates && !template.is_system_template) {
+                                            if (template.capabilities?.can_copy ?? true) actions.push("copy")
+                                            if ((template.capabilities?.can_edit ?? canManageEmailTemplates) && !template.is_system_template) {
                                                 actions.push("delete")
                                             }
-                                            const controls: TemplateCardControls = !canManageEmailTemplates && !template.is_system_template
+                                            const controls: TemplateCardControls = actions.length === 0
                                                 ? { kind: "read_only" }
                                                 : {
                                                     kind: "actions",
@@ -1473,7 +1477,9 @@ function useEmailTemplatesPageView() {
                                             </Button>
                                             <Button
                                                 size="sm"
+                                                disabled={!canManageEmailTemplates || copyFromLibrary.isPending}
                                                 onClick={() => {
+                                                    if (!canManageEmailTemplates) return
                                                     libraryCopyTargetRef.current = template
                                                     setLibraryCopyName(template.name)
                                                     setLibraryCopyOpen(true)
@@ -2136,7 +2142,7 @@ function useEmailTemplatesPageView() {
             </Dialog>
 
             {/* Platform Library Copy Dialog */}
-            <Dialog open={libraryCopyOpen} onOpenChange={setLibraryCopyOpen}>
+            <Dialog open={libraryCopyOpen && canManageEmailTemplates} onOpenChange={(open) => setLibraryCopyOpen(open && canManageEmailTemplates)}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Copy to Org Templates</DialogTitle>
@@ -2159,7 +2165,7 @@ function useEmailTemplatesPageView() {
                         <Button variant="outline" onClick={() => setLibraryCopyOpen(false)}>
                             Cancel
                         </Button>
-                        <Button onClick={handleLibraryCopy} disabled={copyFromLibrary.isPending}>
+                        <Button onClick={handleLibraryCopy} disabled={!canManageEmailTemplates || copyFromLibrary.isPending || !libraryCopyName.trim()}>
                             {copyFromLibrary.isPending && (
                                 <Loader2Icon className="mr-2 size-4 animate-spin" />
                             )}

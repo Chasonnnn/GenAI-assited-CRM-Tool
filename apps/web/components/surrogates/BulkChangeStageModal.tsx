@@ -14,7 +14,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { PipelineStage } from "@/lib/api/pipelines"
-import { stageHasCapability, stageUsesPauseBehavior } from "@/lib/surrogate-stage-context"
+import { stageHasCapability, stageRequiresReasonOnEnter, stageUsesPauseBehavior } from "@/lib/surrogate-stage-context"
 
 function getStageLabel(
     value: string | null | undefined,
@@ -46,6 +46,7 @@ export function BulkChangeStageModal({
             (stage) =>
                 stage.is_active &&
                 !stageUsesPauseBehavior(stage) &&
+                !stageRequiresReasonOnEnter(stage) &&
                 !stageHasCapability(stage, "requires_delivery_details"),
         )
         .toSorted((a, b) => a.order - b.order)
@@ -76,7 +77,7 @@ export function BulkChangeStageModal({
 
                 <div className="space-y-4">
                     <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-                        This bulk action supports immediate moves only. Regressions, on-hold changes,
+                        This bulk action supports immediate moves only. Regressions, stages requiring a reason,
                         and delivery stages still need per-surrogate review.
                     </div>
 

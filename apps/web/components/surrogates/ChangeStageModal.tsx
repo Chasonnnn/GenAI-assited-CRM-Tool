@@ -393,6 +393,8 @@ function ReasonField({
             </Label>
             <Textarea
                 id="reason"
+                required
+                maxLength={500}
                 placeholder="Why is this change being made?"
                 value={reason}
                 onChange={(e) => onReasonChange(e.target.value)}

@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import type { Route } from "next"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -208,17 +210,19 @@ type IntendedParentSortOrder = "asc" | "desc"
 
 function IntendedParentsPageHeader({
     onCreateClick,
+    canCreate,
 }: {
     onCreateClick: () => void
+    canCreate: boolean
 }) {
     return (
         <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <div className="flex h-16 items-center justify-between px-6">
                 <h1 className="text-2xl font-semibold">Intended Parents</h1>
-                <Button onClick={onCreateClick}>
+                {canCreate && <Button onClick={onCreateClick}>
                     <PlusIcon className="mr-2 size-4" />
                     New Intended Parent
-                </Button>
+                </Button>}
             </div>
         </div>
     )
@@ -542,6 +546,11 @@ function CreateIntendedParentDialog({
 }
 
 export default function IntendedParentsPage() {
+    const { user } = useAuth()
+    const { data: permissions } = useEffectivePermissions(user?.user_id ?? null)
+    const canCreate = permissions?.permissions.includes(
+        permissions.policy_version === 2 ? "create_intended_parents" : "edit_intended_parents",
+    ) === true
     const searchParams = useSearchParams()
     const { replace } = useRouter()
     const currentQuery = searchParams.toString()
@@ -692,6 +701,7 @@ export default function IntendedParentsPage() {
     }
 
     const handleCreate = async () => {
+        if (!canCreate) return
         try {
             await createMutation.mutateAsync(
                 buildIntendedParentCreatePayload(formData),
@@ -717,7 +727,7 @@ export default function IntendedParentsPage() {
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
-            <IntendedParentsPageHeader onCreateClick={() => setIsCreateOpen(true)} />
+            <IntendedParentsPageHeader canCreate={canCreate} onCreateClick={() => setIsCreateOpen(true)} />
 
             <div className="flex-1 p-6 space-y-6">
                 <IntendedParentStatsGrid stats={stats} statusOptions={statusOptions} />
@@ -756,7 +766,7 @@ export default function IntendedParentsPage() {
             </div>
 
             <CreateIntendedParentDialog
-                open={isCreateOpen}
+                open={isCreateOpen && canCreate}
                 formData={formData}
                 isPending={createMutation.isPending}
                 onOpenChange={(open) => { setIsCreateOpen(open); if (!open) resetForm() }}

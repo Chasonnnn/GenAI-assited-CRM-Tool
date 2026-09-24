@@ -4,19 +4,26 @@ import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog"
 import SurrogateTasksPage from "@/app/(app)/surrogates/[id]/tasks/page"
 import type { TaskRead } from "@/lib/api/tasks"
 
-const mocks = vi.hoisted(() => ({ task: vi.fn(), save: vi.fn(), close: vi.fn(), remove: vi.fn(), auth: vi.fn() }))
+const mocks = vi.hoisted(() => ({ task: vi.fn(), save: vi.fn(), close: vi.fn(), remove: vi.fn(), auth: vi.fn(), permissions: vi.fn(), toggle: vi.fn() }))
 vi.mock("@/lib/hooks/use-tasks", () => ({
     useTask: mocks.task,
-    useTasks: () => ({ data: { items: [{ id: "task-1", title: "Review screening" }] } }),
+    useTasks: () => ({ data: { items: [fullTask] } }),
 }))
 vi.mock("@/lib/auth-context", () => ({ useAuth: mocks.auth }))
-vi.mock("@/lib/hooks/use-permissions", () => ({ useEffectivePermissions: () => ({ data: { permissions: ["edit_tasks", "delete_tasks"] } }) }))
+vi.mock("@/lib/hooks/use-permissions", () => ({ useEffectivePermissions: () => ({ data: mocks.permissions() }) }))
+vi.mock("@/components/surrogates/detail/SurrogateDetailLayout/context", () => ({ useSurrogateDetailData: () => ({ effectivePermissions: mocks.permissions() }) }))
 vi.mock("@/components/tasks/TaskRelatedRecordPicker", () => ({ TaskRelatedRecordPicker: () => null }))
 vi.mock("next/navigation", () => ({ useParams: () => ({ id: "surrogate-1" }) }))
 vi.mock("@/lib/hooks/use-surrogates", () => ({ useSurrogate: () => ({ data: { full_name: "Surrogate" } }) }))
-vi.mock("@/lib/hooks/use-task-actions", () => ({ useTaskActions: () => ({ update: mocks.save, remove: mocks.remove, create: vi.fn(), toggle: vi.fn(), isCreating: false, isDeleting: false }) }))
+vi.mock("@/lib/hooks/use-task-actions", () => ({ useTaskActions: () => ({ update: mocks.save, remove: mocks.remove, create: vi.fn(), toggle: mocks.toggle, isCreating: false, isDeleting: false }) }))
 vi.mock("@/components/surrogates/AddSurrogateTaskDialog", () => ({ AddSurrogateTaskDialog: () => null }))
-vi.mock("@/components/surrogates/tabs/SurrogateTasksTab", () => ({ SurrogateTasksTab: ({ onTaskClick }: { onTaskClick: (task: object) => void }) => <button onClick={() => onTaskClick({ id: "task-1", title: "Review screening" })}>Open listed task</button> }))
+vi.mock("@/components/surrogates/tabs/SurrogateTasksTab", () => ({ SurrogateTasksTab: ({ onTaskClick, canCreateTask, canToggleTask, onTaskToggle }: {
+    onTaskClick: (task: object) => void; canCreateTask: boolean; canToggleTask: (task: TaskRead) => boolean; onTaskToggle: (id: string, completed: boolean) => void
+}) => <>
+    <button onClick={() => onTaskClick(fullTask)}>Open listed task</button>
+    <button disabled={!canCreateTask}>Create listed task</button>
+    <button disabled={!canToggleTask(fullTask)} onClick={() => onTaskToggle(fullTask.id, false)}>Complete listed task</button>
+</> }))
 
 const fullTask: TaskRead = {
     id: "task-1", title: "Review screening", description: "Existing screening instructions", task_type: "review",
@@ -29,6 +36,7 @@ const props = { taskId: fullTask.id, onClose: mocks.close, onSave: mocks.save, o
 describe("TaskDetailDialog", () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        mocks.permissions.mockReturnValue({ policy_version: 1, permissions: ["edit_tasks", "delete_tasks"] })
         mocks.auth.mockReturnValue({ user: { user_id: "user-1", role: "case_manager" } })
         mocks.task.mockReturnValue({ data: fullTask, isLoading: false, isError: false })
         mocks.save.mockResolvedValue({})
@@ -66,6 +74,23 @@ describe("TaskDetailDialog", () => {
         render(<TaskDetailDialog {...props} />)
         expect(screen.getByText(fullTask.description)).toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Save Changes" })).not.toBeInTheDocument()
+    })
+
+    it('keeps Operations tasks readable and requires separate task actions under v2', () => {
+        mocks.auth.mockReturnValue({ user: { user_id: 'user-1', role: 'operations' } })
+        mocks.permissions.mockReturnValue({ policy_version: 2, permissions: ['view_tasks'] })
+        const view = render(<SurrogateTasksPage />)
+        expect(screen.getByRole('button', { name: 'Create listed task' })).toBeDisabled()
+        expect(screen.getByRole('button', { name: 'Complete listed task' })).toBeDisabled()
+        fireEvent.click(screen.getByRole('button', { name: 'Open listed task' }))
+        expect(screen.getByText(fullTask.description)).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Save Changes' })).not.toBeInTheDocument()
+        expect(mocks.toggle).not.toHaveBeenCalled()
+        mocks.permissions.mockReturnValue({ policy_version: 2, permissions: ['view_tasks', 'create_tasks', 'edit_tasks'] })
+        view.rerender(<SurrogateTasksPage />)
+        expect(screen.getByRole('button', { name: 'Save Changes' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Create listed task', hidden: true })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Complete listed task', hidden: true })).toBeEnabled()
     })
 
     it("fetches full details from surrogate list selections before editing", async () => {

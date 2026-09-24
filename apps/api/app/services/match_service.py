@@ -544,18 +544,9 @@ def accept_match(
 ) -> Match:
     """Accept a match and apply related side effects."""
     match = lock_match(db, match, org_id)
-    from app.core.match_rollout import require_match_expansion
+    if match.donor_id:
+        from app.core.match_rollout import require_match_expansion
 
-    if match.donor_id or (
-        db.query(Match.id)
-        .filter(
-            Match.organization_id == org_id,
-            Match.intended_parent_id == match.intended_parent_id,
-            Match.id != match.id,
-            Match.status.in_(COMMITTED_STATUSES),
-        )
-        .first()
-    ):
         require_match_expansion()
     if match.status not in [MatchStatus.PROPOSED.value, MatchStatus.REVIEWING.value]:
         raise ValueError(f"Cannot accept match with status: {match.status}")
@@ -1014,7 +1005,11 @@ def delete_match_event(db: Session, event: MatchEvent) -> None:
     db.commit()
 
 
-OPEN_STATUSES = ("proposed", "reviewing", "accepted", "cancel_pending")
+OPEN_STATUSES = tuple(
+    status.value
+    for status in MatchStatus
+    if status not in {MatchStatus.REJECTED, MatchStatus.CANCELLED, MatchStatus.COMPLETED}
+)
 COMMITTED_STATUSES = ("accepted", "cancel_pending")
 
 
@@ -1359,6 +1354,10 @@ def apply_approved_cancellation(
 
 def match_visibility_filter(db: Session, session):
     """Filter authorized participants before case pagination and summary counts."""
+    from app.services import permission_policy_service, record_scope_service
+
+    if permission_policy_service.is_enabled(db, session.org_id):
+        return record_scope_service.build_linked_visibility_filter(db, session, Match)
     from sqlalchemy import false
 
     from app.core.policies import POLICIES

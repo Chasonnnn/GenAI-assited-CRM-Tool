@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import or_
+from sqlalchemy import and_, false, or_
 from sqlalchemy.orm import Session
 
 from app.db.enums import MatchStatus, Role
@@ -31,6 +31,87 @@ def get_request(db: Session, request_id: UUID, org_id: UUID) -> StatusChangeRequ
         )
         .first()
     )
+
+
+def build_request_visibility_filter(db, session):
+    from app.services import permission_service, record_scope_service
+
+    permissions = permission_service.get_effective_permissions(
+        db, session.org_id, session.user_id, session.role.value
+    )
+    routes = []
+    for kind, model, permission in (
+        ("surrogate", Surrogate, "view_surrogates"),
+        ("donor", Donor, "view_donors"),
+        ("intended_parent", IntendedParent, "view_intended_parents"),
+    ):
+        if permission in permissions:
+            ids = db.query(model.id).filter(
+                record_scope_service.build_visibility_filter(db, session, kind)
+            )
+            routes.append(
+                and_(
+                    StatusChangeRequest.entity_type == kind, StatusChangeRequest.entity_id.in_(ids)
+                )
+            )
+    if "view_matches" in permissions:
+        ids = db.query(Match.id).filter(
+            record_scope_service.build_linked_visibility_filter(
+                db, session, Match, permissions=permissions
+            )
+        )
+        routes.append(
+            and_(StatusChangeRequest.entity_type == "match", StatusChangeRequest.entity_id.in_(ids))
+        )
+    return and_(
+        StatusChangeRequest.organization_id == session.org_id, or_(*routes) if routes else false()
+    )
+
+
+def require_request_access(db, session, request):
+    from fastapi import HTTPException
+
+    from app.services import permission_policy_service
+
+    if (
+        permission_policy_service.is_enabled(db, session.org_id)
+        and not db.query(StatusChangeRequest.id)
+        .filter(StatusChangeRequest.id == request.id, build_request_visibility_filter(db, session))
+        .first()
+    ):
+        raise HTTPException(status_code=404, detail="Request not found")
+
+
+def _reviewer_session(db, org_id, user_id):
+    from app.schemas.auth import UserSession
+    from app.services import permission_policy_service, permission_service
+
+    if not permission_policy_service.is_enabled(db, org_id):
+        return None
+    permission_policy_service.lock_configuration(db, org_id)
+    member = permission_service.get_membership_for_user(db, org_id, user_id)
+    if member is None:
+        raise ValueError("Active organization membership required")
+    actor = UserSession(org_id=org_id, user_id=user_id, role=member.role, email="", display_name="")
+    if "approve_status_change_requests" not in permission_service.get_effective_permissions(
+        db, org_id, user_id, member.role
+    ):
+        raise ValueError("Status change review permission required")
+    return actor
+
+
+def _require_applicant_approval(db, actor, record, target_stage):
+    if actor is None:
+        return
+    from app.services import approval_handoff_service, permission_service
+
+    module = "donors" if isinstance(record, Donor) else "surrogates"
+    if approval_handoff_service.crosses_approval(
+        db, record, target_stage
+    ) and not permission_service.check_permission(
+        db, actor.org_id, actor.user_id, actor.role.value, f"approve_{module}"
+    ):
+        raise ValueError("Applicant approval permission required")
 
 
 def _log_entity_request_resolution(
@@ -67,6 +148,7 @@ def get_pending_requests(
     per_page: int = 20,
     *,
     include_donor_requests: bool = True,
+    session=None,
 ) -> tuple[list[StatusChangeRequest], int]:
     """
     Get pending status change requests for an organization.
@@ -85,6 +167,11 @@ def get_pending_requests(
         StatusChangeRequest.status == "pending",
     )
 
+    if session is not None:
+        from app.services import permission_policy_service
+
+        if permission_policy_service.is_enabled(db, session.org_id):
+            query = query.filter(build_request_visibility_filter(db, session))
     if entity_type:
         query = query.filter(StatusChangeRequest.entity_type == entity_type)
     if not include_donor_requests:
@@ -141,6 +228,7 @@ def approve_request(
         surrogate_status_service,
     )
 
+    actor = _reviewer_session(db, org_id, admin_user_id)
     request = (
         db.query(StatusChangeRequest)
         .filter(
@@ -153,15 +241,19 @@ def approve_request(
     if not request:
         raise ValueError("Request not found")
 
+    if actor is not None:
+        require_request_access(db, actor, request)
+
     if request.status != "pending":
         raise ValueError(f"Request is not pending (status: {request.status})")
 
     # Check admin permission
     role_str = admin_role.value if hasattr(admin_role, "value") else admin_role
-    if role_str not in [Role.ADMIN.value, Role.DEVELOPER.value]:
+    if actor is None and role_str not in [Role.ADMIN.value, Role.DEVELOPER.value]:
         raise ValueError("Only admins can approve status change requests")
 
     now = datetime.now(UTC)
+    surrogate_stage_event = None
     donor_stage_event: tuple[Donor, PipelineStage, PipelineStage] | None = None
 
     if request.entity_type == "surrogate":
@@ -190,8 +282,15 @@ def approve_request(
         old_stage = stage_context.current_stage
         old_slug = old_stage.slug if old_stage else None
 
+        if (
+            not new_stage.is_active
+            or not old_stage
+            or new_stage.pipeline_id != old_stage.pipeline_id
+        ):
+            raise ValueError("Target stage does not belong to the surrogate pipeline")
+        _require_applicant_approval(db, actor, surrogate, new_stage)
         # Apply the change using the helper function
-        surrogate_status_service.apply_status_change(
+        result = surrogate_status_service.apply_status_change(
             db=db,
             surrogate=surrogate,
             new_stage=new_stage,
@@ -209,7 +308,9 @@ def approve_request(
             approved_at=now,
             requested_at=request.requested_at,
             paused_from_stage=stage_context.paused_from_stage,
+            commit=False,
         )
+        surrogate_stage_event = result.get("after_commit")
 
     elif request.entity_type == "intended_parent":
         intended_parent = (
@@ -277,6 +378,7 @@ def approve_request(
         old_stage = donor.stage
         if old_stage.id == target_stage.id:
             raise ValueError("Donor is already in the requested target stage")
+        _require_applicant_approval(db, actor, donor, target_stage)
         result = donor_service.apply_status_change(
             db,
             donor=donor,
@@ -303,6 +405,16 @@ def approve_request(
             raise ValueError("Match not found")
         if request.target_status != MatchStatus.CANCELLED.value:
             raise ValueError("Target status not found")
+        if actor is not None and match.surrogate_id:
+            surrogate = match_service.get_surrogate_with_stage(db, match.surrogate_id, org_id)
+            if not surrogate or not surrogate.stage:
+                raise ValueError("Match participants not found")
+            target_stage = pipeline_service.get_stage_by_system_role(
+                db, surrogate.stage.pipeline_id, "handoff"
+            )
+            if not target_stage:
+                raise ValueError("Ready to match stage not found")
+            _require_applicant_approval(db, actor, surrogate, target_stage)
         match_stage_event = match_service.apply_approved_cancellation(
             db, match, request=request, actor_user_id=admin_user_id
         )
@@ -329,6 +441,9 @@ def approve_request(
     db.refresh(request)
     admin_user = db.query(User).filter(User.id == admin_user_id).first()
     resolver_name = admin_user.display_name if admin_user else "Admin"
+
+    if surrogate_stage_event:
+        surrogate_stage_event()
 
     if request.entity_type == "match" and match_stage_event:
         match_stage_event()
@@ -404,6 +519,7 @@ def reject_request(
     Raises:
         ValueError: If request not found, not pending, or user not authorized
     """
+    actor = _reviewer_session(db, org_id, admin_user_id)
     request = (
         db.query(StatusChangeRequest)
         .filter(
@@ -416,12 +532,15 @@ def reject_request(
     if not request:
         raise ValueError("Request not found")
 
+    if actor is not None:
+        require_request_access(db, actor, request)
+
     if request.status != "pending":
         raise ValueError(f"Request is not pending (status: {request.status})")
 
     # Check admin permission
     role_str = admin_role.value if hasattr(admin_role, "value") else admin_role
-    if role_str not in [Role.ADMIN.value, Role.DEVELOPER.value]:
+    if actor is None and role_str not in [Role.ADMIN.value, Role.DEVELOPER.value]:
         raise ValueError("Only admins can reject status change requests")
 
     now = datetime.now(UTC)

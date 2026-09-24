@@ -18,6 +18,10 @@ const mockRouterReplace = vi.fn()
 const mockMassEditStageModal = vi.fn()
 const mockBulkChangeStageModal = vi.fn()
 const mockUseAuth = vi.fn()
+const mockUseEffectivePermissions = vi.fn()
+vi.mock('@/lib/hooks/use-permissions', () => ({
+    useEffectivePermissions: () => mockUseEffectivePermissions(),
+}))
 const mockUseBulkChangeStage = vi.fn()
 
 // Mock Next.js navigation
@@ -172,6 +176,7 @@ function buildSurrogateListItem(
 
 describe('SurrogatesPage', () => {
     beforeEach(() => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 1, permissions: ["edit_surrogates"] } })
         // Reset mocks default return values
         mockSearchParams.delete('page')
         mockSearchParams.delete('stage')
@@ -219,6 +224,27 @@ describe('SurrogatesPage', () => {
         })
         mockUseSurrogateCreatedDates.mockReturnValue({ data: [] })
         mockUseQueues.mockReturnValue({ data: [] })
+    })
+
+    it("uses Create independently of Edit under V2 and closes on revocation", async () => {
+        mockUseSurrogates.mockReturnValue({ data: { items: [], total: 0, page: 1, per_page: 30 }, isLoading: false })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_surrogates", "edit_surrogates"] } })
+        const { rerender } = render(<SurrogatesPage />)
+        expect(screen.queryByRole("button", { name: "New Surrogates" })).not.toBeInTheDocument()
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_surrogates", "create_surrogates"] } })
+        rerender(<SurrogatesPage />)
+        fireEvent.click(screen.getByRole("button", { name: "New Surrogates" }))
+        expect(screen.getByRole("dialog")).toBeInTheDocument()
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_surrogates"] } })
+        rerender(<SurrogatesPage />)
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+    })
+
+    it.each([{ data: undefined, isLoading: true }, { data: undefined, isError: true }])("hides Create until permissions load successfully", (result) => {
+        mockUseSurrogates.mockReturnValue({ data: { items: [], total: 0, page: 1, per_page: 30 }, isLoading: false })
+        mockUseEffectivePermissions.mockReturnValue(result)
+        render(<SurrogatesPage />)
+        expect(screen.queryByRole("button", { name: "New Surrogates" })).not.toBeInTheDocument()
     })
 
     it('renders loading state', () => {
@@ -442,6 +468,19 @@ describe('SurrogatesPage', () => {
         expect(screen.getByText('Last Modified')).toBeInTheDocument()
     })
 
+    it('uses the v2 assign action for selected records instead of the role', () => {
+        mockUseSurrogates.mockReturnValue({ data: { items: [buildSurrogateListItem()], total: 1, pages: 1 }, isLoading: false, error: null })
+        mockUseAuth.mockReturnValue({ user: { role: 'case_manager', user_id: 'cm-1' } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ['view_surrogates'] } })
+        const view = render(<SurrogatesPage />)
+        fireEvent.click(screen.getByLabelText('Select John Doe'))
+        expect(screen.queryByRole('button', { name: 'Assign to user' })).not.toBeInTheDocument()
+        mockUseAuth.mockReturnValue({ user: { role: 'intake_specialist', user_id: 'is-1' } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ['view_surrogates', 'assign_surrogates'] } })
+        view.rerender(<SurrogatesPage />)
+        expect(screen.getByRole('button', { name: 'Assign to user' })).toBeInTheDocument()
+    })
+
     it('shows Change stage in the floating selection bar only for admin and developer users', () => {
         mockUseSurrogates.mockReturnValue({
             data: { items: [buildSurrogateListItem()], total: 1, pages: 1 },
@@ -603,6 +642,16 @@ describe('SurrogatesPage', () => {
         const latestCreatedDateFilters = mockUseSurrogateCreatedDates.mock.calls.at(-1)?.[0] as Record<string, unknown>
         expect(latestCreatedDateFilters).not.toHaveProperty('owner_id')
         expect(mockMassEditStageModal).not.toHaveBeenCalled()
+    })
+
+    it('keeps v2 Intake assignee filters for scoped records and calendar dates', () => {
+        mockUseAuth.mockReturnValue({ user: { role: 'intake_specialist', user_id: 'is-1' } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ['view_surrogates'] } })
+        mockSearchParams.set('owner_id', 'case-manager-1')
+        mockUseSurrogates.mockReturnValue({ data: { items: [], total: 0, pages: 0 }, isLoading: false, error: null })
+        render(<SurrogatesPage />)
+        expect(mockUseSurrogates.mock.calls.at(-1)?.[0]).toHaveProperty('owner_id', 'case-manager-1')
+        expect(mockUseSurrogateCreatedDates.mock.calls.at(-1)?.[0]).toHaveProperty('owner_id', 'case-manager-1')
     })
 
     it('keeps assignee filtering behind More Filters', () => {

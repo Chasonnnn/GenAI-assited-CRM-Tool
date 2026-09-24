@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.core.rate_limit import limiter
-from app.services import campaign_service, unsubscribe_service
+from app.services import campaign_suppression_service, unsubscribe_service
 
 router = APIRouter(prefix="/email", tags=["email"])
 
@@ -43,7 +43,7 @@ def unsubscribe_get(
         return _unsubscribe_response(False)
 
     org_id, email = parsed
-    campaign_service.add_to_suppression(
+    campaign_suppression_service.add_to_suppression(
         db,
         org_id=org_id,
         email=email,

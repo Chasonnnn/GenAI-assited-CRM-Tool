@@ -9,7 +9,7 @@ from sqlalchemy import event
 
 from app.core.permissions import ROLE_DEFAULTS
 from app.db.models import Organization, Pipeline, PipelineStage, RolePermission
-from app.services import campaign_service, permission_service, pipeline_service
+from app.services import campaign_audience, permission_service, pipeline_service
 
 
 @contextmanager
@@ -99,7 +99,7 @@ def test_campaign_filter_queries_are_bounded_and_preserve_order(
     stages = [_stage(db, pipeline, f"stage_{index}") for index in range(12)]
     requested = list(reversed(stages))
     with _selects(db) as statements:
-        result = campaign_service.normalize_filter_criteria(
+        result = campaign_audience.normalize_filter_criteria(
             db,
             test_org.id,
             recipient_type,
@@ -133,15 +133,15 @@ def test_donor_filters_reject_inactive_wrong_subtype_and_other_tenant(db, test_o
     )
     for stage_id in [inactive.id, wrong_type.id, foreign.id, uuid4()]:
         with pytest.raises(ValueError, match="Stage filter not found"):
-            campaign_service.normalize_filter_criteria(
+            campaign_audience.normalize_filter_criteria(
                 db, test_org.id, "egg_donor", {"stage_ids": [str(stage_id)]}
             )
     with pytest.raises(ValueError, match="Stage filter not found"):
-        campaign_service.normalize_filter_criteria(
+        campaign_audience.normalize_filter_criteria(
             db, test_org.id, "egg_donor", {"stage_keys": ["missing"]}
         )
     # Existing reference semantics retain an inactive ID, but omit its key.
-    result = campaign_service.normalize_filter_criteria(
+    result = campaign_audience.normalize_filter_criteria(
         db, test_org.id, "egg_donor", {"stage_keys": ["inactive"]}
     )
     assert result["stage_ids"] == [str(inactive.id)]
@@ -153,10 +153,10 @@ def test_campaign_filters_keep_invalid_uuid_validation_and_ignore_missing_case_i
     active = _stage(db, pipeline, "active")
     inactive = _stage(db, pipeline, "inactive", active=False)
     with pytest.raises(ValidationError):
-        campaign_service.normalize_filter_criteria(
+        campaign_audience.normalize_filter_criteria(
             db, test_org.id, "case", {"stage_ids": ["not-a-uuid"]}
         )
-    result = campaign_service.normalize_filter_criteria(
+    result = campaign_audience.normalize_filter_criteria(
         db,
         test_org.id,
         "case",
@@ -179,7 +179,7 @@ def test_case_campaign_explicit_stage_ids_are_tenant_scoped(db, test_org):
     foreign_pipeline = _pipeline(db, other_org.id)
     foreign = _stage(db, foreign_pipeline, "foreign")
 
-    result = campaign_service.normalize_filter_criteria(
+    result = campaign_audience.normalize_filter_criteria(
         db,
         test_org.id,
         "case",

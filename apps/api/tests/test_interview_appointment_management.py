@@ -11,7 +11,13 @@ from app.db.models import (
     AppointmentType,
     AuditLog,
     Job,
+    Membership,
     Organization,
+    OrganizationPermissionPolicy,
+    Queue,
+    RecordCollaborator,
+    RolePermission,
+    RoleRecordScope,
     SurrogateActivityLog,
     SurrogateStatusHistory,
     UserIntegration,
@@ -994,3 +1000,147 @@ async def test_http_retry_after_rebooking_returns_success(authed_client, db, int
     assert first.status_code == 200
     assert retry.status_code == 200
     assert retry.json() == first.json()
+
+
+@pytest.fixture
+def v2_interview(db, interview):
+    surrogate, user = interview
+    membership = (
+        db.query(Membership)
+        .filter_by(organization_id=surrogate.organization_id, user_id=user.id)
+        .one()
+    )
+    membership.role = Role.CASE_MANAGER
+    surrogate.owner_type = "user"
+    surrogate.owner_id = user.id
+    db.add(OrganizationPermissionPolicy(organization_id=surrogate.organization_id, version=2))
+    db.add(
+        RoleRecordScope(
+            organization_id=surrogate.organization_id,
+            role="case_manager",
+            module="surrogates",
+            assignment="assigned",
+            phase="all",
+            stage_ids=[],
+        )
+    )
+    db.commit()
+    return surrogate, user, membership
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "permission",
+    [
+        "view_surrogates",
+        "edit_surrogates",
+        "change_surrogate_status",
+        "manage_appointments",
+    ],
+)
+async def test_v2_appointment_requires_each_action(
+    authed_client, db, v2_interview, notifications, permission
+):
+    surrogate, _, _ = v2_interview
+    path = f"/surrogates/{surrogate.id}/interview-appointment"
+    assert (await authed_client.get(path)).json()["can_manage"] is True
+    request = payload(command(db, surrogate, "cancel"))
+    original_stage = surrogate.stage_id
+    db.add(
+        RolePermission(
+            organization_id=surrogate.organization_id,
+            role="case_manager",
+            permission=permission,
+            is_granted=False,
+        )
+    )
+    db.commit()
+
+    read = await authed_client.get(path)
+    if permission == "view_surrogates":
+        assert read.status_code == 403
+    else:
+        assert read.status_code == 200
+        assert read.json()["can_manage"] is False
+    assert (await authed_client.post(path, json=request)).status_code == 403
+    db.refresh(surrogate)
+    assert surrogate.stage_id == original_stage
+    assert service.get_latest(db, surrogate.organization_id, surrogate.id).status == "confirmed"
+    for mock in notifications.values():
+        mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_v2_appointment_collaboration_revocation_blocks_owner_of_appointment(
+    authed_client, db, v2_interview, notifications
+):
+    surrogate, user, membership = v2_interview
+    queue = Queue(organization_id=surrogate.organization_id, name="Interview pool", is_active=True)
+    db.add(queue)
+    db.flush()
+    surrogate.owner_id = queue.id
+    surrogate.owner_type = "queue"
+    collaborator = RecordCollaborator(
+        organization_id=surrogate.organization_id,
+        membership_id=membership.id,
+        user_id=user.id,
+        surrogate_id=surrogate.id,
+    )
+    db.add(collaborator)
+    db.commit()
+    path = f"/surrogates/{surrogate.id}/interview-appointment"
+    visible = await authed_client.get(path)
+    assert visible.status_code == 200
+    assert visible.json()["can_manage"] is True
+    request = payload(command(db, surrogate, "cancel"))
+    db.delete(collaborator)
+    db.commit()
+
+    assert (await authed_client.get(path)).status_code == 403
+    assert (await authed_client.post(path, json=request)).status_code == 403
+    assert service.get_latest(db, surrogate.organization_id, surrogate.id).status == "confirmed"
+    for mock in notifications.values():
+        mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_v2_appointment_cancel_rebook_and_revoked_retry(authed_client, db, v2_interview):
+    surrogate, _, _ = v2_interview
+    path = f"/surrogates/{surrogate.id}/interview-appointment"
+    cancelled = await authed_client.post(path, json=payload(command(db, surrogate, "cancel")))
+    assert cancelled.status_code == 200
+    assert surrogate.status_label == "Reschedule Needed"
+    request = payload(
+        command(db, surrogate, "schedule", start=datetime.now(UTC) + timedelta(days=8))
+    )
+    booked = await authed_client.post(path, json=request)
+    assert booked.status_code == 200
+    assert booked.json()["appointment"]["status"] == "confirmed"
+    assert surrogate.status_label == "Interview Scheduled"
+    assert (await authed_client.post(path, json=request)).status_code == 200
+
+    db.add(
+        RolePermission(
+            organization_id=surrogate.organization_id,
+            role="case_manager",
+            permission="manage_appointments",
+            is_granted=False,
+        )
+    )
+    db.commit()
+    assert (await authed_client.post(path, json=request)).status_code == 403
+    assert db.query(Appointment).filter_by(surrogate_id=surrogate.id).count() == 2
+
+
+@pytest.mark.asyncio
+async def test_v2_appointment_hides_other_organization(authed_client, db, v2_interview):
+    surrogate, _, _ = v2_interview
+    request = payload(command(db, surrogate, "cancel"))
+    other_org = Organization(id=uuid4(), name="Other org", slug=f"v2-other-{uuid4().hex}")
+    db.add(other_org)
+    db.flush()
+    surrogate.organization_id = other_org.id
+    db.commit()
+    path = f"/surrogates/{surrogate.id}/interview-appointment"
+    assert (await authed_client.get(path)).status_code == 404
+    assert (await authed_client.post(path, json=request)).status_code == 404

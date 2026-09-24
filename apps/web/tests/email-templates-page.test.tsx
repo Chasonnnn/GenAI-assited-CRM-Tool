@@ -16,6 +16,7 @@ const mockUseEffectivePermissions = vi.fn()
 const mockRichTextEditorProps = vi.fn()
 const mockUseEmailTemplates = vi.fn()
 const mockCreateEmailTemplate = vi.fn()
+const mockCopyTemplateFromLibrary = vi.fn()
 const mockUpdateEmailTemplate = vi.fn()
 const mockDeleteEmailTemplate = vi.fn()
 const mockSendTestEmailTemplate = vi.fn()
@@ -262,7 +263,7 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
     useDeleteEmailTemplate: () => ({ mutate: mockDeleteEmailTemplate, isPending: false }),
     useCopyTemplateToPersonal: () => ({ mutate: vi.fn(), isPending: false }),
     useShareTemplateWithOrg: () => ({ mutate: vi.fn(), isPending: false }),
-    useCopyTemplateFromLibrary: () => ({ mutate: vi.fn(), isPending: false }),
+    useCopyTemplateFromLibrary: () => ({ mutate: mockCopyTemplateFromLibrary, isPending: false }),
     useSendTestEmailTemplate: () => ({ mutateAsync: mockSendTestEmailTemplate, isPending: false }),
 }))
 
@@ -305,6 +306,7 @@ describe("EmailTemplatesPage", () => {
         mockRichTextEditorProps.mockClear()
         mockUseEmailTemplates.mockClear()
         mockCreateEmailTemplate.mockReset()
+        mockCopyTemplateFromLibrary.mockReset()
         mockUpdateEmailTemplate.mockReset()
         mockDeleteEmailTemplate.mockReset()
         mockSendTestEmailTemplate.mockReset()
@@ -1045,6 +1047,51 @@ describe("EmailTemplatesPage", () => {
             "href",
             "/automation/email-templates/org/tpl_org_inactive",
         )
+    })
+
+    it("disables personal creation when version 2 grants only template viewing", () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_email_templates"] } })
+        render(<EmailTemplatesPage />)
+        expect(screen.getByRole("button", { name: "Create Template", exact: true })).toBeDisabled()
+        expect(screen.queryByRole("button", { name: "Create Your First Template" })).not.toBeInTheDocument()
+    })
+
+    it("disables copying platform templates to the organization for personal-only Intake access", async () => {
+        mockUseAuth.mockReturnValue({ user: { user_id: "user_1", role: "intake_specialist", ai_enabled: false } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_email_templates", "manage_email_templates"] } })
+        render(<EmailTemplatesPage />)
+        fireEvent.click(screen.getByRole("tab", { name: "Platform Templates" }))
+        const copyButton = await screen.findByRole("button", { name: "Copy to Org" })
+        expect(copyButton).toBeDisabled()
+        fireEvent.click(copyButton)
+        expect(screen.queryByRole("dialog", { name: "Copy to Org Templates" })).not.toBeInTheDocument()
+        expect(mockCopyTemplateFromLibrary).not.toHaveBeenCalled()
+        expect(screen.getByRole("button", { name: "Preview" })).toBeEnabled()
+    })
+
+    it("lets Operations copy platform templates with organization template management", async () => {
+        mockUseAuth.mockReturnValue({ user: { user_id: "user_1", role: "operations", ai_enabled: false } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_email_templates", "manage_email_templates", "manage_org_templates"] } })
+        render(<EmailTemplatesPage />)
+        fireEvent.click(screen.getByRole("tab", { name: "Platform Templates" }))
+        fireEvent.click(await screen.findByRole("button", { name: "Copy to Org" }))
+        expect(await screen.findByRole("dialog", { name: "Copy to Org Templates" })).toBeInTheDocument()
+        fireEvent.change(screen.getByLabelText("Template Name"), { target: { value: "Agency follow-up" } })
+        fireEvent.click(screen.getByRole("button", { name: "Copy Template" }))
+        expect(mockCopyTemplateFromLibrary).toHaveBeenCalledWith({ id: "lib_tpl_1", data: { name: "Agency follow-up" } }, expect.any(Object))
+    })
+
+    it("closes an open organization copy dialog after organization management is revoked", async () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_email_templates", "manage_email_templates", "manage_org_templates"] } })
+        const view = render(<EmailTemplatesPage />)
+        fireEvent.click(screen.getByRole("tab", { name: "Platform Templates" }))
+        fireEvent.click(await screen.findByRole("button", { name: "Copy to Org" }))
+        expect(await screen.findByRole("dialog", { name: "Copy to Org Templates" })).toBeInTheDocument()
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_email_templates", "manage_email_templates"] } })
+        view.rerender(<EmailTemplatesPage />)
+        await waitFor(() => expect(screen.queryByRole("dialog", { name: "Copy to Org Templates" })).not.toBeInTheDocument())
+        expect(screen.getByRole("button", { name: "Copy to Org" })).toBeDisabled()
+        expect(mockCopyTemplateFromLibrary).not.toHaveBeenCalled()
     })
 
 })

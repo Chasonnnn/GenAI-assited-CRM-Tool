@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import TeamSettingsPage from '../app/(app)/settings/team/page'
 
 const mockUseInvites = vi.fn()
 const mockUseMembers = vi.fn()
+const mockUseEffectivePermissions = vi.fn()
 
 vi.mock('next/navigation', () => ({
     useRouter: () => ({
@@ -36,7 +37,8 @@ vi.mock('@/lib/hooks/use-invites', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-permissions', () => ({
-    useMembers: () => mockUseMembers(),
+    useEffectivePermissions: () => mockUseEffectivePermissions(),
+    useMembers: (includeInactive?: boolean) => mockUseMembers(includeInactive),
     useRemoveMember: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useBulkUpdateRoles: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
@@ -59,6 +61,7 @@ vi.mock('@/components/ui/toast', () => ({
 
 describe('TeamSettingsPage invitations tab', () => {
     beforeEach(() => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 1, capabilities: { can_manage_members: true } } })
         mockUseMembers.mockReturnValue({ data: [], isLoading: false })
         mockUseInvites.mockReturnValue({
             data: {
@@ -116,6 +119,30 @@ describe('TeamSettingsPage invitations tab', () => {
         expect(screen.queryByText('accepted@example.com')).not.toBeInTheDocument()
     })
 
+    it('offers Operations invitations only after policy activation', () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, capabilities: { can_manage_members: true } } })
+        render(<TeamSettingsPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'Invite Member' }))
+        fireEvent.click(screen.getByRole('combobox', { name: 'Role' }))
+        const option = screen.getByRole('option', { name: 'Operations' })
+        fireEvent.mouseMove(option)
+        fireEvent.click(option)
+        expect(screen.getByRole('combobox', { name: 'Role' })).toHaveTextContent('Operations')
+    })
+
+    it('keeps Operations out of legacy invitation options', () => {
+        render(<TeamSettingsPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'Invite Member' }))
+        fireEvent.click(screen.getByRole('combobox', { name: 'Role' }))
+        expect(screen.queryByRole('option', { name: 'Operations' })).not.toBeInTheDocument()
+    })
+
+    it('requests inactive members when the Admin enables the returning-member view', () => {
+        render(<TeamSettingsPage />)
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Include inactive members' }))
+        expect(mockUseMembers).toHaveBeenLastCalledWith(true)
+    })
+
     it('moves the current user badge into the action slot so the name column stays centered', () => {
         mockUseMembers.mockReturnValue({
             data: [
@@ -159,5 +186,29 @@ describe('TeamSettingsPage invitations tab', () => {
 
         const youBadge = within(actionCell as HTMLElement).getByText('You')
         expect(youBadge.parentElement).toHaveClass('flex', 'w-14', 'justify-center')
+    })
+})
+
+
+describe('permission People navigation and filters', () => {
+    it('keeps separate member pages and filters by readable roles and names', async () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, capabilities: { can_manage_members: true, can_manage_roles: true } } })
+        mockUseInvites.mockReturnValue({ data: { invites: [] } })
+        mockUseMembers.mockReturnValue({ data: [
+            { id: 'member-a', user_id: 'user-a', email: 'taylor@example.test', display_name: 'Taylor Morgan', role: 'case_manager' },
+            { id: 'member-b', user_id: 'user-b', email: 'avery@example.test', display_name: 'Avery Lane', role: 'intake_specialist' },
+        ], isLoading: false })
+        render(<TeamSettingsPage />)
+        const navigation = screen.getByRole('navigation', { name: 'Permission settings' })
+        expect(within(navigation).getByRole('link', { name: 'People' })).toHaveAttribute('aria-current', 'page')
+        expect(within(navigation).getByRole('link', { name: 'Check access' })).toHaveAttribute('href', '/settings/team/roles?tab=check')
+        fireEvent.click(screen.getByRole('combobox', { name: 'Filter by role' }))
+        fireEvent.mouseMove(screen.getByRole('option', { name: 'Case Manager' }))
+        fireEvent.click(screen.getByRole('option', { name: 'Case Manager' }))
+        await waitFor(() => expect(screen.getByRole('combobox', { name: 'Filter by role' })).toHaveTextContent('Case Manager'))
+        expect(screen.getByRole('link', { name: 'Manage' })).toHaveAttribute('href', '/settings/team/members/member-a')
+        expect(screen.queryByText('Avery Lane')).not.toBeInTheDocument()
+        fireEvent.change(screen.getByRole('textbox', { name: 'Search people' }), { target: { value: 'missing' } })
+        expect(screen.getByText('No matching people.')).toBeVisible()
     })
 })

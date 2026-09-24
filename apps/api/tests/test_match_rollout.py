@@ -57,15 +57,19 @@ async def test_disabled_expansion_rejects_repeat_pairs(authed_client, db, monkey
 
 
 @pytest.mark.asyncio
-async def test_disabled_expansion_rejects_parallel_ip_commitment(authed_client, monkeypatch):
+async def test_disabled_expansion_allows_parallel_ip_surrogate_commitment(
+    authed_client, monkeypatch
+):
     ip = await _create_intended_parent(authed_client)
     first = await _create_surrogate(authed_client)
     second = await _create_surrogate(authed_client)
     await _accept(authed_client, await _case(authed_client, ip, surrogate=first))
     second_case = await _case(authed_client, ip, surrogate=second)
+    assert second_case["status"] == "proposed"
     monkeypatch.setattr(settings, "MATCH_CASE_EXPANSION_ENABLED", False)
     response = await authed_client.put(f"/matches/{second_case['id']}/accept", json={})
-    assert response.status_code == 503
+    assert response.status_code == 200
+    assert response.json()["status"] == "accepted"
 
 
 def test_expansion_requires_explicit_activation(monkeypatch):

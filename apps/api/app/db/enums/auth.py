@@ -15,6 +15,7 @@ class Role(str, Enum):
 
     INTAKE_SPECIALIST = "intake_specialist"
     CASE_MANAGER = "case_manager"
+    OPERATIONS = "operations"
     ADMIN = "admin"
     DEVELOPER = "developer"
 

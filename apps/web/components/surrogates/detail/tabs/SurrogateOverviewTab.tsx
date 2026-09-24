@@ -61,6 +61,7 @@ import type { SurrogateLeadIntakeWarning } from "@/lib/types/surrogate"
 import type { SurrogateUpdatePayload } from "@/lib/api/surrogates"
 
 import { PersonalInfoRow, InlineSelectField, ProfileMetric, InlineHeightField, InlineRaceField, InlineWeightField, PersonalInfoColumn, SectionActionIcon, getAgeLabel, SsnField } from "@/components/records/RecordProfileFields"
+import { RecordEditingContext } from "@/components/records/RecordEditingContext"
 
 const LEAD_WARNING_FIELD_LABELS = {
     email: "Email",
@@ -155,16 +156,19 @@ function ChecklistStatusButton({
     label,
     value,
     onChange,
+    readOnly = false,
 }: {
     label: string
     value: boolean | null | undefined
     onChange: (value: boolean | null) => Promise<void>
+    readOnly?: boolean
 }) {
     const [isSaving, setIsSaving] = React.useState(false)
     const nextValue = getNextChecklistValue(value)
     const statusLabel = value === true ? "Yes" : value === false ? "No" : "Not set"
 
     const cycleChecklistValue = async () => {
+        if (readOnly || isSaving) return
         setIsSaving(true)
         const finishSaving = () => setIsSaving(false)
         try {
@@ -180,8 +184,8 @@ function ChecklistStatusButton({
             type="button"
             className="flex size-6 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-60"
             onClick={cycleChecklistValue}
-            disabled={isSaving}
-            aria-label={`${label}: ${statusLabel}. Click to change.`}
+            disabled={readOnly || isSaving}
+            aria-label={readOnly ? `${label}: ${statusLabel}` : `${label}: ${statusLabel}. Click to change.`}
         >
             {value === true && <CheckIcon className="size-4 text-green-500" />}
             {value === false && <XIcon className="size-4 text-red-500" />}
@@ -197,6 +201,7 @@ export function SurrogateOverviewTab() {
     const id = params.id
     const detailContext = useSurrogateDetailContext()
     const surrogateData = detailContext?.surrogate
+    const readOnly = detailContext?.canEditSurrogate === false
     const pipelineQuery = useDefaultPipeline()
     const stageOptions = pipelineQuery.data?.stages || []
     const stageById = new Map(stageOptions.map((stage) => [stage.id, stage]))
@@ -340,6 +345,7 @@ export function SurrogateOverviewTab() {
 
     return (
         <TabsContent value="overview" className="space-y-4">
+            <RecordEditingContext value={!readOnly}>
             <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
                 <div className="space-y-4">
                     <SurrogateOverviewCard title="Contact Information" icon={UserIcon}>
@@ -550,7 +556,7 @@ export function SurrogateOverviewTab() {
                             <SurrogateOverviewCard
                                 title="Personal Information"
                                 icon={UserIcon}
-                                action={
+                                action={!readOnly &&
                                     <DropdownMenu>
                                         <DropdownMenuTrigger
                                             render={
@@ -850,6 +856,7 @@ export function SurrogateOverviewTab() {
                         </>
 
                     <CombinedMedicalInsuranceCard
+                        readOnly={readOnly}
                         surrogateData={surrogateData}
                         onUpdate={async (data) => {
                             await updateSurrogateMutation.mutateAsync({
@@ -863,6 +870,7 @@ export function SurrogateOverviewTab() {
                 <div className="space-y-4">
                     {isHeartbeatConfirmedOrLater && !isTerminalIntakeOutcome && (
                         <PregnancyTrackerCard
+                            readOnly={readOnly}
                             surrogateData={surrogateData}
                             onUpdate={async (data) => {
                                 await updateSurrogateMutation.mutateAsync({
@@ -915,6 +923,7 @@ export function SurrogateOverviewTab() {
                                         <ChecklistStatusButton
                                             label={item.label}
                                             value={currentValue}
+                                            readOnly={readOnly}
                                             onChange={async (value) => {
                                                 await updateSurrogateMutation.mutateAsync({
                                                     surrogateId: id,
@@ -1003,6 +1012,7 @@ export function SurrogateOverviewTab() {
                     </SurrogateOverviewCard>
                 </div>
             </div>
+            </RecordEditingContext>
         </TabsContent>
     )
 }

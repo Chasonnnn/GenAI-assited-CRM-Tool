@@ -11,7 +11,16 @@ from sqlalchemy.orm import Session
 
 from app.core.csrf import CSRF_HEADER
 from app.db.enums import Role
-from app.db.models import AuditLog, Donor, Form, FormSubmission, Organization
+from app.db.models import (
+    AuditLog,
+    Donor,
+    Form,
+    FormSubmission,
+    Membership,
+    Organization,
+    OrganizationPermissionPolicy,
+    RecordCollaborator,
+)
 from app.schemas.donor import DonorUpdate
 from app.services import donor_profile_service, donor_service, entity_activity_service
 from tests.test_donors import _client_for_org, _create_donor
@@ -29,21 +38,25 @@ def other_org(db):
 
 def _submission(db, donor, *, org_id=None, answers=None, fields=None, submitted_at=None):
     org_id = org_id or donor.organization_id
-    fields = fields if fields is not None else [
-        {"key": "birth", "label": "Date of birth", "type": "date"},
-        {"key": "height", "label": "Height", "type": "height"},
-        {"key": "weight", "label": "Weight", "type": "number"},
-        {"key": "race", "label": "Race / ethnicity", "type": "text"},
-        *[
-            {
-                "key": spec["key"],
-                "label": spec["question"],
-                "type": "select" if spec["options"] else "text",
-                "options": spec["options"] or None,
-            }
-            for spec in donor_profile_service.DEFAULT_QUESTIONS
-        ],
-    ]
+    fields = (
+        fields
+        if fields is not None
+        else [
+            {"key": "birth", "label": "Date of birth", "type": "date"},
+            {"key": "height", "label": "Height", "type": "height"},
+            {"key": "weight", "label": "Weight", "type": "number"},
+            {"key": "race", "label": "Race / ethnicity", "type": "text"},
+            *[
+                {
+                    "key": spec["key"],
+                    "label": spec["question"],
+                    "type": "select" if spec["options"] else "text",
+                    "options": spec["options"] or None,
+                }
+                for spec in donor_profile_service.DEFAULT_QUESTIONS
+            ],
+        ]
+    )
     schema = {"pages": [{"title": "Donor questions", "fields": fields}]}
     form = Form(id=uuid.uuid4(), organization_id=org_id, name="Donor screening", schema_json=schema)
     db.add(form)
@@ -55,7 +68,9 @@ def _submission(db, donor, *, org_id=None, answers=None, fields=None, submitted_
         donor_id=donor.id,
         schema_snapshot=schema,
         mapping_snapshot=[{"field_key": "birth", "surrogate_field": "date_of_birth"}],
-        answers_json=answers if answers is not None else {
+        answers_json=answers
+        if answers is not None
+        else {
             "birth": "2000-05-14",
             "height": "5.5",
             "weight": 135,
@@ -185,19 +200,39 @@ async def test_checklist_uses_submitted_option_labels_and_only_questions_asked(d
         created = await _create_donor(client)
         donor = db.get(Donor, uuid.UUID(created["id"]))
         submission = _submission(db, donor, answers={"infectious_disease": "call"})
-        submission.schema_snapshot = {"pages": [{"title": "Follow-up", "fields": [{
-            "key": "infectious_disease", "type": "radio", "label": "Discuss screening history?",
-            "options": [{"value": "call", "label": "Discuss privately"}, {"value": "none", "label": "No history"}],
-        }]}]}
+        submission.schema_snapshot = {
+            "pages": [
+                {
+                    "title": "Follow-up",
+                    "fields": [
+                        {
+                            "key": "infectious_disease",
+                            "type": "radio",
+                            "label": "Discuss screening history?",
+                            "options": [
+                                {"value": "call", "label": "Discuss privately"},
+                                {"value": "none", "label": "No history"},
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
         db.flush()
         profile = (await client.get(f"/donors/{donor.id}/profile")).json()
-        item = next(item for item in profile["eligibility_checklist"] if item["key"] == "infectious_disease")
+        item = next(
+            item for item in profile["eligibility_checklist"] if item["key"] == "infectious_disease"
+        )
         assert item["value"] == "Discuss privately"
         assert item["question"] == "Discuss screening history?"
         assert item["options"][0] == {"value": "Discuss privately", "label": "Discuss privately"}
         assert "nicotine" not in {item["key"] for item in profile["eligibility_checklist"]}
-        assert (await client.patch(f"/donors/{donor.id}", json={"infectious_disease": "No history"})).status_code == 200
-        assert (await client.get(f"/donors/{donor.id}/profile")).json()["infectious_disease"] == "No history"
+        assert (
+            await client.patch(f"/donors/{donor.id}", json={"infectious_disease": "No history"})
+        ).status_code == 200
+        assert (await client.get(f"/donors/{donor.id}/profile")).json()[
+            "infectious_disease"
+        ] == "No history"
 
 
 @pytest.mark.asyncio
@@ -209,16 +244,25 @@ async def test_profile_retains_earlier_answers_when_later_forms_omit_questions(d
         original = _submission(db, donor, submitted_at=now - timedelta(days=2))
         before = dict(original.answers_json)
         _submission(
-            db, donor, submitted_at=now - timedelta(days=1),
+            db,
+            donor,
+            submitted_at=now - timedelta(days=1),
             answers={"nicotine": "current", "birth": "2001-02-03"},
             fields=[
                 {"key": "birth", "type": "date", "label": "Updated birth date"},
-                {"key": "nicotine", "type": "radio", "label": "Updated nicotine question",
-                 "options": [{"value": "current", "label": "Current use"}]},
+                {
+                    "key": "nicotine",
+                    "type": "radio",
+                    "label": "Updated nicotine question",
+                    "options": [{"value": "current", "label": "Current use"}],
+                },
             ],
         )
         _submission(
-            db, donor, submitted_at=now, answers={"followup": "Received"},
+            db,
+            donor,
+            submitted_at=now,
+            answers={"followup": "Received"},
             fields=[{"key": "followup", "type": "text", "label": "Follow-up"}],
         )
         profile = (await client.get(f"/donors/{donor.id}/profile")).json()
@@ -230,9 +274,11 @@ async def test_profile_retains_earlier_answers_when_later_forms_omit_questions(d
         assert item["value"] == "Current use"
         assert item["question"] == "Updated nicotine question"
         assert item["options"] == [{"value": "Current use", "label": "Current use"}]
-        assert (await client.patch(
-            f"/donors/{donor.id}", json={"college": None, "nicotine": "Manual answer"}
-        )).status_code == 200
+        assert (
+            await client.patch(
+                f"/donors/{donor.id}", json={"college": None, "nicotine": "Manual answer"}
+            )
+        ).status_code == 200
         refreshed = (await client.get(f"/donors/{donor.id}/profile")).json()
         assert refreshed["college"] is None
         assert refreshed["nicotine"] == "Manual answer"
@@ -249,14 +295,20 @@ async def test_profile_respects_newer_unanswered_and_hidden_questions(db, test_o
         now = datetime.now(UTC)
         _submission(db, donor, submitted_at=now - timedelta(days=1))
         _submission(
-            db, donor, submitted_at=now,
+            db,
+            donor,
+            submitted_at=now,
             answers={"college": "", "nicotine": None, "show": "No", "cannabis": "Yes"},
             fields=[
                 {"key": "college", "type": "text", "label": "Current college"},
                 {"key": "nicotine", "type": "text", "label": "Current nicotine use"},
                 {"key": "show", "type": "text", "label": "Ask cannabis question"},
-                {"key": "cannabis", "type": "text", "label": "Hidden question",
-                 "show_if": {"field_key": "show", "operator": "equals", "value": "Yes"}},
+                {
+                    "key": "cannabis",
+                    "type": "text",
+                    "label": "Hidden question",
+                    "show_if": {"field_key": "show", "operator": "equals", "value": "Yes"},
+                },
             ],
         )
         profile = (await client.get(f"/donors/{donor.id}/profile")).json()
@@ -277,16 +329,19 @@ async def test_profile_history_excludes_other_tenants_and_donors(db, test_org, o
         now = datetime.now(UTC)
         _submission(db, donor, submitted_at=now - timedelta(days=2))
         _submission(
-            db, donor, submitted_at=now, org_id=other_org.id,
+            db,
+            donor,
+            submitted_at=now,
+            org_id=other_org.id,
             answers={"college": "Other tenant college"},
         )
-        _submission(
-            db, donor, submitted_at=now - timedelta(days=1), answers={}, fields=[]
-        )
+        _submission(db, donor, submitted_at=now - timedelta(days=1), answers={}, fields=[])
         from app.schemas.donor import DonorCreate
 
         other_donor = donor_service.create_donor(
-            db, test_org.id, None,
+            db,
+            test_org.id,
+            None,
             DonorCreate(donor_type="egg", full_name="Another Donor", email="another@example.com"),
         )
         _submission(db, other_donor, submitted_at=now, answers={"college": "Other donor college"})
@@ -324,6 +379,81 @@ async def test_profile_access_is_org_scoped_and_requires_permissions_and_csrf(
         assert (
             await client.patch(f"/donors/{donor_id}", json={"weight_lb": 140})
         ).status_code == 403
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("donor_type", ["egg", "sperm"])
+async def test_v2_profile_and_sensitive_info_follow_live_record_scope(
+    db, test_org, other_org, donor_type
+):
+    db.add(OrganizationPermissionPolicy(organization_id=test_org.id, version=2))
+    db.flush()
+
+    async with _client_for_org(db, test_org) as owner_client:
+        donor = await _create_donor(owner_client, donor_type=donor_type)
+        donor_id = uuid.UUID(donor["id"])
+        assert (
+            await owner_client.patch(
+                f"/donors/{donor_id}",
+                json={"college": f"{donor_type.title()} College", "ssn": "123-45-6789"},
+            )
+        ).status_code == 200
+
+    existing_member_ids = {member.id for member in db.query(Membership).all()}
+    async with _client_for_org(db, test_org, role=Role.INTAKE_SPECIALIST) as intake_client:
+        intake_member = db.query(Membership).filter(Membership.id.notin_(existing_member_ids)).one()
+
+        profile = await intake_client.get(f"/donors/{donor_id}/profile")
+        reveal = await intake_client.post(f"/donors/{donor_id}/sensitive-info/reveal")
+        assert profile.status_code == 403
+        assert profile.json() == {"detail": "You don't have access to this donor"}
+        assert reveal.status_code == 403
+        assert reveal.json() == {"detail": "You don't have access to this donor"}
+
+        collaboration = RecordCollaborator(
+            organization_id=test_org.id,
+            membership_id=intake_member.id,
+            user_id=intake_member.user_id,
+            donor_id=donor_id,
+        )
+        db.add(collaboration)
+        db.flush()
+
+        profile = await intake_client.get(f"/donors/{donor_id}/profile")
+        assert profile.status_code == 200
+        assert profile.headers["cache-control"] == "no-store"
+        assert profile.json()["college"] == f"{donor_type.title()} College"
+        assert profile.json()["ssn_masked"] == "***-**-6789"
+
+        csrf_token = intake_client.headers.pop(CSRF_HEADER)
+        csrf_denied = await intake_client.post(f"/donors/{donor_id}/sensitive-info/reveal")
+        assert csrf_denied.status_code == 403
+        assert csrf_denied.json() == {
+            "detail": "Missing or invalid CSRF token. Include 'X-CSRF-Token' header matching "
+            "'crm_csrf' cookie."
+        }
+        intake_client.headers[CSRF_HEADER] = csrf_token
+        reveal = await intake_client.post(f"/donors/{donor_id}/sensitive-info/reveal")
+        assert reveal.status_code == 200
+        assert reveal.headers["cache-control"] == "no-store"
+        assert reveal.json() == {"ssn": "123-45-6789", "partner_ssn": None}
+
+        db.delete(collaboration)
+        db.flush()
+        revoked_profile = await intake_client.get(f"/donors/{donor_id}/profile")
+        revoked_reveal = await intake_client.post(f"/donors/{donor_id}/sensitive-info/reveal")
+        assert revoked_profile.status_code == 403
+        assert revoked_profile.json() == {"detail": "You don't have access to this donor"}
+        assert revoked_reveal.status_code == 403
+        assert revoked_reveal.json() == {"detail": "You don't have access to this donor"}
+
+    async with _client_for_org(db, other_org) as foreign_client:
+        foreign_profile = await foreign_client.get(f"/donors/{donor_id}/profile")
+        foreign_reveal = await foreign_client.post(f"/donors/{donor_id}/sensitive-info/reveal")
+        assert foreign_profile.status_code == 404
+        assert foreign_profile.json() == {"detail": "Donor not found"}
+        assert foreign_reveal.status_code == 404
+        assert foreign_reveal.json() == {"detail": "Donor not found"}
 
 
 @pytest.mark.asyncio

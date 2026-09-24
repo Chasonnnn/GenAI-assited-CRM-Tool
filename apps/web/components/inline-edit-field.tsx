@@ -18,6 +18,7 @@ interface InlineEditFieldProps {
     displayClassName?: string
     validate?: (value: string) => string | null
     label?: string
+    readOnly?: boolean
 }
 
 type InlineEditFieldState = {
@@ -77,8 +78,10 @@ export function InlineEditField({
     displayClassName,
     validate,
     label,
+    readOnly = false,
 }: InlineEditFieldProps) {
-    const canEdit = useRecordEditing()
+    const editingEnabled = useRecordEditing()
+    const canEdit = editingEnabled && !readOnly
     const [state, dispatch] = React.useReducer(
         inlineEditFieldReducer,
         INITIAL_INLINE_EDIT_FIELD_STATE,
@@ -90,7 +93,7 @@ export function InlineEditField({
     useFocusWhen(inputRef, isEditing, { select: true })
 
     const handleStartEdit = () => {
-        dispatch({ type: "startEdit", value: value || "" })
+        if (canEdit) dispatch({ type: "startEdit", value: value || "" })
     }
 
     const handleCancel = () => {
@@ -140,7 +143,7 @@ export function InlineEditField({
 
     const fieldLabel = label?.trim() || (placeholder && placeholder !== "-" ? placeholder : "field")
 
-    if (!canEdit) return <span className={cn("text-sm", !value && "text-muted-foreground", className)}>{value || placeholder}</span>
+    if (!canEdit) return <span className={cn("text-sm", !value && "text-muted-foreground", className, displayClassName)}>{value || placeholder}</span>
 
     if (!isEditing) {
         return (

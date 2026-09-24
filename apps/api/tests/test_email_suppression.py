@@ -2,13 +2,15 @@
 
 import pytest
 
+from app.services import campaign_suppression_service
+
 
 def test_send_email_skips_suppressed(db, test_org):
     from uuid import uuid4
 
     from app.db.enums import EmailStatus
     from app.db.models import Job, ResendSettings
-    from app.services import campaign_service, email_service, resend_settings_service
+    from app.services import email_service, resend_settings_service
 
     db.add(
         ResendSettings(
@@ -21,7 +23,7 @@ def test_send_email_skips_suppressed(db, test_org):
     )
     db.flush()
 
-    campaign_service.add_to_suppression(
+    campaign_suppression_service.add_to_suppression(
         db,
         org_id=test_org.id,
         email="suppressed@example.com",
@@ -69,7 +71,7 @@ async def test_workflow_email_skips_suppressed(db, test_org, test_user, monkeypa
 
     from app.db.enums import JobType
     from app.db.models import Job
-    from app.services import campaign_service, email_service, workflow_email_provider
+    from app.services import email_service, workflow_email_provider
     from app.worker import process_workflow_email
 
     template = email_service.create_template(
@@ -81,7 +83,7 @@ async def test_workflow_email_skips_suppressed(db, test_org, test_user, monkeypa
         body="<p>Welcome {{full_name}}</p>",
     )
 
-    campaign_service.add_to_suppression(
+    campaign_suppression_service.add_to_suppression(
         db,
         org_id=test_org.id,
         email="suppressed@example.com",

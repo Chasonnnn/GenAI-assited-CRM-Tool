@@ -34,34 +34,32 @@ import {
 } from "@/components/ui/select"
 import {
     Loader2, UserPlus, Mail, RotateCcw, X,
-    Users, Shield, Settings2, UserCog
+    Users, Settings2, UserCog
 } from "lucide-react"
 import { useInvites, useCreateInvite, useResendInvite, useRevokeInvite } from "@/lib/hooks/use-invites"
-import { useMembers, useRemoveMember, useBulkUpdateRoles } from "@/lib/hooks/use-permissions"
+import { useEffectivePermissions, useMembers, useRemoveMember } from "@/lib/hooks/use-permissions"
 import { toast } from "@/components/ui/toast"
 import { useAuth } from "@/lib/auth-context"
 import { Checkbox } from "@/components/ui/checkbox"
 import { formatRelativeTime } from "@/lib/formatters"
 
-const ROLE_LABELS: Record<string, string> = {
-    intake_specialist: "Intake Specialist",
-    case_manager: "Case Manager",
-    admin: "Admin",
-    developer: "Developer",
-}
+import { PermissionBulkRoleReview } from "@/components/permissions/permission-bulk-role-review"
+import { ChoiceField, PermissionError, ROLE_LABELS } from "@/components/permissions/permission-controls"
+import { PermissionNavigation } from "@/components/permissions/permission-navigation"
 
 const ROLE_COLORS: Record<string, string> = {
     intake_specialist: "bg-blue-100 text-blue-800",
     case_manager: "bg-green-100 text-green-800",
+    operations: "bg-rose-100 text-rose-800",
     admin: "bg-purple-100 text-purple-800",
     developer: "bg-orange-100 text-orange-800",
 }
 
-const INVITE_ROLE_OPTIONS = ["intake_specialist", "case_manager", "admin"] as const
+const INVITE_ROLE_OPTIONS = ["intake_specialist", "case_manager", "operations", "admin"] as const
 type InviteRole = (typeof INVITE_ROLE_OPTIONS)[number]
 const ACTIONABLE_INVITE_STATUSES = new Set(["pending", "expired"])
 
-function InviteTeamModal({ onClose }: { onClose: () => void }) {
+function InviteTeamModal({ onClose, v2 }: { onClose: () => void; v2: boolean }) {
     const [email, setEmail] = useState("")
     const [role, setRole] = useState<InviteRole>(INVITE_ROLE_OPTIONS[0])
     const createInvite = useCreateInvite()
@@ -117,7 +115,7 @@ function InviteTeamModal({ onClose }: { onClose: () => void }) {
                                 </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
-                                {INVITE_ROLE_OPTIONS.map((roleOption) => (
+                                {INVITE_ROLE_OPTIONS.filter((option) => v2 || option !== "operations").map((roleOption) => (
                                     <SelectItem key={roleOption} value={roleOption}>
                                         {ROLE_LABELS[roleOption]}
                                     </SelectItem>
@@ -146,16 +144,20 @@ function InviteTeamModal({ onClose }: { onClose: () => void }) {
     )
 }
 
-function MembersTab() {
-    const { data: members, isLoading } = useMembers()
+function MembersTab({ includeInactive, v2, canManage, canAssignDeveloper }: { includeInactive: boolean; v2: boolean; canManage: boolean; canAssignDeveloper: boolean }) {
+    const { data: members, isLoading, error, refetch } = useMembers(includeInactive)
     const removeMember = useRemoveMember()
-    const bulkUpdate = useBulkUpdateRoles()
     const { user } = useAuth()
 
     // Selection state for bulk operations
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [showBulkDialog, setShowBulkDialog] = useState(false)
-    const [bulkRole, setBulkRole] = useState("case_manager")
+    const [search, setSearch] = useState("")
+    const [roleFilter, setRoleFilter] = useState("all")
+    const visibleMembers = (members ?? []).filter((member) =>
+        (roleFilter === "all" || member.role === roleFilter) &&
+        `${member.display_name ?? ""} ${member.email}`.toLowerCase().includes(search.trim().toLowerCase())
+    )
 
     const handleRemove = async (memberId: string, email: string) => {
         if (!confirm(`Remove ${email} from the organization? This cannot be undone.`)) return
@@ -186,8 +188,8 @@ function MembersTab() {
         if (!members) return
         const selectableIds: string[] = []
 
-        for (const member of members) {
-            if (member.user_id === user?.user_id || member.role === "developer") continue
+        for (const member of visibleMembers) {
+            if (member.user_id === user?.user_id || (member.role === "developer" && !canAssignDeveloper) || !canManage) continue
             selectableIds.push(member.id)
         }
 
@@ -198,23 +200,7 @@ function MembersTab() {
         }
     }
 
-    const handleBulkAssign = async () => {
-        if (selectedIds.size === 0) return
-
-        try {
-            const result = await bulkUpdate.mutateAsync({
-                memberIds: Array.from(selectedIds),
-                role: bulkRole,
-            })
-            toast.success(`${result.success} member(s) updated${result.failed > 0 ? `, ${result.failed} failed` : ""}`)
-            setSelectedIds(new Set())
-            setShowBulkDialog(false)
-        } catch (error) {
-            toast.error("Failed to update roles", {
-                description: error instanceof Error ? error.message : "Unknown error",
-            })
-        }
-    }
+    if (error) return <PermissionError error={error} retry={() => void refetch()} />
 
     if (isLoading) {
         return (
@@ -232,11 +218,15 @@ function MembersTab() {
         )
     }
 
-    const selectableMembers = members.filter(m => m.user_id !== user?.user_id && m.role !== "developer")
-    const allSelected = selectableMembers.length > 0 && selectedIds.size === selectableMembers.length
+    const selectableMembers = visibleMembers.filter(m => canManage && m.user_id !== user?.user_id && (m.role !== "developer" || canAssignDeveloper))
+    const allSelected = selectableMembers.length > 0 && selectableMembers.every((member) => selectedIds.has(member.id))
 
     return (
         <div>
+            <div className="mb-5 grid items-end gap-4 sm:grid-cols-[minmax(0,1fr)_200px]">
+                <div className="space-y-2"><Label htmlFor="people-search">Search people</Label><Input id="people-search" value={search} onChange={(event) => { setSearch(event.target.value); setSelectedIds(new Set()) }} /></div>
+                <ChoiceField label="Filter by role" value={roleFilter} options={{ all: "All roles", ...ROLE_LABELS }} onChange={(value) => { setRoleFilter(value); setSelectedIds(new Set()) }} />
+            </div>
             {/* Bulk Actions Bar */}
             {selectedIds.size > 0 && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
@@ -258,49 +248,8 @@ function MembersTab() {
                                     Assign Role
                                 </Button>
                             } />
-                            <DialogContent>
-                                <DialogHeader>
-                                    <DialogTitle>Bulk Assign Role</DialogTitle>
-                                    <DialogDescription>
-                                        Assign the same role to {selectedIds.size} selected member{selectedIds.size !== 1 ? "s" : ""}.
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <div className="py-4 space-y-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="bulk-role">New Role</Label>
-                                        <Select value={bulkRole} onValueChange={(v) => v && setBulkRole(v)}>
-                                            <SelectTrigger id="bulk-role">
-                                                <SelectValue>
-                                                    {(value: string | null) => {
-                                                        const labels: Record<string, string> = {
-                                                            intake_specialist: "Intake Specialist",
-                                                            case_manager: "Case Manager",
-                                                            admin: "Admin",
-                                                        }
-                                                        return labels[value ?? ""] ?? "Select role"
-                                                    }}
-                                                </SelectValue>
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="intake_specialist">Intake Specialist</SelectItem>
-                                                <SelectItem value="case_manager">Case Manager</SelectItem>
-                                                <SelectItem value="admin">Admin</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-                                <DialogFooter>
-                                    <Button variant="outline" onClick={() => setShowBulkDialog(false)}>
-                                        Cancel
-                                    </Button>
-                                    <Button onClick={handleBulkAssign} disabled={bulkUpdate.isPending}>
-                                        {bulkUpdate.isPending && (
-                                            <Loader2 className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                        )}
-                                        Apply to {selectedIds.size} Member{selectedIds.size !== 1 ? "s" : ""}
-                                    </Button>
-                                </DialogFooter>
-                            </DialogContent>
+                            {showBulkDialog && <PermissionBulkRoleReview memberIds={Array.from(selectedIds)} v2={v2} canAssignDeveloper={canAssignDeveloper} onClose={() => setShowBulkDialog(false)} onSaved={() => { setSelectedIds(new Set()); setShowBulkDialog(false); toast.success("Roles updated") }} />}
+
                         </Dialog>
                     </div>
                 </div>
@@ -314,6 +263,7 @@ function MembersTab() {
                                 checked={allSelected}
                                 onCheckedChange={toggleSelectAll}
                                 aria-label="Select all"
+                                disabled={!canManage}
                             />
                         </TableHead>
                         <TableHead className="text-center">Name</TableHead>
@@ -324,8 +274,8 @@ function MembersTab() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {members.map((member) => {
-                        const isSelectable = member.user_id !== user?.user_id && member.role !== "developer"
+                    {visibleMembers.map((member) => {
+                        const isSelectable = canManage && member.user_id !== user?.user_id && (member.role !== "developer" || canAssignDeveloper)
                         const isSelected = selectedIds.has(member.id)
 
                         return (
@@ -339,7 +289,7 @@ function MembersTab() {
                                     />
                                 </TableCell>
                                 <TableCell className="font-medium text-center">
-                                    {member.display_name || "—"}
+                                    {member.display_name || "—"}{member.is_active === false && <Badge variant="secondary" className="ml-2">Inactive</Badge>}
                                 </TableCell>
                                 <TableCell className="text-center">{member.email}</TableCell>
                                 <TableCell className="text-center">
@@ -363,7 +313,7 @@ function MembersTab() {
                                             Manage
                                         </Button>
                                         <div className="flex w-14 justify-center">
-                                            {member.user_id !== user?.user_id ? (
+                                            {isSelectable && member.is_active !== false ? (
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
@@ -375,7 +325,7 @@ function MembersTab() {
                                                     <X className="size-4" aria-hidden="true" />
                                                 </Button>
                                             ) : (
-                                                <Badge variant="outline" className="text-xs">You</Badge>
+                                                member.user_id === user?.user_id ? <Badge variant="outline" className="text-xs">You</Badge> : null
                                             )}
                                         </div>
                                     </div>
@@ -383,6 +333,7 @@ function MembersTab() {
                             </TableRow>
                         )
                     })}
+                {visibleMembers.length === 0 && <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">No matching people.</TableCell></TableRow>}
                 </TableBody>
             </Table>
         </div>
@@ -494,6 +445,12 @@ function InvitationsTab() {
 
 export default function TeamSettingsPage() {
     const [showInviteModal, setShowInviteModal] = useState(false)
+    const [includeInactive, setIncludeInactive] = useState(false)
+    const { user } = useAuth()
+    const effective = useEffectivePermissions(user?.user_id ?? null)
+    const v2 = effective.data?.policy_version === 2
+    const canManage = !!effective.data?.capabilities?.can_manage_members
+    const canAssignDeveloper = !!effective.data?.capabilities?.can_assign_developer
     const { data: inviteData } = useInvites()
     const { data: members } = useMembers()
 
@@ -501,26 +458,24 @@ export default function TeamSettingsPage() {
     const memberCount = members?.length || 0
 
     return (
-        <div className="flex flex-1 flex-col gap-6 p-6 max-w-5xl mx-auto">
+        <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-6 sm:p-8">
+            <header className="flex flex-wrap items-center justify-between gap-5"><h1 className="text-3xl font-semibold tracking-tight">Permissions</h1><PermissionNavigation current="people" capabilities={effective.data?.capabilities} /></header>
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold">Team Management</h1>
+                    <h2 className="text-2xl font-semibold">People</h2>
                 </div>
 
                 <div className="flex gap-2">
-                    <Button render={<Link href="/settings/team/roles" />} variant="outline">
-                        <Shield className="size-4 mr-2" aria-hidden="true" />
-                        Role Permissions
-                    </Button>
-                    <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
+
+                    {canManage && <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
                         <DialogTrigger render={
                             <Button>
                                 <UserPlus className="size-4 mr-2" aria-hidden="true" />
                                 Invite Member
                             </Button>
                         } />
-                        <InviteTeamModal onClose={() => setShowInviteModal(false)} />
-                    </Dialog>
+                        <InviteTeamModal v2={v2} onClose={() => setShowInviteModal(false)} />
+                    </Dialog>}
                 </div>
             </div>
 
@@ -545,7 +500,8 @@ export default function TeamSettingsPage() {
                         </TabsList>
 
                         <TabsContent value="members">
-                            <MembersTab />
+                            {canManage && <label className="mb-5 flex items-center gap-2 text-sm"><Checkbox checked={includeInactive} onCheckedChange={(value) => setIncludeInactive(value === true)} />Include inactive members</label>}
+                            <MembersTab key={String(includeInactive)} includeInactive={includeInactive} v2={v2} canManage={canManage} canAssignDeveloper={canAssignDeveloper} />
                         </TabsContent>
 
                         <TabsContent value="invitations">

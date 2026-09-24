@@ -44,6 +44,7 @@ import {
     useSurrogateFormSubmission,
     useSurrogateFormDraftStatus,
     useFormIntakeLinks,
+    useSurrogateApplicationIntakeLinks,
     useSendFormIntakeLink,
     useRejectFormSubmission,
     useUpdateSubmissionAnswers,
@@ -70,9 +71,11 @@ interface SurrogateApplicationTabProps {
     surrogateId: string
     formId: string | null
     publishedForms?: FormSummary[]
+    access?: { scoped: boolean; canEdit: boolean; canSend: boolean }
 }
 
 const EMPTY_PUBLISHED_FORMS: FormSummary[] = []
+const LEGACY_ACCESS = { scoped: false, canEdit: true, canSend: true }
 
 function resolveIntakeLink(baseUrl: string, link: FormIntakeLinkRead): string {
     const serverUrl = link.intake_url?.trim()
@@ -932,6 +935,7 @@ function SurrogateApplicationFormOverrideControls({
 }
 
 type SurrogateApplicationSubmittedState = {
+    canEdit: boolean
     approveModalOpen: boolean
     approveNotes: string
     deletingFileId: string | null
@@ -1066,12 +1070,12 @@ function SurrogateApplicationSubmittedHeader({
                             )}
                         </Button>
                     </>
-                ) : (
+                ) : state.canEdit ? (
                     <Button onClick={() => actions.setIsEditMode(true)}>
                         <EditIcon className="size-4 mr-2" />
                         Edit
                     </Button>
-                )}
+                ) : null}
             </div>
         </div>
     )
@@ -1433,7 +1437,7 @@ function SurrogateApplicationReviewFooter({
     actions: SurrogateApplicationSubmittedActions
     state: SurrogateApplicationSubmittedState
 }) {
-    if (!state.isPending) return null
+    if (!state.isPending || !state.canEdit) return null
 
     return (
         <div className="sticky bottom-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 -mx-4 md:-mx-6">
@@ -1582,12 +1586,13 @@ function SurrogateApplicationSubmittedView({
                 state={state}
             />
             <SurrogateApplicationReviewFooter actions={actions} state={state} />
-            <SurrogateApplicationReviewDialogs actions={actions} state={state} />
+            {state.canEdit && <SurrogateApplicationReviewDialogs actions={actions} state={state} />}
         </div>
     )
 }
 
 type SurrogateApplicationEmptyStateRenderInput = {
+    canSend: boolean
     baseUrl: string
     confirmOverride: boolean
     copyFormLink: () => Promise<void>
@@ -1627,7 +1632,7 @@ function renderSurrogateApplicationEmptyState(input: SurrogateApplicationEmptySt
         input.selectedFormId.length > 0 &&
         input.selectedFormId !== (input.formId || "")
     const canSendLink =
-        Boolean(input.effectiveFormId) && (!hasExplicitOverride || input.confirmOverride)
+        input.canSend && Boolean(input.effectiveFormId) && (!hasExplicitOverride || input.confirmOverride)
 
     return (
         <SurrogateApplicationEmptyState
@@ -1668,7 +1673,7 @@ function renderSurrogateApplicationEmptyState(input: SurrogateApplicationEmptySt
                 selectedIntakeLinkId: input.selectedIntakeLinkId,
                 selectedTemplateId: input.selectedTemplateId,
                 sendableIntakeLinks: input.sendableIntakeLinks,
-                sendFormModalOpen: input.sendFormModalOpen,
+                sendFormModalOpen: input.canSend && input.sendFormModalOpen,
                 useAdvancedOverride: input.useAdvancedOverride,
             }}
         />
@@ -1746,6 +1751,7 @@ function SurrogateApplicationSubmittedRenderer({
             }}
             fileInputRef={fileInputRef}
             state={{
+                canEdit: input.canEdit,
                 approveModalOpen: input.approveModalOpen,
                 approveNotes: input.approveNotes,
                 deletingFileId: input.deletingFileId,
@@ -2074,6 +2080,7 @@ export function SurrogateApplicationTab({
     surrogateId,
     formId,
     publishedForms = EMPTY_PUBLISHED_FORMS,
+    access = LEGACY_ACCESS,
 }: SurrogateApplicationTabProps) {
     const { user } = useAuth()
     const baseUrl =
@@ -2107,9 +2114,11 @@ export function SurrogateApplicationTab({
         error: submissionError,
     } = useSurrogateFormSubmission(effectiveFormId || null, surrogateId)
     const { data: draftStatus } = useSurrogateFormDraftStatus(effectiveFormId || null, surrogateId)
-    const { data: intakeLinks = [] } = useFormIntakeLinks(effectiveFormId || null, true)
+    const legacyLinks = useFormIntakeLinks(!access.scoped && access.canSend ? effectiveFormId || null : null, true)
+    const scopedLinks = useSurrogateApplicationIntakeLinks(access.scoped && access.canSend ? surrogateId : null, effectiveFormId || null)
+    const intakeLinks = (access.scoped ? scopedLinks.data : legacyLinks.data) ?? []
     const sendIntakeLinkMutation = useSendFormIntakeLink()
-    const { data: emailTemplates = [] } = useEmailTemplates({ activeOnly: true, usageContext: "manual" })
+    const { data: emailTemplates = [] } = useEmailTemplates({ activeOnly: true, usageContext: "manual" }, access.canSend)
     const approveMutation = useApproveFormSubmission()
     const rejectMutation = useRejectFormSubmission()
     const updateAnswersMutation = useUpdateSubmissionAnswers()
@@ -2215,7 +2224,7 @@ export function SurrogateApplicationTab({
     const hasEdits = Object.keys(editedValues).length > 0
 
     const handleSaveEdits = async () => {
-        if (!submission || !hasEdits) return
+        if (!access.canEdit || !submission || !hasEdits) return
         try {
             const updates = Object.entries(editedValues).map(([field_key, value]) => ({
                 field_key,
@@ -2269,6 +2278,7 @@ export function SurrogateApplicationTab({
 
     if (!submission) {
         return renderSurrogateApplicationEmptyState({
+            canSend: access.canSend,
             baseUrl,
             confirmOverride,
             copyFormLink,
@@ -2278,8 +2288,8 @@ export function SurrogateApplicationTab({
             formId,
             formLink,
             formLinkCopied,
-            handleGenerateFormLink,
-            handleSendEmailLink,
+            handleGenerateFormLink: async () => { if (access.canSend) await handleGenerateFormLink() },
+            handleSendEmailLink: async () => { if (access.canSend) await handleSendEmailLink() },
             isSendingLink,
             publishedForms,
             requiresPurposeOverride,
@@ -2320,28 +2330,29 @@ export function SurrogateApplicationTab({
         <SurrogateApplicationSubmittedRenderer
             fileInputRef={fileInputRef}
             input={{
+                canEdit: access.canEdit,
                 approveModalOpen,
                 approveNotes,
                 cancelEditing,
                 deletingFileId,
-                editedValues,
-                editingField,
+                editedValues: access.canEdit ? editedValues : {},
+                editingField: access.canEdit ? editingField : null,
                 fileFieldLabels,
                 fileFields,
                 fileInputId,
                 filesOpen,
-                handleApprove,
+                handleApprove: async () => { if (access.canEdit) await handleApprove() },
                 handleCancelEdits,
-                handleDeleteFile,
+                handleDeleteFile: async (fileId, filename) => { if (access.canEdit) await handleDeleteFile(fileId, filename) },
                 handleDownloadFile,
                 handleExport,
                 handleFieldChange,
-                handleFileUpload,
-                handleReject,
+                handleFileUpload: async (event) => { if (access.canEdit) await handleFileUpload(event) },
+                handleReject: async () => { if (access.canEdit) await handleReject() },
                 handleSaveEdits,
                 hasEdits,
                 isApproving,
-                isEditMode,
+                isEditMode: access.canEdit && isEditMode,
                 isExporting,
                 isPending,
                 isRejecting,

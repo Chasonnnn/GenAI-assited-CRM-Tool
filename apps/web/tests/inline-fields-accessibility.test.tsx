@@ -3,8 +3,59 @@ import { fireEvent, render, screen } from "@testing-library/react"
 
 import { InlineEditField } from "@/components/inline-edit-field"
 import { InlineDateField } from "@/components/inline-date-field"
+import { CombinedMedicalInsuranceCard } from "@/components/surrogates/CombinedMedicalInsuranceCard"
+import { RecordEditingContext } from "@/components/records/RecordEditingContext"
+import { InlineSelectField, InlineHeightField, InlineRaceField, InlineWeightField, SsnField } from "@/components/records/RecordProfileFields"
 
 describe("Inline field accessibility", () => {
+    it("closes shared profile editors and disables sensitive reveal after edit access is revoked", () => {
+        const onSave = vi.fn()
+        const onReveal = vi.fn()
+        const fields = <>
+            <InlineSelectField label="Education" value="college" options={[{value: "college", label: "College"}]} onSave={onSave} saveOnSelect={false} />
+            <InlineHeightField value={5.5} onSave={onSave} />
+            <InlineRaceField value="asian" onSave={onSave} />
+            <InlineWeightField value={140} onSave={onSave} />
+            <SsnField label="SSN" maskedValue="***-**-1234" revealedValue={null} onReveal={onReveal} onSave={onSave} isRevealPending={false} />
+        </>
+        const view = render(<RecordEditingContext value={true}>{fields}</RecordEditingContext>)
+        for (const label of ["Education", "Height", "Race / Ethnicity", "Weight", "SSN"]) {
+            fireEvent.click(screen.getByRole("button", {name: `Edit ${label}`}))
+            expect(screen.getByRole("button", {name: `Save ${label}`})).toBeEnabled()
+        }
+        view.rerender(<RecordEditingContext value={false}>{fields}</RecordEditingContext>)
+        expect(screen.queryAllByRole("button", {name: /^Save /})).toHaveLength(0)
+        expect(screen.queryAllByRole("textbox")).toHaveLength(0)
+        expect(screen.getByRole("button", {name: "Reveal SSN"})).toBeDisabled()
+        expect(onSave).not.toHaveBeenCalled()
+        expect(onReveal).not.toHaveBeenCalled()
+    })
+
+    it("disables every insurance field when the shared card is read-only", () => {
+        const onUpdate = vi.fn()
+        render(<CombinedMedicalInsuranceCard readOnly onUpdate={onUpdate} surrogateData={{
+            insurance_company: "Example insurer", insurance_plan_name: "Gold plan",
+            insurance_policy_number: "test-policy", insurance_subscriber_dob: "1990-05-14",
+        }} />)
+        expect(screen.getByText("Gold plan")).toBeInTheDocument()
+        expect(screen.getByText("test-policy")).toBeInTheDocument()
+        for (const button of screen.queryAllByRole("button", { name: /^Edit / })) {
+            expect(button).toBeDisabled()
+        }
+        expect(onUpdate).not.toHaveBeenCalled()
+    })
+
+    it('removes an open inline editor when it becomes read-only', () => {
+        const onSave = vi.fn()
+        const view = render(<InlineEditField value="Original" label="Name" onSave={onSave} />)
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Name' }))
+        view.rerender(<InlineEditField value="Original" label="Name" onSave={onSave} readOnly />)
+        expect(screen.getByText('Original')).toBeInTheDocument()
+        expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Edit Name' })).not.toBeInTheDocument()
+        expect(onSave).not.toHaveBeenCalled()
+    })
+
     it("uses a native button trigger for InlineEditField display mode", () => {
         render(
             <InlineEditField

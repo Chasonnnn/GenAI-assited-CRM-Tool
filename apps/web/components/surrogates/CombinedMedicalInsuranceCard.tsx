@@ -41,7 +41,7 @@ import { InlineEditField } from "@/components/inline-edit-field"
 import { InlineDateField } from "@/components/inline-date-field"
 import { MedicalContactSection } from "@/components/surrogates/MedicalContactSection"
 import { SurrogateRead } from "@/lib/types/surrogate"
-import { useRecordEditing } from "@/components/records/RecordEditingContext"
+import { RecordEditingContext, useRecordEditing } from "@/components/records/RecordEditingContext"
 
 type MedicalKey = { [K in keyof SurrogateRead]: K extends `insurance_${string}` | `clinic_${string}` | `monitoring_clinic_${string}` | `ob_${string}` | `delivery_hospital_${string}` | `pcp_${string}` | `lab_clinic_${string}` ? K : never }[keyof SurrogateRead]
 export type MedicalProfile = Partial<Pick<SurrogateRead, NonNullable<MedicalKey>>>
@@ -166,6 +166,7 @@ const SECTION_CONFIGS: SectionConfig[] = [
 ]
 
 interface CombinedMedicalInsuranceCardProps {
+    readOnly?: boolean
     surrogateData: MedicalProfile
     onUpdate: (data: MedicalProfile) => Promise<void>
 }
@@ -190,8 +191,8 @@ function SectionActionIcon({
     )
 }
 
-export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate }: CombinedMedicalInsuranceCardProps) {
-    const canEdit = useRecordEditing()
+export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate, readOnly = false }: CombinedMedicalInsuranceCardProps) {
+    const canEdit = useRecordEditing() && !readOnly
     const [manuallyAdded, setManuallyAdded] = useState<SectionType[]>([])
     const [optimisticallyHiddenSections, setOptimisticallyHiddenSections] = useState<OptimisticallyHiddenSection[]>([])
     const [sectionPendingDelete, setSectionPendingDelete] = useState<SectionType | null>(null)
@@ -236,7 +237,7 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate }: Combin
     }
 
     const deletableSections = visibleSections
-    const canEditSections = availableSections.length > 0 || deletableSections.length > 0
+    const canEditSections = canEdit && (availableSections.length > 0 || deletableSections.length > 0)
 
     const handleFieldUpdate = async (field: string, value: string | null) => {
         await onUpdate({ [field]: value })
@@ -279,7 +280,7 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate }: Combin
     }
 
     return (
-        <>
+        <RecordEditingContext value={canEdit}>
             <Card className="gap-4 py-4">
                 <CardHeader className="px-4 pb-2">
                     <div className="flex items-center justify-between gap-3">
@@ -287,7 +288,7 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate }: Combin
                             <HospitalIcon className="size-4" />
                             Medical & Insurance
                         </CardTitle>
-                        {canEdit && canEditSections && (
+                        {canEditSections && (
                             <DropdownMenu>
                                 <DropdownMenuTrigger
                                     render={
@@ -375,12 +376,14 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate }: Combin
                             {visibleSections.map((section) =>
                                 section.kind === "insurance" ? (
                                     <InsuranceSection
+                                        readOnly={!canEdit}
                                         key={section.key}
                                         surrogateData={surrogateData}
                                         onUpdate={handleInsuranceFieldUpdate}
                                     />
                                 ) : (
                                     <MedicalContactSection
+                                        readOnly={!canEdit}
                                         title={section.title}
                                         icon={section.icon}
                                         prefix={section.prefix}
@@ -428,14 +431,16 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate }: Combin
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-        </>
+        </RecordEditingContext>
     )
 }
 
 function InsuranceSection({
+    readOnly,
     surrogateData,
     onUpdate,
 }: {
+    readOnly: boolean
     surrogateData: MedicalProfile
     onUpdate: (field: string) => (value: string | null) => Promise<void>
 }) {
@@ -451,6 +456,7 @@ function InsuranceSection({
                 <div>
                     <span className="text-sm text-muted-foreground">Company:</span>
                     <InlineEditField
+                        readOnly={readOnly}
                         value={surrogateData.insurance_company}
                         onSave={onUpdate("insurance_company")}
                         placeholder="Insurance company"

@@ -134,6 +134,9 @@ async def process_workflow_email(db, job) -> None:
         EmailProviderError,
         resolve_workflow_email_provider,
     )
+    from app.services.workflow_execution_authority import authorize_email_job
+
+    authorize_email_job(db, job)
 
     template_id = job.payload.get("template_id")
     surrogate_id = job.payload.get("surrogate_id")
@@ -528,6 +531,7 @@ async def process_workflow_email(db, job) -> None:
     db.commit()
 
     try:
+        authorize_email_job(db, job)
         result = await gmail_service.send_email(
             db=db,
             user_id=str(config["user_id"]),

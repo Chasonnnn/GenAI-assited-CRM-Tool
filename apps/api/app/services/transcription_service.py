@@ -341,8 +341,8 @@ async def request_transcription(
     if provider not in {"gemini", "vertex_api_key", "vertex_wif"}:
         raise TranscriptionError("Transcription provider not supported")
 
-    model = get_effective_model(ai_settings) or "gemini-3.7-flash"
-    if model != "gemini-3.7-flash":
+    model = get_effective_model(ai_settings) or "gemini-3.8-flash"
+    if model != "gemini-3.8-flash":
         raise TranscriptionError("Unsupported transcription model configured")
 
     api_key = get_decrypted_key(ai_settings) if provider in {"gemini", "vertex_api_key"} else None

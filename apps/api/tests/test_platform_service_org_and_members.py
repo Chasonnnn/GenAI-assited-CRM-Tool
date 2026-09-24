@@ -6,9 +6,72 @@ from uuid import uuid4
 
 import pytest
 
-from app.db.enums import AlertSeverity, AlertStatus, AlertType, Role
-from app.db.models import AdminActionLog, Membership, SupportSession, SystemAlert
-from app.services import platform_service
+from app.db.enums import AlertSeverity, AlertStatus, AlertType, MatchStatus, Role
+from app.db.models import (
+    AdminActionLog,
+    Match,
+    Membership,
+    Organization,
+    SupportSession,
+    SystemAlert,
+    User,
+)
+from app.services import pipeline_service, platform_service
+from tests.test_tasks_match_scope import _create_intended_parent, _create_surrogate
+
+
+def test_organization_detail_counts_only_non_terminal_matches_in_organization(
+    db, test_org, test_user, default_stage
+):
+    other_org = Organization(name="Other Organization", slug=f"other-org-{uuid4().hex}")
+    other_user = User(email=f"other-{uuid4().hex}@example.com", display_name="Other User")
+    db.add_all([other_org, other_user])
+    db.flush()
+    db.add(
+        Membership(organization_id=other_org.id, user_id=other_user.id, role=Role.DEVELOPER.value)
+    )
+    other_pipeline = pipeline_service.get_or_create_default_pipeline(db, other_org.id)
+    other_stage = pipeline_service.get_stage_by_slug(db, other_pipeline.id, "new_unread")
+    assert other_stage is not None
+
+    for org, user, stage, statuses in (
+        (
+            test_org,
+            test_user,
+            default_stage,
+            (
+                MatchStatus.PROPOSED,
+                MatchStatus.REVIEWING,
+                MatchStatus.ACCEPTED,
+                MatchStatus.CANCEL_PENDING,
+                MatchStatus.REJECTED,
+                MatchStatus.CANCELLED,
+                MatchStatus.COMPLETED,
+            ),
+        ),
+        (other_org, other_user, other_stage, (MatchStatus.ACCEPTED,)),
+    ):
+        intended_parent = _create_intended_parent(db, org.id)
+        for index, status in enumerate(statuses, start=1):
+            surrogate = _create_surrogate(db, org.id, user.id, stage)
+            db.add(
+                Match(
+                    organization_id=org.id,
+                    match_number=f"M{10000 + index}",
+                    surrogate_id=surrogate.id,
+                    intended_parent_id=intended_parent.id,
+                    proposed_by_user_id=user.id,
+                    status=status.value,
+                )
+            )
+    db.flush()
+
+    detail = platform_service.get_organization_detail(db, test_org.id)
+    assert detail is not None
+    assert detail["active_match_count"] == 4
+    other_detail = platform_service.get_organization_detail(db, other_org.id)
+    assert other_detail is not None
+    assert other_detail["active_match_count"] == 1
 
 
 def test_platform_validation_and_hash_helpers(monkeypatch):

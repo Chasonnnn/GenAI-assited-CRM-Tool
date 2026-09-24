@@ -62,6 +62,9 @@ class EmailTemplateRead(BaseModel):
     owner_user_id: UUID | None = None
     owner_name: str | None = None  # Populated by service
     source_template_id: UUID | None = None
+    proposed_by_user_id: UUID | None = None
+    proposed_by_name: str | None = None
+    capabilities: dict[str, bool] | None = None
     is_system_template: bool = False
     current_version: int  # For optimistic locking
     created_at: datetime
@@ -81,6 +84,8 @@ class EmailTemplateListItem(BaseModel):
     scope: str = "org"
     owner_user_id: UUID | None = None
     owner_name: str | None = None  # Populated by service
+    proposed_by_name: str | None = None
+    capabilities: dict[str, bool] | None = None
     is_system_template: bool = False
     created_at: datetime
     updated_at: datetime

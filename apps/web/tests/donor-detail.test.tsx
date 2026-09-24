@@ -12,6 +12,7 @@ const mockUseDonorNotes = vi.fn()
 const mockCreateDonorNote = vi.fn()
 const mockDeleteDonorNote = vi.fn()
 const mockUpdateDonor = vi.fn()
+const mockClaimDonor = vi.fn()
 const mockUpdateDonorStatus = vi.fn()
 const mockArchiveDonor = vi.fn()
 const mockRestoreDonor = vi.fn()
@@ -73,6 +74,7 @@ vi.mock("@/components/ui/avatar", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-donors", () => ({
+    useClaimDonor: () => ({ mutateAsync: mockClaimDonor, isPending: false }),
     useDonorProfile: () => mockUseDonorProfile(),
     useRevealDonorSensitiveInfo: () => ({ mutateAsync: mockRevealDonor, isPending: false, reset: vi.fn() }),
     useDonorOwnerOptions: () => ({ data: { users: [], queues: [] }, isLoading: false, isError: false }),
@@ -194,6 +196,7 @@ describe("DonorDetailPage", () => {
         mockDeleteDonorNote.mockReset().mockResolvedValue(undefined)
         mockUpdateDonor.mockReset()
         mockUpdateDonor.mockResolvedValue({})
+        mockClaimDonor.mockReset().mockResolvedValue({})
         mockUpdateDonorStatus.mockReset()
         mockUpdateDonorStatus.mockResolvedValue({
             status: "applied",
@@ -306,6 +309,33 @@ describe("DonorDetailPage", () => {
             error: null,
             refetch: vi.fn(),
         })
+    })
+
+    it("keeps collaborator management out of the record overview under v2", () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: {
+            policy_version: 2,
+            role: "admin",
+            permissions: ["view_donors", "edit_donors", "assign_donors"],
+        } })
+        render(<DonorDetailPage />)
+
+        expect(screen.queryByRole("heading", { name: "Owner" })).not.toBeInTheDocument()
+        expect(screen.queryByText("Intake collaborators")).not.toBeInTheDocument()
+        expect(screen.queryByRole("combobox", { name: "Intake specialist" })).not.toBeInTheDocument()
+    })
+
+    it("offers claim from Actions only when the server allows it without Edit", async () => {
+        const current = mockUseDonor()
+        mockUseDonor.mockReturnValue({ ...current, data: { ...current.data, can_claim: true } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, role: "case_manager", permissions: ["view_donors", "assign_donors"] } })
+        mockClaimDonor.mockResolvedValue({})
+        render(<DonorDetailPage />)
+        fireEvent.click(screen.getByRole("button", { name: "Actions for Maya Thompson" }))
+        const claimItem = await screen.findByRole("menuitem", { name: "Claim donor" })
+        fireEvent.mouseMove(claimItem)
+        fireEvent.click(claimItem)
+        await waitFor(() => expect(mockClaimDonor).toHaveBeenCalledWith("donor-1"))
+        expect(screen.queryByRole("menuitem", { name: "Edit", exact: true })).not.toBeInTheDocument()
     })
 
     it("uses the compact entity header and action hierarchy shared by other detail pages", async () => {
@@ -426,12 +456,18 @@ describe("DonorDetailPage", () => {
         expect(screen.queryByRole("button", { name: /Delete note by/ })).not.toBeInTheDocument()
     })
 
-    it("renders and replaces the donor profile photo", async () => {
+    it.each([
+        { donorType: "egg", photoId: null },
+        { donorType: "egg", photoId: "profile-1" },
+        { donorType: "sperm", photoId: null },
+        { donorType: "sperm", photoId: "profile-1" },
+    ])("omits header photo controls for $donorType donors with photo $photoId", ({ donorType, photoId }) => {
         mockUseDonor.mockReturnValue({
             ...mockUseDonor(),
             data: {
                 ...mockUseDonor().data,
-                profile_photo_attachment_id: "profile-1",
+                donor_type: donorType,
+                profile_photo_attachment_id: photoId,
             },
         })
         mockUseAttachmentPreviewUrl.mockReturnValue({
@@ -440,21 +476,13 @@ describe("DonorDetailPage", () => {
         })
         render(<DonorDetailPage />)
 
-        expect(screen.getByRole("img", { name: "Maya Thompson profile photo" })).toHaveAttribute(
-            "data-src",
-            "https://files.example/profile.jpg",
-        )
-        const image = new File(["image"], "replacement.jpg", { type: "image/jpeg" })
-        const photoInput = screen.getByLabelText("Choose replacement donor profile photo")
-        expect(photoInput).toHaveAttribute("accept", "image/jpeg,image/png")
-        fireEvent.change(photoInput, {
-            target: { files: [image] },
-        })
-
-        await waitFor(() => expect(mockUploadDonorProfilePhoto).toHaveBeenCalledWith({
-            donorId: "donor-1",
-            file: image,
-        }))
+        const header = within(screen.getByRole("banner"))
+        expect(header.queryByRole("img", { name: "Maya Thompson profile photo" })).not.toBeInTheDocument()
+        expect(header.queryByRole("button", { name: /donor profile photo/i })).not.toBeInTheDocument()
+        expect(header.queryByLabelText(/Choose .*donor profile photo/i)).not.toBeInTheDocument()
+        expect(header.getByRole("button", { name: "Change Stage" })).toBeInTheDocument()
+        expect(mockUseAttachmentPreviewUrl).not.toHaveBeenCalled()
+        expect(mockUploadDonorProfilePhoto).not.toHaveBeenCalled()
     })
 
     it("renders donor document loading, error/retry, and empty states", () => {

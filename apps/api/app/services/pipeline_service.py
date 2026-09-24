@@ -1817,7 +1817,7 @@ def _apply_external_stage_remaps(
     remap_by_key: dict[str, str | None],
 ) -> None:
     from app.services import (
-        campaign_service,
+        campaign_audience,
         meta_crm_dataset_settings_service,
         workflow_service,
         zapier_settings_service,
@@ -1908,7 +1908,7 @@ def _apply_external_stage_remaps(
             .all()
         )
     for campaign in campaigns:
-        campaign_service.remap_campaign_stage_references(
+        campaign_audience.remap_campaign_stage_references(
             db,
             pipeline.organization_id,
             campaign,

@@ -13,10 +13,10 @@ import { Card } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { DonorAssignMenu } from "@/components/donors/DonorAssignMenu"
+import { DonorAssignMenu, DonorClaimMenuItem } from "@/components/donors/DonorAssignMenu"
+import { RecordCollaboratorsDialog } from "@/components/permissions/record-collaborators-dialog"
 import { DonorDocumentsSection } from "@/components/donors/DonorDocumentsSection"
 import { DonorNotesSection } from "@/components/donors/DonorNotesSection"
-import { DonorProfilePhoto } from "@/components/donors/DonorProfilePhoto"
 import { DonorTasksSection } from "@/components/donors/DonorTasksSection"
 import { DonorOverviewTab } from "@/components/donors/DonorOverviewTab"
 import { SurrogateDetailHeader } from "@/components/surrogates/detail/SurrogateDetailHeader"
@@ -26,6 +26,7 @@ import type { TaskListItem } from "@/lib/api/tasks"
 import { normalizeDonorHistory } from "@/lib/activity-history"
 import { getDonorStageLabel, getDonorStageStyle } from "@/lib/donor-stage-utils"
 import type { Donor, DonorStatusHistoryItem } from "@/lib/types/donor"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 
 export function DonorDetailSections({
     donor,
@@ -74,11 +75,18 @@ export function DonorDetailSections({
     currentUserId: string | null
 }) {
     const { user } = useAuth()
+    const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
+    const permissions = permissionsQuery.data?.permissions ?? []
+    const hasPermission = (permission: string) => user?.role === "developer" || permissions.includes(permission)
+    const policyV2 = (permissionsQuery.data?.policy_version ?? 1) >= 2
     const router = useRouter()
     const searchParams = useSearchParams()
     const initialTab = searchParams.get("tab")
     const [tab, setTab] = useState(initialTab && ["overview", "notes", "tasks", "history"].includes(initialTab) ? initialTab : "overview")
     const [correspondenceOpen, setCorrespondenceOpen] = useState(false)
+    const [collaboratorsOpen, setCollaboratorsOpen] = useState(false)
+    const canManageCollaborators = policyV2 && !!permissionsQuery.data?.capabilities?.can_manage_roles
+    const canAssign = !donor.is_archived && (policyV2 ? hasPermission("assign_donors") : access.edit)
     const canEdit = access.edit && !donor.is_archived
     const changeTab = (value: unknown) => {
         if (typeof value !== "string") return
@@ -110,12 +118,15 @@ export function DonorDetailSections({
             statusColor={String(getDonorStageStyle(stages, donor).color)}
             isArchived={donor.is_archived}
             onBack={() => router.push(returnTo as Route)}>
-            <DonorProfilePhoto donor={donor} canEdit={canEdit} compact />
             {access.changeStage && !donor.is_archived && <Button size="sm" variant="outline" onClick={onChangeStage}>Change Stage</Button>}
-            {(canEdit || access.archive || user?.role === "developer") && <DropdownMenu>
+            {(canEdit || canAssign || donor.can_claim || canManageCollaborators || access.archive || user?.role === "developer") && <DropdownMenu>
                 <DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={`Actions for ${donor.full_name}`} />}><MoreVerticalIcon className="size-4" /></DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                    {canEdit && <><DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem><DonorAssignMenu donor={donor} /><DropdownMenuSeparator /></>}
+                    {canEdit && <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>}
+                    {donor.can_claim && <DonorClaimMenuItem donorId={donor.id} />}
+                    {canAssign && <DonorAssignMenu donor={donor} />}
+                    {canManageCollaborators && <DropdownMenuItem onClick={() => setCollaboratorsOpen(true)}>Collaborators</DropdownMenuItem>}
+                    {canEdit && <DropdownMenuSeparator />}
                     {user?.role === "developer" && <DropdownMenuItem onClick={() => setCorrespondenceOpen(true)}>Correspondence</DropdownMenuItem>}
                     {access.archive && (donor.is_archived
                         ? <DropdownMenuItem onClick={onRestore} disabled={restoreStatus === "pending"}>{restoreStatus === "pending" ? <Loader2Icon className="size-4 animate-spin" /> : <ArchiveRestoreIcon className="size-4" />}Restore</DropdownMenuItem>
@@ -146,6 +157,7 @@ export function DonorDetailSections({
                 </TabsContent>
             </Tabs>
         </div>
+        {collaboratorsOpen && <RecordCollaboratorsDialog kind="donor" recordId={donor.id} open={collaboratorsOpen} onOpenChange={setCollaboratorsOpen} canManage={canManageCollaborators} />}
         {correspondenceOpen && <Dialog open onOpenChange={setCorrespondenceOpen}><DialogContent className="sm:max-w-2xl"><DialogHeader><DialogTitle>Correspondence</DialogTitle></DialogHeader><RecordCorrespondenceCard kind="donor" recordId={donor.id} canView={user?.role === "developer"} canEdit={canEdit} /></DialogContent></Dialog>}
     </div>
 }

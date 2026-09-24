@@ -249,9 +249,10 @@ export function useMetaAdAccounts() {
 /**
  * Fetch spend totals with sync status.
  */
-export function useSpendTotals(params: analyticsApi.SpendParams = {}) {
+export function useSpendTotals(params: analyticsApi.SpendParams = {}, enabled = true) {
     return useQuery({
         queryKey: [...analyticsKeys.all, 'spend-totals', params] as const,
+        enabled,
         queryFn: () => analyticsApi.getSpendTotals(params),
         staleTime: 60 * 1000,
     });

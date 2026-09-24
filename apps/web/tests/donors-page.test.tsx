@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 import DonorsPage from "../app/(app)/donors/page"
 import { ApiError } from "@/lib/api"
@@ -137,6 +137,25 @@ describe("DonorsPage", () => {
             error: null,
             refetch: vi.fn(),
         })
+    })
+
+    it("uses Create independently of Edit under V2 and closes on revocation", async () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_donors", "edit_donors"] } })
+        const { rerender } = render(<DonorsPage />)
+        expect(screen.queryByRole("button", { name: "New Donor" })).not.toBeInTheDocument()
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_donors", "create_donors"] } })
+        rerender(<DonorsPage />)
+        fireEvent.click(screen.getByRole("button", { name: "New Donor" }))
+        expect(screen.getByRole("dialog")).toBeInTheDocument()
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_donors"] } })
+        rerender(<DonorsPage />)
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+    })
+
+    it.each([{ data: undefined, isLoading: true }, { data: undefined, isError: true }])("hides Create until permissions load successfully", (result) => {
+        mockUseEffectivePermissions.mockReturnValue(result)
+        render(<DonorsPage />)
+        expect(screen.queryByRole("button", { name: "New Donor" })).not.toBeInTheDocument()
     })
 
     it("renders the Egg Donors list with the platform donor number format", () => {

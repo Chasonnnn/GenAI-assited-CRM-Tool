@@ -11,6 +11,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
+from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -18,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.db.enums import EntityType, OwnerType, TaskType
 from app.db.models import Task
 from app.db.models import ZoomMeeting as ZoomMeetingModel
+from app.schemas.auth import UserSession
 from app.services import oauth_service
 from app.services.http_service import request_with_retries
 
@@ -70,6 +72,92 @@ def _meeting_from_model(model: ZoomMeetingModel) -> ZoomMeeting:
         start_url=model.start_url,
         password=model.password,
     )
+
+
+def _require_action(db: Session, session: UserSession, permission: str) -> None:
+    from app.services import permission_service
+
+    if not permission_service.check_permission(
+        db, session.org_id, session.user_id, session.role.value, permission
+    ):
+        raise HTTPException(status_code=403, detail=f"Missing permission: {permission}")
+
+
+def _require_retry_binding(
+    db: Session,
+    meeting: ZoomMeetingModel,
+    user_id: uuid.UUID,
+    entity_type: EntityType | str,
+    entity_id: uuid.UUID,
+) -> None:
+    from app.services import permission_policy_service
+
+    if not permission_policy_service.is_enabled(db, meeting.organization_id):
+        return
+    kind = entity_type.value if isinstance(entity_type, EntityType) else entity_type
+    if meeting.user_id != user_id or getattr(meeting, f"{kind}_id") != entity_id:
+        raise HTTPException(
+            status_code=409, detail="Idempotency key belongs to a different meeting"
+        )
+
+
+def authorize_meeting_creation(
+    db: Session,
+    session: UserSession,
+    entity_type: str,
+    entity_id: uuid.UUID,
+    *,
+    idempotency_key: str | None = None,
+) -> bool:
+    from app.services import permission_policy_service, record_access_service
+
+    if not permission_policy_service.is_enabled(db, session.org_id):
+        return False
+    _require_action(db, session, "manage_appointments")
+    record_access_service.get_record_with_access(db, session, entity_type, entity_id)
+    if idempotency_key:
+        existing = (
+            db.query(ZoomMeetingModel)
+            .filter_by(organization_id=session.org_id, idempotency_key=idempotency_key)
+            .first()
+        )
+        if existing:
+            _require_retry_binding(db, existing, session.user_id, entity_type, entity_id)
+    return True
+
+
+def get_invite_meeting_with_access(
+    db: Session,
+    session: UserSession,
+    meeting_id: int,
+    *,
+    surrogate_id: str | None = None,
+) -> ZoomMeetingModel | None:
+    from app.services import permission_policy_service, record_access_service
+
+    if not permission_policy_service.is_enabled(db, session.org_id):
+        return None
+    _require_action(db, session, "send_email")
+    meeting = (
+        db.query(ZoomMeetingModel)
+        .filter_by(organization_id=session.org_id, zoom_meeting_id=str(meeting_id))
+        .order_by(ZoomMeetingModel.created_at.desc())
+        .first()
+    )
+    if meeting is None or not (meeting.surrogate_id or meeting.intended_parent_id):
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    for kind in ("surrogate", "intended_parent"):
+        record_id = getattr(meeting, f"{kind}_id")
+        if record_id:
+            record_access_service.get_record_with_access(db, session, kind, record_id)
+    if surrogate_id:
+        try:
+            supplied_surrogate_id = uuid.UUID(surrogate_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid surrogate ID") from exc
+        if supplied_surrogate_id != meeting.surrogate_id:
+            raise HTTPException(status_code=400, detail="Surrogate does not match the meeting")
+    return meeting
 
 
 def list_zoom_meetings(
@@ -280,6 +368,7 @@ async def schedule_zoom_meeting(
             .first()
         )
         if existing:
+            _require_retry_binding(db, existing, user_id, entity_type, entity_id)
             return CreateMeetingResult(
                 meeting=_meeting_from_model(existing),
                 note_id=None,
@@ -408,6 +497,7 @@ async def schedule_zoom_meeting(
                 .first()
             )
             if existing:
+                _require_retry_binding(db, existing, user_id, entity_type, entity_id)
                 return CreateMeetingResult(
                     meeting=_meeting_from_model(existing),
                     note_id=None,
