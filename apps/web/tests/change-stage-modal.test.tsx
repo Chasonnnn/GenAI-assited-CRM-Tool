@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { format } from "date-fns"
 import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
+
+const slotStart = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+vi.mock("@/lib/hooks/use-interview-appointment", () => ({
+    useInterviewSlots: () => ({ data: { slots: [{ start: slotStart, end: new Date(Date.parse(slotStart) + 30 * 60 * 1000).toISOString() }] }, isLoading: false, isFetching: false, isError: false, refetch: vi.fn() }),
+}))
 
 const stages = [
     {
@@ -243,130 +247,41 @@ describe("ChangeStageModal", () => {
         expect(screen.queryByText("Admin Approval Required")).not.toBeInTheDocument()
     })
 
-    it("uses placeholder hints for interview time without defaulting the value", async () => {
+    it("schedules an interview from a selected available slot", async () => {
         const onSubmit = vi.fn().mockResolvedValue({ status: "applied" })
-
-        render(
-            <ChangeStageModal
-                open
-                onOpenChange={vi.fn()}
-                stages={stages}
-                currentStageId="stage_new_unread"
-                currentStageLabel="New Unread"
-                onSubmit={onSubmit}
-            />
-        )
-
+        render(<ChangeStageModal open onOpenChange={vi.fn()} stages={stages}
+            surrogateId="surrogate-1" currentStageId="stage_new_unread"
+            currentStageLabel="New Unread" onSubmit={onSubmit} />)
         fireEvent.click(screen.getByRole("button", { name: /interview scheduled/i }))
-
-        expect(screen.getByText("Interview appointment")).toBeInTheDocument()
-        expect(screen.getByRole("region", { name: /interview appointment/i })).not.toHaveClass("p-3")
-        expect(screen.queryByText("Hour")).not.toBeInTheDocument()
-        expect(screen.queryByText("Minute")).not.toBeInTheDocument()
-        expect(screen.queryByText("AM/PM")).not.toBeInTheDocument()
-        expect(screen.getByRole("button", { name: /switch interview time to am/i })).toHaveTextContent("PM")
-        expect(screen.getByLabelText(/interview hour/i)).toHaveValue("")
-        expect(screen.getByLabelText(/interview minute/i)).toHaveValue("")
+        expect(screen.getByRole("region", { name: "Interview appointment" })).toBeInTheDocument()
+        expect(screen.getByTestId("change-stage-dialog")).toHaveClass("sm:max-w-2xl")
         expect(screen.getByRole("button", { name: "Save Change" })).toBeDisabled()
-
-        const interviewDate = new Date()
-        fireEvent.click(screen.getByRole("button", { name: /select date/i }))
-        const dayButton = screen
-            .getAllByText(format(interviewDate, "d"))
-            .map((element) => element.closest("button"))
-            .find((button): button is HTMLButtonElement => Boolean(button) && !button.disabled)
-        expect(dayButton).toBeDefined()
-        fireEvent.click(dayButton!)
-
-        expect(screen.getByRole("button", { name: "Save Change" })).toBeDisabled()
-
-        fireEvent.change(screen.getByLabelText(/interview hour/i), {
-            target: { value: "1" },
-        })
-        const minuteInput = screen.getByLabelText(/interview minute/i)
-        fireEvent.change(minuteInput, { target: { value: "1" } })
-        expect(minuteInput).toHaveValue("1")
-        fireEvent.change(minuteInput, { target: { value: "15" } })
-        expect(minuteInput).toHaveValue("15")
+        const slot = screen.getByRole("group", { name: "Available times" }).querySelector("button")
+        expect(slot).not.toBeNull()
+        fireEvent.click(slot!)
         fireEvent.click(screen.getByRole("button", { name: "Save Change" }))
-
-        await waitFor(() => {
-            expect(onSubmit).toHaveBeenCalledWith({
-                stage_id: "stage_interview_scheduled",
-                interview_scheduled_at: `${format(interviewDate, "yyyy-MM-dd")}T13:15:00`,
-            })
-        })
+        await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
+            stage_id: "stage_interview_scheduled",
+            interview_scheduled_at: slotStart,
+        }))
     })
 
-    it("toggles interview meridiem with one compact control", async () => {
+    it("requires a reason for a custom interview time", async () => {
         const onSubmit = vi.fn().mockResolvedValue({ status: "applied" })
-
-        render(
-            <ChangeStageModal
-                open
-                onOpenChange={vi.fn()}
-                stages={stages}
-                currentStageId="stage_new_unread"
-                currentStageLabel="New Unread"
-                onSubmit={onSubmit}
-            />
-        )
-
+        render(<ChangeStageModal open onOpenChange={vi.fn()} stages={stages}
+            surrogateId="surrogate-1" currentStageId="stage_new_unread"
+            currentStageLabel="New Unread" onSubmit={onSubmit} />)
         fireEvent.click(screen.getByRole("button", { name: /interview scheduled/i }))
-
-        const meridiemToggle = screen.getByRole("button", { name: /switch interview time to am/i })
-        fireEvent.click(meridiemToggle)
-        expect(screen.getByRole("button", { name: /switch interview time to pm/i })).toHaveTextContent("AM")
-        expect(screen.queryByRole("button", { name: "PM" })).not.toBeInTheDocument()
-
-        const interviewDate = new Date()
-        fireEvent.click(screen.getByRole("button", { name: /select date/i }))
-        const dayButton = screen
-            .getAllByText(format(interviewDate, "d"))
-            .map((element) => element.closest("button"))
-            .find((button): button is HTMLButtonElement => Boolean(button) && !button.disabled)
-        expect(dayButton).toBeDefined()
-        fireEvent.click(dayButton!)
-
-        fireEvent.change(screen.getByLabelText(/interview hour/i), {
-            target: { value: "1" },
-        })
-        fireEvent.change(screen.getByLabelText(/interview minute/i), {
-            target: { value: "15" },
-        })
-        fireEvent.click(screen.getByRole("button", { name: "Save Change" }))
-
-        await waitFor(() => {
-            expect(onSubmit).toHaveBeenCalledWith({
-                stage_id: "stage_interview_scheduled",
-                interview_scheduled_at: `${format(interviewDate, "yyyy-MM-dd")}T01:15:00`,
-            })
-        })
-    })
-
-    it("keeps interview time entry constrained to hour and minute fields", () => {
-        render(
-            <ChangeStageModal
-                open
-                onOpenChange={vi.fn()}
-                stages={stages}
-                currentStageId="stage_new_unread"
-                currentStageLabel="New Unread"
-                onSubmit={vi.fn().mockResolvedValue({ status: "applied" })}
-            />
-        )
-
-        fireEvent.click(screen.getByRole("button", { name: /interview scheduled/i }))
-
-        const hourInput = screen.getByLabelText(/interview hour/i)
-        const minuteInput = screen.getByLabelText(/interview minute/i)
-
-        fireEvent.change(hourInput, { target: { value: "1-45" } })
-        expect(hourInput).toHaveValue("1")
-        expect(minuteInput).toHaveValue("45")
-
-        fireEvent.change(minuteInput, { target: { value: "75" } })
-        expect(screen.getByText(/enter an hour from 1-12 and minutes from 00-59/i)).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Choose a time outside availability" }))
+        const value = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000)
+        const local = new Date(value.getTime() - value.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
+        fireEvent.change(screen.getByLabelText(/Date and time/), { target: { value: local } })
         expect(screen.getByRole("button", { name: "Save Change" })).toBeDisabled()
+        fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: "Staff requested a custom time" } })
+        fireEvent.click(screen.getByRole("button", { name: "Save Change" }))
+        await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+            override_availability: true,
+            override_reason: "Staff requested a custom time",
+        })))
     })
 })

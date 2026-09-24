@@ -387,6 +387,8 @@ def get_or_create_template(
     org_id: UUID,
     user_id: UUID,
     email_type: AppointmentEmailType,
+    *,
+    commit: bool = True,
 ) -> UUID | None:
     """Get or create the template for an appointment email type."""
     template_name = _get_template_name(email_type)
@@ -407,6 +409,7 @@ def get_or_create_template(
         name=default["name"],
         subject=default["subject"],
         body=default["body"],
+        commit=commit,
     )
     return template.id
 
@@ -492,6 +495,8 @@ def send_appointment_email(
     base_url: str = "",
     old_start: datetime | None = None,
     schedule_at: datetime | None = None,
+    *,
+    commit: bool = True,
 ) -> AppointmentEmailLog | None:
     """
     Send an appointment notification email.
@@ -513,6 +518,7 @@ def send_appointment_email(
         org.id,
         staff.id,
         email_type,
+        commit=commit,
     )
     if not template_id:
         return None
@@ -582,10 +588,13 @@ def send_appointment_email(
             appointment_log.status = outbound_log.status
             appointment_log.error = outbound_log.error
             db.flush()
-        db.commit()
-        db.refresh(appointment_log)
+        if commit:
+            db.commit()
+            db.refresh(appointment_log)
         return appointment_log
     except IntegrityError:
+        if not commit:
+            raise
         db.expire_all()
         concurrent = (
             db.query(AppointmentEmailLog)
@@ -599,6 +608,8 @@ def send_appointment_email(
             raise
         return concurrent
     except Exception as exc:
+        if not commit and not isinstance(exc, email_service.EmailProviderConfigurationError):
+            raise
         # Configuration/rendering failures are observable but do not make the
         # surrounding appointment mutation fail.
         failed_log = (
@@ -622,9 +633,14 @@ def send_appointment_email(
                 commit=False,
             )
         failed_log.status = EmailStatus.FAILED.value
-        failed_log.error = str(exc)
-        db.commit()
-        db.refresh(failed_log)
+        failed_log.error = (
+            "email_sender_unavailable"
+            if isinstance(exc, email_service.EmailProviderConfigurationError)
+            else str(exc)
+        )
+        if commit:
+            db.commit()
+            db.refresh(failed_log)
         return failed_log
 
 
@@ -633,6 +649,8 @@ def schedule_reminder_email(
     appointment: Appointment,
     base_url: str = "",
     hours_before: int = 24,
+    *,
+    commit: bool = True,
 ) -> AppointmentEmailLog | None:
     """Schedule a reminder email for hours_before the appointment."""
     if not appointment.scheduled_start:
@@ -650,6 +668,7 @@ def schedule_reminder_email(
         email_type=AppointmentEmailType.REMINDER,
         base_url=base_url,
         schedule_at=remind_at,
+        commit=commit,
     )
 
 
@@ -745,6 +764,7 @@ def replace_reminder_after_reschedule(
     *,
     base_url: str,
     hours_before: int,
+    commit: bool = True,
 ) -> AppointmentEmailLog | None:
     """Cancel stale unleased reminders and queue the current occurrence."""
     if not appointment.scheduled_start:
@@ -763,8 +783,9 @@ def replace_reminder_after_reschedule(
         appointment,
         base_url=base_url,
         hours_before=hours_before,
+        commit=commit,
     )
-    if replacement is None:
+    if replacement is None and commit:
         db.commit()
     return replacement
 
@@ -861,30 +882,46 @@ def is_appointment_email_delivery_eligible(
 
 
 def send_request_received(
-    db: Session, appointment: Appointment, base_url: str = ""
+    db: Session, appointment: Appointment, base_url: str = "", *, commit: bool = True
 ) -> AppointmentEmailLog | None:
     """Send 'request received' email to client."""
-    return send_appointment_email(db, appointment, AppointmentEmailType.REQUEST_RECEIVED, base_url)
+    return send_appointment_email(
+        db, appointment, AppointmentEmailType.REQUEST_RECEIVED, base_url, commit=commit
+    )
 
 
 def send_confirmed(
-    db: Session, appointment: Appointment, base_url: str = ""
+    db: Session, appointment: Appointment, base_url: str = "", *, commit: bool = True
 ) -> AppointmentEmailLog | None:
     """Send confirmation email to client."""
-    return send_appointment_email(db, appointment, AppointmentEmailType.CONFIRMED, base_url)
+    return send_appointment_email(
+        db, appointment, AppointmentEmailType.CONFIRMED, base_url, commit=commit
+    )
 
 
 def send_rescheduled(
-    db: Session, appointment: Appointment, old_start: datetime, base_url: str = ""
+    db: Session,
+    appointment: Appointment,
+    old_start: datetime,
+    base_url: str = "",
+    *,
+    commit: bool = True,
 ) -> AppointmentEmailLog | None:
     """Send reschedule notification to client."""
     return send_appointment_email(
-        db, appointment, AppointmentEmailType.RESCHEDULED, base_url, old_start=old_start
+        db,
+        appointment,
+        AppointmentEmailType.RESCHEDULED,
+        base_url,
+        old_start=old_start,
+        commit=commit,
     )
 
 
 def send_cancelled(
-    db: Session, appointment: Appointment, base_url: str = ""
+    db: Session, appointment: Appointment, base_url: str = "", *, commit: bool = True
 ) -> AppointmentEmailLog | None:
     """Send cancellation notification to client."""
-    return send_appointment_email(db, appointment, AppointmentEmailType.CANCELLED, base_url)
+    return send_appointment_email(
+        db, appointment, AppointmentEmailType.CANCELLED, base_url, commit=commit
+    )

@@ -38,9 +38,39 @@ export interface GoogleCalendarSyncResponse {
     outbound_backfilled: number
     appointment_changes: number
     task_changes: number
-    last_sync_at: string
+    calendars_queued: number
+    last_sync_at: string | null
     warnings: string[]
 }
+
+export interface GoogleCalendarDiscoveryItem {
+    calendar_id: string
+    display_name: string
+    access_role: string
+    primary: boolean
+}
+
+export interface GoogleCalendarBinding {
+    id: string
+    integration_id: string
+    account_email: string
+    calendar_id: string
+    display_name: string
+    access_role: string
+    check_busy: boolean
+    show_events: boolean
+    write_bookings: boolean
+    is_active: boolean
+    synced_at: string | null
+    sync_error: string | null
+}
+
+export interface GoogleCalendarBindingsResponse {
+    enabled: boolean
+    items: GoogleCalendarBinding[]
+}
+
+export type GoogleCalendarBindingInput = Pick<GoogleCalendarBinding, "calendar_id" | "display_name" | "check_busy" | "show_events" | "write_bookings" | "is_active">
 
 export interface ZoomStatusResponse {
     connected: boolean
@@ -124,6 +154,22 @@ export async function getGoogleCalendarStatus(): Promise<GoogleCalendarStatusRes
  */
 export async function syncGoogleCalendarNow(): Promise<GoogleCalendarSyncResponse> {
     return api.post<GoogleCalendarSyncResponse>('/integrations/google-calendar/sync')
+}
+
+export function getGoogleCalendarDiscovery(): Promise<{ items: GoogleCalendarDiscoveryItem[] }> {
+    return api.get<{ items: GoogleCalendarDiscoveryItem[] }>('/integrations/google-calendar/calendars')
+}
+
+export function getGoogleCalendarBindings(): Promise<GoogleCalendarBindingsResponse> {
+    return api.get<GoogleCalendarBindingsResponse>('/integrations/google-calendar/bindings')
+}
+
+export function saveGoogleCalendarBindings(items: GoogleCalendarBindingInput[]): Promise<GoogleCalendarBindingsResponse> {
+    return api.put<GoogleCalendarBindingsResponse>('/integrations/google-calendar/bindings', { items })
+}
+
+export function syncGoogleCalendarBindings(): Promise<{ accepted: boolean; queued: number }> {
+    return api.post<{ accepted: boolean; queued: number }>('/integrations/google-calendar/bindings/sync')
 }
 
 /**

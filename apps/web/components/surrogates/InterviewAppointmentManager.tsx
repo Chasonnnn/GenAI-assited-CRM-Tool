@@ -3,8 +3,11 @@
 import { useEffect, useState } from "react"
 import { ApiError } from "@/lib/api"
 import type { InterviewAppointment, AppointmentStage } from "@/lib/api/interview-appointment"
+import { createSchedulingRequestId } from "@/lib/api/appointments"
+import { SchedulingSyncState, schedulingCanCancel, schedulingCanReschedule } from "@/components/appointments/SchedulingSyncState"
 import {
     useInterviewAppointment,
+    useInterviewSlots,
     useManageInterviewAppointment,
     useRetryInterviewAppointmentGoogleSync,
 } from "@/lib/hooks/use-interview-appointment"
@@ -12,10 +15,11 @@ import { readableForeground } from "@/lib/stage-colors"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { CalendarClockIcon, Loader2Icon } from "lucide-react"
+import { SchedulingTimePicker } from "@/components/appointments/SchedulingTimePicker"
+import { formatSchedulingDate, formatSchedulingTime, localDateTimeToIso as parseLocalDateTime, schedulingDateKey, schedulingTimezoneLabel } from "@/lib/scheduling-time"
 
 export type AppointmentBadgeStatus = "Upcoming" | "Ongoing" | "Cancelled" | "Past"
 
@@ -50,9 +54,8 @@ function StageBadge({ stage, className }: { stage: AppointmentStage; className?:
 }
 
 function formatAppointment(appointment: InterviewAppointment) {
-    return new Intl.DateTimeFormat(undefined, {
-        dateStyle: "medium", timeStyle: "short",
-    }).format(new Date(appointment.scheduled_start))
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    return `${formatSchedulingDate(appointment.scheduled_start, timezone)} · ${formatSchedulingTime(appointment.scheduled_start, timezone)} ${schedulingTimezoneLabel(timezone)}`
 }
 
 function localInputValue(iso: string | undefined) {
@@ -62,10 +65,7 @@ function localInputValue(iso: string | undefined) {
 }
 
 export function localDateTimeToIso(value: string): string | null {
-    if (!value) return null
-    const parsed = new Date(value)
-    if (Number.isNaN(parsed.getTime()) || localInputValue(parsed.toISOString()) !== value) return null
-    return parsed.toISOString()
+    return parseLocalDateTime(value)
 }
 
 type View = "manage" | "book" | "cancel"
@@ -95,26 +95,38 @@ export function InterviewAppointmentManager({
     const mutation = useManageInterviewAppointment(surrogateId)
     const retryGoogleSync = useRetryInterviewAppointmentGoogleSync(surrogateId)
     const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
-    const [view, setView] = useState<View>("manage")
-    const [dateTime, setDateTime] = useState("")
-    const [cancelChoice, setCancelChoice] = useState("move")
-    const [validation, setValidation] = useState<string | null>(null)
+    const [form, setForm] = useState({ view: "manage" as View, date: "", selectedStart: null as string | null, dateTime: "", cancelChoice: "move", overrideAvailability: false, overrideReason: "", validation: null as string | null })
+    const { view, date, selectedStart, dateTime, cancelChoice, overrideAvailability, overrideReason, validation } = form
+    const updateForm = (next: Partial<typeof form>) => setForm((current) => ({ ...current, ...next }))
     const state = query.data
     const appointment = state?.appointment ?? null
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const slotsQuery = useInterviewSlots(surrogateId, date, timezone, view === "book" && Boolean(state?.can_manage))
     const active = Boolean(appointment && ["pending", "confirmed"].includes(appointment.status))
-    const externalSyncStatus = state?.external_sync_status
-    const syncUnresolved = ["pending", "failed", "conflict", "unlinked"].includes(externalSyncStatus ?? "")
+    const externalSyncStatus = appointment?.scheduling?.google_sync.state ?? state?.external_sync_status
+    const legacySyncUnresolved = !appointment?.scheduling && ["pending", "failed", "conflict", "unlinked"].includes(externalSyncStatus ?? "")
+    const canStartNewAppointment = !active
+        && state?.can_manage === true
+        && Boolean(state?.scheduled_stage)
+        && !legacySyncUnresolved
+        && (!appointment?.scheduling || appointment.scheduling.google_sync.state === "completed")
+    const canOpenBooking = active
+        ? state?.can_manage === true && !legacySyncUnresolved && schedulingCanReschedule(appointment?.scheduling)
+        : canStartNewAppointment
     const open = controlledOpen ?? uncontrolledOpen
     const setOpen = onOpenChange ?? setUncontrolledOpen
 
-    useEffect(() => {
-        if (open) {
-            setView("manage")
-            setValidation(null)
-            setCancelChoice("move")
-            setDateTime(localInputValue(active ? appointment?.scheduled_start : undefined))
-        }
-    }, [open, active, appointment?.scheduled_start])
+    const resetForm = () => setForm({ view: "manage", validation: null, cancelChoice: "move", overrideAvailability: false, overrideReason: "", date: "", selectedStart: null, dateTime: "" })
+    const setDialogOpen = (next: boolean) => {
+        if (mutation.isPending) return
+        if (!next) resetForm()
+        setOpen(next)
+    }
+    const openManager = () => {
+        resetForm()
+        if (onManage) onManage()
+        else setOpen(true)
+    }
 
     if (query.isLoading) return hideTrigger ? null : triggerOnly
         ? <Button size="sm" variant="outline" className="h-7 text-xs" disabled aria-label="Loading interview appointment"><Loader2Icon className="size-3 animate-spin" />Manage</Button>
@@ -126,40 +138,44 @@ export function InterviewAppointmentManager({
     if (stageId !== state.scheduled_stage?.id && stageId !== state.reschedule_stage?.id) return null
 
     const submit = async (action: "schedule" | "reschedule" | "cancel", moveStage: boolean) => {
-        if (syncUnresolved) return
-        const scheduledStart = action === "cancel" ? null : localDateTimeToIso(dateTime)
-        if (action !== "cancel" && !scheduledStart) { setValidation("Choose a valid date and time."); return }
-        if (scheduledStart && new Date(scheduledStart).getTime() <= Date.now()) { setValidation("Choose a future date and time."); return }
-        if (action === "reschedule" && scheduledStart && appointment && new Date(scheduledStart).getTime() === new Date(appointment.scheduled_start).getTime()) { setValidation("Choose a different appointment time."); return }
-        setValidation(null)
+        if (legacySyncUnresolved) return
+        const scheduledStart = action === "cancel" ? null : overrideAvailability ? localDateTimeToIso(dateTime) : selectedStart
+        if (action !== "cancel" && !scheduledStart) { updateForm({ validation: "Choose a valid date and time." }); return }
+        if (action !== "cancel" && overrideAvailability && !overrideReason.trim()) { updateForm({ validation: "Enter a reason for the availability override." }); return }
+        if (scheduledStart && new Date(scheduledStart).getTime() <= Date.now()) { updateForm({ validation: "Choose a future date and time." }); return }
+        if (action === "reschedule" && scheduledStart && appointment && new Date(scheduledStart).getTime() === new Date(appointment.scheduled_start).getTime()) { updateForm({ validation: "Choose a different appointment time." }); return }
+        updateForm({ validation: null })
         try {
             const nextState = await mutation.mutateAsync({
                 action, ...(scheduledStart ? { scheduled_start: scheduledStart } : {}), move_stage: moveStage,
                 expected_stage_id: stageId, expected_appointment_id: appointment?.id ?? null,
                 expected_scheduled_start: appointment?.scheduled_start ?? null,
+                ...(appointment?.scheduling ? { expected_revision: appointment.scheduling.revision, request_id: createSchedulingRequestId() } : {}),
+                ...(action !== "cancel" && overrideAvailability ? { override_availability: true, override_reason: overrideReason.trim() } : {}),
             })
             if (nextState.external_sync_status === "pending" || nextState.external_sync_status === "failed") {
-                setView("manage")
+                updateForm({ view: "manage" })
             } else {
-                setOpen(false)
+                setDialogOpen(false)
             }
         } catch (error) {
-            setValidation(error instanceof ApiError && error.status === 409
+            if (error instanceof ApiError && error.status === 409) void slotsQuery.refetch()
+            updateForm({ validation: error instanceof ApiError && error.status === 409
                 ? error.message
                 : error instanceof ApiError && error.status === 403 ? "You no longer have permission to manage this appointment."
-                : error instanceof Error ? error.message : "Unable to save the appointment.")
+                : error instanceof Error ? error.message : "Unable to save the appointment." })
         }
     }
 
     const retrySync = async () => {
         if (!appointment) return
-        setValidation(null)
+        updateForm({ validation: null })
         try {
             await retryGoogleSync.mutateAsync(appointment.id)
         } catch (error) {
-            setValidation(error instanceof ApiError && error.status === 409
+            updateForm({ validation: error instanceof ApiError && error.status === 409
                 ? error.message
-                : error instanceof Error ? error.message : "Unable to retry the Google Calendar update.")
+                : error instanceof Error ? error.message : "Unable to retry the Google Calendar update." })
         }
     }
 
@@ -169,47 +185,59 @@ export function InterviewAppointmentManager({
     </div>
 
     return <>
-        {!hideTrigger && (triggerOnly ? <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onManage ? onManage() : setOpen(true)} disabled={!state.can_manage}>Manage</Button> : <div className={compact ? "flex items-center justify-between gap-3 rounded-lg border px-3 py-2" : "flex items-center justify-between gap-3"}>
+        {!hideTrigger && (triggerOnly ? <Button size="sm" variant="outline" className="h-7 text-xs" onClick={openManager} disabled={!state.can_manage}>Manage</Button> : <div className={compact ? "flex items-center justify-between gap-3 rounded-lg border px-3 py-2" : "flex items-center justify-between gap-3"}>
             <div className="min-w-0"><span className="text-sm font-medium">Interview appointment</span>{row}</div>
-            <Button size="sm" variant="outline" onClick={() => onManage ? onManage() : setOpen(true)} disabled={!state.can_manage}>Manage</Button>
+            <Button size="sm" variant="outline" onClick={openManager} disabled={!state.can_manage}>Manage</Button>
         </div>)}
-        {renderDialog ? <Dialog open={open} onOpenChange={(next) => !mutation.isPending && setOpen(next)}>
-            <DialogContent>
-                <DialogHeader><DialogTitle>{view === "manage" ? "Manage appointment" : view === "cancel" ? "Cancel appointment?" : active ? "Reschedule interview" : "Schedule interview"}</DialogTitle></DialogHeader>
+        {renderDialog ? <Dialog open={open} onOpenChange={setDialogOpen}>
+            <DialogContent className={`flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl p-0 ${view === "book" ? "sm:max-w-2xl" : "sm:max-w-lg"}`}>
+                <DialogHeader className="shrink-0 border-b px-5 py-4 pr-12"><DialogTitle>{view === "manage" ? "Manage appointment" : view === "cancel" ? "Cancel appointment?" : active ? "Reschedule interview" : "Schedule interview"}</DialogTitle></DialogHeader>
+                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
                 {view === "manage" ? <div className="space-y-5">
                     {row}
-                    {externalSyncStatus === "pending" ? <p role="status" className="text-sm text-muted-foreground">Interview saved. Updating Google Calendar…</p> : null}
-                    {externalSyncStatus === "completed" ? <p role="status" className="text-sm text-muted-foreground">Google Calendar is up to date.</p> : null}
-                    {externalSyncStatus === "failed" ? <p role="alert" className="text-sm text-destructive">Interview saved, but Google Calendar could not be updated. Retry the update.</p> : null}
-                    {externalSyncStatus === "conflict" ? <p role="alert" className="text-sm text-destructive">Google Calendar changed. This appointment needs manual review before further CRM changes.</p> : null}
-                    {externalSyncStatus === "unlinked" ? <p role="alert" className="text-sm text-destructive">Google Calendar event ownership could not be verified. This appointment needs manual review before further CRM changes.</p> : null}
+                    {appointment?.scheduling ? <SchedulingSyncState appointment={appointment} onUpdated={() => void query.refetch()} /> : <>
+                        {externalSyncStatus === "pending" ? <p role="status" className="text-sm text-muted-foreground">Interview saved. Updating Google Calendar…</p> : null}
+                        {externalSyncStatus === "completed" ? <p role="status" className="text-sm text-muted-foreground">Google Calendar is up to date.</p> : null}
+                        {externalSyncStatus === "failed" ? <p role="alert" className="text-sm text-destructive">Interview saved, but Google Calendar could not be updated. Retry the update.</p> : null}
+                        {externalSyncStatus === "conflict" ? <p role="alert" className="text-sm text-destructive">Google Calendar changed. This appointment needs manual review before further CRM changes.</p> : null}
+                        {externalSyncStatus === "unlinked" ? <p role="alert" className="text-sm text-destructive">Google Calendar event ownership could not be verified. This appointment needs manual review before further CRM changes.</p> : null}
+                    </>}
                     {!state.can_manage ? <p className="text-sm text-muted-foreground">You do not have permission to manage this appointment.</p> : null}
                 </div> : null}
                 {view === "book" ? <div className="space-y-4">
-                    <div className="space-y-2"><Label htmlFor="appointment-at">Interview date and time</Label><Input id="appointment-at" type="datetime-local" value={dateTime} onChange={(event) => setDateTime(event.target.value)} /></div>
-                    <p className="text-xs text-muted-foreground">Your timezone: {Intl.DateTimeFormat().resolvedOptions().timeZone}</p>
-                    {state.scheduled_stage && state.reschedule_stage && stageId === state.reschedule_stage.id ? <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 rounded-lg border bg-muted/30 p-3"><StageBadge stage={state.reschedule_stage} className="w-full min-w-0 whitespace-normal text-center" /><span aria-hidden>→</span><StageBadge stage={state.scheduled_stage} className="w-full min-w-0 whitespace-normal text-center" /></div> : null}
-                    {state.scheduled_stage ? <p className="text-sm text-muted-foreground">{stageId === state.reschedule_stage?.id ? `Stage will change to ${state.scheduled_stage.label} when you confirm.` : "Stage will stay unchanged."}</p> : null}
+                    <SchedulingTimePicker
+                        idPrefix="interview-appointment"
+                        date={date}
+                        onDateChange={(next) => updateForm({ date: next, selectedStart: null })}
+                        timezone={timezone}
+                        slots={slotsQuery.data?.slots}
+                        selectedStart={selectedStart}
+                        onSelectStart={(start) => updateForm({ selectedStart: start })}
+                        loading={slotsQuery.isLoading || slotsQuery.isFetching}
+                        error={slotsQuery.isError ? "Available times could not be loaded." : undefined}
+                        onRetry={() => void slotsQuery.refetch()}
+                        override={{ enabled: overrideAvailability, onEnabledChange: (enabled) => updateForm({ overrideAvailability: enabled }), dateTime, onDateTimeChange: (next) => updateForm({ dateTime: next }), reason: overrideReason, onReasonChange: (next) => updateForm({ overrideReason: next }) }}
+                    />
                     {!state.scheduled_stage ? <p role="alert" className="text-sm text-destructive">Interview Scheduled is not configured. Ask an administrator to finish the rollout.</p> : null}
                 </div> : null}
                 {view === "cancel" ? <div className="space-y-4">
                     {appointment ? <p className="font-medium">{formatAppointment(appointment)}</p> : null}
-                    {state.reschedule_stage && stageId !== state.reschedule_stage.id ? <RadioGroup value={cancelChoice} onValueChange={setCancelChoice} aria-label="After cancellation">
+                    {state.reschedule_stage && stageId !== state.reschedule_stage.id ? <RadioGroup value={cancelChoice} onValueChange={(value) => updateForm({ cancelChoice: value })} aria-label="After cancellation">
                         <Label className="flex items-center gap-3 rounded-lg border p-3"><RadioGroupItem value="move" />Move to <StageBadge stage={state.reschedule_stage} /></Label>
                         <Label className="flex items-center gap-3 rounded-lg border p-3"><RadioGroupItem value="keep" />Keep current stage</Label>
                     </RadioGroup> : null}
-                    <p className="text-sm text-muted-foreground">{state.reschedule_stage && stageId !== state.reschedule_stage.id && cancelChoice === "move" ? `Stage will change to ${state.reschedule_stage.label} when you confirm.` : "Stage will stay unchanged."}</p>
                 </div> : null}
                 {validation ? <p role="alert" className="text-sm text-destructive">{validation}</p> : null}
-                <DialogFooter className={view === "manage" ? "flex-row sm:justify-start" : undefined}>
+                </div>
+                <DialogFooter className={view === "manage" ? "shrink-0 border-t px-5 py-4 flex-row sm:justify-start" : "shrink-0 border-t px-5 py-4"}>
                     {view === "manage" ? <>
-                        <Button className="h-auto min-h-9 min-w-0 shrink whitespace-normal" disabled={!state.can_manage || syncUnresolved} onClick={() => setView("book")}>{active ? "Reschedule" : "Schedule appointment"}</Button>
-                        {active ? <Button className="h-auto min-h-9 min-w-0 shrink whitespace-normal" variant="outline" disabled={!state.can_manage || syncUnresolved} onClick={() => setView("cancel")}>Cancel appointment</Button> : null}
-                        {externalSyncStatus === "failed" && appointment ? <Button variant="outline" disabled={!state.can_manage || retryGoogleSync.isPending} onClick={() => void retrySync()}>{retryGoogleSync.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}Retry Google update</Button> : null}
-                        <Button className="ml-auto" variant="outline" onClick={() => setOpen(false)}>Done</Button>
-                    </> : <Button variant="outline" disabled={mutation.isPending} onClick={() => setView("manage")}>Back</Button>}
-                    {view === "book" ? <Button disabled={mutation.isPending || !state.can_manage || !state.scheduled_stage || syncUnresolved} onClick={() => void submit(active ? "reschedule" : "schedule", stageId === state.reschedule_stage?.id)}>{mutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}{stageId === state.reschedule_stage?.id ? active ? "Reschedule & update stage" : "Schedule & update stage" : active ? "Reschedule" : "Schedule"}</Button> : null}
-                    {view === "cancel" ? <Button variant="destructive" disabled={mutation.isPending || !state.can_manage || syncUnresolved} onClick={() => void submit("cancel", Boolean(state.reschedule_stage) && cancelChoice === "move" && stageId !== state.reschedule_stage?.id)}>Confirm cancellation</Button> : null}
+                        <Button className="h-auto min-h-9 min-w-0 shrink whitespace-normal" disabled={!canOpenBooking} onClick={() => updateForm({ view: "book", date: schedulingDateKey(active && appointment ? appointment.scheduled_start : new Date().toISOString(), timezone), selectedStart: null, dateTime: localInputValue(active ? appointment?.scheduled_start : undefined), overrideAvailability: false, overrideReason: "" })}>{active ? "Reschedule" : "Schedule appointment"}</Button>
+                        {active ? <Button className="h-auto min-h-9 min-w-0 shrink whitespace-normal" variant="outline" disabled={!state.can_manage || legacySyncUnresolved || !schedulingCanCancel(appointment?.scheduling)} onClick={() => updateForm({ view: "cancel" })}>Cancel appointment</Button> : null}
+                        {!appointment?.scheduling && externalSyncStatus === "failed" && appointment ? <Button variant="outline" disabled={!state.can_manage || retryGoogleSync.isPending} onClick={() => void retrySync()}>{retryGoogleSync.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}Retry Google update</Button> : null}
+                        <Button className="ml-auto" variant="outline" onClick={() => setDialogOpen(false)}>Done</Button>
+                    </> : <Button variant="outline" disabled={mutation.isPending} onClick={() => updateForm({ view: "manage" })}>Back</Button>}
+                    {view === "book" ? <Button disabled={mutation.isPending || !canOpenBooking || (overrideAvailability && !overrideReason.trim())} onClick={() => void submit(active ? "reschedule" : "schedule", stageId === state.reschedule_stage?.id)}>{mutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}{stageId === state.reschedule_stage?.id ? active ? "Reschedule & update stage" : "Schedule & update stage" : active ? "Reschedule" : "Schedule"}</Button> : null}
+                    {view === "cancel" ? <Button variant="destructive" disabled={mutation.isPending || !state.can_manage || legacySyncUnresolved || !schedulingCanCancel(appointment?.scheduling)} onClick={() => void submit("cancel", Boolean(state.reschedule_stage) && cancelChoice === "move" && stageId !== state.reschedule_stage?.id)}>Cancel appointment</Button> : null}
                 </DialogFooter>
             </DialogContent>
         </Dialog> : null}

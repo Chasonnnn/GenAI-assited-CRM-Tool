@@ -1,17 +1,27 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { InterviewAppointmentManager, localDateTimeToIso } from "@/components/surrogates/InterviewAppointmentManager"
+import { formatSchedulingDate, formatSchedulingTime, schedulingTimezoneLabel } from "@/lib/scheduling-time"
 import type { InterviewAppointmentState } from "@/lib/api/interview-appointment"
 
 const mutateAsync = vi.fn()
 const retryGoogleSync = vi.fn()
 const refetch = vi.fn()
 const useInterviewAppointment = vi.fn()
+const slotStart = "2026-09-21T14:30:00.000Z"
+const slotEnd = "2026-09-21T15:00:00.000Z"
+const refetchSlots = vi.fn()
 
 vi.mock("@/lib/hooks/use-interview-appointment", () => ({
     useInterviewAppointment: (...args: unknown[]) => useInterviewAppointment(...args),
+    useInterviewSlots: () => ({ data: { slots: [{ start: slotStart, end: slotEnd }] }, isLoading: false, isFetching: false, isError: false, refetch: refetchSlots }),
     useManageInterviewAppointment: () => ({ mutateAsync, isPending: false }),
     useRetryInterviewAppointmentGoogleSync: () => ({ mutateAsync: retryGoogleSync, isPending: false }),
+}))
+
+vi.mock("@/lib/hooks/use-appointments", () => ({
+    useRetryAppointmentGoogleSync: () => ({ mutate: vi.fn(), isPending: false }),
+    useResolveAppointmentGoogleConflict: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 const scheduledStage = { id: "interview-scheduled", label: "Interview Scheduled", color: "#0f766e" }
@@ -55,6 +65,7 @@ describe("InterviewAppointmentManager", () => {
         retryGoogleSync.mockReset().mockResolvedValue({})
         refetch.mockReset()
         useInterviewAppointment.mockReset()
+        refetchSlots.mockReset()
     })
 
     it("groups Reschedule, Cancel appointment, and Done in the same action row", async () => {
@@ -75,8 +86,7 @@ describe("InterviewAppointmentManager", () => {
         await openCancel()
 
         expect(screen.getByRole("radio", { name: /move to reschedule needed/i })).toBeChecked()
-        expect(screen.getByText("Stage will change to Reschedule Needed when you confirm.")).toBeInTheDocument()
-        fireEvent.click(screen.getByRole("button", { name: "Confirm cancellation" }))
+        fireEvent.click(screen.getByRole("button", { name: "Cancel appointment" }))
 
         await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({
             action: "cancel",
@@ -92,8 +102,7 @@ describe("InterviewAppointmentManager", () => {
         await openCancel()
 
         fireEvent.click(screen.getByRole("radio", { name: "Keep current stage" }))
-        expect(screen.getByText("Stage will stay unchanged.")).toBeInTheDocument()
-        fireEvent.click(screen.getByRole("button", { name: "Confirm cancellation" }))
+        fireEvent.click(screen.getByRole("button", { name: "Cancel appointment" }))
 
         await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
             action: "cancel",
@@ -105,17 +114,14 @@ describe("InterviewAppointmentManager", () => {
         renderManager(activeState({ appointment: null }), rescheduleStage.id)
         fireEvent.click(screen.getByRole("button", { name: "Manage" }))
         fireEvent.click(await screen.findByRole("button", { name: "Schedule appointment" }))
+        expect(screen.getByRole("dialog")).toHaveClass("sm:max-w-2xl")
 
-        expect(screen.getByText("Reschedule Needed")).toBeInTheDocument()
-        expect(screen.getByText("Interview Scheduled")).toBeInTheDocument()
-        expect(screen.getByText("Stage will change to Interview Scheduled when you confirm.")).toBeInTheDocument()
-        const input = screen.getByLabelText("Interview date and time")
-        fireEvent.change(input, { target: { value: "2026-09-21T14:30" } })
+        fireEvent.click(screen.getByRole("button", { name: /2:30 PM|10:30 AM|7:30 AM|14:30/ }))
         fireEvent.click(screen.getByRole("button", { name: "Schedule & update stage" }))
 
         await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({
             action: "schedule",
-            scheduled_start: localDateTimeToIso("2026-09-21T14:30"),
+            scheduled_start: slotStart,
             move_stage: true,
             expected_stage_id: rescheduleStage.id,
             expected_appointment_id: null,
@@ -129,10 +135,12 @@ describe("InterviewAppointmentManager", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Reschedule" }))
 
         fireEvent.click(screen.getByRole("button", { name: "Reschedule" }))
-        expect(screen.getByRole("alert")).toHaveTextContent("Choose a different appointment time.")
+        expect(screen.getByRole("alert")).toHaveTextContent("Choose a valid date and time.")
         expect(mutateAsync).not.toHaveBeenCalled()
 
-        fireEvent.change(screen.getByLabelText("Interview date and time"), { target: { value: "2026-09-18T08:00" } })
+        fireEvent.click(screen.getByRole("button", { name: "Choose a time outside availability" }))
+        fireEvent.change(screen.getByLabelText(/Date and time/), { target: { value: "2026-09-18T08:00" } })
+        fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: "Staff override" } })
         fireEvent.click(screen.getByRole("button", { name: "Reschedule" }))
         expect(screen.getByRole("alert")).toHaveTextContent("Choose a future date and time.")
         expect(mutateAsync).not.toHaveBeenCalled()
@@ -142,8 +150,9 @@ describe("InterviewAppointmentManager", () => {
         renderManager(activeState(), rescheduleStage.id)
         fireEvent.click(screen.getByRole("button", { name: "Manage" }))
         fireEvent.click(await screen.findByRole("button", { name: "Reschedule" }))
-        expect(screen.getByText("Interview Scheduled")).toHaveStyle({ backgroundColor: scheduledStage.color })
-        fireEvent.change(screen.getByLabelText("Interview date and time"), { target: { value: "2026-09-22T10:15" } })
+        fireEvent.click(screen.getByRole("button", { name: "Choose a time outside availability" }))
+        fireEvent.change(screen.getByLabelText(/Date and time/), { target: { value: "2026-09-22T10:15" } })
+        fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: "Staff override" } })
         fireEvent.click(screen.getByRole("button", { name: "Reschedule & update stage" }))
         await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
             action: "reschedule", move_stage: true, expected_appointment_id: appointment.id,
@@ -152,15 +161,16 @@ describe("InterviewAppointmentManager", () => {
 
     it("uses the viewer timezone for both the summary and editor, not the client timezone", async () => {
         renderManager(activeState())
-        const expected = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(appointment.scheduled_start))
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+        const expected = `${formatSchedulingDate(appointment.scheduled_start, timezone)} · ${formatSchedulingTime(appointment.scheduled_start, timezone)} ${schedulingTimezoneLabel(timezone)}`
         expect(screen.getByText(expected)).toBeInTheDocument()
         fireEvent.click(screen.getByRole("button", { name: "Manage" }))
         fireEvent.click(await screen.findByRole("button", { name: "Reschedule" }))
-        expect(screen.getByText(`Your timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)).toBeInTheDocument()
+        expect(screen.getByText(timezone.replaceAll("_", " "))).toBeInTheDocument()
         const local = new Date(appointment.scheduled_start)
         const pad = (value: number) => String(value).padStart(2, "0")
-        expect(screen.getByLabelText("Interview date and time")).toHaveValue(`2026-09-20T${pad(local.getHours())}:${pad(local.getMinutes())}`)
-        expect(screen.getByText("Stage will stay unchanged.")).toBeInTheDocument()
+        expect(screen.queryByLabelText("Interview date and time")).not.toBeInTheDocument()
+        expect(localDateTimeToIso(`2026-09-20T${pad(local.getHours())}:${pad(local.getMinutes())}`)).not.toBeNull()
     })
 
     it("disables management for read-only users", () => {
@@ -206,7 +216,7 @@ describe("InterviewAppointmentManager", () => {
         mutateAsync.mockRejectedValueOnce(new Error("Appointment was changed by another user."))
         renderManager(activeState())
         await openCancel()
-        fireEvent.click(screen.getByRole("button", { name: "Confirm cancellation" }))
+        fireEvent.click(screen.getByRole("button", { name: "Cancel appointment" }))
 
         expect(await screen.findByRole("alert")).toHaveTextContent("Appointment was changed by another user.")
         expect(screen.getByRole("dialog")).toBeInTheDocument()
@@ -275,6 +285,25 @@ describe("InterviewAppointmentManager", () => {
         expect(screen.getByRole("button", { name: "Schedule appointment" })).toBeDisabled()
     })
 
+    it("allows a new appointment after a cancelled V2 appointment finishes Google delivery", async () => {
+        renderManager(activeState({
+            appointment: {
+                ...appointment,
+                status: "cancelled",
+                scheduling: {
+                    revision: 4,
+                    capabilities: { can_reschedule: false, can_cancel: false, can_retry_google_sync: false, can_resolve_google_conflict: false },
+                    google_sync: { state: "completed", linked: true, error_code: null, conflict: null },
+                },
+            },
+            external_sync_status: "completed",
+        }), rescheduleStage.id)
+        fireEvent.click(screen.getByRole("button", { name: "Manage" }))
+
+        expect(await screen.findByText("Google Calendar synced")).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Schedule appointment" })).toBeEnabled()
+    })
+
     it("blocks lifecycle actions while delivery failed but keeps the failed-only retry enabled", async () => {
         renderManager(activeState({ external_sync_status: "failed" }))
         fireEvent.click(screen.getByRole("button", { name: "Manage" }))
@@ -283,5 +312,39 @@ describe("InterviewAppointmentManager", () => {
         expect(screen.getByRole("button", { name: "Reschedule" })).toBeDisabled()
         expect(screen.getByRole("button", { name: "Cancel appointment" })).toBeDisabled()
         expect(screen.getByRole("button", { name: "Retry Google update" })).toBeEnabled()
+    })
+
+    it("uses V2 cancellation capability during pending Google delivery", async () => {
+        renderManager(activeState({
+            appointment: {
+                ...appointment,
+                scheduling: {
+                    revision: 3,
+                    capabilities: { can_reschedule: false, can_cancel: true, can_retry_google_sync: false, can_resolve_google_conflict: false },
+                    google_sync: { state: "pending", linked: true, error_code: null, conflict: null },
+                },
+            },
+            external_sync_status: "pending",
+        }))
+        fireEvent.click(screen.getByRole("button", { name: "Manage" }))
+        expect(await screen.findByRole("button", { name: "Cancel appointment" })).toBeEnabled()
+        fireEvent.click(screen.getByRole("button", { name: "Cancel appointment" }))
+        expect(screen.getAllByRole("button", { name: "Cancel appointment" }).at(-1)).toBeEnabled()
+    })
+
+    it("keeps V2 cancellation disabled when the server denies it", async () => {
+        renderManager(activeState({
+            appointment: {
+                ...appointment,
+                scheduling: {
+                    revision: 3,
+                    capabilities: { can_reschedule: false, can_cancel: false, can_retry_google_sync: false, can_resolve_google_conflict: false },
+                    google_sync: { state: "pending", linked: true, error_code: null, conflict: null },
+                },
+            },
+            external_sync_status: "pending",
+        }))
+        fireEvent.click(screen.getByRole("button", { name: "Manage" }))
+        expect(await screen.findByRole("button", { name: "Cancel appointment" })).toBeDisabled()
     })
 })

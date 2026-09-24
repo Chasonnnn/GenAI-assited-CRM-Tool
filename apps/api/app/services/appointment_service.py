@@ -35,7 +35,13 @@ from app.db.models import (
     User,
     UserIntegration,
 )
-from app.schemas.appointment import AppointmentListItem, AppointmentRead
+from app.schemas.appointment import (
+    AppointmentCapabilities,
+    AppointmentGoogleSyncRead,
+    AppointmentListItem,
+    AppointmentRead,
+    AppointmentSchedulingRead,
+)
 from app.services import appointment_integrations
 from app.utils.pagination import paginate_query_by_offset
 
@@ -409,8 +415,10 @@ def get_appointment_context(
 def to_appointment_read(
     appt: Appointment,
     context: dict[str, dict[UUID, str | None]],
+    scheduling: AppointmentSchedulingRead | None = None,
 ) -> AppointmentRead:
     """Convert Appointment model to read schema."""
+    replay = getattr(appt, "_scheduling_replay_result", None) or {}
     return AppointmentRead(
         id=appt.id,
         user_id=appt.user_id,
@@ -421,13 +429,17 @@ def to_appointment_read(
         client_phone=appt.client_phone,
         client_timezone=appt.client_timezone,
         client_notes=appt.client_notes,
-        scheduled_start=appt.scheduled_start,
-        scheduled_end=appt.scheduled_end,
+        scheduled_start=datetime.fromisoformat(replay["scheduled_start"])
+        if "scheduled_start" in replay
+        else appt.scheduled_start,
+        scheduled_end=datetime.fromisoformat(replay["scheduled_end"])
+        if "scheduled_end" in replay
+        else appt.scheduled_end,
         duration_minutes=appt.duration_minutes,
         meeting_mode=appt.meeting_mode,
         meeting_location=appt.meeting_location,
         dial_in_number=appt.dial_in_number,
-        status=appt.status,
+        status=replay.get("status", appt.status),
         pending_expires_at=appt.pending_expires_at,
         approved_at=appt.approved_at,
         approved_by_user_id=appt.approved_by_user_id,
@@ -450,12 +462,14 @@ def to_appointment_read(
         intended_parent_name=context["intended_parent_names"].get(appt.intended_parent_id),
         created_at=appt.created_at,
         updated_at=appt.updated_at,
+        scheduling=scheduling,
     )
 
 
 def to_appointment_list_item(
     appt: Appointment,
     context: dict[str, dict[UUID, str | None]],
+    scheduling: AppointmentSchedulingRead | None = None,
 ) -> AppointmentListItem:
     """Convert Appointment model to list item schema."""
     return AppointmentListItem(
@@ -483,6 +497,73 @@ def to_appointment_list_item(
         intended_parent_id=appt.intended_parent_id,
         intended_parent_name=context["intended_parent_names"].get(appt.intended_parent_id),
         created_at=appt.created_at,
+        scheduling=scheduling,
+    )
+
+
+def scheduling_read(
+    db: Session,
+    appointment: Appointment,
+    *,
+    can_edit: bool,
+    public: bool = False,
+) -> AppointmentSchedulingRead:
+    """Project server-authorized scheduling actions without provider credentials."""
+    from app.services import appointment_google_sync_service
+
+    state = appointment_google_sync_service.status(db, appointment)
+    if state is None:
+        state = appointment.google_sync_state
+    replay = getattr(appointment, "_scheduling_replay_result", None) or {}
+    has_destination = False
+    if state == "unlinked":
+        from app.services import calendar_binding_service
+
+        has_destination = (
+            calendar_binding_service.get_booking_binding(
+                db, appointment.organization_id, appointment.user_id
+            )
+            is not None
+        )
+    active = appointment.status in {
+        AppointmentStatus.PENDING.value,
+        AppointmentStatus.CONFIRMED.value,
+    }
+    legacy_google_link = bool(appointment.google_event_id and appointment.origin != "crm")
+    return AppointmentSchedulingRead(
+        revision=replay.get("revision", appointment.revision),
+        capabilities=AppointmentCapabilities(
+            can_reschedule=can_edit
+            and active
+            and not legacy_google_link
+            and appointment.meeting_mode != MeetingMode.ZOOM.value
+            and state not in {"pending", "failed", "conflict", "unlinked"},
+            can_cancel=can_edit
+            and active
+            and not legacy_google_link
+            and appointment.meeting_mode != MeetingMode.ZOOM.value
+            and not (state == "unlinked" and appointment.google_event_id)
+            and state not in {"failed", "conflict"},
+            can_retry_google_sync=can_edit
+            and not public
+            and not legacy_google_link
+            and (state == "failed" or (state == "unlinked" and has_destination)),
+            can_resolve_google_conflict=can_edit
+            and not public
+            and not legacy_google_link
+            and state == "conflict"
+            and appointment.google_conflict is not None,
+        ),
+        google_sync=AppointmentGoogleSyncRead(
+            state=state,
+            linked=bool(appointment.google_event_id),
+            error_code=(
+                "legacy_ownership_requires_review"
+                if legacy_google_link
+                else appointment.google_sync_error
+            ),
+            conflict=appointment.google_conflict if not public else None,
+        ),
     )
 
 
@@ -802,6 +883,7 @@ def get_available_slots(
     duration_minutes: int | None = None,
     buffer_before_minutes: int | None = None,
     buffer_after_minutes: int | None = None,
+    appointment_type: AppointmentType | None = None,
 ) -> list[TimeSlot]:
     """
     Calculate available time slots for booking.
@@ -813,14 +895,23 @@ def get_available_slots(
     - Tasks with scheduled times
     - (Future: Google Calendar freebusy)
     """
-    appt_type = (
-        db.query(AppointmentType)
-        .filter(
-            AppointmentType.id == query.appointment_type_id,
-            AppointmentType.organization_id == query.org_id,
+    if appointment_type is not None:
+        if (
+            appointment_type.id != query.appointment_type_id
+            or appointment_type.organization_id != query.org_id
+            or appointment_type.user_id != query.user_id
+        ):
+            raise ValueError("Appointment type mismatch")
+        appt_type = appointment_type
+    else:
+        appt_type = (
+            db.query(AppointmentType)
+            .filter(
+                AppointmentType.id == query.appointment_type_id,
+                AppointmentType.organization_id == query.org_id,
+            )
+            .first()
         )
-        .first()
-    )
 
     if not appt_type or not appt_type.is_active:
         return []
@@ -926,6 +1017,36 @@ def get_available_slots(
     client_start_utc = client_start.astimezone(UTC)
     client_end_utc = client_end.astimezone(UTC)
     slots = [slot for slot in slots if client_start_utc <= slot.start <= client_end_utc]
+
+    from app.core.config import settings
+
+    if settings.SCHEDULING_V2_ENABLED and slots:
+        from app.services import calendar_binding_service
+
+        busy = calendar_binding_service.busy_intervals(
+            db,
+            query.org_id,
+            query.user_id,
+            min(slot.start for slot in slots),
+            max(slot.end for slot in slots),
+            exclude_appointment=(
+                db.get(Appointment, exclude_appointment_id) if exclude_appointment_id else None
+            ),
+        )
+        intervals = [
+            (interval[0], interval[1])
+            if isinstance(interval, tuple)
+            else (
+                interval["start"] if isinstance(interval, dict) else interval.start,
+                interval["end"] if isinstance(interval, dict) else interval.end,
+            )
+            for interval in busy
+        ]
+        slots = [
+            slot
+            for slot in slots
+            if all(slot.end <= start or slot.start >= end for start, end in intervals)
+        ]
 
     return slots
 
@@ -1127,6 +1248,12 @@ def expire_pending_appointments(
     user_id: UUID | None = None,
 ) -> int:
     """Expire pending appointments past their approval window."""
+    from app.core.config import settings
+
+    if settings.SCHEDULING_V2_ENABLED:
+        from app.services import scheduling_v2_service
+
+        return scheduling_v2_service.expire_pending(db, org_id=org_id, user_id=user_id)
     now = datetime.now(UTC)
     query = db.query(Appointment).filter(
         Appointment.status == AppointmentStatus.PENDING.value,
@@ -1168,6 +1295,12 @@ def create_booking(
     idempotency_key: str | None = None,
     meeting_mode: str | None = None,
     record_links: dict | None = None,
+    expected_revision: int | None = None,
+    request_id: str | None = None,
+    actor_scope: str | None = None,
+    actor_user_id: UUID | None = None,
+    override_availability: bool = False,
+    override_reason: str | None = None,
 ) -> Appointment:
     """
     Create a new appointment booking (pending approval).
@@ -1177,7 +1310,34 @@ def create_booking(
     - Token generation for self-service
     - Pending expiry (60 min TTL)
     """
-    expire_pending_appointments(db, org_id=org_id, user_id=user_id)
+    from app.core.config import settings
+
+    if settings.SCHEDULING_V2_ENABLED:
+        from app.services import scheduling_v2_service
+
+        return scheduling_v2_service.create_booking(
+            db,
+            org_id=org_id,
+            user_id=user_id,
+            appointment_type_id=appointment_type_id,
+            client_name=client_name,
+            client_email=client_email,
+            client_phone=client_phone,
+            client_timezone=client_timezone,
+            scheduled_start=scheduled_start,
+            client_notes=client_notes,
+            idempotency_key=idempotency_key,
+            meeting_mode=meeting_mode,
+            record_links=record_links,
+            actor_scope=actor_scope or scheduling_v2_service.staff_actor_scope(user_id),
+            actor_user_id=actor_user_id,
+            request_id=request_id,
+            expected_revision=expected_revision,
+            override_availability=override_availability,
+            override_reason=override_reason,
+        )
+    if not settings.SCHEDULING_V2_ENABLED:
+        expire_pending_appointments(db, org_id=org_id, user_id=user_id)
 
     # Check idempotency
     if idempotency_key:
@@ -1301,6 +1461,8 @@ def approve_booking(
     db: Session,
     appointment: Appointment,
     approved_by_user_id: UUID,
+    expected_revision: int | None = None,
+    request_id: str | None = None,
 ) -> Appointment:
     """
     Approve a pending appointment.
@@ -1311,6 +1473,18 @@ def approve_booking(
     - Schedules reminder email
     - Clears pending expiry
     """
+    from app.core.config import settings
+
+    if settings.SCHEDULING_V2_ENABLED:
+        from app.services import scheduling_v2_service
+
+        return scheduling_v2_service.approve_booking(
+            db,
+            appointment,
+            approved_by_user_id=approved_by_user_id,
+            expected_revision=expected_revision,
+            request_id=request_id,
+        )
     from app.services import appointment_email_service
 
     if appointment.status != AppointmentStatus.PENDING.value:
@@ -1440,12 +1614,41 @@ def reschedule_booking(
     by_client: bool = False,
     token: str | None = None,
     actor_user_id: UUID | None = None,
+    expected_revision: int | None = None,
+    request_id: str | None = None,
+    actor_scope: str | None = None,
+    override_availability: bool = False,
+    override_reason: str | None = None,
 ) -> Appointment:
     """Reschedule an appointment to a new time.
 
     For Zoom appointments, creates a new meeting link.
     For Google Meet, updates the calendar event.
+    Legacy synchronous provider creation remains outside the row-lock guarantee.
     """
+    from app.core.config import settings
+
+    if settings.SCHEDULING_V2_ENABLED and not appointment.zoom_meeting_id:
+        from app.services import scheduling_v2_service
+
+        return scheduling_v2_service.reschedule_booking(
+            db,
+            appointment,
+            new_start,
+            by_client=by_client,
+            token=token,
+            actor_user_id=actor_user_id,
+            expected_revision=expected_revision,
+            request_id=request_id,
+            actor_scope=actor_scope
+            or (
+                scheduling_v2_service.public_actor_scope(token or "")
+                if by_client
+                else scheduling_v2_service.staff_actor_scope(actor_user_id or appointment.user_id)
+            ),
+            override_availability=override_availability,
+            override_reason=override_reason,
+        )
     # Validate token if client-initiated
     if by_client:
         if not token or appointment.reschedule_token != token:
@@ -1497,31 +1700,36 @@ def reschedule_booking(
     if not any(slot.start == new_start for slot in slots):
         raise ValueError("Selected time is no longer available")
 
-    google_link = None
-    if appointment.google_event_id and not appointment.zoom_meeting_id:
-        from app.services import appointment_google_sync_service
+    from app.services import appointment_command_service
 
-        expected_revision = appointment.google_sync_revision
-        expected_account = appointment.google_account_email
-        expected_calendar = appointment.google_calendar_id
-        google_link = appointment_google_sync_service.prepare_link(db, appointment)
-        db.refresh(appointment, with_for_update=True)
-        if (
-            appointment.status
-            not in {AppointmentStatus.PENDING.value, AppointmentStatus.CONFIRMED.value}
-            or appointment.google_sync_revision != expected_revision
-            or appointment.google_account_email != expected_account
-            or appointment.google_calendar_id != expected_calendar
-            or appointment.google_event_id != google_link.event_id
-            or appointment.scheduled_start != google_link.start
-            or appointment.scheduled_end != google_link.end
-        ):
-            raise ValueError("Appointment changed; refresh and try again")
-
-    appointment.scheduled_start = new_start
-    appointment.scheduled_end = new_end
-    if appointment.status == AppointmentStatus.PENDING.value:
-        appointment.pending_expires_at = datetime.now(UTC) + timedelta(minutes=60)
+    prepared = appointment_command_service.prepare_change(
+        db,
+        appointment,
+        verify_google_link=bool(appointment.google_event_id and not appointment.zoom_meeting_id),
+    )
+    legacy_provider_write = (
+        appointment.status == AppointmentStatus.CONFIRMED.value
+        and (
+            appointment.meeting_mode == MeetingMode.ZOOM.value
+            or (
+                appointment.meeting_mode == MeetingMode.GOOGLE_MEET.value
+                and not appointment.google_event_id
+            )
+        )
+        and prepared.google_link is None
+    )
+    if legacy_provider_write:
+        # This path still creates a provider resource synchronously. Keep its
+        # existing no-row-lock behavior until creation has a durable job path.
+        db.refresh(appointment)
+        appointment_command_service.validate_change(
+            appointment, prepared, stale_message="Appointment changed; refresh and try again"
+        )
+    else:
+        appointment = appointment_command_service.lock_and_validate(
+            db, prepared, stale_message="Appointment changed; refresh and try again"
+        )
+    google_link = prepared.google_link
 
     # Regenerate meeting link for Zoom appointments (confirmed only)
     meeting_mode = appointment.meeting_mode
@@ -1535,6 +1743,8 @@ def reschedule_booking(
             .first()
         )
         appt_type_name = appt_type.name if appt_type else "Appointment"
+        appointment.scheduled_start = new_start
+        appointment.scheduled_end = new_end
         appointment_integrations.regenerate_zoom_meeting_on_reschedule(
             db,
             appointment,
@@ -1556,6 +1766,8 @@ def reschedule_booking(
             "Google Meet link creation failed for appointment owner "
             f"{appointment.user_id}. Please reconnect Google Calendar for appointment owner account."
         )
+        appointment.scheduled_start = new_start
+        appointment.scheduled_end = new_end
         try:
             appointment_integrations.create_google_meet_link(db, appointment, appt_type_name)
         except ValueError as exc:
@@ -1565,35 +1777,30 @@ def reschedule_booking(
                 f"{owner_context_message} Root cause: Google Meet link was not generated."
             )
 
-    # Rotate tokens after reschedule
-    appointment.reschedule_token = generate_token()
-    appointment.cancel_token = generate_token()
-    token_expires = new_end + timedelta(days=7)
-    appointment.reschedule_token_expires_at = token_expires
-    appointment.cancel_token_expires_at = token_expires
-
-    from app.services import appointment_email_service
-
-    appointment_email_service.cancel_queued_appointment_emails(
+    appointment_command_service.apply_reschedule(
         db,
         appointment,
-        reason_type="appointment_rescheduled",
-        reason_message="Appointment was rescheduled",
+        prepared,
+        new_start=new_start,
+        new_end=new_end,
+        make_token=generate_token,
+        update_pending_expiry=True,
+        pending_expires_at=datetime.now(UTC) + timedelta(minutes=60),
+        email_reason_type="appointment_rescheduled",
+        email_reason_message="Appointment was rescheduled",
         email_types=(
             AppointmentEmailType.REQUEST_RECEIVED,
             AppointmentEmailType.CONFIRMED,
             AppointmentEmailType.RESCHEDULED,
             AppointmentEmailType.REMINDER,
         ),
-        commit=False,
     )
+
+    from app.services import appointment_email_service
+
     _audit_record_appointment(
         db, appointment, AuditEventType.APPOINTMENT_RESCHEDULED, actor_user_id
     )
-    if google_link:
-        appointment_google_sync_service.enqueue(
-            db, appointment, action="reschedule", link=google_link
-        )
     db.commit()
     db.refresh(appointment)
 
@@ -1655,11 +1862,35 @@ def cancel_booking(
     by_client: bool = False,
     token: str | None = None,
     actor_user_id: UUID | None = None,
+    expected_revision: int | None = None,
+    request_id: str | None = None,
+    actor_scope: str | None = None,
 ) -> Appointment:
     """Cancel an appointment.
 
     Also deletes associated Zoom meeting if present.
     """
+    from app.core.config import settings
+
+    if settings.SCHEDULING_V2_ENABLED and not appointment.zoom_meeting_id:
+        from app.services import scheduling_v2_service
+
+        return scheduling_v2_service.cancel_booking(
+            db,
+            appointment,
+            reason=reason,
+            by_client=by_client,
+            token=token,
+            actor_user_id=actor_user_id,
+            expected_revision=expected_revision,
+            request_id=request_id,
+            actor_scope=actor_scope
+            or (
+                scheduling_v2_service.public_actor_scope(token or "")
+                if by_client
+                else scheduling_v2_service.staff_actor_scope(actor_user_id or appointment.user_id)
+            ),
+        )
     # Validate token if client-initiated
     if by_client:
         if not token or appointment.cancel_token != token:
@@ -1686,53 +1917,33 @@ def cancel_booking(
             db.commit()
             raise ValueError("Appointment request has expired")
 
-    google_link = None
-    if appointment.google_event_id and not appointment.zoom_meeting_id:
-        from app.services import appointment_google_sync_service
+    from app.services import appointment_command_service
 
-        expected_revision = appointment.google_sync_revision
-        expected_account = appointment.google_account_email
-        expected_calendar = appointment.google_calendar_id
-        google_link = appointment_google_sync_service.prepare_link(db, appointment)
-        db.refresh(appointment, with_for_update=True)
-        if (
-            appointment.status
-            not in {AppointmentStatus.PENDING.value, AppointmentStatus.CONFIRMED.value}
-            or appointment.google_sync_revision != expected_revision
-            or appointment.google_account_email != expected_account
-            or appointment.google_calendar_id != expected_calendar
-            or appointment.google_event_id != google_link.event_id
-            or appointment.scheduled_start != google_link.start
-            or appointment.scheduled_end != google_link.end
-        ):
-            raise ValueError("Appointment changed; refresh and try again")
-
-    appointment.status = AppointmentStatus.CANCELLED.value
-    appointment.cancelled_at = datetime.now(UTC)
-    appointment.cancelled_by_client = by_client
-    appointment.cancellation_reason = reason
-    appointment.reschedule_token = None
-    appointment.cancel_token = None
-    appointment.reschedule_token_expires_at = None
-    appointment.cancel_token_expires_at = None
-
-    from app.services import appointment_email_service
-
-    appointment_email_service.cancel_queued_appointment_emails(
+    prepared = appointment_command_service.prepare_change(
         db,
         appointment,
-        reason_type="appointment_cancelled",
-        reason_message="Appointment was cancelled",
+        verify_google_link=bool(appointment.google_event_id and not appointment.zoom_meeting_id),
+    )
+    appointment = appointment_command_service.lock_and_validate(
+        db, prepared, stale_message="Appointment changed; refresh and try again"
+    )
+    google_link = prepared.google_link
+    appointment_command_service.apply_cancel(
+        db,
+        appointment,
+        prepared,
+        cancelled_at=datetime.now(UTC),
+        by_client=by_client,
+        reason=reason,
+        email_reason_type="appointment_cancelled",
+        email_reason_message="Appointment was cancelled",
         email_types=(
             AppointmentEmailType.REQUEST_RECEIVED,
             AppointmentEmailType.CONFIRMED,
             AppointmentEmailType.RESCHEDULED,
             AppointmentEmailType.REMINDER,
         ),
-        commit=False,
     )
-    if google_link:
-        appointment_google_sync_service.enqueue(db, appointment, action="cancel", link=google_link)
     _audit_record_appointment(db, appointment, AuditEventType.APPOINTMENT_CANCELLED, actor_user_id)
     db.commit()
     db.refresh(appointment)
@@ -1775,7 +1986,7 @@ def get_appointment(
     org_id: UUID,
 ) -> Appointment | None:
     """Get appointment by ID."""
-    return (
+    appointment = (
         db.query(Appointment)
         .filter(
             Appointment.id == appointment_id,
@@ -1783,6 +1994,9 @@ def get_appointment(
         )
         .first()
     )
+    if appointment is not None and hasattr(appointment, "_scheduling_replay_result"):
+        delattr(appointment, "_scheduling_replay_result")
+    return appointment
 
 
 def get_appointment_by_token(
@@ -1866,6 +2080,8 @@ def _validate_self_service_appointment_state(
     now: datetime,
 ) -> Appointment | None:
     """Validate appointment state for all self-service token flows."""
+    if hasattr(appt, "_scheduling_replay_result"):
+        delattr(appt, "_scheduling_replay_result")
     if appt.status in [
         AppointmentStatus.CANCELLED.value,
         AppointmentStatus.COMPLETED.value,
@@ -1879,6 +2095,10 @@ def _validate_self_service_appointment_state(
         and appt.pending_expires_at
         and appt.pending_expires_at <= now
     ):
+        from app.core.config import settings
+
+        if settings.SCHEDULING_V2_ENABLED:
+            return None
         appt.status = AppointmentStatus.EXPIRED.value
         appt.pending_expires_at = None
         appt.reschedule_token = None
@@ -1914,7 +2134,9 @@ def list_appointments(
     When surrogate_id and/or intended_parent_id are provided, filters to appointments
     matching EITHER the surrogate_id OR the intended_parent_id (used for match-scoped views).
     """
-    if status in (
+    from app.core.config import settings
+
+    if not settings.SCHEDULING_V2_ENABLED and status in (
         None,
         AppointmentStatus.CONFIRMED.value,
         AppointmentStatus.PENDING.value,
@@ -1934,7 +2156,8 @@ def list_appointments(
             date_end=date_end,
         )
 
-    expire_pending_appointments(db, org_id=org_id, user_id=user_id)
+    if not settings.SCHEDULING_V2_ENABLED:
+        expire_pending_appointments(db, org_id=org_id, user_id=user_id)
     query = db.query(Appointment).filter(
         Appointment.user_id == user_id,
         Appointment.organization_id == org_id,
@@ -1994,6 +2217,10 @@ def list_appointments(
         limit=limit,
         count_query=query,
     )
+
+    for appointment in appointments:
+        if hasattr(appointment, "_scheduling_replay_result"):
+            delattr(appointment, "_scheduling_replay_result")
 
     return appointments, total
 
@@ -2081,9 +2308,34 @@ def _check_gmail_connected(db: Session, user_id: UUID) -> bool:
 
 
 def update_record_links(
-    db: Session, appointment: Appointment, links: dict, actor_user_id: UUID
+    db: Session,
+    appointment: Appointment,
+    links: dict,
+    actor_user_id: UUID,
+    *,
+    expected_revision: int | None = None,
+    request_id: str | None = None,
 ) -> None:
+    from app.core.config import settings
     from app.services import audit_service
+
+    if settings.SCHEDULING_V2_ENABLED:
+        from app.services import scheduling_v2_service
+
+        replay = scheduling_v2_service._replay(
+            db,
+            org_id=appointment.organization_id,
+            actor_scope=scheduling_v2_service.staff_actor_scope(actor_user_id),
+            request_id=request_id,
+            request_hash=scheduling_v2_service._request_hash(
+                "link", {"appointment_id": appointment.id, "links": links}
+            ),
+        )
+        if replay:
+            appointment._scheduling_replay_result = replay._scheduling_replay_result
+            return
+        appointment = scheduling_v2_service._lock_appointment(db, appointment)
+        scheduling_v2_service._check_revision(appointment, expected_revision)
 
     if any(
         links.get(field) != getattr(appointment, field)
@@ -2092,6 +2344,8 @@ def update_record_links(
         _validate_new_record_context(db, appointment.organization_id, links)
     for field, value in links.items():
         setattr(appointment, field, value)
+    if settings.SCHEDULING_V2_ENABLED:
+        appointment.revision += 1
     audit_service.log_event(
         db=db,
         org_id=appointment.organization_id,
@@ -2099,8 +2353,21 @@ def update_record_links(
         event_type=AuditEventType.APPOINTMENT_LINK_UPDATED,
         target_type="appointment",
         target_id=appointment.id,
-        details={field: str(value) if value else None for field, value in links.items()},
+        details={
+            **{field: str(value) if value else None for field, value in links.items()},
+            **({"revision": appointment.revision} if settings.SCHEDULING_V2_ENABLED else {}),
+        },
     )
+    if settings.SCHEDULING_V2_ENABLED:
+        scheduling_v2_service._save_receipt(
+            db,
+            appointment=appointment,
+            actor_scope=scheduling_v2_service.staff_actor_scope(actor_user_id),
+            request_id=request_id,
+            request_hash=scheduling_v2_service._request_hash(
+                "link", {"appointment_id": appointment.id, "links": links}
+            ),
+        )
     db.commit()
     db.refresh(appointment)
 

@@ -62,6 +62,25 @@ class AuditAIActivityResponse(BaseModel):
     recent: list[AuditLogRead]
 
 
+def _response_details(details: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not details or "availability_override_reason_encrypted" not in details:
+        return details
+    from app.services import oauth_service
+
+    result = {
+        key: value
+        for key, value in details.items()
+        if key != "availability_override_reason_encrypted"
+    }
+    try:
+        result["availability_override_reason"] = oauth_service.decrypt_token(
+            details["availability_override_reason_encrypted"]
+        )
+    except Exception:
+        result["availability_override_reason"] = "[unavailable]"
+    return result
+
+
 # ============================================================================
 # Endpoints
 # ============================================================================
@@ -111,7 +130,7 @@ def list_audit_logs(
             actor_name=actor_names.get(log.actor_user_id) if log.actor_user_id else None,
             target_type=log.target_type,
             target_id=log.target_id,
-            details=log.details,
+            details=_response_details(log.details),
             ip_address=log.ip_address,
             created_at=log.created_at,
         )
@@ -159,7 +178,7 @@ def get_ai_activity(
             actor_name=actor_names.get(log.actor_user_id) if log.actor_user_id else None,
             target_type=log.target_type,
             target_id=log.target_id,
-            details=log.details,
+            details=_response_details(log.details),
             ip_address=log.ip_address,
             created_at=log.created_at,
         )

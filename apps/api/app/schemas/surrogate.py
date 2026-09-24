@@ -822,6 +822,8 @@ class SurrogateStatusChange(BaseModel):
         None,
         description="Required appointment date/time when moving to Interview Scheduled",
     )
+    override_availability: bool = False
+    override_reason: str | None = Field(None, max_length=500)
     on_hold_follow_up_months: Literal[1, 3, 6] | None = None
     delivery_baby_gender: str | None = Field(None, max_length=50)
     delivery_baby_weight: str | None = Field(None, max_length=50)

@@ -267,6 +267,7 @@ class Appointment(Base):
             ["match_attempts.organization_id", "match_attempts.match_id", "match_attempts.id"],
             name="fk_appointments_attempt_context",
         ),
+        CheckConstraint("revision >= 0", name="ck_appointments_revision_nonnegative"),
         Index("idx_appointments_user_date", "user_id", "scheduled_start"),
         Index("idx_appointments_org_status", "organization_id", "status"),
         Index("idx_appointments_org_status_surrogate", "organization_id", "status", "surrogate_id"),
@@ -284,6 +285,7 @@ class Appointment(Base):
         UniqueConstraint("idempotency_key", name="uq_appointment_idempotency"),
         UniqueConstraint("reschedule_token", name="uq_appointment_reschedule_token"),
         UniqueConstraint("cancel_token", name="uq_appointment_cancel_token"),
+        UniqueConstraint("organization_id", "id", name="uq_appointments_org_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -383,6 +385,9 @@ class Appointment(Base):
         Integer, default=0, server_default=text("0"), nullable=False
     )
     google_sync_state: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    google_last_synced: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    google_conflict: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    google_sync_error: Mapped[str | None] = mapped_column(String(100), nullable=True)
     google_meet_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     zoom_meeting_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     zoom_join_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -407,6 +412,13 @@ class Appointment(Base):
 
     # Idempotency (prevent duplicate bookings)
     idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    revision: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    origin: Mapped[str] = mapped_column(
+        String(32), default="crm", server_default=text("'crm'"), nullable=False
+    )
+    availability_override_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

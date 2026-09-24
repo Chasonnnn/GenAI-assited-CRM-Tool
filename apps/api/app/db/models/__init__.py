@@ -40,6 +40,11 @@ from app.db.models.auth import (
     UserPermissionOverride,
     UserSession,
 )
+from app.db.models.calendar import (
+    CalendarBinding,
+    ExternalCalendarEvent,
+    SchedulingRequestReceipt,
+)
 from app.db.models.campaigns import Campaign, CampaignRecipient, CampaignRun, CampaignTrackingEvent
 from app.db.models.donors import Donor, DonorStatusHistory
 from app.db.models.email import (
@@ -220,6 +225,7 @@ __all__ = [
     "AvailabilityOverride",
     "AvailabilityRule",
     "BookingLink",
+    "CalendarBinding",
     "Campaign",
     "CampaignRecipient",
     "CampaignRun",
@@ -242,6 +248,7 @@ __all__ = [
     "EntityNote",
     "EntityActivityLog",
     "EntityVersion",
+    "ExternalCalendarEvent",
     "ExportJob",
     "Form",
     "FormFieldMapping",
@@ -310,6 +317,7 @@ __all__ = [
     "RequestMetricsRollup",
     "ResendReadinessSnapshot",
     "ResendSettings",
+    "SchedulingRequestReceipt",
     "ZapierInboundWebhook",
     "ZapierOutboundEvent",
     "ZapierWebhookSettings",

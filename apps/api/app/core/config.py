@@ -234,6 +234,9 @@ class Settings(BaseSettings):
     )  # Optional token query param for /webhooks/google-gmail
     # Google Calendar OAuth (per-user, used for Meet + calendar sync)
     GOOGLE_CALENDAR_REDIRECT_URI: str = ""
+    # Explicit calendar bindings and durable appointment synchronization.
+    SCHEDULING_V2_ENABLED: bool = False
+    SCHEDULING_BUSY_MAX_AGE_SECONDS: int = Field(default=600, ge=1)
     # Google Cloud OAuth (per-user, for Vertex AI setup)
     GCP_REDIRECT_URI: str = ""
 

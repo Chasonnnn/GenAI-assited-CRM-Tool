@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
 
 from alembic import command
@@ -42,13 +43,17 @@ def test_permission_join_preserves_existing_data_and_policy_versions(db_engine, 
                     )
             command.upgrade(config, "head")
             command.upgrade(config, "head")
-            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-                "20260922_1600_permission_heads"
+            assert (
+                connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+                == ScriptDirectory.from_config(config).get_current_head()
             )
             for version, org_id in enumerate(org_ids, start=1):
-                assert connection.execute(
-                    text("SELECT name FROM organizations WHERE id = :id"), {"id": org_id}
-                ).scalar_one() == "Existing organization"
+                assert (
+                    connection.execute(
+                        text("SELECT name FROM organizations WHERE id = :id"), {"id": org_id}
+                    ).scalar_one()
+                    == "Existing organization"
+                )
                 policy = connection.execute(
                     text(
                         "SELECT version, configuration_revision FROM organization_permission_policies "
