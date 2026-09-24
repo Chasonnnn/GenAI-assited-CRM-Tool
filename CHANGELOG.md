@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.71](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.70...surrogacy-crm-platform-v0.91.71) (2026-09-24)
+
+
+### Features
+
+* require reasons for inactive surrogate stages ([01ce7e3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/01ce7e3b6e6d433b4ade315a69b45900fa6f4ac3))
+* require surrogate stage reasons and sync them to notes ([489eb83](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/489eb8305610fcab8f1cb9c7c84fdf140df9a245))
+* save surrogate stage reasons to notes ([725cb16](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/725cb1641b41aae6b5cbb5483a6f8e557118a46d))
+
+
+### Bug Fixes
+
+* allow accepting surrogate matches for IPs with another accepted match ([0a186b3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0a186b30c5279ee84522264eb859ff8358b06328))
+* allow accepting surrogate matches for IPs with another accepted match ([e4a5088](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e4a50888744e516cdd07ba3c33fadaf1e78b74ee))
+
 ## [0.91.70](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.69...surrogacy-crm-platform-v0.91.70) (2026-09-21)
 
 
