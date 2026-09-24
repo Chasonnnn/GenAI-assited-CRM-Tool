@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { RecordAppointmentsCard } from "@/components/records/RecordAppointmentsCard"
 import { RecordCorrespondenceCard } from "@/components/records/RecordCorrespondenceCard"
+import { formatSchedulingTime } from "@/lib/scheduling-time"
 
 const mocks = vi.hoisted(() => ({ appointments: vi.fn(), get: vi.fn(), put: vi.fn(), remove: vi.fn(), tickets: vi.fn(), refetch: vi.fn(), types: vi.fn(), slots: vi.fn(), create: vi.fn() }))
 vi.mock("@/lib/hooks/use-appointments", () => ({
@@ -79,7 +80,8 @@ describe("Light record appointments", () => {
         fireEvent.mouseMove(await screen.findByRole("option", { name: "Attempt 1 · Retrieval · Planned" }))
         fireEvent.click(await screen.findByRole("option", { name: "Attempt 1 · Retrieval · Planned" }))
         fireEvent.click(screen.getByRole("button", { name: /September 12/i }))
-        fireEvent.click(await screen.findByRole("button", { name: /10:00 AM/i }))
+        const slotLabel = formatSchedulingTime("2026-09-12T14:00:00Z", Intl.DateTimeFormat().resolvedOptions().timeZone)
+        fireEvent.click(await screen.findByRole("button", { name: new RegExp(slotLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") }))
         fireEvent.click(screen.getAllByRole("button", { name: "Schedule" }).at(-1)!)
         await waitFor(() => expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ donor_id: "donor-1", match_id: "match-1", attempt_id: "attempt-1", client_email: "qa@example.com" }), expect.anything()))
     })
