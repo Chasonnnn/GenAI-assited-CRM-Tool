@@ -147,24 +147,23 @@ def get_upcoming_items(
     )
 
     surrogate_ids = {t.surrogate_id for t in tasks if t.surrogate_id}
-    # Optimization: Fetch only id and surrogate_number to prevent N+1 full object hydration overhead
     surrogates = (
         {}
         if not surrogate_ids
-        else dict(
-            db.query(Surrogate.id, Surrogate.surrogate_number)
+        else {
+            s.id: s
+            for s in db.query(Surrogate)
             .filter(Surrogate.organization_id == org_id, Surrogate.id.in_(surrogate_ids))
             .all()
-        )
+        }
     )
     donor_ids = {task.donor_id for task in tasks if task.donor_id}
-    # Optimization: Fetch only scalar columns to avoid ORM memory overhead
     donors = (
         {}
         if not donor_ids
         else {
-            row[0]: row
-            for row in db.query(Donor.id, Donor.donor_number, Donor.donor_type)
+            donor.id: donor
+            for donor in db.query(Donor)
             .filter(Donor.organization_id == org_id, Donor.id.in_(donor_ids))
             .all()
         }
@@ -172,8 +171,8 @@ def get_upcoming_items(
 
     task_items = []
     for task in tasks:
-        surrogate_number = surrogates.get(task.surrogate_id) if task.surrogate_id else None
-        donor_row = donors.get(task.donor_id) if task.donor_id else None
+        surrogate = surrogates.get(task.surrogate_id) if task.surrogate_id else None
+        donor = donors.get(task.donor_id) if task.donor_id else None
         is_overdue = task.due_date < today if task.due_date else False
         task_items.append(
             {
@@ -182,10 +181,10 @@ def get_upcoming_items(
                 "title": task.title,
                 "time": task.due_time.strftime("%H:%M") if task.due_time else None,
                 "surrogate_id": str(task.surrogate_id) if task.surrogate_id else None,
-                "surrogate_number": surrogate_number,
+                "surrogate_number": surrogate.surrogate_number if surrogate else None,
                 "donor_id": str(task.donor_id) if task.donor_id else None,
-                "donor_number": donor_row[1] if donor_row else None,
-                "donor_type": donor_row[2] if donor_row else None,
+                "donor_number": donor.donor_number if donor else None,
+                "donor_type": donor.donor_type if donor else None,
                 "date": task.due_date.isoformat() if task.due_date else today.isoformat(),
                 "is_overdue": is_overdue,
                 "task_type": task.task_type or "general",
@@ -221,20 +220,20 @@ def get_upcoming_items(
     )
 
     meeting_surrogate_ids = {m.surrogate_id for m in meetings if m.surrogate_id}
-    # Optimization: Fetch only scalar columns to avoid ORM memory overhead
     meeting_surrogates = (
         {}
         if not meeting_surrogate_ids
-        else dict(
-            db.query(Surrogate.id, Surrogate.surrogate_number)
+        else {
+            s.id: s
+            for s in db.query(Surrogate)
             .filter(Surrogate.organization_id == org_id, Surrogate.id.in_(meeting_surrogate_ids))
             .all()
-        )
+        }
     )
 
     meeting_items = []
     for meeting in meetings:
-        surrogate_number = meeting_surrogates.get(meeting.surrogate_id) if meeting.surrogate_id else None
+        surrogate = meeting_surrogates.get(meeting.surrogate_id) if meeting.surrogate_id else None
         meeting_date = meeting.start_time.date() if meeting.start_time else today
         meeting_items.append(
             {
@@ -243,7 +242,7 @@ def get_upcoming_items(
                 "title": meeting.topic,
                 "time": meeting.start_time.strftime("%H:%M") if meeting.start_time else None,
                 "surrogate_id": str(meeting.surrogate_id) if meeting.surrogate_id else None,
-                "surrogate_number": surrogate_number,
+                "surrogate_number": surrogate.surrogate_number if surrogate else None,
                 "date": meeting_date.isoformat(),
                 "is_overdue": False,
                 "join_url": meeting.join_url,
@@ -473,13 +472,12 @@ def get_attention_items(
     )
 
     overdue_donor_ids = {task.donor_id for task in overdue_results if task.donor_id}
-    # Optimization: Fetch only scalar columns to avoid ORM memory overhead
     overdue_donors = (
         {}
         if not overdue_donor_ids
         else {
-            row[0]: row
-            for row in db.query(Donor.id, Donor.donor_number, Donor.donor_type)
+            donor.id: donor
+            for donor in db.query(Donor)
             .filter(
                 Donor.organization_id == org_id,
                 Donor.id.in_(overdue_donor_ids),
@@ -489,9 +487,8 @@ def get_attention_items(
     )
 
     overdue_tasks = []
-    # Optimization: Fetch values from tuple instead of ORM object
     for task in overdue_results:
-        donor_row = overdue_donors.get(task.donor_id) if task.donor_id else None
+        donor = overdue_donors.get(task.donor_id) if task.donor_id else None
         days_overdue = (today - task.due_date).days if task.due_date else 0
         overdue_tasks.append(
             {
@@ -501,8 +498,8 @@ def get_attention_items(
                 "days_overdue": days_overdue,
                 "surrogate_id": str(task.surrogate_id) if task.surrogate_id else None,
                 "donor_id": str(task.donor_id) if task.donor_id else None,
-                "donor_number": donor_row[1] if donor_row else None,
-                "donor_type": donor_row[2] if donor_row else None,
+                "donor_number": donor.donor_number if donor else None,
+                "donor_type": donor.donor_type if donor else None,
             }
         )
 
