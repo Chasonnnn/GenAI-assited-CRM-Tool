@@ -122,12 +122,36 @@ describe('NotificationsPage', () => {
         expect(screen.getByRole('combobox')).toBeInTheDocument()
     })
 
-    it('passes notification_types to hook when filter is selected', () => {
+    it('passes notification_types to hook when filter is selected', async () => {
         render(<NotificationsPage />)
-        // Initial call should have no filter
-        expect(mockUseNotifications).toHaveBeenCalledWith(
-            expect.objectContaining({ limit: 50 })
+
+        expect(mockUseNotifications.mock.lastCall?.[0]).not.toHaveProperty('notification_types')
+
+        fireEvent.mouseDown(screen.getByRole('combobox'))
+        const appointmentsOption = await screen.findByRole('option', { name: 'Appointments' })
+        fireEvent.mouseMove(appointmentsOption)
+        fireEvent.click(appointmentsOption)
+
+        expect(screen.getByRole('combobox')).toHaveTextContent('Appointments')
+        expect(mockUseNotifications).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                limit: 50,
+                notification_types: [
+                    'appointment_requested',
+                    'appointment_confirmed',
+                    'appointment_cancelled',
+                    'appointment_reminder',
+                ],
+            })
         )
+
+        fireEvent.mouseDown(screen.getByRole('combobox'))
+        const allOption = await screen.findByRole('option', { name: 'All' })
+        fireEvent.mouseMove(allOption)
+        fireEvent.click(allOption)
+
+        expect(screen.getByRole('combobox')).toHaveTextContent('All')
+        expect(mockUseNotifications.mock.lastCall?.[0]).not.toHaveProperty('notification_types')
     })
 
     it("enables polling fallback when websocket is disconnected", () => {
