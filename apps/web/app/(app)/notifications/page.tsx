@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import {
     BellIcon,
     CheckSquareIcon,
@@ -180,7 +181,8 @@ export default function NotificationsPage() {
                         )}
                     </div>
                     {unreadCount > 0 && (
-                        <Button variant="outline" onClick={handleMarkAllRead} disabled={markAllRead.isPending}>
+                        <Button variant="outline" onClick={handleMarkAllRead} disabled={markAllRead.isPending} aria-busy={markAllRead.isPending}>
+                            {markAllRead.isPending && <Spinner aria-hidden="true" />}
                             Mark all read
                         </Button>
                     )}
