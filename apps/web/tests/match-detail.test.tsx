@@ -54,7 +54,7 @@ const mockCreateMatchNote = vi.fn()
 const mockUploadMatchFile = vi.fn()
 const mockUseMatch = vi.fn()
 const mockUseAcceptMatch = vi.fn()
-const mockUseRejectMatch = vi.fn()
+const mockUseDeclineMatch = vi.fn()
 const mockUseCancelMatch = vi.fn()
 const mockUseUpdateMatchNotes = vi.fn()
 
@@ -68,7 +68,7 @@ vi.mock('@/lib/hooks/use-matches', () => ({
     useUploadMatchFile: () => ({ mutateAsync: mockUploadMatchFile, isPending: false }),
     matchWorkKeys: { all: (id: string) => ['matches', 'detail', id, 'work'] },
     useAcceptMatch: () => mockUseAcceptMatch(),
-    useRejectMatch: () => mockUseRejectMatch(),
+    useDeclineMatch: () => mockUseDeclineMatch(),
     useCancelMatch: () => mockUseCancelMatch(),
     useUpdateMatchNotes: () => mockUseUpdateMatchNotes(),
     matchKeys: { detail: (id: string) => ['matches', 'detail', id], lists: () => ['matches', 'list'] },
@@ -166,14 +166,14 @@ describe('MatchDetailPage', () => {
         ip_id: 'ip1',
         intended_parent_id: 'ip1',
         ip_name: 'John Smith',
-        status: 'proposed' as const,
+        status: 'under_review' as const,
         proposed_at: '2024-01-15T10:00:00Z',
         proposed_by_user_id: 'user1',
         proposed_by_name: 'Admin User',
         notes_internal: 'Internal notes about the match',
     }
 
-    it.each(['completed', 'cancelled', 'cancel_pending', 'rejected'])('keeps %s case work readable without creation actions', async (status) => {
+    it.each(['completed', 'cancelled', 'cancellation_pending', 'declined'])('keeps %s case work readable without creation actions', async (status) => {
         mockUseMatch.mockReturnValue({ data: { ...mockMatch, status, outcome: 'Finished.', closed_at: '2026-09-05T12:00:00Z' }, isLoading: false })
         mockUseMatchWork.mockReturnValue({ data: { notes: [{ id: 'note1', content: 'Existing case note', source: 'match', created_at: '2026-09-05T12:00:00Z', author_name: 'Admin' }], files: [], tasks: [], activity: [] }, isLoading: false })
         render(<MatchDetailPage />)
@@ -258,7 +258,7 @@ describe('MatchDetailPage', () => {
 
         mockAcceptMatchMutateAsync.mockResolvedValue(mockMatch)
         mockUseAcceptMatch.mockReturnValue({ mutateAsync: mockAcceptMatchMutateAsync, isPending: false })
-        mockUseRejectMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseDeclineMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseCancelMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseUpdateMatchNotes.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseTasks.mockReturnValue({ data: { items: [], total: 0 }, isLoading: false })
@@ -443,7 +443,7 @@ describe('MatchDetailPage', () => {
 
     it('displays match status badge', () => {
         render(<MatchDetailPage />)
-        expect(screen.getByText('Proposed')).toBeInTheDocument()
+        expect(screen.getByText('Under Review')).toBeInTheDocument()
     })
 
     it('renders tabs for Overview and Calendar', () => {
@@ -540,7 +540,7 @@ describe('MatchDetailPage with different statuses', () => {
             status: 'accepted',
         })
         mockUseAcceptMatch.mockReturnValue({ mutateAsync: mockAcceptMatchMutateAsync, isPending: false })
-        mockUseRejectMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseDeclineMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseCancelMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseUpdateMatchNotes.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     })
@@ -565,7 +565,7 @@ describe('MatchDetailPage with different statuses', () => {
         expect(screen.getByText('Accepted')).toBeInTheDocument()
     })
 
-    it('shows rejected status badge for rejected matches', () => {
+    it('shows declined status badge for declined matches', () => {
         mockUseMatch.mockReturnValue({
             data: {
                 id: 'match1',
@@ -574,15 +574,15 @@ describe('MatchDetailPage with different statuses', () => {
                 intended_parent_id: 'ip1',
                 surrogate_name: 'Jane Doe',
                 ip_name: 'John Smith',
-                status: 'rejected',
+                status: 'declined',
                 proposed_at: '2024-01-15T10:00:00Z',
                 rejected_at: '2024-01-16T10:00:00Z',
-                rejection_reason: 'Not compatible',
+                decline_reason: 'Not compatible',
             },
             isLoading: false,
             error: null,
         })
         render(<MatchDetailPage />)
-        expect(screen.getByText('Rejected')).toBeInTheDocument()
+        expect(screen.getByText('Declined')).toBeInTheDocument()
     })
 })

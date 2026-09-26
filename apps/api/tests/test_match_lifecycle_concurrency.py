@@ -115,7 +115,7 @@ def _surrogate(setup, org_id, user_id):
     return _create_case(setup, org_id, user_id, stage)
 
 
-def _proposal(setup, org_id, user_id, surrogate, ip, number, status="proposed"):
+def _proposal(setup, org_id, user_id, surrogate, ip, number, status="under_review"):
     match = Match(
         organization_id=org_id,
         surrogate_id=surrogate.id,
@@ -142,7 +142,7 @@ def _accept(user_id, match_id):
     return run
 
 
-def test_reject_waiting_on_accept_sees_the_competing_proposal_cancelled(db_engine, monkeypatch):
+def test_decline_waiting_on_accept_sees_the_competing_proposal_declined(db_engine, monkeypatch):
     with _committed_org(db_engine, monkeypatch) as (org_id, user_id):
         with Session(db_engine) as setup:
             surrogate = _surrogate(setup, org_id, user_id)
@@ -154,7 +154,7 @@ def test_reject_waiting_on_accept_sees_the_competing_proposal_cancelled(db_engin
 
         def reject(session):
             match_lifecycle.transition(
-                session, session.get(Match, ids[1]), "reject", actor_user_id=user_id, reason="No"
+                session, session.get(Match, ids[1]), "decline", actor_user_id=user_id, reason="No"
             )
 
         accepted, rejected = _run_while_first_holds_locks(
@@ -162,11 +162,11 @@ def test_reject_waiting_on_accept_sees_the_competing_proposal_cancelled(db_engin
         )
 
         assert accepted == "applied"
-        assert rejected == "Cannot reject match with status: cancelled"
+        assert rejected == "Cannot decline match with status: declined"
         with Session(db_engine) as verify:
             assert [verify.get(Match, match_id).status for match_id in ids] == [
                 "accepted",
-                "cancelled",
+                "declined",
             ]
 
 
@@ -181,7 +181,7 @@ def test_accept_waiting_on_cancellation_approval_accepts_after_it(db_engine, mon
                 surrogate,
                 create_ip(setup, org_id),
                 "M10001",
-                status="cancel_pending",
+                status="cancellation_pending",
             )
             proposed = _proposal(
                 setup, org_id, user_id, surrogate, create_ip(setup, org_id), "M10002"
@@ -263,7 +263,7 @@ def test_cross_intended_parent_accepts_finish_without_deadlock(db_engine, monkey
         with Session(db_engine) as verify:
             assert [verify.get(Match, match_id).status for match_id in ids] == [
                 "accepted",
-                "cancelled",
+                "declined",
                 "accepted",
-                "cancelled",
+                "declined",
             ]

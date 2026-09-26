@@ -86,7 +86,8 @@ TRIGGER_ENTITY_TYPES = {
     "inactivity": "surrogate",
     "match_proposed": "match",
     "match_accepted": "match",
-    "match_rejected": "match",
+    "match_declined": "match",
+    "match_cancelled": "match",
     "appointment_scheduled": "appointment",
     "appointment_completed": "appointment",
     "note_added": "note",
@@ -345,7 +346,8 @@ LEGACY_TRIGGER_SUBJECT_TYPES = {
     WorkflowTriggerType.INTAKE_LEAD_CREATED.value: "intake_lead",
     WorkflowTriggerType.MATCH_PROPOSED.value: "match",
     WorkflowTriggerType.MATCH_ACCEPTED.value: "match",
-    WorkflowTriggerType.MATCH_REJECTED.value: "match",
+    WorkflowTriggerType.MATCH_DECLINED.value: "match",
+    WorkflowTriggerType.MATCH_CANCELLED.value: "match",
     WorkflowTriggerType.APPOINTMENT_SCHEDULED.value: "appointment",
     WorkflowTriggerType.APPOINTMENT_COMPLETED.value: "appointment",
 }
@@ -1560,9 +1562,14 @@ def get_workflow_options(
             "description": "When a match is accepted",
         },
         {
-            "value": "match_rejected",
-            "label": "Match Rejected",
-            "description": "When a match is rejected",
+            "value": "match_declined",
+            "label": "Match Declined",
+            "description": "When a match is declined",
+        },
+        {
+            "value": "match_cancelled",
+            "label": "Match Cancelled",
+            "description": "When a match cancellation is approved",
         },
         {
             "value": "appointment_scheduled",

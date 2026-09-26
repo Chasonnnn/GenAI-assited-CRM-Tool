@@ -219,7 +219,7 @@ export default function MatchesPage() {
                             <div className="text-2xl font-bold">{stats?.total ?? 0}</div>
                         </CardContent>
                     </Card>
-                    {(["proposed", "reviewing", "accepted", "rejected"] as const).map((status) => (
+                    {(["under_review", "accepted", "declined"] as const).map((status) => (
                         <Card key={status}>
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -249,16 +249,16 @@ export default function MatchesPage() {
                     </Select>
                     <Select value={statusFilter} onValueChange={(v) => { if (v) { handleStatusChange(v) } }}>
                         <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="All Stages">
+                            <SelectValue placeholder="All statuses">
                                 {(value: string | null) => {
-                                    if (!value || value === "all") return "All Stages"
+                                    if (!value || value === "all") return "All statuses"
                                     if (isMatchStatus(value)) return getMatchStatusLabel(value)
                                     return value
                                 }}
                             </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">All Stages</SelectItem>
+                            <SelectItem value="all">All statuses</SelectItem>
                             {MATCH_STATUS_DEFINITIONS.map((status) => (
                                 <SelectItem key={status.value} value={status.value}>
                                     {status.label}
@@ -356,16 +356,9 @@ export default function MatchesPage() {
                                                 </Link>
                                             </TableCell>
                                             <TableCell>
-                                                {(() => {
-                                                    const status = isMatchStatus(match.status)
-                                                        ? match.status
-                                                        : "proposed"
-                                                    return (
-                                                        <Badge className={getMatchStatusBadgeClassName(status)}>
-                                                            {getMatchStatusLabel(status)}
-                                                        </Badge>
-                                                    )
-                                                })()}
+                                                <Badge className={getMatchStatusBadgeClassName(match.status)}>
+                                                    {getMatchStatusLabel(match.status)}
+                                                </Badge>
                                             </TableCell>
                                             <TableCell>
                                                 {(match.match_kind === "donor" ? match.donor_stage_label : match.surrogate_stage_label) ? (

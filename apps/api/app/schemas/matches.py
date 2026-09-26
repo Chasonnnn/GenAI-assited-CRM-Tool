@@ -5,7 +5,9 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.db.enums import MatchStatus
 
 
 class MatchCreate(BaseModel):
@@ -38,13 +40,13 @@ class MatchRead(BaseModel):
     closure_reason: str | None = None
     outcome: str | None = None
     intended_parent_id: str
-    status: str
+    status: MatchStatus
     proposed_by_user_id: str | None
     proposed_at: str
     reviewed_by_user_id: str | None
     reviewed_at: str | None
     notes: str | None
-    rejection_reason: str | None
+    decline_reason: str | None
     created_at: str
     updated_at: str
     # Denormalized for convenience
@@ -77,7 +79,7 @@ class MatchListItem(BaseModel):
     intended_parent_id: str
     ip_name: str | None
     ip_number: str | None = None
-    status: str
+    status: MatchStatus
     proposed_at: str
     # Surrogate stage info for status sync
     surrogate_stage_id: str | None = None
@@ -98,7 +100,7 @@ class MatchStatsResponse(BaseModel):
     """Match stats summary."""
 
     total: int
-    by_status: dict[str, int]
+    by_status: dict[MatchStatus, int]
 
 
 class MatchAcceptRequest(BaseModel):
@@ -107,17 +109,31 @@ class MatchAcceptRequest(BaseModel):
     notes: str | None = None
 
 
-class MatchRejectRequest(BaseModel):
-    """Request to reject a match."""
+class MatchDeclineRequest(BaseModel):
+    """Request to decline a match."""
 
     notes: str | None = None
-    rejection_reason: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+
+    @field_validator("reason")
+    @classmethod
+    def required_reason(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Decline reason is required")
+        return value.strip()
 
 
 class MatchCancelRequest(BaseModel):
     """Request to cancel an accepted match (admin approval required)."""
 
-    reason: str | None = None
+    reason: str = Field(min_length=1)
+
+    @field_validator("reason")
+    @classmethod
+    def required_reason(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Cancellation reason is required")
+        return value.strip()
 
 
 class MatchUpdateNotesRequest(BaseModel):

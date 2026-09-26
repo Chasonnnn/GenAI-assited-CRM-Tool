@@ -4,20 +4,14 @@ from enum import Enum
 
 
 class MatchStatus(str, Enum):
-    """
-    Status of a match between surrogate and intended parent.
+    """Status of a match, separate from party pipeline stages."""
 
-    Workflow: proposed → reviewing → accepted/rejected
-    A cancelled status marks withdrawn proposals.
-    """
-
-    PROPOSED = "proposed"  # Initial match proposal
-    REVIEWING = "reviewing"  # Under review by coordinator
-    ACCEPTED = "accepted"  # Match finalized
-    CANCEL_PENDING = "cancel_pending"  # Cancellation pending admin approval
-    REJECTED = "rejected"  # Match declined with reason
-    COMPLETED = "completed"  # Relationship completed
-    CANCELLED = "cancelled"  # Proposal withdrawn
+    UNDER_REVIEW = "under_review"
+    ACCEPTED = "accepted"
+    CANCELLATION_PENDING = "cancellation_pending"
+    DECLINED = "declined"
+    CANCELLED = "cancelled"
+    COMPLETED = "completed"
 
 
 class MatchEventType(str, Enum):

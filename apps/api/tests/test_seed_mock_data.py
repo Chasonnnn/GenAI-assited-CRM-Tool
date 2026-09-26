@@ -77,7 +77,8 @@ def test_create_intended_parents_generates_status_history(db, test_org, test_use
     assert ip_history_count >= 10
 
 
-def test_create_matches_balanced_statuses(db, test_org, test_user) -> None:
+def _seed_match_inputs(db, test_org, test_user) -> dict:
+    """Users, pipeline stages, surrogates and intended parents for create_matches."""
     admin_user = User(
         id=uuid.uuid4(),
         email=f"admin-{uuid.uuid4().hex[:8]}@test.com",
@@ -133,14 +134,25 @@ def test_create_matches_balanced_statuses(db, test_org, test_user) -> None:
         activity_mode="rich_core",
     )
     seed_mock_data.create_intended_parents(db, test_org.id, test_user.id, count=12)
+    return {
+        "developer": test_user,
+        "admin": admin_user,
+        "case_manager": case_manager_user,
+    }
+
+
+def test_create_matches_balanced_statuses(db, test_org, test_user, monkeypatch) -> None:
+    from unittest.mock import Mock
+
+    from app.services import match_effects
+
+    dispatch = Mock(side_effect=AssertionError("Seeds must not dispatch effects"))
+    monkeypatch.setattr(match_effects, "dispatch", dispatch)
+    users_by_role = _seed_match_inputs(db, test_org, test_user)
     seed_mock_data.create_matches(
         db=db,
         org_id=test_org.id,
-        users_by_role={
-            "developer": test_user,
-            "admin": admin_user,
-            "case_manager": case_manager_user,
-        },
+        users_by_role=users_by_role,
         count=15,
         mode="balanced",
     )
@@ -148,7 +160,15 @@ def test_create_matches_balanced_statuses(db, test_org, test_user) -> None:
     statuses = {
         row[0] for row in db.query(Match.status).filter(Match.organization_id == test_org.id).all()
     }
-    assert {"proposed", "reviewing", "accepted", "rejected", "cancelled"}.issubset(statuses)
+    assert statuses == {
+        "under_review",
+        "accepted",
+        "declined",
+        "cancellation_pending",
+        "cancelled",
+        "completed",
+    }
+    dispatch.assert_not_called()
 
     accepted_surrogate_ids = [
         row[0]
@@ -160,3 +180,31 @@ def test_create_matches_balanced_statuses(db, test_org, test_user) -> None:
         .all()
     ]
     assert len(accepted_surrogate_ids) == len(set(accepted_surrogate_ids))
+
+
+def test_create_matches_without_expansion_seeds_completed_as_accepted(
+    db, test_org, test_user, monkeypatch
+) -> None:
+    from app.services import match_lifecycle
+
+    monkeypatch.setattr(match_lifecycle.settings, "MATCH_CASE_EXPANSION_ENABLED", False)
+    users_by_role = _seed_match_inputs(db, test_org, test_user)
+
+    seed_mock_data.create_matches(
+        db=db,
+        org_id=test_org.id,
+        users_by_role=users_by_role,
+        count=12,
+        mode="balanced",
+    )
+
+    statuses = {
+        row[0] for row in db.query(Match.status).filter(Match.organization_id == test_org.id).all()
+    }
+    assert statuses == {
+        "under_review",
+        "accepted",
+        "declined",
+        "cancellation_pending",
+        "cancelled",
+    }

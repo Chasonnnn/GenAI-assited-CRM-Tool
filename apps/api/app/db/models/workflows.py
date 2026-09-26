@@ -35,7 +35,8 @@ def _default_workflow_subject_type(context) -> str:
         "intake_lead_created": "intake_lead",
         "match_proposed": "match",
         "match_accepted": "match",
-        "match_rejected": "match",
+        "match_declined": "match",
+        "match_cancelled": "match",
         "appointment_scheduled": "appointment",
         "appointment_completed": "appointment",
     }.get(trigger_type, "surrogate")

@@ -72,6 +72,8 @@ LEGACY_WORKFLOW_SUBJECT_TYPES = {
     "match_proposed": "match",
     "match_accepted": "match",
     "match_rejected": "match",
+    "match_declined": "match",
+    "match_cancelled": "match",
     "appointment_scheduled": "appointment",
     "appointment_completed": "appointment",
 }
@@ -516,6 +518,11 @@ def import_org_config_zip(
         db.add(template)
 
     for workflow_data in workflows_payload:
+        trigger_type = workflow_data.get("trigger_type")
+        subject_type = workflow_data.get("subject_type")
+        if trigger_type == "match_rejected":
+            trigger_type = "match_declined"
+            subject_type = "match"
         workflow = AutomationWorkflow(
             id=UUID(workflow_data["id"]),
             organization_id=org_id,
@@ -523,11 +530,9 @@ def import_org_config_zip(
             description=workflow_data.get("description"),
             icon=workflow_data.get("icon", "workflow"),
             schema_version=workflow_data.get("schema_version") or 1,
-            trigger_type=workflow_data.get("trigger_type"),
-            subject_type=workflow_data.get("subject_type")
-            or LEGACY_WORKFLOW_SUBJECT_TYPES.get(
-                workflow_data.get("trigger_type"), "surrogate"
-            ),
+            trigger_type=trigger_type,
+            subject_type=subject_type
+            or LEGACY_WORKFLOW_SUBJECT_TYPES.get(trigger_type, "surrogate"),
             trigger_config=workflow_data.get("trigger_config") or {},
             conditions=workflow_data.get("conditions") or [],
             condition_logic=workflow_data.get("condition_logic", "AND"),
@@ -681,6 +686,11 @@ def import_org_config_zip(
         db.add(link)
 
     for template_data in workflow_templates_payload:
+        trigger_type = template_data.get("trigger_type")
+        subject_type = template_data.get("subject_type")
+        if trigger_type == "match_rejected":
+            trigger_type = "match_declined"
+            subject_type = "match"
         template = WorkflowTemplate(
             id=UUID(template_data["id"]),
             name=template_data.get("name"),
@@ -689,8 +699,8 @@ def import_org_config_zip(
             category=template_data.get("category", "general"),
             # Absent/None keeps legacy semantics: donor-trigger templates stay
             # repair-required, other triggers fall back to the legacy mapping.
-            subject_type=template_data.get("subject_type"),
-            trigger_type=template_data.get("trigger_type"),
+            subject_type=subject_type,
+            trigger_type=trigger_type,
             trigger_config=template_data.get("trigger_config") or {},
             conditions=template_data.get("conditions") or [],
             condition_logic=template_data.get("condition_logic", "AND"),

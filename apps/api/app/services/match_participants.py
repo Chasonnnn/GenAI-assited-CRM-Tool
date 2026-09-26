@@ -117,7 +117,7 @@ class SurrogateParty(Party):
         actor_user_id: UUID,
         now: datetime,
     ) -> list[Effect]:
-        """Return the surrogate to Ready to Match. The stage history credits the requester."""
+        """Return the surrogate to Ready to Match. The stage history credits the approver."""
         from app.services import pipeline_service, surrogate_status_service
 
         surrogate = match_queries.get_surrogate_with_stage(
@@ -137,7 +137,7 @@ class SurrogateParty(Party):
             old_stage_id=surrogate.stage_id,
             old_label=surrogate.status_label,
             old_slug=old_stage.slug,
-            user_id=request.requested_by_user_id,
+            user_id=actor_user_id,
             reason=request.reason,
             effective_at=request.effective_at,
             recorded_at=now,
@@ -250,7 +250,7 @@ class IntendedParentParty(Party):
             ip=ip,
             old_stage=old_stage,
             new_stage=ready,
-            user_id=request.requested_by_user_id,
+            user_id=actor_user_id,
             reason=request.reason,
             effective_at=request.effective_at,
             recorded_at=now,

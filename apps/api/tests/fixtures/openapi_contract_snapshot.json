@@ -2443,10 +2443,6 @@
     ]
   },
   "/matches/{match_id}": {
-    "DELETE": [
-      "204",
-      "422"
-    ],
     "GET": [
       "200",
       "422"
@@ -2492,6 +2488,12 @@
       "422"
     ]
   },
+  "/matches/{match_id}/decline": {
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
   "/matches/{match_id}/events": {
     "GET": [
       "200",
@@ -2529,12 +2531,6 @@
   "/matches/{match_id}/notes/{note_id}": {
     "DELETE": [
       "204",
-      "422"
-    ]
-  },
-  "/matches/{match_id}/reject": {
-    "PUT": [
-      "200",
       "422"
     ]
   },

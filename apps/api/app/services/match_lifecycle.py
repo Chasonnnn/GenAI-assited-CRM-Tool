@@ -29,11 +29,10 @@ from app.db.enums import AuditEventType, MatchStatus, SurrogateActivityType
 from app.db.models import Match, MatchAttempt, StatusChangeRequest
 from app.services import match_effects, match_participants, match_queries
 
-PROPOSED = MatchStatus.PROPOSED.value
-REVIEWING = MatchStatus.REVIEWING.value
+UNDER_REVIEW = MatchStatus.UNDER_REVIEW.value
 ACCEPTED = MatchStatus.ACCEPTED.value
-CANCEL_PENDING = MatchStatus.CANCEL_PENDING.value
-REJECTED = MatchStatus.REJECTED.value
+CANCELLATION_PENDING = MatchStatus.CANCELLATION_PENDING.value
+DECLINED = MatchStatus.DECLINED.value
 CANCELLED = MatchStatus.CANCELLED.value
 COMPLETED = MatchStatus.COMPLETED.value
 
@@ -66,29 +65,22 @@ TRANSITIONS: dict[str, Transition] = {
     for t in (
         Transition(
             "accept",
-            (PROPOSED, REVIEWING),
+            (UNDER_REVIEW,),
             ACCEPTED,
             "Cannot accept match with status: {status}",
             "match_accepted",
         ),
         Transition(
-            "reject",
-            (PROPOSED, REVIEWING),
-            REJECTED,
-            "Cannot reject match with status: {status}",
-            "match_rejected",
-        ),
-        Transition(
-            "cancel",
-            (PROPOSED, REVIEWING),
-            CANCELLED,
-            "Cannot cancel match with status: {status}",
-            "match_cancelled",
+            "decline",
+            (UNDER_REVIEW,),
+            DECLINED,
+            "Cannot decline match with status: {status}",
+            "match_declined",
         ),
         Transition(
             "request_cancel",
             (ACCEPTED,),
-            CANCEL_PENDING,
+            CANCELLATION_PENDING,
             "Only accepted matches can be cancelled",
             "match_cancel_requested",
         ),
@@ -103,21 +95,21 @@ TRANSITIONS: dict[str, Transition] = {
         # approve_status_change_requests and owns the request record.
         Transition(
             "approve_cancel",
-            (CANCEL_PENDING,),
+            (CANCELLATION_PENDING,),
             CANCELLED,
             "Match is no longer pending cancellation",
             "match_cancelled",
         ),
         Transition(
             "reject_cancel",
-            (CANCEL_PENDING,),
+            (CANCELLATION_PENDING,),
             ACCEPTED,
             None,
             "match_cancel_request_rejected",
         ),
         Transition(
             "withdraw_cancel",
-            (CANCEL_PENDING,),
+            (CANCELLATION_PENDING,),
             ACCEPTED,
             None,
             "match_cancel_request_withdrawn",
@@ -140,7 +132,7 @@ def require_expansion() -> None:
 
     Gated while disabled: donor proposals, repeat surrogate/IP proposals, donor
     accept, complete, attempt writes, match work writes, and donor or match
-    links on appointments. Surrogate propose, accept, reject, cancel,
+    links on appointments. Surrogate propose, accept, decline,
     cancellation requests and their resolution, notes, and reads stay open.
     """
     if not expansion_enabled():
@@ -291,7 +283,8 @@ def write_case_change(
 
 def _pair_details(match: Match) -> tuple[dict, dict]:
     audit = {
-        "surrogate_id": str(match.surrogate_id),
+        "surrogate_id": str(match.surrogate_id) if match.surrogate_id else None,
+        "donor_id": str(match.donor_id) if match.donor_id else None,
         "intended_parent_id": str(match.intended_parent_id),
     }
     party = {"match_id": str(match.id), "intended_parent_id": str(match.intended_parent_id)}
@@ -339,7 +332,7 @@ def propose(
     notes: str | None = None,
     dispatch_effects: bool = True,
 ) -> Match:
-    """Create a proposed match. Parties may be at any stage.
+    """Create an under-review match. Parties may be at any stage.
 
     ``dispatch_effects=False`` commits the match and its history but skips
     after-commit effects such as workflow triggers. Its only caller is
@@ -380,7 +373,7 @@ def propose(
             donor_id=donor_id,
             match_kind="donor" if donor_id else "surrogate",
             intended_parent_id=intended_parent_id,
-            status=PROPOSED,
+            status=UNDER_REVIEW,
             proposed_by_user_id=proposed_by_user_id,
             notes=note_service.sanitize_html(notes) if notes else None,
         )
@@ -479,12 +472,30 @@ def transition(
         outcome=outcome,
         competitors=competitors,
     )
+    if action == "request_cancel" and locked.status == CANCELLATION_PENDING:
+        raise TransitionError("A pending cancellation request already exists for this match", 409)
+    if action in {"decline", "request_cancel"}:
+        ctx.reason = (reason or "").strip()
+        if not ctx.reason:
+            label = "Decline" if action == "decline" else "Cancellation"
+            raise TransitionError(f"{label} reason is required")
     applies = locked.status in spec.sources
     if not applies and spec.source_error is not None:
         raise TransitionError(spec.source_error.format(status=locked.status))
 
     try:
         effects = _APPLY[action](ctx) if applies else []
+        if not applies:
+            write_case_change(
+                db,
+                locked,
+                actor_user_id,
+                spec.history,
+                {
+                    "status_request_id": str(request.id),
+                    "status": locked.status,
+                },
+            )
         if action == "reject_cancel":
             effects += match_effects.cancel_request_resolved_notification(
                 db, locked, request, actor_user_id, approved=False, reason=reason
@@ -521,14 +532,19 @@ def _accept(ctx: _Context) -> list:
         db, match, actor_user_id=ctx.actor_user_id, actor_role=ctx.actor_role, now=ctx.now
     )
     for other in ctx.competitors:
-        other.status = CANCELLED
+        other.status = DECLINED
         other.closed_at = ctx.now
         other.closed_by_user_id = ctx.actor_user_id
         other.closure_reason = "Another match accepted"
+        other.decline_reason = other.closure_reason
+        other.reviewed_by_user_id = ctx.actor_user_id
+        other.reviewed_at = ctx.now
         other.updated_at = ctx.now
-        write_case_change(db, other, ctx.actor_user_id, "match_cancelled")
+        write_case_change(db, other, ctx.actor_user_id, "match_declined")
+        # Step 6 replaces auto-closure with conflict flags; until then, only
+        # explicit declines fire workflows, not these automatic competitor closures.
     audit, party = _pair_details(match)
-    count = {"cancelled_matches": len(ctx.competitors)}
+    count = {"declined_matches": len(ctx.competitors)}
     write_history(
         db,
         match,
@@ -544,15 +560,15 @@ def _accept(ctx: _Context) -> list:
     ]
 
 
-def _reject(ctx: _Context) -> list:
+def _decline(ctx: _Context) -> list:
     match = ctx.match
-    match.status = REJECTED
+    match.status = DECLINED
     match.closed_at = ctx.now
     match.closed_by_user_id = ctx.actor_user_id
     match.closure_reason = ctx.reason
     match.reviewed_by_user_id = ctx.actor_user_id
     match.reviewed_at = ctx.now
-    match.rejection_reason = ctx.reason
+    match.decline_reason = ctx.reason
     _append_notes(match, ctx.notes)
     match.updated_at = ctx.now
     audit, party = _pair_details(match)
@@ -560,29 +576,11 @@ def _reject(ctx: _Context) -> list:
         ctx.db,
         match,
         ctx.actor_user_id,
-        "match_rejected",
-        audit_details={**audit, "rejection_reason_provided": bool(ctx.reason)},
-        party_details={**party, "rejection_reason": ctx.reason},
+        "match_declined",
+        audit_details={**audit, "decline_reason_provided": bool(ctx.reason)},
+        party_details={**party, "decline_reason": ctx.reason},
     )
-    return match_effects.workflow_trigger(ctx.db, "rejected", match)
-
-
-def _cancel(ctx: _Context) -> list:
-    match = ctx.match
-    match.status = CANCELLED
-    match.closed_at = ctx.now
-    match.closed_by_user_id = ctx.actor_user_id
-    match.updated_at = ctx.now
-    audit, party = _pair_details(match)
-    write_history(
-        ctx.db,
-        match,
-        ctx.actor_user_id,
-        "match_cancelled",
-        audit_details=audit,
-        party_details=party,
-    )
-    return []
+    return match_effects.workflow_trigger(ctx.db, "declined", match)
 
 
 def _request_cancel(ctx: _Context) -> list:
@@ -611,7 +609,7 @@ def _request_cancel(ctx: _Context) -> list:
         status="pending",
     )
     db.add(request)
-    match.status = CANCEL_PENDING
+    match.status = CANCELLATION_PENDING
     match.updated_at = ctx.now
     write_case_change(db, match, ctx.actor_user_id, "match_cancel_requested")
     return match_effects.cancel_request_pending_notification(db, match, request, ctx.actor_user_id)
@@ -665,6 +663,7 @@ def _approve_cancel(ctx: _Context) -> list:
         *match_effects.cancel_request_resolved_notification(
             db, match, request, ctx.actor_user_id, approved=True
         ),
+        *match_effects.workflow_trigger(db, "cancelled", match),
     ]
 
 
@@ -684,8 +683,7 @@ def _restore_accepted(ctx: _Context) -> list:
 
 _APPLY: dict[str, Callable[[_Context], list]] = {
     "accept": _accept,
-    "reject": _reject,
-    "cancel": _cancel,
+    "decline": _decline,
     "request_cancel": _request_cancel,
     "complete": _complete,
     "approve_cancel": _approve_cancel,
