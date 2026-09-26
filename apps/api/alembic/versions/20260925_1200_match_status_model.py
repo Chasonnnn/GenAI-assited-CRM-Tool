@@ -1,7 +1,10 @@
 """Unify match review and decline statuses and workflow triggers.
 
 Deploy API and workers together: old writers use the replaced status values.
-Migration history preserves the original status, without copying legacy reasons.
+Migration history preserves the original status and existing reason text.
+
+Downgrade is lossy: never-accepted cancelled rows become rejected.
+match_cancelled workflows and match_status_migrated audit rows remain.
 
 Revision ID: 20260925_1200_match_status_model
 Revises: 20260924_0930_scheduling_permission_heads
@@ -75,6 +78,9 @@ def _history(connection, row, status: str) -> None:
         "status": status,
         "migration": revision,
     }
+    for field in ("decline_reason", "closure_reason"):
+        if getattr(row, field) is not None:
+            details[field] = getattr(row, field)
     payload = json.dumps(details, sort_keys=True, separators=(",", ":"))
     event = "match_status_migrated"
     digest = hashlib.sha256(
@@ -136,6 +142,18 @@ def upgrade() -> None:
     op.execute("SET LOCAL statement_timeout = '60s'")
     op.execute("LOCK TABLE matches IN ACCESS EXCLUSIVE MODE")
     connection = op.get_bind()
+    unknown = connection.execute(
+        sa.text("""
+        SELECT status, count(*) AS count FROM matches
+        WHERE status NOT IN ('proposed', 'reviewing', 'rejected', 'cancel_pending',
+            'under_review', 'accepted', 'cancellation_pending', 'declined', 'cancelled', 'completed')
+        GROUP BY status ORDER BY status
+    """)
+    ).all()
+    if unknown:
+        count = sum(row.count for row in unknown)
+        values = ", ".join(row.status for row in unknown)
+        raise RuntimeError(f"Cannot migrate {count} matches with unknown statuses: {values}")
     op.alter_column(
         "matches",
         "rejection_reason",
@@ -147,7 +165,7 @@ def upgrade() -> None:
     # Acceptance audit history or an approved cancellation request does prove it.
     rows = connection.execute(
         sa.text("""
-        SELECT m.id, m.organization_id, m.status FROM matches m
+        SELECT m.id, m.organization_id, m.status, m.decline_reason, m.closure_reason FROM matches m
         WHERE m.status IN ('proposed', 'reviewing', 'rejected', 'cancel_pending')
         OR (m.status = 'cancelled'
             AND NOT EXISTS (SELECT 1 FROM audit_logs a WHERE a.organization_id=m.organization_id AND a.target_type='match' AND a.target_id=m.id AND a.event_type='match_accepted')
@@ -165,10 +183,8 @@ def upgrade() -> None:
         }[row.status]
         _history(connection, row, status)
         connection.execute(
-            sa.text(
-                "UPDATE matches SET status=:status, decline_reason=CASE WHEN :declined THEN NULL ELSE decline_reason END, closure_reason=CASE WHEN :declined THEN NULL ELSE closure_reason END WHERE id=:id"
-            ),
-            {"id": row.id, "status": status, "declined": status == "declined"},
+            sa.text("UPDATE matches SET status=:status WHERE id=:id"),
+            {"id": row.id, "status": status},
         )
     _indexes(
         "'under_review','accepted','cancellation_pending'", "'accepted','cancellation_pending'"

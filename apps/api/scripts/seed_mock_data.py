@@ -31,6 +31,7 @@ from app.db.models import (
     Membership,
     Organization,
     PipelineStage,
+    StatusChangeRequest,
     Surrogate,
     SurrogateActivityLog,
     SurrogateContactAttempt,
@@ -321,6 +322,9 @@ MATCH_STATUS_FLOW = [
     MatchStatus.UNDER_REVIEW.value,
     MatchStatus.ACCEPTED.value,
     MatchStatus.DECLINED.value,
+    MatchStatus.CANCELLATION_PENDING.value,
+    MatchStatus.CANCELLED.value,
+    MatchStatus.COMPLETED.value,
 ]
 MATCH_ACCEPTABLE_SURROGATE_STAGES = {"approved", "ready_to_match"}
 
@@ -1083,14 +1087,14 @@ def create_matches(
     created_matches: list[Match] = []
 
     for target_status in targets:
+        needs_acceptance = target_status not in {
+            MatchStatus.UNDER_REVIEW.value,
+            MatchStatus.DECLINED.value,
+        }
         created = False
         for _ in range(120):
-            pool = (
-                accepted_surrogates
-                if target_status == MatchStatus.ACCEPTED.value
-                else general_surrogates
-            )
-            if target_status == MatchStatus.ACCEPTED.value:
+            pool = accepted_surrogates if needs_acceptance else general_surrogates
+            if needs_acceptance:
                 pool = [s for s in pool if s.id not in used_accepted_surrogates]
             if not pool:
                 break
@@ -1130,7 +1134,7 @@ def create_matches(
                 created = True
                 break
 
-            if target_status == MatchStatus.ACCEPTED.value:
+            if needs_acceptance:
                 try:
                     match = match_lifecycle.transition(
                         db,
@@ -1154,7 +1158,59 @@ def create_matches(
                     except Exception:
                         pass
                     continue
-                used_accepted_surrogates.add(surrogate.id)
+                if target_status in {
+                    MatchStatus.CANCELLATION_PENDING.value,
+                    MatchStatus.CANCELLED.value,
+                }:
+                    match = match_lifecycle.transition(
+                        db,
+                        match,
+                        "request_cancel",
+                        actor_user_id=proposer.id,
+                        reason="Seed cancellation for test coverage",
+                        dispatch_effects=False,
+                    )
+                if target_status == MatchStatus.CANCELLED.value:
+                    request = (
+                        db.query(StatusChangeRequest)
+                        .filter(
+                            StatusChangeRequest.organization_id == org_id,
+                            StatusChangeRequest.entity_type == "match",
+                            StatusChangeRequest.entity_id == match.id,
+                            StatusChangeRequest.status == "pending",
+                        )
+                        .with_for_update()
+                        .one()
+                    )
+
+                    def resolve():
+                        request.status = "approved"
+                        request.approved_by_user_id = decider.id
+                        request.approved_at = datetime.now(UTC)
+
+                    match = match_lifecycle.transition(
+                        db,
+                        match,
+                        "approve_cancel",
+                        actor_user_id=decider.id,
+                        request=request,
+                        before_commit=resolve,
+                        dispatch_effects=False,
+                    )
+                if target_status == MatchStatus.COMPLETED.value:
+                    match = match_lifecycle.transition(
+                        db,
+                        match,
+                        "complete",
+                        actor_user_id=decider.id,
+                        outcome="Seed completed match",
+                        dispatch_effects=False,
+                    )
+                if target_status in {
+                    MatchStatus.ACCEPTED.value,
+                    MatchStatus.CANCELLATION_PENDING.value,
+                }:
+                    used_accepted_surrogates.add(surrogate.id)
                 created_matches.append(match)
                 created = True
                 break

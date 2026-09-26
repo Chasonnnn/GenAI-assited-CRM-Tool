@@ -1,5 +1,6 @@
 """Workflow triggers - hooks into core services to trigger workflows."""
 
+import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -22,6 +23,8 @@ from app.db.models import (
 from app.schemas.workflow import is_supported_simple_cron
 from app.services import workflow_execution_authority
 from app.services.workflow_engine import engine
+
+logger = logging.getLogger(__name__)
 
 
 def _get_entity_owner_id(surrogate: Surrogate) -> UUID | None:
@@ -790,7 +793,11 @@ def _trigger_match(db: Session, match: Match, trigger_type: WorkflowTriggerType)
         else match_queries.get_surrogate_with_stage(db, match.surrogate_id, match.organization_id)
     )
     if party is None:
-        return
+        logger.warning(
+            "match_workflow_party_missing",
+            extra={"match_id": str(match.id), "trigger_type": trigger_type.value},
+        )
+        raise ValueError("Match workflow participant not found")
     event_data = {
         "match_id": str(match.id),
         "surrogate_id": str(match.surrogate_id) if match.surrogate_id else None,

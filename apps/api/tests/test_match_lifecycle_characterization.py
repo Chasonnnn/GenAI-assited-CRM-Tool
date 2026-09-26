@@ -23,6 +23,7 @@ from app.core.security import create_session_token
 from app.db.enums import Role
 from app.db.models import (
     AuditLog,
+    AutomationWorkflow,
     Donor,
     DonorStatusHistory,
     EntityActivityLog,
@@ -37,6 +38,7 @@ from app.db.models import (
     Task,
     User,
     UserPermissionOverride,
+    WorkflowExecution,
 )
 from app.main import app
 from app.services import (
@@ -616,7 +618,7 @@ async def test_accept_surrogate_match_moves_surrogate_and_ip_to_matched(
 
 @pytest.mark.asyncio
 async def test_accept_declines_other_open_proposals_for_same_surrogate(
-    authed_client, db, test_auth
+    authed_client, db, test_auth, monkeypatch
 ):
     surrogate = await _create_surrogate(authed_client)
     first_ip = await _create_intended_parent(authed_client)
@@ -628,7 +630,9 @@ async def test_accept_declines_other_open_proposals_for_same_surrogate(
     _set_reviewing(db, reviewing["id"])
     before = _snapshot(db, test_auth.org.id)
 
+    spies = _spy_effects(monkeypatch)
     await _accept(authed_client, accepted)
+    assert _call_counts(spies) == {"trigger_match_accepted": 1, "push_dashboard_stats": 1}
 
     for other_id in (proposed["id"], reviewing["id"]):
         row = _match_row(db, other_id)
@@ -1005,7 +1009,7 @@ async def test_delete_match_is_removed_without_changing_history(
 
 
 @pytest.mark.asyncio
-async def test_cancel_request_sets_cancel_pending_and_notifies(
+async def test_cancel_request_sets_cancellation_pending_and_notifies(
     authed_client, db, test_auth, monkeypatch
 ):
     spies = _spy_effects(monkeypatch)
@@ -2372,3 +2376,95 @@ async def test_decline_and_complete_enforce_org_and_permission_for_both_match_ki
     assert response.status_code == (404 if foreign_org else 403)
     assert _match_row(db, match["id"]).status == match["status"]
     assert _transition_history(db, test_auth.org.id) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("donor", [False, True])
+async def test_missing_workflow_party_records_effect_failure(
+    authed_client, db, test_auth, monkeypatch, caplog, donor
+):
+    from sqlalchemy.orm import Session
+
+    from app.services import match_queries
+
+    party = await _donor(authed_client) if donor else await _create_surrogate(authed_client)
+    match = await _case(
+        authed_client,
+        await _create_intended_parent(authed_client),
+        **({"donor": party} if donor else {"surrogate": party}),
+    )
+    monkeypatch.setattr(
+        match_queries, "get_donor" if donor else "get_surrogate_with_stage", lambda *args: None
+    )
+    # Keep effect rollback inside a savepoint in the outer test transaction.
+    with Session(bind=db.connection(), join_transaction_mode="create_savepoint") as effects_db:
+        result = match_lifecycle.transition(
+            effects_db,
+            effects_db.get(Match, uuid.UUID(match["id"])),
+            "decline",
+            actor_user_id=test_auth.user.id,
+            reason="Ended",
+        )
+        assert result.status == "declined"
+        failures = _effect_failures(effects_db, match["id"])
+        assert len(failures) == 1
+        assert failures[0]["effect"] == "workflow_trigger_match_declined"
+        assert failures[0]["error_class"] == "ValueError"
+    assert any(
+        record.levelname == "WARNING" and record.message == "match_workflow_party_missing"
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_surrogate_stage_workflow_on_donor_match_fails_without_changes(
+    authed_client, db, test_auth
+):
+    surrogate = await _create_surrogate(authed_client)
+    donor = await _donor(authed_client)
+    match = await _accept(
+        authed_client,
+        await _case(authed_client, await _create_intended_parent(authed_client), donor=donor),
+    )
+    workflow = AutomationWorkflow(
+        organization_id=test_auth.org.id,
+        name="Legacy surrogate stage action",
+        subject_type="match",
+        trigger_type="match_accepted",
+        trigger_config={},
+        conditions=[],
+        actions=[
+            {
+                "action_type": "update_field",
+                "field": "stage_id",
+                "value": str(db.get(Surrogate, uuid.UUID(surrogate["id"])).stage_id),
+            }
+        ],
+        created_by_user_id=test_auth.user.id,
+        is_enabled=True,
+    )
+    db.add(workflow)
+    db.commit()
+    before = _snapshot(db, test_auth.org.id)
+    stages = (
+        _stage_slug(db, Donor, donor["id"]),
+        _stage_slug(db, Surrogate, surrogate["id"]),
+        _ip_stage_key(db, match["intended_parent_id"]),
+    )
+    workflow_triggers.trigger_match_accepted(db, _match_row(db, match["id"]))
+    execution = (
+        db.query(WorkflowExecution).filter(WorkflowExecution.workflow_id == workflow.id).one()
+    )
+    assert execution.status == "partial"
+    assert len(execution.actions_executed) == 1
+    assert execution.actions_executed[0]["success"] is False
+    assert execution.actions_executed[0]["error"] == (
+        "Action 'update_field' only supports Surrogate entities, got 'match'"
+    )
+    assert _snapshot(db, test_auth.org.id) == before
+    assert stages == (
+        _stage_slug(db, Donor, donor["id"]),
+        _stage_slug(db, Surrogate, surrogate["id"]),
+        _ip_stage_key(db, match["intended_parent_id"]),
+    )
+    assert _match_row(db, match["id"]).status == "accepted"

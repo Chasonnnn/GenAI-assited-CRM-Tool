@@ -83,6 +83,14 @@ describe('MatchesPage', () => {
         })
     })
 
+    it.each(['pending_legacy', 'constructor'])('labels the filter and preserves unknown status %s', (unknownStatus) => {
+        mockUseMatches.mockReturnValue({data: {...mockMatchData, items: [{...mockMatchData.items[0], status: unknownStatus}]}, isLoading: false})
+        render(<MatchesPage />)
+        expect(screen.getByText('All statuses')).toBeInTheDocument()
+        expect(screen.getByText(unknownStatus)).toBeInTheDocument()
+        expect(screen.getAllByText('Under Review')).toHaveLength(1)
+    })
+
     it('renders page header and title', () => {
         render(<MatchesPage />)
         expect(screen.getByText('Matches')).toBeInTheDocument()

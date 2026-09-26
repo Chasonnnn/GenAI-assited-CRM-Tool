@@ -71,13 +71,16 @@ LEGACY_WORKFLOW_SUBJECT_TYPES = {
     "intake_lead_created": "intake_lead",
     "match_proposed": "match",
     "match_accepted": "match",
+    "match_rejected": "match",
     "match_declined": "match",
     "match_cancelled": "match",
     "appointment_scheduled": "appointment",
     "appointment_completed": "appointment",
 }
 
-DONOR_PHOTO_BASE64_FIELD_LIMIT = ((attachment_service.MAX_FILE_SIZE_BYTES + 2) // 3) * 4
+DONOR_PHOTO_BASE64_FIELD_LIMIT = (
+    (attachment_service.MAX_FILE_SIZE_BYTES + 2) // 3
+) * 4
 MAX_DONOR_STATUS_HISTORY_JSON_BYTES = 1_048_576
 MIN_DONOR_NUMBER_VALUE = 10_001
 
@@ -515,6 +518,11 @@ def import_org_config_zip(
         db.add(template)
 
     for workflow_data in workflows_payload:
+        trigger_type = workflow_data.get("trigger_type")
+        subject_type = workflow_data.get("subject_type")
+        if trigger_type == "match_rejected":
+            trigger_type = "match_declined"
+            subject_type = "match"
         workflow = AutomationWorkflow(
             id=UUID(workflow_data["id"]),
             organization_id=org_id,
@@ -522,9 +530,9 @@ def import_org_config_zip(
             description=workflow_data.get("description"),
             icon=workflow_data.get("icon", "workflow"),
             schema_version=workflow_data.get("schema_version") or 1,
-            trigger_type=workflow_data.get("trigger_type"),
-            subject_type=workflow_data.get("subject_type")
-            or LEGACY_WORKFLOW_SUBJECT_TYPES.get(workflow_data.get("trigger_type"), "surrogate"),
+            trigger_type=trigger_type,
+            subject_type=subject_type
+            or LEGACY_WORKFLOW_SUBJECT_TYPES.get(trigger_type, "surrogate"),
             trigger_config=workflow_data.get("trigger_config") or {},
             conditions=workflow_data.get("conditions") or [],
             condition_logic=workflow_data.get("condition_logic", "AND"),
@@ -678,6 +686,11 @@ def import_org_config_zip(
         db.add(link)
 
     for template_data in workflow_templates_payload:
+        trigger_type = template_data.get("trigger_type")
+        subject_type = template_data.get("subject_type")
+        if trigger_type == "match_rejected":
+            trigger_type = "match_declined"
+            subject_type = "match"
         template = WorkflowTemplate(
             id=UUID(template_data["id"]),
             name=template_data.get("name"),
@@ -686,8 +699,8 @@ def import_org_config_zip(
             category=template_data.get("category", "general"),
             # Absent/None keeps legacy semantics: donor-trigger templates stay
             # repair-required, other triggers fall back to the legacy mapping.
-            subject_type=template_data.get("subject_type"),
-            trigger_type=template_data.get("trigger_type"),
+            subject_type=subject_type,
+            trigger_type=trigger_type,
             trigger_config=template_data.get("trigger_config") or {},
             conditions=template_data.get("conditions") or [],
             condition_logic=template_data.get("condition_logic", "AND"),
@@ -1158,7 +1171,9 @@ def _restore_donor_profile_photo(
     scan_status = (row.get("profile_photo_scan_status") or "").strip().lower()
     quarantined_value = (row.get("profile_photo_quarantined") or "").strip().lower()
     if scan_status != "clean" or quarantined_value not in {"false", "0", "no", "n"}:
-        raise ValueError(f"Profile photo must be clean and not quarantined for donor {donor.id}")
+        raise ValueError(
+            f"Profile photo must be clean and not quarantined for donor {donor.id}"
+        )
     if expected_size < 0 or expected_size > attachment_service.MAX_FILE_SIZE_BYTES:
         raise ValueError(f"Invalid profile photo size for donor {donor.id}")
     max_encoded_size = ((attachment_service.MAX_FILE_SIZE_BYTES + 2) // 3) * 4

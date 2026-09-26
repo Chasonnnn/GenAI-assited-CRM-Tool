@@ -20,7 +20,10 @@ PREVIOUS = "20260924_0930_scheduling_permission_heads"
 
 
 @pytest.mark.parametrize("donor", [False, True])
-def test_upgrade_statuses_null_reasons_history_and_saved_workflows(db_engine, donor):
+@pytest.mark.parametrize("unknown_status", [False, True])
+def test_upgrade_preserves_reasons_history_and_rejects_unknown_statuses(
+    db_engine, donor, unknown_status
+):
     with db_engine.connect() as connection:
         transaction = connection.begin()
         try:
@@ -38,6 +41,7 @@ def test_upgrade_statuses_null_reasons_history_and_saved_workflows(db_engine, do
                         ("reviewing", "reviewing", "under_review"),
                         ("rejected", "rejected", "declined"),
                         ("withdrawn", "cancelled", "declined"),
+                        ("auto_closed", "cancelled", "declined"),
                         ("viewed_then_withdrawn", "cancelled", "declined"),
                         ("accepted", "accepted", "accepted"),
                         ("pending", "cancel_pending", "cancellation_pending"),
@@ -49,13 +53,15 @@ def test_upgrade_statuses_null_reasons_history_and_saved_workflows(db_engine, do
                     ip = _create_intended_parent(db, org_id)
                     surrogate = None if donor else _create_case(db, org_id, user_id, stage)
                     match_id = uuid4()
-                    cases[label] = (match_id, status, expected)
+                    rejection_reason = "Not a fit" if label == "rejected" else None
+                    closure_reason = "Another match accepted" if label == "auto_closed" else None
+                    cases[label] = (match_id, status, expected, rejection_reason, closure_reason)
                     db.execute(
                         text("""
                         INSERT INTO matches (id, organization_id, match_number, surrogate_id, donor_id, match_kind,
-                            intended_parent_id, status, proposed_by_user_id, reviewed_at, rejection_reason, notes)
+                            intended_parent_id, status, proposed_by_user_id, reviewed_at, rejection_reason, closure_reason, notes)
                         VALUES (:id, :org, :number, :surrogate, :donor, :kind, :ip, :status, :user, :reviewed,
-                            'Legacy reason must not become a decline reason', 'Preserved')
+                            :rejection_reason, :closure_reason, 'Preserved')
                     """),
                         {
                             "id": match_id,
@@ -67,6 +73,8 @@ def test_upgrade_statuses_null_reasons_history_and_saved_workflows(db_engine, do
                             "ip": ip.id,
                             "status": status,
                             "user": user_id,
+                            "rejection_reason": rejection_reason,
+                            "closure_reason": closure_reason,
                             "reviewed": datetime.now(UTC)
                             if label == "viewed_then_withdrawn"
                             else None,
@@ -112,9 +120,37 @@ def test_upgrade_statuses_null_reasons_history_and_saved_workflows(db_engine, do
                 draft_trigger_type="match_rejected",
                 name="Legacy match template",
             )
+            if unknown_status:
+                connection.execute(
+                    text("UPDATE matches SET status='pending' WHERE id=:id"),
+                    {"id": cases["proposed"][0]},
+                )
+
+                def snapshot():
+                    return {
+                        table: connection.execute(text(f"SELECT * FROM {table} ORDER BY id")).all()
+                        for table in (
+                            "matches",
+                            "audit_logs",
+                            "automation_workflows",
+                            "workflow_templates",
+                        )
+                    }
+
+                original = snapshot()
+                with pytest.raises(RuntimeError, match=r"1.*pending"):
+                    command.upgrade(config, REVISION)
+                assert snapshot() == original
+                columns = {c["name"] for c in inspect(connection).get_columns("matches")}
+                assert "rejection_reason" in columns and "decline_reason" not in columns
+                assert (
+                    connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+                    == PREVIOUS
+                )
+                return
             command.upgrade(config, REVISION)
             command.upgrade(config, REVISION)
-            for match_id, old, expected in cases.values():
+            for match_id, old, expected, rejection_reason, closure_reason in cases.values():
                 row = connection.execute(
                     text(
                         "SELECT status, decline_reason, closure_reason, notes FROM matches WHERE id=:id"
@@ -123,9 +159,8 @@ def test_upgrade_statuses_null_reasons_history_and_saved_workflows(db_engine, do
                 ).one()
                 assert row.status == expected
                 assert row.notes == "Preserved"
-                if expected == "declined":
-                    assert row.decline_reason is None
-                    assert row.closure_reason is None
+                assert row.decline_reason == rejection_reason
+                assert row.closure_reason == closure_reason
                 history = connection.execute(
                     text(
                         "SELECT details, actor_user_id FROM audit_logs WHERE target_id=:id AND event_type='match_status_migrated'"
@@ -140,6 +175,14 @@ def test_upgrade_statuses_null_reasons_history_and_saved_workflows(db_engine, do
                         "original_status": old,
                         "status": expected,
                         "migration": REVISION,
+                        **(
+                            {"decline_reason": rejection_reason}
+                            if rejection_reason is not None
+                            else {}
+                        ),
+                        **(
+                            {"closure_reason": closure_reason} if closure_reason is not None else {}
+                        ),
                     }
                 else:
                     assert history == []

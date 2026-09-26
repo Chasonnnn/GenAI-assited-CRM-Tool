@@ -30,7 +30,6 @@ import {
     getMatchStatusBadgeClassName,
     getMatchStatusLabel,
     getMatchKindLabel,
-    isMatchStatus,
     MATCH_STATUS_DEFINITIONS,
 } from "@/lib/match-status-definitions"
 import { useAuth } from "@/lib/auth-context"
@@ -38,7 +37,7 @@ import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 import { PermissionDeniedState } from "@/components/error-state"
 
-function StatusBadge({ status }: { status: MatchStatus }) {
+function StatusBadge({ status }: { status: string }) {
     return (
         <Badge variant="outline" className={getMatchStatusBadgeClassName(status)}>
             {getMatchStatusLabel(status)}
@@ -47,7 +46,7 @@ function StatusBadge({ status }: { status: MatchStatus }) {
 }
 
 function MatchRow({ match }: { match: MatchListItem }) {
-    const status = isMatchStatus(match.status) ? match.status : "under_review"
+    const status = match.status
 
     return (
         <TableRow className="hover:bg-accent/50">

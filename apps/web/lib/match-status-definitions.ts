@@ -58,22 +58,17 @@ const MATCH_STATUS_BY_VALUE = Object.fromEntries(
 ) as Record<MatchStatus, MatchStatusDefinition>
 
 export function isMatchStatus(value: string | null | undefined): value is MatchStatus {
-    return typeof value === "string" && value in MATCH_STATUS_BY_VALUE
-}
-
-function getMatchStatusDefinition(value: string | null | undefined): MatchStatusDefinition {
-    if (isMatchStatus(value)) {
-        return MATCH_STATUS_BY_VALUE[value]
-    }
-    return MATCH_STATUS_BY_VALUE.under_review
+    return typeof value === "string" && Object.hasOwn(MATCH_STATUS_BY_VALUE, value)
 }
 
 export function getMatchStatusLabel(value: string | null | undefined): string {
-    return getMatchStatusDefinition(value).label
+    return isMatchStatus(value) ? MATCH_STATUS_BY_VALUE[value].label : value || "Unknown"
 }
 
 export function getMatchStatusBadgeClassName(value: string | null | undefined): string {
-    return getMatchStatusDefinition(value).badgeClassName
+    return isMatchStatus(value)
+        ? MATCH_STATUS_BY_VALUE[value].badgeClassName
+        : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
 }
 
 export function getMatchKindLabel(kind: string | null | undefined): string {

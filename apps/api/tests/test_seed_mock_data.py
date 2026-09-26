@@ -77,7 +77,13 @@ def test_create_intended_parents_generates_status_history(db, test_org, test_use
     assert ip_history_count >= 10
 
 
-def test_create_matches_balanced_statuses(db, test_org, test_user) -> None:
+def test_create_matches_balanced_statuses(db, test_org, test_user, monkeypatch) -> None:
+    from unittest.mock import Mock
+
+    from app.services import match_effects
+
+    dispatch = Mock(side_effect=AssertionError("Seeds must not dispatch effects"))
+    monkeypatch.setattr(match_effects, "dispatch", dispatch)
     admin_user = User(
         id=uuid.uuid4(),
         email=f"admin-{uuid.uuid4().hex[:8]}@test.com",
@@ -148,7 +154,15 @@ def test_create_matches_balanced_statuses(db, test_org, test_user) -> None:
     statuses = {
         row[0] for row in db.query(Match.status).filter(Match.organization_id == test_org.id).all()
     }
-    assert {"under_review", "accepted", "declined"}.issubset(statuses)
+    assert statuses == {
+        "under_review",
+        "accepted",
+        "declined",
+        "cancellation_pending",
+        "cancelled",
+        "completed",
+    }
+    dispatch.assert_not_called()
 
     accepted_surrogate_ids = [
         row[0]

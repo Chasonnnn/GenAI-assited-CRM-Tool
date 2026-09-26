@@ -541,7 +541,8 @@ def _accept(ctx: _Context) -> list:
         other.reviewed_at = ctx.now
         other.updated_at = ctx.now
         write_case_change(db, other, ctx.actor_user_id, "match_declined")
-        effects += match_effects.workflow_trigger(db, "declined", other)
+        # Step 6 replaces auto-closure with conflict flags; until then, only
+        # explicit declines fire workflows, not these automatic competitor closures.
     audit, party = _pair_details(match)
     count = {"declined_matches": len(ctx.competitors)}
     write_history(
