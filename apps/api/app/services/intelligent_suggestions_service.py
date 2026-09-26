@@ -342,7 +342,22 @@ def _resolve_stage_for_org(
 
 
 def serialize_rule(db: Session, rule: OrgIntelligentSuggestionRule) -> dict:
-    stage = _resolve_stage_for_org(db, rule.organization_id, rule.stage_slug)
+    return serialize_rules(db, rule.organization_id, [rule])[0]
+
+
+def serialize_rules(
+    db: Session, org_id: UUID, rules: list[OrgIntelligentSuggestionRule]
+) -> list[dict]:
+    if not rules:
+        return []
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
+    stages = pipeline_service.resolve_stages_bulk(
+        db, org_id, pipeline.id, [rule.stage_slug for rule in rules]
+    )
+    return [_serialize_rule(rule, stage) for rule, stage in zip(rules, stages, strict=True)]
+
+
+def _serialize_rule(rule: OrgIntelligentSuggestionRule, stage: PipelineStage | None) -> dict:
     return {
         "id": str(rule.id),
         "organization_id": str(rule.organization_id),
@@ -925,11 +940,9 @@ def get_intelligent_summary(
             counts[FILTER_INTELLIGENT_STUCK_PREAPPROVAL] += len(rule_ids)
 
     total = len({sid for ids in results.values() for sid in ids})
-    rule_summaries = []
-    for rule in rules:
-        serialized = serialize_rule(db, rule)
+    rule_summaries = serialize_rules(db, org_id, rules)
+    for rule, serialized in zip(rules, rule_summaries, strict=True):
         serialized["match_count"] = len(results.get(rule.id, set()))
-        rule_summaries.append(serialized)
 
     return {
         "total": total,

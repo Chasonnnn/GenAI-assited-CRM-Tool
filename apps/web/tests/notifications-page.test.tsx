@@ -11,13 +11,14 @@ vi.mock('next/navigation', () => ({
 const mockUseNotifications = vi.fn()
 const mockMarkRead = vi.fn()
 const mockMarkAllRead = vi.fn()
+const mockUseMarkAllRead = vi.fn()
 const mockUseTasks = vi.fn()
 const mockUseNotificationSocket = vi.fn()
 
 vi.mock('@/lib/hooks/use-notifications', () => ({
     useNotifications: (params: unknown) => mockUseNotifications(params),
     useMarkRead: () => ({ mutate: mockMarkRead, isPending: false }),
-    useMarkAllRead: () => ({ mutate: mockMarkAllRead, isPending: false }),
+    useMarkAllRead: () => mockUseMarkAllRead(),
 }))
 
 vi.mock('@/lib/hooks/use-tasks', () => ({
@@ -86,6 +87,7 @@ describe('NotificationsPage', () => {
         mockPush.mockReset()
         mockMarkRead.mockReset()
         mockMarkAllRead.mockReset()
+        mockUseMarkAllRead.mockReturnValue({ mutate: mockMarkAllRead, isPending: false })
     })
 
     it('renders notifications page with header', () => {
@@ -207,5 +209,26 @@ describe('NotificationsPage', () => {
 
         render(<NotificationsPage />)
         expect(screen.getByText("You're all caught up!")).toBeInTheDocument()
+    })
+
+    it("shows progress and prevents duplicate mark-all requests until the mutation settles", () => {
+        mockUseMarkAllRead.mockReturnValue({ mutate: mockMarkAllRead, isPending: true })
+        const { rerender } = render(<NotificationsPage />)
+        const button = screen.getByRole("button", { name: "Mark all read" })
+
+        expect(button).toBeDisabled()
+        expect(button).toHaveAttribute("aria-busy", "true")
+        expect(button.querySelector("svg")).toHaveClass("animate-spin")
+        fireEvent.click(button)
+        expect(mockMarkAllRead).not.toHaveBeenCalled()
+
+        // A rejected request leaves unread items available for retry.
+        mockUseMarkAllRead.mockReturnValue({ mutate: mockMarkAllRead, isPending: false, isError: true })
+        rerender(<NotificationsPage />)
+        expect(button).toBeEnabled()
+        expect(button).toHaveAttribute("aria-busy", "false")
+        expect(button.querySelector("svg")).toBeNull()
+        fireEvent.click(button)
+        expect(mockMarkAllRead).toHaveBeenCalledTimes(1)
     })
 })
