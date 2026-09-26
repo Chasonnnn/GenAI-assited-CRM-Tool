@@ -13,7 +13,6 @@ from app.core.config import settings
 from app.db.models import OpsCliToken, Organization, User
 from app.db.models.ops_cli import OpsCliLogin
 from app.services.platform_service import log_admin_action
-from app.utils.normalization import escape_like_string
 
 TOKEN_LIFETIME = timedelta(hours=8)
 TOKEN_PREFIX = "sf_ops_"
@@ -161,11 +160,7 @@ def list_organizations(db: Session, *, search: str = "", limit: int = 100, offse
     """Discover publication targets for an authenticated platform CLI session."""
     query = db.query(Organization).filter(Organization.deleted_at.is_(None))
     if search:
-        escaped_search = escape_like_string(search)
-        filters = [
-            Organization.slug.ilike(f"%{escaped_search}%", escape="\\"),
-            Organization.name.ilike(f"%{escaped_search}%", escape="\\"),
-        ]
+        filters = [Organization.slug.ilike(f"%{search}%"), Organization.name.ilike(f"%{search}%")]
         try:
             filters.append(Organization.id == UUID(search))
         except ValueError:

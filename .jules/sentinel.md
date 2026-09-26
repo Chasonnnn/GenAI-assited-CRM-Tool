@@ -1,4 +1,0 @@
-## 2025-02-28 - SQL LIKE Wildcard Injection in Search APIs
-**Vulnerability:** User input was directly interpolated into SQLAlchemy `.ilike()` statements using string formatting (e.g., `.ilike(f"%{search}%")`) without escaping wildcard characters like `%` and `_`.
-**Learning:** Even when using parameterized queries (which SQLAlchemy handles under the hood for `.ilike`), failing to escape the LIKE pattern itself allows an attacker to inject wildcards. In `search_service.py`, `ops_cli_service.py`, and `meta_form_mapping_service.py`, this could allow denial-of-service (DoS) via expensive, unindexed queries or unintended data enumeration.
-**Prevention:** Always sanitize user input intended for `LIKE`/`ILIKE` patterns by wrapping it in `escape_like_string()` (from `app.utils.normalization`) and explicitly specifying the escape character using `escape="\\"` in the `.ilike()` call.

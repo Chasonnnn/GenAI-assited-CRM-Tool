@@ -1092,20 +1092,12 @@ def _search_surrogates(
         normalized_identifier = normalize_identifier(query)
         fallback_filters = []
         if normalized_text:
-            escaped_text = escape_like_string(normalized_text)
             fallback_filters.append(
-                surrogate_table.c.full_name_normalized.ilike(
-                    f"%{escaped_text}%",
-                    escape="\\",
-                )
+                surrogate_table.c.full_name_normalized.ilike(f"%{normalized_text}%")
             )
         if normalized_identifier:
-            escaped_identifier = escape_like_string(normalized_identifier)
             fallback_filters.append(
-                surrogate_table.c.surrogate_number_normalized.ilike(
-                    f"%{escaped_identifier}%",
-                    escape="\\",
-                )
+                surrogate_table.c.surrogate_number_normalized.ilike(f"%{normalized_identifier}%")
             )
         if fallback_filters:
             fallback_stmt = (
