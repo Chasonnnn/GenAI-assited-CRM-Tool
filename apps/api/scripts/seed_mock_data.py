@@ -1030,6 +1030,24 @@ def _build_match_targets(count: int, mode: str) -> list[str]:
     return _repeat_balanced(MATCH_STATUS_FLOW, count)
 
 
+def _promote_surrogate_to_ready(
+    db, org_id: UUID, candidates: list, accepted: list, used: set[UUID]
+) -> Surrogate | None:
+    """Move one unused seeded surrogate to ready_to_match so it can accept a match."""
+    taken = {s.id for s in accepted} | used
+    pool = [s for s in candidates if s.id not in taken]
+    if not pool:
+        return None
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
+    stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "ready_to_match")
+    if stage is None:
+        return None
+    surrogate = random.choice(pool)
+    surrogate.stage_id = stage.id
+    db.flush()
+    return surrogate
+
+
 def create_matches(
     db,
     *,
@@ -1082,6 +1100,14 @@ def create_matches(
         fallback=proposer,
     )
     targets = _build_match_targets(count, mode=mode)
+    if not match_lifecycle.expansion_enabled():
+        # complete() is fenced behind MATCH_CASE_EXPANSION_ENABLED; seed accepted instead.
+        skipped = targets.count(MatchStatus.COMPLETED.value)
+        targets = [
+            MatchStatus.ACCEPTED.value if t == MatchStatus.COMPLETED.value else t for t in targets
+        ]
+        if skipped:
+            print(f"  - match expansion disabled: seeding {skipped} completed matches as accepted")
     used_pairs: set[tuple[UUID, UUID]] = set()
     used_accepted_surrogates: set[UUID] = set()
     created_matches: list[Match] = []
@@ -1096,6 +1122,20 @@ def create_matches(
             pool = accepted_surrogates if needs_acceptance else general_surrogates
             if needs_acceptance:
                 pool = [s for s in pool if s.id not in used_accepted_surrogates]
+                if not pool:
+                    # Random stage seeding rarely leaves enough acceptable surrogates;
+                    # promote one so every status in the flow is seeded deterministically.
+                    promoted = _promote_surrogate_to_ready(
+                        db,
+                        org_id,
+                        general_surrogates,
+                        accepted_surrogates,
+                        used_accepted_surrogates,
+                    )
+                    if promoted is None:
+                        break
+                    accepted_surrogates.append(promoted)
+                    pool = [promoted]
             if not pool:
                 break
 

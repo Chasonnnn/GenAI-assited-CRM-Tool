@@ -16,7 +16,7 @@ def upgrade() -> None:
         SET subject_type = CASE
             WHEN trigger_type = 'form_submitted' THEN 'form_submission'
             WHEN trigger_type = 'intake_lead_created' THEN 'intake_lead'
-            WHEN trigger_type IN ('match_proposed', 'match_accepted', 'match_rejected', 'match_declined', 'match_cancelled')
+            WHEN trigger_type IN ('match_proposed', 'match_accepted', 'match_rejected')
                 THEN 'match'
             WHEN trigger_type IN ('appointment_scheduled', 'appointment_completed')
                 THEN 'appointment'
