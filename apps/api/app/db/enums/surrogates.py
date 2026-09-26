@@ -119,8 +119,8 @@ class SurrogateActivityType(str, Enum):
     MATCH_ATTEMPT_UPDATED = "match_attempt_updated"
     MATCH_CANCEL_REQUESTED = "match_cancel_requested"
     MATCH_ACCEPTED = "match_accepted"  # Match accepted
-    MATCH_REJECTED = "match_rejected"  # Match rejected
-    MATCH_CANCELLED = "match_cancelled"  # Match cancelled/withdrawn
+    MATCH_DECLINED = "match_declined"  # Match declined
+    MATCH_CANCELLED = "match_cancelled"  # Accepted match cancelled
     MATCH_CANCEL_REQUEST_REJECTED = "match_cancel_request_rejected"
     MATCH_CANCEL_REQUEST_WITHDRAWN = "match_cancel_request_withdrawn"
     APPLICATION_EDITED = "application_edited"

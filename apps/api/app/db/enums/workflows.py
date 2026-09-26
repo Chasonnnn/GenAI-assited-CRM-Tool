@@ -24,7 +24,8 @@ class WorkflowTriggerType(str, Enum):
     # Match triggers
     MATCH_PROPOSED = "match_proposed"
     MATCH_ACCEPTED = "match_accepted"
-    MATCH_REJECTED = "match_rejected"
+    MATCH_DECLINED = "match_declined"
+    MATCH_CANCELLED = "match_cancelled"
     # Document trigger
     DOCUMENT_UPLOADED = "document_uploaded"  # Fires after scan_status = 'clean'
     # Note trigger (high-volume, requires condition to activate)

@@ -108,9 +108,7 @@ def _record_failure(
 
 
 def workflow_trigger(db: Session, action: str, match: Match) -> list[Effect]:
-    """Workflow triggers fire for surrogate matches only."""
-    if not match.surrogate_id:
-        return []
+    """Workflow triggers fire for both surrogate and donor matches."""
     from app.services import workflow_triggers
 
     name = f"trigger_match_{action}"

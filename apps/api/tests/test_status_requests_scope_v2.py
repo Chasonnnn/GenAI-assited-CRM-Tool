@@ -218,7 +218,7 @@ def test_match_cancellation_rechecks_applicant_approval_boundary(
         surrogate_id=record.id,
         intended_parent_id=parent.id,
         proposed_by_user_id=context.manager.user_id,
-        status="cancel_pending",
+        status="cancellation_pending",
     )
     db.add(match)
     db.flush()
@@ -262,5 +262,5 @@ def test_match_cancellation_rechecks_applicant_approval_boundary(
                 db, request.id, context.org.id, context.manager.user_id, Role.CASE_MANAGER
             )
         assert request.status == "pending"
-        assert match.status == "cancel_pending"
+        assert match.status == "cancellation_pending"
         assert record.stage_id == previous_stage_id

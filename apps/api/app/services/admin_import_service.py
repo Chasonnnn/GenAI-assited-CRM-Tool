@@ -71,14 +71,13 @@ LEGACY_WORKFLOW_SUBJECT_TYPES = {
     "intake_lead_created": "intake_lead",
     "match_proposed": "match",
     "match_accepted": "match",
-    "match_rejected": "match",
+    "match_declined": "match",
+    "match_cancelled": "match",
     "appointment_scheduled": "appointment",
     "appointment_completed": "appointment",
 }
 
-DONOR_PHOTO_BASE64_FIELD_LIMIT = (
-    (attachment_service.MAX_FILE_SIZE_BYTES + 2) // 3
-) * 4
+DONOR_PHOTO_BASE64_FIELD_LIMIT = ((attachment_service.MAX_FILE_SIZE_BYTES + 2) // 3) * 4
 MAX_DONOR_STATUS_HISTORY_JSON_BYTES = 1_048_576
 MIN_DONOR_NUMBER_VALUE = 10_001
 
@@ -525,9 +524,7 @@ def import_org_config_zip(
             schema_version=workflow_data.get("schema_version") or 1,
             trigger_type=workflow_data.get("trigger_type"),
             subject_type=workflow_data.get("subject_type")
-            or LEGACY_WORKFLOW_SUBJECT_TYPES.get(
-                workflow_data.get("trigger_type"), "surrogate"
-            ),
+            or LEGACY_WORKFLOW_SUBJECT_TYPES.get(workflow_data.get("trigger_type"), "surrogate"),
             trigger_config=workflow_data.get("trigger_config") or {},
             conditions=workflow_data.get("conditions") or [],
             condition_logic=workflow_data.get("condition_logic", "AND"),
@@ -1161,9 +1158,7 @@ def _restore_donor_profile_photo(
     scan_status = (row.get("profile_photo_scan_status") or "").strip().lower()
     quarantined_value = (row.get("profile_photo_quarantined") or "").strip().lower()
     if scan_status != "clean" or quarantined_value not in {"false", "0", "no", "n"}:
-        raise ValueError(
-            f"Profile photo must be clean and not quarantined for donor {donor.id}"
-        )
+        raise ValueError(f"Profile photo must be clean and not quarantined for donor {donor.id}")
     if expected_size < 0 or expected_size > attachment_service.MAX_FILE_SIZE_BYTES:
         raise ValueError(f"Invalid profile photo size for donor {donor.id}")
     max_encoded_size = ((attachment_service.MAX_FILE_SIZE_BYTES + 2) // 3) * 4

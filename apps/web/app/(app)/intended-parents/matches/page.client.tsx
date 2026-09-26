@@ -219,7 +219,7 @@ export default function MatchesPage() {
                             <div className="text-2xl font-bold">{stats?.total ?? 0}</div>
                         </CardContent>
                     </Card>
-                    {(["proposed", "reviewing", "accepted", "rejected"] as const).map((status) => (
+                    {(["under_review", "accepted", "declined"] as const).map((status) => (
                         <Card key={status}>
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -359,7 +359,7 @@ export default function MatchesPage() {
                                                 {(() => {
                                                     const status = isMatchStatus(match.status)
                                                         ? match.status
-                                                        : "proposed"
+                                                        : "under_review"
                                                     return (
                                                         <Badge className={getMatchStatusBadgeClassName(status)}>
                                                             {getMatchStatusLabel(status)}

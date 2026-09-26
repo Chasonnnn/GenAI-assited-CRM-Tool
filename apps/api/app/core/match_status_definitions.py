@@ -6,26 +6,13 @@ from app.db.enums import MatchStatus
 
 MATCH_STATUS_DEFINITIONS = [
     {
-        "value": MatchStatus.PROPOSED.value,
-        "label": "Proposed",
-        "color": "#2563EB",
-        "order": 1,
-        "allowed_transitions": [
-            MatchStatus.REVIEWING.value,
-            MatchStatus.ACCEPTED.value,
-            MatchStatus.REJECTED.value,
-            MatchStatus.CANCELLED.value,
-        ],
-    },
-    {
-        "value": MatchStatus.REVIEWING.value,
-        "label": "Reviewing",
+        "value": MatchStatus.UNDER_REVIEW.value,
+        "label": "Under Review",
         "color": "#D97706",
         "order": 2,
         "allowed_transitions": [
             MatchStatus.ACCEPTED.value,
-            MatchStatus.REJECTED.value,
-            MatchStatus.CANCELLED.value,
+            MatchStatus.DECLINED.value,
         ],
     },
     {
@@ -33,18 +20,21 @@ MATCH_STATUS_DEFINITIONS = [
         "label": "Accepted",
         "color": "#059669",
         "order": 3,
-        "allowed_transitions": [MatchStatus.CANCEL_PENDING.value, MatchStatus.COMPLETED.value],
+        "allowed_transitions": [
+            MatchStatus.CANCELLATION_PENDING.value,
+            MatchStatus.COMPLETED.value,
+        ],
     },
     {
-        "value": MatchStatus.CANCEL_PENDING.value,
-        "label": "Cancel Pending",
+        "value": MatchStatus.CANCELLATION_PENDING.value,
+        "label": "Cancellation Pending",
         "color": "#B45309",
         "order": 4,
         "allowed_transitions": [MatchStatus.ACCEPTED.value, MatchStatus.CANCELLED.value],
     },
     {
-        "value": MatchStatus.REJECTED.value,
-        "label": "Rejected",
+        "value": MatchStatus.DECLINED.value,
+        "label": "Declined",
         "color": "#DC2626",
         "order": 5,
         "allowed_transitions": [],

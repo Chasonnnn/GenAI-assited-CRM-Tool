@@ -781,72 +781,54 @@ def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
 # =============================================================================
 
 
-def trigger_match_proposed(db: Session, match: Match) -> None:
-    """Trigger workflows when a match is proposed."""
-    entity_owner_id = _get_owner_id_for_surrogate_id(db, match.organization_id, match.surrogate_id)
+def _trigger_match(db: Session, match: Match, trigger_type: WorkflowTriggerType) -> None:
+    from app.services import match_queries
+
+    party = (
+        match_queries.get_donor(db, match.donor_id, match.organization_id)
+        if match.donor_id
+        else match_queries.get_surrogate_with_stage(db, match.surrogate_id, match.organization_id)
+    )
+    if party is None:
+        return
+    event_data = {
+        "match_id": str(match.id),
+        "surrogate_id": str(match.surrogate_id) if match.surrogate_id else None,
+        "donor_id": str(match.donor_id) if match.donor_id else None,
+        "intended_parent_id": str(match.intended_parent_id),
+        "status": match.status,
+    }
+    if trigger_type == WorkflowTriggerType.MATCH_ACCEPTED:
+        accepted_at = match.reviewed_at or match.updated_at
+        event_data["accepted_at"] = accepted_at.isoformat() if accepted_at else None
     engine.trigger(
         db=db,
-        trigger_type=WorkflowTriggerType.MATCH_PROPOSED,
+        trigger_type=trigger_type,
         entity_type="match",
         entity_id=match.id,
-        event_data={
-            "match_id": str(match.id),
-            "surrogate_id": str(match.surrogate_id),
-            "intended_parent_id": str(match.intended_parent_id)
-            if match.intended_parent_id
-            else None,
-            "status": match.status,
-        },
+        event_data=event_data,
         org_id=match.organization_id,
         source=WorkflowEventSource.USER,
-        entity_owner_id=entity_owner_id,
+        entity_owner_id=_get_entity_owner_id(party),
+        subject_type="match",
+        subject_id=match.id,
     )
+
+
+def trigger_match_proposed(db: Session, match: Match) -> None:
+    _trigger_match(db, match, WorkflowTriggerType.MATCH_PROPOSED)
 
 
 def trigger_match_accepted(db: Session, match: Match) -> None:
-    """Trigger workflows when a match is accepted."""
-    accepted_at = match.reviewed_at or match.updated_at
-    entity_owner_id = _get_owner_id_for_surrogate_id(db, match.organization_id, match.surrogate_id)
-    engine.trigger(
-        db=db,
-        trigger_type=WorkflowTriggerType.MATCH_ACCEPTED,
-        entity_type="match",
-        entity_id=match.id,
-        event_data={
-            "match_id": str(match.id),
-            "surrogate_id": str(match.surrogate_id),
-            "intended_parent_id": str(match.intended_parent_id)
-            if match.intended_parent_id
-            else None,
-            "status": match.status,
-            "accepted_at": accepted_at.isoformat() if accepted_at else None,
-        },
-        org_id=match.organization_id,
-        source=WorkflowEventSource.USER,
-        entity_owner_id=entity_owner_id,
-    )
+    _trigger_match(db, match, WorkflowTriggerType.MATCH_ACCEPTED)
 
 
-def trigger_match_rejected(db: Session, match: Match) -> None:
-    """Trigger workflows when a match is rejected."""
-    entity_owner_id = _get_owner_id_for_surrogate_id(db, match.organization_id, match.surrogate_id)
-    engine.trigger(
-        db=db,
-        trigger_type=WorkflowTriggerType.MATCH_REJECTED,
-        entity_type="match",
-        entity_id=match.id,
-        event_data={
-            "match_id": str(match.id),
-            "surrogate_id": str(match.surrogate_id),
-            "intended_parent_id": str(match.intended_parent_id)
-            if match.intended_parent_id
-            else None,
-            "status": match.status,
-        },
-        org_id=match.organization_id,
-        source=WorkflowEventSource.USER,
-        entity_owner_id=entity_owner_id,
-    )
+def trigger_match_declined(db: Session, match: Match) -> None:
+    _trigger_match(db, match, WorkflowTriggerType.MATCH_DECLINED)
+
+
+def trigger_match_cancelled(db: Session, match: Match) -> None:
+    _trigger_match(db, match, WorkflowTriggerType.MATCH_CANCELLED)
 
 
 # =============================================================================

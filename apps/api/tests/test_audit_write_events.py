@@ -699,14 +699,14 @@ async def test_match_write_routes_emit_semantic_audit_events(authed_client, db, 
     match_2_id = uuid.UUID(proposed_2.json()["id"])
 
     reject_2 = await authed_client.put(
-        f"/matches/{match_2_id}/reject",
-        json={"rejection_reason": "not a fit"},
+        f"/matches/{match_2_id}/decline",
+        json={"reason": "not a fit"},
     )
     assert reject_2.status_code == 200, reject_2.text
     assert _latest_event(
         db,
         test_auth.org.id,
-        AuditEventType.MATCH_REJECTED,
+        AuditEventType.MATCH_DECLINED,
         target_id=match_2_id,
         actor_user_id=test_auth.user.id,
     )
@@ -720,12 +720,14 @@ async def test_match_write_routes_emit_semantic_audit_events(authed_client, db, 
     assert proposed_3.status_code == 201, proposed_3.text
     match_3_id = uuid.UUID(proposed_3.json()["id"])
 
-    cancel_3 = await authed_client.delete(f"/matches/{match_3_id}")
-    assert cancel_3.status_code == 204, cancel_3.text
+    cancel_3 = await authed_client.put(
+        f"/matches/{match_3_id}/decline", json={"reason": "Withdrawn"}
+    )
+    assert cancel_3.status_code == 200, cancel_3.text
     assert _latest_event(
         db,
         test_auth.org.id,
-        AuditEventType.MATCH_CANCELLED,
+        AuditEventType.MATCH_DECLINED,
         target_id=match_3_id,
         actor_user_id=test_auth.user.id,
     )

@@ -148,7 +148,7 @@ def test_create_matches_balanced_statuses(db, test_org, test_user) -> None:
     statuses = {
         row[0] for row in db.query(Match.status).filter(Match.organization_id == test_org.id).all()
     }
-    assert {"proposed", "reviewing", "accepted", "rejected", "cancelled"}.issubset(statuses)
+    assert {"under_review", "accepted", "declined"}.issubset(statuses)
 
     accepted_surrogate_ids = [
         row[0]

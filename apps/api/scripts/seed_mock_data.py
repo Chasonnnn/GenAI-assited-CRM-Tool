@@ -318,11 +318,9 @@ IP_STATUS_FLOW = [
     IntendedParentStatus.DELIVERED.value,
 ]
 MATCH_STATUS_FLOW = [
-    MatchStatus.PROPOSED.value,
-    MatchStatus.REVIEWING.value,
+    MatchStatus.UNDER_REVIEW.value,
     MatchStatus.ACCEPTED.value,
-    MatchStatus.REJECTED.value,
-    MatchStatus.CANCELLED.value,
+    MatchStatus.DECLINED.value,
 ]
 MATCH_ACCEPTABLE_SURROGATE_STAGES = {"approved", "ready_to_match"}
 
@@ -1074,22 +1072,11 @@ def create_matches(
         users_by_role,
         [Role.CASE_MANAGER.value, Role.ADMIN.value, Role.DEVELOPER.value],
     )
-    reviewer = _pick_actor(
-        users_by_role,
-        [Role.ADMIN.value, Role.DEVELOPER.value, Role.CASE_MANAGER.value],
-        fallback=proposer,
-    )
     decider = _pick_actor(
         users_by_role,
         [Role.DEVELOPER.value, Role.ADMIN.value, Role.CASE_MANAGER.value],
         fallback=proposer,
     )
-    if reviewer.id == proposer.id:
-        for user in users_by_role.values():
-            if user.id != proposer.id:
-                reviewer = user
-                break
-
     targets = _build_match_targets(count, mode=mode)
     used_pairs: set[tuple[UUID, UUID]] = set()
     used_accepted_surrogates: set[UUID] = set()
@@ -1138,17 +1125,7 @@ def create_matches(
                 # propose refuses this pair (accepted surrogate, open match, or missing parent); pick another.
                 continue
 
-            if target_status == MatchStatus.PROPOSED.value:
-                created_matches.append(match)
-                created = True
-                break
-
-            if target_status == MatchStatus.REVIEWING.value:
-                # Legacy status; no transition writes it, so seed it directly.
-                match.status = MatchStatus.REVIEWING.value
-                match.reviewed_by_user_id = reviewer.id
-                match.reviewed_at = datetime.now(UTC)
-                db.commit()
+            if target_status == MatchStatus.UNDER_REVIEW.value:
                 created_matches.append(match)
                 created = True
                 break
@@ -1167,7 +1144,12 @@ def create_matches(
                 except ValueError:
                     try:
                         match_lifecycle.transition(
-                            db, match, "cancel", actor_user_id=decider.id, dispatch_effects=False
+                            db,
+                            match,
+                            "decline",
+                            actor_user_id=decider.id,
+                            reason="Seed proposal withdrawn",
+                            dispatch_effects=False,
                         )
                     except Exception:
                         pass
@@ -1177,23 +1159,15 @@ def create_matches(
                 created = True
                 break
 
-            if target_status == MatchStatus.REJECTED.value:
+            if target_status == MatchStatus.DECLINED.value:
                 match = match_lifecycle.transition(
                     db,
                     match,
-                    "reject",
+                    "decline",
                     actor_user_id=decider.id,
-                    reason="Seed rejection for test coverage",
-                    notes="Seed rejected scenario",
+                    reason="Seed decline for test coverage",
+                    notes="Seed declined scenario",
                     dispatch_effects=False,
-                )
-                created_matches.append(match)
-                created = True
-                break
-
-            if target_status == MatchStatus.CANCELLED.value:
-                match = match_lifecycle.transition(
-                    db, match, "cancel", actor_user_id=decider.id, dispatch_effects=False
                 )
                 created_matches.append(match)
                 created = True
