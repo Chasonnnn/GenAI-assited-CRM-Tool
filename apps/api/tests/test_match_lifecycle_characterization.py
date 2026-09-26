@@ -1321,21 +1321,21 @@ async def test_disabled_expansion_allows_donor_view_reject_cancel_and_cancel_req
 
 @pytest.mark.asyncio
 async def test_disabled_expansion_blocks_donor_repeat_pair_after_closure_with_503(
-    authed_client, db, monkeypatch
+    authed_client, db, test_auth, monkeypatch
 ):
     donor = await _donor(authed_client)
     ip = await _create_intended_parent(authed_client)
     first = await _case(authed_client, ip, donor=donor)
     await authed_client.put(f"/matches/{first['id']}/decline", json={"reason": "Withdrawn"})
     monkeypatch.setattr(settings, "MATCH_CASE_EXPANSION_ENABLED", False)
-    count = db.query(Match).count()
+    count = db.query(Match).filter(Match.organization_id == test_auth.org.id).count()
 
     response = await authed_client.post(
         "/matches/", json={"donor_id": donor["id"], "intended_parent_id": ip["id"]}
     )
 
     assert response.status_code == 503
-    assert db.query(Match).count() == count
+    assert db.query(Match).filter(Match.organization_id == test_auth.org.id).count() == count
 
 
 # =============================================================================
