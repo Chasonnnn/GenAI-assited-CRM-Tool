@@ -492,12 +492,24 @@ def get_attention_items(
 # =============================================================================
 
 
-def push_dashboard_stats(db: Session, org_id: UUID) -> None:
-    """Compute and push dashboard stats to connected org clients."""
+def build_dashboard_stats(db: Session, org_id: UUID) -> dict:
+    """Build the dashboard update, propagating errors to the caller."""
     from app.services import surrogate_service
 
+    return surrogate_service.get_surrogate_stats(db, org_id)
+
+
+def push_dashboard_stats_or_raise(db: Session, org_id: UUID) -> None:
+    """Build and schedule an update for callers that record build failures."""
+    stats = build_dashboard_stats(db, org_id)
+    _schedule_ws_send(_send_dashboard_stats(org_id, stats))
+
+
+def push_dashboard_stats(db: Session, org_id: UUID) -> None:
+    """Compute and push dashboard stats to connected org clients."""
+    # Keep only the build inside the catch, preserving existing scheduling errors.
     try:
-        stats = surrogate_service.get_surrogate_stats(db, org_id)
+        stats = build_dashboard_stats(db, org_id)
     except Exception:
         logger.exception("Failed to build dashboard stats for websocket push")
         return
