@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.72](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.71...surrogacy-crm-platform-v0.91.72) (2026-09-26)
+
+
+### Features
+
+* complete permission v2 and modularize execution services ([f226c11](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f226c11ce763e9537ad3c503550515384cb75486))
+* unify scheduling architecture and calendar UX ([aa08147](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/aa081479f72d354cc4e0654863fc35d9b2ecb154))
+
+
+### Bug Fixes
+
+* address match step 4 review follow-ups ([f092d35](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f092d3569fa34827b0dca0845886f9f996b6589b))
+* address match step 4 review follow-ups ([35bb85e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/35bb85efdf2d3ebabb6ddf231064740cfdd7cc2f))
+* batch stage resolution for intelligent rules ([2e9553a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2e9553a558b02704ea2f3c02d1c42478fc7a7b26))
+* consolidate validated search, query, and notification fixes ([d50e2f8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d50e2f85b8a2698850f536cc85f7aab18ca387f9))
+* count non-terminal matches in operations overview ([3838fa4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3838fa4e689fc04ab149c1c4b849a188592cf9c8))
+* count non-terminal matches in operations overview ([8365897](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/83658974d09f26a8d71da4b8561705436085e905))
+* show progress while marking notifications read ([c60c4b0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c60c4b0e684fbcac03d5a4753423b6cfe0cb6717))
+* treat organization search wildcards literally ([e9f01e3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e9f01e3ac8c960a7c34a27ba32f108bd3c743076))
+
+
+### Maintenance
+
+* merge main into permission v2 ([a94e980](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a94e980ee8fd774b3962cb87c5c53d405b2e2f9d))
+* merge main into scheduling v2 ([0d8cc1b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0d8cc1bee0c02a85a32866af79852777721352ff))
+* sync match permission characterization tests ([2fc6af8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2fc6af8771d9b9d1392f8eb6f2a3014264529fb1))
+* sync validated fixes with current main ([25d6af2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/25d6af2c7ae70a84258a545f72241d8e5e70bea0))
+
 ## [0.91.71](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.70...surrogacy-crm-platform-v0.91.71) (2026-09-24)
 
 
