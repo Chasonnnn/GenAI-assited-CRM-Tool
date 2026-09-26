@@ -133,7 +133,7 @@ def get_upcoming_items(
         if not surrogate_ids
         else {
             s.id: s
-            for s in db.query(Surrogate)
+            for s in db.query(Surrogate.id, Surrogate.surrogate_number)
             .filter(Surrogate.organization_id == org_id, Surrogate.id.in_(surrogate_ids))
             .all()
         }
@@ -144,7 +144,7 @@ def get_upcoming_items(
         if not donor_ids
         else {
             donor.id: donor
-            for donor in db.query(Donor)
+            for donor in db.query(Donor.id, Donor.donor_number, Donor.donor_type)
             .filter(Donor.organization_id == org_id, Donor.id.in_(donor_ids))
             .all()
         }
@@ -210,7 +210,7 @@ def get_upcoming_items(
         if not meeting_surrogate_ids
         else {
             s.id: s
-            for s in db.query(Surrogate)
+            for s in db.query(Surrogate.id, Surrogate.surrogate_number)
             .filter(Surrogate.organization_id == org_id, Surrogate.id.in_(meeting_surrogate_ids))
             .all()
         }
@@ -362,7 +362,7 @@ def get_attention_items(
         if not overdue_donor_ids
         else {
             donor.id: donor
-            for donor in db.query(Donor)
+            for donor in db.query(Donor.id, Donor.donor_number, Donor.donor_type)
             .filter(
                 Donor.organization_id == org_id,
                 Donor.id.in_(overdue_donor_ids),
