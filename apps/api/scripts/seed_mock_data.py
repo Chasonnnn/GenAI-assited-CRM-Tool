@@ -38,7 +38,13 @@ from app.db.models import (
     User,
 )
 from app.db.session import SessionLocal
-from app.services import dev_service, match_service, pipeline_service, template_seeder
+from app.services import (
+    dev_service,
+    match_lifecycle,
+    match_queries,
+    pipeline_service,
+    template_seeder,
+)
 from app.utils.height import total_inches_to_height_ft
 
 # Sample data pools
@@ -1109,7 +1115,7 @@ def create_matches(
                 continue
             used_pairs.add(pair)
 
-            existing = match_service.get_existing_match(
+            existing = match_queries.get_existing_match(
                 db,
                 org_id=org_id,
                 surrogate_id=surrogate.id,
@@ -1118,15 +1124,19 @@ def create_matches(
             if existing:
                 continue
 
-            match = match_service.create_match(
-                db=db,
-                org_id=org_id,
-                surrogate_id=surrogate.id,
-                intended_parent_id=intended_parent.id,
-                proposed_by_user_id=proposer.id,
-                compatibility_score=round(random.uniform(60, 99), 2),
-                notes=f"Seed {target_status} scenario",
-            )
+            try:
+                match = match_lifecycle.propose(
+                    db=db,
+                    org_id=org_id,
+                    surrogate_id=surrogate.id,
+                    intended_parent_id=intended_parent.id,
+                    proposed_by_user_id=proposer.id,
+                    notes=f"Seed {target_status} scenario",
+                    dispatch_effects=False,
+                )
+            except match_lifecycle.TransitionError:
+                # propose refuses this pair (accepted surrogate, open match, or missing parent); pick another.
+                continue
 
             if target_status == MatchStatus.PROPOSED.value:
                 created_matches.append(match)
@@ -1134,33 +1144,30 @@ def create_matches(
                 break
 
             if target_status == MatchStatus.REVIEWING.value:
-                match = match_service.mark_match_reviewing_if_needed(
-                    db=db,
-                    match=match,
-                    actor_user_id=reviewer.id,
-                    org_id=org_id,
-                )
+                # Legacy status; no transition writes it, so seed it directly.
+                match.status = MatchStatus.REVIEWING.value
+                match.reviewed_by_user_id = reviewer.id
+                match.reviewed_at = datetime.now(UTC)
+                db.commit()
                 created_matches.append(match)
                 created = True
                 break
 
             if target_status == MatchStatus.ACCEPTED.value:
                 try:
-                    match = match_service.accept_match(
-                        db=db,
-                        match=match,
+                    match = match_lifecycle.transition(
+                        db,
+                        match,
+                        "accept",
                         actor_user_id=decider.id,
                         actor_role=Role.DEVELOPER.value,
-                        org_id=org_id,
                         notes="Seed accepted match",
+                        dispatch_effects=False,
                     )
                 except ValueError:
                     try:
-                        match_service.cancel_match(
-                            db=db,
-                            match=match,
-                            actor_user_id=decider.id,
-                            org_id=org_id,
+                        match_lifecycle.transition(
+                            db, match, "cancel", actor_user_id=decider.id, dispatch_effects=False
                         )
                     except Exception:
                         pass
@@ -1171,40 +1178,23 @@ def create_matches(
                 break
 
             if target_status == MatchStatus.REJECTED.value:
-                if reviewer.id != proposer.id and random.random() < 0.6:
-                    match = match_service.mark_match_reviewing_if_needed(
-                        db=db,
-                        match=match,
-                        actor_user_id=reviewer.id,
-                        org_id=org_id,
-                    )
-                match = match_service.reject_match(
-                    db=db,
-                    match=match,
+                match = match_lifecycle.transition(
+                    db,
+                    match,
+                    "reject",
                     actor_user_id=decider.id,
-                    org_id=org_id,
-                    rejection_reason="Seed rejection for test coverage",
+                    reason="Seed rejection for test coverage",
                     notes="Seed rejected scenario",
+                    dispatch_effects=False,
                 )
                 created_matches.append(match)
                 created = True
                 break
 
             if target_status == MatchStatus.CANCELLED.value:
-                if reviewer.id != proposer.id and random.random() < 0.6:
-                    match = match_service.mark_match_reviewing_if_needed(
-                        db=db,
-                        match=match,
-                        actor_user_id=reviewer.id,
-                        org_id=org_id,
-                    )
-                match_service.cancel_match(
-                    db=db,
-                    match=match,
-                    actor_user_id=decider.id,
-                    org_id=org_id,
+                match = match_lifecycle.transition(
+                    db, match, "cancel", actor_user_id=decider.id, dispatch_effects=False
                 )
-                db.refresh(match)
                 created_matches.append(match)
                 created = True
                 break

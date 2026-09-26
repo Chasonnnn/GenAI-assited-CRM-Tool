@@ -133,7 +133,7 @@ def create_task(
 ):
     """Create a new task (respects surrogate access control)."""
     from app.services import (
-        match_service,
+        match_access,
     )
 
     if data.donor_id and (data.match_id or data.surrogate_id or data.intended_parent_id):
@@ -156,7 +156,7 @@ def create_task(
 
     if data.match_id:
         try:
-            match = match_service.get_match_with_access(db, session, data.match_id)
+            match = match_access.load(db, session, data.match_id)
         except HTTPException as exc:
             if exc.status_code == 404:
                 raise HTTPException(status_code=400, detail="Match not found") from exc

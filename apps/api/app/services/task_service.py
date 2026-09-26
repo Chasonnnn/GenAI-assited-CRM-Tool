@@ -639,7 +639,7 @@ def check_task_subject_access(db: Session, task: Task, session: UserSession) -> 
     if task.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Task not found")
     if task.match_id:
-        from app.services.match_service import get_match_with_access
+        from app.services.match_access import load as get_match_with_access
 
         get_match_with_access(db, session, task.match_id)
 
@@ -970,9 +970,9 @@ def list_tasks(
     if match_id:
         context_filter = Task.match_id == match_id
         if include_record_history and not attempt_id:
-            from app.services import match_service, match_work_service
+            from app.services import match_queries, match_work_service
 
-            match = match_service.get_match(db, match_id, org_id)
+            match = match_queries.get_match(db, match_id, org_id)
             if match is None:
                 raise HTTPException(status_code=404, detail="Match not found")
             context_filter = or_(
@@ -1190,9 +1190,9 @@ def list_tasks_for_session(
             record_access_service.get_record_with_access(db, session, kind, record_id)
 
     if match_id:
-        from app.services import match_service, match_work_service
+        from app.services import match_access, match_work_service
 
-        match_service.get_match_with_access(db, session, match_id, allow_archived=True)
+        match_access.load(db, session, match_id, allow_archived=True)
         match_work_service.validate_context(db, session.org_id, match_id, attempt_id)
     elif attempt_id or include_record_history:
         raise HTTPException(status_code=400, detail="Attempt or record history requires match_id")

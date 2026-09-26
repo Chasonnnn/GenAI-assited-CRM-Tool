@@ -184,7 +184,7 @@ async def test_match_cancel_request_reject_restores_status(authed_client, db, te
     match_row = db.query(Match).filter(Match.id == uuid.UUID(match["id"])).first()
     assert match_row is not None
     assert match_row.status == MatchStatus.ACCEPTED.value
-    assert _ip_activity_types(db, match_row)[-1] == "match_cancel_requested"
+    assert _ip_activity_types(db, match_row)[-1] == "match_cancel_request_rejected"
 
 
 @pytest.mark.asyncio

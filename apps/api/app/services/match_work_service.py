@@ -23,7 +23,7 @@ from app.schemas.auth import UserSession
 from app.services import (
     attachment_service,
     audit_service,
-    match_service,
+    match_access,
     note_service,
     permission_service,
     record_access_service,
@@ -46,10 +46,10 @@ def validate_context(
     if match is None:
         raise HTTPException(status_code=404, detail="Match not found")
     if write:
-        from app.core.match_rollout import require_match_expansion
+        from app.services import match_lifecycle
 
-        require_match_expansion()
-        match = match_service.lock_match(db, match, org_id)
+        match_lifecycle.require_expansion()
+        match = match_lifecycle.lock_match(db, match)
     if write and match.status in {"completed", "cancelled", "rejected", "cancel_pending"}:
         raise HTTPException(status_code=409, detail="This match is not open for new work")
     if attempt_id:
@@ -253,7 +253,7 @@ def _list_activity(db, session, match, attempt_id, page):
 def list_work(
     db: Session, session: UserSession, match_id: UUID, attempt_id: UUID | None, *, page: int = 1
 ) -> dict:
-    match = match_service.get_match_with_access(db, session, match_id, allow_archived=True)
+    match = match_access.load(db, session, match_id, allow_archived=True)
     validate_context(db, session.org_id, match_id, attempt_id)
     can_case_notes = not match.surrogate_id or has_permission(db, session, P.SURROGATES_VIEW_NOTES)
     can_notes = can_case_notes or not attempt_id
@@ -398,7 +398,7 @@ def list_work(
 
 
 def create_note(db: Session, session: UserSession, match_id: UUID, data) -> EntityNote:
-    match = match_service.get_match_with_access(db, session, match_id)
+    match = match_access.load(db, session, match_id)
     require_permission(db, session, P.MATCHES_PROPOSE)
     validate_context(db, session.org_id, match_id, data.attempt_id, write=True)
     source_fields(db, session, match, data.source)
@@ -437,7 +437,7 @@ def upload_file(
 ) -> Attachment:
     from app.db.enums import AuditEventType
 
-    match = match_service.get_match_with_access(db, session, match_id)
+    match = match_access.load(db, session, match_id)
     require_permission(db, session, P.MATCHES_PROPOSE)
     validate_context(db, session.org_id, match_id, attempt_id, write=True)
     fields = source_fields(db, session, match, source)

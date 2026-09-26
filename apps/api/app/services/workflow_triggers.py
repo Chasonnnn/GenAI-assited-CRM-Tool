@@ -777,7 +777,7 @@ def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
 
 
 # =============================================================================
-# Match Triggers (called from match_service.py)
+# Match Triggers (dispatched by match_effects after a committed transition)
 # =============================================================================
 
 

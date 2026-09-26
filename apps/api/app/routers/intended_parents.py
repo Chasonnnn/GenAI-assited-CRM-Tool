@@ -368,9 +368,9 @@ def update_status(
 
     # Disallow setting Matched directly unless there is an accepted Match row
     if pipeline_service.stage_matches_key(target_stage, "matched"):
-        from app.services import match_service
+        from app.services import match_queries
 
-        accepted = match_service.get_accepted_match_for_intended_parent(
+        accepted = match_queries.get_accepted_match_for_intended_parent(
             db=db,
             org_id=session.org_id,
             intended_parent_id=ip.id,

@@ -30,7 +30,7 @@ from app.db.models import (
     User,
 )
 from app.services import alert_service, duo_admin_service, job_service, mfa_service, session_service
-from app.services.match_service import OPEN_STATUSES
+from app.services.match_queries import OPEN_STATUSES
 from app.utils.normalization import escape_like_string
 from app.utils.pagination import paginate_query_by_offset
 from app.utils.presentation import humanize_identifier
