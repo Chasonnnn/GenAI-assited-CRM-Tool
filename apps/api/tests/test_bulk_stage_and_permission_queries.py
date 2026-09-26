@@ -1,6 +1,7 @@
 """Preserve stage/permission semantics while bounding database round trips."""
 
 from contextlib import contextmanager
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
@@ -8,8 +9,20 @@ from pydantic import ValidationError
 from sqlalchemy import event
 
 from app.core.permissions import ROLE_DEFAULTS
-from app.db.models import Organization, Pipeline, PipelineStage, RolePermission
-from app.services import campaign_audience, permission_service, pipeline_service
+from app.db.models import (
+    Organization,
+    OrgIntelligentSuggestionRule,
+    Pipeline,
+    PipelineStage,
+    RolePermission,
+)
+from app.services import (
+    campaign_audience,
+    intelligent_suggestions_service,
+    permission_service,
+    pipeline_dependency_service,
+    pipeline_service,
+)
 
 
 @contextmanager
@@ -222,3 +235,97 @@ def test_permission_seed_is_bounded_idempotent_and_preserves_denials(db, test_or
         db.query(RolePermission).filter_by(organization_id=test_org.id, role="developer").count()
         == 0
     )
+
+
+@pytest.mark.parametrize("surface", ["settings", "summary", "dependencies"])
+def test_rule_stage_queries_are_bounded_and_preserve_references(
+    db, test_org, test_user, monkeypatch, surface
+):
+    from app.routers import settings as settings_router
+
+    service = intelligent_suggestions_service
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id)
+    service.list_rules(db, test_org.id)
+    stage = pipeline_service.resolve_stage(db, pipeline.id, "contacted")
+    stage.slug = "renamed-contact"
+    stage.is_active = False
+    other_org = Organization(name="Other rules", slug=f"other-rules-{uuid4().hex}")
+    db.add(other_org)
+    db.flush()
+    foreign_pipeline = _pipeline(db, other_org.id)
+    foreign_stage = _stage(db, foreign_pipeline, "foreign")
+    refs = [
+        "contacted",
+        "renamed-contact",
+        str(stage.id),
+        "contacted",
+        "missing",
+        None,
+        str(foreign_stage.id),
+    ]
+    rules = [
+        OrgIntelligentSuggestionRule(
+            organization_id=test_org.id,
+            template_key="stage_followup_custom",
+            name=f"Rule {index}",
+            rule_kind="stage_inactivity",
+            stage_slug=ref,
+            sort_order=index + 100,
+        )
+        for index, ref in enumerate(refs)
+    ]
+    foreign_rule = OrgIntelligentSuggestionRule(
+        organization_id=other_org.id,
+        template_key="stage_followup_custom",
+        name="Foreign rule",
+        rule_kind="stage_inactivity",
+        stage_slug="contacted",
+    )
+    db.add_all([*rules, foreign_rule])
+    db.flush()
+    expected_stages = [("contacted", stage.label)] * 4 + [
+        ("missing", None),
+        (None, None),
+        (str(foreign_stage.id), None),
+    ]
+    rule_ids = {str(rule.id) for rule in rules}
+    org_id, user_id = test_org.id, test_user.id
+
+    if surface == "summary":
+        service.get_or_create_settings(db, org_id)
+        monkeypatch.setattr(
+            service, "_rule_ids_for_user", lambda *args, **kwargs: (rules, {rules[0].id: {uuid4()}})
+        )
+
+    with _selects(db) as statements:
+        if surface == "settings":
+            output = settings_router.list_intelligent_suggestion_rules(
+                session=SimpleNamespace(org_id=org_id), db=db
+            )
+            serialized = [item.model_dump(mode="json") for item in output]
+        elif surface == "summary":
+            output = service.get_intelligent_summary(
+                db, org_id=org_id, user_id=user_id, user_role="developer"
+            )
+            serialized = output["rules"]
+        else:
+            output = pipeline_dependency_service.build_pipeline_dependency_graph(db, pipeline)
+
+    if surface == "dependencies":
+        entry = next(item for item in output["stages"] if item["stage_key"] == "contacted")
+        linked = {item["id"] for item in entry["intelligent_suggestion_rules"]}
+        assert {str(rule.id) for rule in rules[:4]} <= linked
+        assert not linked.intersection(
+            {str(rule.id) for rule in rules[4:]} | {str(foreign_rule.id)}
+        )
+    else:
+        actual = [item for item in serialized if str(item["id"]) in rule_ids]
+        assert [str(item["id"]) for item in actual] == [str(rule.id) for rule in rules]
+        assert [(item["stage_key"], item["stage_label"]) for item in actual] == expected_stages
+        assert str(foreign_rule.id) not in {str(item["id"]) for item in serialized}
+        if surface == "summary":
+            assert [item["match_count"] for item in actual] == [1, 0, 0, 0, 0, 0, 0]
+            assert output["total"] == 1
+
+    stage_queries = [sql for sql in statements if "FROM pipeline_stages" in sql]
+    assert len(stage_queries) <= 3
