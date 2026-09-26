@@ -1,7 +1,7 @@
 "use client"
 
 import type { Route } from "next"
-import { Bell, BellOff, Loader2Icon } from "lucide-react"
+import { Bell, BellOff } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { formatDistanceToNow } from "date-fns"
 import { useState, type Dispatch, type SetStateAction } from "react"
@@ -143,9 +143,7 @@ export function NotificationBell() {
                             size="sm"
                             className="h-auto p-0 text-xs text-muted-foreground hover:text-foreground"
                             onClick={handleMarkAllRead}
-                            disabled={markAllRead.isPending}
                         >
-                            {markAllRead.isPending && <Loader2Icon className="mr-2 size-3 animate-spin" aria-hidden="true" />}
                             Mark all read
                         </Button>
                     )}
