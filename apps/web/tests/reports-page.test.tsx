@@ -15,6 +15,34 @@ vi.mock('next/dynamic', () => ({
 }))
 
 import ReportsPage from '../app/(app)/reports/page'
+import { ReportsChartsGrid } from '../app/(app)/reports/components/ReportsChartsGrid'
+
+const MAX_CARD_ENTRANCE_DELAY_MS = 300
+
+// Reads both inline animation-delay and delay-* utilities so the cap holds for either styling approach.
+function getEntranceDelayMs(card: HTMLElement) {
+    const inlineDelay = card.style.animationDelay
+    const inlineDelayMs = inlineDelay
+        ? parseFloat(inlineDelay) * (inlineDelay.endsWith('ms') ? 1 : 1000)
+        : 0
+    const classDelaysMs = Array.from(card.classList).flatMap((name) => {
+        const match = /^delay-(?:\[(\d+)ms\]|(\d+))$/.exec(name)
+        return match ? [Number(match[1] ?? match[2])] : []
+    })
+    return Math.max(inlineDelayMs, ...classDelaysMs)
+}
+
+function expectHeldCardEntrances(container: HTMLElement) {
+    const animatedCards = Array.from(
+        container.querySelectorAll<HTMLElement>('[data-slot="card"].animate-in'),
+    )
+    expect(animatedCards.length).toBeGreaterThan(0)
+    for (const card of animatedCards) {
+        // Without a backwards fill, delayed cards render at full opacity and then drop to the start opacity.
+        expect(card.className).toMatch(/\bfill-mode-(backwards|both)\b/)
+        expect(getEntranceDelayMs(card)).toBeLessThanOrEqual(MAX_CARD_ENTRANCE_DELAY_MS)
+    }
+}
 
 vi.mock('@/lib/auth-context', () => ({
     useAuth: () => ({ user: { ai_enabled: true, user_id: 'user-1', role: 'admin' } }),
@@ -193,5 +221,36 @@ describe('ReportsPage', () => {
         expect(screen.getByText('Egg Donors by Stage')).toBeInTheDocument()
         expect(screen.getByText('Egg Donors Creation Trend')).toBeInTheDocument()
         expect(screen.getAllByText('7').length).toBeGreaterThan(0)
+    })
+
+    it('holds the start state of staggered summary cards through a capped delay', () => {
+        const { container } = render(<ReportsPage />)
+        expectHeldCardEntrances(container)
+    })
+
+    it('holds the start state of staggered chart cards through a capped delay', () => {
+        const { container } = render(
+            <ReportsChartsGrid
+                aiEnabled
+                statusChartData={[{ status: 'New Unread', count: 1, fill: '#3B82F6' }]}
+                trendChartData={[{ date: '2025-01-01', count: 1 }]}
+                assigneeChartData={[{ member: 'Alice', count: 2 }]}
+                topStatus={{ status: 'New Unread', count: 1, fill: '#3B82F6' }}
+                topPerformer={{ member: 'Alice', count: 2 }}
+                totalSurrogatesInPeriod={1}
+                computeTrendPercentage={null}
+                metaPerf={null}
+                byStatusLoading={false}
+                byStatusError={false}
+                trendLoading={false}
+                trendError={false}
+                byAssigneeLoading={false}
+                byAssigneeError={false}
+                metaLoading={false}
+                metaError={false}
+            />,
+        )
+        expect(container.querySelectorAll('[data-slot="card"].animate-in')).toHaveLength(4)
+        expectHeldCardEntrances(container)
     })
 })

@@ -3,6 +3,9 @@
 @import "../styles/tiptap.css";
 
 @custom-variant dark (&:is(.dark *));
+/* Base UI sets data-orientation; the shadcn primitives use data-horizontal and data-vertical. */
+@custom-variant data-horizontal (&[data-orientation="horizontal"]);
+@custom-variant data-vertical (&[data-orientation="vertical"]);
 
 @theme inline {
   --color-background: var(--background);
@@ -45,6 +48,7 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 :root {
@@ -228,64 +232,16 @@
   background: rgba(252, 252, 252, 0.9);
 }
 
-/* View Transition API for Circle Blur theme toggle */
-
-/* Keyframes for circle animation */
-@keyframes circle-in {
-  from {
-    clip-path: circle(0px at var(--x, 40px) var(--y, 40px));
-  }
-
-  to {
-    clip-path: circle(var(--r, 100%) at var(--x, 40px) var(--y, 40px));
-  }
-}
-
-@keyframes circle-out {
-  from {
-    clip-path: circle(var(--r, 100%) at var(--x, 40px) var(--y, 40px));
-  }
-
-  to {
-    clip-path: circle(0px at var(--x, 40px) var(--y, 40px));
-  }
-}
-
-/* Base styles to prevent blink */
-::view-transition-old(root),
-::view-transition-new(root) {
-  mix-blend-mode: normal;
-}
-
-/* Default: dark -> light (new view expands) */
-::view-transition-old(root) {
-  animation: none;
-  z-index: 1;
-}
-
-::view-transition-new(root) {
-  animation: circle-in 0.5s ease-out forwards;
-  z-index: 9999;
-}
-
-/* Reverse: light -> dark (old view contracts) */
-.dark-transition::view-transition-old(root) {
-  animation: circle-out 0.5s ease-out forwards;
-  z-index: 9999;
-}
-
-.dark-transition::view-transition-new(root) {
-  animation: none;
-  z-index: 1;
-}
-
-/* Disable transitions for users who prefer reduced motion */
 @media (prefers-reduced-motion: reduce) {
-
-  ::view-transition-group(*),
-  ::view-transition-old(*),
-  ::view-transition-new(*) {
-    animation: none !important;
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
   }
 }
 

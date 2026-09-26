@@ -19,7 +19,6 @@ import {
     FileTextIcon,
     CalendarIcon,
     ChevronDownIcon,
-    ChevronUpIcon,
 } from "lucide-react"
 import { useNotifications, useMarkRead, useMarkAllRead } from "@/lib/hooks/use-notifications"
 import { useNotificationSocket } from "@/lib/hooks/use-notification-socket"
@@ -233,9 +232,9 @@ export default function NotificationsPage() {
                                             </CardDescription>
                                         </div>
                                     </div>
-                                    <CollapsibleTrigger>
+                                    <CollapsibleTrigger className="group/overdue-trigger">
                                         <span className="inline-flex items-center justify-center size-9 rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer">
-                                            {isOverdueOpen ? <ChevronUpIcon className="size-4" /> : <ChevronDownIcon className="size-4" />}
+                                            <ChevronDownIcon className="size-4 transition-transform duration-200 ease-smooth-out group-data-panel-open/overdue-trigger:rotate-180" />
                                         </span>
                                     </CollapsibleTrigger>
                                 </div>

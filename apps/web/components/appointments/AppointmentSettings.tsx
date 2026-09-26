@@ -15,6 +15,7 @@ import { useState } from "react"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { CopyButton } from "@/components/ui/copy-button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -39,11 +40,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import {
     LinkIcon,
-    CopyIcon,
     ClockIcon,
     PlusIcon,
     TrashIcon,
-    CheckIcon,
     AlertCircleIcon,
     VideoIcon,
     PhoneIcon,
@@ -239,15 +238,6 @@ type AppointmentTypeFormUpdater = (
 
 function BookingLinkCard() {
     const { data: link, isLoading } = useBookingLink()
-    const [copied, setCopied] = useState(false)
-
-    const copyLink = () => {
-        if (link?.full_url) {
-            void navigator.clipboard.writeText(link.full_url)
-            setCopied(true)
-            setTimeout(() => setCopied(false), 2000)
-        }
-    }
 
     if (isLoading) {
         return (
@@ -275,13 +265,11 @@ function BookingLinkCard() {
                         className="font-mono text-sm"
                         aria-label="Your booking link"
                     />
-                    <Button variant="outline" onClick={copyLink} aria-label="Copy booking link">
-                        {copied ? (
-                            <CheckIcon className="size-4" aria-hidden="true" />
-                        ) : (
-                            <CopyIcon className="size-4" aria-hidden="true" />
-                        )}
-                    </Button>
+                    <CopyButton
+                        variant="outline"
+                        value={link?.full_url ?? ""}
+                        aria-label="Copy booking link"
+                    />
                 </div>
                 <Button variant="outline" size="sm" onClick={openBookingPreview}>
                     <EyeIcon className="size-4 mr-2" />

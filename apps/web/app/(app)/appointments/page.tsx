@@ -12,6 +12,7 @@
 import { useState } from "react"
 import { AppointmentsList } from "@/components/appointments/AppointmentsList"
 import { Button } from "@/components/ui/button"
+import { CopyButton } from "@/components/ui/copy-button"
 import { Input } from "@/components/ui/input"
 import {
     Dialog,
@@ -20,21 +21,12 @@ import {
     DialogTitle,
     DialogDescription,
 } from "@/components/ui/dialog"
-import { LinkIcon, CopyIcon, CheckIcon, Loader2Icon } from "lucide-react"
+import { LinkIcon, Loader2Icon } from "lucide-react"
 import { useBookingLink } from "@/lib/hooks/use-appointments"
 
 function BookingLinkButton() {
     const { data: link, isLoading, isError, refetch } = useBookingLink()
     const [open, setOpen] = useState(false)
-    const [copied, setCopied] = useState(false)
-
-    const copyLink = () => {
-        if (link?.full_url) {
-            void navigator.clipboard.writeText(link.full_url)
-            setCopied(true)
-            setTimeout(() => setCopied(false), 2000)
-        }
-    }
 
     if (isLoading) {
         return (
@@ -76,13 +68,11 @@ function BookingLinkButton() {
                             value={link?.full_url || ""}
                             className="font-mono text-sm"
                         />
-                        <Button variant="outline" onClick={copyLink}>
-                            {copied ? (
-                                <CheckIcon className="size-4 text-green-500" />
-                            ) : (
-                                <CopyIcon className="size-4" />
-                            )}
-                        </Button>
+                        <CopyButton
+                            variant="outline"
+                            value={link?.full_url ?? ""}
+                            aria-label="Copy booking link"
+                        />
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">
                         Tip: Go to Settings → Appointments to manage your availability and appointment types.

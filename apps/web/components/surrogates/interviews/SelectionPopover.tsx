@@ -218,15 +218,15 @@ export function SelectionPopover({
     return createPortal(
         <div
             ref={popoverRef}
+            // Position with the translate property; the enter keyframe animates transform on top of it.
             className={cn(
-                "fixed z-50 transform -translate-x-1/2",
+                "fixed z-50 -translate-x-1/2 -translate-y-full",
                 "animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2",
-                "duration-150"
+                "duration-150 ease-smooth-out"
             )}
             style={{
                 left: position.x,
                 top: position.y - 8,
-                transform: "translate(-50%, -100%)",
             }}
         >
             <Button

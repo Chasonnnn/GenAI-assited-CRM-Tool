@@ -513,7 +513,7 @@ function AppSidebarContent({
                             <Button unstyled
                                 type="button"
                                 className={cn(
-                                    "w-full rounded-lg data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground",
+                                    "w-full rounded-lg data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground",
                                     getNavItemClass(false)
                                 )}
                                 aria-label="User menu"
@@ -780,7 +780,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
             {isMobile && mobileOpen && (
                 <Button unstyled
                     type="button"
-                    className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm appearance-none border-0 p-0 m-0"
+                    className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm appearance-none border-0 p-0 m-0 animate-in fade-in-0 duration-200 ease-smooth-out"
                     onClick={() => dispatch({ type: "setMobileOpen", mobileOpen: false })}
                     aria-label="Close sidebar overlay"
                 />
@@ -788,7 +788,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
             <aside
                 className={cn(
-                    "bg-sidebar text-sidebar-foreground z-50 flex h-svh flex-col border-r border-sidebar-border transition-[width,transform] duration-200 ease-linear",
+                    "bg-sidebar text-sidebar-foreground z-50 flex h-svh flex-col border-r border-sidebar-border transition-[width,translate] duration-200 ease-smooth-out",
                     isCollapsed ? "w-12" : "w-64",
                     isMobile && "fixed inset-y-0 left-0",
                     isMobile && (mobileOpen ? "translate-x-0" : "-translate-x-full")

@@ -35,7 +35,7 @@ import {
     useRequestPlatformEmailReadinessCheck,
 } from '@/lib/hooks/use-platform-email';
 import { getErrorMessage } from '@/lib/error-utils';
-import { Button } from '@/components/ui/button';
+import { CopyButton } from '@/components/ui/copy-button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AgencyOverviewTab } from '@/components/ops/agencies/AgencyOverviewTab';
@@ -51,28 +51,9 @@ import {
     STATUS_BADGE_VARIANTS,
     type InviteRole,
 } from '@/components/ops/agencies/agency-constants';
-import { ChevronRight, Globe, Copy, Loader2, AlertTriangle } from 'lucide-react';
+import { ChevronRight, Globe, Loader2, AlertTriangle } from 'lucide-react';
 import { toast } from '@/components/ui/toast';
 
-
-function CopyButton({ value, label }: { value: string; label: string }) {
-    const handleCopy = async () => {
-        await navigator.clipboard.writeText(value);
-        toast.success(`${label} copied to clipboard`);
-    };
-
-    return (
-        <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-xs text-stone-500"
-            onClick={handleCopy}
-        >
-            <Copy className="size-3 mr-1" />
-            Copy ID
-        </Button>
-    );
-}
 
 type AgencyDetailData = {
     org: OrganizationDetail;
@@ -570,7 +551,15 @@ function AgencyDetailHeader({ controller }: { controller: ReadyAgencyDetailContr
                         </div>
                         <div className="flex items-center gap-4 mt-1 text-sm text-stone-500 dark:text-stone-400">
                             <span className="font-mono">{org.slug}</span>
-                            <CopyButton value={org.id} label="ID" />
+                            <CopyButton
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs text-stone-500"
+                                iconClassName="size-3 mr-1"
+                                value={org.id}
+                            >
+                                Copy ID
+                            </CopyButton>
                             {org.portal_base_url && (
                                 <a
                                     href={org.portal_base_url}

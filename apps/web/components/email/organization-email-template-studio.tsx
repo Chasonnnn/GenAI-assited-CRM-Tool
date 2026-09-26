@@ -1005,6 +1005,7 @@ function OrganizationEmailTemplateEditor({
                         <ToggleGroup
                             aria-label="Email body editor mode"
                             className="rounded-lg bg-muted p-1"
+                            spacing={1}
                             multiple={false}
                             value={[bodyMode]}
                             onValueChange={(value) => {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "@/components/app-link"
-import { AlertCircle, ChevronDown, ChevronUp, ShieldAlert } from "lucide-react"
+import { AlertCircle, ChevronDown, ShieldAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import {
@@ -91,7 +91,10 @@ export function ErrorState({
                             aria-expanded={isOpen}
                         >
                             <span>Error details</span>
-                            {isOpen ? <ChevronUp className="size-4" aria-hidden="true" /> : <ChevronDown className="size-4" aria-hidden="true" />}
+                            <ChevronDown
+                                className={cn("size-4 transition-transform duration-200 ease-smooth-out", isOpen && "rotate-180")}
+                                aria-hidden="true"
+                            />
                         </Button>
                         {isOpen && (
                             <div className="mt-2 rounded-lg border bg-muted/50 p-4 text-left font-mono text-xs">

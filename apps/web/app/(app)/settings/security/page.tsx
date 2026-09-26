@@ -13,6 +13,7 @@
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { CopyButton } from "@/components/ui/copy-button"
 import { Badge } from "@/components/ui/badge"
 import {
     Dialog,
@@ -29,8 +30,6 @@ import {
 } from "@/components/ui/alert"
 import {
     AlertTriangleIcon,
-    CheckIcon,
-    CopyIcon,
     KeyIcon,
     Loader2Icon,
     RefreshCwIcon,
@@ -50,14 +49,6 @@ import {
 // =============================================================================
 
 function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: () => void }) {
-    const [copied, setCopied] = useState(false)
-
-    const handleCopy = () => {
-        void navigator.clipboard.writeText(codes.join("\n"))
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-    }
-
     return (
         <Dialog open={true} onOpenChange={onClose}>
             <DialogContent className="max-w-md">
@@ -88,19 +79,9 @@ function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: ()
                 </div>
 
                 <DialogFooter className="gap-2">
-                    <Button variant="outline" onClick={handleCopy}>
-                        {copied ? (
-                            <>
-                                <CheckIcon className="size-4 mr-2" aria-hidden="true" />
-                                Copied!
-                            </>
-                        ) : (
-                            <>
-                                <CopyIcon className="size-4 mr-2" aria-hidden="true" />
-                                Copy All
-                            </>
-                        )}
-                    </Button>
+                    <CopyButton variant="outline" value={codes.join("\n")} iconClassName="size-4 mr-2">
+                        Copy All
+                    </CopyButton>
                     <Button onClick={onClose}>I've Saved These Codes</Button>
                 </DialogFooter>
             </DialogContent>

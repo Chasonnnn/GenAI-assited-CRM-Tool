@@ -822,7 +822,7 @@ function ActivityTimelineStageList({
                             data-testid={`timeline-stage-row-${stage.id}`}
                             className={cn("group hover:bg-muted/50", STAGE_ROW_CLASS)}
                         >
-                            <ChevronRightIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+                            <ChevronRightIcon className="size-4 text-muted-foreground transition-transform group-data-panel-open:rotate-90" />
                             <div
                                 className={cn(
                                     "rounded-full",

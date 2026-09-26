@@ -110,7 +110,9 @@ function ToastViewport() {
               toast={toastObject}
               data-slot="toast"
               swipeDirection="right"
-              className="pointer-events-auto relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 rounded-xl border bg-popover p-4 text-popover-foreground shadow-lg transition-[transform,opacity] duration-200 data-limited:hidden data-starting-style:translate-x-6 data-starting-style:opacity-0 data-ending-style:translate-x-6 data-ending-style:opacity-0"
+              // Base UI drives the drag with an inline transform, then keeps the released offset in
+              // --toast-swipe-movement-x; enter/exit offsets use the separate translate property.
+              className="pointer-events-auto relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 rounded-xl border bg-popover p-4 text-popover-foreground shadow-lg transform-[translateX(var(--toast-swipe-movement-x))] transition-[opacity,transform,translate,scale,rotate] duration-200 ease-smooth-out data-limited:hidden data-starting-style:translate-x-6 data-starting-style:opacity-0 data-ending-style:translate-x-6 data-ending-style:opacity-0"
             >
               <ToastIcon kind={kind} />
               <ToastPrimitive.Content className="min-w-0">

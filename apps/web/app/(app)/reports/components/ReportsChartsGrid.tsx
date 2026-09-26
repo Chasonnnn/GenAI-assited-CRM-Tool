@@ -1,5 +1,6 @@
 "use client"
 
+import type { CSSProperties } from "react"
 import dynamic from "next/dynamic"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -10,6 +11,16 @@ import {
     TrendingDownIcon,
     TrendingUpIcon,
 } from "lucide-react"
+
+// Duplicates the reports page card entrance: the page loads this module through next/dynamic,
+// so it cannot import a helper from here without bundling this module eagerly.
+// The backwards fill holds the faded start state through the delay, so staggered cards never flash in at full opacity.
+// Chart cards use indexes 4-7 to follow the first row of quick-stat cards.
+const cardEntranceClassName = "animate-in fade-in-50 fill-mode-backwards duration-200 ease-smooth-out"
+
+function cardEntranceDelay(index: number): CSSProperties {
+    return { animationDelay: `${Math.min(index * 40, 300)}ms` }
+}
 
 const surrogatesOverviewConfig = {
     count: { label: "Surrogates" },
@@ -265,7 +276,7 @@ export function ReportsChartsGrid({
     return (
         <div className="grid gap-6 md:grid-cols-2">
             {/* Surrogates by Stage */}
-            <Card className="animate-in fade-in-50 duration-500 delay-400">
+            <Card className={cardEntranceClassName} style={cardEntranceDelay(4)}>
                 <CardHeader>
                     <CardTitle>Surrogates by Stage</CardTitle>
                 </CardHeader>
@@ -302,7 +313,7 @@ export function ReportsChartsGrid({
             </Card>
 
             {/* Surrogates Trend */}
-            <Card className="animate-in fade-in-50 duration-500 delay-500">
+            <Card className={cardEntranceClassName} style={cardEntranceDelay(5)}>
                 <CardHeader>
                     <CardTitle>Surrogates Trend</CardTitle>
                 </CardHeader>
@@ -349,7 +360,7 @@ export function ReportsChartsGrid({
             </Card>
 
             {/* Team Performance */}
-            <Card className="animate-in fade-in-50 duration-500 delay-[600ms]">
+            <Card className={cardEntranceClassName} style={cardEntranceDelay(6)}>
                 <CardHeader>
                     <CardTitle>Team Performance</CardTitle>
                 </CardHeader>
@@ -387,7 +398,7 @@ export function ReportsChartsGrid({
             </Card>
 
             {/* Meta Performance */}
-            <Card className="animate-in fade-in-50 duration-500 delay-700">
+            <Card className={cardEntranceClassName} style={cardEntranceDelay(7)}>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <MegaphoneIcon className="size-5 text-blue-600" />
