@@ -230,7 +230,9 @@ def _spy_effects(monkeypatch) -> dict[str, _Spy]:
     }
     for name in ("trigger_match_proposed", "trigger_match_accepted", "trigger_match_rejected"):
         monkeypatch.setattr(workflow_triggers, name, spies[name])
-    monkeypatch.setattr(dashboard_service, "push_dashboard_stats", spies["push_dashboard_stats"])
+    monkeypatch.setattr(
+        dashboard_service, "push_dashboard_stats_or_raise", spies["push_dashboard_stats"]
+    )
     for name in ("notify_match_cancel_request_pending", "notify_match_cancel_request_resolved"):
         monkeypatch.setattr(notification_service, name, spies[name])
     return spies
@@ -1484,6 +1486,61 @@ async def test_other_org_user_gets_404_for_match_routes(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["POST", "GET", "PUT", "DELETE"])
+async def test_other_org_user_gets_404_for_match_event_actions(authed_client, db, method):
+    match = await _case(
+        authed_client,
+        await _create_intended_parent(authed_client),
+        surrogate=await _create_surrogate(authed_client),
+    )
+    path = f"/matches/{match['id']}/events"
+    body = {
+        "person_type": "surrogate",
+        "event_type": "medical_exam",
+        "title": "Consultation",
+        "all_day": True,
+        "start_date": "2026-09-25",
+    }
+    created = await authed_client.post(path, json=body)
+    assert created.status_code == 201, created.text
+    before = (await authed_client.get(path)).json()
+    target = path if method == "POST" else f"{path}/{created.json()['id']}"
+    payload = body if method == "POST" else {"title": "Changed"} if method == "PUT" else None
+
+    async with _client_for(db, _other_org(db).id) as (_user, client):
+        response = await client.request(method, target, json=payload)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Match not found"
+    assert (await authed_client.get(path)).json() == before
+
+
+@pytest.mark.asyncio
+async def test_other_org_user_cannot_update_match_attempt(authed_client, db):
+    match = await _accept(
+        authed_client,
+        await _case(
+            authed_client,
+            await _create_intended_parent(authed_client),
+            surrogate=await _create_surrogate(authed_client),
+        ),
+    )
+    path = f"/matches/{match['id']}/attempts"
+    created = await authed_client.post(path, json={"attempt_type": "embryo_transfer"})
+    assert created.status_code == 201, created.text
+    before = (await authed_client.get(path)).json()
+
+    async with _client_for(db, _other_org(db).id) as (_user, client):
+        response = await client.patch(
+            f"{path}/{created.json()['id']}", json={"status": "completed", "outcome": "Changed"}
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Match not found"
+    assert (await authed_client.get(path)).json() == before
+
+
+@pytest.mark.asyncio
 async def test_other_org_user_cannot_propose_with_foreign_parties(authed_client, db, test_auth):
     surrogate = await _create_surrogate(authed_client)
     ip = await _create_intended_parent(authed_client)
@@ -1633,7 +1690,7 @@ def _spy_ordered_effects(monkeypatch, events: list[str], failing: str | None = N
     targets = {
         "dispatch_note_added": (note_service, "dispatch_note_added"),
         "handle_status_changed": (surrogate_events, "handle_status_changed"),
-        "push_dashboard_stats": (dashboard_service, "push_dashboard_stats"),
+        "push_dashboard_stats": (dashboard_service, "push_dashboard_stats_or_raise"),
         "trigger_match_accepted": (workflow_triggers, "trigger_match_accepted"),
         "notify_match_cancel_request_resolved": (
             notification_service,
@@ -1995,6 +2052,52 @@ async def test_failing_effect_is_recorded_on_the_match_and_later_effects_run(
     assert "Match Effect Failed" in {item["event_type"] for item in feed.json()["activity"]}
 
 
+def test_non_match_dashboard_push_keeps_build_failures_best_effort(
+    db, test_org, monkeypatch, caplog
+):
+    from app.services import surrogate_service
+
+    monkeypatch.setattr(
+        surrogate_service, "get_surrogate_stats", _Spy(error=RuntimeError("stats unavailable"))
+    )
+
+    dashboard_service.push_dashboard_stats(db, test_org.id)
+
+    assert "Failed to build dashboard stats for websocket push" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_dashboard_build_failure_is_recorded_and_later_effect_runs(
+    authed_client, db, monkeypatch
+):
+    from app.services import surrogate_service
+
+    created = await _case(
+        authed_client,
+        await _create_intended_parent(authed_client),
+        surrogate=await _create_surrogate(authed_client),
+    )
+    accepted_trigger = _Spy()
+    monkeypatch.setattr(workflow_triggers, "trigger_match_accepted", accepted_trigger)
+    monkeypatch.setattr(
+        surrogate_service, "get_surrogate_stats", _Spy(error=RuntimeError("stats unavailable"))
+    )
+
+    response = await authed_client.put(f"/matches/{created['id']}/accept", json={})
+
+    assert response.status_code == 200, response.text
+    assert _match_row(db, created["id"]).status == "accepted"
+    assert len(accepted_trigger.calls) == 1
+    assert _effect_failures(db, created["id"]) == [
+        {
+            "match_id": created["id"],
+            "action": "accept",
+            "effect": "dashboard_push",
+            "error_class": "RuntimeError",
+        }
+    ]
+
+
 @pytest.mark.asyncio
 async def test_each_failing_effect_is_recorded_separately(authed_client, db, monkeypatch):
     created = await _case(
@@ -2008,7 +2111,7 @@ async def test_each_failing_effect_is_recorded_separately(authed_client, db, mon
         workflow_triggers, "trigger_match_accepted", _Spy(error=ValueError("workflow down"))
     )
     monkeypatch.setattr(
-        dashboard_service, "push_dashboard_stats", _Spy(error=RuntimeError("socket down"))
+        dashboard_service, "push_dashboard_stats_or_raise", _Spy(error=RuntimeError("socket down"))
     )
 
     response = await authed_client.put(f"/matches/{created['id']}/accept", json={})
@@ -2046,6 +2149,44 @@ async def test_ai_bulk_tasks_require_view_matches(authed_client, db, test_auth):
     assert response.status_code == 403
     assert response.json()["detail"] == denied.json()["detail"]
     assert db.query(Task).filter(Task.created_by_user_id == user.id).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_ai_bulk_task_replay_requires_current_match_access(authed_client, db, test_auth):
+    created = await _case(
+        authed_client,
+        await _create_intended_parent(authed_client),
+        surrogate=await _create_surrogate(authed_client),
+    )
+    body = {
+        "request_id": str(uuid.uuid4()),
+        "match_id": created["id"],
+        "tasks": [{"title": "Schedule consult"}],
+    }
+    async with _client_for(db, test_auth.org.id) as (user, client):
+        initial = await client.post("/ai/create-bulk-tasks", json=body)
+        assert initial.status_code == 200, initial.text
+        count = db.query(Task).filter(Task.created_by_user_id == user.id).count()
+        assert count == 1
+        db.add(
+            UserPermissionOverride(
+                id=uuid.uuid4(),
+                organization_id=test_auth.org.id,
+                user_id=user.id,
+                permission="view_matches",
+                override_type="revoke",
+            )
+        )
+        db.commit()
+
+        replay = await client.post("/ai/create-bulk-tasks", json=body)
+        fresh = await client.post(
+            "/ai/create-bulk-tasks", json={**body, "request_id": str(uuid.uuid4())}
+        )
+
+    assert replay.status_code == fresh.status_code == 403
+    assert replay.json()["detail"] == fresh.json()["detail"] == "Missing permission: view_matches"
+    assert db.query(Task).filter(Task.created_by_user_id == user.id).count() == count
 
 
 @pytest.mark.asyncio
