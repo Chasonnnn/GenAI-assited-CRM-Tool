@@ -125,7 +125,7 @@ def dashboard_push(db: Session, org_id: UUID) -> list[Effect]:
     def run() -> None:
         from app.services import dashboard_service
 
-        dashboard_service.push_dashboard_stats(db, org_id)
+        dashboard_service.push_dashboard_stats_or_raise(db, org_id)
 
     return [("dashboard_push", run)]
 

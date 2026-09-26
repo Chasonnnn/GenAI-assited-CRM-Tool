@@ -35,16 +35,6 @@ def create_bulk_tasks(
     Uses request_id for idempotency - same request_id returns cached result.
     Tasks can be linked to case, surrogate, intended parent, or match.
     """
-    cached_response = ai_task_service.get_cached_bulk_response(
-        db,
-        session.org_id,
-        session.user_id,
-        body.request_id,
-    )
-    if cached_response:
-        logger.info("Returning cached result for request_id=%s", body.request_id)
-        return cached_response
-
     # Verify entity exists and belongs to org
     entity_type = None
     entity_id = None
@@ -88,6 +78,17 @@ def create_bulk_tasks(
             db=db,
             org_id=session.org_id,
         )
+
+    # Replays require the same current entity access as new requests.
+    cached_response = ai_task_service.get_cached_bulk_response(
+        db,
+        session.org_id,
+        session.user_id,
+        body.request_id,
+    )
+    if cached_response:
+        logger.info("Returning cached result for request_id=%s", body.request_id)
+        return cached_response
 
     task_surrogate_id = surrogate_id
     task_ip_id = body.intended_parent_id
