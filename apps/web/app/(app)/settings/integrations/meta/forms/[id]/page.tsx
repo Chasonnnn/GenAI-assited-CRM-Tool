@@ -22,7 +22,11 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Loader2Icon, SparklesIcon, ArrowLeftIcon } from "lucide-react"
+import { Loader2Icon, SparklesIcon } from "lucide-react"
+import { QueryErrorState } from "@/components/error-state"
+import { PageHeader } from "@/components/page-header"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
+import { SettingsPageGate } from "../../../../settings-page-gate"
 import {
     useMetaFormMapping,
     useReconvertMetaFormLeads,
@@ -98,28 +102,12 @@ type MetaFormMappingData = NonNullable<ReturnType<typeof useMetaFormMapping>["da
 type MetaFormUnconvertedLeadData = NonNullable<ReturnType<typeof useMetaFormUnconvertedLeads>["data"]>
 type UpdateMapping = (csvColumn: string, patch: Partial<ColumnMappingDraft>) => void
 
-function MetaFormMappingHeader({
-    formExternalId,
-    formName,
-    onBack,
-}: {
-    formExternalId: string
-    formName: string
-    onBack: () => void
-}) {
+function MetaFormMappingHeader({ formName }: { formName: string }) {
     return (
-        <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex h-16 items-center justify-between px-6">
-                <div>
-                    <h1 className="text-2xl font-semibold">{formName}</h1>
-                    <p className="text-sm text-muted-foreground">{formExternalId}</p>
-                </div>
-                <Button variant="ghost" onClick={onBack}>
-                    <ArrowLeftIcon className="mr-2 size-4" aria-hidden="true" />
-                    Back to forms
-                </Button>
-            </div>
-        </div>
+        <PageHeader
+            title={formName}
+            back={{ href: "/settings/integrations/meta/forms", label: "Back to forms" }}
+        />
     )
 }
 
@@ -644,12 +632,28 @@ function MetaUnconvertedLeadsTable({ items }: { items: MetaFormUnconvertedLeadDa
     )
 }
 
+const META_FORMS_BACK = { href: "/settings/integrations/meta/forms", label: "Back to forms" }
+
 export default function MetaFormMappingPage() {
+    return (
+        <SettingsPageGate
+            title="Lead form mapping"
+            permission="manage_meta_leads"
+            deniedDescription="Meta lead forms need the Manage Meta Leads permission. Ask an admin to update your role."
+            back={META_FORMS_BACK}
+        >
+            <MetaFormMappingContent />
+        </SettingsPageGate>
+    )
+}
+
+function MetaFormMappingContent() {
     const params = useParams()
     const { push } = useRouter()
     const formId = params?.id as string
 
-    const { data, isLoading } = useMetaFormMapping(formId)
+    const mappingQuery = useMetaFormMapping(formId)
+    const { data, isLoading } = mappingQuery
     const { data: unconvertedLeadData, isLoading: unconvertedLeadsLoading } =
         useMetaFormUnconvertedLeads(formId, (data?.form.unconverted_leads || 0) > 0)
     const updateMutation = useUpdateMetaFormMapping(formId)
@@ -777,7 +781,7 @@ export default function MetaFormMappingPage() {
                 return next
             })
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : "AI mapping failed")
+            setError(getActionErrorMessage(err, "AI mapping failed. Try again.") ?? "")
         }
     }
 
@@ -817,7 +821,7 @@ export default function MetaFormMappingPage() {
                 lead_kind: leadKind,
             })
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : "Failed to save mapping")
+            setError(getActionErrorMessage(err, "Couldn't save the mapping. Try again.") ?? "")
         }
     }
 
@@ -838,8 +842,28 @@ export default function MetaFormMappingPage() {
                     .join(" ")
             )
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : "Failed to queue reconversion")
+            setError(getActionErrorMessage(err, "Couldn't queue reconversion. Try again.") ?? "")
         }
+    }
+
+    if (!data && mappingQuery.isError) {
+        return (
+            <div className="flex min-h-screen flex-col">
+                <PageHeader title="Lead form mapping" back={META_FORMS_BACK} />
+                <QueryErrorState
+                    error={mappingQuery.error}
+                    title="Couldn't load this form mapping"
+                    onRetry={() => void mappingQuery.refetch()}
+                    isRetrying={mappingQuery.isFetching}
+                    notFound={{
+                        title: "Form not found",
+                        backHref: META_FORMS_BACK.href,
+                        backLabel: META_FORMS_BACK.label,
+                    }}
+                    headingLevel={2}
+                />
+            </div>
+        )
     }
 
     if (isLoading || !data) {
@@ -852,11 +876,7 @@ export default function MetaFormMappingPage() {
 
     return (
         <div className="flex min-h-screen flex-col">
-            <MetaFormMappingHeader
-                formExternalId={data.form.form_external_id}
-                formName={data.form.form_name}
-                onBack={() => push("/settings/integrations/meta/forms")}
-            />
+            <MetaFormMappingHeader formName={data.form.form_name} />
 
             <div className="flex-1 space-y-6 p-6">
                 {data.form.mapping_status === "outdated" && <MetaMappingOutdatedAlert />}

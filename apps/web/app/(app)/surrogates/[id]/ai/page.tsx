@@ -4,7 +4,9 @@ import * as React from "react"
 import { useParams } from "next/navigation"
 import { TabsContent } from "@/components/ui/tabs"
 import { SurrogateAiTab } from "@/components/surrogates/detail/SurrogateAiTab"
-import { useSummarizeSurrogate, useDraftEmail, useAISettings } from "@/lib/hooks/use-ai"
+import { useSummarizeSurrogate, useDraftEmail } from "@/lib/hooks/use-ai"
+import { useAuth } from "@/lib/auth-context"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import type { DraftEmailResponse, EmailType, SummarizeSurrogateResponse } from "@/lib/api/ai"
 
 export default function SurrogateAiPage() {
@@ -12,7 +14,8 @@ export default function SurrogateAiPage() {
     const id = params.id
     const summarizeSurrogateMutation = useSummarizeSurrogate()
     const draftEmailMutation = useDraftEmail()
-    const { data: aiSettings } = useAISettings()
+    const { user } = useAuth()
+    const { can } = usePermissionCheck()
 
     const [aiSummary, setAiSummary] = React.useState<SummarizeSurrogateResponse | null>(null)
     const [aiDraftEmail, setAiDraftEmail] = React.useState<DraftEmailResponse | null>(null)
@@ -35,7 +38,8 @@ export default function SurrogateAiPage() {
     return (
         <TabsContent value="ai" className="space-y-4">
             <SurrogateAiTab
-                aiSettings={aiSettings}
+                aiEnabled={Boolean(user?.ai_enabled)}
+                canManageAI={can("manage_ai_settings")}
                 aiSummary={aiSummary}
                 aiDraftEmail={aiDraftEmail}
                 selectedEmailType={selectedEmailType}

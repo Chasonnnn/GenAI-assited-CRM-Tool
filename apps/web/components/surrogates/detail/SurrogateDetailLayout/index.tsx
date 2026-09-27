@@ -2,9 +2,9 @@
 
 import * as React from "react"
 import { useParams } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { QueryErrorState } from "@/components/error-state"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import { Loader2Icon, SparklesIcon } from "lucide-react"
 import { SurrogateDetailHeader } from "@/components/surrogates/detail/SurrogateDetailHeader"
 import { SurrogateDetailProvider } from "@/components/surrogates/detail/SurrogateDetailContext"
@@ -26,6 +26,8 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
         surrogate,
         isLoading,
         error,
+        refetchSurrogate,
+        isFetchingSurrogate,
         pausedFromStage,
         statusLabel,
         statusColor,
@@ -38,6 +40,8 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
         currentTab,
         setTab,
     } = useSurrogateDetailTabs()
+    const { can } = usePermissionCheck()
+    const canViewEmails = can("view_tickets")
 
     if (isLoading) {
         return (
@@ -50,19 +54,25 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
 
     if (error || !surrogate) {
         return (
-            <div className="flex min-h-screen items-center justify-center">
-                <Card className="p-6">
-                    <p className="text-destructive">
-                        Error loading surrogate: {error?.message || "Not found"}
-                    </p>
-                    <Button
-                        variant="outline"
-                        className="mt-4"
-                        onClick={navigateToList}
-                    >
-                        Back to Surrogates
-                    </Button>
-                </Card>
+            <div className="flex min-w-0 flex-1 flex-col items-center justify-center p-6">
+                <QueryErrorState
+                    error={error}
+                    onRetry={refetchSurrogate}
+                    isRetrying={isFetchingSurrogate}
+                    title="Couldn't load surrogate"
+                    forbidden={{
+                        title: "No access to this surrogate",
+                        description: "Ask an admin or the case owner for access.",
+                        secondaryHref: "/surrogates",
+                        secondaryLabel: "Back to Surrogates",
+                    }}
+                    notFound={{
+                        title: "Surrogate not found",
+                        backHref: "/surrogates",
+                        backLabel: "Back to Surrogates",
+                    }}
+                    headingLevel={1}
+                />
             </div>
         )
     }
@@ -93,7 +103,7 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
                     <div className="mb-4 max-w-full overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden print:hidden">
                         <TabsList>
                             <TabsTrigger value="overview">Overview</TabsTrigger>
-                            <TabsTrigger value="emails">Emails</TabsTrigger>
+                            {canViewEmails && <TabsTrigger value="emails">Emails</TabsTrigger>}
                             <TabsTrigger value="notes">
                                 Notes {noteCount > 0 && `(${noteCount})`}
                             </TabsTrigger>

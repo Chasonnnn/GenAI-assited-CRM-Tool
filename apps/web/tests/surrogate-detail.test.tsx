@@ -4,6 +4,7 @@ import { SurrogateDetailLayout as SurrogateDetailLayoutClient } from '@/componen
 import { SurrogateOverviewTab } from '@/components/surrogates/detail/tabs/SurrogateOverviewTab'
 import { SurrogateDetailHeader } from '@/components/surrogates/detail/SurrogateDetailHeader'
 import SurrogateJourneyPage from '../app/(app)/surrogates/[id]/journey/page'
+import { ApiError } from '@/lib/api'
 
 const mockPush = vi.fn()
 const mockReplace = vi.fn()
@@ -31,8 +32,22 @@ vi.mock('next/navigation', () => ({
     }),
 }))
 
+const mockAuthUser: { value: { role: string; user_id?: string } } = { value: { role: 'developer' } }
+const mockGrantedPermissions: { value: string[] } = { value: [] }
+
 vi.mock('@/lib/auth-context', () => ({
-    useAuth: () => ({ user: { role: 'developer' } }),
+    useAuth: () => ({ user: mockAuthUser.value }),
+}))
+
+vi.mock('@/lib/hooks/use-permission-check', () => ({
+    usePermissionCheck: () => ({
+        isLoading: false,
+        isError: false,
+        retry: vi.fn(),
+        isRetrying: false,
+        can: (permission: string) =>
+            mockAuthUser.value.role === 'developer' || mockGrantedPermissions.value.includes(permission),
+    }),
 }))
 
 vi.mock('@/components/rich-text-editor', () => ({
@@ -256,13 +271,13 @@ vi.mock('@/lib/hooks/use-surrogates', async (importOriginal) => ({
 }))
 
 vi.mock('@/lib/hooks/use-notes', () => ({
-    useNotes: (surrogateId: string) => mockUseNotes(surrogateId),
+    useNotes: (surrogateId: string, options?: unknown) => mockUseNotes(surrogateId, options),
     useCreateNote: () => ({ mutateAsync: mockCreateNote }),
     useDeleteNote: () => ({ mutateAsync: mockDeleteNote }),
 }))
 
 vi.mock('@/lib/hooks/use-tasks', () => ({
-    useTasks: (params: unknown) => mockUseTasks(params),
+    useTasks: (params: unknown, options?: unknown) => mockUseTasks(params, options),
     useCompleteTask: () => ({ mutateAsync: mockCompleteTask }),
     useUncompleteTask: () => ({ mutateAsync: mockUncompleteTask }),
     useUpdateTask: () => ({ mutateAsync: mockUpdateTask }),
@@ -312,6 +327,10 @@ vi.mock('@/lib/hooks/use-matches', () => ({
 describe('SurrogateDetailPage', () => {
     beforeEach(() => {
         mockPipelineStages = [...defaultPipelineStages]
+        mockAuthUser.value = { role: 'developer' }
+        mockGrantedPermissions.value = []
+        mockUseNotes.mockClear()
+        mockUseTasks.mockClear()
         mockUseAssignees.mockReturnValue({ data: [] })
         mockUseSurrogate.mockReturnValue({
             data: {
@@ -340,6 +359,73 @@ describe('SurrogateDetailPage', () => {
         mockRevealSurrogateSensitiveInfo.mockReset()
         const clipboardWriteText = navigator.clipboard.writeText as unknown as { mockClear?: () => void }
         clipboardWriteText.mockClear?.()
+    })
+
+    it('shows a permission state for a denied record and skips the notes and tasks requests', () => {
+        mockAuthUser.value = { role: 'intake', user_id: 'u-intake' }
+        mockUseSurrogate.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            error: new ApiError(403, 'Forbidden', "You don't have access to this surrogate"),
+            refetch: vi.fn(),
+            isFetching: false,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        expect(screen.getByRole('heading', { level: 1, name: 'No access to this surrogate' })).toBeInTheDocument()
+        expect(screen.getByRole('link', { name: 'Back to Surrogates' })).toHaveAttribute('href', '/surrogates')
+        expect(screen.queryByText(/Error loading surrogate/)).not.toBeInTheDocument()
+        expect(screen.queryByText("You don't have access to this surrogate")).not.toBeInTheDocument()
+        expect(mockUseNotes).toHaveBeenCalledWith('c1', { enabled: false })
+        expect(mockUseTasks).toHaveBeenCalledWith(
+            { surrogate_id: 'c1', exclude_approvals: true },
+            { enabled: false },
+        )
+    })
+
+    it('loads notes and tasks once the record loads', () => {
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        expect(mockUseNotes).toHaveBeenCalledWith('c1', { enabled: true })
+        expect(mockUseTasks).toHaveBeenCalledWith(
+            { surrogate_id: 'c1', exclude_approvals: true },
+            { enabled: true },
+        )
+    })
+
+    it('hides the Emails tab from roles without view_tickets', () => {
+        mockAuthUser.value = { role: 'admin', user_id: 'u-admin' }
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
+        expect(screen.queryByRole('tab', { name: 'Emails' })).not.toBeInTheDocument()
+    })
+
+    it('shows the Emails tab to roles with view_tickets', () => {
+        mockAuthUser.value = { role: 'admin', user_id: 'u-admin' }
+        mockGrantedPermissions.value = ['view_tickets']
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        expect(screen.getByRole('tab', { name: 'Emails' })).toBeInTheDocument()
     })
 
     it('renders surrogate header and allows copying email', () => {
@@ -891,7 +977,7 @@ describe('SurrogateDetailPage', () => {
         expect(screen.queryByText(/Underweight|Normal|Overweight|Obese/i)).not.toBeInTheDocument()
     })
 
-    it('shows "-" for height when missing but demographics section is visible', () => {
+    it('shows the empty-value token for height when missing but demographics section is visible', () => {
         mockUseSurrogate.mockReturnValueOnce({
             data: {
                 ...baseSurrogateData,
@@ -910,7 +996,8 @@ describe('SurrogateDetailPage', () => {
 
         expect(screen.getByText('Height:')).toBeInTheDocument()
         expect(screen.getByText('120 lb')).toBeInTheDocument()
-        expect(screen.getAllByText('-').length).toBeGreaterThan(0)
+        expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+        expect(screen.queryByText('-')).not.toBeInTheDocument()
     })
 
     it('shows inline lead warning icons for affected fields and no review card', async () => {
@@ -963,7 +1050,7 @@ describe('SurrogateDetailPage', () => {
 
         expect(screen.getByText('Height:')).toBeInTheDocument()
         expect(screen.getByText('Weight:')).toBeInTheDocument()
-        expect(screen.getAllByText('-').length).toBeGreaterThan(0)
+        expect(screen.getAllByText('—').length).toBeGreaterThan(0)
 
         fireEvent.focus(phoneWarning)
 
@@ -1270,11 +1357,11 @@ describe('SurrogateDetailPage', () => {
         fireEvent.click(screen.getByRole('button', { name: /edit info/i }))
         fireEvent.click(screen.getByRole('menuitem', { name: /add section/i }))
         fireEvent.click(screen.getByRole('menuitem', { name: /pcp provider/i }))
-        fireEvent.click(screen.getByRole('button', { name: 'Edit Clinic/Hospital name' }))
-        fireEvent.change(screen.getByLabelText('Clinic/Hospital name'), {
+        fireEvent.click(screen.getByRole('button', { name: 'Edit PCP Provider name' }))
+        fireEvent.change(screen.getByLabelText('PCP Provider name'), {
             target: { value: 'Austin PCP Associates' },
         })
-        fireEvent.keyDown(screen.getByLabelText('Clinic/Hospital name'), { key: 'Enter' })
+        fireEvent.keyDown(screen.getByLabelText('PCP Provider name'), { key: 'Enter' })
 
         await waitFor(() => {
             expect(mockUpdateSurrogate).toHaveBeenCalledWith({
@@ -1880,20 +1967,20 @@ describe('SurrogateDetailPage', () => {
         fireEvent.click(screen.getByRole('button', { name: /more actions/i }))
         fireEvent.click(screen.getByRole('menuitem', { name: /^edit$/i }))
 
-        const feetSelect = await screen.findByRole('combobox', { name: 'Height Feet' })
-        const inchesSelect = screen.getByRole('combobox', { name: 'Height Inches' })
+        const feetSelect = await screen.findByRole('combobox', { name: 'Height feet' })
+        const inchesSelect = screen.getByRole('combobox', { name: 'Height inches' })
 
         expect(feetSelect).toHaveAttribute('data-slot', 'select-trigger')
         expect(inchesSelect).toHaveAttribute('data-slot', 'select-trigger')
-        expect(feetSelect).toHaveTextContent('4 ft')
-        expect(inchesSelect).toHaveTextContent('11 in')
+        expect(feetSelect).toHaveTextContent('4')
+        expect(inchesSelect).toHaveTextContent('11')
 
         fireEvent.click(feetSelect)
-        const fourFeetOption = screen.getByRole('option', { name: '4 ft' })
+        const fourFeetOption = screen.getByRole('option', { name: '4' })
         fireEvent.mouseMove(fourFeetOption)
         fireEvent.click(fourFeetOption)
         fireEvent.click(inchesSelect)
-        const elevenInchesOption = screen.getByRole('option', { name: '11 in' })
+        const elevenInchesOption = screen.getByRole('option', { name: '11' })
         fireEvent.mouseMove(elevenInchesOption)
         fireEvent.click(elevenInchesOption)
         fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))

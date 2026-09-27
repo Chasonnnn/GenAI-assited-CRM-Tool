@@ -29,9 +29,28 @@ function deferred<T>(): Deferred<T> {
     return { promise, resolve }
 }
 
+const authState: { user: { role: string; user_id: string; ai_enabled?: boolean } } = {
+    user: { role: 'case_manager', user_id: 'u1' },
+}
+
 vi.mock('@/lib/auth-context', () => ({
-    useAuth: () => ({ user: { role: 'case_manager', user_id: 'u1' } }),
+    useAuth: () => authState,
 }))
+
+const searchParamsState = { value: new URLSearchParams() }
+
+vi.mock('next/navigation', () => ({
+    useSearchParams: () => searchParamsState.value,
+}))
+
+function stubDesktopViewport(isDesktop: boolean) {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+        matches: isDesktop && query === '(min-width: 1024px)',
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+    }))
+}
 
 vi.mock('@/components/rich-text-editor', () => ({
     RichTextEditor: ({ onSubmit }: { onSubmit?: (value: string) => void }) => (
@@ -84,7 +103,12 @@ vi.mock('@/components/ui/dialog', () => ({
     Dialog: ({ open, children }: { open?: boolean; children?: ReactNode }) =>
         open ? <div>{children}</div> : null,
     DialogContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-    DialogHeader: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    DialogHeader: ({ children, status }: { children?: ReactNode; status?: ReactNode }) => (
+        <div>
+            {children}
+            {status}
+        </div>
+    ),
     DialogTitle: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
     DialogFooter: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }))
@@ -177,6 +201,66 @@ describe('SurrogateInterviewTab', () => {
             data: interviewId ? attachments : [],
         }))
         mockRequestTranscription.mockResolvedValue({})
+        authState.user = { role: 'case_manager', user_id: 'u1' }
+        searchParamsState.value = new URLSearchParams()
+        vi.unstubAllGlobals()
+    })
+
+    it('opens the interview named in ?interview= even on mobile', async () => {
+        stubDesktopViewport(false)
+        searchParamsState.value = new URLSearchParams('interview=i1')
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        expect(await screen.findByText('Phone Interview')).toBeDefined()
+        expect(mockUseInterview).toHaveBeenCalledWith('i1')
+    })
+
+    it('ignores an ?interview= id that is not in the list', () => {
+        stubDesktopViewport(false)
+        searchParamsState.value = new URLSearchParams('interview=other-surrogates-interview')
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        expect(screen.queryByText('Phone Interview')).toBeNull()
+        expect(mockUseInterview).not.toHaveBeenCalledWith('other-surrogates-interview')
+    })
+
+    it('selects the first interview on load on desktop', async () => {
+        stubDesktopViewport(true)
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        expect(await screen.findByText('Phone Interview')).toBeDefined()
+        expect(screen.queryByText('Select an interview to view details')).toBeNull()
+    })
+
+    it('does not auto-select on mobile, where the list is the first view', () => {
+        stubDesktopViewport(false)
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        expect(screen.queryByText('Phone Interview')).toBeNull()
+    })
+
+    it('hides the AI Summary action when AI is off for the organization', async () => {
+        stubDesktopViewport(true)
+        authState.user = { role: 'case_manager', user_id: 'u1', ai_enabled: false }
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        await screen.findByText('Phone Interview')
+        expect(screen.queryByText('AI Summary')).toBeNull()
+    })
+
+    it('offers the AI Summary action when AI is on', async () => {
+        stubDesktopViewport(true)
+        authState.user = { role: 'case_manager', user_id: 'u1', ai_enabled: true }
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        await screen.findByText('Phone Interview')
+        expect(screen.getAllByText('AI Summary').length).toBeGreaterThan(0)
     })
 
     it('renders empty state when no interviews exist', () => {

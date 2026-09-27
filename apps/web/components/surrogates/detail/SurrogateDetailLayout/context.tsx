@@ -5,6 +5,7 @@ import type { Route } from "next"
 import { createContext, use, useState, useRef } from "react"
 import { redirect, useRouter, useSearchParams, useSelectedLayoutSegment } from "next/navigation"
 import { toast } from "@/components/ui/toast"
+import { showUndoToast } from "@/components/ui/undo-toast"
 import {
     useSurrogate,
     useChangeSurrogateStatus,
@@ -35,6 +36,7 @@ import {
     toLocalIsoDateTime,
 } from "../surrogate-detail-utils"
 import { useTrackSurrogateView } from "@/lib/hooks/use-track-surrogate-view"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import type { SurrogateRead } from "@/lib/types/surrogate"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import type { Queue } from "@/lib/hooks/use-queues"
@@ -85,6 +87,8 @@ interface SurrogateDetailDataContextValue {
     surrogate: SurrogateRead | null
     isLoading: boolean
     error: Error | null
+    refetchSurrogate: () => void
+    isFetchingSurrogate: boolean
 
     // Derived data
     stage: PipelineStage | undefined
@@ -268,18 +272,20 @@ function canUserViewSurrogateProfile(user: SurrogateDetailAuthUser) {
 function useSurrogateDetailTabNavigation({
     surrogateId,
     canViewProfile,
+    canViewEmails,
 }: {
     surrogateId: string
     canViewProfile: boolean
+    canViewEmails: boolean
 }) {
     const { push, replace } = useRouter()
     const searchParams = useSearchParams()
     const segment = useSelectedLayoutSegment()
     const detailSearch = searchParams.toString()
     const returnTo = sanitizeInternalReturnTo(searchParams.get("return_to")) ?? DEFAULT_SURROGATES_LIST_PATH
-    const allowedTabs: TabValue[] = canViewProfile
-        ? [...TAB_VALUES]
-        : TAB_VALUES.filter((tab) => tab !== "profile")
+    const allowedTabs: TabValue[] = TAB_VALUES.filter(
+        (tab) => (tab !== "profile" || canViewProfile) && (tab !== "emails" || canViewEmails)
+    )
 
     const isTabValue = (value: string | null): value is TabValue =>
         !!value && allowedTabs.includes(value as TabValue)
@@ -322,11 +328,15 @@ function useSurrogateDetailDataValue({
     returnTo: string
 }) {
     const timezoneName = getLocalTimezoneName()
-    const { data: surrogateData, isLoading, error } = useSurrogate(surrogateId)
+    const { data: surrogateData, isLoading, error, refetch, isFetching } = useSurrogate(surrogateId)
     const surrogate = surrogateData || null
     const { data: defaultPipeline } = useDefaultPipeline()
-    const { data: notes } = useNotes(surrogateId)
-    const { data: tasksData } = useTasks({ surrogate_id: surrogateId, exclude_approvals: true })
+    // Counts load only after the record loads, so a denied or missing record sends no extra requests.
+    const { data: notes } = useNotes(surrogateId, { enabled: !!surrogate })
+    const { data: tasksData } = useTasks(
+        { surrogate_id: surrogateId, exclude_approvals: true },
+        { enabled: !!surrogate },
+    )
     const { data: queues = [] } = useQueues(false, {
         enabled: !!user?.role && ["case_manager", "admin", "developer"].includes(user.role),
     })
@@ -398,6 +408,10 @@ function useSurrogateDetailDataValue({
         surrogate,
         isLoading,
         error: error || null,
+        refetchSurrogate: () => {
+            void refetch()
+        },
+        isFetchingSurrogate: isFetching,
         stage,
         effectiveStage,
         pausedFromStage,
@@ -686,7 +700,10 @@ function useSurrogateDetailActionsValue({
     }
 
     const archiveSurrogate = async () => {
-        await archiveMutation.mutateAsync(surrogateId)
+        const archived = await archiveMutation.mutateAsync(surrogateId)
+        showUndoToast(`${archived.surrogate_number} archived`, () =>
+            restoreMutation.mutateAsync(surrogateId)
+        )
         push(returnTo as Route)
     }
     const restoreSurrogate = async () => {
@@ -748,7 +765,11 @@ function useSurrogateDetailActionsValue({
 function SurrogateDetailLayoutProviderContent({ surrogateId, children }: SurrogateDetailLayoutProviderProps) {
     const { user } = useAuth()
     const canViewProfile = canUserViewSurrogateProfile(user)
-    const navigation = useSurrogateDetailTabNavigation({ surrogateId, canViewProfile })
+    const permissionCheck = usePermissionCheck()
+    // The emails tab reads ticket data, which the API gates on view_tickets. While permissions
+    // load, keep the tab routable so a direct link is not redirected before the check resolves.
+    const canViewEmails = permissionCheck.isLoading || permissionCheck.can("view_tickets")
+    const navigation = useSurrogateDetailTabNavigation({ surrogateId, canViewProfile, canViewEmails })
     const data = useSurrogateDetailDataValue({
         surrogateId,
         user,

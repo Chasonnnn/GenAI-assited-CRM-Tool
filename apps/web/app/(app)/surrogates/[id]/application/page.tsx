@@ -2,13 +2,22 @@
 
 import { useParams } from "next/navigation"
 import { TabsContent } from "@/components/ui/tabs"
-import { SurrogateApplicationTab } from "@/components/surrogates/SurrogateApplicationTab"
+import {
+    SurrogateApplicationTab,
+    type ApplicationFormsAccess,
+} from "@/components/surrogates/SurrogateApplicationTab"
 import { useForms } from "@/lib/hooks/use-forms"
+import { isPermissionError } from "@/lib/error-utils"
 
 export default function SurrogateApplicationPage() {
     const params = useParams<{ id?: string }>()
     const id = params?.id
-    const { data: forms } = useForms()
+    const { data: forms, isError: isFormsError, error: formsError, refetch: refetchForms } = useForms()
+    const formsAccess: ApplicationFormsAccess = !isFormsError
+        ? "ready"
+        : isPermissionError(formsError)
+            ? "forbidden"
+            : "error"
     const publishedForms = (forms || []).filter((form) => form.status === "published")
     const defaultApplicationForm =
         publishedForms.find(
@@ -30,6 +39,8 @@ export default function SurrogateApplicationPage() {
                 surrogateId={id}
                 formId={defaultFormId}
                 publishedForms={publishedForms}
+                formsAccess={formsAccess}
+                onRetryForms={() => void refetchForms()}
             />
         </TabsContent>
     )

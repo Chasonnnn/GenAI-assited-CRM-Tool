@@ -22,6 +22,7 @@ import {
     FileTextIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/auth-context"
 import { InterviewWithComments } from "../InterviewComments"
 import { useInterviewTab } from "./context"
 import { AttachmentsDialog } from "./AttachmentsDialog"
@@ -83,6 +84,9 @@ export function DetailView() {
         uploadFiles,
         requestTranscription,
     } = useInterviewTab()
+    const { user } = useAuth()
+    // Same organization flag the AI endpoints enforce.
+    const aiEnabled = Boolean(user?.ai_enabled)
 
     if (!selectedInterview) {
         return (
@@ -156,10 +160,12 @@ export function DetailView() {
                                 <HistoryIcon className="size-4 mr-2" />
                                 Version History
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={generateAISummary} disabled={isAISummaryPending}>
-                                <SparklesIcon className="size-4 mr-2" />
-                                {isAISummaryPending ? "Generating..." : "AI Summary"}
-                            </DropdownMenuItem>
+                            {aiEnabled && (
+                                <DropdownMenuItem onClick={generateAISummary} disabled={isAISummaryPending}>
+                                    <SparklesIcon className="size-4 mr-2" />
+                                    {isAISummaryPending ? "Generating..." : "AI Summary"}
+                                </DropdownMenuItem>
+                            )}
                             {canDelete && (
                                 <DropdownMenuItem onClick={() => openDeleteDialog(interview)} className="text-destructive">
                                     <TrashIcon className="size-4 mr-2" />

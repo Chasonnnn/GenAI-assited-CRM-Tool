@@ -1,7 +1,10 @@
 "use client"
 
+import Link from "@/components/app-link"
+import { EmptyState } from "@/components/empty-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { BrainIcon, CopyIcon, Loader2Icon, MailIcon, SparklesIcon } from "lucide-react"
 import type { DraftEmailResponse, EmailType, SummarizeSurrogateResponse } from "@/lib/api/ai"
@@ -15,7 +18,10 @@ const DEFAULT_EMAIL_TYPES: EmailType[] = [
 ]
 
 type SurrogateAiTabProps = {
-    aiSettings: { is_enabled?: boolean } | null | undefined
+    /** Organization AI flag (the one the AI endpoints enforce). */
+    aiEnabled: boolean
+    /** Viewer can open AI settings to turn AI on. */
+    canManageAI: boolean
     aiSummary: SummarizeSurrogateResponse | null
     aiDraftEmail: DraftEmailResponse | null
     selectedEmailType: EmailType | null
@@ -28,7 +34,8 @@ type SurrogateAiTabProps = {
 }
 
 export function SurrogateAiTab({
-    aiSettings,
+    aiEnabled,
+    canManageAI,
     aiSummary,
     aiDraftEmail,
     selectedEmailType,
@@ -42,18 +49,27 @@ export function SurrogateAiTab({
     const summaryPending = summaryStatus === "generating"
     const draftEmailPending = draftEmailStatus === "drafting"
 
-    if (aiSettings && !aiSettings.is_enabled) {
+    if (!aiEnabled) {
         return (
             <Card>
-                <CardContent className="pt-6">
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                        <BrainIcon className="mb-4 size-12 text-muted-foreground" />
-                        <h3 className="text-lg font-medium">AI Assistant Not Enabled</h3>
-                        <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                            Contact your admin to enable AI features and configure an API key in
-                            Settings.
-                        </p>
-                    </div>
+                <CardContent>
+                    {canManageAI ? (
+                        <EmptyState
+                            icon={BrainIcon}
+                            title="AI is off"
+                            headingLevel={2}
+                            action={
+                                <Link
+                                    href="/settings/integrations"
+                                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                                >
+                                    Open AI settings
+                                </Link>
+                            }
+                        />
+                    ) : (
+                        <EmptyState icon={BrainIcon} title="AI is off for this organization" headingLevel={2} />
+                    )}
                 </CardContent>
             </Card>
         )
