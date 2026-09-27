@@ -44,7 +44,7 @@ const mockUseIntendedParent = vi.fn()
 
 vi.mock('@/lib/hooks/use-intended-parents', () => ({
     useIntendedParent: (id: string) => mockUseIntendedParent(id),
-    useIntendedParentHistory: () => mockUseIntendedParentHistory(),
+    useIntendedParentHistory: (id: string | null) => mockUseIntendedParentHistory(id),
     useIntendedParentNotes: () => mockUseIntendedParentNotes(),
     useUpdateIntendedParent: () => ({ mutateAsync: mockUpdateIntendedParent, isPending: false }),
     useUpdateIntendedParentStatus: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -106,7 +106,7 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-entity-activity', () => ({
-    useEntityActivity: () => mockUseEntityActivity(),
+    useEntityActivity: (...args: unknown[]) => mockUseEntityActivity(...args),
 }))
 
 vi.mock('@/lib/hooks/use-attachments', () => ({
@@ -833,7 +833,26 @@ describe('IntendedParentDetailPage', () => {
 
         expect(screen.getByRole("heading", { level: 1, name: "Permission required" })).toBeInTheDocument()
         expect(screen.getByRole("link", { name: "Go to Dashboard" })).toHaveAttribute("href", "/dashboard")
+        expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument()
         expect(screen.queryByText(/not found/i)).not.toBeInTheDocument()
+        // History, activity and tasks wait for the record, so a denied record sends one request.
+        expect(mockUseIntendedParentHistory).toHaveBeenLastCalledWith(null)
+        expect(mockUseEntityActivity).toHaveBeenLastCalledWith("intended_parent", null)
+        expect(mockUseTasks).toHaveBeenLastCalledWith(
+            expect.objectContaining({ intended_parent_id: "ip1" }),
+            { enabled: false },
+        )
+    })
+
+    it("loads history, activity and tasks once the intended parent has loaded", () => {
+        render(<IntendedParentDetailPage />)
+
+        expect(mockUseIntendedParentHistory).toHaveBeenLastCalledWith("ip1")
+        expect(mockUseEntityActivity).toHaveBeenLastCalledWith("intended_parent", "ip1")
+        expect(mockUseTasks).toHaveBeenLastCalledWith(
+            expect.objectContaining({ intended_parent_id: "ip1" }),
+            { enabled: true },
+        )
     })
 
     it("shows the not-found state for a missing intended parent", () => {

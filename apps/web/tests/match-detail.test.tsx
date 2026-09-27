@@ -334,6 +334,8 @@ describe('MatchDetailPage', () => {
 
         expect(screen.getByText('Permission required')).toBeInTheDocument()
         expect(screen.getByText(/account does not have permission to view this match/i)).toBeInTheDocument()
+        // query-retry never retries a 403, so the denied state offers only the back link.
+        expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
     })
 
     it('shows upload button in files tab', () => {

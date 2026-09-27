@@ -626,7 +626,6 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
         isLoading: matchLoading,
         isError: matchIsError,
         error: matchError,
-        refetch: refetchMatch,
     } = useMatch(matchId)
     const acceptMatchMutation = useAcceptMatch()
     const rejectMatchMutation = useRejectMatch()
@@ -758,7 +757,6 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
             <PermissionDeniedState
                 className="min-h-screen"
                 description="Your account does not have permission to view this match. Ask an admin to update your role or permissions."
-                onRetry={() => refetchMatch()}
                 secondaryHref={canViewMatches ? "/intended-parents/matches" : "/dashboard"}
                 secondaryLabel={canViewMatches ? "Back to matches" : "Go to Dashboard"}
             />

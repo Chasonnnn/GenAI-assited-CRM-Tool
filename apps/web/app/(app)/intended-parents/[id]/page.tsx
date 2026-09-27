@@ -157,13 +157,14 @@ export default function IntendedParentDetailPage() {
         refetch,
         isFetching,
     } = useIntendedParent(id)
-    const historyQuery = useIntendedParentHistory(id)
-    const activityQuery = useEntityActivity("intended_parent", id)
+    // Related reads wait for the record, so a denied or missing record sends one request, not four.
+    const historyQuery = useIntendedParentHistory(ip ? id : null)
+    const activityQuery = useEntityActivity("intended_parent", ip ? id : null)
     const stageOptionsQuery = useIntendedParentStatuses()
     const stageOptionsResponse = stageOptionsQuery.data
     const tasksQuery = useTasks(
         { intended_parent_id: id, exclude_approvals: true },
-        { enabled: !!id && canViewTasks },
+        { enabled: !!ip && canViewTasks },
     )
 
     // Mutations
