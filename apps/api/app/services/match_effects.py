@@ -237,7 +237,7 @@ def surrogate_conflict_notifications(db: Session, match: Match) -> list[Effect]:
         if not match_queries.get_accepted_match_for_surrogate(db, org_id, surrogate_id):
             return
         proposals = (
-            db.query(Match.id)
+            db.query(Match)
             .filter(
                 Match.organization_id == org_id,
                 Match.surrogate_id == surrogate_id,
@@ -246,17 +246,20 @@ def surrogate_conflict_notifications(db: Session, match: Match) -> list[Effect]:
             .order_by(Match.id)
             .all()
         )
-        dispatch(
-            db,
-            TransitionEvent(
-                "surrogate_conflict",
-                match,
-                actor_user_id,
-                [
-                    (f"surrogate_conflict_notification:{proposal_id}", partial(notify, proposal_id))
-                    for (proposal_id,) in proposals
-                ],
-            ),
-        )
+        for proposal in proposals:
+            dispatch(
+                db,
+                TransitionEvent(
+                    "surrogate_conflict",
+                    proposal,
+                    actor_user_id,
+                    [
+                        (
+                            f"surrogate_conflict_notification:{proposal.id}",
+                            partial(notify, proposal.id),
+                        )
+                    ],
+                ),
+            )
 
     return [("surrogate_conflict_notifications", run)]

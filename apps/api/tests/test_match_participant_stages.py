@@ -25,7 +25,13 @@ from app.services import (
 )
 from tests.test_match_cancel_request import _create_intended_parent, _create_surrogate
 from tests.test_match_cases import _accept, _case, _donor
-from tests.test_match_lifecycle_characterization import _client_for, _match_row, _other_org
+from tests.test_match_lifecycle_characterization import (
+    _client_for,
+    _diff,
+    _match_row,
+    _other_org,
+    _snapshot,
+)
 from tests.test_match_permissions_v2_characterization import _activate_v2, _set_role_permission
 
 
@@ -201,6 +207,8 @@ async def test_conflict_notification_failure_is_audited_and_later_recipient_stil
     assert len(failures) == 1
     assert failures[0].details["effect"] == f"surrogate_conflict_notification:{failed_id}"
     assert failures[0].details["error_class"] == "RuntimeError"
+    assert failures[0].target_id == uuid.UUID(failed_id)
+    assert failures[0].details["match_id"] == failed_id
     assert (
         db.query(Notification)
         .filter_by(organization_id=test_auth.org.id, type="match_conflict")
@@ -484,3 +492,79 @@ async def test_donor_stage_effect_failure_is_audited_and_match_trigger_still_run
     )
     assert failure.details["effect"] == "donor_stage_changed"
     assert failure.details["error_class"] == "RuntimeError"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "kind,stage",
+    [
+        ("egg", "cycle_in_progress"),
+        ("egg", "retrieval_complete"),
+        ("sperm", "collection_in_progress"),
+        ("sperm", "donation_complete"),
+    ],
+)
+async def test_cancellation_preserves_donor_stage_outside_matched(authed_client, db, kind, stage):
+    donor = await _donor(authed_client, donor_type=kind)
+    match = await _accept(
+        authed_client,
+        await _case(authed_client, await _create_intended_parent(authed_client), donor=donor),
+    )
+    row = db.get(Donor, uuid.UUID(donor["id"]))
+    target = _stage(db, row, stage)
+    before = db.query(DonorStatusHistory).filter_by(donor_id=row.id).count()
+
+    await _cancel(authed_client, db, match)
+
+    db.refresh(row)
+    assert row.stage_id == target.id
+    assert _match_row(db, match["id"]).status == "cancelled"
+    assert db.query(DonorStatusHistory).filter_by(donor_id=row.id).count() == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["surrogate", "egg", "sperm"])
+async def test_accept_denied_by_pipeline_role_rule_changes_nothing(
+    authed_client, db, test_auth, kind
+):
+    is_donor = kind != "surrogate"
+    party = (
+        await _donor(authed_client, donor_type=kind)
+        if is_donor
+        else await _create_surrogate(authed_client)
+    )
+    ip = await _create_intended_parent(authed_client)
+    match = await _case(authed_client, ip, **{"donor" if is_donor else "surrogate": party})
+    model = Donor if is_donor else Surrogate
+    row = db.get(model, uuid.UUID(party["id"]))
+    pipeline = row.stage.pipeline
+    pipeline.feature_config = {
+        **pipeline.feature_config,
+        "role_mutation": {
+            Role.DEVELOPER.value: {
+                "stage_keys": [row.stage.stage_key],
+                "stage_types": [],
+                "capabilities": [],
+            }
+        },
+    }
+    db.commit()
+    before_stage = row.stage_id
+    before_ip_stage = db.get(IntendedParent, uuid.UUID(ip["id"])).stage_id
+    before_history = _snapshot(db, test_auth.org.id)
+
+    response = await authed_client.put(f"/matches/{match['id']}/accept", json={})
+
+    assert response.status_code == 400, response.text
+    party_kind = "donor" if is_donor else "surrogate"
+    assert response.json()["detail"] == f"Role not permitted to change {party_kind} stage"
+    assert _match_row(db, match["id"]).status == "under_review"
+    assert db.get(model, row.id).stage_id == before_stage
+    assert db.get(IntendedParent, uuid.UUID(ip["id"])).stage_id == before_ip_stage
+    # Keep the rejected HTTP request's fallback audit; no domain history changes.
+    assert _diff(before_history, _snapshot(db, test_auth.org.id)) == {
+        "audit": {("api_mutation_fallback", "api_route"): 1},
+        "surrogate_activity": {},
+        "entity_activity": {},
+        "stage_history": {},
+    }

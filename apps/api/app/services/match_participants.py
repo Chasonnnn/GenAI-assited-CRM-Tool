@@ -183,6 +183,10 @@ class DonorParty(Party):
         if not donor or not donor.stage:
             raise ValueError("Match participants not found")
         old_stage = donor.stage
+        if role == "handoff" and not pipeline_service.stage_matches_system_role(
+            old_stage, "matched", donor.pipeline_entity_type
+        ):
+            return []
         target = pipeline_service.get_stage_by_system_role(
             db, old_stage.pipeline_id, role, donor.pipeline_entity_type
         )
@@ -284,7 +288,7 @@ class IntendedParentParty(Party):
         actor_user_id: UUID,
         now: datetime,
     ) -> list[Effect]:
-        """Return the intended parent to Ready to Match when no other committed match remains."""
+        """Return a Matched intended parent to handoff after its last committed match ends."""
         from app.services import intended_parent_status_service, pipeline_service
 
         ip = match_queries.get_intended_parent(db, match.intended_parent_id, match.organization_id)
@@ -292,7 +296,9 @@ class IntendedParentParty(Party):
             raise ValueError("Match participants not found")
         remaining = match_queries.has_other_committed_match_for_intended_parent(db, match)
         old_stage = intended_parent_status_service.get_current_stage(db, ip)
-        if remaining:
+        if remaining or not pipeline_service.stage_matches_system_role(
+            old_stage, "matched", INTENDED_PARENT_PIPELINE_ENTITY
+        ):
             return []
         ready = pipeline_service.get_stage_by_system_role(
             db, old_stage.pipeline_id, "handoff", INTENDED_PARENT_PIPELINE_ENTITY

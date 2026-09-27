@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import text
 
 from alembic import command
+from app.db.migration_steps import donor_pipelines
 from tests.test_migration_20260829_donor_module import _alembic_config, _insert_donor_fixture
 
 REVISION = "20260926_1200_donor_match_stages"
@@ -15,7 +16,7 @@ PREVIOUS = "20260925_1200_match_status_model"
 @pytest.mark.parametrize("kind,handoff", [("egg", "ready_to_match"), ("sperm", "available")])
 @pytest.mark.parametrize("stage_state", ["existing", "inactive", "deleted", "missing"])
 def test_upgrade_restores_protected_stages_without_moving_donors(
-    db_engine, kind, handoff, stage_state
+    db_engine, monkeypatch, kind, handoff, stage_state
 ):
     with db_engine.connect() as connection:
         transaction = connection.begin()
@@ -69,6 +70,9 @@ def test_upgrade_restores_protected_stages_without_moving_donors(
             before_donor = connection.execute(
                 text("SELECT stage_id FROM donors WHERE id=:id"), {"id": fixture["donor_id"]}
             ).scalar_one()
+            monkeypatch.setattr(
+                donor_pipelines, "_stage_semantics", lambda *args: {"future_helper": True}
+            )
             command.upgrade(config, REVISION)
             command.upgrade(config, REVISION)
             rows = connection.execute(
@@ -78,7 +82,25 @@ def test_upgrade_restores_protected_stages_without_moving_donors(
             ).all()
             assert [row.stage_key for row in rows] == [handoff, "matched"]
             assert all(row.is_active and row.deleted_at is None for row in rows)
-            if stage_state != "missing":
+            if stage_state == "missing":
+                for row in rows:
+                    assert row.semantics == {
+                        "capabilities": {
+                            "counts_as_contacted": True,
+                            "eligible_for_matching": row.stage_key == handoff,
+                            "locks_match_state": row.stage_key == "matched",
+                            "shows_pregnancy_tracking": False,
+                            "requires_delivery_details": False,
+                            "tracks_interview_outcome": False,
+                        },
+                        "pause_behavior": "none",
+                        "terminal_outcome": "none",
+                        "integration_bucket": "converted",
+                        "analytics_bucket": row.stage_key,
+                        "suggestion_profile_key": None,
+                        "requires_reason_on_enter": False,
+                    }
+            else:
                 assert [row.id for row in rows] == ids
                 assert [
                     (row.slug, row.label, row.color, row.order, row.semantics) for row in rows

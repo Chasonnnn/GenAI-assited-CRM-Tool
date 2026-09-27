@@ -354,9 +354,7 @@ async def test_failing_approval_effect_returns_success_and_runs_later_effects(
 
 
 @pytest.mark.asyncio
-async def test_approve_cancellation_returns_ip_to_handoff_when_no_active_match_remains(
-    authed_client, db, test_auth
-):
+async def test_approve_cancellation_preserves_ip_outside_matched(authed_client, db, test_auth):
     ip = await _create_intended_parent(authed_client)
     surrogate = await _create_surrogate(authed_client)
     match = await _accept(authed_client, await _case(authed_client, ip, surrogate=surrogate))
@@ -376,11 +374,10 @@ async def test_approve_cancellation_returns_ip_to_handoff_when_no_active_match_r
 
     assert response.status_code == 200, response.text
     assert _match_row(db, match["id"]).status == "cancelled"
-    assert _ip_stage_key(db, ip["id"]) == "ready_to_match"
+    assert _ip_stage_key(db, ip["id"]) == "delivered"
     assert _stage_slug(db, Surrogate, surrogate["id"]) == "ready_to_match"
     assert _diff(before, _snapshot(db, test_auth.org.id))["stage_history"] == {
         "surrogate": 1,
-        "intended_parent": 1,
     }
 
 

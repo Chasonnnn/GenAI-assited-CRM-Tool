@@ -15,7 +15,6 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
 from alembic import op
-from app.db.migration_steps.donor_pipelines import _stage_semantics
 
 revision = "20260926_1200_donor_match_stages"
 down_revision = "20260925_1200_match_status_model"
@@ -95,7 +94,24 @@ def upgrade() -> None:
                         "label": label,
                         "color": color,
                         "order": order,
-                        "semantics": _stage_semantics(pipeline.entity_type, key),
+                        # Frozen from app.db.migration_steps.donor_pipelines._stage_semantics
+                        # for handoff/Matched so later helper edits cannot change this revision.
+                        "semantics": {
+                            "capabilities": {
+                                "counts_as_contacted": True,
+                                "eligible_for_matching": key == handoff,
+                                "locks_match_state": key == "matched",
+                                "shows_pregnancy_tracking": False,
+                                "requires_delivery_details": False,
+                                "tracks_interview_outcome": False,
+                            },
+                            "pause_behavior": "none",
+                            "terminal_outcome": "none",
+                            "integration_bucket": "converted",
+                            "analytics_bucket": key,
+                            "suggestion_profile_key": None,
+                            "requires_reason_on_enter": False,
+                        },
                     },
                 )
             previous_key = key
