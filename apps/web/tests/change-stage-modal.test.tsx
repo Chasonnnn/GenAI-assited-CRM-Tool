@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
 
 const slotStart = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+const toastError = vi.hoisted(() => vi.fn())
+vi.mock("@/components/ui/toast", () => ({ toast: { error: toastError } }))
 vi.mock("@/lib/hooks/use-interview-appointment", () => ({
     useInterviewSlots: () => ({ data: { slots: [{ start: slotStart, end: new Date(Date.parse(slotStart) + 30 * 60 * 1000).toISOString() }] }, isLoading: false, isFetching: false, isError: false, refetch: vi.fn() }),
 }))
@@ -145,6 +147,30 @@ describe("ChangeStageModal", () => {
                 on_hold_follow_up_months: 3,
             })
         })
+    })
+
+    it("keeps the dialog open and shows the error when the stage change fails", async () => {
+        const onSubmit = vi.fn().mockRejectedValue(new Error("Cannot set to Matched without an accepted Match."))
+        const onOpenChange = vi.fn()
+        render(
+            <ChangeStageModal
+                open
+                onOpenChange={onOpenChange}
+                stages={stages}
+                currentStageId="stage_new_unread"
+                currentStageLabel="New Unread"
+                onSubmit={onSubmit}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: /delivered/i }))
+        fireEvent.click(screen.getByRole("button", { name: "Save Change" }))
+
+        await waitFor(() => {
+            expect(toastError).toHaveBeenCalledWith("Cannot set to Matched without an accepted Match.")
+        })
+        expect(onOpenChange).not.toHaveBeenCalled()
+        expect(screen.getByTestId("change-stage-dialog")).toBeInTheDocument()
     })
 
     it.each(["cold_leads", "lost", "disqualified"])("requires a reason for %s", async (stageKey) => {

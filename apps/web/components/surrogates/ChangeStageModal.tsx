@@ -36,6 +36,8 @@ import {
     stageUsesPauseBehavior,
 } from "@/lib/surrogate-stage-context"
 import { cn } from "@/lib/utils"
+import { getErrorMessage } from "@/lib/error-utils"
+import { toast } from "@/components/ui/toast"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import { StageOptionLabel, groupStageOptions } from "@/components/stage-select"
 import { pipelineStageOptions } from "@/lib/stage-options"
@@ -609,7 +611,12 @@ function ChangeStageModalContent({
             if (trimmedWeight) payload.delivery_baby_weight = trimmedWeight
         }
 
-        await onSubmit(payload)
+        try {
+            await onSubmit(payload)
+        } catch (error) {
+            // The dialog stays open so the user can pick another stage.
+            toast.error(getErrorMessage(error, "Couldn't change the stage"))
+        }
     }
 
     const handleClose = () => {
