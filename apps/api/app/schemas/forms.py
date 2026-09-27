@@ -372,6 +372,8 @@ class FormIntakePublicRead(BaseModel):
     campaign_name: str | None
     event_name: str | None
     messaging_consent: MessagingConsentOptionsRead
+    agency_name: str | None
+    agency_logo_url: str | None
 
 
 class FormEmbedConsentRead(BaseModel):

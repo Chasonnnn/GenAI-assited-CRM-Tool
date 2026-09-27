@@ -193,6 +193,192 @@ async def test_shared_public_intake_uses_latest_logo_branding_without_republish(
     assert public_schema.get("public_title") is None
 
 
+def _create_other_org_intake_link(db, *, event_name: str):
+    from app.db.enums import Role
+    from app.db.models import Membership, Organization, User
+    from app.services import form_intake_service, form_service
+
+    other_org = Organization(
+        id=uuid.uuid4(),
+        name="Other Agency Legal Name",
+        slug=f"other-agency-{uuid.uuid4().hex[:8]}",
+        ai_enabled=True,
+        signature_company_name="Other Agency Brand",
+        signature_logo_url="logos/other-agency.png",
+    )
+    db.add(other_org)
+    db.flush()
+    other_user = User(
+        id=uuid.uuid4(),
+        email=f"other-agency-{uuid.uuid4().hex[:8]}@example.com",
+        display_name="Other Agency Admin",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(other_user)
+    db.flush()
+    db.add(
+        Membership(
+            id=uuid.uuid4(),
+            user_id=other_user.id,
+            organization_id=other_org.id,
+            role=Role.DEVELOPER,
+        )
+    )
+    db.flush()
+    form = form_service.create_form(
+        db=db,
+        org_id=other_org.id,
+        user_id=other_user.id,
+        name="Other Agency Intake",
+        description=None,
+        schema={
+            "pages": [
+                {
+                    "title": "Basics",
+                    "fields": [
+                        {
+                            "key": "full_name",
+                            "label": "Full Name",
+                            "type": "text",
+                            "required": True,
+                        },
+                        {"key": "date_of_birth", "label": "DOB", "type": "date", "required": True},
+                        {"key": "phone", "label": "Phone", "type": "phone", "required": True},
+                        {"key": "email", "label": "Email", "type": "email", "required": True},
+                    ],
+                }
+            ]
+        },
+        max_file_size_bytes=None,
+        max_file_count=None,
+        allowed_mime_types=None,
+    )
+    form = form_service.publish_form(db, form, other_user.id)
+    link = form_intake_service.create_intake_link(
+        db=db,
+        org_id=other_org.id,
+        form=form,
+        user_id=other_user.id,
+        campaign_name=None,
+        event_name=event_name,
+        expires_at=None,
+        max_submissions=None,
+        utm_defaults=None,
+    )
+    return other_org, link
+
+
+@pytest.mark.asyncio
+async def test_shared_public_intake_adds_only_agency_name_and_logo_from_link_org(
+    authed_client, db, test_org
+):
+    _form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    test_org.signature_company_name = "Sunrise Surrogacy"
+    test_org.signature_logo_url = "logos/sunrise-signature.png"
+    db.add(test_org)
+    db.commit()
+    other_org, other_link = _create_other_org_intake_link(db, event_name="Other Agency Expo")
+
+    public_res = await authed_client.get(f"/forms/public/intake/{slug}")
+
+    assert public_res.status_code == 200
+    payload = public_res.json()
+    assert set(payload) == {
+        "form_id",
+        "intake_link_id",
+        "published_version_id",
+        "name",
+        "description",
+        "form_schema",
+        "max_file_size_bytes",
+        "max_file_count",
+        "allowed_mime_types",
+        "campaign_name",
+        "event_name",
+        "messaging_consent",
+        "agency_name",
+        "agency_logo_url",
+    }
+    assert payload["agency_name"] == "Sunrise Surrogacy"
+    assert payload["agency_logo_url"] == f"/forms/public/{test_org.id}/signature-logo"
+    # The stored media key, the legal name, and the other org never reach the public payload.
+    assert "sunrise-signature.png" not in public_res.text
+    assert test_org.name not in public_res.text
+    assert "Other Agency" not in public_res.text
+    assert str(other_org.id) not in public_res.text
+
+    other_res = await authed_client.get(f"/forms/public/intake/{other_link.slug}")
+
+    assert other_res.status_code == 200
+    other_payload = other_res.json()
+    assert other_payload["agency_name"] == "Other Agency Brand"
+    assert other_payload["agency_logo_url"] == f"/forms/public/{other_org.id}/signature-logo"
+    assert "Sunrise Surrogacy" not in other_res.text
+    assert str(test_org.id) not in other_res.text
+
+
+@pytest.mark.asyncio
+async def test_shared_public_intake_agency_without_logo_uses_org_name(authed_client, db, test_org):
+    _form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    test_org.signature_company_name = "   "
+    test_org.signature_logo_url = None
+    db.add(test_org)
+    db.commit()
+
+    public_res = await authed_client.get(f"/forms/public/intake/{slug}")
+
+    assert public_res.status_code == 200
+    assert public_res.json()["agency_name"] == "Test Organization"
+    assert public_res.json()["agency_logo_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_shared_public_intake_soft_deleted_org_has_no_agency_branding(
+    authed_client, db, test_org
+):
+    """Match the public booking page: an org in its purge grace period shows no agency name."""
+    _form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    now = datetime.now(UTC)
+    test_org.signature_company_name = "Sunrise Surrogacy"
+    test_org.signature_logo_url = "logos/sunrise-signature.png"
+    test_org.deleted_at = now
+    test_org.purge_at = now + timedelta(days=30)
+    db.add(test_org)
+    db.commit()
+
+    public_res = await authed_client.get(f"/forms/public/intake/{slug}")
+
+    assert public_res.status_code == 200
+    payload = public_res.json()
+    assert payload["agency_name"] is None
+    assert payload["agency_logo_url"] is None
+    assert "Unknown Organization" not in public_res.text
+    assert "Sunrise Surrogacy" not in public_res.text
+
+
+@pytest.mark.asyncio
+async def test_shared_public_intake_unknown_or_revoked_link_still_404s(authed_client, db, test_org):
+    _form_id, link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    test_org.signature_company_name = "Sunrise Surrogacy"
+    db.add(test_org)
+    db.commit()
+
+    unknown_res = await authed_client.get("/forms/public/intake/not-a-real-intake-link")
+    assert unknown_res.status_code == 404
+    assert unknown_res.json() == {"detail": "Form not found"}
+
+    link = db.get(FormIntakeLink, uuid.UUID(link_id))
+    link.is_active = False
+    db.add(link)
+    db.commit()
+
+    revoked_res = await authed_client.get(f"/forms/public/intake/{slug}")
+    assert revoked_res.status_code == 404
+    assert revoked_res.json() == {"detail": "Form not found"}
+    assert "Sunrise Surrogacy" not in revoked_res.text
+
+
 @pytest.mark.asyncio
 async def test_shared_submit_blocks_unresolved_duplicate_applicant(authed_client):
     _form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
@@ -783,10 +969,15 @@ async def test_shared_submit_idempotency_insert_race_returns_bound_original(
     assert stored.intake_link_id == uuid.UUID(link_id)
     assert stored.organization_id == stored.form.organization_id
     assert stored.answers_json["full_name"] == "Race Original"
-    assert db.query(FormSubmission).filter_by(
-        intake_link_id=uuid.UUID(link_id),
-        idempotency_key="hosted-race-idem",
-    ).count() == 1
+    assert (
+        db.query(FormSubmission)
+        .filter_by(
+            intake_link_id=uuid.UUID(link_id),
+            idempotency_key="hosted-race-idem",
+        )
+        .count()
+        == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -966,10 +1157,14 @@ async def test_shared_submit_auto_match_requires_approval_without_surrogate_cont
     )
     assert execution is not None
     assert execution.status == "paused"
-    workflow_job = db.query(Job).filter_by(
-        organization_id=test_org.id,
-        job_type=JobType.FORM_SUBMISSION_WORKFLOW.value,
-    ).one()
+    workflow_job = (
+        db.query(Job)
+        .filter_by(
+            organization_id=test_org.id,
+            job_type=JobType.FORM_SUBMISSION_WORKFLOW.value,
+        )
+        .one()
+    )
     assert workflow_job.status == JobStatus.COMPLETED.value
 
     task = (
@@ -985,9 +1180,7 @@ async def test_shared_submit_auto_match_requires_approval_without_surrogate_cont
     assert task.owner_id == test_user.id
     assert task.surrogate_id is None
 
-    workflow.actions = [
-        {"action_type": "auto_match_submission", "requires_approval": True}
-    ]
+    workflow.actions = [{"action_type": "auto_match_submission", "requires_approval": True}]
     db.commit()
     resolve_res = await authed_client.post(
         f"/tasks/{task.id}/resolve",
@@ -999,9 +1192,7 @@ async def test_shared_submit_auto_match_requires_approval_without_surrogate_cont
     from app.services.workflow_engine import engine
 
     engine.continue_execution(db, execution.id, task, "approve")
-    assert db.query(IntakeLead).filter_by(
-        form_submission_id=uuid.UUID(submission_id)
-    ).count() == 1
+    assert db.query(IntakeLead).filter_by(form_submission_id=uuid.UUID(submission_id)).count() == 1
 
 
 @pytest.mark.asyncio
@@ -1516,10 +1707,14 @@ async def test_shared_workflow_job_recovers_transient_trigger_failure_without_du
     )
     assert response.status_code == 200
     submission_id = uuid.UUID(response.json()["id"])
-    job = db.query(Job).filter_by(
-        job_type=JobType.FORM_SUBMISSION_WORKFLOW.value,
-        organization_id=test_org.id,
-    ).one()
+    job = (
+        db.query(Job)
+        .filter_by(
+            job_type=JobType.FORM_SUBMISSION_WORKFLOW.value,
+            organization_id=test_org.id,
+        )
+        .one()
+    )
     assert job.status == JobStatus.PENDING.value
     assert job.last_error == "Form submission workflow processing failed"
 
@@ -1539,10 +1734,15 @@ async def test_shared_workflow_job_recovers_transient_trigger_failure_without_du
     )
 
     assert db.query(IntakeLead).filter_by(form_submission_id=submission_id).count() == 1
-    assert db.query(WorkflowExecution).filter_by(
-        workflow_id=workflow.id,
-        entity_id=submission_id,
-    ).count() == 1
+    assert (
+        db.query(WorkflowExecution)
+        .filter_by(
+            workflow_id=workflow.id,
+            entity_id=submission_id,
+        )
+        .count()
+        == 1
+    )
     assert db.query(Job).filter_by(id=job.id).one().status == JobStatus.COMPLETED.value
     with pytest.raises(ValueError, match="Form submission not found"):
         form_intake_service.process_form_submission_workflow(
@@ -1623,10 +1823,14 @@ async def test_shared_workflow_retries_only_failed_action_indexes(
     execution.status = WorkflowExecutionStatus.FAILED.value
     db.commit()
 
-    job = db.query(Job).filter_by(
-        job_type=JobType.FORM_SUBMISSION_WORKFLOW.value,
-        organization_id=test_org.id,
-    ).one()
+    job = (
+        db.query(Job)
+        .filter_by(
+            job_type=JobType.FORM_SUBMISSION_WORKFLOW.value,
+            organization_id=test_org.id,
+        )
+        .one()
+    )
     claimed_job = job_service.claim_job_for_dispatch(db, job.id)
     assert claimed_job is not None and claimed_job.claim_token is not None
     await form_submission_jobs.process_form_submission_workflow(db, claimed_job)
@@ -1720,10 +1924,14 @@ async def test_shared_workflow_retry_does_not_rerun_successful_sibling(
     assert response.status_code == 200
     submission_id = uuid.UUID(response.json()["id"])
 
-    job = db.query(Job).filter_by(
-        job_type=JobType.FORM_SUBMISSION_WORKFLOW.value,
-        organization_id=test_org.id,
-    ).one()
+    job = (
+        db.query(Job)
+        .filter_by(
+            job_type=JobType.FORM_SUBMISSION_WORKFLOW.value,
+            organization_id=test_org.id,
+        )
+        .one()
+    )
     claimed_job = job_service.claim_job_for_dispatch(db, job.id)
     assert claimed_job is not None and claimed_job.claim_token is not None
     await form_submission_jobs.process_form_submission_workflow(db, claimed_job)
@@ -1740,9 +1948,12 @@ async def test_shared_workflow_retry_does_not_rerun_successful_sibling(
         WorkflowExecution.workflow_id.in_([successful_workflow.id, failing_workflow.id]),
     )
     assert sibling_executions.count() == 2
-    assert sibling_executions.filter(
-        WorkflowExecution.status == WorkflowExecutionStatus.SUCCESS.value
-    ).count() == 2
+    assert (
+        sibling_executions.filter(
+            WorkflowExecution.status == WorkflowExecutionStatus.SUCCESS.value
+        ).count()
+        == 2
+    )
     assert db.query(IntakeLead).filter_by(form_submission_id=submission_id).count() == 1
 
 
@@ -1812,10 +2023,14 @@ async def test_shared_workflow_recovers_crash_from_frozen_action_snapshot(
 
     workflow.actions = [{"action_type": "create_intake_lead", "source": "edited"}]
     db.commit()
-    job = db.query(Job).filter_by(
-        job_type=JobType.FORM_SUBMISSION_WORKFLOW.value,
-        organization_id=test_org.id,
-    ).one()
+    job = (
+        db.query(Job)
+        .filter_by(
+            job_type=JobType.FORM_SUBMISSION_WORKFLOW.value,
+            organization_id=test_org.id,
+        )
+        .one()
+    )
     claimed_job = job_service.claim_job_for_dispatch(db, job.id)
     assert claimed_job is not None and claimed_job.claim_token is not None
     await form_submission_jobs.process_form_submission_workflow(db, claimed_job)
