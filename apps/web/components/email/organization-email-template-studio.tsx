@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import type { Route } from "next"
 import { useRouter } from "next/navigation"
 import { ArrowLeftIcon, HistoryIcon } from "lucide-react"
@@ -12,7 +12,13 @@ import {
 } from "@/components/email/email-template-visual-editor"
 import { SendTestEmailDialog } from "@/components/email/SendTestEmailDialog"
 import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
-import { NotFoundState, QueryErrorState } from "@/components/error-state"
+import {
+    LoadErrorState,
+    NotFoundState,
+    PermissionDeniedState,
+    QueryErrorState,
+} from "@/components/error-state"
+import { PageHeader } from "@/components/page-header"
 import {
     RichTextEditor,
     type RichTextEditorHandle,
@@ -237,14 +243,76 @@ function useUnsavedChangesWarning(
     }, [isDirty, onInternalNavigation])
 }
 
+function studioDeniedCopy(scope: EmailTemplateDraftScope) {
+    return {
+        ...(scope === "org"
+            ? { title: "Organization templates require template management access" }
+            : {}),
+        description: "Ask an admin to update your role.",
+        secondaryHref: "/automation/email-templates",
+        secondaryLabel: "Back to Email Templates",
+    }
+}
+
+/** Header for states that replace the editor; each state carries its own link back to the list. */
+function StudioStateShell({
+    scope,
+    children,
+}: {
+    scope: EmailTemplateDraftScope
+    children: ReactNode
+}) {
+    return (
+        <div className="flex min-h-screen flex-col">
+            <PageHeader title={scope === "personal" ? "Personal template" : "Organization template"} />
+            {children}
+        </div>
+    )
+}
+
+/**
+ * Mirrors the drafts API: organization drafts need manage_email_templates (v1) or
+ * manage_email_templates plus manage_org_templates (v2). Personal drafts need
+ * manage_email_templates only under v2.
+ */
+function canOpenStudio(
+    permissions: string[],
+    policyVersion: number,
+    scope: EmailTemplateDraftScope,
+): boolean {
+    if (policyVersion >= 2) {
+        return (
+            permissions.includes("manage_email_templates") &&
+            (scope !== "org" || permissions.includes("manage_org_templates"))
+        )
+    }
+    return scope !== "org" || permissions.includes("manage_email_templates")
+}
+
 export default function OrganizationEmailTemplateStudio(props: OrganizationEmailTemplateStudioProps) {
     const { user } = useAuth()
     const access = useEffectivePermissions(user?.user_id ?? null)
+    const scope = props.scope ?? "org"
     if (access.isLoading) return <div className="p-6 text-sm text-muted-foreground">Loading template studio…</div>
-    if (access.isError) return <div role="alert" className="space-y-3 p-6"><p>Unable to load permissions.</p><Button variant="outline" onClick={() => { void access.refetch() }}>Retry</Button></div>
-    const permissions = access.data?.permissions ?? []
-    if ((access.data?.policy_version ?? 1) >= 2 && (!permissions.includes("manage_email_templates") || ((props.scope ?? "org") === "org" && !permissions.includes("manage_org_templates")))) {
-        return <div className="p-6"><h1 className="text-xl font-semibold">Template editing unavailable</h1></div>
+    if (access.isError) {
+        return (
+            <StudioStateShell scope={scope}>
+                <LoadErrorState
+                    title="Couldn't load template studio"
+                    onRetry={() => { void access.refetch() }}
+                    isRetrying={access.isFetching}
+                    headingLevel={2}
+                />
+            </StudioStateShell>
+        )
+    }
+    // Checked before any request so denied roles do not trigger a 403 from the drafts API.
+    if (!canOpenStudio(access.data?.permissions ?? [], access.data?.policy_version ?? 1, scope)) {
+        return (
+            <StudioStateShell scope={scope}>
+                <PermissionDeniedState {...studioDeniedCopy(scope)} headingLevel={2} />
+            </StudioStateShell>
+        )
     }
     return <OrganizationEmailTemplateStudioContent {...props} />
 }
@@ -281,24 +349,19 @@ function OrganizationEmailTemplateStudioContent({
         }
 
         return (
-            <QueryErrorState
-                error={draftList.error ?? publishedTemplate.error ?? draftDetail.error}
-                onRetry={retryFailedQueries}
-                isRetrying={
-                    draftList.isFetching || publishedTemplate.isFetching || draftDetail.isFetching
-                }
-                title="Couldn't load template studio"
-                forbidden={{
-                    ...(scope === "org"
-                        ? { title: "Organization templates require template management access" }
-                        : {}),
-                    description: "Ask an admin to update your role.",
-                    secondaryHref: "/automation/email-templates",
-                    secondaryLabel: "Back to Email Templates",
-                }}
-                notFound={TEMPLATE_NOT_FOUND}
-                headingLevel={1}
-            />
+            <StudioStateShell scope={scope}>
+                <QueryErrorState
+                    error={draftList.error ?? publishedTemplate.error ?? draftDetail.error}
+                    onRetry={retryFailedQueries}
+                    isRetrying={
+                        draftList.isFetching || publishedTemplate.isFetching || draftDetail.isFetching
+                    }
+                    title="Couldn't load template studio"
+                    forbidden={studioDeniedCopy(scope)}
+                    notFound={TEMPLATE_NOT_FOUND}
+                    headingLevel={2}
+                />
+            </StudioStateShell>
         )
     }
 
@@ -310,7 +373,11 @@ function OrganizationEmailTemplateStudioContent({
         (draft && draft.scope !== scope) ||
         (published && published.scope !== scope)
     ) {
-        return <NotFoundState {...TEMPLATE_NOT_FOUND} headingLevel={1} />
+        return (
+            <StudioStateShell scope={scope}>
+                <NotFoundState {...TEMPLATE_NOT_FOUND} headingLevel={2} />
+            </StudioStateShell>
+        )
     }
 
     return (

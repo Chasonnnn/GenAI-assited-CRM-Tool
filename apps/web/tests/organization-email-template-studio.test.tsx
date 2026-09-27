@@ -268,7 +268,7 @@ describe("OrganizationEmailTemplateStudio", () => {
 
     beforeEach(() => {
         mocks.state.permissionPolicy = 1
-        mocks.state.permissions = []
+        mocks.state.permissions = ["manage_email_templates"]
         mocks.push.mockReset()
         mocks.replace.mockReset()
         mocks.createDraft.mockReset()
@@ -1165,7 +1165,7 @@ describe("OrganizationEmailTemplateStudio", () => {
 
         expect(
             screen.getByRole("heading", {
-                level: 1,
+                level: 2,
                 name: "Organization templates require template management access",
             }),
         ).toBeInTheDocument()
@@ -1184,7 +1184,7 @@ describe("OrganizationEmailTemplateStudio", () => {
         render(<OrganizationEmailTemplateStudio templateId="missing-template" />)
 
         expect(
-            screen.getByRole("heading", { level: 1, name: "Template not found" }),
+            screen.getByRole("heading", { level: 2, name: "Template not found" }),
         ).toBeInTheDocument()
         expect(screen.getByRole("link", { name: /Back to Email Templates/ })).toHaveAttribute(
             "href",
@@ -1199,7 +1199,7 @@ describe("OrganizationEmailTemplateStudio", () => {
         render(<OrganizationEmailTemplateStudio templateId="missing-template" />)
 
         expect(
-            screen.getByRole("heading", { level: 1, name: "Template not found" }),
+            screen.getByRole("heading", { level: 2, name: "Template not found" }),
         ).toBeInTheDocument()
     })
 
@@ -1338,7 +1338,8 @@ describe("OrganizationEmailTemplateStudio", () => {
         mocks.state.permissionPolicy = 2
         mocks.state.permissions = ["view_email_templates"]
         render(<OrganizationEmailTemplateStudio scope={scope} />)
-        expect(screen.getByText("Template editing unavailable")).toBeInTheDocument()
+        expect(screen.getByRole("heading", { level: 1, name: scope === "org" ? "Organization template" : "Personal template" })).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Back to Email Templates" })).toHaveAttribute("href", "/automation/email-templates")
         expect(mocks.draftListParams).not.toHaveBeenCalled()
         expect(mocks.createDraft).not.toHaveBeenCalled()
     })
@@ -1347,8 +1348,24 @@ describe("OrganizationEmailTemplateStudio", () => {
         mocks.state.permissionPolicy = 2
         mocks.state.permissions = ["manage_email_templates"]
         render(<OrganizationEmailTemplateStudio scope="org" />)
-        expect(screen.getByText("Template editing unavailable")).toBeInTheDocument()
+        expect(screen.getByRole("heading", { level: 2, name: "Organization templates require template management access" })).toBeInTheDocument()
         expect(mocks.draftListParams).not.toHaveBeenCalled()
+    })
+
+    it("checks v1 organization template access before requesting drafts", () => {
+        mocks.state.permissionPolicy = 1
+        mocks.state.permissions = ["view_email_templates"]
+        render(<OrganizationEmailTemplateStudio scope="org" />)
+        expect(screen.getByRole("heading", { level: 1, name: "Organization template" })).toBeInTheDocument()
+        expect(screen.getByRole("heading", { level: 2, name: "Organization templates require template management access" })).toBeInTheDocument()
+        expect(mocks.draftListParams).not.toHaveBeenCalled()
+    })
+
+    it("opens the v1 personal studio without organization template access", () => {
+        mocks.state.permissionPolicy = 1
+        mocks.state.permissions = ["view_email_templates"]
+        render(<OrganizationEmailTemplateStudio scope="personal" />)
+        expect(mocks.draftListParams).toHaveBeenCalled()
     })
 
 })
