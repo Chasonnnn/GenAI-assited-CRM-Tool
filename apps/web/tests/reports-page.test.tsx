@@ -276,6 +276,39 @@ describe('ReportsPage', () => {
         expectHeldCardEntrances(container)
     })
 
+    it('keeps chart cards inside a single shrinkable column below md', () => {
+        // Without an explicit column the auto track grows to the chart width and clips cards at 390px.
+        const { container } = render(
+            <ReportsChartsGrid
+                aiEnabled={false}
+                statusChartData={[]}
+                trendChartData={[]}
+                assigneeChartData={[]}
+                topStatus={null}
+                topPerformer={null}
+                totalSurrogatesInPeriod={0}
+                computeTrendPercentage={null}
+                metaPerf={null}
+                byStatusLoading={false}
+                byStatusError={false}
+                trendLoading={false}
+                trendError={false}
+                byAssigneeLoading={false}
+                byAssigneeError={false}
+                metaLoading={false}
+                metaError={false}
+            />,
+        )
+        const grid = container.querySelector('[data-slot="card"]')?.parentElement
+        expect(grid).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-2', '[&>*]:min-w-0')
+    })
+
+    it('keeps individual performance cards inside a single shrinkable column below lg', () => {
+        render(<ReportsPage />)
+        const grid = screen.getByTestId('team-performance-table').parentElement
+        expect(grid).toHaveClass('grid', 'grid-cols-1', 'lg:grid-cols-2', '[&>*]:min-w-0')
+    })
+
     it('shows the denied state without report queries or Export PDF when view_reports is missing', () => {
         accessState.role = 'case_manager'
         accessState.permissions = ['view_dashboard']

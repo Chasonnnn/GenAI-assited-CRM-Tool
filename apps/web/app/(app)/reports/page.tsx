@@ -601,7 +601,7 @@ function ReportsPerformanceSection({
                     ? 'Showing metrics for surrogates created within the selected date range, grouped by current owner.'
                     : 'Showing metrics for surrogates with status transitions within the selected date range.'}
             </p>
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 [&>*]:min-w-0">
                 <TeamPerformanceChart
                     data={performanceData?.data}
                     isLoading={performanceLoading}

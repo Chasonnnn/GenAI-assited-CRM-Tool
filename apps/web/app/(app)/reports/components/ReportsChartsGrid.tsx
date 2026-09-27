@@ -274,7 +274,7 @@ export function ReportsChartsGrid({
     metaError,
 }: ReportsChartsGridProps) {
     return (
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 [&>*]:min-w-0">
             {/* Surrogates by Stage */}
             <Card className={cardEntranceClassName} style={cardEntranceDelay(4)}>
                 <CardHeader>
