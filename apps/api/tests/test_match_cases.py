@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db.enums import Role
 from app.db.models import AuditLog, IntendedParent, Match, MatchAttempt, StatusChangeRequest
-from app.services import match_service
+from app.services import match_access, match_lifecycle, match_queries
 from tests.test_match_cancel_request import _create_intended_parent, _create_surrogate
 
 
@@ -129,7 +129,9 @@ async def test_pending_cancellation_reserves_surrogate_in_database(authed_client
     s = await _create_surrogate(authed_client)
     ip = await _create_intended_parent(authed_client)
     case = await _accept(authed_client, await _case(authed_client, ip, surrogate=s))
-    result = await authed_client.post(f"/matches/{case['id']}/cancel-request", json={})
+    result = await authed_client.post(
+        f"/matches/{case['id']}/cancel-request", json={"reason": "Ended"}
+    )
     assert result.status_code == 200
     ip2 = await _create_intended_parent(authed_client)
     with pytest.raises(IntegrityError), db.begin_nested():
@@ -144,7 +146,7 @@ async def test_pending_cancellation_reserves_surrogate_in_database(authed_client
             )
         )
         db.flush()
-    assert match_service.get_accepted_match_for_surrogate(
+    assert match_queries.get_accepted_match_for_surrogate(
         db, test_auth.org.id, uuid.UUID(s["id"])
     ).id == uuid.UUID(case["id"])
 
@@ -204,14 +206,14 @@ async def test_attempt_route_org_and_permission_denials(authed_client, db, test_
         display_name=test_auth.user.display_name,
     )
     with pytest.raises(HTTPException) as denied:
-        match_service.get_match_with_access(db, session, uuid.UUID(case["id"]))
+        match_access.load(db, session, uuid.UUID(case["id"]))
     assert denied.value.status_code == 404
     missing = await authed_client.get(f"/matches/{uuid.uuid4()}/attempts")
     assert missing.status_code == 404
     session.org_id = test_auth.org.id
     session.role = Role.INTAKE_SPECIALIST
     with pytest.raises(HTTPException) as denied:
-        match_service.get_match_with_access(db, session, uuid.UUID(case["id"]), write=True)
+        match_access.load(db, session, uuid.UUID(case["id"]), action="edit_attempts")
     assert denied.value.status_code == 403
 
 
@@ -234,18 +236,18 @@ async def test_acceptance_audit_failure_does_not_commit_stage(authed_client, db,
 
     monkeypatch.setattr(audit_service, "log_event", fail_audit)
     with pytest.raises(RuntimeError, match="audit storage failed"), db.begin_nested():
-        match_service.accept_match(
+        match_lifecycle.transition(
             db,
             match,
+            "accept",
             actor_user_id=match.proposed_by_user_id,
             actor_role=Role.DEVELOPER,
-            org_id=match.organization_id,
         )
     assert commits == []
     db.refresh(subject)
     db.refresh(match)
     assert subject.stage_id == old_stage
-    assert match.status == "proposed"
+    assert match.status == "under_review"
 
 
 def test_concurrent_acceptances_reserve_one_surrogate(db_engine, monkeypatch):
@@ -301,11 +303,11 @@ def test_concurrent_acceptances_reserve_one_surrogate(db_engine, monkeypatch):
 
     def accept(case_id):
         with Session(db_engine) as session:
-            case = match_service.get_match(session, case_id, org_id)
+            case = match_queries.get_match(session, case_id, org_id)
             barrier.wait(timeout=10)
             try:
-                match_service.accept_match(
-                    session, case, actor_user_id=user_id, actor_role=Role.DEVELOPER, org_id=org_id
+                match_lifecycle.transition(
+                    session, case, "accept", actor_user_id=user_id, actor_role=Role.DEVELOPER
                 )
                 return "accepted"
             except ValueError:
@@ -367,7 +369,9 @@ async def test_donor_case_permission_filters_lists_stats_approvals_and_notificat
     donor = await _donor(authed_client)
     ip = await _create_intended_parent(authed_client)
     case = await _accept(authed_client, await _case(authed_client, ip, donor=donor))
-    requested = await authed_client.post(f"/matches/{case['id']}/cancel-request", json={})
+    requested = await authed_client.post(
+        f"/matches/{case['id']}/cancel-request", json={"reason": "Ended"}
+    )
     assert requested.status_code == 200, requested.text
     pending = (
         db.query(StatusChangeRequest)

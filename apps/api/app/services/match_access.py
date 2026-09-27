@@ -2,7 +2,8 @@
 
 Every match action needs its action permission plus record scope on both
 parties. Viewing needs ``view_matches``; every change also needs
-``propose_matches`` until the v2 match actions exist.
+``propose_matches`` until the v2 match actions exist, except the proposer
+may decline their own match.
 """
 
 from typing import Literal
@@ -20,8 +21,7 @@ MatchAction = Literal[
     "view",
     "propose",
     "accept",
-    "reject",
-    "cancel",
+    "decline",
     "request_cancel",
     "complete",
     "edit_notes",
@@ -49,7 +49,10 @@ def authorize(
     allow_archived: bool = False,
 ) -> Match:
     """Raise 403 without the action permission and 403/404 without scope on either party."""
-    for permission in required_permissions(action):
+    permissions = required_permissions(action)
+    if action == "decline" and match.proposed_by_user_id == session.user_id:
+        permissions = required_permissions("view")
+    for permission in permissions:
         if not permission_service.check_permission(
             db, session.org_id, session.user_id, session.role.value, permission
         ):

@@ -1782,3 +1782,36 @@ class TestAdminImports:
             .select()
         ) is False
         assert not os.path.exists(attachment_service.resolve_local_storage_path(expected_storage_key))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("subject_type", [None, "surrogate", "match"])
+async def test_import_config_normalizes_legacy_match_rejected(
+    authed_client, db, test_org, test_user, subject_type
+):
+    workflow_id, template_id = uuid.uuid4(), uuid.uuid4()
+    definition = {
+        "name": "Legacy match rejection",
+        "trigger_type": "match_rejected",
+        "subject_type": subject_type,
+        "created_by_user_id": str(test_user.id),
+    }
+    archive = _build_config_zip(
+        {
+            "organization.json": {
+                "id": str(test_org.id),
+                "name": test_org.name,
+                "slug": test_org.slug,
+            },
+            "workflows.json": [{**definition, "id": str(workflow_id)}],
+            "workflow_templates.json": [{**definition, "id": str(template_id)}],
+        }
+    )
+    response = await authed_client.post(
+        "/admin/imports/config", files={"config_zip": ("config.zip", archive, "application/zip")}
+    )
+    assert response.status_code == 200, response.text
+    for model, identifier in ((AutomationWorkflow, workflow_id), (WorkflowTemplate, template_id)):
+        stored = db.get(model, identifier)
+        assert stored.trigger_type == "match_declined"
+        assert stored.subject_type == "match"

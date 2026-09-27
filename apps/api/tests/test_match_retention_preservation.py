@@ -458,7 +458,7 @@ def test_purge_rechecks_history_after_waiting_for_concurrent_case_writer(db_engi
 
 
 @pytest.mark.parametrize(
-    "status", ["proposed", "reviewing", "accepted", "cancel_pending", "completed"]
+    "status", ["under_review", "accepted", "cancellation_pending", "completed"]
 )
 def test_retention_preserves_open_or_recently_closed_cases(db, test_org, test_user, status):
     _, _, match = _case(db, test_org.id, test_user.id)

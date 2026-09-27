@@ -30,7 +30,6 @@ import {
     getMatchStatusBadgeClassName,
     getMatchStatusLabel,
     getMatchKindLabel,
-    isMatchStatus,
     MATCH_STATUS_DEFINITIONS,
 } from "@/lib/match-status-definitions"
 import { useAuth } from "@/lib/auth-context"
@@ -38,7 +37,7 @@ import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 import { PermissionDeniedState } from "@/components/error-state"
 
-function StatusBadge({ status }: { status: MatchStatus }) {
+function StatusBadge({ status }: { status: string }) {
     return (
         <Badge variant="outline" className={getMatchStatusBadgeClassName(status)}>
             {getMatchStatusLabel(status)}
@@ -47,7 +46,7 @@ function StatusBadge({ status }: { status: MatchStatus }) {
 }
 
 function MatchRow({ match }: { match: MatchListItem }) {
-    const status = isMatchStatus(match.status) ? match.status : "proposed"
+    const status = match.status
 
     return (
         <TableRow className="hover:bg-accent/50">
@@ -324,7 +323,7 @@ function MatchTable({ status, search, kind }: { status?: MatchStatus; search?: s
 
 export default function MatchesPage() {
     const [kind, setKind] = useState<"all" | "surrogate" | "donor">("all")
-    const [activeTab, setActiveTab] = useState<string>("proposed")
+    const [activeTab, setActiveTab] = useState<string>("under_review")
     const [search, setSearch] = useState("")
     const debouncedSearch = useDebouncedValue(search, 300)
     const [newMatchOpen, setNewMatchOpen] = useState(false)
@@ -374,13 +373,13 @@ export default function MatchesPage() {
             <div className="grid gap-4 md:grid-cols-4">
                 <Card>
                     <CardContent className="pt-6">
-                        <div className="text-2xl font-bold">{matchStats?.by_status.proposed ?? 0}</div>
-                        <p className="text-xs text-muted-foreground">Proposed</p>
+                        <div className="text-2xl font-bold">{matchStats?.by_status.cancellation_pending ?? 0}</div>
+                        <p className="text-xs text-muted-foreground">Cancellation Pending</p>
                     </CardContent>
                 </Card>
                 <Card>
                     <CardContent className="pt-6">
-                        <div className="text-2xl font-bold">{matchStats?.by_status.reviewing ?? 0}</div>
+                        <div className="text-2xl font-bold">{matchStats?.by_status.under_review ?? 0}</div>
                         <p className="text-xs text-muted-foreground">Under Review</p>
                     </CardContent>
                 </Card>
@@ -392,8 +391,8 @@ export default function MatchesPage() {
                 </Card>
                 <Card>
                     <CardContent className="pt-6">
-                        <div className="text-2xl font-bold text-red-600">{matchStats?.by_status.rejected ?? 0}</div>
-                        <p className="text-xs text-muted-foreground">Rejected</p>
+                        <div className="text-2xl font-bold text-red-600">{matchStats?.by_status.declined ?? 0}</div>
+                        <p className="text-xs text-muted-foreground">Declined</p>
                     </CardContent>
                 </Card>
             </div>

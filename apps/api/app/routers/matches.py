@@ -22,12 +22,12 @@ from app.schemas.matches import (
     MatchCancelRequest,
     MatchCompleteRequest,
     MatchCreate,
+    MatchDeclineRequest,
     MatchEventCreate,
     MatchEventRead,
     MatchEventUpdate,
     MatchListResponse,
     MatchRead,
-    MatchRejectRequest,
     MatchStatsResponse,
     MatchUpdateNotesRequest,
 )
@@ -192,7 +192,7 @@ def accept_match(
 
     This will:
     - Set match status to accepted
-    - Cancel all other pending matches for this surrogate
+    - Decline all other pending matches for this surrogate
     - Log activity
 
     Requires: Manager+ role
@@ -201,24 +201,22 @@ def accept_match(
 
 
 @router.put(
-    "/{match_id}/reject",
+    "/{match_id}/decline",
     response_model=MatchRead,
     dependencies=[Depends(require_csrf_header)],
 )
-def reject_match(
+def decline_match(
     match_id: UUID,
-    data: MatchRejectRequest,
+    data: MatchDeclineRequest,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[UserSession, "fastapi_param"] = Depends(_propose_permission),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MatchRead:
     """
-    Reject a match with reason.
+    Decline a match with reason.
 
     Requires: Manager+ role
     """
-    return _transition(
-        db, session, match_id, "reject", reason=data.rejection_reason, notes=data.notes
-    )
+    return _transition(db, session, match_id, "decline", reason=data.reason, notes=data.notes)
 
 
 @router.post(
@@ -237,28 +235,9 @@ def request_cancel_match(
 
     This will:
     - Create a pending status change request tied to the match
-    - Mark the match as cancel_pending
+    - Mark the match as cancellation_pending
     """
     return _transition(db, session, match_id, "request_cancel", reason=data.reason)
-
-
-@router.delete(
-    "/{match_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_csrf_header)],
-)
-def cancel_match(
-    match_id: UUID,
-    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[UserSession, "fastapi_param"] = Depends(_propose_permission),
-) -> Response:
-    """
-    Cancel a proposed match.
-
-    Only proposed/reviewing matches can be cancelled.
-    Requires: Manager+ role
-    """
-    _transition(db, session, match_id, "cancel")
 
 
 @router.patch(

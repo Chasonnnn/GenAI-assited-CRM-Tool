@@ -110,9 +110,7 @@ async def test_template_roundtrip_preserves_exact_donor_subject(
 
 
 @pytest.mark.asyncio
-async def test_create_template_donor_trigger_requires_explicit_subject(
-    authed_client, db, test_org
-):
+async def test_create_template_donor_trigger_requires_explicit_subject(authed_client, db, test_org):
     payload = {
         "name": f"Donor stage template {uuid.uuid4().hex[:8]}",
         "trigger_type": "donor_stage_changed",
@@ -579,5 +577,8 @@ def test_migration_backfill_map_matches_service_contract():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    assert module.LEGACY_TRIGGER_SUBJECT_TYPES == workflow_service.LEGACY_TRIGGER_SUBJECT_TYPES
+    historical = dict(module.LEGACY_TRIGGER_SUBJECT_TYPES)
+    historical["match_declined"] = historical.pop("match_rejected")
+    historical["match_cancelled"] = "match"
+    assert historical == workflow_service.LEGACY_TRIGGER_SUBJECT_TYPES
     assert set(module.DONOR_ONLY_TRIGGER_TYPES) == template_service.DONOR_ONLY_TRIGGER_TYPES

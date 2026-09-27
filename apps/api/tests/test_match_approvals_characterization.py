@@ -44,7 +44,9 @@ from tests.test_match_lifecycle_characterization import (
 )
 
 
-async def _pending_cancellation(authed_client, db, *, requester=None, donor=False, reason=None):
+async def _pending_cancellation(
+    authed_client, db, *, requester=None, donor=False, reason="Family withdrew"
+):
     """Accept a new match and file a cancellation request; returns (match, request)."""
     ip = await _create_intended_parent(authed_client)
     party = await _donor(authed_client) if donor else await _create_surrogate(authed_client)
@@ -120,7 +122,7 @@ async def test_approve_cancellation_cancels_match_and_returns_parties_to_ready(
         .order_by(SurrogateStatusHistory.recorded_at.desc())
         .first()
     )
-    assert history.changed_by_user_id == requester.id
+    assert history.changed_by_user_id == test_auth.user.id
     assert history.reason == "Family withdrew"
     assert locks == ["status_change_requests", "matches", "surrogates", "intended_parents"]
     assert _diff(before, _snapshot(db, test_auth.org.id)) == {
@@ -185,7 +187,9 @@ async def test_approve_cancellation_closes_open_surrogate_attempts(authed_client
         )
         assert response.status_code == 201, response.text
         attempts.append(response.json()["id"])
-    response = await authed_client.post(f"/matches/{match['id']}/cancel-request", json={})
+    response = await authed_client.post(
+        f"/matches/{match['id']}/cancel-request", json={"reason": "Ended"}
+    )
     assert response.status_code == 200
     request = (
         db.query(StatusChangeRequest)
@@ -247,7 +251,7 @@ async def test_approve_stage_failure_commits_nothing(authed_client, db, test_aut
 
     assert commits == []
     assert _request_row(db, request_id).status == "pending"
-    assert _match_row(db, match["id"]).status == "cancel_pending"
+    assert _match_row(db, match["id"]).status == "cancellation_pending"
     assert _stage_slug(db, Surrogate, match["surrogate_id"]) == "matched"
 
 
@@ -295,7 +299,7 @@ async def test_approve_dispatches_surrogate_stage_callbacks_before_notification(
     assert stage["surrogate"].id == uuid.UUID(match["surrogate_id"])
     assert stage["new_stage"].slug == "ready_to_match"
     assert stage["old_slug"] == "matched"
-    assert stage["user_id"] == requester.id
+    assert stage["user_id"] == test_auth.user.id
     assert stage["request_id"] == request.id
     assert stage["approved_by_user_id"] == test_auth.user.id
     assert stage["trigger_workflows"] is True
@@ -358,7 +362,9 @@ async def test_approve_cancellation_preserves_ip_outside_matched(authed_client, 
     surrogate = await _create_surrogate(authed_client)
     match = await _accept(authed_client, await _case(authed_client, ip, surrogate=surrogate))
     _move_ip_to_stage(db, test_auth.org.id, ip["id"], "delivered")
-    response = await authed_client.post(f"/matches/{match['id']}/cancel-request", json={})
+    response = await authed_client.post(
+        f"/matches/{match['id']}/cancel-request", json={"reason": "Ended"}
+    )
     assert response.status_code == 200
     request = (
         db.query(StatusChangeRequest)
@@ -398,7 +404,7 @@ async def test_approve_without_handoff_stage_returns_400(
     assert response.status_code == 400
     assert response.json()["detail"] == "Ready to match stage not found"
     assert _request_row(db, request.id).status == "pending"
-    assert _match_row(db, match["id"]).status == "cancel_pending"
+    assert _match_row(db, match["id"]).status == "cancellation_pending"
     assert _ip_stage_key(db, match["intended_parent_id"]) == "matched"
     if not donor:
         assert _stage_slug(db, Surrogate, match["surrogate_id"]) == "matched"
@@ -423,7 +429,7 @@ async def test_approve_by_non_admin_role_with_approval_permission_returns_400(
     assert response.json()["detail"] == "Only admins can approve status change requests"
     assert rejected.status_code == 400
     assert rejected.json()["detail"] == "Only admins can reject status change requests"
-    assert _match_row(db, match["id"]).status == "cancel_pending"
+    assert _match_row(db, match["id"]).status == "cancellation_pending"
 
 
 # =============================================================================
@@ -532,7 +538,7 @@ async def test_withdraw_by_non_requester_returns_400(authed_client, db, test_aut
     assert response.status_code == 400
     assert response.json()["detail"] == "Only the requester can cancel their request"
     assert _request_row(db, request.id).status == "pending"
-    assert _match_row(db, match["id"]).status == "cancel_pending"
+    assert _match_row(db, match["id"]).status == "cancellation_pending"
 
 
 @pytest.mark.asyncio
@@ -555,13 +561,13 @@ async def test_withdraw_requires_propose_matches(authed_client, db, test_auth):
     assert response.status_code == 403
     assert response.json()["detail"] == "Missing permission for request entity"
     assert _request_row(db, request.id).status == "pending"
-    assert _match_row(db, match["id"]).status == "cancel_pending"
+    assert _match_row(db, match["id"]).status == "cancellation_pending"
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("action", ["reject", "cancel"])
 async def test_resolving_request_leaves_match_outside_cancel_pending_unchanged(
-    authed_client, db, action
+    authed_client, db, test_auth, action
 ):
     from datetime import UTC, datetime
 
@@ -571,6 +577,7 @@ async def test_resolving_request_leaves_match_outside_cancel_pending_unchanged(
     row.closed_at = datetime.now(UTC)
     db.commit()
 
+    before = _snapshot(db, test_auth.org.id)
     response = await authed_client.post(f"/status-change-requests/{request.id}/{action}", json={})
 
     assert response.status_code == 200, response.text
@@ -578,6 +585,11 @@ async def test_resolving_request_leaves_match_outside_cancel_pending_unchanged(
         _request_row(db, request.id).status == {"reject": "rejected", "cancel": "cancelled"}[action]
     )
     assert _match_row(db, match["id"]).status == "cancelled"
+
+    event = (
+        "match_cancel_request_rejected" if action == "reject" else "match_cancel_request_withdrawn"
+    )
+    assert _diff(before, _snapshot(db, test_auth.org.id)) == _restored_history(event)
 
 
 @pytest.mark.asyncio
@@ -630,7 +642,7 @@ async def test_resolving_cancellation_requires_approval_permission(
 
     assert response.status_code == 403
     assert _request_row(db, request.id).status == "pending"
-    assert _match_row(db, match["id"]).status == "cancel_pending"
+    assert _match_row(db, match["id"]).status == "cancellation_pending"
 
 
 @pytest.mark.asyncio
@@ -641,7 +653,7 @@ async def test_approving_cancellation_requires_view_matches(authed_client, db, t
         response = await client.post(f"/status-change-requests/{request.id}/approve")
 
     assert response.status_code == 403
-    assert _match_row(db, match["id"]).status == "cancel_pending"
+    assert _match_row(db, match["id"]).status == "cancellation_pending"
 
 
 @pytest.mark.asyncio
@@ -660,7 +672,7 @@ async def test_other_org_user_gets_404_for_match_cancellation_request(
     assert response.json()["detail"] == "Request not found"
     assert detail.status_code == 404
     assert _request_row(db, request.id).status == "pending"
-    assert _match_row(db, match["id"]).status == "cancel_pending"
+    assert _match_row(db, match["id"]).status == "cancellation_pending"
 
 
 # =============================================================================
@@ -725,7 +737,9 @@ async def test_ip_left_matched_when_another_committed_match_remains(authed_clien
         await _case(authed_client, ip, surrogate=await _create_surrogate(authed_client)),
     )
     for match in (first, second):
-        response = await authed_client.post(f"/matches/{match['id']}/cancel-request", json={})
+        response = await authed_client.post(
+            f"/matches/{match['id']}/cancel-request", json={"reason": "Ended"}
+        )
         assert response.status_code == 200
     request = (
         db.query(StatusChangeRequest)
@@ -739,4 +753,4 @@ async def test_ip_left_matched_when_another_committed_match_remains(authed_clien
     db.expire_all()
     assert db.get(IntendedParent, uuid.UUID(ip["id"])).status == "matched"
     assert _stage_slug(db, Surrogate, first["surrogate_id"]) == "ready_to_match"
-    assert _match_row(db, second["id"]).status == "cancel_pending"
+    assert _match_row(db, second["id"]).status == "cancellation_pending"

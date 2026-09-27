@@ -8,14 +8,14 @@ import {
     getMatch,
     createMatch,
     acceptMatch,
-    rejectMatch,
+    declineMatch,
     cancelMatch,
     updateMatchNotes,
     getMatchStats,
     type ListMatchesParams,
     type MatchCreate,
     type MatchAcceptRequest,
-    type MatchRejectRequest,
+    type MatchDeclineRequest,
     type MatchCancelRequest,
     type MatchUpdateNotesRequest,
     type MatchListItem,
@@ -93,14 +93,14 @@ export function useAcceptMatch() {
 }
 
 /**
- * Reject a match.
+ * Decline a match.
  */
-export function useRejectMatch() {
+export function useDeclineMatch() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: ({ matchId, data }: { matchId: string; data: MatchRejectRequest }) =>
-            rejectMatch(matchId, data),
+        mutationFn: ({ matchId, data }: { matchId: string; data: MatchDeclineRequest }) =>
+            declineMatch(matchId, data),
         onSuccess: (result) => {
             void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
             void queryClient.invalidateQueries({ queryKey: matchKeys.stats() })
@@ -110,13 +110,13 @@ export function useRejectMatch() {
 }
 
 /**
- * Cancel a proposed match.
+ * Request cancellation of an accepted match.
  */
 export function useCancelMatch() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: ({ matchId, data }: { matchId: string; data?: MatchCancelRequest }) =>
+        mutationFn: ({ matchId, data }: { matchId: string; data: MatchCancelRequest }) =>
             cancelMatch(matchId, data),
         onSuccess: (result) => {
             void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })

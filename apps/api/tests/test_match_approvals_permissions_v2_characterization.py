@@ -11,7 +11,13 @@ import uuid
 import pytest
 
 from app.db.enums import Role
-from app.db.models import Notification, PipelineStage, Surrogate
+from app.db.models import (
+    IntendedParentStatusHistory,
+    Notification,
+    PipelineStage,
+    Surrogate,
+    SurrogateStatusHistory,
+)
 from tests.test_match_approvals_characterization import _pending_cancellation, _request_row
 from tests.test_match_lifecycle_characterization import _client_for, _match_row
 from tests.test_match_permissions_v2_characterization import (
@@ -46,6 +52,12 @@ async def test_v2_protected_roles_resolve_cancellation(
     by = "approved_by_user_id" if action == "approve" else "rejected_by_user_id"
     assert response.json()[by] == str(user.id)
     assert _match_row(db, match["id"]).status == match_status
+    if action == "approve":
+        for model in (SurrogateStatusHistory, IntendedParentStatusHistory):
+            history = db.query(model).filter(model.request_id == request.id).one()
+            assert history.changed_by_user_id == user.id
+            assert history.approved_by_user_id == user.id
+            assert history.reason == "Ended"
 
 
 @pytest.mark.asyncio
@@ -67,7 +79,7 @@ async def test_v2_roles_without_approval_permission_cannot_reach_cancellation_re
     assert response.status_code == 403
     assert response.json()["detail"] == "Missing permission: approve_status_change_requests"
     assert _request_row(db, request.id).status == "pending"
-    assert _match_row(db, match["id"]).status == "cancel_pending"
+    assert _match_row(db, match["id"]).status == "cancellation_pending"
 
 
 @pytest.mark.asyncio
@@ -124,7 +136,7 @@ async def test_v2_granted_approver_without_view_matches_gets_404(authed_client, 
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Request not found"
-    assert _match_row(db, match["id"]).status == "cancel_pending"
+    assert _match_row(db, match["id"]).status == "cancellation_pending"
 
 
 @pytest.mark.asyncio
@@ -138,7 +150,7 @@ async def test_v2_granted_approver_outside_donor_scope_gets_404(authed_client, d
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Request not found"
-    assert _match_row(db, match["id"]).status == "cancel_pending"
+    assert _match_row(db, match["id"]).status == "cancellation_pending"
 
 
 # =============================================================================
@@ -178,7 +190,7 @@ async def test_v2_case_manager_requester_withdraws_cancellation(
     else:
         assert response.json()["detail"] == detail
         assert _request_row(db, request.id).status == "pending"
-        assert _match_row(db, match["id"]).status == "cancel_pending"
+        assert _match_row(db, match["id"]).status == "cancellation_pending"
 
 
 @pytest.mark.asyncio
@@ -190,7 +202,7 @@ async def test_v2_withdraw_by_non_requester_admin_returns_400(authed_client, db,
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Only the requester can cancel their request"
-    assert _match_row(db, match["id"]).status == "cancel_pending"
+    assert _match_row(db, match["id"]).status == "cancellation_pending"
 
 
 # =============================================================================
@@ -220,7 +232,7 @@ async def test_v2_other_org_user_gets_404_for_match_cancellation_request(
     assert response.status_code == 404
     assert response.json()["detail"] == "Request not found"
     assert _request_row(db, request.id).status == "pending"
-    assert _match_row(db, match["id"]).status == "cancel_pending"
+    assert _match_row(db, match["id"]).status == "cancellation_pending"
 
 
 # =============================================================================

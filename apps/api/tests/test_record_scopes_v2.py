@@ -722,7 +722,7 @@ async def test_donor_scope_detail_assignment_and_cross_org_claim(
 
 def test_match_list_detail_and_linked_tasks_require_both_participants(db, context):
     from app.db.models import Match, Task, UserPermissionOverride
-    from app.services import match_service
+    from app.services import match_access, match_queries
 
     for permission in ("view_intended_parents", "view_matches"):
         db.add(
@@ -750,13 +750,11 @@ def test_match_list_detail_and_linked_tasks_require_both_participants(db, contex
         db.add(match)
         db.flush()
         matches.append(match)
-    condition = match_service.match_visibility_filter(db, context.intake)
+    condition = match_queries.match_visibility_filter(db, context.intake)
     assert [row.id for row in db.query(Match).filter(condition)] == [matches[0].id]
-    assert (
-        match_service.get_match_with_access(db, context.intake, matches[0].id).id == matches[0].id
-    )
+    assert match_access.load(db, context.intake, matches[0].id).id == matches[0].id
     with pytest.raises(HTTPException):
-        match_service.get_match_with_access(db, context.intake, matches[1].id)
+        match_access.load(db, context.intake, matches[1].id)
     for match in matches:
         db.add(
             Task(

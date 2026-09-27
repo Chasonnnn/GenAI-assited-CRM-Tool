@@ -16,10 +16,10 @@ from app.utils.pagination import paginate_query_by_offset
 OPEN_STATUSES = tuple(
     status.value
     for status in MatchStatus
-    if status not in {MatchStatus.REJECTED, MatchStatus.CANCELLED, MatchStatus.COMPLETED}
+    if status not in {MatchStatus.DECLINED, MatchStatus.CANCELLED, MatchStatus.COMPLETED}
 )
-COMMITTED_STATUSES = (MatchStatus.ACCEPTED.value, MatchStatus.CANCEL_PENDING.value)
-PENDING_STATUSES = (MatchStatus.PROPOSED.value, MatchStatus.REVIEWING.value)
+COMMITTED_STATUSES = (MatchStatus.ACCEPTED.value, MatchStatus.CANCELLATION_PENDING.value)
+PENDING_STATUSES = (MatchStatus.UNDER_REVIEW.value,)
 
 
 # =============================================================================
@@ -362,7 +362,7 @@ def to_read(db: Session, match: Match, org_id: UUID | None = None) -> MatchRead:
         reviewed_by_user_id=str(match.reviewed_by_user_id) if match.reviewed_by_user_id else None,
         reviewed_at=match.reviewed_at.isoformat() if match.reviewed_at else None,
         notes=match.notes,
-        rejection_reason=match.rejection_reason,
+        decline_reason=match.decline_reason,
         created_at=match.created_at.isoformat(),
         updated_at=match.updated_at.isoformat(),
         surrogate_number=surrogate.surrogate_number if surrogate else None,

@@ -22,12 +22,12 @@ import {
     UsersIcon,
     CalendarPlusIcon,
 } from "lucide-react"
-import { useMatch, matchKeys, useAcceptMatch, useRejectMatch, useCancelMatch, useMatchWork, useCreateMatchNote, useUploadMatchFile, matchWorkKeys, useCompleteMatch } from "@/lib/hooks/use-matches"
+import { useMatch, matchKeys, useAcceptMatch, useDeclineMatch, useCancelMatch, useMatchWork, useCreateMatchNote, useUploadMatchFile, matchWorkKeys, useCompleteMatch } from "@/lib/hooks/use-matches"
 import type { MatchRead, MatchWorkSource } from "@/lib/api/matches"
 import { CompleteMatchDialog } from "@/components/matches/CompleteMatchDialog"
 import { MatchAttemptControl } from "@/components/matches/MatchAttemptControl"
 import { MatchTasksCalendar } from "@/components/matches/MatchTasksCalendar"
-import { RejectMatchDialog } from "@/components/matches/RejectMatchDialog"
+import { DeclineMatchDialog } from "@/components/matches/DeclineMatchDialog"
 import { CancelMatchDialog } from "@/components/matches/CancelMatchDialog"
 import { AddNoteDialog } from "@/components/matches/AddNoteDialog"
 import { UploadFileDialog } from "@/components/matches/UploadFileDialog"
@@ -92,20 +92,20 @@ function MatchDetailHeader({
     match,
     canChangeStatus,
     acceptPending,
-    rejectPending,
+    declinePending,
     cancelPending,
     onAcceptMatch,
-    onRejectClick,
+    onDeclineClick,
     onCancelClick,
     onCompleteClick,
 }: {
     match: MatchRead
     canChangeStatus: boolean
     acceptPending: boolean
-    rejectPending: boolean
+    declinePending: boolean
     cancelPending: boolean
     onAcceptMatch: () => void
-    onRejectClick: () => void
+    onDeclineClick: () => void
     onCancelClick: () => void
     onCompleteClick: () => void
 }) {
@@ -137,7 +137,7 @@ function MatchDetailHeader({
                 <Badge className={getMatchStatusBadgeClassName(match.status)}>
                     {getMatchStatusLabel(match.status)}
                 </Badge>
-                {canChangeStatus && (match.status === "proposed" || match.status === "reviewing") && (
+                {canChangeStatus && (match.status === "under_review") && (
                     <>
                         <Button
                             variant="default"
@@ -152,10 +152,10 @@ function MatchDetailHeader({
                             variant="destructive"
                             size="sm"
                             className="h-7 text-xs"
-                            onClick={onRejectClick}
-                            disabled={rejectPending}
+                            onClick={onDeclineClick}
+                            disabled={declinePending}
                         >
-                            {rejectPending ? "Rejecting..." : "Reject"}
+                            {declinePending ? "Declining..." : "Decline"}
                         </Button>
                     </>
                 )}
@@ -474,7 +474,7 @@ function IntendedParentProfileColumn({
 }
 
 function MatchDetailDialogs({
-    rejectDialogOpen,
+    declineDialogOpen,
     cancelDialogOpen,
     addNoteDialogOpen,
     uploadFileDialogOpen,
@@ -485,24 +485,24 @@ function MatchDetailDialogs({
     surrogateName,
     participantKind,
     intendedParentName,
-    rejectPending,
+    declinePending,
     cancelPending,
     addNotePending,
     uploadFilePending,
     addTaskPending,
-    onRejectOpenChange,
+    onDeclineOpenChange,
     onCancelOpenChange,
     onAddNoteOpenChange,
     onUploadFileOpenChange,
     onAddTaskOpenChange,
     onScheduleParserOpenChange,
-    onReject,
+    onDecline,
     onCancel,
     onAddNote,
     onUploadFile,
     onAddTask,
 }: {
-    rejectDialogOpen: boolean
+    declineDialogOpen: boolean
     cancelDialogOpen: boolean
     addNoteDialogOpen: boolean
     uploadFileDialogOpen: boolean
@@ -513,30 +513,30 @@ function MatchDetailDialogs({
     surrogateName: string
     participantKind: "surrogate" | "donor"
     intendedParentName: string
-    rejectPending: boolean
+    declinePending: boolean
     cancelPending: boolean
     addNotePending: boolean
     uploadFilePending: boolean
     addTaskPending: boolean
-    onRejectOpenChange: (open: boolean) => void
+    onDeclineOpenChange: (open: boolean) => void
     onCancelOpenChange: (open: boolean) => void
     onAddNoteOpenChange: (open: boolean) => void
     onUploadFileOpenChange: (open: boolean) => void
     onAddTaskOpenChange: (open: boolean) => void
     onScheduleParserOpenChange: (open: boolean) => void
-    onReject: (reason: string) => Promise<void>
-    onCancel: (reason?: string) => Promise<void>
+    onDecline: (reason: string) => Promise<void>
+    onCancel: (reason: string) => Promise<void>
     onAddNote: (target: MatchWorkSource, content: string) => Promise<void>
     onUploadFile: (target: MatchWorkSource, file: File) => Promise<void>
     onAddTask: (target: MatchWorkSource, data: TaskFormData) => Promise<void>
 }) {
     return (
         <>
-            <RejectMatchDialog
-                open={rejectDialogOpen}
-                onOpenChange={onRejectOpenChange}
-                onConfirm={onReject}
-                isPending={rejectPending}
+            <DeclineMatchDialog
+                open={declineDialogOpen}
+                onOpenChange={onDeclineOpenChange}
+                onConfirm={onDecline}
+                isPending={declinePending}
             />
 
             <CancelMatchDialog
@@ -613,7 +613,7 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
     const [selectedAttemptId, setSelectedAttemptId] = useState("")
     const [completeDialogOpen, setCompleteDialogOpen] = useState(false)
     const completeMutation = useCompleteMatch()
-    const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
+    const [declineDialogOpen, setDeclineDialogOpen] = useState(false)
     const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
     const [addNoteDialogOpen, setAddNoteDialogOpen] = useState(false)
     const [uploadFileDialogOpen, setUploadFileDialogOpen] = useState(false)
@@ -630,7 +630,7 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
         refetch: refetchMatch,
     } = useMatch(matchId)
     const acceptMatchMutation = useAcceptMatch()
-    const rejectMatchMutation = useRejectMatch()
+    const declineMatchMutation = useDeclineMatch()
     const cancelMatchMutation = useCancelMatch()
     const createNoteMutation = useCreateMatchNote(matchId)
     const uploadAttachmentMutation = useUploadMatchFile(matchId)
@@ -657,7 +657,7 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
 
     // Check if user can change surrogate status (case_manager+)
     const canChangeStatus = !!user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
-    const canCreateWork = match?.status === "proposed" || match?.status === "accepted"
+    const canCreateWork = match?.status === "under_review" || match?.status === "accepted"
 
     const invalidateMatchSourceQueries = (
         entityIds?: {
@@ -699,21 +699,21 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
         } catch (error) { setActionError(error instanceof Error ? error.message : "Unable to accept match") }
     }
 
-    // Handle Reject match
-    const handleRejectMatch = async (reason: string) => {
-        const updatedMatch = await rejectMatchMutation.mutateAsync({
+    // Handle decline match
+    const handleDeclineMatch = async (reason: string) => {
+        const updatedMatch = await declineMatchMutation.mutateAsync({
             matchId,
-            data: { rejection_reason: reason },
+            data: { reason },
         })
         invalidateMatchSourceQueries(updatedMatch)
         void queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
         void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
     }
 
-    const handleCancelMatch = async (reason?: string) => {
+    const handleCancelMatch = async (reason: string) => {
         const updatedMatch = await cancelMatchMutation.mutateAsync({
             matchId,
-            data: reason ? { reason } : {},
+            data: { reason },
         })
         invalidateMatchSourceQueries(updatedMatch)
         void queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
@@ -778,10 +778,10 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
                     match={match}
                     canChangeStatus={canChangeStatus}
                     acceptPending={acceptMatchMutation.isPending}
-                    rejectPending={rejectMatchMutation.isPending}
+                    declinePending={declineMatchMutation.isPending}
                     cancelPending={cancelMatchMutation.isPending}
                     onAcceptMatch={handleAcceptMatch}
-                    onRejectClick={() => setRejectDialogOpen(true)}
+                    onDeclineClick={() => setDeclineDialogOpen(true)}
                     onCancelClick={() => setCancelDialogOpen(true)}
                     onCompleteClick={() => setCompleteDialogOpen(true)}
                 />
@@ -838,7 +838,7 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
 
             {completeDialogOpen && <CompleteMatchDialog onClose={() => setCompleteDialogOpen(false)} isPending={completeMutation.isPending} onComplete={async (data) => { const result = await completeMutation.mutateAsync({ matchId, data }); invalidateMatchSourceQueries(result) }} />}
             <MatchDetailDialogs
-                rejectDialogOpen={rejectDialogOpen}
+                declineDialogOpen={declineDialogOpen}
                 cancelDialogOpen={cancelDialogOpen}
                 addNoteDialogOpen={addNoteDialogOpen && canCreateWork}
                 uploadFileDialogOpen={uploadFileDialogOpen && canCreateWork}
@@ -849,18 +849,18 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
                 surrogateName={match.match_kind === "donor" ? donorData?.full_name || "Donor" : surrogateData?.full_name || "Surrogate"}
                 participantKind={match.match_kind ?? "surrogate"}
                 intendedParentName={ipData?.full_name || "Intended Parent"}
-                rejectPending={rejectMatchMutation.isPending}
+                declinePending={declineMatchMutation.isPending}
                 cancelPending={cancelMatchMutation.isPending}
                 addNotePending={createNoteMutation.isPending}
                 uploadFilePending={uploadAttachmentMutation.isPending}
                 addTaskPending={createTaskMutation.isPending}
-                onRejectOpenChange={setRejectDialogOpen}
+                onDeclineOpenChange={setDeclineDialogOpen}
                 onCancelOpenChange={setCancelDialogOpen}
                 onAddNoteOpenChange={setAddNoteDialogOpen}
                 onUploadFileOpenChange={setUploadFileDialogOpen}
                 onAddTaskOpenChange={setAddTaskDialogOpen}
                 onScheduleParserOpenChange={setShowScheduleParser}
-                onReject={handleRejectMatch}
+                onDecline={handleDeclineMatch}
                 onCancel={handleCancelMatch}
                 onAddNote={handleAddNote}
                 onUploadFile={handleUploadFile}

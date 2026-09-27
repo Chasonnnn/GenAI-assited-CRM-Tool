@@ -110,11 +110,10 @@ describe("MatchesPage", () => {
             data: {
                 total: 16,
                 by_status: {
-                    proposed: 7,
-                    reviewing: 4,
+                    under_review: 11,
                     accepted: 3,
-                    cancel_pending: 0,
-                    rejected: 2,
+                    cancellation_pending: 0,
+                    declined: 2,
                     cancelled: 0,
                 },
             },
@@ -201,13 +200,11 @@ describe("MatchesPage", () => {
         render(<MatchesPage />)
 
         expect(mockUseMatchStats).toHaveBeenCalledTimes(1)
-        expect(mockUseMatches).not.toHaveBeenCalledWith({ status: "proposed" })
-        expect(mockUseMatches).not.toHaveBeenCalledWith({ status: "reviewing" })
+        expect(mockUseMatches).not.toHaveBeenCalledWith({ status: "under_review" })
         expect(mockUseMatches).not.toHaveBeenCalledWith({ status: "accepted" })
-        expect(mockUseMatches).not.toHaveBeenCalledWith({ status: "rejected" })
+        expect(mockUseMatches).not.toHaveBeenCalledWith({ status: "declined" })
 
-        expect(screen.getByText("7")).toBeInTheDocument()
-        expect(screen.getByText("4")).toBeInTheDocument()
+        expect(screen.getByText("11")).toBeInTheDocument()
         expect(screen.getByText("3")).toBeInTheDocument()
         expect(screen.getByText("2")).toBeInTheDocument()
     })

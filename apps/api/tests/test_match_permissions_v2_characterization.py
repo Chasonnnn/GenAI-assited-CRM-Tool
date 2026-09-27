@@ -87,14 +87,14 @@ async def _ready_surrogate(client, db, org_id) -> dict:
 
 
 async def _target(client, db, org_id, status="accepted") -> dict:
-    """Match ids for a route: a proposed match, or an accepted one with an event and attempt.
+    """Match ids for a route: an under-review match, or an accepted one with an event and attempt.
 
     The attempt is completed so the complete route is not refused for an open attempt.
     """
     ip = await _create_intended_parent(client)
     match = await _case(client, ip, surrogate=await _ready_surrogate(client, db, org_id))
     ids = {"id": match["id"], "event_id": uuid.uuid4(), "attempt_id": uuid.uuid4()}
-    if status == "proposed":
+    if status == "under_review":
         return ids
     await _accept(client, match)
     event = await client.post(f"/matches/{match['id']}/events", json=_EVENT)
@@ -154,11 +154,17 @@ MATCH_READS = [
 
 # (method, path, body, target status, success code, match status after success)
 MATCH_WRITES = [
-    ("PUT", "/matches/{id}/accept", {}, "proposed", 200, "accepted"),
-    ("PUT", "/matches/{id}/reject", {"rejection_reason": "No"}, "proposed", 200, "rejected"),
-    ("DELETE", "/matches/{id}", None, "proposed", 204, "cancelled"),
-    ("PATCH", "/matches/{id}/notes", {"notes": "Changed"}, "proposed", 200, "proposed"),
-    ("POST", "/matches/{id}/cancel-request", {}, "accepted", 200, "cancel_pending"),
+    ("PUT", "/matches/{id}/accept", {}, "under_review", 200, "accepted"),
+    ("PUT", "/matches/{id}/decline", {"reason": "No"}, "under_review", 200, "declined"),
+    ("PATCH", "/matches/{id}/notes", {"notes": "Changed"}, "under_review", 200, "under_review"),
+    (
+        "POST",
+        "/matches/{id}/cancel-request",
+        {"reason": "Ended"},
+        "accepted",
+        200,
+        "cancellation_pending",
+    ),
     ("PUT", "/matches/{id}/complete", {"outcome": "Done"}, "accepted", 200, "completed"),
     ("POST", "/matches/{id}/events", _EVENT, "accepted", 201, "accepted"),
     ("PUT", "/matches/{id}/events/{event_id}", {"title": "Moved"}, "accepted", 200, "accepted"),
@@ -402,7 +408,7 @@ async def test_v2_operations_granted_propose_matches_can_edit_but_not_accept(
     authed_client, db, v2_org, granted_by
 ):
     # Accept moves the surrogate stage, which v2 checks against change_surrogate_status.
-    ids = await _target(authed_client, db, v2_org.id, "proposed")
+    ids = await _target(authed_client, db, v2_org.id, "under_review")
     grant = ("propose_matches",) if granted_by == "legacy_user_grant" else ()
     if granted_by == "role_grant":
         _set_role_permission(db, v2_org.id, Role.OPERATIONS, "propose_matches", True)
@@ -415,13 +421,13 @@ async def test_v2_operations_granted_propose_matches_can_edit_but_not_accept(
     assert accept.status_code == 400
     assert accept.json()["detail"] == "Stage change permission required"
     row = _match_row(db, ids["id"])
-    assert (row.status, row.notes) == ("proposed", "Granted")
+    assert (row.status, row.notes) == ("under_review", "Granted")
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", [Role.ADMIN, Role.DEVELOPER])
 async def test_v2_protected_roles_ignore_role_level_denials(authed_client, db, v2_org, role):
-    ids = await _target(authed_client, db, v2_org.id, "proposed")
+    ids = await _target(authed_client, db, v2_org.id, "under_review")
     for permission in ("view_matches", "propose_matches"):
         _set_role_permission(db, v2_org.id, role, permission, False)
 
@@ -454,7 +460,7 @@ async def test_v2_case_manager_cannot_reach_match_with_pre_approval_surrogate(
         assert response.status_code == 403
         assert response.json()["detail"] == "You don't have access to this surrogate"
     assert created["id"] not in {item["id"] for item in listed.json()["items"]}
-    assert _match_row(db, created["id"]).status == "proposed"
+    assert _match_row(db, created["id"]).status == "under_review"
 
 
 @pytest.mark.asyncio
@@ -748,3 +754,39 @@ async def test_mixed_orgs_role_denial_stays_in_its_org(authed_client, db, test_a
     assert v1_detail.status_code == 200, v1_detail.text
     assert v2_detail.status_code == 403
     assert v2_detail.json()["detail"] == "Missing permission: view_matches"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("blocked_by", [None, "view_matches", "party_scope"])
+async def test_v2_proposer_decline_exception_preserves_view_and_party_scope(
+    authed_client, db, v2_org, blocked_by
+):
+    from app.db.models import AuditLog
+
+    async with _client_for(db, v2_org.id, role=Role.CASE_MANAGER) as (user, client):
+        proposed = await _propose(client, authed_client, db, v2_org.id)
+        assert proposed.status_code == 201, proposed.text
+        match = proposed.json()
+        _set_role_permission(db, v2_org.id, Role.CASE_MANAGER, "propose_matches", False)
+        if blocked_by == "view_matches":
+            _set_role_permission(db, v2_org.id, Role.CASE_MANAGER, "view_matches", False)
+        elif blocked_by == "party_scope":
+            pipeline = pipeline_service.get_or_create_default_pipeline(db, v2_org.id)
+            stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "new_unread")
+            db.get(Surrogate, uuid.UUID(match["surrogate_id"])).stage_id = stage.id
+            db.commit()
+        response = await client.put(
+            f"/matches/{match['id']}/decline", json={"reason": "  Withdrawn  "}
+        )
+    history = db.query(AuditLog).filter(
+        AuditLog.target_id == uuid.UUID(match["id"]), AuditLog.event_type == "match_declined"
+    )
+    if blocked_by:
+        assert response.status_code == 403
+        assert _match_row(db, match["id"]).status == "under_review"
+        assert history.count() == 0
+    else:
+        assert response.status_code == 200, response.text
+        assert response.json()["decline_reason"] == "Withdrawn"
+        assert _match_row(db, match["id"]).status == "declined"
+        assert history.one().actor_user_id == user.id

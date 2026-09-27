@@ -29,7 +29,7 @@ const mockUseMatches = vi.fn()
 vi.mock('@/lib/hooks/use-matches', () => ({
     useMatches: (filters: unknown) => mockUseMatches(filters),
     useMatchStats: () => ({
-        data: { proposed: 1, reviewing: 0, accepted: 1, rejected: 0, cancelled: 0, total: 2 },
+        data: { under_review: 1, accepted: 1, declined: 0, cancelled: 0, total: 2 },
         isLoading: false,
     }),
 }))
@@ -45,7 +45,7 @@ describe('MatchesPage', () => {
                 surrogate_number: 'S10001',
                 ip_id: 'ip1',
                 ip_name: 'John Smith',
-                status: 'proposed' as const,
+                status: 'under_review' as const,
                 proposed_at: '2024-01-15T10:00:00Z',
                 proposed_by_user_id: 'user1',
                 proposed_by_name: 'Admin User',
@@ -81,6 +81,14 @@ describe('MatchesPage', () => {
             data: mockMatchData,
             isLoading: false,
         })
+    })
+
+    it.each(['pending_legacy', 'constructor'])('labels the filter and preserves unknown status %s', (unknownStatus) => {
+        mockUseMatches.mockReturnValue({data: {...mockMatchData, items: [{...mockMatchData.items[0], status: unknownStatus}]}, isLoading: false})
+        render(<MatchesPage />)
+        expect(screen.getByText('All statuses')).toBeInTheDocument()
+        expect(screen.getByText(unknownStatus)).toBeInTheDocument()
+        expect(screen.getAllByText('Under Review')).toHaveLength(1)
     })
 
     it('renders page header and title', () => {
@@ -206,7 +214,7 @@ describe('MatchesPage', () => {
     it('debounces search URL updates while preserving sibling filters and resetting page', () => {
         vi.useFakeTimers()
         mockSearchParams.set('page', '4')
-        mockSearchParams.set('status', 'proposed')
+        mockSearchParams.set('status', 'under_review')
         mockSearchParams.set('q', 'old')
 
         render(<MatchesPage />)
@@ -221,7 +229,7 @@ describe('MatchesPage', () => {
         })
 
         expect(mockRouterReplace).toHaveBeenCalledWith(
-            '/intended-parents/matches?status=proposed&q=alice',
+            '/intended-parents/matches?status=under_review&q=alice',
             { scroll: false },
         )
         vi.useRealTimers()

@@ -10,36 +10,29 @@ export interface MatchStatusDefinition {
 
 export const MATCH_STATUS_DEFINITIONS: MatchStatusDefinition[] = [
     {
-        value: "proposed",
-        label: "Proposed",
-        order: 1,
-        badgeClassName: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-        allowedTransitions: ["reviewing", "accepted", "rejected", "cancelled"],
-    },
-    {
-        value: "reviewing",
-        label: "Reviewing",
+        value: "under_review",
+        label: "Under Review",
         order: 2,
         badgeClassName: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
-        allowedTransitions: ["accepted", "rejected", "cancelled"],
+        allowedTransitions: ["accepted", "declined"],
     },
     {
         value: "accepted",
         label: "Accepted",
         order: 3,
         badgeClassName: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-        allowedTransitions: ["cancel_pending", "completed"],
+        allowedTransitions: ["cancellation_pending", "completed"],
     },
     {
-        value: "cancel_pending",
-        label: "Cancel Pending",
+        value: "cancellation_pending",
+        label: "Cancellation Pending",
         order: 4,
         badgeClassName: "bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200",
         allowedTransitions: ["accepted", "cancelled"],
     },
     {
-        value: "rejected",
-        label: "Rejected",
+        value: "declined",
+        label: "Declined",
         order: 5,
         badgeClassName: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
         allowedTransitions: [],
@@ -65,22 +58,17 @@ const MATCH_STATUS_BY_VALUE = Object.fromEntries(
 ) as Record<MatchStatus, MatchStatusDefinition>
 
 export function isMatchStatus(value: string | null | undefined): value is MatchStatus {
-    return typeof value === "string" && value in MATCH_STATUS_BY_VALUE
-}
-
-function getMatchStatusDefinition(value: string | null | undefined): MatchStatusDefinition {
-    if (isMatchStatus(value)) {
-        return MATCH_STATUS_BY_VALUE[value]
-    }
-    return MATCH_STATUS_BY_VALUE.proposed
+    return typeof value === "string" && Object.hasOwn(MATCH_STATUS_BY_VALUE, value)
 }
 
 export function getMatchStatusLabel(value: string | null | undefined): string {
-    return getMatchStatusDefinition(value).label
+    return isMatchStatus(value) ? MATCH_STATUS_BY_VALUE[value].label : value || "Unknown"
 }
 
 export function getMatchStatusBadgeClassName(value: string | null | undefined): string {
-    return getMatchStatusDefinition(value).badgeClassName
+    return isMatchStatus(value)
+        ? MATCH_STATUS_BY_VALUE[value].badgeClassName
+        : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
 }
 
 export function getMatchKindLabel(kind: string | null | undefined): string {

@@ -1014,7 +1014,7 @@ def _build_retention_query(
         query = db.query(Match).filter(
             Match.organization_id == org_id,
             Match.created_at < cutoff,
-            Match.status.in_(("completed", "cancelled", "rejected")),
+            Match.status.in_(("completed", "cancelled", "declined")),
             Match.closed_at.is_not(None),
             Match.closed_at < cutoff,
             ~Match.id.in_(_held_match_ids(org_id, surrogate_hold_ids, entity_hold_ids)),
