@@ -311,6 +311,100 @@ describe('Shared Intake Public Page', () => {
         expect(progress.tagName).toBe('PROGRESS')
         expect(progress).toHaveAttribute('value', '33')
         expect(progress).toHaveAttribute('max', '100')
+        expect(progress).toHaveClass('[&::-webkit-progress-value]:bg-primary')
+        // Page title shows as the card title and as its step label, not a third time above the bar.
+        expect(screen.getAllByText('Application')).toHaveLength(2)
+        expect(screen.getByText('Step 1 of 3')).toBeInTheDocument()
+    })
+
+    it('marks every invalid field inline on Continue and focuses the first one', async () => {
+        const { toast } = await import('@/components/ui/toast')
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Application',
+                        fields: [
+                            { key: 'full_name', label: 'Full Name', type: 'text', required: true },
+                            { key: 'email', label: 'Email', type: 'email', required: true },
+                            {
+                                key: 'smoker',
+                                label: 'Do you smoke?',
+                                type: 'radio',
+                                required: true,
+                                options: [
+                                    { label: 'Yes', value: 'yes' },
+                                    { label: 'No', value: 'no' },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            },
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'not-an-email' } })
+        fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+        const fullName = screen.getByLabelText(/full name/i)
+        expect(fullName).toHaveAttribute('aria-invalid', 'true')
+        expect(fullName).toHaveAccessibleDescription('Full Name is required.')
+        expect(screen.getByLabelText(/email/i)).toHaveAccessibleDescription(
+            'Email must be a valid email address.',
+        )
+        expect(screen.getByRole('radiogroup', { name: /do you smoke/i })).toHaveAccessibleDescription(
+            'Do you smoke? is required.',
+        )
+        await waitFor(() => expect(fullName).toHaveFocus())
+        expect(toast.error).not.toHaveBeenCalled()
+        expect(screen.queryByRole('button', { name: 'Submit Application' })).not.toBeInTheDocument()
+
+        fireEvent.change(fullName, { target: { value: 'Jane Applicant' } })
+        expect(fullName).not.toHaveAttribute('aria-invalid')
+        expect(screen.queryByText('Full Name is required.')).not.toBeInTheDocument()
+    })
+
+    it('returns to the page with a missing required upload and marks it inline', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Documents',
+                        fields: [
+                            { key: 'profile_photo', label: 'Profile Photo', type: 'file', required: true },
+                        ],
+                    },
+                ],
+            },
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+        fireEvent.click(await screen.findByRole('checkbox'))
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
+
+        const uploadGroup = await screen.findByRole('group', { name: 'Profile Photo' })
+        expect(uploadGroup).toHaveAttribute('aria-invalid', 'true')
+        expect(uploadGroup).toHaveAccessibleDescription('Upload Profile Photo.')
+        expect(submitSharedPublicForm).not.toHaveBeenCalled()
+    })
+
+    it('falls back to the form name when no public title is set', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: { ...baseForm.form_schema, public_title: '' },
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        expect(await screen.findByRole('heading', { name: 'Shared Intake', level: 1 })).toBeInTheDocument()
     })
 
     it('treats unsaved uploads as an informational note', async () => {

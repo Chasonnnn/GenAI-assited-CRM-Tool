@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { InterviewAppointmentManager, localDateTimeToIso } from "@/components/surrogates/InterviewAppointmentManager"
+import { InterviewAppointmentManager, localDateTimeToIso, nextBusinessHour } from "@/components/surrogates/InterviewAppointmentManager"
 import { formatSchedulingDate, formatSchedulingTime, schedulingTimezoneLabel } from "@/lib/scheduling-time"
 import type { InterviewAppointmentState } from "@/lib/api/interview-appointment"
 
@@ -112,9 +112,13 @@ describe("InterviewAppointmentManager", () => {
 
     it("previews and books from Reschedule Needed while requesting the stage move", async () => {
         renderManager(activeState({ appointment: null }), rescheduleStage.id)
-        fireEvent.click(screen.getByRole("button", { name: "Manage" }))
-        fireEvent.click(await screen.findByRole("button", { name: "Schedule appointment" }))
-        expect(screen.getByRole("dialog")).toHaveClass("sm:max-w-2xl")
+        // With no appointment the trigger opens booking directly; there is no Manage step.
+        expect(screen.queryByRole("button", { name: "Manage" })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Schedule" }))
+        const dialog = await screen.findByRole("dialog", { name: "Schedule interview" })
+        expect(dialog).toHaveAttribute("data-size", "2xl")
+        expect(screen.getByRole("button", { name: "Schedule & update stage" })).toBeDisabled()
+        expect(within(dialog).queryByRole("button", { name: "Back" })).not.toBeInTheDocument()
 
         fireEvent.click(screen.getByRole("button", { name: /2:30 PM|10:30 AM|7:30 AM|14:30/ }))
         fireEvent.click(screen.getByRole("button", { name: "Schedule & update stage" }))
@@ -134,9 +138,9 @@ describe("InterviewAppointmentManager", () => {
         fireEvent.click(screen.getByRole("button", { name: "Manage" }))
         fireEvent.click(await screen.findByRole("button", { name: "Reschedule" }))
 
-        fireEvent.click(screen.getByRole("button", { name: "Reschedule" }))
-        expect(screen.getByRole("alert")).toHaveTextContent("Choose a valid date and time.")
-        expect(mutateAsync).not.toHaveBeenCalled()
+        // No slot chosen yet: the submit stays disabled instead of reporting an error afterwards.
+        expect(screen.getByRole("button", { name: "Reschedule" })).toBeDisabled()
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
 
         fireEvent.click(screen.getByRole("button", { name: "Choose a time outside availability" }))
         fireEvent.change(screen.getByLabelText(/Date and time/), { target: { value: "2026-09-18T08:00" } })
@@ -298,10 +302,41 @@ describe("InterviewAppointmentManager", () => {
             },
             external_sync_status: "completed",
         }), rescheduleStage.id)
-        fireEvent.click(screen.getByRole("button", { name: "Manage" }))
+        fireEvent.click(screen.getByRole("button", { name: "Schedule" }))
 
-        expect(await screen.findByText("Google Calendar synced")).toBeInTheDocument()
-        expect(screen.getByRole("button", { name: "Schedule appointment" })).toBeEnabled()
+        expect(await screen.findByRole("dialog", { name: "Schedule interview" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: /2:30 PM|10:30 AM|7:30 AM|14:30/ }))
+        expect(screen.getByRole("button", { name: "Schedule & update stage" })).toBeEnabled()
+    })
+
+    it("clears a stale error when switching to a custom time and needs a reason before submitting", async () => {
+        mutateAsync.mockRejectedValueOnce(new Error("Slot taken"))
+        renderManager(activeState({ appointment: null }))
+        fireEvent.click(screen.getByRole("button", { name: "Schedule" }))
+        await screen.findByRole("dialog", { name: "Schedule interview" })
+
+        fireEvent.click(screen.getByRole("button", { name: /2:30 PM|10:30 AM|7:30 AM|14:30/ }))
+        fireEvent.click(screen.getByRole("button", { name: "Schedule" }))
+        expect(await screen.findByRole("alert")).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Choose a time outside availability" }))
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Schedule" })).toBeDisabled()
+
+        fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: "Staff override" } })
+        expect(screen.getByRole("button", { name: "Schedule" })).toBeEnabled()
+    })
+
+    it("defaults the custom time to the next full hour within business hours", () => {
+        const at = (iso: string) => nextBusinessHour(new Date(iso))
+        // Wednesday 01:38 local -> Wednesday 09:00
+        expect(at("2026-09-23T01:38:00")).toEqual(new Date("2026-09-23T09:00:00"))
+        // Wednesday 10:20 -> 11:00
+        expect(at("2026-09-23T10:20:00")).toEqual(new Date("2026-09-23T11:00:00"))
+        // Wednesday 16:30 -> Thursday 09:00
+        expect(at("2026-09-23T16:30:00")).toEqual(new Date("2026-09-24T09:00:00"))
+        // Friday 18:00 -> Monday 09:00
+        expect(at("2026-09-25T18:00:00")).toEqual(new Date("2026-09-28T09:00:00"))
     })
 
     it("blocks lifecycle actions while delivery failed but keeps the failed-only retry enabled", async () => {

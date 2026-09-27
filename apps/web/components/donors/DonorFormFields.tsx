@@ -1,21 +1,32 @@
 "use client"
 
+import { ValidatedField } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { DonorFormValues } from "@/components/donors/donor-form-values"
 import { US_STATES } from "@/lib/constants/us-states"
 
+export type ValidatedDonorField = "full_name" | "email"
+
+/** Subset of useFormValidation for the fields this component validates. */
+export type DonorFieldValidation = {
+    errorFor: (field: ValidatedDonorField) => string | undefined
+    touch: (field: ValidatedDonorField) => void
+}
+
 export function DonorFormFields({
     values,
     idPrefix,
     showDonorType = true,
     onChange,
+    validation,
 }: {
     values: DonorFormValues
     idPrefix: string
     showDonorType?: boolean
     onChange: <K extends keyof DonorFormValues>(field: K, value: DonorFormValues[K]) => void
+    validation?: DonorFieldValidation
 }) {
     return (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -40,26 +51,40 @@ export function DonorFormFields({
                     </Select>
                 </div>
             ) : null}
-            <div className="space-y-2">
-                <Label htmlFor={`${idPrefix}full_name`}>Full name</Label>
-                <Input
-                    id={`${idPrefix}full_name`}
-                    autoFocus
-                    required
-                    value={values.full_name}
-                    onChange={(event) => onChange("full_name", event.target.value)}
-                />
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor={`${idPrefix}email`}>Email</Label>
-                <Input
-                    id={`${idPrefix}email`}
-                    type="email"
-                    required
-                    value={values.email}
-                    onChange={(event) => onChange("email", event.target.value)}
-                />
-            </div>
+            <ValidatedField
+                id={`${idPrefix}full_name`}
+                label="Full name"
+                error={validation?.errorFor("full_name")}
+                className="gap-2"
+            >
+                {(control) => (
+                    <Input
+                        {...control}
+                        autoFocus
+                        required
+                        value={values.full_name}
+                        onChange={(event) => onChange("full_name", event.target.value)}
+                        onBlur={() => validation?.touch("full_name")}
+                    />
+                )}
+            </ValidatedField>
+            <ValidatedField
+                id={`${idPrefix}email`}
+                label="Email"
+                error={validation?.errorFor("email")}
+                className="gap-2"
+            >
+                {(control) => (
+                    <Input
+                        {...control}
+                        type="email"
+                        required
+                        value={values.email}
+                        onChange={(event) => onChange("email", event.target.value)}
+                        onBlur={() => validation?.touch("email")}
+                    />
+                )}
+            </ValidatedField>
             <div className="space-y-2">
                 <Label htmlFor={`${idPrefix}phone`}>Phone</Label>
                 <Input

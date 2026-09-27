@@ -511,4 +511,55 @@ describe("PublicFormFieldRenderer", () => {
             ]),
         )
     })
+    it("renders select fields as a labelled dropdown, not option tiles", () => {
+        const updateField = vi.fn()
+        const field: FormField = {
+            key: "race",
+            label: "Race",
+            type: "select",
+            options: [
+                { label: "Asian", value: "asian" },
+                { label: "White", value: "white" },
+            ],
+        }
+
+        render(
+            <PublicFormFieldRenderer
+                field={field}
+                value={null}
+                updateField={updateField}
+                datePickerOpen={{}}
+                setDatePickerOpen={vi.fn()}
+            />,
+        )
+
+        const trigger = screen.getByRole("combobox", { name: "Race" })
+        expect(trigger).toHaveAttribute("data-slot", "select-trigger")
+        expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument()
+
+        chooseBaseUiOption(trigger, "White")
+        expect(updateField).toHaveBeenLastCalledWith("race", "white")
+    })
+
+    it.each([
+        ["text", { key: "full_name", label: "Full Name", type: "text" }, "textbox"],
+        ["radio", { key: "smoker", label: "Smoker", type: "radio", options: [{ label: "Yes", value: "yes" }] }, "radiogroup"],
+        ["select", { key: "race", label: "Race", type: "select", options: [{ label: "Asian", value: "asian" }] }, "combobox"],
+    ] as const)("marks an invalid %s field and describes it with the inline error", (_type, field, role) => {
+        render(
+            <PublicFormFieldRenderer
+                field={{ ...field, required: true } as FormField}
+                value={null}
+                updateField={vi.fn()}
+                datePickerOpen={{}}
+                setDatePickerOpen={vi.fn()}
+                error={`${field.label} is required.`}
+            />,
+        )
+
+        const control = screen.getByRole(role)
+        expect(control).toHaveAttribute("aria-invalid", "true")
+        expect(control).toHaveAccessibleDescription(`${field.label} is required.`)
+        expect(screen.getByRole("alert")).toHaveTextContent(`${field.label} is required.`)
+    })
 })

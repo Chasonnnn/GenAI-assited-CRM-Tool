@@ -14,7 +14,6 @@ export function ProgressStepper({
     steps: Step[]
 }) {
     const totalSteps = steps.length
-    const currentLabel = steps[currentStep - 1]?.label ?? ""
     const progressValue = totalSteps <= 0 ? 0 : Math.round((currentStep / totalSteps) * 100)
     const maxVisible = 5
     let start = Math.max(0, currentStep - 1 - Math.floor(maxVisible / 2))
@@ -27,17 +26,15 @@ export function ProgressStepper({
 
     return (
         <div className="space-y-3">
-            <div className="text-center">
-                <div className="text-[11px] font-medium uppercase tracking-[0.22em] text-stone-500">
-                    Step {currentStep} of {totalSteps}
-                </div>
-                <div className="mt-1 text-sm font-semibold text-stone-950">{currentLabel}</div>
+            {/* The current page title is the card heading below; it is not repeated here. */}
+            <div className="text-center text-[11px] font-medium uppercase tracking-[0.22em] text-stone-500">
+                Step {currentStep} of {totalSteps}
             </div>
             <progress
                 aria-label="Application progress"
                 value={progressValue}
                 max={100}
-                className="h-1.5 w-full overflow-hidden rounded-full accent-blue-500"
+                className="block h-1.5 w-full appearance-none overflow-hidden rounded-full border-0 bg-stone-200 accent-primary [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:bg-stone-200 [&::-webkit-progress-value]:bg-primary"
             >
                 {progressValue}%
             </progress>
@@ -48,7 +45,7 @@ export function ProgressStepper({
                         <span
                             className={cn(
                                 "size-1.5 rounded-full transition-colors",
-                                step.id <= currentStep ? "bg-blue-500" : "bg-stone-300",
+                                step.id <= currentStep ? "bg-primary" : "bg-stone-300",
                             )}
                         />
                         <span

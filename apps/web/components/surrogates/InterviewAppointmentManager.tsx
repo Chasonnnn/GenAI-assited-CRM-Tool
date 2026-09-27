@@ -59,9 +59,30 @@ function formatAppointment(appointment: InterviewAppointment) {
 }
 
 function localInputValue(iso: string | undefined) {
-    const date = iso ? new Date(iso) : new Date(Date.now() + 24 * 60 * 60 * 1000)
+    const date = iso ? new Date(iso) : nextBusinessHour()
     const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
     return shifted.toISOString().slice(0, 16)
+}
+
+const BUSINESS_DAY_START_HOUR = 9
+const BUSINESS_DAY_END_HOUR = 17
+
+/** Next full hour between 9 AM and 5 PM local time on a weekday: the default custom interview time. */
+export function nextBusinessHour(now = new Date()): Date {
+    const next = new Date(now)
+    next.setMinutes(0, 0, 0)
+    next.setHours(next.getHours() + 1)
+    if (next.getHours() < BUSINESS_DAY_START_HOUR) {
+        next.setHours(BUSINESS_DAY_START_HOUR)
+    } else if (next.getHours() >= BUSINESS_DAY_END_HOUR) {
+        next.setDate(next.getDate() + 1)
+        next.setHours(BUSINESS_DAY_START_HOUR)
+    }
+    while (next.getDay() === 0 || next.getDay() === 6) {
+        next.setDate(next.getDate() + 1)
+        next.setHours(BUSINESS_DAY_START_HOUR)
+    }
+    return next
 }
 
 export function localDateTimeToIso(value: string): string | null {
@@ -115,8 +136,26 @@ export function InterviewAppointmentManager({
         : canStartNewAppointment
     const open = controlledOpen ?? uncontrolledOpen
     const setOpen = onOpenChange ?? setUncontrolledOpen
+    // With nothing to manage, the trigger opens the booking view directly instead of an empty Manage step.
+    const opensInBooking = !active && canStartNewAppointment
 
     const resetForm = () => setForm({ view: "manage", validation: null, cancelChoice: "move", overrideAvailability: false, overrideReason: "", date: "", selectedStart: null, dateTime: "" })
+    const bookingForm = () => ({
+        view: "book" as View,
+        date: schedulingDateKey(active && appointment ? appointment.scheduled_start : new Date().toISOString(), timezone),
+        selectedStart: null,
+        dateTime: localInputValue(active ? appointment?.scheduled_start : undefined),
+        overrideAvailability: false,
+        overrideReason: "",
+        validation: null,
+    })
+    // The dialog can be opened by this trigger or by a parent through `open`, so the booking
+    // view is chosen when the dialog opens rather than in the click handler.
+    const [wasOpen, setWasOpen] = useState(open)
+    if (wasOpen !== open) {
+        setWasOpen(open)
+        if (open && opensInBooking) updateForm(bookingForm())
+    }
     const setDialogOpen = (next: boolean) => {
         if (mutation.isPending) return
         if (!next) resetForm()
@@ -184,13 +223,18 @@ export function InterviewAppointmentManager({
         <span className="truncate text-sm text-muted-foreground">{active && appointment ? formatAppointment(appointment) : "No active appointment"}</span>
     </div>
 
+    const triggerLabel = opensInBooking ? "Schedule" : "Manage"
+    const hasBookingTime = overrideAvailability
+        ? Boolean(localDateTimeToIso(dateTime)) && Boolean(overrideReason.trim())
+        : Boolean(selectedStart)
+
     return <>
-        {!hideTrigger && (triggerOnly ? <Button size="sm" variant="outline" className="h-7 text-xs" onClick={openManager} disabled={!state.can_manage}>Manage</Button> : <div className={compact ? "flex items-center justify-between gap-3 rounded-lg border px-3 py-2" : "flex items-center justify-between gap-3"}>
+        {!hideTrigger && (triggerOnly ? <Button size="sm" variant="outline" className="h-7 text-xs" onClick={openManager} disabled={!state.can_manage}>{triggerLabel}</Button> : <div className={compact ? "flex items-center justify-between gap-3 rounded-lg border px-3 py-2" : "flex items-center justify-between gap-3"}>
             <div className="min-w-0"><span className="text-sm font-medium">Interview appointment</span>{row}</div>
-            <Button size="sm" variant="outline" onClick={openManager} disabled={!state.can_manage}>Manage</Button>
+            <Button size="sm" variant="outline" onClick={openManager} disabled={!state.can_manage}>{triggerLabel}</Button>
         </div>)}
         {renderDialog ? <Dialog open={open} onOpenChange={setDialogOpen}>
-            <DialogContent className={`flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl p-0 ${view === "book" ? "sm:max-w-2xl" : "sm:max-w-lg"}`}>
+            <DialogContent size={view === "book" ? "2xl" : "lg"} className="flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl p-0">
                 <DialogHeader className="shrink-0 border-b px-5 py-4 pr-12"><DialogTitle>{view === "manage" ? "Manage appointment" : view === "cancel" ? "Cancel appointment?" : active ? "Reschedule interview" : "Schedule interview"}</DialogTitle></DialogHeader>
                 <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
                 {view === "manage" ? <div className="space-y-5">
@@ -208,15 +252,15 @@ export function InterviewAppointmentManager({
                     <SchedulingTimePicker
                         idPrefix="interview-appointment"
                         date={date}
-                        onDateChange={(next) => updateForm({ date: next, selectedStart: null })}
+                        onDateChange={(next) => updateForm({ date: next, selectedStart: null, validation: null })}
                         timezone={timezone}
                         slots={slotsQuery.data?.slots}
                         selectedStart={selectedStart}
-                        onSelectStart={(start) => updateForm({ selectedStart: start })}
+                        onSelectStart={(start) => updateForm({ selectedStart: start, validation: null })}
                         loading={slotsQuery.isLoading || slotsQuery.isFetching}
                         error={slotsQuery.isError ? "Available times could not be loaded." : undefined}
                         onRetry={() => void slotsQuery.refetch()}
-                        override={{ enabled: overrideAvailability, onEnabledChange: (enabled) => updateForm({ overrideAvailability: enabled }), dateTime, onDateTimeChange: (next) => updateForm({ dateTime: next }), reason: overrideReason, onReasonChange: (next) => updateForm({ overrideReason: next }) }}
+                        override={{ enabled: overrideAvailability, onEnabledChange: (enabled) => updateForm({ overrideAvailability: enabled, validation: null }), dateTime, onDateTimeChange: (next) => updateForm({ dateTime: next, validation: null }), reason: overrideReason, onReasonChange: (next) => updateForm({ overrideReason: next, validation: null }) }}
                     />
                     {!state.scheduled_stage ? <p role="alert" className="text-sm text-destructive">Interview Scheduled is not configured. Ask an administrator to finish the rollout.</p> : null}
                 </div> : null}
@@ -231,12 +275,14 @@ export function InterviewAppointmentManager({
                 </div>
                 <DialogFooter className={view === "manage" ? "shrink-0 border-t px-5 py-4 flex-row sm:justify-start" : "shrink-0 border-t px-5 py-4"}>
                     {view === "manage" ? <>
-                        <Button className="h-auto min-h-9 min-w-0 shrink whitespace-normal" disabled={!canOpenBooking} onClick={() => updateForm({ view: "book", date: schedulingDateKey(active && appointment ? appointment.scheduled_start : new Date().toISOString(), timezone), selectedStart: null, dateTime: localInputValue(active ? appointment?.scheduled_start : undefined), overrideAvailability: false, overrideReason: "" })}>{active ? "Reschedule" : "Schedule appointment"}</Button>
+                        <Button className="h-auto min-h-9 min-w-0 shrink whitespace-normal" disabled={!canOpenBooking} onClick={() => updateForm(bookingForm())}>{active ? "Reschedule" : "Schedule appointment"}</Button>
                         {active ? <Button className="h-auto min-h-9 min-w-0 shrink whitespace-normal" variant="outline" disabled={!state.can_manage || legacySyncUnresolved || !schedulingCanCancel(appointment?.scheduling)} onClick={() => updateForm({ view: "cancel" })}>Cancel appointment</Button> : null}
                         {!appointment?.scheduling && externalSyncStatus === "failed" && appointment ? <Button variant="outline" disabled={!state.can_manage || retryGoogleSync.isPending} onClick={() => void retrySync()}>{retryGoogleSync.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}Retry Google update</Button> : null}
                         <Button className="ml-auto" variant="outline" onClick={() => setDialogOpen(false)}>Done</Button>
-                    </> : <Button variant="outline" disabled={mutation.isPending} onClick={() => updateForm({ view: "manage" })}>Back</Button>}
-                    {view === "book" ? <Button disabled={mutation.isPending || !canOpenBooking || (overrideAvailability && !overrideReason.trim())} onClick={() => void submit(active ? "reschedule" : "schedule", stageId === state.reschedule_stage?.id)}>{mutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}{stageId === state.reschedule_stage?.id ? active ? "Reschedule & update stage" : "Schedule & update stage" : active ? "Reschedule" : "Schedule"}</Button> : null}
+                    </> : view === "book" && opensInBooking
+                        ? <Button variant="outline" disabled={mutation.isPending} onClick={() => setDialogOpen(false)}>Cancel</Button>
+                        : <Button variant="outline" disabled={mutation.isPending} onClick={() => updateForm({ view: "manage", validation: null })}>Back</Button>}
+                    {view === "book" ? <Button disabled={mutation.isPending || !canOpenBooking || !hasBookingTime} onClick={() => void submit(active ? "reschedule" : "schedule", stageId === state.reschedule_stage?.id)}>{mutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}{stageId === state.reschedule_stage?.id ? active ? "Reschedule & update stage" : "Schedule & update stage" : active ? "Reschedule" : "Schedule"}</Button> : null}
                     {view === "cancel" ? <Button variant="destructive" disabled={mutation.isPending || !state.can_manage || legacySyncUnresolved || !schedulingCanCancel(appointment?.scheduling)} onClick={() => void submit("cancel", Boolean(state.reschedule_stage) && cancelChoice === "move" && stageId !== state.reschedule_stage?.id)}>Cancel appointment</Button> : null}
                 </DialogFooter>
             </DialogContent>

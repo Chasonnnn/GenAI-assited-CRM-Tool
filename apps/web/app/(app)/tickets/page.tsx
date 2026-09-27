@@ -4,17 +4,30 @@ import Link from 'next/link'
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from '@/components/ui/toast'
-import { Loader2Icon, ShieldAlertIcon } from 'lucide-react'
+import { InboxIcon, Loader2Icon, PlusIcon } from 'lucide-react'
 
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog'
+import { ValidatedField } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { EmptyState } from '@/components/empty-state'
+import { PermissionDeniedState, QueryErrorState } from '@/components/error-state'
+import { ListToolbar, ListToolbarSearch } from '@/components/list-toolbar'
+import { PageHeader } from '@/components/page-header'
 import { useAuth } from '@/lib/auth-context'
+import { useFormValidation } from '@/lib/forms/use-form-validation'
+import { EMAIL_INVALID_MESSAGE, validateEmail, validateRequired } from '@/lib/forms/validators'
 import { useComposeTicket, useTickets } from '@/lib/hooks/use-tickets'
 import type { TicketListParams, TicketPriority, TicketStatus } from '@/lib/api/tickets'
 import MessagesPageClient from '../messages/page.client'
@@ -53,11 +66,13 @@ export default function TicketsPage() {
 
     if (!isDeveloper) {
         return (
-            <div className="p-4 md:p-6">
-                <Alert variant="destructive">
-                    <ShieldAlertIcon className="size-4" aria-hidden="true" />
-                    <AlertDescription>Tickets are available only to developers.</AlertDescription>
-                </Alert>
+            <div className="flex min-h-full flex-col">
+                <PageHeader title="Tickets" />
+                <PermissionDeniedState
+                    description="Tickets are available only to developers."
+                    secondaryHref="/dashboard"
+                    headingLevel={2}
+                />
             </div>
         )
     }
@@ -81,40 +96,165 @@ function DeveloperTicketsWorkspace() {
     const { replace } = useRouter()
     const searchParams = useSearchParams()
     const activeView = searchParams.get('view') === 'messages' ? 'messages' : 'email'
+    const [composeOpen, setComposeOpen] = useState(false)
 
     const handleViewChange = (value: string | number) => {
         replace(value === 'messages' ? '/tickets?view=messages' : '/tickets', { scroll: false })
     }
 
     return (
-        <div className="space-y-6 p-4 md:p-6">
-            <header className="flex flex-wrap items-center justify-between gap-3">
-                <h1 className="text-2xl font-semibold">Tickets</h1>
+        <div className="flex min-h-full flex-col">
+            <PageHeader
+                title="Tickets"
+                actions={
+                    activeView === 'email' ? (
+                        <Button onClick={() => setComposeOpen(true)}>
+                            <PlusIcon aria-hidden="true" />
+                            New ticket
+                        </Button>
+                    ) : null
+                }
+            />
+
+            <div className="space-y-6 p-6">
                 <Tabs value={activeView} onValueChange={handleViewChange}>
                     <TabsList aria-label="Ticket channels">
                         <TabsTrigger value="email">Email tickets</TabsTrigger>
                         <TabsTrigger value="messages">SMS/MMS</TabsTrigger>
                     </TabsList>
                 </Tabs>
-            </header>
 
-            {activeView === 'messages' ? (
-                <MessagesPageClient embedded />
-            ) : (
-                <EmailTicketsView />
-            )}
+                {activeView === 'messages' ? (
+                    <MessagesPageClient embedded />
+                ) : (
+                    <EmailTicketsView />
+                )}
+            </div>
+
+            <ComposeTicketDialog open={composeOpen} onOpenChange={setComposeOpen} />
         </div>
     )
 }
 
-function EmailTicketsView() {
+type ComposeValues = { to: string; subject: string; body: string }
+
+const EMPTY_COMPOSE_VALUES: ComposeValues = { to: '', subject: '', body: '' }
+
+function validateCompose(values: ComposeValues) {
+    return {
+        to: validateEmail(values.to, { requiredMessage: 'Enter a recipient email.' }),
+        subject: validateRequired(values.subject, 'Enter a subject.'),
+        body: validateRequired(values.body, 'Enter a message.'),
+    }
+}
+
+function ComposeTicketDialog({
+    open,
+    onOpenChange,
+}: {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+}) {
     const { push } = useRouter()
+    const composeMutation = useComposeTicket()
+    const [values, setValues] = useState<ComposeValues>(EMPTY_COMPOSE_VALUES)
+    const form = useFormValidation({ values, validate: validateCompose })
+
+    const setField = (name: keyof ComposeValues, value: string) => {
+        setValues((current) => ({ ...current, [name]: value }))
+    }
+
+    const handleOpenChange = (nextOpen: boolean) => {
+        // The draft stays for the next open; validation state starts fresh.
+        if (!nextOpen) form.reset()
+        onOpenChange(nextOpen)
+    }
+
+    const submit = async (current: ComposeValues) => {
+        try {
+            const result = await composeMutation.mutateAsync({
+                to_emails: [current.to.trim()],
+                subject: current.subject.trim(),
+                body_text: current.body.trim(),
+            })
+            toast.success(
+                result.status === 'queued'
+                    ? 'Email queued and ticket created'
+                    : 'Email sent and ticket created'
+            )
+            setValues(EMPTY_COMPOSE_VALUES)
+            form.reset()
+            onOpenChange(false)
+            push(`/tickets/${result.ticket_id}`)
+        } catch (error) {
+            const message = form.applyApiError(error, {
+                fields: { to_emails: 'to', 'to_emails.0': 'to', subject: 'subject', body_text: 'body' },
+                messages: { to: EMAIL_INVALID_MESSAGE },
+                fallback: "Couldn't send the email. Try again.",
+            })
+            if (message) toast.error(message)
+        }
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={handleOpenChange}>
+            <DialogContent size="lg">
+                <form noValidate onSubmit={form.handleSubmit(submit)} className="grid gap-4">
+                    <DialogHeader>
+                        <DialogTitle>New ticket</DialogTitle>
+                    </DialogHeader>
+                    <ValidatedField label="To" error={form.errorFor('to')}>
+                        {(control) => (
+                            <Input
+                                {...control}
+                                type="email"
+                                autoComplete="email"
+                                value={values.to}
+                                onChange={(event) => setField('to', event.target.value)}
+                                onBlur={() => form.touch('to')}
+                            />
+                        )}
+                    </ValidatedField>
+                    <ValidatedField label="Subject" error={form.errorFor('subject')}>
+                        {(control) => (
+                            <Input
+                                {...control}
+                                value={values.subject}
+                                onChange={(event) => setField('subject', event.target.value)}
+                                onBlur={() => form.touch('subject')}
+                            />
+                        )}
+                    </ValidatedField>
+                    <ValidatedField label="Message" error={form.errorFor('body')}>
+                        {(control) => (
+                            <Textarea
+                                {...control}
+                                rows={8}
+                                value={values.body}
+                                onChange={(event) => setField('body', event.target.value)}
+                                onBlur={() => form.touch('body')}
+                            />
+                        )}
+                    </ValidatedField>
+                    <DialogFooter>
+                        <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+                        <Button type="submit" disabled={composeMutation.isPending}>
+                            {composeMutation.isPending ? (
+                                <Loader2Icon className="animate-spin" aria-hidden="true" />
+                            ) : null}
+                            Send
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+function EmailTicketsView() {
     const [statusFilter, setStatusFilter] = useState<TicketStatusFilter>('all')
     const [priorityFilter, setPriorityFilter] = useState<TicketPriorityFilter>('all')
     const [query, setQuery] = useState('')
-    const [composeTo, setComposeTo] = useState('')
-    const [composeSubject, setComposeSubject] = useState('')
-    const [composeBody, setComposeBody] = useState('')
 
     const filters: TicketListParams = { limit: 50 }
     if (statusFilter !== 'all') {
@@ -128,139 +268,107 @@ function EmailTicketsView() {
         filters.q = trimmedQuery
     }
 
-    const { data, isLoading } = useTickets(filters)
-    const composeMutation = useComposeTicket()
+    const ticketsQuery = useTickets(filters)
+    const { data, isLoading } = ticketsQuery
+    const hasActiveFilters = statusFilter !== 'all' || priorityFilter !== 'all' || trimmedQuery !== ''
 
-    const handleCompose = async () => {
-        const to = composeTo.trim()
-        const subject = composeSubject.trim()
-        const body = composeBody.trim()
-
-        if (!to || !subject || !body) {
-            toast.error('To, subject, and body are required')
-            return
-        }
-
-        try {
-            const result = await composeMutation.mutateAsync({
-                to_emails: [to],
-                subject,
-                body_text: body,
-            })
-            toast.success(
-                result.status === 'queued'
-                    ? 'Email queued and ticket created'
-                    : 'Email sent and ticket created'
-            )
-            setComposeTo('')
-            setComposeSubject('')
-            setComposeBody('')
-            push(`/tickets/${result.ticket_id}`)
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Failed to compose ticket email'
-            toast.error(message)
-        }
+    const resetFilters = () => {
+        setStatusFilter('all')
+        setPriorityFilter('all')
+        setQuery('')
     }
 
     return (
-        <>
-            <Card>
-                <CardHeader>
-                    <CardTitle>Email tickets</CardTitle>
-                    <CardDescription>Global inbox for inbound and outbound ticket threads.</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-3 md:grid-cols-5">
-                    <Input
-                        placeholder="Search subject, requester, code"
+        <div className="space-y-4">
+            <ListToolbar
+                className="border-b-0 px-0 py-0"
+                filters={
+                    <>
+                        <Select
+                            value={statusFilter}
+                            onValueChange={(value) => setStatusFilter((value ?? 'all') as TicketStatusFilter)}
+                        >
+                            <SelectTrigger aria-label="Filter by status" className="min-w-36 flex-1 sm:w-[180px] sm:flex-none">
+                                <SelectValue placeholder="All statuses">
+                                    {(value: string | null) => getTicketStatusLabel((value ?? 'all') as TicketStatusFilter)}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All statuses</SelectItem>
+                                {STATUS_OPTIONS.map((value) => (
+                                    <SelectItem key={value} value={value}>
+                                        {getTicketStatusLabel(value)}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Select
+                            value={priorityFilter}
+                            onValueChange={(value) =>
+                                setPriorityFilter((value ?? 'all') as TicketPriorityFilter)
+                            }
+                        >
+                            <SelectTrigger aria-label="Filter by priority" className="min-w-36 flex-1 sm:w-[180px] sm:flex-none">
+                                <SelectValue placeholder="All priorities">
+                                    {(value: string | null) =>
+                                        getTicketPriorityLabel((value ?? 'all') as TicketPriorityFilter)
+                                    }
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All priorities</SelectItem>
+                                {PRIORITY_OPTIONS.map((value) => (
+                                    <SelectItem key={value} value={value}>
+                                        {getTicketPriorityLabel(value)}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </>
+                }
+                search={
+                    <ListToolbarSearch
                         value={query}
-                        onChange={(event) => setQuery(event.target.value)}
-                        className="md:col-span-3"
+                        onValueChange={setQuery}
+                        placeholder="Search subject, requester, code"
+                        aria-label="Search tickets"
                     />
-                    <Select
-                        value={statusFilter}
-                        onValueChange={(value) => setStatusFilter((value ?? 'all') as TicketStatusFilter)}
-                    >
-                        <SelectTrigger>
-                            <SelectValue placeholder="Status">
-                                {(value: string | null) => getTicketStatusLabel((value ?? 'all') as TicketStatusFilter)}
-                            </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All statuses</SelectItem>
-                            {STATUS_OPTIONS.map((value) => (
-                                <SelectItem key={value} value={value}>
-                                    {getTicketStatusLabel(value)}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <Select
-                        value={priorityFilter}
-                        onValueChange={(value) =>
-                            setPriorityFilter((value ?? 'all') as TicketPriorityFilter)
-                        }
-                    >
-                        <SelectTrigger>
-                            <SelectValue placeholder="Priority">
-                                {(value: string | null) =>
-                                    getTicketPriorityLabel((value ?? 'all') as TicketPriorityFilter)
-                                }
-                            </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All priorities</SelectItem>
-                            {PRIORITY_OPTIONS.map((value) => (
-                                <SelectItem key={value} value={value}>
-                                    {getTicketPriorityLabel(value)}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </CardContent>
-            </Card>
+                }
+                chips={[
+                    statusFilter !== 'all' && {
+                        key: 'status',
+                        label: `Status: ${getTicketStatusLabel(statusFilter)}`,
+                        onRemove: () => setStatusFilter('all'),
+                    },
+                    priorityFilter !== 'all' && {
+                        key: 'priority',
+                        label: `Priority: ${getTicketPriorityLabel(priorityFilter)}`,
+                        onRemove: () => setPriorityFilter('all'),
+                    },
+                ]}
+                onReset={resetFilters}
+            />
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Compose</CardTitle>
-                    <CardDescription>Send a new email and open a ticket thread.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                    <Input
-                        placeholder="To email"
-                        value={composeTo}
-                        onChange={(event) => setComposeTo(event.target.value)}
+            <div className="rounded-xl border bg-card">
+                {isLoading ? (
+                    <div className="flex min-h-56 items-center justify-center" aria-label="Loading tickets">
+                        <Loader2Icon className="size-6 animate-spin text-muted-foreground" aria-hidden="true" />
+                    </div>
+                ) : ticketsQuery.isError ? (
+                    <QueryErrorState
+                        error={ticketsQuery.error}
+                        onRetry={() => void ticketsQuery.refetch()}
+                        isRetrying={ticketsQuery.isFetching}
+                        title="Couldn't load tickets"
+                        className="min-h-0 py-10"
                     />
-                    <Input
-                        placeholder="Subject"
-                        value={composeSubject}
-                        onChange={(event) => setComposeSubject(event.target.value)}
-                    />
-                    <Textarea
-                        placeholder="Message"
-                        value={composeBody}
-                        onChange={(event) => setComposeBody(event.target.value)}
-                        rows={4}
-                    />
-                    <Button onClick={handleCompose} disabled={composeMutation.isPending}>
-                        {composeMutation.isPending ? 'Sending…' : 'Send'}
-                    </Button>
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Inbox</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {isLoading ? (
-                        <p className="text-sm text-muted-foreground">Loading tickets…</p>
-                    ) : data?.items.length ? (
-                        <div className="space-y-2">
-                            {data.items.map((ticket) => (
+                ) : data?.items.length ? (
+                    <ul className="divide-y">
+                        {data.items.map((ticket) => (
+                            <li key={ticket.id}>
                                 <Link
-                                    key={ticket.id}
                                     href={`/tickets/${ticket.id}`}
-                                    className="block rounded-md border p-3 transition hover:bg-accent"
+                                    className="block px-4 py-3 transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
                                 >
                                     <div className="flex flex-wrap items-center gap-2">
                                         <span className="text-sm font-semibold">{ticket.ticket_code}</span>
@@ -275,13 +383,15 @@ function EmailTicketsView() {
                                         {ticket.requester_email || 'Unknown sender'}
                                     </p>
                                 </Link>
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-sm text-muted-foreground">No tickets match your filters.</p>
-                    )}
-                </CardContent>
-            </Card>
-        </>
+                            </li>
+                        ))}
+                    </ul>
+                ) : hasActiveFilters ? (
+                    <EmptyState icon={InboxIcon} title="No matching tickets" onClearFilters={resetFilters} />
+                ) : (
+                    <EmptyState icon={InboxIcon} title="No tickets" />
+                )}
+            </div>
+        </div>
     )
 }

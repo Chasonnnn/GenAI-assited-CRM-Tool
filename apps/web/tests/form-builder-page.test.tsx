@@ -261,12 +261,37 @@ describe("FormBuilderPage", () => {
         })
         fireEvent.click(screen.getByRole("button", { name: "Add Name field" }))
         fireEvent.click(screen.getByRole("button", { name: "Add Email field" }))
-        fireEvent.click(screen.getByRole("button", { name: /^publish$/i }))
 
-        expect(toastError).toHaveBeenCalledWith(expect.stringContaining("Date of Birth"))
-        expect(toastError).toHaveBeenCalledWith(expect.stringContaining("Phone"))
-        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+        const publishButton = screen.getByRole("button", { name: /^publish$/i })
+        expect(publishButton).toHaveAttribute("aria-disabled", "true")
+        expect(publishButton).toHaveAccessibleDescription(expect.stringContaining("Date of Birth"))
+        expect(publishButton).toHaveAccessibleDescription(expect.stringContaining("Phone"))
+        fireEvent.click(publishButton)
+        expect(toastError).not.toHaveBeenCalled()
         expect(screen.queryByRole("alertdialog", { name: /publish form/i })).not.toBeInTheDocument()
+
+        const readiness = screen.getByRole("region", { name: "Required to publish" })
+        expect(within(readiness).getByText("Date of Birth")).toBeInTheDocument()
+        expect(within(readiness).getByText("Phone")).toBeInTheDocument()
+    })
+
+    it("adds missing identity fields from the readiness list and then allows publishing", async () => {
+        render(<FormBuilderPage />)
+
+        fireEvent.change(screen.getByLabelText("Form name"), {
+            target: { value: "Ready Intake" },
+        })
+        for (const label of ["Full Name", "Date of Birth", "Phone", "Email"]) {
+            // Adding a field selects it, which remounts the settings panel.
+            const readiness = screen.getByRole("region", { name: "Required to publish" })
+            fireEvent.click(within(readiness).getByRole("button", { name: `Add ${label} to form` }))
+        }
+
+        expect(screen.queryByRole("region", { name: "Required to publish" })).not.toBeInTheDocument()
+        const publishButton = screen.getByRole("button", { name: /^publish$/i })
+        expect(publishButton).not.toHaveAttribute("aria-disabled")
+        fireEvent.click(publishButton)
+        expect(await screen.findByRole("alertdialog", { name: /publish form/i })).toBeInTheDocument()
     })
 
     it("opens sharing from the link returned by a successful publish", async () => {
@@ -437,13 +462,20 @@ describe("FormBuilderPage", () => {
         expect(screen.queryByRole("option", { name: "Date of Birth" })).not.toBeInTheDocument()
         fireEvent.click(screen.getByRole("option", { name: "Education" }))
 
-        fireEvent.click(screen.getByRole("button", { name: /^publish$/i }))
-
-        const error = await screen.findByRole("alert")
-        expect(error).toHaveTextContent("Full Name")
-        expect(error).toHaveTextContent("Email")
-        expect(error).toHaveTextContent("Profile Photo")
-        expect(screen.queryByRole("alertdialog", { name: /publish form/i })).not.toBeInTheDocument()
+        const publishButton = screen.getByRole("button", { name: /^publish$/i })
+        expect(publishButton).toHaveAttribute("aria-disabled", "true")
+        expect(publishButton).toHaveAccessibleDescription(
+            "To publish, add Full Name, Email, Profile Photo.",
+        )
+        const readiness = screen.getByRole("region", { name: "Required to publish" })
+        expect(within(readiness).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+            "Full NameMissingAdd",
+            "EmailMissingAdd",
+            "Profile PhotoMissingAdd",
+        ])
+        fireEvent.click(within(readiness).getByRole("button", { name: "Add Profile Photo to form" }))
+        const updatedReadiness = screen.getByRole("region", { name: "Required to publish" })
+        expect(within(updatedReadiness).getByText("Profile Photo").closest("li")).toHaveTextContent("Added")
     })
 
     it("promotes a donor intake lead through the shared promotion route behavior", async () => {

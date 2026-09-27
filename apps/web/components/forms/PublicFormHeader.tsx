@@ -59,8 +59,8 @@ export function PublicFormHeader({
                                         />
                                     </div>
                                 ) : fallbackInitial ? (
-                                    <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-violet-600 shadow-[0_10px_24px_rgba(79,70,229,0.24)]">
-                                        <span className="text-lg font-semibold text-white">
+                                    <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-primary">
+                                        <span className="text-lg font-semibold text-primary-foreground">
                                             {fallbackInitial}
                                         </span>
                                     </div>

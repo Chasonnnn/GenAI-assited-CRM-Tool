@@ -17,6 +17,7 @@ import { AutomationFormSubmissionsPanel } from "@/components/forms/builder/Autom
 import { DeletePageDialog } from "@/components/forms/builder/DeletePageDialog"
 import { FormBuilderHeader } from "@/components/forms/builder/FormBuilderHeader"
 import { FormBuilderPreviewPane } from "@/components/forms/builder/FormBuilderPreviewPane"
+import { FormPublishReadiness } from "@/components/forms/builder/FormPublishReadiness"
 import { FormBuilderWorkspace } from "@/components/forms/builder/FormBuilderWorkspace"
 import { FormBuilderWorkspaceTabs } from "@/components/forms/builder/FormBuilderWorkspaceTabs"
 import { ShareApplicationDialog } from "@/components/forms/builder/ShareApplicationDialog"
@@ -60,6 +61,7 @@ export function AutomationFormBuilderScreen({
                 onSave={controller.handleSave}
                 onPublish={controller.handlePublish}
                 publishDisabled={controller.state.isPublished}
+                publishDisabledReason={controller.publishBlockedReason}
             />
 
             <FormBuilderWorkspaceTabs
@@ -77,17 +79,19 @@ export function AutomationFormBuilderScreen({
                 ]}
             />
 
-            {controller.publishValidationMessage ? (
-                <div
-                    role="alert"
-                    className="border-b border-destructive/30 bg-destructive/10 px-6 py-2 text-sm text-destructive"
-                >
-                    {controller.publishValidationMessage}
-                </div>
-            ) : null}
-
             {controller.state.workspaceTab === "edit" ? (
-                <FormBuilderWorkspace {...controller.workspaceProps} />
+                <FormBuilderWorkspace
+                    {...controller.workspaceProps}
+                    inspectorHeader={
+                        controller.publishBlockedReason ? (
+                            <FormPublishReadiness
+                                items={controller.publishReadiness}
+                                onAddField={controller.onAddReadinessField}
+                                onMarkRequired={controller.onMarkReadinessFieldRequired}
+                            />
+                        ) : null
+                    }
+                />
             ) : (
                 <div data-testid="form-builder-workspace" className="hidden" />
             )}
@@ -140,7 +144,6 @@ export function AutomationFormBuilderScreen({
                         <AlertDialogCancel disabled={controller.state.isPublishing}>Cancel</AlertDialogCancel>
                         <AlertDialogAction
                             onClick={controller.confirmPublish}
-                            className="bg-teal-600 hover:bg-teal-700"
                             disabled={controller.state.isPublishing}
                         >
                             {controller.state.isPublishing ? <Loader2Icon className="mr-2 size-4 animate-spin" /> : null}

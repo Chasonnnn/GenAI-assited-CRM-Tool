@@ -21,9 +21,11 @@ import { cn } from "@/lib/utils"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { ApiError } from "@/lib/api"
 import type { JsonObject } from "@/lib/types/json"
-import { PublicFormFieldRenderer } from "@/components/forms/PublicFormFieldRenderer"
+import { PublicFormFieldRenderer, getPublicFieldErrorId } from "@/components/forms/PublicFormFieldRenderer"
 import { PublicFormHeader } from "@/components/forms/PublicFormHeader"
+import { FieldError } from "@/components/ui/field"
 import { getPublicFieldValidationError } from "@/lib/forms/public-field-validation"
+import { focusFirstInvalid } from "@/lib/forms/use-form-validation"
 import {
     getSharedPublicForm,
     getSharedPublicFormDraft,
@@ -436,7 +438,7 @@ function isPublicFieldVisible(field: FormField, values: Answers): boolean {
 function getFieldValidationError(field: FormField, value: AnswerValue): string | null {
     if (field.type === "file") return null
     if (field.required && isEmptyValue(value)) {
-        return `Please complete: ${field.label}`
+        return `${field.label} is required.`
     }
     if (isEmptyValue(value)) return null
 
@@ -904,6 +906,9 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
     const [isSubmitted, setIsSubmitted] = React.useState(false)
     const [submissionOutcome, setSubmissionOutcome] = React.useState<FormSubmissionSharedResponse["outcome"] | null>(null)
     const [datePickerOpen, setDatePickerOpen] = React.useState<Record<string, boolean>>({})
+    // Inline errors for the step the user tried to leave; a field's error clears when it changes.
+    const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({})
+    const formContentRef = React.useRef<HTMLDivElement>(null)
     const [agreed, setAgreed] = React.useState(false)
     const [smsOperational, setSmsOperational] = React.useState(false)
     const [smsPromotional, setSmsPromotional] = React.useState(false)
@@ -1046,7 +1051,8 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
 
     const pages = formConfig?.form_schema.pages || []
     const hasAnyFileFields = pages.some((page) => page.fields.some((field) => field.type === "file"))
-    const publicTitle = formConfig?.form_schema.public_title?.trim() ?? ""
+    // An unset public title falls back to the form name so the page always has a heading.
+    const publicTitle = formConfig?.form_schema.public_title?.trim() || formConfig?.name?.trim() || ""
     const publicEyebrow = formConfig?.form_schema.public_eyebrow?.trim() ?? ""
     const publicSubtitle = formConfig?.form_schema.public_subtitle?.trim() ?? ""
     const logoUrl = formConfig?.form_schema.logo_url?.trim() || ""
@@ -1089,6 +1095,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
             }
         }
         setFileUploads((prev) => ({ ...prev, [fieldKey]: trimmed }))
+        clearFieldError(fieldKey)
     }
 
     const getMaxFilesForField = (fieldKey: string) => {
@@ -1098,18 +1105,47 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
         return Math.min(PER_FILE_FIELD_MAX, allowedByTotal)
     }
 
+    const clearFieldError = (fieldKey: string) => {
+        setFieldErrors((prev) => {
+            if (!(fieldKey in prev)) return prev
+            const next = { ...prev }
+            delete next[fieldKey]
+            return next
+        })
+    }
+
     const updateField = (field: string, value: AnswerValue) => {
         setAnswers((prev) => ({ ...prev, [field]: value }))
+        clearFieldError(field)
+    }
+
+    const showFieldErrors = (errors: Record<string, string>) => {
+        setFieldErrors(errors)
+        // Errors render in the next commit; focus and scroll once aria-invalid exists.
+        window.requestAnimationFrame(() => {
+            if (focusFirstInvalid(formContentRef.current)) {
+                const focused = document.activeElement
+                if (focused instanceof HTMLElement) {
+                    focused.scrollIntoView?.({ block: "center", behavior: "smooth" })
+                }
+            }
+        })
+    }
+
+    const getPageFieldErrors = (page: FormSchema["pages"][number]): Record<string, string> => {
+        const errors: Record<string, string> = {}
+        for (const field of page.fields) {
+            if (!isPublicFieldVisible(field, answers)) continue
+            const error = getFieldValidationError(field, answers[field.key] ?? null)
+            if (error) errors[field.key] = error
+        }
+        return errors
     }
 
     const visibleReviewPages = pages.map((page) => ({
         page,
         fieldGroups: getVisibleFieldGroups(page.fields, answers, isPublicFieldVisible),
     }))
-    const fileFields: FormField[] = []
-    for (const reviewPage of visibleReviewPages) {
-        fileFields.push(...reviewPage.fieldGroups.fileFields)
-    }
 
     const validateStep = (step: number): boolean => {
         if (!formConfig) return false
@@ -1117,13 +1153,10 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
 
         const page = pages[step - 1]
         if (!page) return false
-        for (const field of page.fields) {
-            if (!isPublicFieldVisible(field, answers)) continue
-            const error = getFieldValidationError(field, answers[field.key] ?? null)
-            if (error) {
-                toast.error(error)
-                return false
-            }
+        const errors = getPageFieldErrors(page)
+        if (Object.keys(errors).length > 0) {
+            showFieldErrors(errors)
+            return false
         }
 
         return true
@@ -1144,6 +1177,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
         if (!validateStep(boundedCurrentStep)) return
         if (!isPreview) void saveCurrentDraft()
         if (boundedCurrentStep < steps.length) {
+            setFieldErrors({})
             setCurrentStep(Math.min(boundedCurrentStep + 1, steps.length))
             window.scrollTo({ top: 0, behavior: "smooth" })
         }
@@ -1152,6 +1186,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
     const handleBack = () => {
         if (boundedCurrentStep > 1) {
             if (!isPreview) void saveCurrentDraft()
+            setFieldErrors({})
             setCurrentStep(Math.max(boundedCurrentStep - 1, 1))
             window.scrollTo({ top: 0, behavior: "smooth" })
         }
@@ -1163,27 +1198,20 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
             return
         }
 
-        for (let index = 0; index < pages.length; index += 1) {
-            const page = pages[index]
-            if (!page) continue
-            for (const field of page.fields) {
-                if (!isPublicFieldVisible(field, answers)) continue
-                const error = getFieldValidationError(field, answers[field.key] ?? null)
-                if (error) {
-                    toast.error(error)
-                    setCurrentStep(() => index + 1)
-                    window.scrollTo({ top: 0, behavior: "smooth" })
-                    return
+        for (let index = 0; index < visibleReviewPages.length; index += 1) {
+            const reviewPage = visibleReviewPages[index]
+            if (!reviewPage) continue
+            const errors = getPageFieldErrors(reviewPage.page)
+            for (const field of reviewPage.fieldGroups.fileFields) {
+                if (field.required && (fileUploads[field.key]?.length ?? 0) === 0) {
+                    errors[field.key] = `Upload ${field.label}.`
                 }
             }
-        }
-
-        const missingFileField = fileFields.find(
-            (field) => field.required && (fileUploads[field.key]?.length ?? 0) === 0,
-        )
-        if (missingFileField) {
-            toast.error(`Please upload: ${missingFileField.label}`)
-            return
+            if (Object.keys(errors).length > 0) {
+                setCurrentStep(() => index + 1)
+                showFieldErrors(errors)
+                return
+            }
         }
 
         setIsSubmitting(true)
@@ -1228,6 +1256,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
     }
 
     const goToEditStep = (step: number) => {
+        setFieldErrors({})
         setCurrentStep(step)
         window.scrollTo({ top: 0, behavior: "smooth" })
     }
@@ -1240,6 +1269,8 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
 
     const renderFieldInput = (field: FormSchema["pages"][number]["fields"][number]) => {
         const value = answers[field.key]
+        const error = fieldErrors[field.key] ?? null
+        const errorId = getPublicFieldErrorId(field.key)
 
         if (field.type === "repeatable_table") {
             const requiredMark = field.required ? <span className="text-red-500">*</span> : null
@@ -1273,7 +1304,13 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
             }
 
             return (
-                <div key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                <div
+                    key={field.key}
+                    role="group"
+                    aria-label={field.label}
+                    className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4"
+                    {...(error ? { "aria-invalid": true, "aria-describedby": errorId, tabIndex: -1 } : {})}
+                >
                     <div className="flex items-center justify-between">
                         <Label className="text-sm font-medium">
                             {field.label} {requiredMark}
@@ -1377,6 +1414,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                             )}
                         </div>
                     )}
+                    {error ? <FieldError id={errorId}>{error}</FieldError> : null}
                     {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
                 </div>
             )
@@ -1390,6 +1428,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                 updateField={updateField}
                 datePickerOpen={datePickerOpen}
                 setDatePickerOpen={setDatePickerOpen}
+                error={error}
             />
         )
     }
@@ -1495,7 +1534,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
             </PublicFormHeader>
 
             {/* Form Content */}
-            <div className="max-w-3xl mx-auto px-4">
+            <div ref={formContentRef} className="max-w-3xl mx-auto px-4">
                 {!formConfig ? (
                     <Card className={publicFormCardClassName}>
                         <CardContent className="px-6 py-8 text-center">
@@ -1652,23 +1691,36 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                                 currentVisibleFields.standardFields.map((field) => renderFieldInput(field))
                             )}
 
-                            {currentVisibleFields.fileFields.map((field) => (
-                                <div key={field.key} className="space-y-2 rounded-lg border border-stone-200/80 bg-stone-50/60 p-4">
-                                    <Label className="text-sm font-medium">
-                                        {field.label} {field.required && <span className="text-red-500">*</span>}
-                                    </Label>
-                                    <FileUploadZone
-                                        files={fileUploads[field.key] || []}
-                                        onFilesChange={(nextFiles) => updateFileUploads(field.key, nextFiles)}
-                                        maxFiles={getMaxFilesForField(field.key)}
-                                        maxFileSizeBytes={formConfig.max_file_size_bytes}
-                                        allowedMimeTypes={formConfig.allowed_mime_types ?? null}
-                                    />
-                                    {field.help_text && (
-                                        <p className="text-xs text-stone-500">{field.help_text}</p>
-                                    )}
-                                </div>
-                            ))}
+                            {currentVisibleFields.fileFields.map((field) => {
+                                const error = fieldErrors[field.key] ?? null
+                                const errorId = getPublicFieldErrorId(field.key)
+                                return (
+                                    <div
+                                        key={field.key}
+                                        role="group"
+                                        aria-label={field.label}
+                                        className="space-y-2 rounded-lg border border-stone-200/80 bg-stone-50/60 p-4"
+                                        {...(error
+                                            ? { "aria-invalid": true, "aria-describedby": errorId, tabIndex: -1 }
+                                            : {})}
+                                    >
+                                        <Label className="text-sm font-medium">
+                                            {field.label} {field.required && <span className="text-red-500">*</span>}
+                                        </Label>
+                                        <FileUploadZone
+                                            files={fileUploads[field.key] || []}
+                                            onFilesChange={(nextFiles) => updateFileUploads(field.key, nextFiles)}
+                                            maxFiles={getMaxFilesForField(field.key)}
+                                            maxFileSizeBytes={formConfig.max_file_size_bytes}
+                                            allowedMimeTypes={formConfig.allowed_mime_types ?? null}
+                                        />
+                                        {error ? <FieldError id={errorId}>{error}</FieldError> : null}
+                                        {field.help_text && (
+                                            <p className="text-xs text-stone-500">{field.help_text}</p>
+                                        )}
+                                    </div>
+                                )
+                            })}
 
                             <PrivacyNotice text={privacyNotice ?? null} />
                         </CardContent>
@@ -1699,7 +1751,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                              {boundedCurrentStep < steps.length ? (
                                 <Button
                                     onClick={handleNext}
-                                    className="h-11 px-7 bg-primary hover:bg-primary/90"
+                                    className="h-11 px-7"
                                 >
                                     Continue
                                     <ChevronRightIcon className="size-4 ml-2" />
@@ -1708,7 +1760,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                                 <Button
                                     onClick={handleSubmit}
                                     disabled={isSubmitting || !agreed}
-                                    className="h-11 px-7 bg-primary hover:bg-primary/90"
+                                    className="h-11 px-7"
                                 >
                                     {isSubmitting ? (
                                         <>
