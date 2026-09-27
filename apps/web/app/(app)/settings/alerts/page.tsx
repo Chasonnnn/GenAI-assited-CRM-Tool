@@ -208,9 +208,9 @@ function AlertsContent() {
                                             className={`flex items-start gap-4 rounded-lg border p-4 ${config.color}`}
                                         >
                                             <Icon className="mt-0.5 size-5 flex-shrink-0" aria-hidden="true" />
-                                            <div className="flex-1 space-y-1">
+                                            <div className="min-w-0 flex-1 space-y-1">
                                                 <div className="flex items-start justify-between gap-2">
-                                                    <div>
+                                                    <div className="min-w-0 break-words">
                                                         <p className="font-medium">{alert.title}</p>
                                                         <p className="text-sm opacity-80">
                                                             {alertTypeLabels[alert.alert_type] || alert.alert_type}
@@ -221,9 +221,9 @@ function AlertsContent() {
                                                     </Badge>
                                                 </div>
                                                 {alert.message && (
-                                                    <p className="text-sm opacity-70">{alert.message}</p>
+                                                    <p className="break-words text-sm opacity-70">{alert.message}</p>
                                                 )}
-                                                <div className="flex items-center gap-4 text-xs opacity-60">
+                                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs opacity-60">
                                                     <span>
                                                         First seen: {formatRelativeTime(alert.first_seen_at, "Unknown")}
                                                     </span>
@@ -234,7 +234,7 @@ function AlertsContent() {
 
                                                 {/* Actions */}
                                                 {alert.status === "open" && (
-                                                    <div className="flex gap-2 pt-2">
+                                                    <div className="flex flex-wrap gap-2 pt-2">
                                                         <Button
                                                             size="sm"
                                                             variant="secondary"

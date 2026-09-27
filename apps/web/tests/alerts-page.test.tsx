@@ -72,6 +72,15 @@ describe('AlertsPage', () => {
         expect(mockResolve).toHaveBeenCalledWith('a1')
     })
 
+    it('lets the alert column shrink and the action row wrap at narrow widths', () => {
+        render(<AlertsPage />)
+
+        const title = screen.getByText('Surrogate number counter drift repaired')
+        expect(title.parentElement).toHaveClass('min-w-0')
+        expect(title.closest('.flex-1')).toHaveClass('min-w-0')
+        expect(screen.getByRole('button', { name: /resolve/i }).parentElement).toHaveClass('flex-wrap')
+    })
+
     it('shows the denied state instead of an all-clear list without manage_ops', () => {
         mockCan.mockReturnValue(false)
         mockUseAlerts.mockClear()
