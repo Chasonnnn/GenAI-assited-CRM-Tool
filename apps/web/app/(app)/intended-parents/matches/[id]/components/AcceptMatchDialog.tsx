@@ -16,10 +16,11 @@ function findMatchedStage(stages: readonly StageLike[] | undefined): StageLike |
 }
 
 /**
- * Side effects of PUT /matches/{id}/accept, in the order match_service.accept_match applies them:
+ * Side effects of PUT /matches/{id}/accept, in the order match_lifecycle applies them:
  * the surrogate moves to the pipeline's "matched" stage, the intended parent moves to its
- * "matched" stage when it is earlier in the pipeline, and other pending surrogate matches close.
- * Donor matches change no donor stage.
+ * "matched" stage when it is earlier in the pipeline, and the surrogate's other matches under
+ * review stay open but cannot be accepted. The donor's own move to its "matched" stage is not
+ * listed: MatchRead carries no donor stage id to compare.
  */
 export function getAcceptMatchChanges({
     match,
@@ -57,7 +58,7 @@ export function getAcceptMatchChanges({
     }
 
     if (isSurrogateMatch) {
-        changes.push("Other proposed matches for this surrogate are cancelled.")
+        changes.push("Other matches under review for this surrogate stay open but can't be accepted.")
     }
 
     return changes
