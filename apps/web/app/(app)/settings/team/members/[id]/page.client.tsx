@@ -2,10 +2,13 @@
 
 import { useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import Link from "@/components/app-link"
+import { QueryErrorState } from "@/components/error-state"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { SaveBar } from "@/components/ui/save-bar"
 import {
     Select,
     SelectContent,
@@ -23,9 +26,10 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import {
-    ChevronLeft, User, Shield, Plus, X, Check, XCircle,
-    Loader2, AlertTriangle, Clock, Save
+    User, Shield, Plus, X, Check, XCircle,
+    Loader2, AlertTriangle, Clock
 } from "lucide-react"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
 import {
     useMember,
     useUpdateMember,
@@ -36,6 +40,7 @@ import type { MemberDetail } from "@/lib/api/permissions"
 import { useAuth } from "@/lib/auth-context"
 import { toast } from "@/components/ui/toast"
 import { formatDate, formatRelativeTime } from "@/lib/formatters"
+import { SettingsPageGate } from "../../../settings-page-gate"
 
 type DisplayedOverride = MemberDetail["overrides"][number]
 
@@ -154,18 +159,8 @@ function AddOverrideDialog({
                                 </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="grant">
-                                    <div className="flex items-center gap-2">
-                                        <Check className="size-4 text-green-600" aria-hidden="true" />
-                                        Grant (add permission)
-                                    </div>
-                                </SelectItem>
-                                <SelectItem value="revoke">
-                                    <div className="flex items-center gap-2">
-                                        <XCircle className="size-4 text-red-600" aria-hidden="true" />
-                                        Revoke (remove permission)
-                                    </div>
-                                </SelectItem>
+                                <SelectItem value="grant">Grant (add permission)</SelectItem>
+                                <SelectItem value="revoke">Revoke (remove permission)</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -180,7 +175,22 @@ function AddOverrideDialog({
     )
 }
 
+const TEAM_BACK_LINK = { href: "/settings/team", label: "Back to Team" }
+
 export default function MemberDetailPage() {
+    return (
+        <SettingsPageGate
+            title="Team Member"
+            permission="manage_team"
+            deniedDescription="Team settings need the Manage team permission. Ask an admin to update your role."
+            back={TEAM_BACK_LINK}
+        >
+            <MemberDetailContent />
+        </SettingsPageGate>
+    )
+}
+
+function MemberDetailContent() {
     const params = useParams()
     const { push } = useRouter()
     const rawMemberId = params.id
@@ -190,7 +200,7 @@ export default function MemberDetailPage() {
             : Array.isArray(rawMemberId)
               ? rawMemberId[0] ?? ""
               : ""
-    const { data: member, isLoading } = useMember(memberId)
+    const { data: member, isLoading, isError, error, refetch, isFetching } = useMember(memberId)
     const updateMember = useUpdateMember()
     const removeMember = useRemoveMember()
     const { user } = useAuth()
@@ -205,7 +215,13 @@ export default function MemberDetailPage() {
 
     const currentUserId = user?.email  // Use email as identifier since User type may vary
     const isCurrentUser = member?.email === currentUserId
-    const hasChanges = pendingRole !== null || pendingOverrides.add.length > 0 || pendingOverrides.remove.length > 0
+    const changeCount = (pendingRole !== null ? 1 : 0) + pendingOverrides.add.length + pendingOverrides.remove.length
+    const hasChanges = changeCount > 0
+
+    const handleDiscard = () => {
+        setPendingRole(null)
+        setPendingOverrides({ add: [], remove: [] })
+    }
 
     const handleRoleChange = (newRole: string | null) => {
         if (newRole === member?.role) {
@@ -244,36 +260,44 @@ export default function MemberDetailPage() {
             setPendingRole(null)
             setPendingOverrides({ add: [], remove: [] })
             toast.success("Member updated")
-        } catch (error) {
-            toast.error("Failed to update member", {
-                description: error instanceof Error ? error.message : "Unknown error"
-            })
+        } catch (saveError) {
+            const message = getActionErrorMessage(saveError, "Couldn't update this member. Try again.")
+            if (message) toast.error(message)
         }
     }
 
+    // ConfirmDialog keeps itself open while this runs and shows a rejection inline.
     const handleRemoveMember = async () => {
-        if (!confirm(`Remove ${member?.email} from the organization? This cannot be undone.`)) return
-
-        try {
-            await removeMember.mutateAsync(memberId)
-            toast.success("Member removed")
-            push("/settings/team")
-        } catch (error) {
-            toast.error("Failed to remove member", {
-                description: error instanceof Error ? error.message : "Unknown error"
-            })
-        }
+        await removeMember.mutateAsync(memberId)
+        toast.success("Member removed")
+        push("/settings/team")
     }
 
-    if (isLoading) {
+    if (isLoading || isError || !member) {
         return (
-            <div className="flex flex-1 items-center justify-center p-6">
-                <Loader2 className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+            <div className="flex min-h-screen flex-col">
+                <PageHeader title="Team Member" back={TEAM_BACK_LINK} />
+                {isLoading ? (
+                    <div className="flex items-center justify-center p-12" role="status" aria-label="Loading">
+                        <Loader2 className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                    </div>
+                ) : (
+                    <QueryErrorState
+                        error={error}
+                        onRetry={() => void refetch()}
+                        isRetrying={isFetching}
+                        title="Couldn't load this member"
+                        notFound={{
+                            title: "Member not found",
+                            backHref: TEAM_BACK_LINK.href,
+                            backLabel: TEAM_BACK_LINK.label,
+                        }}
+                        headingLevel={2}
+                    />
+                )}
             </div>
         )
     }
-
-    if (!member) return null
 
     // Combine existing overrides with pending changes
     const pendingOverrideRemovals = new Set(pendingOverrides.remove)
@@ -290,13 +314,10 @@ export default function MemberDetailPage() {
     const currentRole = pendingRole || member.role
 
     return (
-        <div className="flex flex-1 flex-col gap-6 p-6 max-w-3xl mx-auto">
-            <MemberDetailToolbar
-                hasChanges={hasChanges}
-                isSaving={updateMember.isPending}
-                onSave={handleSave}
-            />
+        <div className="flex min-h-screen flex-col">
+            <PageHeader title={member.display_name || member.email} back={TEAM_BACK_LINK} />
 
+            <div className="flex max-w-3xl flex-1 flex-col gap-6 p-6">
             <MemberProfileCard
                 member={member}
                 isCurrentUser={isCurrentUser}
@@ -315,7 +336,7 @@ export default function MemberDetailPage() {
 
             {!isCurrentUser && (
                 <DangerZoneCard
-                    isRemoving={removeMember.isPending}
+                    email={member.email}
                     onRemoveMember={handleRemoveMember}
                 />
             )}
@@ -327,41 +348,21 @@ export default function MemberDetailPage() {
                 existingOverrides={getOverridePermissions(displayedOverrides)}
                 effectivePermissions={member?.effective_permissions || []}
             />
+            </div>
+
+            <SaveBar
+                dirty={hasChanges}
+                changeCount={changeCount}
+                saving={updateMember.isPending}
+                onSave={() => void handleSave()}
+                onDiscard={handleDiscard}
+            />
         </div>
     )
 }
 
 function getOverridePermissions(overrides: DisplayedOverride[]) {
     return overrides.map(o => o.permission)
-}
-
-function MemberDetailToolbar({
-    hasChanges,
-    isSaving,
-    onSave,
-}: {
-    hasChanges: boolean
-    isSaving: boolean
-    onSave: () => void
-}) {
-    return (
-        <div className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" render={<Link href="/settings/team" />}>
-                <ChevronLeft className="size-4 mr-1" aria-hidden="true" />
-                Back to Team
-            </Button>
-            {hasChanges && (
-                <Button onClick={onSave} disabled={isSaving}>
-                    {isSaving ? (
-                        <Loader2 className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                    ) : (
-                        <Save className="size-4 mr-2" aria-hidden="true" />
-                    )}
-                    Save Changes
-                </Button>
-            )}
-        </div>
-    )
 }
 
 function MemberProfileCard({
@@ -427,7 +428,7 @@ function MemberProfileCard({
                         onValueChange={onRoleChange}
                         disabled={isCurrentUser}
                     >
-                        <SelectTrigger id="member-role" className={pendingRole ? "border-yellow-400 bg-yellow-50" : ""}>
+                        <SelectTrigger id="member-role" className={pendingRole ? "border-warning bg-warning/10" : ""}>
                             <SelectValue>
                                 {(value: string | null) => ROLE_LABELS[value ?? ""] ?? "Select role"}
                             </SelectValue>
@@ -499,7 +500,7 @@ function PermissionOverridesCard({
                             <div
                                 key={override.permission}
                                 className={`flex items-center justify-between p-3 rounded-lg ${override.category === "Pending"
-                                    ? "bg-yellow-50 border border-yellow-200"
+                                    ? "bg-warning/10 border border-warning/40"
                                     : "bg-muted/50"
                                     }`}
                             >
@@ -536,11 +537,11 @@ function PermissionOverridesCard({
 }
 
 function DangerZoneCard({
-    isRemoving,
+    email,
     onRemoveMember,
 }: {
-    isRemoving: boolean
-    onRemoveMember: () => void
+    email: string
+    onRemoveMember: () => Promise<void>
 }) {
     return (
         <Card className="border-destructive/50">
@@ -558,16 +559,14 @@ function DangerZoneCard({
                             This will revoke all access and delete permission overrides.
                         </p>
                     </div>
-                    <Button
-                        variant="destructive"
-                        onClick={onRemoveMember}
-                        disabled={isRemoving}
-                    >
-                        {isRemoving && (
-                            <Loader2 className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                        )}
-                        Remove Member
-                    </Button>
+                    <ConfirmDialog
+                        trigger={<Button variant="destructive">Remove Member</Button>}
+                        title={`Remove ${email}?`}
+                        description="They lose access to the organization. This cannot be undone."
+                        confirmLabel="Remove member"
+                        errorFallback="Couldn't remove this member. Try again."
+                        onConfirm={onRemoveMember}
+                    />
                 </div>
             </CardContent>
         </Card>

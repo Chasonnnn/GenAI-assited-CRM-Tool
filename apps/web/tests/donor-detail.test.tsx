@@ -621,7 +621,7 @@ describe("DonorDetailPage", () => {
             "return_to",
             "/donors?type=sperm&stage=sperm-ready&q=maya&page=2",
         )
-        vi.spyOn(window, "confirm").mockReturnValueOnce(true)
+        const confirmSpy = vi.spyOn(window, "confirm")
         render(<DonorDetailPage />)
 
         fireEvent.click(screen.getByRole("button", { name: "Back" }))
@@ -634,10 +634,18 @@ describe("DonorDetailPage", () => {
         fireEvent.click(screen.getByRole("button", { name: "Actions for Maya Thompson" }))
         fireEvent.click(await screen.findByRole("menuitem", { name: "Archive" }))
 
+        const dialog = await screen.findByRole("alertdialog", { name: "Archive donor D10001?" })
+        expect(mockArchiveDonor).not.toHaveBeenCalled()
+        fireEvent.click(within(dialog).getByRole("button", { name: "Archive donor" }))
+
         await waitFor(() => expect(mockArchiveDonor).toHaveBeenCalledWith("donor-1"))
-        expect(mockRouterPush).toHaveBeenCalledWith(
-            "/donors?type=sperm&stage=sperm-ready&q=maya&page=2",
+        await waitFor(() =>
+            expect(mockRouterPush).toHaveBeenCalledWith(
+                "/donors?type=sperm&stage=sperm-ready&q=maya&page=2",
+            ),
         )
+        expect(confirmSpy).not.toHaveBeenCalled()
+        confirmSpy.mockRestore()
     })
 
     it("restores an archived donor", async () => {

@@ -13,6 +13,7 @@ import { PermissionDeniedState } from "@/components/error-state"
 import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import {
     Dialog,
     DialogContent,
@@ -74,6 +75,7 @@ function LoadedDonorDetail({ donor, returnTo }: { donor: Donor; returnTo: string
     const canCreateTasks = isDeveloper || permissions.includes("create_tasks")
     const [isEditOpen, setIsEditOpen] = useState(false)
     const [isStageOpen, setIsStageOpen] = useState(false)
+    const [isArchiveConfirmOpen, setIsArchiveConfirmOpen] = useState(false)
     const [formValues, setFormValues] = useState<DonorFormValues>(() => toDonorFormValues(donor))
     const updateDonor = useUpdateDonor()
     const updateStatus = useUpdateDonorStatus()
@@ -155,15 +157,11 @@ function LoadedDonorDetail({ donor, returnTo }: { donor: Donor; returnTo: string
         }
     }
 
+    // ConfirmDialog keeps the dialog open while this runs and shows a failure inline.
     const handleArchive = async () => {
-        if (!window.confirm("Are you sure you want to archive this donor?")) return
-        try {
-            await archiveDonor.mutateAsync(donor.id)
-            toast.success("Donor archived")
-            router.push(returnTo as Route)
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to archive donor")
-        }
+        await archiveDonor.mutateAsync(donor.id)
+        toast.success("Donor archived")
+        router.push(returnTo as Route)
     }
 
     const handleRestore = async () => {
@@ -207,7 +205,7 @@ function LoadedDonorDetail({ donor, returnTo }: { donor: Donor; returnTo: string
                 }}
                 onEdit={openEdit}
                 onChangeStage={openStage}
-                onArchive={() => { void handleArchive() }}
+                onArchive={() => setIsArchiveConfirmOpen(true)}
                 archiveStatus={archiveDonor.isPending ? "pending" : "idle"}
                 onRestore={() => { void handleRestore() }}
                 restoreStatus={restoreDonor.isPending ? "pending" : "idle"}
@@ -222,8 +220,17 @@ function LoadedDonorDetail({ donor, returnTo }: { donor: Donor; returnTo: string
                 currentUserId={user?.user_id ?? null}
             />
 
+            <ConfirmDialog
+                open={isArchiveConfirmOpen}
+                onOpenChange={setIsArchiveConfirmOpen}
+                title={`Archive donor ${donor.donor_number}?`}
+                confirmLabel="Archive donor"
+                errorFallback="Couldn't archive this donor. Try again."
+                onConfirm={handleArchive}
+            />
+
             <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-                <DialogContent className="max-w-lg">
+                <DialogContent size="lg">
                     <form action={handleEdit}>
                         <DialogHeader><DialogTitle>Edit Donor</DialogTitle></DialogHeader>
                         <div className="py-4">
