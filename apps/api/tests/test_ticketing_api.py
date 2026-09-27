@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
 
-from app.db.enums import SurrogateSource
-from app.db.models import UserIntegration
+from app.db.enums import (
+    LinkConfidence,
+    SurrogateSource,
+    TicketLinkStatus,
+    TicketPriority,
+    TicketStatus,
+)
+from app.db.models import Organization, Ticket, UserIntegration
 from app.schemas.surrogate import SurrogateCreate
 from app.services import surrogate_service
 
@@ -103,6 +110,92 @@ async def test_ticket_compose_list_detail_and_surrogate_email_history(
     surrogate_payload = surrogate_emails.json()
     assert surrogate_payload["items"]
     assert any(item["id"] == ticket_id for item in surrogate_payload["items"])
+
+
+def _insert_ticket(db, org_id, code, *, status, priority, subject, activity_at):
+    item = Ticket(
+        organization_id=org_id,
+        ticket_code=code,
+        subject=subject,
+        requester_email=f"{code.lower()}@example.com",
+        status=status,
+        priority=priority,
+        surrogate_link_status=TicketLinkStatus.UNLINKED,
+        stitch_confidence=LinkConfidence.LOW,
+        last_activity_at=activity_at,
+    )
+    db.add(item)
+    db.flush()
+    return item
+
+
+@pytest.mark.asyncio
+async def test_ticket_list_filters_and_pages_within_the_caller_org(
+    authed_client: AsyncClient, db, test_org
+):
+    now = datetime.now(UTC)
+    other_org = Organization(id=uuid.uuid4(), name="Other", slug=f"other-{uuid.uuid4().hex}")
+    db.add(other_org)
+    db.flush()
+    _insert_ticket(
+        db,
+        test_org.id,
+        "T-CLOSED-1",
+        status=TicketStatus.CLOSED,
+        priority=TicketPriority.HIGH,
+        subject="Invoice question",
+        activity_at=now,
+    )
+    _insert_ticket(
+        db,
+        test_org.id,
+        "T-CLOSED-2",
+        status=TicketStatus.CLOSED,
+        priority=TicketPriority.NORMAL,
+        subject="Scheduling",
+        activity_at=now - timedelta(minutes=5),
+    )
+    _insert_ticket(
+        db,
+        test_org.id,
+        "T-OPEN-1",
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.HIGH,
+        subject="Invoice follow-up",
+        activity_at=now - timedelta(minutes=10),
+    )
+    # Another org's ticket matches every filter and sorts first; it must never appear.
+    _insert_ticket(
+        db,
+        other_org.id,
+        "T-FOREIGN",
+        status=TicketStatus.CLOSED,
+        priority=TicketPriority.HIGH,
+        subject="Invoice from another agency",
+        activity_at=now + timedelta(minutes=5),
+    )
+    db.commit()
+
+    async def codes(params):
+        response = await authed_client.get("/tickets", params=params)
+        assert response.status_code == 200, response.text
+        return [item["ticket_code"] for item in response.json()["items"]], response.json()
+
+    assert (await codes({"status": "closed"}))[0] == ["T-CLOSED-1", "T-CLOSED-2"]
+    assert (await codes({"priority": "high"}))[0] == ["T-CLOSED-1", "T-OPEN-1"]
+    assert (await codes({"q": "invoice"}))[0] == ["T-CLOSED-1", "T-OPEN-1"]
+    assert (await codes({"status": "closed", "priority": "high", "q": "invoice"}))[0] == [
+        "T-CLOSED-1"
+    ]
+
+    first_page, first_payload = await codes({"status": "closed", "limit": 1})
+    assert first_page == ["T-CLOSED-1"]
+    assert first_payload["next_cursor"]
+    second_page, second_payload = await codes(
+        {"status": "closed", "limit": 1, "cursor": first_payload["next_cursor"]}
+    )
+    assert second_page == ["T-CLOSED-2"]
+    assert second_payload["next_cursor"] is None
 
 
 @pytest.mark.asyncio
