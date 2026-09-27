@@ -1761,6 +1761,36 @@ describe('SurrogateDetailPage', () => {
         })
     })
 
+    it('marks an unset boolean eligibility row with the muted minus icon, not a hyphen', () => {
+        mockUseSurrogate.mockReturnValue({
+            data: {
+                ...baseSurrogateData,
+                is_age_eligible: null,
+                eligibility_checklist: [
+                    {
+                        key: 'is_age_eligible',
+                        label: 'Age Eligible (21-36)',
+                        type: 'boolean',
+                        value: null,
+                        display_value: null,
+                    },
+                ],
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        const toggle = screen.getByRole('button', { name: /Age Eligible.*Not set/i })
+        expect(toggle.querySelector('[data-slot="checklist-unset"]')).not.toBeNull()
+        expect(toggle).not.toHaveTextContent('-')
+    })
+
     it('edits non-boolean eligibility checklist rows inline from checklist fallback values', async () => {
         mockUseSurrogate.mockReturnValue({
             data: {

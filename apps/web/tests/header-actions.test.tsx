@@ -53,6 +53,17 @@ vi.mock("@/lib/auth-context", () => ({
     useAuth: () => mockUseAuth(),
 }))
 
+const mockGrantedPermissions = { value: ["archive_surrogates"] as string[] }
+vi.mock("@/lib/hooks/use-permission-check", () => ({
+    usePermissionCheck: () => ({
+        isLoading: false,
+        isError: false,
+        retry: vi.fn(),
+        isRetrying: false,
+        can: (permission: string) => mockGrantedPermissions.value.includes(permission),
+    }),
+}))
+
 vi.mock("@/lib/api/surrogates", () => ({
     exportSurrogatePacketPdf: (...args: unknown[]) => mockExportSurrogatePacketPdf(...args),
 }))
@@ -122,12 +133,25 @@ describe("HeaderActions", () => {
         mockExportSurrogatePacketPdf.mockReset()
         mockToastSuccess.mockReset()
         mockToastError.mockReset()
+        mockGrantedPermissions.value = ["archive_surrogates"]
     })
 
     it("renders 'More actions' button with accessible label", () => {
         render(<HeaderActions />)
         const button = screen.getByRole("button", { name: /more actions/i })
         expect(button).toBeInTheDocument()
+    })
+
+    it("offers Archive only with the archive_surrogates permission", () => {
+        const { unmount } = render(<HeaderActions />)
+        expect(screen.getByRole("button", { name: "Archive" })).toBeInTheDocument()
+        unmount()
+
+        mockGrantedPermissions.value = []
+        render(<HeaderActions />)
+        expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Archive" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Restore" })).not.toBeInTheDocument()
     })
 
     it("shows Log Contact for intake assignee in new unread even when stage order is custom", () => {

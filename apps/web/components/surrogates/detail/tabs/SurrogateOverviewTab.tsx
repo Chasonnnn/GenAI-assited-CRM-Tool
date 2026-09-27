@@ -44,6 +44,7 @@ import {
     ClipboardCheckIcon,
     InfoIcon,
     CheckIcon,
+    MinusIcon,
     PencilIcon,
     PlusIcon,
     RulerIcon,
@@ -187,7 +188,11 @@ function ChecklistStatusButton({
             {value === true && <CheckIcon className="size-4 text-green-500" />}
             {value === false && <XIcon className="size-4 text-red-500" />}
             {(value === null || value === undefined) && (
-                <span className="text-sm leading-none text-muted-foreground">-</span>
+                <MinusIcon
+                    data-slot="checklist-unset"
+                    className="size-4 text-muted-foreground"
+                    aria-hidden="true"
+                />
             )}
         </Button>
     )

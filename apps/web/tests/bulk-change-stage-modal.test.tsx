@@ -63,8 +63,8 @@ vi.mock("@/components/ui/select", () => {
         return <span>{value}</span>
     }
 
-    function SelectContent({ children }: { children: React.ReactNode }) {
-        return <div id="mock-select-listbox" role="listbox">{children}</div>
+    function SelectContent({ children, className }: { children: React.ReactNode; className?: string }) {
+        return <div id="mock-select-listbox" role="listbox" className={className}>{children}</div>
     }
 
     function SelectItem({
@@ -142,6 +142,23 @@ describe("BulkChangeStageModal", () => {
         expect(
             screen.getByRole("option", { name: "Contacted" }).querySelector('[data-slot="stage-dot"]'),
         ).toHaveStyle({ backgroundColor: "#0ea5e9" })
+    })
+
+    it("caps the stage list height so it opens below the trigger inside the dialog", () => {
+        render(
+            <BulkChangeStageModal
+                open
+                onOpenChange={vi.fn()}
+                selectedCount={2}
+                stages={[...stages]}
+                isPending={false}
+                onSubmit={vi.fn()}
+            />,
+        )
+
+        const listbox = screen.getByRole("listbox")
+        expect(listbox).toHaveClass("max-h-[min(18rem,var(--available-height))]")
+        expect(listbox).not.toHaveClass("max-h-[min(28rem,var(--available-height))]")
     })
 
     it("submits the selected immediate stage", async () => {

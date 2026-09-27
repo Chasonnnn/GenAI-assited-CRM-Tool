@@ -81,6 +81,8 @@ export function BulkChangeStageModal({
                             onValueChange={setTargetStageId}
                             options={immediateStageOptions}
                             className="w-full"
+                            // A shorter list fits below the trigger, so it does not flip up over the title.
+                            contentClassName="max-h-[min(18rem,var(--available-height))]"
                         />
                     </div>
                 </div>

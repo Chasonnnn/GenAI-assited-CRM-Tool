@@ -56,20 +56,31 @@ function formatPostTransferDuration(daysSinceTransfer: number) {
     return `(${weeks}w ${days}d post transfer)`
 }
 
-/** Gestational age on the delivery date, or null when the transfer date or embryo stage is missing. */
+/**
+ * Gestational age on the delivery date. It uses the transfer date and embryo stage, or, when the
+ * stage is unknown, the manual due date (40w 0d). Null when neither is available.
+ */
 function getGestationalAgeAtDelivery(
     startDate: string | null | undefined,
     deliveryDate: string | null | undefined,
-    embryoStage: EmbryoStage | null | undefined
+    embryoStage: EmbryoStage | null | undefined,
+    dueDateOverride: string | null | undefined
 ): { weeks: number; days: number } | null {
-    if (!startDate || !deliveryDate) return null
-    const start = parseISO(startDate)
+    if (!deliveryDate) return null
     const delivered = parseISO(deliveryDate)
-    const embryoAgeDays = getEmbryoAgeDays(embryoStage)
-    if (!isValid(start) || !isValid(delivered) || embryoAgeDays == null) return null
+    if (!isValid(delivered)) return null
 
-    const gestationalDays = differenceInDays(delivered, start) + 14 + embryoAgeDays
-    if (gestationalDays < 0) return null
+    let gestationalDays: number | null = null
+    const embryoAgeDays = getEmbryoAgeDays(embryoStage)
+    const start = startDate ? parseISO(startDate) : null
+    if (start && isValid(start) && embryoAgeDays != null) {
+        gestationalDays = differenceInDays(delivered, start) + 14 + embryoAgeDays
+    } else if (dueDateOverride) {
+        const dueDate = parseISO(dueDateOverride)
+        if (isValid(dueDate)) gestationalDays = 280 - differenceInDays(dueDate, delivered)
+    }
+
+    if (gestationalDays == null || gestationalDays < 0) return null
     return { weeks: Math.floor(gestationalDays / 7), days: gestationalDays % 7 }
 }
 
@@ -284,7 +295,8 @@ export function PregnancyTrackerCard({
     const ageAtDelivery = getGestationalAgeAtDelivery(
         surrogateData.pregnancy_start_date,
         surrogateData.actual_delivery_date,
-        surrogateData.embryo_stage
+        surrogateData.embryo_stage,
+        surrogateData.pregnancy_due_date
     )
     const [isEditingDueDate, setIsEditingDueDate] = useState(false)
     const [isEditingEmbryoStage, setIsEditingEmbryoStage] = useState(false)

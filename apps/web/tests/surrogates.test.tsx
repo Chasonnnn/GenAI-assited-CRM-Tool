@@ -100,6 +100,17 @@ vi.mock('@/lib/auth-context', () => ({
     useAuth: () => mockUseAuth(),
 }))
 
+const mockGrantedPermissions = { value: ['archive_surrogates'] as string[] }
+vi.mock('@/lib/hooks/use-permission-check', () => ({
+    usePermissionCheck: () => ({
+        isLoading: false,
+        isError: false,
+        retry: vi.fn(),
+        isRetrying: false,
+        can: (permission: string) => mockGrantedPermissions.value.includes(permission),
+    }),
+}))
+
 // Mock UI components that might cause issues in JSDOM or are complex
 vi.mock('@/components/ui/date-range-picker', () => ({
     DateRangePicker: () => <div data-testid="date-picker">Date Picker</div>,
@@ -211,6 +222,7 @@ describe('SurrogatesPage', () => {
         mockBulkChangeStageModal.mockReset()
         mockUseAuth.mockReset()
         mockUseAuth.mockReturnValue({ user: { role: 'admin', user_id: 'admin-1' } })
+        mockGrantedPermissions.value = ['archive_surrogates']
         mockUseArchiveSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseRestoreSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseUpdateSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
@@ -330,6 +342,34 @@ describe('SurrogatesPage', () => {
         await mockShowUndoToast.mock.calls[0]?.[1]()
         expect(restore).toHaveBeenCalledWith('1')
         expect(restore).toHaveBeenCalledWith('2')
+    })
+
+    it('hides row and bulk Archive without the archive_surrogates permission', async () => {
+        mockUseAuth.mockReturnValue({ user: { role: 'intake_specialist', user_id: 'is-1' } })
+        mockGrantedPermissions.value = []
+        mockUseSurrogates.mockReturnValue({
+            data: {
+                items: [
+                    buildSurrogateListItem({ id: '1', full_name: 'Jane Doe' }),
+                    buildSurrogateListItem({ id: '2', full_name: 'Mia Ross', surrogate_number: 'S12346' }),
+                ],
+                total: 2,
+                pages: 1,
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'Actions for Jane Doe' }))
+        expect(await screen.findByRole('menuitem', { name: 'View Details' })).toBeInTheDocument()
+        expect(screen.queryByRole('menuitem', { name: /archive/i })).not.toBeInTheDocument()
+        fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+
+        fireEvent.click(screen.getByLabelText('Select Jane Doe'))
+        fireEvent.click(screen.getByLabelText('Select Mia Ross'))
+        expect(screen.getByText('2 surrogates selected')).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /^archive$/i })).not.toBeInTheDocument()
     })
 
     it('confirms a row archive and offers undo that restores the surrogate', async () => {

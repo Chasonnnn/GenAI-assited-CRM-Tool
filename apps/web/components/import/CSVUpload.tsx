@@ -48,6 +48,7 @@ import {
 } from "@/lib/hooks/use-import"
 import type { ValidationMode } from "@/lib/api/import"
 import type { SurrogateSource } from "@/lib/types/surrogate"
+import { createSelectLabelGetter } from "@/lib/select-labels"
 import {
     applyUnknownColumnBehavior,
     buildColumnMappingsFromSuggestions,
@@ -56,6 +57,8 @@ import {
     type UnknownColumnBehavior,
 } from "@/lib/import-utils"
 
+// Mirrors TRANSFORMERS in apps/api/app/services/import_transformers.py. Detection suggests the
+// source_* transforms for Source columns, so they must be listed for the trigger to label them.
 const TRANSFORM_OPTIONS = [
     { value: "", label: "No transform" },
     { value: "date_flexible", label: "Date (flexible)" },
@@ -66,7 +69,14 @@ const TRANSFORM_OPTIONS = [
     { value: "phone_normalize", label: "Phone normalize" },
     { value: "boolean_flexible", label: "Boolean (flexible)" },
     { value: "boolean_inverted", label: "Boolean (inverted)" },
+    { value: "source_channel_guess", label: "Detect channel" },
+    { value: "source_meta_platform", label: "Meta platform" },
 ]
+
+const getTransformLabel = createSelectLabelGetter(TRANSFORM_OPTIONS, {
+    emptyLabel: "No transform",
+    unknownLabel: "Custom transform",
+})
 
 const ACTION_OPTIONS = [
     { value: "map", label: "Map" },
@@ -1328,7 +1338,7 @@ function CSVMappingTransformSelect({
             disabled={mapping.action !== "map"}
         >
             <SelectTrigger className="w-[170px]" aria-label={`${mapping.csv_column} transform`}>
-                <SelectValue placeholder="No transform" />
+                <SelectValue placeholder="No transform">{getTransformLabel}</SelectValue>
             </SelectTrigger>
             <SelectContent>
                 {TRANSFORM_OPTIONS.map((option) => (

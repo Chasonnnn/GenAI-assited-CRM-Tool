@@ -326,7 +326,16 @@ export function InlineHeightField({
     return (
         <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-1">
-                <Select value={feet} onValueChange={(value) => setFeet(value ?? "")} disabled={isSaving}>
+                <Select
+                    value={feet}
+                    onValueChange={(value) => {
+                        const next = value ?? ""
+                        setFeet(next)
+                        // Clearing feet clears the height, matching the Edit dialog.
+                        if (!next) setInches("")
+                    }}
+                    disabled={isSaving}
+                >
                     <SelectTrigger aria-label="Height feet" size="sm" className="w-20">
                         <SelectValue>
                             {(value: string | null) => (value ? `${value} ft` : "ft")}
@@ -334,7 +343,8 @@ export function InlineHeightField({
                     </SelectTrigger>
                     <SelectContent className="w-24">
                         <SelectGroup>
-                            <SelectItem value="">ft</SelectItem>
+                            {/* An explicit clear choice, not a placeholder row. */}
+                            <SelectItem value="">{EMPTY_VALUE_LABEL}</SelectItem>
                             {Array.from({ length: 9 }, (_, option) => option).map((option) => (
                                 <SelectItem key={`inline-height-feet-${option}`} value={String(option)}>
                                     {option} ft
@@ -343,7 +353,11 @@ export function InlineHeightField({
                         </SelectGroup>
                     </SelectContent>
                 </Select>
-                <Select value={inches} onValueChange={(value) => setInches(value ?? "")} disabled={isSaving}>
+                <Select
+                    value={inches || null}
+                    onValueChange={(value) => setInches(value ?? "")}
+                    disabled={isSaving || !feet}
+                >
                     <SelectTrigger aria-label="Height inches" size="sm" className="w-20">
                         <SelectValue>
                             {(value: string | null) => (value ? `${value} in` : "in")}
@@ -351,7 +365,6 @@ export function InlineHeightField({
                     </SelectTrigger>
                     <SelectContent className="w-24">
                         <SelectGroup>
-                            <SelectItem value="">in</SelectItem>
                             {Array.from({ length: 12 }, (_, option) => option).map((option) => (
                                 <SelectItem key={`inline-height-inches-${option}`} value={String(option)}>
                                     {option} in

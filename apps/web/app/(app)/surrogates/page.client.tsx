@@ -30,6 +30,7 @@ import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurro
 import { useQueues } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import type { SurrogateSource } from "@/lib/types/surrogate"
 import { isDynamicSurrogateFilter, type DynamicSurrogateFilter, type SurrogateMassEditStageFilters } from "@/lib/api/surrogates"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
@@ -108,6 +109,8 @@ function FloatingActionBar({
 
     const canAssign = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
     const canBulkChangeStage = user?.role && ['admin', 'developer'].includes(user.role)
+    // Archive requires the same permission the API enforces.
+    const canArchive = usePermissionCheck().can("archive_surrogates")
 
     const handleAssign = async (userId: string) => {
         await bulkAssignMutation.mutateAsync({
@@ -215,18 +218,20 @@ function FloatingActionBar({
                         </Button>
                     )}
 
-                    <ConfirmDialog
-                        trigger={
-                            <Button variant="secondary" size="sm" disabled={isLoading}>
-                                <ArchiveIcon className="size-4 mr-1" aria-hidden="true" />
-                                Archive
-                            </Button>
-                        }
-                        title={`Archive ${formatSurrogateCount(selectedCount)}?`}
-                        confirmLabel="Archive"
-                        errorFallback="Couldn't archive surrogates. Try again."
-                        onConfirm={handleArchive}
-                    />
+                    {canArchive && (
+                        <ConfirmDialog
+                            trigger={
+                                <Button variant="secondary" size="sm" disabled={isLoading}>
+                                    <ArchiveIcon className="size-4 mr-1" aria-hidden="true" />
+                                    Archive
+                                </Button>
+                            }
+                            title={`Archive ${formatSurrogateCount(selectedCount)}?`}
+                            confirmLabel="Archive"
+                            errorFallback="Couldn't archive surrogates. Try again."
+                            onConfirm={handleArchive}
+                        />
+                    )}
 
                     <Button variant="ghost" size="sm" onClick={onClear} disabled={isLoading}>
                         <XIcon className="size-4 mr-1" />
@@ -578,6 +583,7 @@ export function SurrogatesPageClient() {
     const canFilterByAssignee = canUseOrgAssigneeFilter
     const assigneeFilterOptions = assignees ?? []
     const canManagePriority = user?.role === "admin" || user?.role === "developer"
+    const canArchive = usePermissionCheck().can("archive_surrogates")
     const listUrlState = readSurrogateListUrlState(normalizedSearchParams, canFilterByAssignee)
     const {
         stageFilter,
@@ -1684,7 +1690,7 @@ export function SurrogatesPageClient() {
                                                                     {surrogateItem.is_priority ? "Remove Priority" : "Mark as Priority"}
                                                                 </DropdownMenuItem>
                                                             )}
-                                                            {!surrogateItem.is_archived ? (
+                                                            {!canArchive ? null : !surrogateItem.is_archived ? (
                                                                 <DropdownMenuItem
                                                                     onClick={() => {
                                                                         setArchiveTarget({

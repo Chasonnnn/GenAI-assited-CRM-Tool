@@ -81,6 +81,16 @@ vi.mock('@/lib/auth-context', () => ({
     useAuth: () => ({ user: { role: 'case_manager' } }), // Ensure role allows assign
 }))
 
+vi.mock('@/lib/hooks/use-permission-check', () => ({
+    usePermissionCheck: () => ({
+        isLoading: false,
+        isError: false,
+        retry: vi.fn(),
+        isRetrying: false,
+        can: (permission: string) => permission === 'archive_surrogates',
+    }),
+}))
+
 // Mock UI components
 vi.mock('@/components/ui/date-range-picker', () => ({
     DateRangePicker: () => <div data-testid="date-picker">Date Picker</div>,

@@ -26,6 +26,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import { stageHasCapability, stageUsesPauseBehavior } from "@/lib/surrogate-stage-context"
 import { toast } from "@/components/ui/toast"
 import { exportSurrogatePacketPdf } from "@/lib/api/surrogates"
@@ -66,6 +67,8 @@ export function HeaderActions() {
     const [isExporting, setIsExporting] = React.useState(false)
     // Menu items unmount on click, so the archive confirm is rendered outside the menu.
     const [isArchiveConfirmOpen, setIsArchiveConfirmOpen] = React.useState(false)
+    // Archive and restore require the same permission the API enforces.
+    const canArchive = usePermissionCheck().can("archive_surrogates")
 
     if (!surrogate) return null
 
@@ -277,7 +280,7 @@ export function HeaderActions() {
                                 </DropdownMenuSubContent>
                             </DropdownMenuSub>
                         )}
-                    {surrogate.is_archived ? (
+                    {!canArchive ? null : surrogate.is_archived ? (
                         <DropdownMenuItem onClick={restoreSurrogate}>Restore</DropdownMenuItem>
                     ) : (
                         <DropdownMenuItem
