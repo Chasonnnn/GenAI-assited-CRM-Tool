@@ -608,11 +608,12 @@ function TeamSettingsContent() {
                         <TabsList className="mb-4">
                             <TabsTrigger value="members">
                                 <Users className="size-4 mr-1" aria-hidden="true" />
-                                Members ({memberCount})
+                                {/* No count until the list loads, so a failed load never reads as 0. */}
+                                {members ? `Members (${memberCount})` : "Members"}
                             </TabsTrigger>
                             <TabsTrigger value="invitations">
                                 <Mail className="size-4 mr-1" aria-hidden="true" />
-                                Invitations ({actionableInviteCount})
+                                {inviteData ? `Invitations (${actionableInviteCount})` : "Invitations"}
                             </TabsTrigger>
                         </TabsList>
 

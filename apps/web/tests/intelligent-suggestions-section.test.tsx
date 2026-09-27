@@ -148,12 +148,36 @@ describe("IntelligentSuggestionsSection", () => {
         getRules.mockResolvedValue([EXISTING_RULE])
         renderSection()
 
+        // The default draft matches the existing rule; no error shows until the user acts.
+        const addRule = await screen.findByRole("button", { name: "Add Rule" })
+        await screen.findByRole("cell", { name: "Stale new leads" })
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+
+        fireEvent.click(addRule)
         expect(await screen.findByRole("alert")).toHaveTextContent(
             "A rule with this template, stage and threshold already exists.",
         )
-        expect(screen.getByRole("button", { name: "Add Rule" })).toBeDisabled()
+        expect(addRule).toBeDisabled()
+        expect(createRule).not.toHaveBeenCalled()
 
         fireEvent.change(screen.getByLabelText("Business days"), { target: { value: "3" } })
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+        expect(addRule).toBeEnabled()
+
+        fireEvent.change(screen.getByLabelText("Business days"), { target: { value: "2" } })
+        expect(screen.getByRole("alert")).toHaveTextContent(
+            "A rule with this template, stage and threshold already exists.",
+        )
+    })
+
+    it("does not show the duplicate error for the reset draft after adding a rule", async () => {
+        createRule.mockResolvedValue(EXISTING_RULE)
+        renderSection()
+
+        fireEvent.click(await screen.findByRole("button", { name: "Add Rule" }))
+
+        await waitFor(() => expect(createRule).toHaveBeenCalledTimes(1))
+        expect(await screen.findByRole("cell", { name: "Stale new leads" })).toBeInTheDocument()
         expect(screen.queryByRole("alert")).not.toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Add Rule" })).toBeEnabled()
     })

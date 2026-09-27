@@ -505,8 +505,13 @@ function SignaturePreviewActions({
 // Profile Section with Avatar Upload, Phone, Title
 // =============================================================================
 
+// Title is required: the API marks a profile without one incomplete (profile_complete in
+// apps/api/app/routers/auth.py), and the app shell then sends the user back to /welcome.
 function validateProfileForm(values: ProfileFormState) {
-  return { name: validateRequired(values.name, "Enter your full name.") }
+  return {
+    name: validateRequired(values.name, "Enter your full name."),
+    title: validateRequired(values.title, "Enter your title."),
+  }
 }
 
 function ProfileSection() {
@@ -718,32 +723,41 @@ function ProfileSection() {
           <p className="text-xs text-muted-foreground">Email is managed by SSO</p>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="title">Title</Label>
-          <Input
-            id="title"
-            name="title"
-            autoComplete="organization-title"
-            value={profileForm.title}
-            onChange={(e) => updateProfileForm("title", e.target.value)}
-            placeholder="Case Manager"
-          />
-          <p className="text-xs text-muted-foreground">Displayed in email signatures</p>
-        </div>
+        <ValidatedField
+          label="Title"
+          id="title"
+          error={profileValidation.errorFor("title")}
+          description="Displayed in email signatures"
+        >
+          {(control) => (
+            <Input
+              {...control}
+              name="title"
+              autoComplete="organization-title"
+              value={profileForm.title}
+              onChange={(e) => {
+                updateProfileForm("title", e.target.value)
+                profileValidation.touch("title")
+              }}
+              onBlur={() => profileValidation.touch("title")}
+            />
+          )}
+        </ValidatedField>
 
-        <div className="space-y-2">
-          <Label htmlFor="phone">Phone</Label>
-          <Input
-            id="phone"
-            name="phone"
-            autoComplete="tel"
-            type="tel"
-            value={profileForm.phone}
-            onChange={(e) => updateProfileForm("phone", e.target.value)}
-            placeholder="(555) 123-4567"
-          />
-          <p className="text-xs text-muted-foreground">Displayed in email signatures</p>
-        </div>
+        {/* Same field layout as Title so the two columns stay aligned. */}
+        <ValidatedField label="Phone" id="phone" description="Displayed in email signatures">
+          {(control) => (
+            <Input
+              {...control}
+              name="phone"
+              autoComplete="tel"
+              type="tel"
+              value={profileForm.phone}
+              onChange={(e) => updateProfileForm("phone", e.target.value)}
+              placeholder="(555) 123-4567"
+            />
+          )}
+        </ValidatedField>
 
         <div className="space-y-2">
           <Label>Role</Label>
@@ -759,7 +773,11 @@ function ProfileSection() {
         className="-mx-6"
         dirty={profileChangeCount > 0}
         changeCount={profileChangeCount}
-        errorCount={profileValidation.isValid ? 0 : 1}
+        errorCount={
+          profileValidation.isValid
+            ? 0
+            : Math.max(1, Object.values(validateProfileForm(profileForm)).filter(Boolean).length)
+        }
         onErrorsClick={showProfileErrors}
         saving={profileSaving}
         onSave={() => void handleSaveProfile()}

@@ -238,6 +238,8 @@ describe('TeamSettingsPage invitations tab', () => {
         expect(screen.getByText("Couldn't load team members")).toBeInTheDocument()
         expect(screen.queryByText('No team members')).not.toBeInTheDocument()
         expect(screen.queryByText(/boom/)).not.toBeInTheDocument()
+        expect(screen.getByRole('tab', { name: 'Members' })).toBeInTheDocument()
+        expect(screen.queryByText('Members (0)')).not.toBeInTheDocument()
     })
 
     it('confirms member removal in an in-app dialog', async () => {

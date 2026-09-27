@@ -315,14 +315,35 @@ function WorkflowRuleComposer({
   onAddRule: () => Promise<void>
   onDraftChange: (updater: React.SetStateAction<IntelligentSuggestionRuleDraft | null>) => void
 }) {
+  // The default draft often matches an existing rule (on load and right after an add), so the
+  // duplicate error waits until the user edits the draft or clicks Add Rule.
+  const [duplicateVisible, setDuplicateVisible] = useState(false)
+  const visibleDuplicateError = duplicateVisible ? duplicateError : null
+  const handleTemplateChange = (templateKey: string | null) => {
+    setDuplicateVisible(true)
+    onTemplateChange(templateKey)
+  }
+  const handleDraftChange = (updater: React.SetStateAction<IntelligentSuggestionRuleDraft | null>) => {
+    setDuplicateVisible(true)
+    onDraftChange(updater)
+  }
+  const handleAddRule = async () => {
+    if (duplicateError) {
+      setDuplicateVisible(true)
+      return
+    }
+    await onAddRule()
+    setDuplicateVisible(false)
+  }
+
   return (
     <div className="rounded-lg border border-border p-4 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="font-medium">Add Workflow Rule</p>
         <Button
           variant="outline"
-          onClick={onAddRule}
-          disabled={ruleSaving || !newRuleDraft || templates.length === 0 || duplicateError !== null}
+          onClick={() => void handleAddRule()}
+          disabled={ruleSaving || !newRuleDraft || templates.length === 0 || visibleDuplicateError !== null}
         >
           <PlusIcon className="mr-2 size-4" aria-hidden="true" />
           Add Rule
@@ -335,7 +356,7 @@ function WorkflowRuleComposer({
             <Label htmlFor="new-rule-template">Template</Label>
             <Select
               value={newRuleDraft.template_key}
-              onValueChange={onTemplateChange}
+              onValueChange={handleTemplateChange}
               disabled={ruleSaving || templates.length === 0}
             >
               <SelectTrigger id="new-rule-template">
@@ -366,7 +387,7 @@ function WorkflowRuleComposer({
               value={newRuleDraft.name}
               disabled={ruleSaving}
               onChange={(event) =>
-                onDraftChange((previous) => (previous ? { ...previous, name: event.target.value } : previous))
+                handleDraftChange((previous) => (previous ? { ...previous, name: event.target.value } : previous))
               }
             />
           </div>
@@ -378,7 +399,7 @@ function WorkflowRuleComposer({
                 id="new-rule-stage"
                 value={newRuleDraft.stage_slug}
                 onChange={(nextStage) =>
-                  onDraftChange((previous) =>
+                  handleDraftChange((previous) =>
                     nextStage && previous ? { ...previous, stage_slug: nextStage } : previous,
                   )
                 }
@@ -401,16 +422,16 @@ function WorkflowRuleComposer({
               onChange={(event) => {
                 const parsed = Number.parseInt(event.target.value, 10)
                 const normalized = Number.isFinite(parsed) ? parsed : newRuleDraft.business_days
-                onDraftChange((previous) =>
+                handleDraftChange((previous) =>
                   previous ? { ...previous, business_days: Math.max(1, Math.min(60, normalized)) } : previous,
                 )
               }}
             />
           </div>
 
-          {duplicateError ? (
+          {visibleDuplicateError ? (
             <p role="alert" className="text-sm text-destructive md:col-span-2">
-              {duplicateError}
+              {visibleDuplicateError}
             </p>
           ) : null}
         </div>

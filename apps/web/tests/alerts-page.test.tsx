@@ -4,6 +4,7 @@ import { ApiError } from '@/lib/api'
 import AlertsPage from '../app/(app)/settings/alerts/page'
 
 const mockUseAlerts = vi.fn()
+const mockUseAlertsSummary = vi.fn()
 const mockResolve = vi.fn()
 const mockCan = vi.fn()
 
@@ -27,7 +28,7 @@ vi.mock('@/components/app-link', () => ({
 
 vi.mock('@/lib/hooks/use-ops', () => ({
     useAlerts: (params: unknown) => mockUseAlerts(params),
-    useAlertsSummary: () => ({ data: { critical: 1, error: 0, warn: 0 } }),
+    useAlertsSummary: () => mockUseAlertsSummary(),
     useResolveAlert: () => ({ mutate: mockResolve, isPending: false }),
     useAcknowledgeAlert: () => ({ mutate: vi.fn(), isPending: false }),
     useSnoozeAlert: () => ({ mutate: vi.fn(), isPending: false }),
@@ -56,6 +57,7 @@ describe('AlertsPage', () => {
             },
             isLoading: false,
         })
+        mockUseAlertsSummary.mockReturnValue({ data: { critical: 1, error: 0, warn: 0 } })
         mockResolve.mockReset()
         mockCan.mockReset()
         mockCan.mockImplementation((permission: string) => permission === 'manage_ops')
@@ -95,5 +97,14 @@ describe('AlertsPage', () => {
 
         expect(screen.getByText("Couldn't load alerts")).toBeInTheDocument()
         expect(screen.queryByText(/All systems operating normally/)).not.toBeInTheDocument()
+    })
+
+    it('shows unavailable summary counts instead of zeros when the summary fails to load', () => {
+        mockUseAlertsSummary.mockReturnValue({ data: undefined, isLoading: false, isError: true })
+
+        render(<AlertsPage />)
+
+        expect(screen.getAllByText('Unavailable')).toHaveLength(3)
+        expect(screen.queryByText('0')).not.toBeInTheDocument()
     })
 })

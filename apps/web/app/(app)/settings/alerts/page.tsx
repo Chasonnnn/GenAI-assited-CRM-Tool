@@ -19,6 +19,7 @@ import {
 import { useAlerts, useAlertsSummary, useResolveAlert, useAcknowledgeAlert, useSnoozeAlert } from "@/lib/hooks/use-ops"
 import { formatRelativeTime } from "@/lib/formatters"
 import { QueryErrorState } from "@/components/error-state"
+import { EmptyValue } from "@/components/ui/empty-value"
 import { PageHeader } from "@/components/page-header"
 import { SettingsPageGate } from "../settings-page-gate"
 
@@ -107,7 +108,7 @@ function AlertsContent() {
                             {summaryLoading ? (
                                 <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                             ) : (
-                                <div className="text-2xl font-bold text-red-600">{summary?.critical ?? 0}</div>
+                                <div className="text-2xl font-bold text-red-600">{summary ? summary.critical : <EmptyValue label="Unavailable" />}</div>
                             )}
                         </CardContent>
                     </Card>
@@ -121,7 +122,7 @@ function AlertsContent() {
                             {summaryLoading ? (
                                 <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                             ) : (
-                                <div className="text-2xl font-bold text-orange-600">{summary?.error ?? 0}</div>
+                                <div className="text-2xl font-bold text-orange-600">{summary ? summary.error : <EmptyValue label="Unavailable" />}</div>
                             )}
                         </CardContent>
                     </Card>
@@ -135,7 +136,7 @@ function AlertsContent() {
                             {summaryLoading ? (
                                 <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                             ) : (
-                                <div className="text-2xl font-bold text-yellow-600">{summary?.warn ?? 0}</div>
+                                <div className="text-2xl font-bold text-yellow-600">{summary ? summary.warn : <EmptyValue label="Unavailable" />}</div>
                             )}
                         </CardContent>
                     </Card>

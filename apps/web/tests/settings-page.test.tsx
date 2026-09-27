@@ -380,11 +380,11 @@ describe('SettingsPage', () => {
         expect(screen.getByLabelText('Address')).not.toHaveClass('bg-input/30')
     })
 
-    it('clears Title and Phone by sending empty strings', async () => {
+    it('clears Phone by sending an empty string', async () => {
         await renderSettingsPage()
 
         expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument()
-        fireEvent.change(screen.getByLabelText('Title'), { target: { value: '' } })
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: '  Director ' } })
         fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '   ' } })
         const bar = screen.getByRole('region', { name: 'Unsaved changes' })
         expect(bar).toHaveTextContent('2 unsaved changes')
@@ -394,11 +394,26 @@ describe('SettingsPage', () => {
             expect(mockUpdateProfile).toHaveBeenCalledWith({
                 display_name: 'Dana Developer',
                 phone: '',
-                title: '',
+                title: 'Director',
             })
         )
         await waitFor(() => expect(mockToastSuccess).toHaveBeenCalledWith('Profile saved'))
         expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument()
+    })
+
+    it('requires a title because an empty title sends the user back to the welcome page', async () => {
+        await renderSettingsPage()
+
+        const title = screen.getByLabelText('Title')
+        fireEvent.change(title, { target: { value: ' ' } })
+        expect(title).toHaveAttribute('aria-invalid', 'true')
+        expect(screen.getByText('Enter your title.')).toBeInTheDocument()
+
+        fireEvent.change(screen.getByLabelText('Full Name'), { target: { value: '' } })
+        const bar = screen.getByRole('region', { name: 'Unsaved changes' })
+        expect(within(bar).getByRole('button', { name: 'Save changes' })).toBeDisabled()
+        expect(within(bar).getByRole('button', { name: '2 errors' })).toBeInTheDocument()
+        expect(mockUpdateProfile).not.toHaveBeenCalled()
     })
 
     it('discards profile edits from the save bar', async () => {
