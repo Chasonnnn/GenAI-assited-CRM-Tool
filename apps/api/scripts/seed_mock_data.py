@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import (
@@ -405,6 +405,25 @@ def get_next_intended_parent_number(db, org_id: UUID) -> int:
         .all()
     ]
     return _next_number(values, "I", 10001)
+
+
+def sync_org_counter(db, org_id: UUID, counter_type: str, last_used: int) -> None:
+    """Advance an org counter past numbers the seed assigned directly.
+
+    The seed writes S/I numbers without calling the service generators, so the
+    org_counters row must catch up or the first create in the app reuses a seeded number.
+    The counter never moves backwards.
+    """
+    db.execute(
+        text("""
+            INSERT INTO org_counters (organization_id, counter_type, current_value)
+            VALUES (:org_id, :counter_type, :last_used)
+            ON CONFLICT (organization_id, counter_type)
+            DO UPDATE SET current_value = GREATEST(org_counters.current_value, :last_used),
+                          updated_at = now()
+        """),
+        {"org_id": org_id, "counter_type": counter_type, "last_used": last_used},
+    )
 
 
 def _repeat_balanced(items: list[str], count: int) -> list[str]:
@@ -846,6 +865,7 @@ def create_surrogates(
         )
         created_surrogates.append(surrogate)
 
+    sync_org_counter(db, org_id, "surrogate_number", get_next_surrogate_number(db, org_id) - 1)
     db.commit()
     print(f"Created {count} surrogates")
     return created_surrogates
@@ -993,6 +1013,12 @@ def create_intended_parents(
         )
         created_ips.append(intended_parent)
 
+    sync_org_counter(
+        db,
+        org_id,
+        "intended_parent_number",
+        get_next_intended_parent_number(db, org_id) - 1,
+    )
     db.commit()
     print(f"Created {count} intended parents")
     return created_ips
