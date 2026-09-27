@@ -4,6 +4,7 @@ import * as React from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CopyButton } from "@/components/ui/copy-button"
+import { EmptyValue } from "@/components/ui/empty-value"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -43,6 +44,7 @@ import {
     WeightIcon,
 } from "lucide-react"
 import { computeBmi, formatDate } from "@/components/surrogates/detail/surrogate-detail-utils"
+import { getDonorSourceLabel } from "@/lib/donor-source-labels"
 import { getMaritalStatusOptions } from "@/lib/intended-parent-marital-status"
 import type { Donor, DonorUpdate } from "@/lib/types/donor"
 import type { DonorProfile } from "@/lib/types/donor-profile"
@@ -267,9 +269,13 @@ function DonorOverviewContent({ donor, profile, canEdit, activityPanel }: {
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Source:</span>
-                            <Badge variant="secondary" className="capitalize">
-                                {donorData.source}
-                            </Badge>
+                            {donorData.source?.trim() ? (
+                                <Badge variant="secondary">
+                                    {getDonorSourceLabel(donorData.source)}
+                                </Badge>
+                            ) : (
+                                <EmptyValue className="text-sm" />
+                            )}
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Created:</span>

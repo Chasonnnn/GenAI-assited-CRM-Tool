@@ -347,6 +347,28 @@ describe("DonorDetailPage", () => {
         expect(mockUseTasks).toHaveBeenCalledWith(expect.objectContaining({ donor_id: "donor-1", per_page: 100 }), { enabled: true })
     })
 
+    it.each([
+        ["manual", "Manual"],
+        ["shared_intake", "Intake form"],
+        ["spring_campaign", "Spring campaign"],
+    ])("labels the %s source through the donor source helper", (source, label) => {
+        const query = mockUseDonor("donor-1")
+        mockUseDonor.mockReturnValue({ ...query, data: { ...query.data, source } })
+        render(<DonorDetailPage />)
+        const row = screen.getByText("Source:").parentElement as HTMLElement
+        expect(within(row).getByText(label)).toHaveAttribute("data-slot", "badge")
+        expect(row).not.toHaveTextContent(source)
+    })
+
+    it.each([null, "", "  "])("shows the empty token for a %j source", (source) => {
+        const query = mockUseDonor("donor-1")
+        mockUseDonor.mockReturnValue({ ...query, data: { ...query.data, source } })
+        render(<DonorDetailPage />)
+        const row = screen.getByText("Source:").parentElement as HTMLElement
+        expect(row.querySelector("[data-slot=badge]")).toBeNull()
+        expect(row.querySelector("[data-slot=empty-value]")).toHaveTextContent("Not provided")
+    })
+
     it("adds and deletes donor notes", async () => {
         mockDetailSearchParams.set("tab", "notes")
         render(<DonorDetailPage />)
