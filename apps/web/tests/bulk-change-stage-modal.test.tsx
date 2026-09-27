@@ -87,12 +87,28 @@ vi.mock("@/components/ui/select", () => {
         )
     }
 
+    // StageSelect groups options under headings with separators.
+    function SelectGroup({ children }: { children: React.ReactNode }) {
+        return <div role="group">{children}</div>
+    }
+
+    function SelectLabel({ children }: { children: React.ReactNode }) {
+        return <div>{children}</div>
+    }
+
+    function SelectSeparator() {
+        return <hr />
+    }
+
     return {
         Select,
         SelectTrigger,
         SelectValue,
         SelectContent,
         SelectItem,
+        SelectGroup,
+        SelectLabel,
+        SelectSeparator,
     }
 })
 
@@ -122,6 +138,10 @@ describe("BulkChangeStageModal", () => {
         expect(screen.getByRole("option", { name: "Contacted" })).toBeInTheDocument()
         expect(screen.queryByRole("option", { name: "On Hold" })).not.toBeInTheDocument()
         expect(screen.queryByRole("option", { name: "Delivered" })).not.toBeInTheDocument()
+        // Shared StageSelect rendering: a colour dot per option.
+        expect(
+            screen.getByRole("option", { name: "Contacted" }).querySelector('[data-slot="stage-dot"]'),
+        ).toHaveStyle({ backgroundColor: "#0ea5e9" })
     })
 
     it("submits the selected immediate stage", async () => {

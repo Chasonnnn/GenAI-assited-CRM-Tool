@@ -20,7 +20,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { StageSelect } from "@/components/stage-select"
 import { formatRace } from "@/lib/formatters"
+import { pipelineStageOptions } from "@/lib/stage-options"
 import { cn } from "@/lib/utils"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import type {
@@ -356,8 +358,8 @@ function ComparisonFilterField({
                         onOperatorChange(nextValue ? (nextValue as ComparisonOp) : null)
                     }
                 >
-                    <SelectTrigger>
-                        <SelectValue placeholder="Op" />
+                    <SelectTrigger aria-label={`${label} operator`}>
+                        <SelectValue placeholder="Any" />
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value=">">&gt;</SelectItem>
@@ -668,30 +670,16 @@ function MassEditActionSection({
             {actionMode === "change_stage" ? (
                 <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                        <Label>New Stage</Label>
-                        <Select
+                        <Label htmlFor="mass-edit-target-stage">New Stage</Label>
+                        <StageSelect
+                            id="mass-edit-target-stage"
                             value={targetStageId}
                             onValueChange={(value) =>
-                                dispatch({ type: "set", patch: { targetStageId: value ?? "" } })
+                                dispatch({ type: "set", patch: { targetStageId: value } })
                             }
-                        >
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select a stage">
-                                    {(value: string | null) => {
-                                        if (!value) return "Select a stage"
-                                        const stage = activeStages.find((item) => item.id === value)
-                                        return stage?.label ?? "Unknown stage"
-                                    }}
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                                {activeStages.map((stage) => (
-                                    <SelectItem key={stage.id} value={stage.id}>
-                                        {stage.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                            options={pipelineStageOptions(activeStages)}
+                            className="w-full"
+                        />
                         {selectedStage ? (
                             <p className="text-xs text-muted-foreground">
                                 Target: <span className="font-medium">{selectedStage.label}</span>
@@ -1172,7 +1160,7 @@ function MassEditStageOpenSession({
 
     return (
         <Dialog open onOpenChange={(next) => !isApplying && onOpenChange(next)}>
-            <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            <DialogContent size="3xl" className="max-h-[90vh] overflow-hidden flex flex-col">
                 <DialogHeader className="pr-10">
                     <DialogTitle className="flex items-center gap-2">
                         <SparklesIcon className="size-5" />

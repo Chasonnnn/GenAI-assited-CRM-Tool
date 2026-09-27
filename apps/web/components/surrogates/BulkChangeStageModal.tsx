@@ -12,17 +12,10 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { StageSelect } from "@/components/stage-select"
 import type { PipelineStage } from "@/lib/api/pipelines"
+import { pipelineStageOptions } from "@/lib/stage-options"
 import { stageHasCapability, stageUsesPauseBehavior } from "@/lib/surrogate-stage-context"
-
-function getStageLabel(
-    value: string | null | undefined,
-    stages: PipelineStage[],
-): string {
-    if (!value) return "Select a stage"
-    return stages.find((stage) => stage.id === value)?.label ?? "Select a stage"
-}
 
 export function BulkChangeStageModal({
     open,
@@ -41,14 +34,14 @@ export function BulkChangeStageModal({
 }) {
     const [targetStageId, setTargetStageId] = React.useState("")
 
-    const immediateStages = stages
-        .filter(
+    const immediateStageOptions = pipelineStageOptions(
+        stages.filter(
             (stage) =>
-                stage.is_active &&
                 !stageUsesPauseBehavior(stage) &&
                 !stageHasCapability(stage, "requires_delivery_details"),
-        )
-        .toSorted((a, b) => a.order - b.order)
+        ),
+        { activeOnly: true },
+    )
 
     const handleOpenChange = (nextOpen: boolean) => {
         if (!nextOpen) {
@@ -82,26 +75,13 @@ export function BulkChangeStageModal({
 
                     <div className="space-y-2">
                         <Label htmlFor="bulk-change-stage-target">Target stage</Label>
-                        <Select
+                        <StageSelect
+                            id="bulk-change-stage-target"
                             value={targetStageId}
-                            onValueChange={(value) => setTargetStageId(value ?? "")}
-                        >
-                            <SelectTrigger
-                                id="bulk-change-stage-target"
-                                aria-label="Target stage"
-                            >
-                                <SelectValue placeholder="Select a stage">
-                                    {(value: string | null) => getStageLabel(value, immediateStages)}
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                                {immediateStages.map((stage) => (
-                                    <SelectItem key={stage.id} value={stage.id}>
-                                        {stage.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                            onValueChange={setTargetStageId}
+                            options={immediateStageOptions}
+                            className="w-full"
+                        />
                     </div>
                 </div>
 

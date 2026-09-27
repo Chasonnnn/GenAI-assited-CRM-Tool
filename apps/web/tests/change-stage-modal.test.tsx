@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
 
 const slotStart = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
@@ -70,6 +70,44 @@ describe("ChangeStageModal", () => {
         )
         expect(screen.getByTestId("change-stage-scroll-body")).toHaveClass("min-h-0", "overflow-y-auto")
         expect(screen.getByTestId("change-stage-actions")).toHaveClass("shrink-0", "border-t")
+    })
+
+    it("groups stages under intake, post-approval and paused headings with colour dots", () => {
+        render(
+            <ChangeStageModal
+                open
+                onOpenChange={vi.fn()}
+                stages={stages}
+                currentStageId="stage_new_unread"
+                currentStageLabel="New Unread"
+                onSubmit={vi.fn().mockResolvedValue({ status: "applied" })}
+            />
+        )
+
+        const intake = screen.getByRole("group", { name: "Intake" })
+        expect(within(intake).getByRole("button", { name: /interview scheduled/i })).toBeInTheDocument()
+        expect(within(screen.getByRole("group", { name: "Post-approval" })).getByRole("button", { name: /delivered/i })).toBeInTheDocument()
+        expect(within(screen.getByRole("group", { name: "Paused & closed" })).getByRole("button", { name: /on-hold/i })).toBeInTheDocument()
+        const dot = within(intake).getByRole("button", { name: /interview scheduled/i }).querySelector('[data-slot="stage-dot"]')
+        expect(dot).toHaveStyle({ backgroundColor: "#0f766e" })
+    })
+
+    it("places the appointment card below the Effective now switch", () => {
+        render(
+            <ChangeStageModal
+                open
+                onOpenChange={vi.fn()}
+                stages={stages}
+                currentStageId="stage_new_unread"
+                currentStageLabel="New Unread"
+                onSubmit={vi.fn().mockResolvedValue({ status: "applied" })}
+                appointmentManager={<div data-testid="appointment-card">Appointment</div>}
+            />
+        )
+
+        const effectiveNow = screen.getByText("Effective now")
+        const card = screen.getByTestId("appointment-card")
+        expect(effectiveNow.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     })
 
     it("requires a reason and submits follow-up months when moving to On-Hold", async () => {
@@ -231,7 +269,7 @@ describe("ChangeStageModal", () => {
             currentStageLabel="New Unread" onSubmit={onSubmit} />)
         fireEvent.click(screen.getByRole("button", { name: /interview scheduled/i }))
         expect(screen.getByRole("region", { name: "Interview appointment" })).toBeInTheDocument()
-        expect(screen.getByTestId("change-stage-dialog")).toHaveClass("sm:max-w-2xl")
+        expect(screen.getByTestId("change-stage-dialog")).toHaveAttribute("data-size", "2xl")
         expect(screen.getByRole("button", { name: "Save Change" })).toBeDisabled()
         const slot = screen.getByRole("group", { name: "Available times" }).querySelector("button")
         expect(slot).not.toBeNull()
